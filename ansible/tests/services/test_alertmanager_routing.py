@@ -65,6 +65,9 @@ LOG_PIPELINE_RULES = (
 CUTOVER_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "kuma-cutover.yaml"
 )
+BRIDGE_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "bridge-exporter.yaml"
+)
 # A per-target ingress alert takes `service` from its probe target, so a probed service
 # stands in for it.
 INGRESS_STAND_IN_SERVICE = "homepage"
@@ -248,6 +251,7 @@ SHADOW = {
     **container_sets(),
     **literal_sets(SCRAPE_RULES, shadow=True),
     **literal_sets(LOG_PIPELINE_RULES, shadow=True),
+    **literal_sets(BRIDGE_RULES, shadow=True),
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 

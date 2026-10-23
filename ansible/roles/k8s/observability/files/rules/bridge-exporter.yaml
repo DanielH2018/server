@@ -9,6 +9,82 @@
 groups:
   - name: bridge-exporter
     rules:
+      # THE WAN FAMILY (A6-3): the gate row and the four rows behind it. Each rule reads one
+      # row's `homelab_check_success` gauge, which the exporter sets to 0 when the row's verdict
+      # is down. A dependent whose gate reads down is skipped and exports 0 in the same cycle as
+      # the gate, so source and targets reach Alertmanager in one batch. None of these rules has
+      # a `for:`: monitor-bridge's WAN body already needs both providers to fail, and none of
+      # the four dependents is a `startup_grace` row. The gate shares this group with its
+      # dependents, so Prometheus evaluates them together. `requires: wan` marks a dependent
+      # for the inhibit rule in alertmanager-secret.yaml.j2, whose source is WANUnreachable.
+      # A row with no series stays quiet here: BridgeCheckStale owns a missing row.
+      # `service` is monitor-bridge on all five, the component that evaluates the rows until C-7.
+      # Every rule is SHADOW UNTIL A6-7b, while Kuma's tile for the row pages.
+      - alert: WANUnreachable
+        expr: homelab_check_success{job="monitor-bridge", check="wan_reachable"} == 0
+        labels:
+          severity: critical
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: monitor-bridge cannot reach the public internet.
+          description: >-
+            Both WAN probe providers failed from monitor-bridge, so this house has no working link
+            or no DNS. The rows behind this gate (Discord delivery, R2 headroom, Cloudflare IP
+            drift and Healthchecks.io console drift) are held by the inhibit rule. Read the
+            probe's failure messages in the monitor-bridge log in the homelab namespace.
+      - alert: DiscordDeliveryFailing
+        expr: homelab_check_success{job="monitor-bridge", check="discord"} == 0
+        labels:
+          severity: critical
+          service: monitor-bridge
+          requires: wan
+          shadow: "true"
+        annotations:
+          summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
+          description: >-
+            One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr, healthchecks)
+            no longer resolves, or the Gmail SMTP backstop login failed. Rotate the named webhook
+            in SOPS and redeploy its consumer. The monitor-bridge log names the failing webhook.
+      - alert: R2FreeTierHeadroomLow
+        expr: homelab_check_success{job="monitor-bridge", check="r2_usage"} == 0
+        labels:
+          severity: critical
+          service: monitor-bridge
+          requires: wan
+          shadow: "true"
+        annotations:
+          summary: R2 usage is past 80% of the free tier on at least one arm.
+          description: >-
+            Month-to-date R2 storage, Class A operations, Class B operations or incomplete
+            multipart uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so this
+            is the only boundary. The runbook is longhorn-backup-tiering.
+      - alert: CloudflareIPRangesDrifted
+        expr: homelab_check_success{job="monitor-bridge", check="cloudflare_ips_drift"} == 0
+        labels:
+          severity: warning
+          service: monitor-bridge
+          requires: wan
+          shadow: "true"
+        annotations:
+          summary: Cloudflare's published IP ranges differ from cloudflare_ips, or the fetch failed.
+          description: >-
+            cloudflare_ips in group_vars/all.yml sets Traefik's trustedIPs and the netpol
+            allow-list. Update it and redeploy traefik, netpol-baseline and monitor-bridge. A
+            failed fetch is retried every cycle; a match is re-checked daily.
+      - alert: HealthchecksConsoleDrifted
+        expr: homelab_check_success{job="monitor-bridge", check="healthchecks_drift"} == 0
+        labels:
+          severity: warning
+          service: monitor-bridge
+          requires: wan
+          shadow: "true"
+        annotations:
+          summary: A Healthchecks.io dead-man check differs from the documented schedule.
+          description: >-
+            The monitor-bridge log names each slug and field that differs, or a check missing from
+            the console. Fix the console, or change docs/healthchecks-io-deadman.md and
+            monitor_bridge_healthchecks_expected together and redeploy monitor-bridge.
       # SHADOW UNTIL A6-7b. Kuma's Cluster Scrape Targets tile pages a failed scrape of this job
       # today, because the job carries no `origin` label (M1 convention 5 allows one pager). The
       # absent() arm is what that tile cannot see: a scrape job removed from prometheus.yml.
