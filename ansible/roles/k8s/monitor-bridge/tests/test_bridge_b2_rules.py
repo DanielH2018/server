@@ -160,9 +160,7 @@ def test_one_inhibit_rules_key_holds_both_the_wan_and_the_b2_inhibit():
         render_role_template("observability", "alertmanager-secret.yaml.j2")
     )
     text = secret["stringData"]["alertmanager.yml"]
-    assert (
-        text.count("\n    inhibit_rules:") == 0 or text.count("\ninhibit_rules:") == 1
-    )
+    assert text.count("\ninhibit_rules:") == 1
     sources = [i["source_matchers"] for i in yaml_fast.safe_load(text)["inhibit_rules"]]
     assert ['alertname="WANUnreachable"'] in sources
     assert ['alertname="B2Unreachable"'] in sources
