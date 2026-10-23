@@ -53,6 +53,15 @@ cluster, and roll the tree and service back on a failed health gate.
   parks included. `files/gitops_tick_metrics.py` writes it each tick, and the unit's second
   `ExecStopPost=` writes it for a tick `flock` skipped.
 
+**The two GitHub timers write a textfile beside their Kuma push (M6 batch B3).** The ruleset-drift
+and interaction-limit scripts call `write_check_textfile` from
+`ansible/roles/setup/initial_setup/files/homelab-check-lib.sh` in `push()`, with a `DEADLINE_S` of
+90000 that equals their Kuma tiles' interval. The rules in
+`ansible/roles/k8s/observability/files/rules/gitops-checks.yaml` read the files in shadow.
+ENFORCED: `ansible/tests/services/test_gitops_check_rule_literals.py` pins each rule's deadline
+literals to the rendered `DEADLINE_S`. Both scripts source the check library with `|| exit 1`, so
+a host that lacks the library fails its timer unit instead of skipping the file.
+
 ## Safety
 
 Each arm is a rule and the function that holds it; the record page has its incident.
