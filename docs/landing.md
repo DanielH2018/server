@@ -692,6 +692,40 @@ behind a recorded role reads `settled`, because the tree converged. The clear, `
 the six-hour page are in
 [A role only a hand can apply is recorded, not parked](gitops-pipeline.md#a-role-only-a-hand-can-apply-is-recorded-not-parked).
 
+## Waiting for a host to apply its package
+
+A PR that changes a path under a member of `HOST_INPUTS` (`hosts/`, the inventory, the
+renderer and the other members `renderer_lib/host_inputs.py` lists) is a host candidate. Resolve
+sets the flag from the file list and renders nothing, because it reads the merge commit before
+master CI and must not run that commit's code. After master CI is green, `host_wait.host_targets`
+renders every host package at the merge commit and at its first parent, and keeps the hosts whose
+trees differ. When no host differs, the candidate is cleared and the landing ends
+`nothing-to-deploy`. A render or snapshot that fails makes every host a target, so a failure
+waits rather than skips.
+
+A PR with host targets and no service tag deploys nothing, because the tick fast-forwards its
+empty change set at step 4. A PR that also carries a plane a hand applies still ends
+`needs-manual-apply`, and the output names each host it did not wait on.
+
+Step 6, `host_wait.wait_for_hosts`, queries Prometheus on loopback and then on the ClusterIP.
+A host settles when `homelab_host_applied_info` equals or descends from the merge commit and
+`homelab_host_reconcile_ok` is 1. A `homelab_host_reconcile_ok` of 0 ends the landing
+`deploy-failed` and names the host's `homelab-updater --clear-hold` command. The step queries
+once before it waits, so a host that already settled never delays the landing.
+
+It ends `deferred` in three cases:
+
+- The host's package at the first parent ships no enable link for `homelab-updater.timer`. A host
+  holds at best the first parent's package until the builder publishes this merge, so a link
+  that arrives in this merge arms nothing until an updater run installs it. The operator starts
+  the updater by hand with `systemctl start homelab-updater.service` as root on that host, once
+  the agent's Prometheus shows `homelab_repo_published_info` at the merge commit. They then
+  re-run the same `land.sh` command.
+- The host's deadline is more than 45 minutes away. The deadline is the second updater fire
+  after the merge plus 10 minutes, read from the first parent's rendered drop-in.
+- The host is still unsettled past its deadline. The line gives the host's last success
+  timestamp.
+
 ## `nothing-to-deploy`
 
 Decided from the PR's file list right after the merge, before any CI wait: a PR that reaches no

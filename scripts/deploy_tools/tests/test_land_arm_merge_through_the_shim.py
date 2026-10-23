@@ -110,7 +110,7 @@ def test_an_open_pr_is_handed_to_the_merge_wait(tmp_path):
     assert any(argv.startswith(_POLL_ARGV) for argv in gh), gh
     assert not [argv for argv in gh if argv.startswith("pr merge")]
     # The arm falls through into the rest of the procedure rather than ending the landing.
-    assert "== 1/6  resolving PR #939" in result.stdout
+    assert "== 1/7  resolving PR #939" in result.stdout
     assert "VERDICT: nothing-to-deploy" in result.stdout
 
 

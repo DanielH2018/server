@@ -233,7 +233,7 @@ PROMOTE_TIMEOUT_NOTE = (
 )
 
 
-# What a `deferred` from step 6 means, printed by `health_verdict.health` when `probe.py health`
+# What a `deferred` from step 7 means, printed by `health_verdict.health` when `probe.py health`
 # could not read its store for a tag and found no other tag unhealthy (#5543). No tick re-gates
 # health, so this deferral never ends on its own: `land_probe` reads the note and reports the
 # landing as `gave-up`, a resume point, as it does for PROMOTE_TIMEOUT_NOTE.
@@ -327,3 +327,9 @@ def disarmed(where: str, consequence: str) -> str:
         f"reports no verdict; {consequence}. To re-arm it, set REQUIRED_CONTEXTS in "
         "scripts/deploy_tools/await_ci.py to the deployer's gitops_deploy_ci_contexts"
     )
+
+
+def host_not_waited_note(targets: list) -> str:
+    """The line naming each host target a landing ended without waiting on."""
+    hosts = ", ".join(t.host for t in targets)
+    return f"  it also changes the package of {hosts}; this landing did not wait for it to apply"

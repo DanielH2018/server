@@ -60,12 +60,12 @@ from deployer_lib.deploy_changes import _BROAD_DEPLOY_PREFIXES
 
 
 def published(ln: Landing) -> list[str]:
-    """The `owner: flux` tags `split_owned` took, which a promotion applies and step 6 gates."""
+    """The `owner: flux` tags `split_owned` took, which a promotion applies and step 7 gates."""
     return [tag for tag, owner in ln.owned_tags.items() if owner == "flux"]
 
 
 def gated_tags(ln: Landing) -> list[str]:
-    """The tags step 6 gates: those deploy.sh deployed, then those a promotion applied.
+    """The tags step 7 gates: those deploy.sh deployed, then those a promotion applied.
 
     A tag suspended at the merge commit is left out, as Flux applied nothing for it.
     """
@@ -166,7 +166,7 @@ def owned_by_narrowing(ln: Landing) -> None:
 def _owners_unread(ln: Landing, narrowed: list[str], exc: Exception) -> NoReturn:
     """End a deploy-plane landing whose ownership map cannot be read at the merge commit.
 
-    This arm ends the landing inside step 5, before `deploy.no_tag_outcome` and step 6 read
+    This arm ends the landing inside step 5, before `deploy.no_tag_outcome` and step 7 read
     the deployer's state, so it reports that state itself (#5160). A plane only a hand can
     apply keeps `needs-manual-apply`, with the tick's half printed beside it, as in
     `no_tag_outcome`. Without one, a held tick means this PR's own apply failed, which is
