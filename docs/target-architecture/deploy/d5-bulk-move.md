@@ -341,7 +341,10 @@ after H1.7b.
     - **The result.** After the resumes, speedtest read 1/1 at 15:09:58Z and `probe.py health
       speedtest` read ok. The revert, [#6008](https://github.com/DanielH2018/server/pull/6008)
       (`7956a263d`), merged, and the operator cleared the hold at about 15:14Z. The revert's
-      promotion verified at TBD (the orchestrator fills this in before the PR leaves draft).
+      promotion verified. Its per-tag `flux/<tag>-verify` statuses on `7956a263` read `success`
+      from 15:17:57Z. At 15:18:55Z, `probe.py landing` read `prod: 7956a263 sha256:162d2f9ee53d`
+      with `last-good` at the same digest, and `DEPLOY_HOLD (promote workflow, Flux-owned tags):
+      none`.
 - **Exit 7, and the request it changed.** The operator deleted the kustomize-controller pod at
   about 14:02:51Z. Its replacement's one-hour peak working set was 174002176 bytes (about
   166 MiB) against the 64Mi request, and the steady figure was about 155 MiB (162967552 at
