@@ -15,8 +15,8 @@ host probes stay green.
 
 - **Flux applies it, not Ansible** (H1.5a). Its `containers_list` entry carries `owner: flux`
   from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
-  runs it. A rebuilt cluster gets it from the `longhorn` Kustomization at step 7 of
-  `docs/longhorn-disaster-recovery.md`'s *Order from H1.2*. The `longhorn-backup` Kustomization
+  runs it. A rebuilt cluster gets it from the `longhorn` Kustomization at step 6 of
+  `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization
   depends on it and creates the backup targets once it reads `Ready`.
 - **The workloads are `files/upstream/longhorn.yaml`**, upstream's file byte for byte, pinned by
   `k3s_longhorn_version` and the `longhorn_vendored_manifests` item in `defaults/main.yml`.
@@ -98,6 +98,6 @@ Flux owns: this role owns the Settings and classes, the CSI sidecar requests amo
 (#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the credentials, the backup
 targets and the RecurringJobs. A fourth `longhorn_host` task removes the manifests that retired
 tasks staged under /etc/rancher/k3s, these and the CoreDNS, MetalLB, cluster-base and traefik
-ones, so no file remains for a hand `kubectl apply -f` to write a Flux-owned object from. The stale-checkout guard holds no Longhorn row, and bring-up
-step 1 skips only `kubeconfig`. `docs/longhorn-disaster-recovery.md`, *Order from H1.2*, has
-the steps.
+ones, so no file remains for a hand `kubectl apply -f` to write a Flux-owned object from. The stale-checkout guard holds no Longhorn row, and the first
+bring-up run skips only `kubeconfig`. `docs/flux-deploy-plane.md`, *Bootstrapping Flux on a
+rebuilt cluster*, has the steps.

@@ -9,8 +9,9 @@ A placeholder render with `--role` writes, for each tag it names:
   `render_sops_manifests`, whose SOPS manifests the renderer copies into `cluster/<tag>/`
   (C3 *Per-role fields*, D3.3c). A tag that renders a per-tag kind's directory, such as
   `<tag>-snapshot`, gets that Kustomization as a further document of the file, in
-  `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1). `<tag>` and `<tag>-deferred` take `prune` and
-  `timeout` from the role's defaults where `role_fields` finds them (C3 *Per-role fields*).
+  `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1). `<tag>` takes `prune` from the role's defaults,
+  and `<tag>` and `<tag>-deferred` take `timeout`, where `role_fields` finds them (C3
+  *Per-role fields*). `<tag>-deferred` always renders `prune: true`.
   A role that sets `flux_suspend: true` renders `suspend: true` on every one of its tag's
   Kustomizations (C3 *Suspension*, D5.1b);
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member: `cluster-vars`
@@ -314,9 +315,9 @@ def flux_files(
             the tags' files.
         decrypting: The published tags whose role lists `render_sops_manifests`.
         edges: Each Kustomization's generated edges; a name it does not map has none.
-        fields: Each tag's per-role fields: `prune` and `timeout` (`role_fields`) for `<tag>`
-            and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`, `verify_timeout`
-            for `<tag>-verify` and `precheck_timeout` for `<tag>-precheck`
+        fields: Each tag's per-role fields: `prune` (`role_fields`) for `<tag>` alone,
+            `timeout` for `<tag>` and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`,
+            `verify_timeout` for `<tag>-verify` and `precheck_timeout` for `<tag>-precheck`
             (`verify_timeout`), `suspend` for all.
         contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
@@ -341,7 +342,14 @@ def flux_files(
                 timeouts.get(name, timeout),
                 name in decrypting,
                 edges.get(name, NO_EDGES),
-                own.get("prune", True) if name in role_own else True,
+                # DECIDED: `flux_prune` reaches `<tag>` alone, and `<tag>-deferred` keeps
+                # `prune: true`, while `timeout` reaches both. H1's text is "prune: false on
+                # that Kustomization, and prune: true everywhere else", and the operator ruled
+                # it so on 2026-10-22 for D5 step 29: `flux-deferred`'s prune is what deletes
+                # `verify-drill` once the drill is off. The consequence: a plumbing role that
+                # adds deferred files later gets prunable deferred objects, so a deferred
+                # object that must never be pruned belongs in the role's own directory.
+                own.get("prune", True) if name == tag else True,
                 own.get("suspend", False),
                 (contents or {}).get(name) if name == tag else None,
             )

@@ -145,7 +145,7 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     # terraria and valheim since D5.15, code-server since D5.16, mosquitto, radarr and sonarr
     # since D5.20, n8n since #5546, nut since D5.17, artifacts, autofix-bridge, cloudflare-ddns,
     # docs and game-stats since D5.19, monitor-bridge and prowlarr since #5594, and karakeep,
-    # media-volume and pi-peer-backup since #5652, blackbox-exporter since D5's last Wave A PR, zigbee2mqtt since D5.10, and home-assistant since D5.11, so the live list holds owned entries too.
+    # media-volume and pi-peer-backup since #5652, blackbox-exporter since D5's last Wave A PR, zigbee2mqtt since D5.10, and home-assistant since D5.11, and flux since D5 step 29, so the live list holds owned entries too.
     owned = {"fixture-flux", "fixture-released"} | {
         c["name"] for c in live if "owner" in c
     }
@@ -159,6 +159,7 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "code-server",
         "deploy-ui",
         "docs",
+        "flux",
         "freshrss",
         "game-stats",
         "gpu-exporter",
@@ -229,17 +230,31 @@ def test_ansible_owned_drops_exactly_the_entries_carrying_owner_is_clean(path):
         assert _play_visit_mismatch(containers) == ""
 
 
+def _handed_back(containers: list[dict], name: str = "flux") -> list[dict]:
+    """The live list with `name`'s `owner` removed, the handback D5's *Rollback* names.
+
+    Since D5 step 29 every k8s entry on daniel-box carries `owner`, so the live list alone
+    leaves nothing for a filter that drops one entry too many to drop.
+    """
+    assert any(c["name"] == name and "owner" in c for c in containers), name
+    return [
+        {k: v for k, v in c.items() if k != "owner"} if c["name"] == name else c
+        for c in containers
+    ]
+
+
 def test_a_filter_dropping_an_entry_without_owner_is_flagged():
-    containers = _containers(HOST_VARS / "daniel-box.yml")
+    containers = _handed_back(_containers(HOST_VARS / "daniel-box.yml"))
     assert _owner_drop_mismatch(containers, lambda cs: ansible_owned(cs)[:-1]) != ""
 
 
 def test_a_batch_loop_dropping_an_entry_without_owner_is_flagged():
-    # The loop skips bento-pdf, the live list's one owned entry, as it must, but it also drops
-    # the last Ansible-owned entry. That makes it the play half's red case: the visit check the
+    # The loop skips every owned entry, as it must, but it also drops the last Ansible-owned
+    # entry, the handed-back flux. That makes it the play half's red case: the visit check the
     # clean half runs on the live list must flag the missing entry.
     loop = "{{ (containers_list | ansible_owned)[:-1] | batch(2) | list }}"
-    assert _play_visit_mismatch(_containers(HOST_VARS / "daniel-box.yml"), loop) != ""
+    containers = _handed_back(_containers(HOST_VARS / "daniel-box.yml"))
+    assert _play_visit_mismatch(containers, loop) != ""
 
 
 def test_the_host_census_names_daniel_box_with_its_k8s_entries():

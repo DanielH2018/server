@@ -78,9 +78,9 @@ this role only declares the targets.
   that deleted it left with the file after a read-only `kubectl get recurringjobs` showed no
   such job. Removing a job from this tag leaves it live (`flux_prune: false`), so the PR that
   removes one carries an **operator-only** delete.
-- **On a new cluster, bring-up step 7 applies this tag.** It creates both targets and their
-  Secrets, and step 6 confirms that `prod`'s render arms both. Step 9 then forces the
-  backupstore sync (`docs/longhorn-disaster-recovery.md`, *Order from H1.2*).
+- **On a new cluster, bootstrap step 6 applies this tag.** It creates both targets and their
+  Secrets, and step 1 confirms that `prod`'s render arms both. Step 7 then forces the
+  backupstore sync (`docs/flux-deploy-plane.md`, *Bootstrapping Flux on a rebuilt cluster*).
 
 ## What it writes (the autonomous-role contract)
 

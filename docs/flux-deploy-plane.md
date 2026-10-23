@@ -1,20 +1,22 @@
 # The Flux deploy plane
 
 Flux's source controller, Kustomize controller and notification controller run in the
-`flux-system` namespace. They follow the promoted artifact, whose root Kustomization is
-empty, so Flux applies nothing outside `flux-system`, and the GitOps deployer and Ansible
-still deploy every service, Flux included. The plan that takes
-Flux from here to owning the cluster is [slice D1](target-architecture/deploy/d1-flux-installed.md)
-and the slices after it, and the decision it proposes is
-[ADR-0020](adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md).
+`flux-system` namespace. They follow the promoted artifact, and Flux applies every k8s service
+from it, Flux itself included (D5 step 29). The GitOps deployer and Ansible deploy no workload
+on the cluster. The plans are [slice D1](target-architecture/deploy/d1-flux-installed.md) and
+the slices after it, and the decision is
+[ADR-0020](adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md). A rebuilt cluster
+gets Flux from *Bootstrapping Flux on a rebuilt cluster* below, and a broken Flux is
+recovered by *Recovering Flux by hand*.
 
 ## What runs
 
 - **Three controllers, at the release `flux_version` names** in
   `ansible/roles/k8s/flux/defaults/main.yml`. helm-controller and the image-automation
   controllers are not installed, because nothing here uses them.
-- **One role deploys them**, `ansible/roles/k8s/flux/`, under the tag `flux`. It is an
-  ordinary Ansible-owned k8s role, denylisted from auto-deploy (`k8s_autodeploy: false`).
+- **Flux applies them**, from `ansible/roles/k8s/flux/`'s render under the tag `flux`
+  (`owner: flux`). The Kustomization `flux` applies the components at `prune: false`, and
+  `flux-deferred` applies the sync objects at `prune: true`. `deploy.sh --tags flux` exits 5.
 - **The install is vendored.** `files/gotk-components.yaml` is the output of `flux install
   --export`, filtered and pinned by digest. Its first line is the pipeline that produced it,
   so a regeneration reviews as that pipeline plus upstream's change. The role's `CLAUDE.md`
@@ -28,7 +30,8 @@ Renovate opens a manual PR for a new `fluxcd/flux2` release, because its hosted 
 `flux_version` but cannot run `flux install`. The PR is finished by regenerating the vendored
 file at the new release. Until then, the header test in `ansible/tests/k8s/test_flux_role.py`
 fails, because the file's first line still names the old release. Land the finished PR with
-`land.sh --tags flux`; the tick applies nothing for a denylisted role.
+`land.sh`; `promote` publishes it, and the Kustomization `flux` rolls the controllers. A
+release that breaks the controllers is the first branch of *Recovering Flux by hand*.
 
 A regenerated `ansible/roles/k8s/flux/files/gotk-components.yaml` also runs CI's
 `sops-manifest-type-proof` job, which applies the file to a kind cluster. The bump PR shows
@@ -77,8 +80,8 @@ Two sources put Flux in the metrics plane, both in `ansible/roles/k8s/observabil
   change to it rolls kube-state-metrics.
 
 **`suspended` is absent, not `"false"`, on an object Flux is reconciling.** kube-state-metrics
-drops a label whose field is absent, and the flux role writes `spec.suspend` only while
-`flux_sync_suspend` is true. A rule about suspension therefore matches `suspended="true"`.
+drops a label whose field is absent, and the renderer writes `spec.suspend` only when it is
+true. A rule about suspension therefore matches `suspended="true"`.
 
 **Series.** These counts were measured on 2026-10-13 at about 03:00Z, after D1.6 deployed
 `observability` at 02:50:58Z:
@@ -127,7 +130,7 @@ M1's Alertmanager. Every rule carries `service="flux"`.
   `FluxSuspended` quiet. Its alert carries no `exported_namespace`, and its description
   points at the kube-state-metrics log.
 - **`FluxSuspended`, warning.** A Kustomization has been suspended for more than 24 hours.
-  `flux_sync_suspend` and a hand suspend both count.
+  A role's `flux_suspend` and a hand suspend both count.
 - **`FluxWorkersSaturated`, warning.** For 30 minutes, every `kustomize-controller` reconcile
   worker has been busy and its work queue has not been empty, so applies are queueing.
     - The rule compares `controller_runtime_active_workers` with
@@ -399,33 +402,402 @@ To check the controllers after a deploy, run `kubectl -n flux-system get deploy`
 
 ## What Flux follows
 
-The flux role applies these objects in `flux-system` from `templates/sync.yaml.j2`, after the
-Flux CRDs are Established:
+The Kustomization `flux-deferred` applies these objects in `flux-system` from the flux role's
+`templates/sync.yaml.j2`, after `flux` reads Ready, so the Flux CRDs exist:
 
 - **The `OCIRepository` `homelab`** polls `oci://ghcr.io/danielh2018/homelab-manifests:prod`
   every minute, with no pull secret, so the package stays public. It verifies the cosign
   signature against the identity of the `promote` workflow on `refs/heads/master`, so an artifact
   anything else pushed is never applied.
+- **The `OCIRepository` `last-good`** follows the `last-good` tag with the same `verify`
+  block. No Kustomization reads it; the soak Job diffs against it.
 - **The Kustomization `homelab`** is the root. It applies `./flux` from that artifact, with
-  `prune: true`, `wait: false` and `deletionPolicy: Orphan`. The bundle's root holds no
-  objects, so its inventory is empty.
+  `prune: true`, `wait: false` and `deletionPolicy: Orphan`. Its inventory holds every
+  Kustomization in `flux/`, `flux` and `flux-deferred` among them, so the root applies the
+  Kustomization that applies the root.
 - **The Provider `github-status` and the Alert `commit-status`** post a commit status with the
   context `flux/<kustomization>` on the commit the artifact carries. A Ready reconcile posts
   `success`, and an error event posts `failure`.
 - **The Provider `discord` and the Alert `deploy-errors`** post error events from every
   Kustomization and from the `OCIRepository` `homelab` to the channel the deployer posts to.
 
-To stop all reconciliation, land a PR that sets `flux_sync_suspend: true` in the role's
-defaults. It renders `suspend: true` on the `OCIRepository` and the root, and deletes nothing.
-Setting it back to `false` resumes both at the next role run. With the lever off the render
-omits the field, so a hand suspend survives the role's runs; a suspend the lever wrote does
-not.
+A renderer test pins the two `OCIRepository` objects' URL, `ref` and `verify` block to these values
+(`scripts/renderer/tests/test_renderer_bootstrap_documents.py`), so a change to them fails CI
+rather than cutting Flux off from its source. The renderer refuses `flux_sync_suspend: true`:
+Flux would apply the suspend to its own source and could never fetch the commit that clears
+it. To stop all reconciliation, suspend the `OCIRepository` `homelab` by hand, as *Recovering
+Flux by hand* says, with its resume beside it.
 
-The signature drill uses a second lever. `flux_verify_drill: true` renders an `OCIRepository`
+The signature drill uses a lever. `flux_verify_drill: true` renders an `OCIRepository`
 `verify-drill`, which follows the unsigned tag that a `verify_drill` dispatch of `promote`
 pushes, and must read Ready=False with a verification error. It is not a source of
 `deploy-errors`, so the drill posts nothing to Discord. Setting the lever back to `false`
-deletes the object at the role's next run.
+drops the object from the render, and `flux-deferred`'s prune deletes it.
+
+## Recovering Flux by hand
+
+Flux applies its own controllers and sync objects (D5 step 29), so a broken one cannot be
+fixed by a PR alone: the commit that fixes it reaches the cluster only through Flux. Every
+branch below is **operator-only**, because it needs `sudo k3s kubectl`. Every suspend and
+every resume names `--field-manager=homelab-operator`. That manager matches none of the
+managers `kustomize-controller` cleans, so a suspend survives the reconcile of the Kustomization
+that applies the suspended object (D5.1b, and *A hand suspend uses its own field manager*
+under *Stopping one service* below).
+
+The two branches that apply by hand render at `last-good`'s commit. Read it, as
+`<last-good SHA>`, from the `org.opencontainers.image.revision` key of `last-good`'s manifest
+in GHCR (C2). While source-controller runs, the `OCIRepository` `last-good` reports the same key:
+
+```bash
+kubectl -n flux-system get ocirepository last-good -o jsonpath='{.status.artifact.metadata.org\.opencontainers\.image\.revision}'
+```
+
+Then render the flux role at that commit, in a checkout of its own:
+
+```bash
+git worktree add --detach <dir> <last-good SHA>
+cd <dir> && uv run python scripts/renderer/homelab_render.py cluster --out <out> --role flux
+```
+
+The components are `<out>/cluster/flux/components.yaml`, and the sync objects are
+`<out>/cluster/flux-deferred/sync.yaml`.
+
+### A broken controller upgrade
+
+A release whose controllers do not run leaves the Kustomization `flux` applying the broken
+components. The restored controller would re-apply them from `prod` at its next reconcile of
+`flux`, so this branch has the same shape as *A broken sync object*, in this order:
+
+1. Hold promotions, so no promotion moves `prod` past the reset:
+
+    ```bash
+    gh variable set DEPLOY_HOLD --body <reason> -R DanielH2018/server
+    ```
+
+2. Suspend `flux`. The suspend survives the root's reconcile (D5.1b). The source can still
+   hold the broken revision's artifact after the reset, so without the suspend the restored
+   `kustomize-controller` could apply the broken components again:
+
+    ```bash
+    sudo k3s kubectl -n flux-system patch kustomization flux --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":true}}'
+    ```
+
+3. Dispatch the reset (*The reset input*):
+
+    ```bash
+    gh workflow run promote.yml -R DanielH2018/server --ref master -f reset_to_last_good=true
+    ```
+
+    If it refuses because a verification is in flight, cancel the run it names. A broken Flux
+    posts no statuses, so waiting would last the whole derived verify timeout. That run's
+    `settle` still runs: it writes `<T> unverified` over the reason from step 1 and resets
+    `prod` itself. Read `last-good` again, then dispatch again:
+
+    ```bash
+    gh run cancel <run-id> -R DanielH2018/server
+    ```
+
+4. Apply the components rendered at `last-good`, for the reasons *A broken sync object*
+   gives:
+
+    ```bash
+    sudo k3s kubectl apply --server-side --force-conflicts --field-manager=kubectl -f <out>/cluster/flux/components.yaml
+    ```
+
+5. Wait until the controllers are Ready and the `OCIRepository`'s
+   `org.opencontainers.image.revision` key reads `master@sha1:<last-good SHA>`, as Branch 1's
+   step 3 in `docs/volume-snapshot-drills.md` reads it. A broken source-controller cannot
+   report before step 4, so this wait comes after the apply:
+
+    ```bash
+    kubectl -n flux-system rollout status deployment/source-controller --timeout=300s
+    kubectl -n flux-system rollout status deployment/kustomize-controller --timeout=300s
+    kubectl -n flux-system rollout status deployment/notification-controller --timeout=300s
+    kubectl -n flux-system get ocirepository homelab -o jsonpath='{.status.artifact.metadata.org\.opencontainers\.image\.revision}'
+    ```
+
+6. Resume `flux` with the same patch and `false`:
+
+    ```bash
+    sudo k3s kubectl -n flux-system patch kustomization flux --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'
+    ```
+
+    Then land the revert of the upgrade, clear the hold and dispatch `promote`, by *Clearing
+    a hold* under *Verification*:
+
+    ```bash
+    gh variable set DEPLOY_HOLD --body none -R DanielH2018/server
+    gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master tip>
+    ```
+
+### Stopping everything
+
+Suspend the `OCIRepository` `homelab`. Every Kustomization reads its revision from that one
+source, so none gets a new revision. Each still corrects drift at its interval against the
+revision it holds. Suspending the root alone would not stop anything, because each child
+reconciles its own source revision. The renderer refuses `flux_sync_suspend: true`, because
+Flux would apply that suspend to its own source and never fetch the commit that clears it, so
+this hand suspend is the only stop:
+
+```bash
+sudo k3s kubectl -n flux-system patch ocirepository homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":true}}'
+```
+
+The resume is the same patch with `false`:
+
+```bash
+sudo k3s kubectl -n flux-system patch ocirepository homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'
+```
+
+While the source is suspended no Kustomization posts a status, so a promotion in that time
+times out in `verify`. Set `DEPLOY_HOLD` first when a merge may land meanwhile, as *A hand
+suspend uses its own field manager* says.
+
+### A broken sync object
+
+A sync object the render broke, such as the `OCIRepository`'s URL or `ref`, leaves Flux unable
+to fetch the commit that fixes it. In this order:
+
+1. Hold promotions, so no promotion moves `prod` past the reset:
+
+    ```bash
+    gh variable set DEPLOY_HOLD --body <reason> -R DanielH2018/server
+    ```
+
+2. Suspend `flux-deferred`, which applies the sync objects:
+
+    ```bash
+    sudo k3s kubectl -n flux-system patch kustomization flux-deferred --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":true}}'
+    ```
+
+3. Dispatch the reset. A refusal that names a verification in flight takes step 3's cancel in
+   *A broken controller upgrade*:
+
+    ```bash
+    gh workflow run promote.yml -R DanielH2018/server --ref master -f reset_to_last_good=true
+    ```
+
+4. Apply the sync objects rendered at `last-good`:
+
+    ```bash
+    sudo k3s kubectl apply --server-side --force-conflicts --field-manager=kubectl -f <out>/cluster/flux-deferred/sync.yaml
+    ```
+
+5. Wait until the `OCIRepository` is Ready and its `org.opencontainers.image.revision` key reads
+   `master@sha1:<last-good SHA>`:
+
+    ```bash
+    kubectl -n flux-system wait ocirepository/homelab --for=condition=Ready --timeout=300s
+    kubectl -n flux-system get ocirepository homelab -o jsonpath='{.status.artifact.metadata.org\.opencontainers\.image\.revision}'
+    ```
+
+6. Resume `flux-deferred` with the same patch and `false`:
+
+    ```bash
+    sudo k3s kubectl -n flux-system patch kustomization flux-deferred --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'
+    ```
+
+    Then land the revert of the broken change, clear the hold and dispatch `promote`, as step 6
+    of *A broken controller upgrade* does.
+
+- **Why `--force-conflicts`.** `kustomize-controller`'s own Apply entry owns every field of the
+  sync objects. A server-side apply by another manager that sets a different value on an
+  owned field is refused as a conflict unless it is forced. The broken fields, such as the
+  `OCIRepository`'s URL or `ref`, are exactly those fields.
+- **Why the manager `kubectl`.** The apply names that manager explicitly, so the Apply entry
+  it creates matches the cleanup's `kubectl` (Apply) entry by construction rather than by
+  kubectl's default. Upstream's comment on that entry reads "to undo changes made with
+  'kubectl apply --server-side --force-conflicts'". So Flux's cleanup takes those fields back
+  at `flux-deferred`'s first reconcile after the resume. Under `homelab-operator`, an Apply
+  owner would stay on every field, and a later commit that removed one would never take
+  effect.
+
+`ansible/tests/repo/test_flux_recovery_runbook.py` fails this section on a suspend or a resume
+without `--field-manager=homelab-operator`, on a server-side apply without
+`--force-conflicts`, and on a hand-apply branch whose apply precedes its `DEPLOY_HOLD` step.
+
+## Bootstrapping Flux on a rebuilt cluster
+
+This section is the single owner of the bring-up and DR order. No Ansible path installs Flux,
+because the flux tag is flux-owned and `deploy.sh --tags flux` exits 5 (D5 step 29).
+`docs/longhorn-disaster-recovery.md`, `docs/break-glass.md` and `docs/k3s-etcd-restore.md` link
+here rather than keep an order of their own. Every step is **operator-only**. The bootstrap
+drill, `.github/workflows/bootstrap-drill.yml`, rehearses this order on a throwaway kind
+cluster.
+
+**Before step 1**, H1's steps 1 to 3 have run: k3s is installed, `cluster-base` is applied under
+`kustomize-controller`'s field manager, and the read-only token exists.
+
+```bash
+uv run ansible-playbook ansible/k3s-bringup.yml --skip-tags kubeconfig
+uv run python scripts/renderer/homelab_render.py cluster --out <out> --role cluster-base
+sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -k <out>/cluster/cluster-base
+uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
+```
+
+**Until D5's namespace PR lands**, the `homelab` Namespace and its LimitRange come only from
+the Ansible k8s play's `pre_tasks`. So run the deploy once first. Every k8s service is
+flux-owned, so its batches visit none. Then check that both objects exist:
+
+```bash
+./scripts/deploy.sh
+kubectl get namespace homelab
+kubectl -n homelab get limitrange
+```
+
+The namespace PR deletes this step, because the Kustomization `homelab-namespace` then
+creates both objects.
+
+1. Confirm that `prod`'s `longhorn-backup` render arms both backup targets, from a checkout of
+   `prod`'s commit (step 2 reads it):
+
+    ```bash
+    grep -E '^k3s_longhorn_(backup|r2)_armed:' ansible/roles/k8s/longhorn-backup/defaults/main.yml
+    ```
+
+    If an arm PR must merge, it merges and promotes now, and the hold its verify leaves is
+    cleared in step 9.
+
+2. Settle the hold, then choose the revision. The root applies whatever `prod` names and
+   adopts what the operator applied by hand, so every document below is rendered at `prod`'s
+   commit. A reset moves `prod`, so the hold comes first. Read it with
+   `gh variable get DEPLOY_HOLD -R DanielH2018/server`:
+    - **No hold.** When it reads `none`, wait until no run of the `promote` workflow is
+      queued or in progress. Then set the DR hold with
+      `gh variable set DEPLOY_HOLD --body dr-restore -R DanielH2018/server`. Without it, a
+      merge during the restores would promote. Its `verify` would time out, because no
+      Kustomization can post before step 9, and the failure path would reset `prod`. The
+      `OCIRepository` would then serve a commit other than the one rendered here.
+    - **A hold that step 1 did not leave.** A promotion failed or timed out before the
+      rebuild, so `prod` names `last-good` or the held revision R. The hold stays until step
+      9, because it already stops `decide`. The operator may dispatch `reset_to_last_good`,
+      which moves only a GHCR tag and makes `prod` name `last-good`'s commit, **only when no
+      tag changed between `last-good` and `prod` is a snapshot role or a forward-only tag.**
+      A tag has changed when its `own` digest in `digests.json` differs between the two
+      bundles, or when only one bundle holds it (*Snapshot roles hold without a reset*, and
+      *Forward-only tags*). A failure hold's post lists the changed tags and marks each
+      snapshot role.
+    - **The one exception** is the compatibility judgment that Branch 1 of
+      `docs/volume-snapshot-drills.md` already requires, recorded in the hold's thread before
+      the dispatch. For a snapshot role, the operator records that the data R wrote suits
+      `last-good`'s image. For a forward-only tag, the operator records that the downgrade is
+      safe on a fresh cluster with the restored backups. Without that record, the render
+      stays at the held `prod`.
+    - **Why the rule.** Step 8 restores the newest backups, which R's image may already have
+      written, and step 9's root applies whatever `prod` names. A reset across a changed
+      snapshot role would apply `last-good`'s image onto data R may have migrated. The
+      forward-only hold forbids a reset across a forward-only tag for the same reason.
+
+    Once the hold is settled, read `prod`'s commit without the cluster, from the
+    `org.opencontainers.image.revision` key of `prod`'s manifest in GHCR (C2). Render at that
+    commit, in placeholder mode, with `flux_verify_drill` false. Name every published tag with
+    `--role`, as `promote`'s *Build the bundle* step does: a render without `--role` writes
+    `cluster/` alone, and steps 6 and 9 need its `flux/` files.
+
+    ```bash
+    git worktree add --detach <dir> <prod SHA>
+    cd <dir> && uv run python scripts/deploy_tools/promote.py published-tags | sed 's/^/--role /' | xargs uv run python scripts/renderer/homelab_render.py cluster --out <out>
+    ```
+
+    - **Offline branch.** When GitHub or GHCR cannot be reached, steps 1 and 2 cannot run.
+      Follow C2's break-glass promotion instead; D6 owns that runbook and its order against
+      steps 3 to 9.
+
+3. Apply the Flux components and wait for the three controllers. `cluster/flux/secret.yaml`
+   holds `${...}` placeholders, so it is not applied by hand: the `flux` Kustomization
+   applies it with substitution once `cluster-vars` is up.
+
+    ```bash
+    sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -f <out>/cluster/flux/components.yaml
+    kubectl -n flux-system rollout status deployment/source-controller --timeout=300s
+    kubectl -n flux-system rollout status deployment/kustomize-controller --timeout=300s
+    kubectl -n flux-system rollout status deployment/notification-controller --timeout=300s
+    ```
+
+4. Create `flux-system/sops-age` from the cluster age key in the password manager (item 10 of
+   the recovery kit in `docs/break-glass.md`), with D3.0's command, then shred the file:
+
+    ```bash
+    sudo k3s kubectl -n flux-system create secret generic sops-age --from-file=age.agekey=<file>
+    ```
+
+5. From `cluster/flux-deferred/`, apply the `OCIRepository` `homelab` and nothing else. **The
+   root Kustomization is withheld until step 9.** While it does not exist, nothing applies a
+   stateful tag, so no PVC is provisioned under a backed-up name.
+
+    ```bash
+    uv run python -c 'import sys, yaml; [d] = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d and d["kind"] == sys.argv[2] and d["metadata"]["name"] == "homelab"]; print(yaml.safe_dump(d))' <out>/cluster/flux-deferred/sync.yaml OCIRepository > <out>/ocirepository.yaml
+    sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -f <out>/ocirepository.yaml
+    kubectl -n flux-system wait ocirepository/homelab --for=condition=Ready --timeout=300s
+    ```
+
+6. Apply the child Kustomizations the restores need: the `flux/<tag>.yaml` of each plumbing
+   tag (`cluster-base`, `metallb`, `coredns`, `longhorn` and `longhorn-backup`) and of every
+   Kustomization in their `dependsOn` closure, `flux/cluster-vars.yaml`, and, once D5's
+   namespace PR adds it, `flux/homelab-namespace.yaml`. The closure never holds
+   `flux-deferred` or the root, because `flux-deferred` applies the root.
+   `scripts/renderer/tests/test_renderer_bootstrap_documents.py` fails a plumbing tag whose
+   closure reaches either.
+
+    ```bash
+    sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -f <out>/flux/<tag>.yaml
+    kubectl -n flux-system wait kustomization/<tag> --for=condition=Ready --timeout=600s
+    ```
+
+    Wait until each reads `Ready`. Then run the agent join and the storage smoke test, which
+    both need Longhorn:
+
+    ```bash
+    uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent
+    uv run ansible-playbook ansible/k3s-storage-smoke.yml -e storage_smoke=daniel-box
+    ```
+
+7. Force the backupstore sync and wait for both targets to read available, as
+   `docs/longhorn-disaster-recovery.md`'s step 3 says.
+
+8. Run the DR gates, then restore each volume and create its PV and PVC, as that document's
+   step 4 says:
+
+    ```bash
+    uv run python scripts/deploy_tools/runbook_gates.py longhorn-dr
+    ```
+
+9. Apply the root Kustomization `homelab` from `cluster/flux-deferred/`. It applies every
+   Kustomization at `prod` and adopts the ones step 6 applied, and the stateful tags bind the
+   restored claims.
+
+    ```bash
+    uv run python -c 'import sys, yaml; [d] = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d and d["kind"] == sys.argv[2] and d["metadata"]["name"] == "homelab"]; print(yaml.safe_dump(d))' <out>/cluster/flux-deferred/sync.yaml Kustomization > <out>/root.yaml
+    sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -f <out>/root.yaml
+    ```
+
+    Once every status on `prod`'s commit reads `success`, clear the hold, whether step 1 left
+    it, step 2 set the DR value or step 2 kept a failure hold:
+
+    ```bash
+    gh variable set DEPLOY_HOLD --body none -R DanielH2018/server
+    ```
+
+    If a status fails, the hold stays, and the operator picks a branch by the revert
+    runbook's *Choosing the branch* in `docs/volume-snapshot-drills.md`.
+
+Every hand apply in steps 3, 5, 6 and 9 is
+`sudo k3s kubectl apply --server-side --field-manager=kustomize-controller` on the rendered
+file. That is the root's own field manager, so the root and the `flux` tag adopt each object
+without a conflict.
+
+`ansible/tests/repo/test_flux_bootstrap_section.py` fails this section when the root's apply
+comes before the restore step, when a hand apply lacks `--field-manager=kustomize-controller`,
+and when step 2 names `reset_to_last_good` without its condition and the recorded exception.
+
+### Why the root is withheld, not suspended
+
+H1's order applied the root suspended and resumed it after the restores. Here the root comes
+from a hand apply of its render, which carries no `spec.suspend`: the renderer refuses a
+suspended sync render, and it never renders `suspend: false` (D5.1b). A root applied and then
+suspended with the `homelab-operator` patch could reconcile between the two commands and
+provision empty PVCs under the backed-up names. A root that does not exist cannot. Step 9's
+apply is the resume.
 
 ## Stopping one service: `flux_suspend`
 
@@ -868,9 +1240,10 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   `IN_FLIGHT_WAIT_S`;
 - a revision that changes every importer of `workload-shell.yml.j2` queues in rounds of up
   to each role's `timeout`, so it can reach the cap. The soak's own chain already does: on
-  2026-10-22 the published bundle's 111 Kustomizations, all counted as changed, chain to
-  32016s against the cap's 19800s. Longhorn v1.13.0 raised the `longhorn` timeout from 2m to
-  10m, which moved the chain from 31920s (#5972). The soak's wait is therefore clamped at the
+  2026-10-22 the published bundle's 114 Kustomizations, all counted as changed, chain to
+  32256s against the cap's 19800s. Longhorn v1.13.0 raised the `longhorn` timeout from 2m to
+  10m, which moved the chain from 31920s (#5972), and D5 step 29's `flux` and
+  `flux-deferred` moved it from 32016s. The soak's wait is therefore clamped at the
   cap, as `verify`'s is, and the `# DECIDED:` at `chained_timeout.py:VERIFY_CAP_S` records
   why the clamp stands (#5868).
 
@@ -915,8 +1288,10 @@ The bundle holds:
 - `digests.json`, described below.
 
 A published tag that defers files also gets the Kustomization `<tag>-deferred`, the second
-document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the tag's fields
-and depends on `<tag>`. The publish census admits that second document only for a tag that
+document of `flux/<tag>.yaml`. It applies `./cluster/<tag>-deferred` with the tag's `timeout`
+and depends on `<tag>`. It always renders `prune: true`, because `flux_prune: false` reaches
+`<tag>` alone (operator ruling, 2026-10-22, D5 step 29). A deferred object that must never
+be pruned therefore belongs in the role's own directory. The publish census admits that second document only for a tag that
 defers files (*The publish census*, the per-file rule).
 
 D5's per-tag kinds, `<tag>-snapshot`, `<tag>-prepull` and `<tag>-verify`, follow in the same

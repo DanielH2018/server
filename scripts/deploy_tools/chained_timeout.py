@@ -43,8 +43,9 @@ CONCURRENT = 5
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (ansible/tests/repo/test_promote_workflow_verify.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
-# (#5868: 32016s with 111 Kustomizations, against 19800s; it was 31920s until Longhorn v1.13.0
-# raised the `longhorn` timeout from 2m to 10m, #5972). `verify`'s own wait is the same
+# (#5868: 32256s with 114 Kustomizations, against 19800s; it was 32016s until D5 step 29 added
+# `flux` and `flux-deferred`, and 31920s until Longhorn v1.13.0 raised the `longhorn` timeout
+# from 2m to 10m, #5972). `verify`'s own wait is the same
 # `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would
 # let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no
 # promotion. The soak's wait cannot shrink to the chain of what changed either: the render

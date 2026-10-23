@@ -136,22 +136,42 @@ def test_flux_prune_false_renders_prune_false(tmp_path):
     assert _spec(tmp_path, "flux_prune: false\n")["prune"] is False
 
 
-def test_a_deferred_directory_takes_its_roles_fields(tmp_path):
-    """A plumbing role's deferred objects are its own manifests, so they are never pruned."""
-    _role(tmp_path, "flux_prune: false\nmanifests_rollout_timeout: 1200s\n", False)
+def _deferred_pair(roles) -> list[tuple[str, bool, str]]:
+    """`(name, prune, timeout)` of `TAG` and `TAG-deferred` as a placeholder render writes them."""
     tag = RenderedTag(TAG, _rendered().files, _rendered().files)
     result = apply_placeholders([tag], ("email",))
     directories = {n: f for t in result.tags for n, f in t.directories().items()}
     files = bundle_files(
-        directories, result.key_sets, [TAG], TIMEOUT, DOTENV, roles=tmp_path
+        directories, result.key_sets, [TAG], TIMEOUT, DOTENV, roles=roles
     )
-    docs = list(yaml_fast.safe_load_all(files[f"flux/{TAG}.yaml"]))
-    assert [
+    docs = yaml_fast.safe_load_all(files[f"flux/{TAG}.yaml"])
+    return [
         (d["metadata"]["name"], d["spec"]["prune"], d["spec"]["timeout"]) for d in docs
-    ] == [
-        (TAG, False, "1200s"),
-        (f"{TAG}-deferred", False, "1200s"),
     ]
+
+
+def prune_split_problems(pair: list[tuple[str, bool, str]]) -> list[str]:
+    """What breaks the operator's ruling of 2026-10-22 for a role setting `flux_prune: false`.
+
+    `flux_prune` reaches `<tag>` alone and `<tag>-deferred` keeps `prune: true`, while the role's
+    timeout reaches both (`bundle.flux_files`, its decision marker).
+    """
+    want = [(TAG, False, "1200s"), (f"{TAG}-deferred", True, "1200s")]
+    return [] if pair == want else [f"rendered {pair}, want {want}"]
+
+
+def test_prune_split_problems_is_clean_on_the_tag_and_its_deferred_directory(tmp_path):
+    """`flux` renders `prune: false` and `flux-deferred` renders `prune: true` (D5 step 29)."""
+    _role(tmp_path, "flux_prune: false\nmanifests_rollout_timeout: 1200s\n", False)
+    assert prune_split_problems(_deferred_pair(tmp_path)) == []
+
+
+def test_prune_split_problems_is_flagged_on_a_deferred_directory_that_keeps_the_lever():
+    """The red half: H1.1a's reading, which gave `flux_prune` to `<tag>-deferred` as well."""
+    old = [(TAG, False, "1200s"), (f"{TAG}-deferred", False, "1200s")]
+    assert prune_split_problems(old) != []
+    untimed = [(TAG, False, "1200s"), (f"{TAG}-deferred", True, TIMEOUT)]
+    assert prune_split_problems(untimed) != []
 
 
 def test_a_role_that_sets_neither_field_keeps_prune_and_the_default_timeout(tmp_path):
