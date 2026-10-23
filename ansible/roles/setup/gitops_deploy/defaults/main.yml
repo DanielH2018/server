@@ -237,8 +237,10 @@ gitops_deploy_k8s_timeout_s: 1440
 # The in-role term matters. A role's own `tasks/` run before k8s/manifests/tasks/drain.yml, so
 # what they wait for adds to the drain rather than overlapping it. prowlarr waited
 # `--timeout=300s` for its flaresolverr isolation probe Job on top of its 780s rollout, which
-# made it the worst promoted service at 480 + 300 + 780 + 60 = 1620s. Its flip deleted the probe
-# (#5594), so it is still the worst, at 1320s. An inline `rollout status` gate is
+# made it the worst promoted service at 480 + 300 + 780 + 60 = 1620s. Only an Ansible-owned role
+# counts, because the deployer never rolls a flux-owned tag back, and every promoted,
+# claim-declaring role is flux-owned since the D5 flips. prowlarr handed back would need 1320s.
+# An inline `rollout status` gate is
 # NOT counted — sonarr's 660s gate waits for the rollout the drain also waits for, so the two are
 # alternatives on one timeline, not additions.
 #

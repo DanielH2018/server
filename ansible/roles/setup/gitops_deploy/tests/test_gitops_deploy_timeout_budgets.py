@@ -23,6 +23,7 @@ import re
 import pytest
 import yaml
 
+from lib.k8s_roles import tag_owners
 from lib.repo_paths import ALL_VARS
 from lib.repo_paths import REPO as _REPO
 
@@ -252,53 +253,93 @@ def _rollout_timeout_s(role: str) -> int:
 # flip deleted its waits, and no Ansible-owned role waits in-role now.
 
 
-def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
-    revert_defaults = yaml.safe_load(
-        (_K8S_ROLES_DIR / "volume-revert" / "defaults" / "main.yml").read_text()
-    )
-    snapshot_defaults = yaml.safe_load(
-        (_K8S_ROLES_DIR / "volume-snapshot" / "defaults" / "main.yml").read_text()
-    )
-    all_vars = yaml.safe_load(ALL_VARS.read_text())
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
+# Only an Ansible-owned role counts: the deployer moves a tag whose containers_list entry sets
+# `owner` to `cs.flux` and never applies it, so never runs `_rollback_k8s` for it either. Every
+# promoted, claim-declaring role is flux-owned since the D5 flips, so the live set is empty and
+# nothing spends this budget today. A handback puts a role back in it (prowlarr would need
+# 1320s), and the fixture pair below proves the filter while the live set is empty.
 
-    state_timeout = int(revert_defaults["volume_revert_state_timeout"])
-    api_timeout = int(revert_defaults["volume_revert_api_timeout"])
-    snapshot_timeout = int(snapshot_defaults["volume_snapshot_timeout"])
-    stabilise = int(all_vars["k8s_rollout_stabilise_seconds"])
-    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
-    per_claim = snapshot_timeout + 3 * state_timeout + 3 * api_timeout
 
-    worst_role, worst_ceiling, worst_claims = None, 0, 0
-    for role_defaults_path in sorted(_K8S_ROLES_DIR.glob("*/defaults/main.yml")):
+def _rollback_terms() -> tuple[int, int, int]:
+    """(per-claim snapshot and revert cost, stabilise soak, rollback budget), from their sources."""
+    revert = yaml.safe_load(
+        (_K8S_ROLES_DIR / "volume-revert/defaults/main.yml").read_text()
+    )
+    snapshot = yaml.safe_load(
+        (_K8S_ROLES_DIR / "volume-snapshot/defaults/main.yml").read_text()
+    )
+    per_claim = int(snapshot["volume_snapshot_timeout"]) + 3 * (
+        int(revert["volume_revert_state_timeout"])
+        + int(revert["volume_revert_api_timeout"])
+    )
+    stabilise = int(
+        yaml.safe_load(ALL_VARS.read_text())["k8s_rollout_stabilise_seconds"]
+    )
+    budget = int(
+        yaml.safe_load(_DEFAULTS.read_text())["gitops_deploy_k8s_rollback_timeout_s"]
+    )
+    return per_claim, stabilise, budget
+
+
+def _worst_rollback_case(
+    roles_dir,
+    owners,
+    per_claim,
+    stabilise,
+    rollout_s=_rollout_timeout_s,
+    in_role_s=in_role_wait_s,
+) -> tuple[str, int]:
+    """The promoted, claim-declaring role in `roles_dir` with the longest rollback, and its length.
+
+    A role whose tag `owners` names is skipped. Returns `("", 0)` when no role qualifies.
+    """
+    worst_role, worst = "", 0
+    for role_defaults_path in sorted(roles_dir.glob("*/defaults/main.yml")):
         role = role_defaults_path.parent.parent.name
         role_defaults = yaml.safe_load(role_defaults_path.read_text()) or {}
-        if not role_defaults.get("k8s_autodeploy"):
-            continue
         claims = role_defaults.get("k8s_autodeploy_snapshot_pvcs") or []
-        if not claims:
+        if role in owners or not role_defaults.get("k8s_autodeploy") or not claims:
             continue
         ceiling = (
-            len(claims) * per_claim
-            + in_role_wait_s(role)
-            + _rollout_timeout_s(role)
-            + stabilise
+            len(claims) * per_claim + in_role_s(role) + rollout_s(role) + stabilise
         )
-        if ceiling > worst_ceiling:
-            worst_role, worst_ceiling, worst_claims = role, ceiling, len(claims)
+        if ceiling > worst:
+            worst_role, worst = role, ceiling
+    return worst_role, worst
 
-    assert worst_role is not None, (
-        "no promoted (k8s_autodeploy: true), claim-declaring k8s role found — the sizing model "
-        "this test encodes no longer matches the repo; update it rather than deleting it"
+
+def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
+    per_claim, stabilise, rollback_timeout = _rollback_terms()
+    worst_role, worst_ceiling = _worst_rollback_case(
+        _K8S_ROLES_DIR, tag_owners(), per_claim, stabilise
     )
     assert worst_ceiling <= rollback_timeout, (
         f"{worst_role} needs {worst_ceiling}s for one full rollback cycle "
-        f"({worst_claims} claim(s), {in_role_wait_s(worst_role)}s of in-role waits, "
+        f"({in_role_wait_s(worst_role)}s of in-role waits, "
         f"{_rollout_timeout_s(worst_role)}s rollout), which exceeds "
         f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s) — its rollback can be "
         f"SIGTERMed mid-revert. Raise that default (and TimeoutStartSec, and re-check this "
         f"test's own comment on the batch-summation gap it does not cover)."
     )
+
+
+def _fixture_rollback_case(roles_dir: pathlib.Path, owners: dict[str, str]):
+    # prowlarr's shape: one claim at 480s, a 780s rollout, no in-role waits and a 60s soak.
+    defaults = roles_dir / "widget" / "defaults" / "main.yml"
+    defaults.parent.mkdir(parents=True, exist_ok=True)
+    defaults.write_text(
+        "k8s_autodeploy: true\nk8s_autodeploy_snapshot_pvcs: [widget-config]\n"
+    )
+    return _worst_rollback_case(roles_dir, owners, 480, 60, lambda _: 780, lambda _: 0)
+
+
+def test_an_ansible_owned_role_is_counted_in_the_rollback_budget(tmp_path):
+    assert _fixture_rollback_case(tmp_path, owners={}) == ("widget", 1320)
+
+
+def test_a_flux_owned_role_is_left_out_of_the_rollback_budget(tmp_path):
+    assert _fixture_rollback_case(tmp_path, owners={"widget": "flux"}) == ("", 0)
+    assert _fixture_rollback_case(tmp_path, owners={"widget": "released"}) == ("", 0)
 
 
 # The FORWARD deploy's own ceiling, derived the same way as the rollback's above and from the
