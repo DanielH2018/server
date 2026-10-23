@@ -94,6 +94,14 @@ tests:
             exp_annotations:
               summary: Kuma's UPS Battery Health tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the UPS Battery Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Artifacts Peer Sync, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Artifacts Peer Sync tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Artifacts Peer Sync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Telemetry OTLP Door, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Telemetry OTLP Door tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Telemetry OTLP Door tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -138,6 +146,10 @@ tests:
       - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -188,6 +200,10 @@ tests:
       - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
