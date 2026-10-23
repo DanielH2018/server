@@ -206,7 +206,7 @@ def test_a_rejected_push_from_a_b6b_pod_producer_is_clean_and_from_any_other_is_
         refused = _REJECTED_UP.replace("release-staleness-check", tag)
         ok, msg = swallowed_verdicts([(1, refused)], "3h", truncated=False)
         assert ok, (tag, msg)
-    ok, _ = swallowed_verdicts([(1, _REJECTED_UP)], "3h", truncated=False)
+    ok, _ = swallowed_verdicts([(1, _REJECTED_UNLISTED)], "3h", truncated=False)
     assert not ok
 
 
