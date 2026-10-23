@@ -16,9 +16,9 @@ Accepted.
 this decision, and the operator accepted it the same day: the cluster decrypts its own cluster
 file with its own age key, and never `secrets.yml`.
 
-2026-10-23: the same record proposes a second amendment, pending the operator's approval: a
-host that runs from a package decrypts its own per-host file with its own key, and never
-`secrets.yml`.
+2026-10-23: the same record amends this decision a second time, and the operator accepted it
+the same day: a host that runs from a package decrypts its own per-host file with its own key,
+and never `secrets.yml`.
 
 ## Context
 

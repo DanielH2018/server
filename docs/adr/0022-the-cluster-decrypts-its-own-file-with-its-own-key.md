@@ -91,8 +91,8 @@ encrypt a file that an editor writes under `vars/`.
 
 ### Amendment status
 
-Proposed on 2026-10-23 in PR H4.1d. **Approving it is an operator decision, and the approval
-gates the merge of that PR.** The sections above stay as accepted on 2026-10-15. This section
+Accepted. The operator accepted it on 2026-10-23, in the session that orchestrates slice H4,
+before PR H4.1d merged. The sections above stay as accepted on 2026-10-15. This section
 extends them from the cluster to the hosts and changes nothing the cluster rules decide.
 
 ### Amendment context
