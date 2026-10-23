@@ -24,6 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from pathlib import Path
 from typing import Any
 
+from deploy_tools.setup_lib.setup_gates import role_end_guard
 from lib import yaml_fast
 from lib.ansible_inventory import PI_HOST
 from lib.json_types import JsonObject, JsonValue, as_object
@@ -240,7 +241,11 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
 
 
 def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list[str]:
-    """The block's bullet lines for one setup role, unwrapped."""
+    """The block's bullet lines for one setup role, unwrapped.
+
+    A role whose first task is a guarded `meta: end_role` adds the guard's text to the
+    *Applied by* line, read by `setup_gates.role_end_guard`.
+    """
     appliers = setup_appliers(role_dir.name, playbooks_dir)
     if appliers:
         cells = []
@@ -256,6 +261,13 @@ def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list
             + ", ".join(f"`{p}`" for p in SETUP_PLAYBOOKS)
             + " read)"
         ]
+    guard = role_end_guard(role_dir)
+    if guard is not None:
+        # The role ends before any task on the hosts the guard names, so the line that says
+        # where it is applied says where it stops too.
+        lines[0] += (
+            f"; ends on hosts where `{_when_text(guard)}` (leading `meta: end_role`)"
+        )
 
     jobs = cron_jobs(role_dir)
     if jobs:

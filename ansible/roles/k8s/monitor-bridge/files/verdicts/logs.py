@@ -237,6 +237,9 @@ KUMA_RETIRING_TAGS = frozenset(
         "docs-refresh",
         "etcd-snapshot-offbox",
         "eval-run",
+        # B3: gitops_deploy's two timers.
+        "github-interaction-limit",
+        "github-ruleset-drift",
         "janitorr-health",
         "live-drift-check",
         "loki-read-route-health",

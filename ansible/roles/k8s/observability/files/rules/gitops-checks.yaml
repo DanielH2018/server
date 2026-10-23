@@ -1,0 +1,92 @@
+# The B3 host checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B3): the
+# GitHub ruleset drift check and the GitHub interaction-limit re-arm, both timers of the
+# gitops_deploy role on daniel-box. Each producer writes a `homelab_check_*` textfile to the `node`
+# scrape job, so these rules read the metric contract of
+# docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim.
+#
+# SHADOW UNTIL M6's BATCH B3 CUTOVER-1B. Each rule runs beside the Kuma tile of the same check, so
+# each carries `shadow: "true"` and pages nobody. Severity is `warning` because both tiles notify
+# Discord only. Each pair is `<Check>Failed` and `<Check>NotReporting`, the shape M3 fixed:
+# NotReporting reads the timestamp against the deadline, falls back to absent_over_time over the
+# same deadline, and leaves a dead exporter to the `targets` check.
+#
+# DECIDED: `service` names the thing checked, not the host that runs the check (operator,
+# 2026-10-23; the same ruling as bridge-exporter.yaml's). Both checks are about the GitHub
+# repository's settings, so both carry `service: github`. A node is not a workload, and the
+# gitops_deploy timers are only where the question is asked.
+#
+# Each deadline is the DEADLINE_S its producer renders, which equals the interval of the Kuma tile
+# it shadows. Both literals of a NotReporting rule are pinned to it by
+# ansible/tests/services/test_gitops_check_rule_literals.py (M1 convention 1).
+groups:
+  - name: gitops-checks
+    rules:
+      # Kuma tile "GitHub Ruleset Drift".
+      - alert: GitHubRulesetDrift
+        expr: homelab_check_success{check="github-ruleset-drift",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: github
+          shadow: "true"
+        annotations:
+          summary: The live GitHub rulesets no longer match the values the repo declares.
+          description: >-
+            github-ruleset-drift.sh on daniel-box ended with status=down: the repo is not public,
+            a ruleset's required contexts, bypass actors, Renovate exclusion or agent-branch
+            fence differ from roles/setup/gitops_deploy/defaults/main.yml, or GitHub could not be
+            read. The `github-ruleset-drift` syslog tag names the ruleset id and the property.
+            Revert the ruleset change unless it was deliberate, otherwise update the defaults.
+      - alert: GitHubRulesetDriftNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="github-ruleset-drift",origin="daniel-box"} > 90000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="github-ruleset-drift",origin="daniel-box"}[90000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: github
+          shadow: "true"
+        annotations:
+          summary: daniel-box's GitHub ruleset drift check has stopped reporting.
+          description: >-
+            No github-ruleset-drift verdict newer than 90000s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the merge gate matches the repo. Read
+            `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
+            /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
+      # Kuma tile "GitHub Interaction Limit".
+      - alert: GitHubInteractionLimitNotArmed
+        expr: homelab_check_success{check="github-interaction-limit",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: github
+          shadow: "true"
+        annotations:
+          summary: The repo's GitHub interaction limit was not re-armed.
+          description: >-
+            github-interaction-limit.sh on daniel-box ended with status=down: gh is not logged in
+            for the deploy user, the PUT failed, or the readback did not match the declared
+            limit. The repo is open to non-collaborators until the limit is set again. Run `gh
+            auth status` as the deploy user, then check the limit in the repo settings.
+      - alert: GitHubInteractionLimitNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="github-interaction-limit",origin="daniel-box"} > 90000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="github-interaction-limit",origin="daniel-box"}[90000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: github
+          shadow: "true"
+        annotations:
+          summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
+          description: >-
+            No github-interaction-limit verdict newer than 90000s reached Prometheus from
+            daniel-box's textfile collector, so nothing confirms the limit is being re-armed
+            before GitHub lets it lapse. Read `systemctl status
+            kuma-check-github-interaction-limit` on daniel-box, then
+            /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
