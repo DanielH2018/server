@@ -14,11 +14,12 @@ import copy
 import pytest
 from ansible.errors import AnsibleFilterError
 
-from _k8s_render import host_context, render_role_template
+from _k8s_render import host_context, render_pod_env, render_role_template
 from lib import yaml_fast
 from scrape_jobs import FilterModule, entry_port, metrics_port, scrape_jobs
 
-# Every job derived from a `metrics` item: the seven from #3743, and `nut` from #3816. Each must
+# Every job derived from a `metrics` item: the seven from #3743, `nut` from #3816 and
+# `monitor-bridge`, the check exporter's. Each must
 # still render from an entry, so a `metrics` item dropped from the inventory fails here rather
 # than reading as a smaller loop.
 _DERIVED = {
@@ -30,6 +31,7 @@ _DERIVED = {
     "terraria-stats",
     "valheim-stats",
     "nut",
+    "monitor-bridge",
 }
 
 
@@ -92,6 +94,23 @@ def test_the_scrape_target_and_the_service_read_one_port(entry_name, job):
     service = render_role_template(entry_name, "service.yaml.j2", overrides)
     assert targets[job] == [f"{entry_name}.homelab.svc:9999"]
     assert _service_ports(service) == [9999]
+
+
+def test_the_check_exporter_listener_service_and_scrape_job_read_one_port():
+    """Moving monitor-bridge's `metrics` port moves the process env, the Service and the job."""
+    entries = copy.deepcopy(host_context()["containers_list"])
+    entry = next(e for e in entries if e["name"] == "monitor-bridge")
+    (item,) = entry["metrics"]
+    assert entry["port"] != 9999
+    item["port"] = 9999
+    overrides = {"containers_list": entries}
+    targets = _scrape_targets(
+        render_role_template("observability", "prometheus.yaml.j2", overrides)
+    )
+    service = render_role_template("monitor-bridge", "service.yaml.j2", overrides)
+    assert targets["monitor-bridge"] == ["monitor-bridge.homelab.svc:9999"]
+    assert 9999 in _service_ports(service)
+    assert render_pod_env("monitor-bridge", overrides)["CHECK_EXPORTER_PORT"] == "9999"
 
 
 def test_the_nut_job_renders_its_path_interval_and_params_from_the_item():
