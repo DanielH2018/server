@@ -1,6 +1,6 @@
 # D5 — Bulk move
 
-Status: IN PROGRESS
+Status: DONE
 
 PR D5.1a1, the publish layout: [#5259](https://github.com/DanielH2018/server/pull/5259). It
 merged on 2026-10-16 at `645fe859a` and deployed nothing. The publish census reserves D5's
@@ -310,6 +310,44 @@ the last roles to Flux after #5765. traefik's own window landed earlier, in #572
   [#5847](https://github.com/DanielH2018/server/pull/5847) (`7ca56d11e`). H1.3, MetalLB
   ([#5862](https://github.com/DanielH2018/server/pull/5862)), is a draft that waits on the
   operator's pre-merge census.
+
+**Status, 2026-10-23: D5 is done, and the seven exit checks are met.** Steps 29 to 31 landed
+after H1.7b.
+
+- **Exit 5 (steps 29 and 30).** [#5975](https://github.com/DanielH2018/server/pull/5975) set
+  `prune: false` on `flux` and `prune: true` on `flux-deferred`.
+  [#5990](https://github.com/DanielH2018/server/pull/5990) made `homelab-namespace` own the
+  Namespace and the LimitRange, and `deploy.yml` lost its two namespace tasks. Both were
+  verified live.
+- **Exit 6, the second speedtest revert drill.**
+  [#5998](https://github.com/DanielH2018/server/pull/5998) (merge `accead5710f7`) pointed the
+  readinessProbe at `/flux-drill-not-found`. Promote run 39971145741 held
+  `accead5710f70cd9c0465e01941fc9e2120cbf9a stateful=speedtest` at 14:52:24Z.
+    - **Branch 1 applied.** The classify command read `lastAttemptedRevision`
+      `prod@sha256:3fd1cd21...`, equal to the OCIRepository's. The session read digest8
+      `4a3ada11` from the snapshot name `autodeploy-speedtest-4a3ada11-config-20261023144142`.
+      The Job was `snapshot-speedtest-9205c418`, and its hash is not the digest.
+    - **The suspends survived a reconcile.** The operator suspended both Kustomizations at
+      about 14:54Z. `homelab` reconciled at 14:59:16Z, after the operator's patch, and
+      `flux-deferred` at 15:00:41Z. Both objects kept the field manager `homelab-operator`:
+      ```
+      speedtest           true  kustomize-controller gotk-kustomize-controller gotk-kustomize-controller homelab-operator
+      speedtest-snapshot  true  kustomize-controller gotk-kustomize-controller gotk-kustomize-controller homelab-operator
+      ```
+    - **The reset and the stale soak.** The operator ran `volume-revert.yml`, which left the
+      Deployment at 0/0, and dispatched the reset. The OCIRepository read
+      `master@sha1:4585d73e...` (last-good) at 15:06:23Z. The held soak Job `soak-a8439fc2`
+      failed by itself, with no pod delete, which is the #5704 fix working.
+    - **The result.** After the resumes, speedtest read 1/1 at 15:09:58Z and `probe.py health
+      speedtest` read ok. The revert, [#6008](https://github.com/DanielH2018/server/pull/6008)
+      (`7956a263d`), merged, and the operator cleared the hold at about 15:14Z. The revert's
+      promotion verified at TBD (the orchestrator fills this in before the PR leaves draft).
+- **Exit 7, and the request it changed.** The operator deleted the kustomize-controller pod at
+  about 14:02:51Z. Its replacement's one-hour peak working set was 174002176 bytes (about
+  166 MiB) against the 64Mi request, and the steady figure was about 155 MiB (162967552 at
+  15:03:48Z). The exit's "at or under 64Mi" therefore did not hold. Step 31
+  ([#6011](https://github.com/DanielH2018/server/pull/6011)) raised kustomize-controller's
+  request to 192Mi, as step 31 provides.
 
 Related issues:
 

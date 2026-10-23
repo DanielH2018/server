@@ -1,6 +1,6 @@
 # H1 — Hand the cluster content to Flux
 
-Status: IN PROGRESS
+Status: DONE
 
 PR H1.1f, the CI pin checks: [#5256](https://github.com/DanielH2018/server/pull/5256). It
 merged on 2026-10-16 at `2e8d5b1e3` and deployed nothing. `scripts/validate/cluster_pins.py`
@@ -54,6 +54,16 @@ merged at `c31833d3d` and owed `manual_plane k3s`. The operator applied `k3s-bri
 kubeconfig`, which read `ok=18 changed=0 failed=0`: the guard read the live Flux inventory and its
 refusal skipped. The operator then cleared the line
 ([readings](https://github.com/DanielH2018/server/pull/5316#issuecomment-6224451468)).
+
+**Status, 2026-10-23: H1 is done, and both exit checks are met.** The last PRs moved the
+cluster content to Flux in this order. H1.6 is [#5937](https://github.com/DanielH2018/server/pull/5937),
+H1.7a is [#5941](https://github.com/DanielH2018/server/pull/5941) and H1.7b is
+[#5943](https://github.com/DanielH2018/server/pull/5943). H1.8a needed no PR, because
+`K3S_WRITE_ALLOW` already holds only `agent_verify.yml` and `storage_smoke.yml`, which is the
+census exit check 2 asks for. H1.8b is [#5972](https://github.com/DanielH2018/server/pull/5972),
+and Longhorn v1.13.0 went live through it on 2026-10-23. [#5979](https://github.com/DanielH2018/server/pull/5979)
+retired the stale-checkout guard. H1.9 stays open: it waits on R4 and D6, and neither exit
+check names it.
 
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9
