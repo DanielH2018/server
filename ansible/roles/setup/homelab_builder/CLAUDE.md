@@ -106,6 +106,10 @@ version, `0.<first-parent count>+g<12-hex sha>`. A staged set the signer has not
 rebuilt at the new commit, because the signer refuses a `staged/` whose versions name two
 commits.
 
+The verdict reads every page of the commit's check runs, because a failing re-run on page 2
+would otherwise grade a red commit green. A read short of the listing's `total_count` grades
+`pending`, which is never cached (#5991).
+
 The anchor is master plus a green CI verdict, and nothing more. The `# DECIDED:` marker in the
 script cites ADR-0021:
 `ansible/roles/setup/homelab_builder/files/host_package_builder.py:DECIDED: the anchor is a commit`.

@@ -3,8 +3,8 @@
 "The rollback survives max flock contention" is split across defaults/main.yml (the k8s deploy,
 rollback budgets) and gitops-deploy.service.j2 (the flock wait and
 TimeoutStartSec). Four other jobs wait on the same
-lock, so every one of their waits must clear the deployer's worst hold, and
-K8S_ROLLBACK_TIMEOUT_S must cover one full revert cycle for the worst promoted service. Every
+lock, so every one of their waits must clear the deployer's worst hold. That
+K8S_ROLLBACK_TIMEOUT_S covers one full revert cycle is test_gitops_deploy_k8s_rollback_budget.py's. Every
 value is read from its source rather than pinned, so a bump to any one of them fails here
 instead of silently reopening the gap.
 
@@ -25,6 +25,7 @@ import yaml
 
 from lib.repo_paths import ALL_VARS
 from lib.repo_paths import REPO as _REPO
+
 
 from _helpers import manifests_rollout_timeout_s
 from _shell_render import rendered_shell_text
@@ -220,23 +221,6 @@ def test_a_short_lock_waiter_is_flagged():
     )
 
 
-# K8S_ROLLBACK_TIMEOUT_S must cover one full rollback cycle for the most expensive currently-
-# promoted (k8s_autodeploy: true) service that also declares k8s_autodeploy_snapshot_pvcs: the
-# pre-revert snapshot wait, the revert itself, whatever the role waits for in its OWN tasks, the
-# forward apply's rollout wait, and the post-rollout stabilisation soak — all inside the SAME
-# playbook run, on one continuous timeline
-# where nothing fails (a failure aborts the whole play immediately, so it can never compound with
-# an independent failure elsewhere — see docs/gitops-pipeline.md, *The rollback timeout, derived*).
-#
-# Deliberately a PER-SERVICE bound, not a per-batch one: co-batched claim-declaring services
-# stack their snapshot+revert phases (only the rollout WAIT is deduped across a batch, via
-# roles/k8s/manifests/tasks/drain.yml), so a multi-service batch is NOT covered here — that gap is recorded
-# at the DECIDED marker on the claim cap in deploy_k8s.py (the batch-abort blast radius) and in this same defaults/main.yml
-# comment, deliberately not modeled by this test.
-#
-# Computed from role SOURCES, not pinned numbers, so a future rollout-timeout bump or a new
-# promoted claim-declaring role fails this test instead of silently under-sizing the budget.
-
 _K8S_ROLES_DIR = pathlib.Path(__file__).parents[3] / "k8s"
 
 
@@ -252,56 +236,8 @@ def _rollout_timeout_s(role: str) -> int:
 # flip deleted its waits, and no Ansible-owned role waits in-role now.
 
 
-def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
-    revert_defaults = yaml.safe_load(
-        (_K8S_ROLES_DIR / "volume-revert" / "defaults" / "main.yml").read_text()
-    )
-    snapshot_defaults = yaml.safe_load(
-        (_K8S_ROLES_DIR / "volume-snapshot" / "defaults" / "main.yml").read_text()
-    )
-    all_vars = yaml.safe_load(ALL_VARS.read_text())
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
-
-    state_timeout = int(revert_defaults["volume_revert_state_timeout"])
-    api_timeout = int(revert_defaults["volume_revert_api_timeout"])
-    snapshot_timeout = int(snapshot_defaults["volume_snapshot_timeout"])
-    stabilise = int(all_vars["k8s_rollout_stabilise_seconds"])
-    rollback_timeout = int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
-    per_claim = snapshot_timeout + 3 * state_timeout + 3 * api_timeout
-
-    worst_role, worst_ceiling, worst_claims = None, 0, 0
-    for role_defaults_path in sorted(_K8S_ROLES_DIR.glob("*/defaults/main.yml")):
-        role = role_defaults_path.parent.parent.name
-        role_defaults = yaml.safe_load(role_defaults_path.read_text()) or {}
-        if not role_defaults.get("k8s_autodeploy"):
-            continue
-        claims = role_defaults.get("k8s_autodeploy_snapshot_pvcs") or []
-        if not claims:
-            continue
-        ceiling = (
-            len(claims) * per_claim
-            + in_role_wait_s(role)
-            + _rollout_timeout_s(role)
-            + stabilise
-        )
-        if ceiling > worst_ceiling:
-            worst_role, worst_ceiling, worst_claims = role, ceiling, len(claims)
-
-    assert worst_role is not None, (
-        "no promoted (k8s_autodeploy: true), claim-declaring k8s role found — the sizing model "
-        "this test encodes no longer matches the repo; update it rather than deleting it"
-    )
-    assert worst_ceiling <= rollback_timeout, (
-        f"{worst_role} needs {worst_ceiling}s for one full rollback cycle "
-        f"({worst_claims} claim(s), {in_role_wait_s(worst_role)}s of in-role waits, "
-        f"{_rollout_timeout_s(worst_role)}s rollout), which exceeds "
-        f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s) — its rollback can be "
-        f"SIGTERMed mid-revert. Raise that default (and TimeoutStartSec, and re-check this "
-        f"test's own comment on the batch-summation gap it does not cover)."
-    )
-
-
-# The FORWARD deploy's own ceiling, derived the same way as the rollback's above and from the
+# The FORWARD deploy's own ceiling, derived the same way as the rollback's (in
+# test_gitops_deploy_k8s_rollback_budget.py) and from the
 # same role sources — minus the revert terms, which only the rollback run pays. One tick runs
 # `ansible-playbook --tags <promoted services>` under `locked_budget(services,
 # K8S_DEPLOY_TIMEOUT_S)`, and inside that one budget a promoted role pays, in sequence: the

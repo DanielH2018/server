@@ -70,6 +70,11 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 )
 
 
+# deploy_git.py's page size and page cap for a check-runs listing, which `read_check_pages`
+# below walks by. The same test holds these equal to the deployer's.
+_CHECK_PAGE_SIZE, _CHECK_PAGES_MAX = 100, 20
+
+
 def log(message: str) -> None:
     print(f"homelab-builder: {message}", flush=True)
 
@@ -99,6 +104,35 @@ def ci_verdict(check_runs: list[dict], required: frozenset[str]) -> str:
     if any("pending" in states.get(name, {"pending"}) for name in required):
         return "pending"
     return "pass"
+
+
+def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:
+    """Every entry of `key` across a check-runs listing, walked as `deploy_git.read_check_pages`.
+
+    GitHub pages the listing at 100 runs, so a failing re-run of a required check can sit on
+    page 2 only (#5991). `fetch_page(query)` returns the parsed body for the `?per_page=&page=`
+    string this walk builds. A read short of `total_count` raises rather than returning a
+    partial list, and the caller reads that as `pending`.
+
+    Raises:
+        ValueError: a body without a `key` list or an integer `total_count`, a short read, or
+            more than _CHECK_PAGES_MAX pages.
+    """
+    found: list[dict] = []
+    for page in range(1, _CHECK_PAGES_MAX + 1):
+        body = fetch_page(f"?per_page={_CHECK_PAGE_SIZE}&page={page}")
+        entries = body.get(key) if isinstance(body, dict) else None
+        total = body.get("total_count") if isinstance(body, dict) else None
+        if not isinstance(entries, list):
+            raise ValueError(f"{key} page {page}: the body has no {key} list")
+        if not isinstance(total, int) or isinstance(total, bool):
+            raise ValueError(f"{key} page {page}: the body has no total_count")
+        found.extend(entries)
+        if len(entries) < _CHECK_PAGE_SIZE or len(found) >= total:
+            if len(found) < total:
+                raise ValueError(f"{key}: read {len(found)} of {total}")
+            return found
+    raise ValueError(f"{key}: more than {_CHECK_PAGES_MAX} pages")
 
 
 def version(count: int, sha: str) -> str:
@@ -335,15 +369,20 @@ class Builder:
     def verdict(self, sha: str, contexts: frozenset[str]) -> str:
         if self.cache.get(sha) == "pass":
             return "pass"
-        self.requests += 1
-        try:
-            payload = github_get(
-                f"repos/{self.config['GITHUB_REPO']}/commits/{sha}/check-runs?per_page=100",
+
+        def fetch_page(query: str) -> object:
+            self.requests += 1
+            return github_get(
+                f"repos/{self.config['GITHUB_REPO']}/commits/{sha}/check-runs{query}",
                 self.token,
                 user_agent="homelab-builder",
                 opener=self.opener,
             )
-            runs = payload["check_runs"]
+
+        try:
+            # A ValueError here includes a read short of total_count, so a partial listing
+            # reads as pending below rather than grading page 1 alone (#5991).
+            runs = read_check_pages(fetch_page, "check_runs")
         except urllib.error.HTTPError as exc:
             if token_refused(exc):
                 # The fetch is anonymous and keeps succeeding, so this read is the only one
@@ -369,8 +408,8 @@ class Builder:
         # DECIDED: only `pass` is cached. GitHub's check-runs API returns the latest run per
         # name, so `gh run rerun --failed` turns a red SHA green, and a cached `fail` would
         # never see it while the deployer's gate, which caches nothing, deploys the SHA
-        # (#5786). Re-reading a fail costs one request per red commit in a walk that
-        # CI_ANCESTOR_WALK_MAX bounds.
+        # (#5786). Re-reading a fail costs one request per page of a red commit's runs, in a
+        # walk that CI_ANCESTOR_WALK_MAX bounds.
         if result == "pass":
             self.cache[sha] = result
         return result
