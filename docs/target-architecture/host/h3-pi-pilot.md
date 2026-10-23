@@ -87,9 +87,15 @@ count was 1.
 PR H3.10b, drop the canary: [#6039](https://github.com/DanielH2018/server/pull/6039). It merged at
 `14c43910d`. It removes both units and the link. The operator check passed: the canary timer read
 `LoadState=not-found` and `ActiveState=inactive`, and the `timers.target.wants` count was 0.
-PR H3.11, `homelab-tools`: the PR that carries this line. It adds the package with `sops` and
-`chezmoi` pinned for `amd64` and `arm64`, and the Pi package `Depends` on it. The builder fetches
-and checks each pin, and the `host_tools_arm64` CI job installs the `arm64` build.
+PR H3.11, `homelab-tools`: [#6045](https://github.com/DanielH2018/server/pull/6045). It merged at
+`b5e1e1ebb`. It adds the package with `sops` and `chezmoi` pinned for `amd64` and `arm64`, and the
+Pi package `Depends` on it. The builder fetches and checks each pin, and the `host_tools_arm64` CI
+job installs the `arm64` build. The operator check passed on 2026-10-23: `dpkg-query -W
+homelab-tools:arm64` printed `homelab-tools 0.6096+g9ebb51406c47`, `dpkg --verify homelab-tools`
+printed nothing, and `/usr/lib/homelab/bin/` holds `chezmoi` and `sops`.
+PR H3.12, staged rollout: the PR that carries this line. It adds the gate, the `canary` reason and
+the root-owned `release` override to the builder, and `PROMETHEUS_URLS` to its settings file. It
+changes nothing while the Pi is the only host with a package.
 
 Depends on: R1
 Unblocks: H4, H5

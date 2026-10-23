@@ -48,3 +48,11 @@ homelab_builder_python_dir: "{{ homelab_builder_state_dir }}/python"
 homelab_builder_nfpm_version: v2.48.0
 homelab_builder_nfpm_sha256: 6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750
 homelab_builder_nfpm_dir: "{{ homelab_builder_code_dir }}/nfpm-{{ homelab_builder_nfpm_version }}"
+
+# The rollout gate's Prometheus (H3.12), loopback first: Prometheus publishes loopback only on
+# the node it runs on, and the ClusterIP reaches it from either node. The second entry is
+# observability_prometheus_cluster_ip, which this role cannot read, and
+# ansible/roles/setup/homelab_builder/tests/test_builder_units.py holds the two equal.
+homelab_builder_prom_urls:
+  - http://127.0.0.1:9090
+  - http://10.43.39.218:9090

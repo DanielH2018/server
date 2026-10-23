@@ -72,7 +72,8 @@ After the clear, a change under this role's directory lands through the setup-pl
   signer, which is not in the group, stat the operator's `hold` and read `archive-key.fpr`
   without listing the directory.
 - `/opt/homelab-builder/`, root-owned: the script `files/host_package_builder.py`, its sibling
-  `files/homelab_tool_fetch.py` (the `homelab-tools` step below), `host_lib.py`,
+  `files/homelab_tool_fetch.py` (the `homelab-tools` step below), `files/builder_ci_grade.py`
+  (the CI grading), `files/builder_rollout_gate.py` (the rollout gate below), `host_lib.py`,
   `publish-textfile`, a copy of the operator's pinned uv, and nfpm at the version
   `homelab_builder_nfpm_version` pins in `ansible/roles/setup/homelab_builder/defaults/main.yml`.
   The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot rewrite
@@ -118,7 +119,7 @@ script cites ADR-0021:
 Every run past the fetch writes `homelab_builder.prom`, and the unit's `ExecStopPost=-+` line
 copies it into the textfile directory. The `reason` label of
 `homelab_builder_unbuilt_since_timestamp_seconds` is one of `ok`, `hold`, `ancestry`,
-`keyring`, `ci`, `no-green`, `token`, `build` and `tools`. `token` is a missing token, or a 401 or
+`keyring`, `ci`, `no-green`, `token`, `build`, `tools` and `canary`. `token` is a missing token, or a 401 or
 403 from the check-runs read, which the anonymous fetch cannot see. `build` is a render or
 nfpm failure at the chosen commit, a value the plan's list does not name. `tools` is a
 `homelab-tools` pin that could not be fetched or whose sha256 differs from the pin (below). A worktree cleanup
@@ -143,6 +144,33 @@ The code is `ansible/roles/setup/homelab_builder/files/homelab_tool_fetch.py:ins
 CI's `host_packages` job calls the same function through `host_packages.py fetch-tools`.
 `ansible/roles/setup/homelab_builder/tests/test_host_package_builder_tools.py::test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools`
 holds the refusal.
+
+## The rollout gate (H3.12)
+
+A run whose changed set holds more than one host package (`hosts/<host>/`) stages only the
+canary's and defers the rest. The canary is the first of daniel-pi, daniel-server and daniel-box
+whose package changed. The shared packages under `packages/` never wait. The run records the gate
+`{host, sha}` and the deferred directories in `state.json`, and moves the gate to each newer
+canary version it stages. While the gate is open the builder builds no other host package, and
+the unbuilt-since series reads `reason="canary"` with the gate's commit as `sha`. A hold or a
+failure keeps its own reason.
+
+The gate closes at the start of a run, after the hold check, in one of two ways. The operator's
+root-owned `/etc/homelab-builder/release` can name the gate's commit or a descendant, and then
+Prometheus is not asked. Otherwise the builder reads `homelab_host_applied_info` and
+`homelab_host_reconcile_ok` for the canary from the addresses in the settings file's
+`PROMETHEUS_URLS`, loopback first and then the pinned ClusterIP. It closes the gate when the
+applied SHA equals or descends from the gate's commit with reconcile at 1. Any other answer, an
+unreadable file or an unreachable Prometheus leaves the gate open. After the gate closes with
+nothing new on master, the next run rebuilds the deferred packages at the last built commit.
+
+`PROMETHEUS_URLS` renders from `homelab_builder_prom_urls`. The role cannot read the
+observability role's `observability_prometheus_cluster_ip`, so the default repeats the address,
+and `ansible/roles/setup/homelab_builder/tests/test_builder_units.py::test_the_settings_carry_loopback_then_the_pinned_prometheus_cluster_ip`
+holds the two equal. No row of `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` is owed, because the role
+reads no other setup role's default. The code is
+`ansible/roles/setup/homelab_builder/files/builder_rollout_gate.py`, and `docs/host-packages.md`
+has the override's runbook step.
 
 ## The signer and the publish (H3.5b)
 
@@ -217,7 +245,8 @@ and publish what was staged, so every host's updater installs it at its next fir
   the packages it checks, and signs with the key `archive-key.fpr` names.
 - **Abort valves:** an empty `CI_CONTEXTS` or a walk bound that is not a positive integer
   (`ci`), a tip that does not descend from the last built commit (`ancestry`), and a keyring
-  that differs from `archive-key.fpr` (`keyring`). Each builds nothing. The signer's refusal
+  that differs from `archive-key.fpr` (`keyring`). Each builds nothing. An open rollout gate
+  (`canary`) builds no host package but the canary's. The signer's refusal
   rule publishes nothing from a set it refuses. The operator's root-owned
   `/etc/homelab-builder/hold` stops both from publishing anything new, and
   `homelab_builder_enabled: false` removes both.

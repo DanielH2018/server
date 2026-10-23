@@ -1,11 +1,12 @@
 """The builder's CI grading and its metric reasons, held to the deployer's and the plan's.
 
-The builder cannot import `deploy_git`, so it carries its own copy of `ci_verdict`, the
+The builder cannot import `deploy_git`, so `builder_ci_grade.py` carries its own copy of `ci_verdict`, the
 two conclusion sets and `read_check_pages`. These tests hold the copy equal to the deployer's.
 
 Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_builder_ci_grading.py
 """
 
+import builder_ci_grade as cg
 import host_package_builder as hb
 import pytest
 from deployer_lib import deploy_git
@@ -44,18 +45,18 @@ def test_every_reason_is_a_plan_value_and_none_is_trust():
     ],
 )
 def test_the_grading_matches_the_deployers(runs):
-    assert hb.ci_verdict(runs, frozenset({"prek"})) == deploy_git.ci_verdict(
+    assert cg.ci_verdict(runs, frozenset({"prek"})) == deploy_git.ci_verdict(
         runs, frozenset({"prek"})
     )
 
 
 def test_the_conclusion_sets_match_the_deployers():
-    assert hb._CI_PASS_CONCLUSIONS == deploy_git._CI_PASS_CONCLUSIONS
-    assert hb._CI_NO_VERDICT_CONCLUSIONS == deploy_git._CI_NO_VERDICT_CONCLUSIONS
+    assert cg._CI_PASS_CONCLUSIONS == deploy_git._CI_PASS_CONCLUSIONS
+    assert cg._CI_NO_VERDICT_CONCLUSIONS == deploy_git._CI_NO_VERDICT_CONCLUSIONS
 
 
 def test_the_page_size_and_cap_match_the_deployers():
-    assert (hb._CHECK_PAGE_SIZE, hb._CHECK_PAGES_MAX) == (
+    assert (cg._CHECK_PAGE_SIZE, cg._CHECK_PAGES_MAX) == (
         deploy_git.CHECK_PAGE_SIZE,
         deploy_git.CHECK_PAGES_MAX,
     )
@@ -67,7 +68,7 @@ def _listing(runs: int, total: int | None = None):
 
     def fetch_page(query: str) -> dict:
         page = int(query.rsplit("page=", 1)[1])
-        size = hb._CHECK_PAGE_SIZE
+        size = cg._CHECK_PAGE_SIZE
         return {
             "total_count": runs if total is None else total,
             "check_runs": listing[(page - 1) * size : page * size],
@@ -108,4 +109,4 @@ def test_the_page_walk_matches_the_deployers(fetch_page):
         except ValueError as exc:
             return f"ValueError: {exc}"
 
-    assert outcome(hb.read_check_pages) == outcome(deploy_git.read_check_pages)
+    assert outcome(cg.read_check_pages) == outcome(deploy_git.read_check_pages)

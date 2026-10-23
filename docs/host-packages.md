@@ -192,6 +192,34 @@ merge that. The tick applies the teardown, which removes the units, the code, th
 repository is unreachable while disarmed, so each host's updater fails its fetch, and
 `HostUpdateStale` fires once the host's limit passes.
 
+## Releasing the other hosts before the canary reports: the rollout gate
+
+A run whose changed set holds more than one host package stages only the canary's package
+(daniel-pi, then daniel-server, then daniel-box) and opens a gate at that commit. While the gate
+is open, the unbuilt-since series reads `reason="canary"`, and its `sha` names the gate's commit.
+The gate closes by itself once Prometheus reports the canary at that commit or a descendant with
+`homelab_host_reconcile_ok` at 1. The "Host Packages — Status" tile pages once the gate has stayed
+open for 2 hours.
+
+To close the gate before the canary reports, name the gate's commit on daniel-box. The gate's
+commit is the `sha` label of the series, and a descendant of it also works:
+
+```bash
+echo <sha-from-the-canary-series> | sudo tee /etc/homelab-builder/release
+```
+
+`sudo tee` makes the file root's, and the builder user cannot create or change it. The next builder
+run closes the gate without asking Prometheus, then builds the deferred host packages at the
+commit it chooses. To leave the override behind, remove it once the run has built them:
+
+```bash
+sudo rm /etc/homelab-builder/release
+```
+
+A file that names an older commit, or no SHA at all, leaves the gate open. The builder logs
+`rollout gate at <sha> closed` in `journalctl -u homelab-builder` when the gate closes. Shared
+packages (`homelab-updater`, `homelab-tools`) never wait on the gate.
+
 ## Rolling a host back
 
 The usual rollback is a revert on master. A version counts first-parent commits, so the
