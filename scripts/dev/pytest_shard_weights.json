@@ -223,6 +223,7 @@
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_failure_output.py": 1.01,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_fetch_skip.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_flux_owned.py": 0.03,
+ "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_k8s_rollback_budget.py": 0.18,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_lock_contention.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_not_the_deployer.py": 0.0,
