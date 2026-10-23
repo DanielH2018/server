@@ -4,6 +4,8 @@ Status: IN PROGRESS
 Depends on: H3
 Unblocks: H5, H6
 
+PR H4.1a1, the secrets script: decrypt and render: [#6056](https://github.com/DanielH2018/server/pull/6056).
+
 This slice adds `homelab-secrets.service`, which decrypts a per-host SOPS file on the host
 with the host's own age key. It proves the unit on the UPS shutdown chain of daniel-server,
 the host whose config carries the most consequence per line. It then retires the Pi's interim
