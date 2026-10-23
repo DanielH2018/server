@@ -30,9 +30,9 @@ or a comment is not credited.
 The exemptions are per task, which is why this is its own module: a `Census` row's `allow` map
 is keyed by file and would exempt every task in a role's `tasks/main.yml`.
 
-A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
-and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above,
-which selects every task it names, so it backs up a derivation that regresses.
+A second check covers the tasks a stub makes fail rather than act. `stub_refusers_without_the_guard`
+requires each task id it is given to carry the `homelab_secret_stubs` guard itself. It predates the
+assert rule above, which selects every such task, so it backs up a derivation that regresses.
 """
 
 import json
@@ -42,7 +42,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 
-from _k8s_guards import K8S_ROLES, _guard_covered_files
+from _k8s_guards import _guard_covered_files
 from _role_census import role_task_files
 from _secret_derivation import (
     _STUB_GUARD,
@@ -79,10 +79,10 @@ _SIDE_EFFECT_FREE = {
 
 # The live census over the real tree is retired (#5886). It selected four tasks, and no Ansible
 # path runs any of them: pihole-exporter and uptime-kuma are flux-owned, and nothing includes
-# arr-notification's `tasks/` since #5561 dropped sonarr's and radarr's includes. Its anchor,
-# `MUST_FIND_GUARDED`, named one of arr-notification's, which R4 deletes. The fixture pairs below
-# keep `census` and `stale_exemptions` provably able to go red, for a handback that brings an
-# Ansible-owned task back.
+# the other two, in a role whose `tasks/` R4 deletes, since #5561 dropped sonarr's and radarr's
+# includes of it. The live `STUB_REFUSING` list went with it, empty since uptime-kuma's flip. The
+# fixture pairs below keep `census`, `stale_exemptions` and `stub_refusers_without_the_guard`
+# provably able to go red, for a role handed back to Ansible with such a task.
 
 
 def census(
@@ -132,13 +132,6 @@ def stale_exemptions(exempt: Mapping[str, str], offenders: list[str]) -> list[st
     return sorted(set(exempt) - set(offenders))
 
 
-# "<role>/<task file>::<task name>" of each task that FAILS on a stub value. sonarr's two asserts
-# on its API reads' registers left this list once the census followed a register (#4862), and
-# uptime-kuma's push-token assert left it when the flip deleted the assert. No live task refuses
-# a stub today, so the fixture tests below are the check's proof that it can go red.
-STUB_REFUSING: tuple[str, ...] = ()
-
-
 def stub_refusers_without_the_guard(roles: Path, task_ids: Iterable[str]) -> list[str]:
     """The ids in `task_ids` that a stubbed run would still evaluate.
 
@@ -166,13 +159,6 @@ def stub_refusers_without_the_guard(roles: Path, task_ids: Iterable[str]) -> lis
         elif not (covered or all(guarded)):
             flagged.append(task_id)
     return flagged
-
-
-def test_every_stub_refusing_task_is_skipped_under_stubs() -> None:
-    assert stub_refusers_without_the_guard(K8S_ROLES, STUB_REFUSING) == [], (
-        "these tasks fail on a stub value, so a shadow dry run stops at them. Give each "
-        "`when: not (homelab_secret_stubs | default(false) | bool)`, never a k8s_dry_run guard"
-    )
 
 
 _PUSH_TOKEN_CHECK = "Check every push token is in the format AutoKuma accepts"

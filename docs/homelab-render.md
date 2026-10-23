@@ -726,9 +726,9 @@ sonarr's Flux flip deleted them. The census no longer runs over the real tree (#
 it selected sat in a flux-owned role or in arr-notification's `tasks/`, which nothing includes.
 Its fixture pairs stay, for a role handed back to Ansible with such a task.
 
-The same module names uptime-kuma's push-token format check in `STUB_REFUSING`, which must
-carry the `homelab_secret_stubs` guard itself. The list predates the census's assert rule and
-backs it up.
+The same module checks that a task which fails on a stub value, as uptime-kuma's push-token
+format check did, carries the `homelab_secret_stubs` guard itself. That check predates the
+census's assert rule and backs it up; it too runs only on fixtures since the flips.
 
 From this change on, the preamble names the stub filters, so the deployer cannot narrow an
 edit to `ansible/filter_plugins/secret_stubs.py` to a service. Each such edit defers every
