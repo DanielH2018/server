@@ -70,9 +70,15 @@ PR H3.9a, the host-wait module, unwired: [#5383](https://github.com/DanielH2018/
 It merged at `340f20772` and deployed nothing. Nothing called `land_lib/host_wait.py` until
 H3.9b. Its `HOST_INPUTS` audit caught D5.3b2's soak imports reaching a host render before
 D5.3b2 merged.
-PR H3.9b, wire the host wait and arm the Pi: the PR that carries this line. The Pi package now
-ships the enable link for `homelab-updater.timer`. The operator's hand start follows the merge
-(item 9 of H3.9b).
+PR H3.9b, wire the host wait and arm the Pi: [#6020](https://github.com/DanielH2018/server/pull/6020).
+It merged at `b0c40b65`, and the Pi package ships the enable link for `homelab-updater.timer`.
+The Pi package repo published `b0c40b65` (`homelab_repo_published_info{package="homelab-daniel-pi"}`
+read sha `b0c40b65693c`). On 2026-10-23 at about 17:05Z the operator started
+`homelab-updater.service` on the Pi by hand (item 9 of H3.9b), and `systemctl is-active
+homelab-updater.timer` printed `active`.
+PR H3.9c, the Pi joins `HostUpdateStale`: the PR that carries this line. It adds daniel-pi
+(job `node-pi`, 11400 seconds) to `observability_expected_hosts` and its rule to
+`host-checks.yaml`.
 
 Depends on: R1
 Unblocks: H4, H5

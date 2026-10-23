@@ -277,8 +277,29 @@ groups:
             ran on either node. Read `uv run python scripts/dev/findings.py next` for what is
             free and `uv run python scripts/dev/fanout.py place read` for the hosts' headroom,
             then launch, or record why the queue waits (`findings.py defer`).
-      # HostUpdateStale: one rule per entry of observability_expected_hosts, which is empty
-      # until H3.9c, so no rule follows yet. Each entry's rule is the shape of
-      # tests/rules/fixtures/host-update-stale.yaml, and
+      # HostUpdateStale: one rule per entry of observability_expected_hosts. Each entry's rule is
+      # the shape of tests/rules/fixtures/host-update-stale.yaml, and
       # ansible/tests/services/test_host_plane_rule_literals.py prints the rule a new entry
       # needs.
+      - alert: HostUpdateStale
+        expr: |
+          (
+              time() - homelab_host_update_success_timestamp_seconds{job="node-pi",origin="daniel-pi"} > 11400
+            or
+              (
+                  absent(homelab_host_update_success_timestamp_seconds{job="node-pi",origin="daniel-pi"})
+                and on (job, origin)
+                  up{job="node-pi",origin="daniel-pi"} == 1
+              )
+          )
+        labels:
+          severity: critical
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi has had no successful homelab update for 11400s.
+          description: >-
+            No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is up
+            and serves no success timestamp. A failed fetch, a stopped homelab-apt-repo.service,
+            a firewall rule, a keyring mismatch and a stopped timer each leave it stale. Read
+            `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+            daniel-pi, and docs/host-packages.md, "Host-plane pages".

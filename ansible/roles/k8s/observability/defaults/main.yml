@@ -310,10 +310,11 @@ observability_rule_groups:
 # ansible/tests/services/test_host_plane_rule_literals.py holds the rules equal to this map.
 # scripts/renderer/tests/test_renderer_host_update_limits.py fails a limit shorter than the
 # longest gap between two of the host's updater fires plus the updater's TimeoutStartSec, read
-# from the rendered timer and its drop-in. Empty until H3.9c adds daniel-pi
+# from the rendered timer and its drop-in. daniel-pi joined in H3.9c
 # (docs/target-architecture/host/h3-pi-pilot.md, *Steps*, H3.9c); an entry reads
 #   daniel-pi: {job: node-pi, limit_seconds: 11400}
-observability_expected_hosts: {}
+observability_expected_hosts:
+  daniel-pi: {job: node-pi, limit_seconds: 11400}
 
 # The telemetry workloads, as the {kind, name} pairs tasks/main.yml passes to the include as
 # `manifests_self_rollouts`. The renderer stamps `checksum/restart` on each one's pod template
