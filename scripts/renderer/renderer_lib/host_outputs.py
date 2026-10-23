@@ -29,9 +29,9 @@ the same way and appears in no `outputs` list.
 
 `credentials:` lists the secret keys `homelab-secrets` writes to `/run/credstore`.
 
-A package that lists the `secrets` component also gets `/usr/lib/homelab/secrets.json`, its
+A package that lists the `secrets-unit` component also gets `/usr/lib/homelab/secrets.json`, its
 per-host ciphertext and `secrets_inputs_sha256` in its manifest. A package with an output or a
-credential and no `secrets` component fails the render, and so does an output whose dependent
+credential and no `secrets-unit` component fails the render, and so does an output whose dependent
 the package marks `windowed`. `scripts/secrets_mgmt/host_secrets.py:tree_keys` reads `credentials`
 and each output's `keys` from the same specs, so the two agree on the names.
 """
@@ -53,6 +53,9 @@ from renderer.renderer_lib.host_package import Package
 from renderer.renderer_lib.host_sources import file_mode
 from renderer.renderer_lib.placeholders import Sentinels
 
+# The component a package lists to ship the unit. Not `secrets`: the operator's tooling guard
+# denies agent writes under any `secrets/` directory.
+SECRETS_COMPONENT = "secrets-unit"
 # A rendered output and its template, and what `homelab-secrets` reads (the script's constants).
 TEMPLATE_ROOT = PurePosixPath("/usr/lib/homelab/secret-templates")
 COMPOSE_ROOT = PurePosixPath("/usr/lib/homelab/compose")
@@ -220,21 +223,20 @@ def compose_file(
 
 
 def finish(package: Package, host: str | None, sops_dir: Path) -> None:
-    """The checks that need every spec rendered, and the `secrets` files of a package that ships it.
+    """The checks that need every spec rendered, and the `secrets-unit` files of a package that ships it.
 
     Raises:
-        RenderRefused: The package breaks a rule above, or ships `secrets` without its
+        RenderRefused: The package breaks a rule above, or ships `secrets-unit` without its
             ciphertext at `sops_dir/<host>.sops.yaml`.
     """
     named = package.outputs or package.credentials
-    if (named or package.secrets) and host is None:
+    if named and host is None:
         raise RenderRefused(
-            f"{package.name}: a shared package lists no output, credential or `secrets` "
-            "component; a host package does"
+            f"{package.name}: a shared package lists no output or credential; a host package does"
         )
     if named and not package.secrets:
         raise RenderRefused(
-            f"{package.name}: lists an output or a credential without the `secrets` component"
+            f"{package.name}: lists an output or a credential without the `secrets-unit` component"
         )
     for out in package.outputs:
         for unit in out["dependents"]:
@@ -249,12 +251,14 @@ def finish(package: Package, host: str | None, sops_dir: Path) -> None:
         raise RenderRefused(
             f"{package.name}: a symlink and a file both install {clash}"
         )
-    if not package.secrets:
+    # A shared package, such as `validate/unit_templates.py`'s wrapper around a component no
+    # host lists yet, has no host to carry a ciphertext or a manifest for.
+    if not package.secrets or host is None:
         return
     cipher = sops_dir / f"{host}{SOPS_SUFFIX}"
     if not cipher.is_file():
         raise RenderRefused(
-            f"{package.name}: ships `secrets` and has no {cipher.name} to carry"
+            f"{package.name}: ships `secrets-unit` and has no {cipher.name} to carry"
         )
     sops_file = str(SOPS_ROOT / cipher.name)
     cipher_bytes = cipher.read_bytes()

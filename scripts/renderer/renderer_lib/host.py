@@ -87,6 +87,7 @@ from renderer.renderer_lib.host_sources import (
     file_mode,
 )
 from renderer.renderer_lib.host_outputs import (
+    SECRETS_COMPONENT,
     add_credentials,
     add_output,
     compose_file,
@@ -118,7 +119,7 @@ from renderer.renderer_lib.host_manifest import (
 
 HOSTS = REPO / "hosts"
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
-# The per-host ciphertext a package that ships `secrets` carries (H4, *Which ciphertext*).
+# The per-host ciphertext a package that ships `secrets-unit` carries (H4, *Which ciphertext*).
 HOST_SOPS = ANSIBLE / "vars" / "hosts"
 
 # Every host package runs reconcile under /usr/bin/python3 (H3, *Package rules*).
@@ -297,7 +298,7 @@ def _render(
                 f"{spec_path}: a host package lists no tools; a shared package does"
             )
         package.tools = parse_tools(spec["tools"], str(spec_path))
-    package.secrets = "secrets" in (spec.get("components") or [])
+    package.secrets = SECRETS_COMPONENT in (spec.get("components") or [])
     lib = hosts_root / "lib"
     _render_unit(package, spec_path.parent, spec, host, inventory, withheld, lib)
     for name in spec.get("components") or []:

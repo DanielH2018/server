@@ -49,10 +49,10 @@ class Package:
         legacy: The legacy entries reconcile retires, each with its values rendered.
         tools: Each pinned upstream binary, by name and then architecture (`host_tools.py`).
             A package with tools renders one tree per architecture.
-        secrets: Whether the package lists the `secrets` component (`host_outputs.py`).
+        secrets: Whether the package lists the `secrets-unit` component (`host_outputs.py`).
         credentials: The secret keys `homelab-secrets` writes to `/run/credstore`.
         outputs: Each secret-bearing output, in the shape `secrets.json` carries.
-        secrets_inputs_sha256: The hash reconcile compares, set only when `secrets` is.
+        secrets_inputs_sha256: The hash reconcile compares, set only when `secrets-unit` is.
     """
 
     name: str

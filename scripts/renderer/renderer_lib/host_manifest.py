@@ -9,7 +9,7 @@ A host package installs `/usr/lib/homelab/manifest.json` (H3, *Shared names*), i
   directory;
 - `legacy` holds the host package's legacy entries, each value rendered;
 - `reconcilers` is empty until H4;
-- `secrets_inputs_sha256` is present only for a package that ships the `secrets` component.
+- `secrets_inputs_sha256` is present only for a package that ships the `secrets-unit` component.
 
 `units:`, `enable:` and `legacy:` in a `package.yml` or `component.yml` feed it. The version and SHA stay
 out of it, so a render changes only when the package's content does (H3, *Package rules*).
@@ -106,7 +106,7 @@ def manifest(package: Package, updater: Package | None) -> dict:
         # H4 adds the first reconciler kind; reconcile fails a run that lists an unknown one.
         "reconcilers": [],
     }
-    # Only a package that ships the `secrets` component carries the field, so reconcile keys
+    # Only a package that ships the `secrets-unit` component carries the field, so reconcile keys
     # its secrets step on it (H4, *The restart contract*).
     if package.secrets_inputs_sha256:
         result["secrets_inputs_sha256"] = package.secrets_inputs_sha256

@@ -20,7 +20,7 @@ from renderer.renderer_lib.environment import RenderError
 from secrets_mgmt.host_secrets import tree_keys
 
 SCRIPT = REPO / "hosts" / "lib" / "homelab-secrets"
-REAL_COMPONENT = REPO / "hosts" / "components" / "secrets"
+REAL_COMPONENT = REPO / "hosts" / "components" / "secrets-unit"
 TEMPLATES = "/usr/lib/homelab/secret-templates"
 UNITS = "/usr/lib/systemd/system"
 NAMES = ("alpha_token", "beta_token", "domain")
@@ -39,7 +39,9 @@ class Tree:
         (self.root / "lib").mkdir(parents=True)
         (self.root / "lib" / "homelab-secrets").write_text(SCRIPT.read_text())
 
-    def package(self, host="daniel-server", components=("secrets", "beat"), **extra):
+    def package(
+        self, host="daniel-server", components=("secrets-unit", "beat"), **extra
+    ):
         spec = {"components": list(components), **extra}
         (self.root / host).mkdir(exist_ok=True)
         (self.root / host / "package.yml").write_text(yaml.safe_dump(spec))
@@ -66,7 +68,8 @@ def tree(tmp_path):
     return (
         Tree(tmp_path)
         .component(
-            "secrets", files=[{"lib": "homelab-secrets", "dst": "/usr/lib/homelab/s"}]
+            "secrets-unit",
+            files=[{"lib": "homelab-secrets", "dst": "/usr/lib/homelab/s"}],
         )
         .package()
     )
@@ -232,10 +235,12 @@ def test_the_same_package_without_the_windowed_mark_renders(tree):
 
 
 @pytest.mark.parametrize("spec", [output(), {"credentials": ["alpha_token"]}])
-def test_an_output_or_credential_without_the_secrets_component_fails(tmp_path, spec):
+def test_an_output_or_credential_without_the_secrets_unit_component_fails(
+    tmp_path, spec
+):
     tree = Tree(tmp_path).package(components=["beat"])
     tree.component(sources={"o.j2": "{{ alpha_token }}\n"}, **spec)
-    with pytest.raises(RenderRefused, match="without the `secrets` component"):
+    with pytest.raises(RenderRefused, match="without the `secrets-unit` component"):
         tree.render()
 
 
@@ -300,10 +305,14 @@ def test_a_package_that_ships_secrets_needs_its_ciphertext(tree):
         tree.render()
 
 
-def test_a_shared_package_lists_no_secret_component(tree):
+def test_a_shared_package_may_list_the_component_but_no_output(tree):
     spec = tree.root / "packages" / "shared" / "package.yml"
     spec.parent.mkdir(parents=True)
-    spec.write_text(yaml.safe_dump({"components": ["secrets"]}))
+    spec.write_text(yaml.safe_dump({"components": ["secrets-unit"]}))
+    package = host_mode.render_package("shared", tree.root, secrets=tree.secrets)
+    assert "/usr/lib/homelab/secrets.json" not in package.files
+    tree.component(sources={"o.j2": "{{ alpha_token }}\n"}, **output())
+    spec.write_text(yaml.safe_dump({"components": ["secrets-unit", "beat"]}))
     with pytest.raises(RenderRefused, match="a shared package lists no output"):
         host_mode.render_package("shared", tree.root, secrets=tree.secrets)
 
@@ -362,10 +371,10 @@ def test_the_scripts_single_pass_restores_the_literal_text_the_renderer_escaped(
     assert naive != got
 
 
-def test_the_real_secrets_component_renders_the_unit_and_the_script(tmp_path):
-    tree = Tree(tmp_path).package(components=["secrets"])
+def test_the_real_secrets_unit_component_renders_the_unit_and_the_script(tmp_path):
+    tree = Tree(tmp_path).package(components=["secrets-unit"])
     real = REAL_COMPONENT
-    target = tree.root / "components" / "secrets"
+    target = tree.root / "components" / "secrets-unit"
     (target / "units").mkdir(parents=True)
     (target / "component.yml").write_text((real / "component.yml").read_text())
     unit = real / "units" / "homelab-secrets.service"
