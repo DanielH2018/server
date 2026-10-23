@@ -19,6 +19,10 @@ COMMANDS = ("hostname", "dpkg-query", "dpkg", "crontab", "systemctl")
 # The verbs that change a unit, as opposed to the reads reconcile asks before acting.
 ACTIONS = frozenset({"start", "stop", "restart", "try-restart", "disable"})
 
+# Every systemctl verb that changes a unit or its failed state, `reset-failed` included.
+WRITES = ACTIONS | {"reset-failed"}
+SECRETS_UNIT = "homelab-secrets.service"
+
 V1 = "0.100+gaaaaaaaaaaaa"
 UNIT_DIR = "usr/lib/systemd/system"
 
@@ -148,6 +152,52 @@ class Node:
             for call in self.calls("systemctl")
             if call["argv"][1] in ACTIONS
         ]
+
+    def writes(self) -> list[list[str]]:
+        """Each systemctl call that changes a unit or clears its failure, as [verb, unit]."""
+        return [
+            call["argv"][1:]
+            for call in self.calls("systemctl")
+            if call["argv"][1] in WRITES
+        ]
+
+    def secrets(
+        self,
+        outputs: list[dict] | None = None,
+        credentials: list[str] | None = None,
+        digest: str = "a" * 64,
+    ) -> None:
+        """Make this a package that ships `secrets-unit`: the digest, secrets.json and the unit."""
+        self.manifest["secrets_inputs_sha256"] = digest
+        self.unit(SECRETS_UNIT, "[Service]\nType=oneshot\n", active="active")
+        path = self.root / "usr/lib/homelab/secrets.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"credentials": credentials or [], "outputs": outputs or []})
+        )
+
+    def output_file(self, destination: str, *, persist: bool = False) -> None:
+        """Write the rendered output `homelab-secrets` would have left at `destination`."""
+        top = "var/lib/homelab-secrets" if persist else "run/homelab-secrets"
+        path = self.root / top / destination
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("rendered\n")
+
+    def credential(self, key: str) -> None:
+        path = self.root / "run/credstore" / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("value\n")
+
+    @property
+    def pending_path(self) -> Path:
+        return self.root / "run/homelab-secrets/pending.json"
+
+    def queue(self, *units: str) -> None:
+        self.pending_path.parent.mkdir(parents=True, exist_ok=True)
+        self.pending_path.write_text(json.dumps(sorted(units)))
+
+    def pending(self) -> list[str]:
+        return json.loads(self.pending_path.read_text())
 
     def applied(self) -> dict:
         return json.loads(self.applied_path.read_text())
