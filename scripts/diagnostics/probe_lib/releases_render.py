@@ -50,6 +50,22 @@ A MISMATCH at R proves nothing about the ref, since R..ref may hold the fix, so 
 `UNKNOWN`, never `DRIFTED`. So does a render whose `commit` is not a full 40-character
 lowercase SHA, since that value reaches git.
 
+AN UNEXPLAINED MISMATCH (#5903). The path verdict still stands for a mismatch at R, but its
+reason can name a hit that moved no bytes. #4840's homelab-mcp read `changed since applied:
+.../release_stamp.yml`, a comment-only edit, while the drift came from a build-context file no
+path rule read. So `unexplained_behind` asks whether ANY hit could have moved the bytes, and
+when none could, `apply_verdicts` replaces the path reason with `_UNEXPLAINED_REASON`. The
+service stays stale and keeps its place; only the reason changes. A hit could have moved the
+bytes unless its change from the release record's commit C is inert both at R and at the ref:
+Ansible-read YAML whose content lines are equal at both ends, or a template whose edit is
+Jinja comments only. R is the end that matters, since R's render is the one that mismatched;
+the ref is checked too so the reason never hides a hit the path verdict would name. An edit
+at R that the ref reverts is therefore still a cause. An `undigested_hits` hit always counts, since it acts outside the digest.
+The claim also needs C to be an ancestor of R, or R itself: a render older than the apply
+mismatches because of R..C, which no hit names. This reads `manifests/tasks` comments, which
+`releases_diff` declines to narrow, and that is safe here because the answer changes a label,
+never whether the service is stale.
+
 TWO THINGS A DRIFTED VERDICT DOES NOT OVERRIDE. A service inside `compute_stale`'s grace window
 keeps waiting: the window exists because a landing's own deploy is still in flight, and a digest
 cannot tell that apart from drift. And "commit unknown to this checkout" is a doubt about
@@ -75,7 +91,7 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from lib.git import git
-from lib.repo_paths import REPO as REPO_ROOT
+from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO as REPO_ROOT
 
 # Mirrors manifests_render_record_dir in roles/k8s/manifests/defaults/main.yml;
 # scripts/diagnostics/tests/test_probe_releases_render.py asserts the two agree.
@@ -111,6 +127,15 @@ _SECRETS_REASON = (
     DIGEST_REASON_PREFIX
     + "the applied secret manifests are not what origin/master renders"
 )
+_UNEXPLAINED_REASON = (
+    DIGEST_REASON_PREFIX
+    + "the applied manifests are not what an earlier origin/master renders,"
+    + " and no change since the apply explains it"
+)
+
+# The Ansible-read directories, whose YAML content lines are all a run sees. A `#` line in a
+# `templates/` or `files/` YAML is usually copied into a manifest, so those never qualify.
+_ANSIBLE_READ_DIRS = frozenset({"tasks", "defaults", "vars", "handlers", "meta"})
 
 
 def load_renders(render_dir=RENDER_DIR):
@@ -240,17 +265,10 @@ def _touch_times(rev_range, paths=(), repo_root=REPO_ROOT):
     return started
 
 
-def changed_since(commit, ref_sha, repo_root=REPO_ROOT):
-    """{path: oldest committer time} for every path touched in `commit..ref_sha`.
-
-    None when `commit` is not an ancestor of `ref_sha`, or git cannot say: a render of a commit
-    the ref does not hold, or one this checkout does not know, proves nothing about the ref.
-
-    The log is raw, so a path whose only edit after `commit` is comment-only still counts. That
-    keeps a hit the path rules would drop, which is the safe direction.
-    """
+def _is_ancestor(commit, ref_sha, repo_root=REPO_ROOT):
+    """Whether `commit` is `ref_sha` or one of its ancestors. False when git cannot say."""
     try:
-        ancestor = git(
+        result = git(
             "merge-base",
             "--is-ancestor",
             commit,
@@ -260,8 +278,20 @@ def changed_since(commit, ref_sha, repo_root=REPO_ROOT):
             timeout=10,
         )
     except OSError, subprocess.SubprocessError:
-        return None
-    if ancestor.returncode != 0:
+        return False
+    return result.returncode == 0
+
+
+def changed_since(commit, ref_sha, repo_root=REPO_ROOT):
+    """{path: oldest committer time} for every path touched in `commit..ref_sha`.
+
+    None when `commit` is not an ancestor of `ref_sha`, or git cannot say: a render of a commit
+    the ref does not hold, or one this checkout does not know, proves nothing about the ref.
+
+    The log is raw, so a path whose only edit after `commit` is comment-only still counts. That
+    keeps a hit the path rules would drop, which is the safe direction.
+    """
+    if not _is_ancestor(commit, ref_sha, repo_root):
         return None
     return _touch_times(f"{commit}..{ref_sha}", repo_root=repo_root)
 
@@ -312,6 +342,84 @@ def renders_behind(records, renders, ref_sha, verdicts, repo_root=REPO_ROOT, hit
     return behind
 
 
+def unexplained_behind(records, renders, ref_sha, verdicts, hits, repo_root=REPO_ROOT):
+    """The services whose render behind `ref_sha` mismatches with no hit able to explain it.
+
+    That is a service `verdicts` leaves `UNKNOWN` whose render's commit R is a full SHA, an
+    ancestor of `ref_sha`, and `DRIFTED` at R by `digest_verdict`'s rules. Its release record's
+    commit C is a full SHA from a clean tree, and C is R or an ancestor of it. Every hit in
+    `hits` is inert from C to R and from C to `ref_sha`, by `_inert`, and none is one `undigested_hits` keeps.
+    The module docstring says why each condition is there.
+    """
+    found, inert = set(), {}
+    for rec in records:
+        service = rec.get("service")
+        render, service_hits = renders.get(service), hits.get(service)
+        if (
+            verdicts.get(service, (None,))[0] != UNKNOWN
+            or not render
+            or not service_hits
+        ):
+            continue
+        commit, base = render.get("commit"), rec.get("commit")
+        if not _is_full_sha(commit) or not _is_full_sha(base) or commit == ref_sha:
+            continue
+        if rec.get("tree_dirty") is not False or undigested_hits(service, service_hits):
+            continue
+        if digest_verdict(rec, render, commit)[0] != DRIFTED:
+            continue
+        if not _is_ancestor(commit, ref_sha, repo_root):
+            continue
+        if not _is_ancestor(base, commit, repo_root):
+            continue
+        for path in {_hit_path(h) for h in service_hits}:
+            for end in (commit, ref_sha):
+                if (path, base, end) not in inert:
+                    inert[path, base, end] = _inert(path, base, end, repo_root)
+        if all(
+            inert[_hit_path(h), base, end]
+            for h in service_hits
+            for end in (commit, ref_sha)
+        ):
+            found.add(service)
+    return found
+
+
+def _inert(path, old_ref, new_ref, repo_root=REPO_ROOT):
+    """Whether `path`'s change from `old_ref` to `new_ref` cannot move a rendered byte.
+
+    True for Ansible-read YAML whose content lines are equal at both refs, by the deployer's
+    own `_content_unchanged`, and for a `.j2` whose edit is Jinja comments only, by
+    `narrow_lib.templates.comment_only`. True for any path whose text is identical at both
+    refs. False for every other path, and for a side git cannot read.
+    """
+    from lib.narrow_git import show_at
+
+    before, after = (show_at(ref, path, repo_root) for ref in (old_ref, new_ref))
+    if before is None or after is None:
+        return False
+    if before == after:
+        return True
+    if path.endswith(".j2"):
+        from deploy_tools.narrow_lib.templates import comment_only
+
+        return comment_only(before, after)
+    parts = path.split("/")
+    ansible_read = path.startswith("ansible/inventory/") or (
+        path.startswith(_K8S_ROLES)
+        and len(parts) > 5
+        and parts[4] in _ANSIBLE_READ_DIRS
+    )
+    if not ansible_read or not path.endswith((".yml", ".yaml")):
+        return False
+    if str(GITOPS_DEPLOY_FILES) not in _sys.path:
+        _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+    from deployer_lib.deploy_changes import _content_unchanged
+
+    texts = {old_ref: before, new_ref: after}
+    return bool(_content_unchanged([path], old_ref, new_ref, lambda r, _p: texts[r]))
+
+
 def _is_full_sha(value):
     """Whether `value` is exactly 40 lowercase hex characters."""
     return isinstance(value, str) and _FULL_SHA.fullmatch(value) is not None
@@ -347,7 +455,14 @@ def _hit_path(hit):
 
 
 def apply_verdicts(
-    stale, pending, verdicts, hits=None, behind=None, grace_seconds=0, now=None
+    stale,
+    pending,
+    verdicts,
+    hits=None,
+    behind=None,
+    grace_seconds=0,
+    now=None,
+    unexplained=(),
 ):
     """Let the digest answer override the path verdict in `stale` and `pending`, in place.
 
@@ -368,6 +483,9 @@ def apply_verdicts(
     A CURRENT service is dropped from `pending` too, so it does not read as a merge still
     waiting on its deploy. A DRIFTED one is left alone where the grace window or the
     unknown-commit doubt already answers for it, per the module docstring.
+
+    `unexplained` is `unexplained_behind`'s answer. A stale service in it keeps its place, and
+    its path reason becomes `_UNEXPLAINED_REASON`.
     """
     cleared = []
     behind = behind or {}
@@ -407,6 +525,9 @@ def apply_verdicts(
             if service in stale and not stale[service].startswith(PATH_HIT_PREFIX):
                 continue
             stale[service] = reason
+        elif service in unexplained and service in stale:
+            if stale[service].startswith(PATH_HIT_PREFIX):
+                stale[service] = _UNEXPLAINED_REASON
     return cleared
 
 
@@ -447,6 +568,11 @@ def apply_digest_verdicts(
         if ref_sha
         else {}
     )
+    unexplained = (
+        unexplained_behind(records, renders, ref_sha, verdicts, hits, repo_root)
+        if ref_sha and hits
+        else set()
+    )
     return apply_verdicts(
         stale,
         pending,
@@ -455,4 +581,5 @@ def apply_digest_verdicts(
         behind=behind,
         grace_seconds=grace_seconds,
         now=now,
+        unexplained=unexplained,
     )

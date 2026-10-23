@@ -318,21 +318,42 @@ _OTHER = "docs/unrelated.md"
 
 
 def _behind_stale(
-    tmp_path, at_r, after_r, digest="deadbeef", side=False, spell=lambda sha: sha
+    tmp_path,
+    at_r,
+    after_r,
+    digest="deadbeef",
+    side=False,
+    spell=lambda sha: sha,
+    edit=lambda path: "v2\n",
+    render_first=False,
+    revert=False,
 ):
     """littlelink applied at `base`, `at_r` moved by R, `after_r` by the ref, a render at R.
 
     With `side`, the render names a child of R that master never merged. `spell` rewrites the
-    commit the render records, for a spelling git would still resolve.
+    commit the render records, for a spelling git would still resolve. `edit` gives each
+    `at_r` path its text at R, and `revert` puts each back to v1 at the tip. With
+    `render_first`, R is the v1 commit and the apply is a
+    child of it, so `at_r` moves after both.
     """
     repo = tmp_path / "repo"
     _init_repo(repo)
     base = _commit(repo, {p: "v1\n" for p in (_OWN, _PVC, _RENDERER, _OTHER)}, "v1")
-    r = _commit(repo, {p: "v2\n" for p in at_r}, "R")
+    if render_first:
+        r, base = base, _commit(repo, {_OTHER: "v2\n"}, "applied")
+        _commit(repo, {p: edit(p) for p in at_r}, "edit")
+    else:
+        r = _commit(repo, {p: edit(p) for p in at_r}, "R")
     if side:
         r = git_out(repo, "commit-tree", "HEAD^{tree}", "-p", r, "-m", "side")
     _set_origin_master(
-        repo, _commit(repo, {p: "v3\n" for p in (_OTHER, *after_r)}, "tip")
+        repo,
+        _commit(
+            repo,
+            {p: "v3\n" for p in (_OTHER, *after_r)}
+            | ({p: "v1\n" for p in at_r} if revert else {}),
+            "tip",
+        ),
     )
     records, hits = [_release("littlelink", base)], {}
     stale = pr.compute_stale(
@@ -373,6 +394,49 @@ def test_a_mismatch_behind_the_ref_keeps_the_path_verdict_is_flagged(tmp_path):
     assert _behind_stale(tmp_path, [_RENDERER], [], digest="cafef00d") == {
         "littlelink": rr.path_reason([_RENDERER])
     }
+
+
+def _comment_only(path):
+    """`path`'s v1 text with a comment added, in the comment syntax its reader skips."""
+    return "{# note #}v1\n" if path.endswith(".j2") else "# note\nv1\n"
+
+
+@pytest.mark.parametrize("at_r", [[_RENDERER], [_OWN, _RENDERER]])
+def test_a_mismatch_behind_the_ref_no_hit_explains_is_flagged_as_unexplained(
+    tmp_path, at_r
+):
+    """#5903: a comment-only release_stamp.yml edit was named as homelab-mcp's drift."""
+    stale = _behind_stale(tmp_path, at_r, [], digest="cafef00d", edit=_comment_only)
+    assert stale["littlelink"].startswith(rr.DIGEST_REASON_PREFIX)
+    assert "no change since the apply explains it" in stale["littlelink"]
+
+
+@pytest.mark.parametrize(
+    ("at_r", "render_first"),
+    [
+        pytest.param([_PVC, _RENDERER], False, id="undigested-hit"),
+        pytest.param([_RENDERER], True, id="render-older-than-apply"),
+    ],
+)
+def test_a_mismatch_behind_the_ref_an_unseen_change_may_explain_keeps_the_path_verdict_is_flagged(
+    tmp_path, at_r, render_first
+):
+    """A volume-claim hit acts outside the digest, and R..C is a range no hit names."""
+    stale = _behind_stale(
+        tmp_path,
+        at_r,
+        [],
+        digest="cafef00d",
+        edit=_comment_only,
+        render_first=render_first,
+    )
+    assert stale == {"littlelink": rr.path_reason(sorted(at_r))}
+
+
+def test_a_mismatch_behind_the_ref_from_an_edit_the_tip_reverts_is_flagged(tmp_path):
+    """apply.yml's edit at R explains R's mismatch, though C and the tip agree on it."""
+    stale = _behind_stale(tmp_path, [_RENDERER], [], digest="cafef00d", revert=True)
+    assert stale == {"littlelink": rr.path_reason([_RENDERER])}
 
 
 def test_a_volume_claim_hit_a_render_behind_the_ref_holds_is_flagged(tmp_path):
