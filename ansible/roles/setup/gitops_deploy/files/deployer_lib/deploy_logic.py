@@ -63,6 +63,7 @@ from deployer_lib.deploy_git import (  # noqa: F401
     _CI_NO_VERDICT_CONCLUSIONS,
     _CI_PASS_CONCLUSIONS,
     behind_marker,
+    cancellation_suspects,
     ci_verdict,
     ci_walk_candidates,
     dirty_alert_slot,
