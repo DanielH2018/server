@@ -111,6 +111,8 @@ groups:
               absent_over_time(monitor_status{monitor_name="k3s nut (upsd)"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Pi Pressure"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Workload Log Errors"}[2h])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:

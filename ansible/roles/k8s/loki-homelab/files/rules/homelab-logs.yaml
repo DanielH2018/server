@@ -71,3 +71,34 @@ groups:
             Uptime Kuma logged {{ $value }} "Cannot send notification" lines in the last 3
             hours, so a page it raised reached no one. Read the uptime-kuma pod's log in the
             homelab namespace for the reason line beside each drop.
+      # The log-pattern arm of the bridge's Workload Log Errors row, ported by M6's batch A7. It
+      # counts, per container, the lines that match `LOG_ERROR_PATTERN` over `LOG_ERROR_WINDOW` in
+      # the cluster pod and daniel-pi container streams, and fires when one container exceeds
+      # `LOG_ERROR_MAX`. `error` is deliberately absent from the pattern: it appears in ordinary
+      # output constantly, and an alert on it gets ignored. These four mean the process gave up.
+      # `for: 5m` replaces the row's `startup_grace`. The bridge's empty `LOG_ERROR_IGNORE`
+      # carries over, so no container is excluded. The rule is shadow beside the Kuma tile until
+      # Cutover-b drops the label.
+      #
+      # DECIDED: stays at 20, and home-assistant stays OUT of any ignore list. #1784 proposed
+      # raising this or ignoring that container, after `fatal log lines in 1h: home-assistant (23)`
+      # and `(26)` held k3s Workload Health red for 46 and 43 minutes. Both were declined on the
+      # measurement: over the 4 days to 2026-09-11 this selector and pattern matched home-assistant
+      # ZERO times, so the burst is episodic rather than chronic, and a permanent ignore would blind
+      # the arm on a container that is normally silent. The 7d query times out against Loki, so "no
+      # matches in 4d" cannot see the 09-02/03 burst itself; it establishes that HA is not
+      # chronically noisy, NOT that those lines were benign. Raise this only from a window that
+      # contains a burst and a reason to call it ordinary.
+      - alert: WorkloadLogErrors
+        expr: sum by (container) (count_over_time({job=~"k8s|pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [1h])) > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: k3s
+          shadow: "true"
+        annotations:
+          summary: '{{ $labels.container }} logged more than 20 fatal-pattern lines in an hour.'
+          description: >-
+            {{ $labels.container }} logged {{ $value }} lines matching panic, fatal, traceback
+            or out of memory in the last hour, so it may be failing at its job while its pod
+            reads Ready. Read that container's log in loki-homelab to see the lines.

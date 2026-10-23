@@ -182,6 +182,10 @@ tests:
             exp_annotations:
               summary: Kuma's Pi Pressure tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Pi Pressure tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Workload Log Errors, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Workload Log Errors tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Workload Log Errors tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -270,6 +274,8 @@ tests:
       - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -364,6 +370,8 @@ tests:
       - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="http"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -467,6 +475,8 @@ tests:
       - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x160'
     alert_rule_test:
       - alertname: CheckWithoutPager
