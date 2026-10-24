@@ -165,7 +165,10 @@ def test_the_split_packs_runner_seconds_and_scales_the_unmeasured_rest():
     )
 
 
-def test_the_committed_runner_table_names_the_known_pole_and_only_the_census():
+def test_the_committed_runner_table_names_the_known_pole():
+    """Non-vacuity: an empty or unreadable table would pack every module on scaled weights.
+
+    No census check: an entry for a deleted module is ignored, so a PR deleting a test module
+    need not touch the table (#5989 is the same trap on the weight table)."""
     table = shard_weight_gate.load_runner_weights()
     assert table.get("scripts/deploy_tools/tests/test_chained_timeout.py", 0.0) > 30.0
-    assert sorted(set(table) - set(pytest_shard.census())) == []
