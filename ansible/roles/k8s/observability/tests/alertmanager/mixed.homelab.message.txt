@@ -1,0 +1,15 @@
+**Firing (2)**
+
+**CRITICAL** Longhorn volume jellyfin-config is degraded.
+jellyfin-config has fewer healthy replicas than it asks for. Read `kubectl -n longhorn-system get volumes.longhorn.io` for its robustness.
+Started <t:1792850580:R>
+
+**CRITICAL** Longhorn volume sonarr-config is degraded.
+sonarr-config has fewer healthy replicas than it asks for. Read `kubectl -n longhorn-system get volumes.longhorn.io` for its robustness.
+Started <t:1792850730:R>
+Runbook: https://docs.local.example.com/longhorn-disaster-recovery/
+
+**Resolved (1)**
+
+Longhorn volume radarr-config is degraded.
+Cleared <t:1792851000:R>, after starting <t:1792849200:f>

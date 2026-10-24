@@ -50,7 +50,7 @@ groups:
         annotations:
           summary: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas.
           description: >-
-            {{ $labels.deployment }} has had {{ $value }} unavailable replicas for 15 minutes. The
+            {{ $labels.deployment }} has had {{ $value | printf "%.0f" }} unavailable replicas for 15 minutes. The
             hold is per Deployment, where the bridge's streak counted any workload.
       - alert: K8sDeploymentZeroAvailable
         expr: |
@@ -180,7 +180,7 @@ groups:
         annotations:
           summary: DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has unavailable pods.
           description: >-
-            {{ $labels.daemonset }} has had {{ $value }} unavailable pods for 5 minutes. The bridge
+            {{ $labels.daemonset }} has had {{ $value | printf "%.0f" }} unavailable pods for 5 minutes. The bridge
             paged this on one 300s sample, and the hold keeps that span.
       # The census floors. Every per-workload rule above is silent over an empty vector, so
       # these page the input instead. 5 is a sanity floor that mirrors no count. A dead
