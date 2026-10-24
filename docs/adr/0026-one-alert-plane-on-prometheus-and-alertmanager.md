@@ -1,7 +1,7 @@
 ---
 id: "0026"
 title: "One alert plane on Prometheus and Alertmanager; Uptime Kuma retired"
-status: Proposed
+status: Accepted
 date: 2026-10-24
 governs: []
 ---
@@ -10,9 +10,9 @@ governs: []
 
 ## Status
 
-Proposed. Acceptance is **operator-only**. Slice M6 step C-0 (the
-[M6 plan](../target-architecture/monitoring/m6-retire-kuma.md)) writes this record, and PR
-C-1 does not merge before the operator accepts it.
+Accepted. The operator accepted it on 2026-10-24. Slice M6 step C-0 (the
+[M6 plan](../target-architecture/monitoring/m6-retire-kuma.md)) wrote this record, and PR
+C-1 required that acceptance before it could merge.
 
 ## Context
 
@@ -60,6 +60,9 @@ Every check pages through Alertmanager, and Uptime Kuma is retired.
 - **The cutover keeps one pager per check.** Each cutover splits into one PR that removes the
   Kuma pager and one that drops `shadow` from the rules. A temporary rule, `CheckWithoutPager`,
   pages a tile that has had no pager for two hours.
+- **The eight `kuma-check-*` timers keep their names.** The operator ruled on 2026-10-24 to
+  keep them, so C-3b does not rename them and shrinks to the task-file rename. The census
+  allowlist gains the `kuma-check-` prefix, which the M6 plan's C-3b and C-6 PRs apply.
 - **The exit criterion is functional.** No template, task, inventory key, script or skill
   reads Kuma, and no push-token secret remains.
 
@@ -110,8 +113,6 @@ The M6 plan leaves these open. Each is the operator's or another slice's to sett
 
 - **C-4b waits for D6.** `narrow_lib/filters.py` refuses any deleted filter plugin. If the
   operator wants C-4b sooner, the narrowing needs its own PR.
-- **The `kuma-check-*` timer rename.** C-3b renames eight timers on two hosts. The operator
-  can keep the names, which shrinks C-3b and adds `kuma-check-` to the census allowlist.
 - **The Pi's AutoKuma labels.** They are inert once Kuma is gone, and H5 drops them when it
   rewrites the Pi compose files.
 - **`ALERTS_FOR_STATE` across a Prometheus restart.** The before and after reading is owed.
