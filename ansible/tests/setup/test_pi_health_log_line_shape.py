@@ -26,7 +26,12 @@ from diagnostics.probe_lib.alerts import parse_syslog_down_line
 
 
 # Every container the cron watches: the Pi's containers_list plus the docker-proxy sub-proxy.
-ALL = [c["name"] for c in PI_HOST_VARS["containers_list"]] + ["docker-proxy-lifecycle"]
+# Both of the Pi's lists, since the recovery heartbeat watches the union (H5.1), plus the
+# sub-proxy the docker-proxy compose file declares.
+ALL = [
+    c["name"]
+    for c in PI_HOST_VARS["containers_list"] + PI_HOST_VARS["compose_services"]
+] + ["docker-proxy-lifecycle"]
 
 
 def _only_line(lines):
