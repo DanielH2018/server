@@ -6,7 +6,8 @@ instead promote T over P, `prod`'s commit, when every condition below holds. T's
 carries P's changes, so T's verification takes its changed set against `last-good` and covers
 both, and P's run prints `superseded` and writes nothing (`superseded.py`, D7.1).
 
-THE CONDITIONS. `in_flight` reads the first three, and `refusal` the rest once T is chosen:
+THE CONDITIONS. `verify_promotion.wait_settled` reads the first two and asks
+`supersedable` the third; `refusal` reads the rest once T is chosen:
   - DEPLOY_HOLD reads `none`;
   - `prod` is in flight: it differs from `last-good` and is not the `held` digest;
   - `prod` is not the `superseding` digest, so P did not itself supersede a run and a
@@ -24,13 +25,13 @@ Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_super
 """
 
 import sys as _sys
-from dataclasses import dataclass
+from collections.abc import Callable
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `changed_set` and `artifact_retention` import bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
-from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG, SUPERSEDING_TAG
+from artifact_retention import SUPERSEDING_TAG
 from changed_set import ROOT, SOAK, ChangedSet, changed_set
 from deploy_tools.promote_lib import verify_promotion as verify
 from deploy_tools.promote_lib.reads import Reads
@@ -43,34 +44,13 @@ ALWAYS = frozenset({ROOT, SOAK})
 FAILED_STATES = frozenset({"failure", "error"})
 
 
-@dataclass(frozen=True)
-class InFlight:
-    """The verification `decide` may supersede.
+def supersedable(reads: Reads) -> Callable[[str], bool]:
+    """Whether T may take over the run `prod`'s digest names: it is not the `superseding` one.
 
-    Attributes:
-        prod: `prod`'s digest, P's.
-        last_good: `last-good`'s digest.
+    `verify_promotion.wait_settled` asks it only once it has read DEPLOY_HOLD as `none` and
+    `prod` in flight and not `held`, so those reads are made once a poll.
     """
-
-    prod: str
-    last_good: str
-
-
-def in_flight(reads: Reads) -> InFlight | None:
-    """The verification in flight that T may supersede, or None to wait as before.
-
-    None when DEPLOY_HOLD holds anything but `none`, when nothing is in flight, and when
-    `prod` names the `held` or the `superseding` digest. Every read raises as the reads do,
-    so a failed read is `decide`'s `error`.
-    """
-    if (reads.hold() or "").strip() != "none":
-        return None
-    prod, last_good = reads.digest(PROD_TAG), reads.digest(LAST_GOOD_TAG)
-    if prod is None or last_good is None or prod == last_good:
-        return None
-    if prod in (reads.digest(HELD_TAG), reads.digest(SUPERSEDING_TAG)):
-        return None
-    return InFlight(prod, last_good)
+    return lambda prod: reads.digest(SUPERSEDING_TAG) != prod
 
 
 def _changed(new: dict[str, bytes], old: dict[str, bytes]) -> ChangedSet:

@@ -530,6 +530,7 @@ class Settled:
         prod: `prod`'s digest, or None when the tag is absent.
         last_good: `last-good`'s digest, or None when the tag is absent.
         hold: the DEPLOY_HOLD value read, which `tag` compares before it moves `prod`.
+        in_flight: `prod`'s run is still verifying, and `supersedable` let T take it over.
     """
 
     stop: tuple[str, str] | None = None
@@ -537,6 +538,7 @@ class Settled:
     prod: str | None = None
     last_good: str | None = None
     hold: str = "none"
+    in_flight: bool = False
 
 
 # DECIDED: a hold without a reset (H1.1b) leaves `prod` on the failed T while `last-good` stays
@@ -551,6 +553,7 @@ def wait_settled(
     sleep: Callable[[float], None],
     clock: Callable[[], float],
     revert_rule: bool,
+    supersedable: Callable[[str], bool] | None = None,
 ) -> Settled:
     """Read DEPLOY_HOLD, then wait while `prod` and `last-good` name different digests.
 
@@ -563,6 +566,8 @@ def wait_settled(
         sleep: waits the given seconds.
         clock: monotonic seconds.
         revert_rule: whether a `failed=` hold may be passed.
+        supersedable: whether T may take over the run that `prod`'s digest names (D7). When
+            it answers True under a `none` hold, the wait ends at once with `in_flight`.
 
     Raises:
         Whatever `hold` and `digest` raise.
@@ -583,6 +588,8 @@ def wait_settled(
             return Settled(None, held, prod, last_good, value)
         if digest(HELD_TAG) == prod:
             return Settled(None, held, prod, last_good, value)
+        if supersedable is not None and value == "none" and supersedable(prod):
+            return Settled(None, held, prod, last_good, value, in_flight=True)
         waited = int(clock() - started)
         if waited >= IN_FLIGHT_WAIT_S:
             return Settled(
