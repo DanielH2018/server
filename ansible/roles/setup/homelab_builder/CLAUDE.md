@@ -108,6 +108,16 @@ version, `0.<first-parent count>+g<12-hex sha>`. A staged set the signer has not
 rebuilt at the new commit, because the signer refuses a `staged/` whose versions name two
 commits.
 
+`state.json`'s `staged` names the packages whose `.deb` may still be unsigned. `stage()` saves
+it before it empties `staged/` or copies a render into `published/`, so a run that fails or is
+killed in between leaves the next run a record that matches the disk. `published/` keeps each
+render as a copy that preserves symlinks, and the comparison reads a symlink's target text: a
+link that dangles inside its own render, such as the Pi package's
+`timers.target.wants/homelab-updater.timer`, once made `copytree` raise after the copy and made
+the comparison skip the link. The Pi package was recorded as published and never signed
+(2026-10-23). The signer's own refusals are a separate path: a refused set moves to
+`refused/`, and the signer's alert pages it.
+
 The verdict reads every page of the commit's check runs, because a failing re-run on page 2
 would otherwise grade a red commit green. A read short of the listing's `total_count` grades
 `pending`, which is never cached (#5991).
