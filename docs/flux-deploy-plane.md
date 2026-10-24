@@ -1040,6 +1040,14 @@ the variable with `prod`'s live digest and pages on a mismatch.
   and moves and verifies nothing. The first run's `settle` then dispatches one more run, so
   the second run's commit does not wait for the next merge (*Publishing and promotion*).
 
+**A superseding promotion skips the wait** (D7.5). With `promote.SUPERSEDE` on, a
+`decide` that finds a verification in flight may promote T over it instead of waiting, under
+the conditions `scripts/deploy_tools/promote_lib/supersede.py` states. T's verification then
+expects the names T changes against `last-good`, which covers the superseded commit's
+changes too, and `tag` tags T `superseding` so it is not superseded in turn. `decide` prints
+`<T> supersedes the verification of <P>`. Any failed condition prints why and waits as before.
+`SUPERSEDE` is `False` until the operator rules on D7.6.
+
 **A verdict counts only while `prod` names its target** (D7.1). `settle` reads `prod`'s
 digest before it writes anything, and again before its reset. When a later run has moved
 `prod` past T, `settle` writes neither `last-good`, the hold, `held` nor the reset, and
