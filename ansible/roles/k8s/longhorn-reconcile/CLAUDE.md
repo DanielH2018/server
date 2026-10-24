@@ -59,6 +59,24 @@ authority is written here to keep a later edit from widening it.
       `recurring-job-group.longhorn.io/{default, no-backup, weekly-backup, weekly-backup-d0..d6}`
       and `spec.backupTargetName`. One patch per volume that must move, labels and target
       together.
+    - The same patch carries the per-job label `recurring-job.longhorn.io/trim` (H2.2a). The
+      script never writes a `recurring-job-group.longhorn.io/trim` key.
+- **The trim arm labels an attached volume that a ReplicaSet or StatefulSet runs.** The volume's
+  `status.state` is `attached` and `status.kubernetesStatus.workloadsStatus` holds a
+  `Running` ReplicaSet or StatefulSet. The arm removes the label when either stops holding, so
+  a CronJob-only claim such as `pi-peer-backup-data` never joins and the `trim` RecurringJob
+  attaches no idle volume. A volume that gains the label and sits in the daily tier also gets
+  `recurring-job-group.longhorn.io/default`, because Longhorn adds `default` only to a volume
+  with no job of its own. It never sets `default` on a `no-backup` or weekly-shard volume.
+  The rule lags by up to an hour, because the job runs hourly.
+- **`longhorn_reconcile_trim_claims` bounds the trim arm.** The ConfigMap renders it as
+  `tiers.json`'s `trim_claims`. Only a listed claim keeps the label, an empty list admits none,
+  and an absent key admits every volume the rule admits. H2.2a lists one canary claim and H2.2b
+  deletes the key. Every run prints `trim would-admit: <claims>`, the claims the unbounded rule
+  admits, whatever the bound is. The arm calls only `list` and `patch` on volumes, so the
+  grants below are unchanged.
+  `tests/test_longhorn_reconcile_trim.py::test_a_bound_keeps_the_trim_label_off_every_unlisted_claim`
+  holds the bound.
 - **A converged cluster gets no write.** The run reads the Volume list and the PVC list, plans,
   and patches only what differs. `tests/test_longhorn_reconcile.py::test_a_second_run_changes_nothing`
   proves it, and the gate Job's `homelab/rerun-safe` names that test.

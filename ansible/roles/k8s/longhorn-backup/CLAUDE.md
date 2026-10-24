@@ -2,7 +2,7 @@
 
 The Longhorn backup plane: the credential Secrets `longhorn-b2` and `longhorn-r2`, the
 BackupTargets `default` (B2) and `r2`, and the RecurringJobs `daily-backup` and
-`weekly-backup-d0` to `weekly-backup-d6`. It replaced `tasks/longhorn-backup.yml` in
+`weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob (H2.2a). It replaced `tasks/longhorn-backup.yml` in
 `setup/k3s` (H1.7b). Which target a volume uses is `longhorn-reconcile`'s decision (H1.7a), and
 this role only declares the targets.
 
@@ -92,6 +92,11 @@ in the loop, and the contract is written here so a later edit cannot quietly wid
   `templates/storageclass-nobackup.yaml.j2`. Each `weekly-backup-d<N>` job backs up the volumes
   `longhorn-reconcile` labels with its shard. The jobs delete old backups through their `retain`
   counts, and only the backups of that job.
+- **The `trim` job is no backup tier.** It runs `filesystem-trim` at `k3s_longhorn_trim_cron`
+  (06:10 UTC) with `groups: []`, and a volume joins it through the per-job label
+  `recurring-job.longhorn.io/trim` that `longhorn-reconcile` sets. A `trim` group would read as
+  a backup tier to the restore drill and the reapers, and the `DECIDED:` marker in
+  `templates/longhorn-recurringjob.yaml.j2` says why. It deletes no backup.
 - **Arming.** `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` blank one target each. The
   retired `k3s_manage_backup_targets` flag existed for a cluster with no real credentials. No
   host set it, and staging, the one such cluster, was retired on 2026-09-29.

@@ -1,5 +1,5 @@
 {
-  "checksum": "09919bdd8306fc8bb7fc051a05a565e988b23450b8b7e29d077120d50ab63b45",
+  "checksum": "5930b567a10335087b77cd7cc57fe8d2d7c10c59f09fe2bb8f9e5c1a13b3b17b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#What it writes, and how often (the autonomous-role contract)",
   "row": {
@@ -8,6 +8,6 @@
       "ansible/tests/longhorn/test_daily_group_membership_is_the_r2_list.py": "16f66507efe2f9065180727d36f93922095ad199cc398dc5c4dab09acbb199c1"
     },
     "python": "3.14",
-    "verified_sha": "cfa5f7ab3"
+    "verified_sha": "65b1917f5"
   }
 }
