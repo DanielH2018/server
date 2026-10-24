@@ -6,26 +6,26 @@ Both scans run on every host, so one DEADLINE_S pins three rules each. The DEADL
 the interval of the Kuma tile the rules shadow, so a cron moved without its tile or its rules
 fails here rather than paging on every healthy week (M1 convention 1).
 
-Run: uv run pytest ansible/tests/services/test_integrity_scan_rule_literals.py
+Run: uv run pytest ansible/tests/setup/test_integrity_scan_rule_literals.py
 """
 
 import re
 
 import pytest
 from _helpers import K8S_ROLES
+from _kuma_monitors import entity
 from _shell_render import render_shell_script
 from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
-TILES = K8S_ROLES / "uptime-kuma" / "templates" / "static-monitors.yaml.j2"
 HOSTS = ["daniel-box", "daniel-server", "daniel-pi"]
 # A bare `>` comparison: `>=` and `==` are not the stale-file arm.
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
-# Alert prefix -> (template, the `check` label its textfile carries, the Kuma tile's name prefix).
+# Alert prefix -> (template, the `check` label its textfile carries, the Kuma tiles' file slug).
 PRODUCERS = {
-    "AideCheck": ("aide-check.sh.j2", "aide-check", "AIDE Integrity"),
-    "RkhunterScan": ("rkhunter-check.sh.j2", "rkhunter-check", "rkhunter Scan"),
+    "AideCheck": ("aide-check.sh.j2", "aide-check", "aide"),
+    "RkhunterScan": ("rkhunter-check.sh.j2", "rkhunter-check", "rkhunter"),
 }
 
 
@@ -36,10 +36,14 @@ def rendered_deadline(template: str) -> int:
     return int(deadline)
 
 
-def tile_intervals(text: str, tile: str) -> list[int]:
-    """The `interval` of each host's tile whose name starts with `tile`."""
-    pattern = rf'"name": "{re.escape(tile)} \([^)]*\)".*?"interval": (\d+)'
-    return [int(n) for n in re.findall(pattern, text)]
+def tile_intervals(slug: str) -> list[int]:
+    """The rendered `interval` of each host's tile, e.g. `aide-daniel-box.json`."""
+    return [
+        entity(f"{slug}-{host}.json", f"{slug}_{host.replace('-', '_')}_push_token")[
+            "interval"
+        ]
+        for host in HOSTS
+    ]
 
 
 def not_reporting_rules(text: str) -> dict[tuple[str, str], str]:
@@ -117,6 +121,4 @@ def test_each_scan_writes_its_check_and_its_deadline_equals_its_tiles_interval(p
     assert re.search(
         rf'write_check_textfile {re.escape(check)} ".*" "\$DEADLINE_S"', body
     ), f"{template} does not write the {check} textfile its rules read"
-    assert tile_intervals(TILES.read_text(), tile) == [
-        rendered_deadline(template)
-    ] * len(HOSTS)
+    assert tile_intervals(tile) == [rendered_deadline(template)] * len(HOSTS)

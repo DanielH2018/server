@@ -637,7 +637,7 @@
  "ansible/tests/services/test_host_plane_rule_literals.py": 0.0,
  "ansible/tests/services/test_ical_proxy_pins_match_uv_lock.py": 0.0,
  "ansible/tests/services/test_initial_setup_check_rule_literals.py": 0.11,
- "ansible/tests/services/test_integrity_scan_rule_literals.py": 0.13,
+ "ansible/tests/setup/test_integrity_scan_rule_literals.py": 0.13,
  "ansible/tests/services/test_introskipper_install.py": 0.0,
  "ansible/tests/services/test_jellyfin_plugin_allowlist.py": 0.06,
  "ansible/tests/services/test_jellyfin_plugin_pins_hold_across_a_restart.py": 0.48,

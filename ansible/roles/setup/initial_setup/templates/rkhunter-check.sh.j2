@@ -41,7 +41,7 @@ source /usr/local/lib/homelab-check-lib.sh || {
 # The longest legitimate gap between two textfile writes: the cron runs weekly (Wednesday 02:00,
 # integrity.yml), 604800s, and the extra 2h is the slack the "rkhunter Scan" tile keeps
 # (interval 612000) for a run that takes far longer than the last. Move it with the cron (#6168).
-# ansible/tests/services/test_integrity_scan_rule_literals.py pins the rules' literals to it.
+# ansible/tests/setup/test_integrity_scan_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=612000
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"

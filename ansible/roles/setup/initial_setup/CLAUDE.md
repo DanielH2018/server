@@ -122,5 +122,5 @@ with a `DEADLINE_S` that equals its Kuma tile's interval, and the rules in
 ENFORCED: `ansible/tests/services/test_initial_setup_check_rule_literals.py` pins each rule's
 deadline literals to the rendered `DEADLINE_S`. The weekly AIDE and rkhunter scans write a
 textfile the same way on every host (#6168), and the `host-checks` rule group reads it.
-ENFORCED: `ansible/tests/services/test_integrity_scan_rule_literals.py`. The witness gets its textfile directory from a
-task tagged `loki_route_witness`, which gives the deploy user write access on daniel-server.
+ENFORCED: `ansible/tests/setup/test_integrity_scan_rule_literals.py`. The witness gets its
+textfile directory from a task tagged `loki_route_witness`, which gives the deploy user write access on daniel-server.

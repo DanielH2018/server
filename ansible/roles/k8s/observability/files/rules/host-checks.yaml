@@ -310,7 +310,7 @@ groups:
       # every host and write the textfile beside their Kuma push, and the "AIDE Integrity" and
       # "rkhunter Scan" tiles page the same verdicts. Each host gets the DiskHealth pair for each
       # scan. A NotReporting rule's two literals equal the DEADLINE_S its script renders, which
-      # equals the tile's interval: ansible/tests/services/test_integrity_scan_rule_literals.py
+      # equals the tile's interval: ansible/tests/setup/test_integrity_scan_rule_literals.py
       # pins all three. daniel-pi's rules read the `node-pi` job. Every tile notifies Discord
       # only, so the rules are `warning`. Each NotReporting rule fires from its deploy until the
       # scan's first run writes the file, up to a week, which pages nobody while it is shadow.

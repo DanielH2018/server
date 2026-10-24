@@ -1,5 +1,5 @@
 {
-  "checksum": "dc84fd627d36f51c3c189912f4c95f391868c87f1e651e3cbb0ddb6cb7d730d5",
+  "checksum": "ec77dcdc8c3fa7c9034f6dd5383651be9505eaa4fe14135c444934c0f8e41979",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Notable",
   "row": {
@@ -7,9 +7,9 @@
       "ansible/roles/k8s/observability/files/rules/initial-setup-checks.yaml": "dfe4dc7ea91478e321367deee6fd90afee36493e56df41369a2c713514292201",
       "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh": "662474ecceda5707c63bc86091ada2b07576b94ef9e4473da20180bfa2381c22",
       "ansible/tests/services/test_initial_setup_check_rule_literals.py": "4d47643950c220e8aac033c369022d791b12dc57da7116e9c39408146ca429e9",
-      "ansible/tests/services/test_integrity_scan_rule_literals.py": "f2513d0a4691655a8e218d79827c4b34f34a5b55fc286b4f72bd9a4d6194bccd"
+      "ansible/tests/setup/test_integrity_scan_rule_literals.py": "a2410f3a5eef922beda27ef679bddb31e514ab283ea263e476ce28dfe095f74a"
     },
     "python": "3.14",
-    "verified_sha": "7b9fa18c0"
+    "verified_sha": "e74bae0f1"
   }
 }
