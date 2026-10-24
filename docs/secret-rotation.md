@@ -288,6 +288,12 @@ not rotated again by the weekly cron. Examples:
   as well as on `crowdsec` (`flux_verify_after` in the `crowdsec` role's defaults), so it
   probes the rolled Traefik pod. It therefore fails, or never starts, after the outage
   has begun.
+  The `traefik-precheck` Job is the prevention once `traefik_k8s_bouncer_key_precheck` is
+  true; it ships false (#6095). It runs after `crowdsec` and before `traefik`, sends the new
+  key to the LAPI, and fails on a 403, so Flux holds `traefik` while the old pod serves. Its
+  name changes with the key, so every rotation runs it. A failed run stays failed. To recover,
+  run the bouncer delete, wait for the restarted engine pod, then have the operator delete the
+  failed `traefik-precheck-*` Job; Flux recreates it under the same name and it runs again.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
   (fresh `last_pull`) and a `kubectl -n homelab logs deploy/traefik` free of LAPI 403s.
   (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and

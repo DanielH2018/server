@@ -1,0 +1,12 @@
+{
+  "checksum": "83d9031d2a02bf85d3e16d8e3705202bce9c6def3761d82506ff1423e4be51f6",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#LAPI adds a bouncer row per Traefik pod IP, and an hourly job prunes them",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/traefik/files/traefik_bouncer_key_precheck.py": "d5152ad59ace3d5b55a4246b61fd3ff0f6e0353dfb9e2d3f7a1ca037d1772f65"
+    },
+    "python": "3.14",
+    "verified_sha": "eab40596f"
+  }
+}
