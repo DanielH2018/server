@@ -1952,7 +1952,11 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       `test_gitops_deploy_ship_list.py` and `test_ci_contexts_match_workflows.py`, and the
       empty `diff -r` of the cluster render. The fourth grep's output is the list of
       record for H7.19b.
-    - **H7.2f** The setup census, in report mode.
+    - **H7.2f** The setup census, in report mode. It lives in
+      `scripts/deploy_tools/setup_lib/setup_census.py` (`--host`, `--strict`), and the
+      test is `ansible/tests/setup/test_setup_census.py`. The census does not evaluate a
+      task's `when:`, so a `<role>_packaged_hosts` guard cannot hide an item: the item stays
+      in the report, marked `[per-host guard: ...]`, until the host's package carries it.
     - H7.2a also adds the reconcile-size census with its ceiling constant, and measures B
       at H3.2b's merge commit (*Reconcile's line ceiling*).
 3. **H7.3 Pi: `optimize_pi`, part 1.** zram, Log2Ram and the watchdog, each with `activate:
