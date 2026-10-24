@@ -51,3 +51,44 @@ groups:
             upgrade left one node behind, or the series has been absent, so the skew cannot be
             judged. Read kubectl get nodes, then the Plans with kubectl -n system-upgrade get
             plans. docs/k3s-upgrade.md says how to finish or retry the upgrade.
+      # homelab-k3s-restart (H6.3b, hosts/components/k3s-restart) writes these two series on every
+      # run, so a clean host reads 0 and an absent series is not a pass. Each rule names its host
+      # as a literal `service`, the way host-checks.yaml does. daniel-box ships the unit first, and
+      # daniel-server's two rules join when its package lists the component.
+      # K3sConfigRestartMetricsAbsent, which pages a host whose textfile stops reaching Prometheus,
+      # lands in H6.4a after a live query has shown the `host` label on the series.
+      #
+      # `failed` is 1 after an attempt that did not bring k3s back, and after an attempt a kill
+      # interrupted. The unit makes one attempt per hash, so this page stands until the operator
+      # recovers the node and removes failed.sha256 (docs/target-architecture/host/h6-k3s-suc.md,
+      # *Rollback*, H6.4b).
+      - alert: K3sConfigRestartFailed
+        expr: homelab_k3s_restart_failed{host="daniel-box"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          service: daniel-box
+        annotations:
+          summary: homelab-k3s-restart failed to restart k3s on daniel-box.
+          description: >-
+            The last windowed restart of k3s.service on daniel-box did not end with the unit
+            active, under a new MainPID, and the node Ready past its restart, or a run was killed
+            after it restarted k3s. The unit makes one attempt per config hash. Read
+            `journalctl -u homelab-k3s-restart -p notice` on daniel-box, recover the node by
+            hand if it is down, then `sudo rm /var/lib/homelab-k3s-restart/failed.sha256`.
+      # `pending` is 1 while the shipped config differs from the applied hash and a gate refused
+      # the window's restart. 72 hours spans a weekend plus a refused Monday, and still pages a
+      # gate that refuses every window.
+      - alert: K3sConfigRestartPending
+        expr: homelab_k3s_restart_pending{host="daniel-box"} == 1
+        for: 72h
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: A k3s config change on daniel-box has waited 72 hours for a restart.
+          description: >-
+            homelab-k3s-restart has refused to restart k3s.service on daniel-box at every window
+            for 72 hours. Read `journalctl -u homelab-k3s-restart -p notice` for the refusing
+            gate, which is a Longhorn volume, a node, CoreDNS, a SUC run, a Flux promotion, the
+            deployer's lock or hold, or an unreadable API.
