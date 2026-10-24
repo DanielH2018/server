@@ -32,6 +32,7 @@ Run: uv run pytest ansible/tests/setup/test_pi_recovery_restarts_and_reports.py
 
 import pytest
 from _pi_health import COMPONENT_DEFAULTS, PI_HOST_VARS, journalctl_calls, run
+from lib.ansible_inventory import pi_entries_in
 from renderer.renderer_lib import host as host_mode
 from validate.validate_lib.host_fixtures import (
     HOST,
@@ -39,7 +40,6 @@ from validate.validate_lib.host_fixtures import (
     RECOVERY_TIMER,
     disarmed_inventory,
 )
-
 
 SCRIPT = "pi-recovery-health"
 UNIT_DIR = "/usr/lib/systemd/system"
@@ -49,10 +49,7 @@ LINK = f"{UNIT_DIR}/timers.target.wants/{RECOVERY_TIMER}"
 # on daniel-pi, plus the sub-proxy the docker-proxy role's compose file declares beside its list
 # entry. Named rather than counted so the failure says which container the script stopped
 # watching.
-PI_CONTAINERS = [
-    c["name"]
-    for c in PI_HOST_VARS["containers_list"] + PI_HOST_VARS["compose_services"]
-]
+PI_CONTAINERS = [entry["name"] for entry in pi_entries_in(PI_HOST_VARS)]
 EXPECTED_WATCH_SET = {*PI_CONTAINERS, "docker-proxy-lifecycle"}
 # A compose sub-service, not a containers_list entry, so iterating the list alone would miss it.
 MUST_WATCH = frozenset(

@@ -30,6 +30,7 @@ Run: uv run pytest ansible/tests/services/test_pi_publishing_containers.py
 
 from _helpers import HOST_VARS
 from _k8s_render import render_pod_env
+from lib.ansible_inventory import pi_entries_in
 from validate.k8s_manifests import load_yaml
 
 ROLE = "monitor-bridge"
@@ -66,8 +67,7 @@ def _hostvars(pi_containers: list | None = None) -> dict[str, dict]:
 
 
 def _pi_containers() -> list:
-    pi = load_yaml(HOST_VARS / "daniel-pi.yml")
-    return pi["containers_list"] + pi["compose_services"]
+    return pi_entries_in(load_yaml(HOST_VARS / "daniel-pi.yml"))
 
 
 def published(pi_containers: list | None = None) -> dict[str, int]:
