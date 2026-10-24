@@ -103,7 +103,7 @@ tests:
               service: flux
               shadow: "true"
             exp_annotations:
-              summary: Prometheus cannot scrape a Flux controller.
+              summary: Prometheus cannot scrape the Flux controller source-controller.
               description: >-
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
@@ -120,7 +120,7 @@ tests:
               service: flux
               shadow: "true"
             exp_annotations:
-              summary: Prometheus cannot scrape a Flux controller.
+              summary: Prometheus cannot scrape the Flux controller source-controller.
               description: >-
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
@@ -181,7 +181,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations: &not_ready_kustomization
-              summary: A Flux object has not been Ready for 15 minutes.
+              summary: The Kustomization homelab has not been Ready for 15 minutes.
               description: >-
                 The Kustomization homelab in flux-system has had a Ready condition other than
                 True for 15 minutes. Its status conditions name the failing step.
@@ -260,7 +260,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: A Flux object has not been Ready for 15 minutes.
+              summary: The OCIRepository homelab has not been Ready for 15 minutes.
               description: >-
                 The OCIRepository homelab in flux-system has had a Ready condition other than
                 True for 15 minutes. Its status conditions name the failing step.
@@ -334,7 +334,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: A Flux Kustomization has been suspended for more than 24 hours.
+              summary: The Kustomization homelab has been suspended for more than 24 hours.
               description: >-
                 The Kustomization homelab in flux-system has been suspended for 24 hours, so
                 Flux applies nothing it owns. If its role sets flux_suspend, land the PR that

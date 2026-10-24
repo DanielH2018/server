@@ -32,7 +32,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: daniel-box's UPS secondary watchdog has stopped reporting.
-              description: No ups-secondary-health verdict newer than 1500s reached Prometheus from daniel-box's
+              description: No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Read
                 the `UPS secondary watchdog` cron and the `ups-secondary-health` syslog tag, then /var/lib/node-exporter-textfile/ups-secondary-health.prom
                 on the host.
@@ -44,7 +44,7 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: daniel-server's UPS secondary watchdog has stopped reporting.
-              description: No ups-secondary-health verdict newer than 1500s reached Prometheus from daniel-server's
+              description: No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-server's
                 textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Read
                 the `UPS secondary watchdog` cron and the `ups-secondary-health` syslog tag, then /var/lib/node-exporter-textfile/ups-secondary-health.prom
                 on the host.
@@ -62,7 +62,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the scan.
-              description: No fake-remux-scan verdict newer than 1500s reached Prometheus from daniel-box's
+              description: No fake-remux-scan verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the scan's state file is being read. Read the
                 `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/fake-remux-scan.prom
                 on the host.
@@ -80,7 +80,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the reconciler.
-              description: No fake-remux-replace verdict newer than 1500s reached Prometheus from daniel-box's
+              description: No fake-remux-replace verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the reconciler's state file is being read. Read
                 the `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/fake-remux-replace.prom
                 on the host.
@@ -98,7 +98,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the mkv repair.
-              description: No mkv-attachment-repair verdict newer than 1500s reached Prometheus from daniel-box's
+              description: No mkv-attachment-repair verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the repair sweep's state file is being read. Read
                 the `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/mkv-attachment-repair.prom
                 on the host.
@@ -116,7 +116,7 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: The monthly etcd restore drill on daniel-server has stopped reporting.
-              description: No etcd-restore-drill-vm verdict newer than 3024000s (35 days) reached Prometheus
+              description: No etcd-restore-drill-vm verdict newer than 35 days (35 days) reached Prometheus
                 from daniel-server's textfile collector, so no drill has run since the last 1st-of-month
                 cron slot plus four days of slack. Read the `Full etcd restore drill in a throwaway guest`
                 cron on daniel-server, cron.log under /var/log/etcd-restore-drill, then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom
@@ -135,7 +135,7 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: The etcd drill's egress fence leg on daniel-server has stopped reporting.
-              description: No etcd-restore-drill-egress-fence verdict newer than 3024000s (35 days) reached
+              description: No etcd-restore-drill-egress-fence verdict newer than 35 days (35 days) reached
                 Prometheus from daniel-server's textfile collector. A run that dies before the fence leg
                 executes writes nothing here, so the fence went unmeasured this month. Read the newest
                 run directory under /var/log/etcd-restore-drill, then /var/lib/node-exporter-textfile/etcd-restore-drill-egress-fence.prom
@@ -151,7 +151,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The renovate notifier on daniel-box has not completed a run in 36 hours.
-              description: 'No renovate-notify verdict newer than 129600s reached Prometheus from daniel-box''s
+              description: 'No renovate-notify verdict newer than 36 hours reached Prometheus from daniel-box''s
                 textfile collector: the daily 13:00 timer did not fire or the run failed, and OnFailure
                 will also have posted to Discord. It says nothing about Renovate itself. Read `systemctl
                 status renovate-notify.timer` and `journalctl -u renovate-notify`.'
@@ -166,7 +166,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The renovate agent on daniel-box has not completed a clean run in 28 hours.
-              description: 'No renovate-agent verdict newer than 100800s reached Prometheus from daniel-box''s
+              description: 'No renovate-agent verdict newer than 28 hours reached Prometheus from daniel-box''s
                 textfile collector: the daily 06:00 timer did not fire, the run crashed, or a worktree-blocked
                 tick skipped it. Read `systemctl status renovate-agent.timer` and `journalctl -u renovate-agent`.'
   - interval: 1h
@@ -229,7 +229,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: daniel-box's UPS secondary watchdog has stopped reporting.
-              description: No ups-secondary-health verdict newer than 1500s reached Prometheus from daniel-box's
+              description: No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Read
                 the `UPS secondary watchdog` cron and the `ups-secondary-health` syslog tag, then /var/lib/node-exporter-textfile/ups-secondary-health.prom
                 on the host.
@@ -305,7 +305,7 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: daniel-server's UPS secondary watchdog has stopped reporting.
-              description: No ups-secondary-health verdict newer than 1500s reached Prometheus from daniel-server's
+              description: No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-server's
                 textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Read
                 the `UPS secondary watchdog` cron and the `ups-secondary-health` syslog tag, then /var/lib/node-exporter-textfile/ups-secondary-health.prom
                 on the host.
@@ -373,7 +373,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the scan.
-              description: No fake-remux-scan verdict newer than 1500s reached Prometheus from daniel-box's
+              description: No fake-remux-scan verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the scan's state file is being read. Read the
                 `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/fake-remux-scan.prom
                 on the host.
@@ -440,7 +440,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the reconciler.
-              description: No fake-remux-replace verdict newer than 1500s reached Prometheus from daniel-box's
+              description: No fake-remux-replace verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the reconciler's state file is being read. Read
                 the `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/fake-remux-replace.prom
                 on the host.
@@ -508,7 +508,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux heartbeat on daniel-box has stopped reporting the mkv repair.
-              description: No mkv-attachment-repair verdict newer than 1500s reached Prometheus from daniel-box's
+              description: No mkv-attachment-repair verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the repair sweep's state file is being read. Read
                 the `fake-remux health` cron and the `fake-remux-health` syslog tag, then /var/lib/node-exporter-textfile/mkv-attachment-repair.prom
                 on the host.
@@ -580,7 +580,7 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: The monthly etcd restore drill on daniel-server has stopped reporting.
-              description: No etcd-restore-drill-vm verdict newer than 3024000s (35 days) reached Prometheus
+              description: No etcd-restore-drill-vm verdict newer than 35 days (35 days) reached Prometheus
                 from daniel-server's textfile collector, so no drill has run since the last 1st-of-month
                 cron slot plus four days of slack. Read the `Full etcd restore drill in a throwaway guest`
                 cron on daniel-server, cron.log under /var/log/etcd-restore-drill, then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom
@@ -652,7 +652,7 @@ tests:
               origin: daniel-server
             exp_annotations:
               summary: The etcd drill's egress fence leg on daniel-server has stopped reporting.
-              description: No etcd-restore-drill-egress-fence verdict newer than 3024000s (35 days) reached
+              description: No etcd-restore-drill-egress-fence verdict newer than 35 days (35 days) reached
                 Prometheus from daniel-server's textfile collector. A run that dies before the fence leg
                 executes writes nothing here, so the fence went unmeasured this month. Read the newest
                 run directory under /var/log/etcd-restore-drill, then /var/lib/node-exporter-textfile/etcd-restore-drill-egress-fence.prom
@@ -699,7 +699,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The renovate notifier on daniel-box has not completed a run in 36 hours.
-              description: 'No renovate-notify verdict newer than 129600s reached Prometheus from daniel-box''s
+              description: 'No renovate-notify verdict newer than 36 hours reached Prometheus from daniel-box''s
                 textfile collector: the daily 13:00 timer did not fire or the run failed, and OnFailure
                 will also have posted to Discord. It says nothing about Renovate itself. Read `systemctl
                 status renovate-notify.timer` and `journalctl -u renovate-notify`.'
@@ -745,7 +745,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The renovate agent on daniel-box has not completed a clean run in 28 hours.
-              description: 'No renovate-agent verdict newer than 100800s reached Prometheus from daniel-box''s
+              description: 'No renovate-agent verdict newer than 28 hours reached Prometheus from daniel-box''s
                 textfile collector: the daily 06:00 timer did not fire, the run crashed, or a worktree-blocked
                 tick skipped it. Read `systemctl status renovate-agent.timer` and `journalctl -u renovate-agent`.'
   - interval: 1h
