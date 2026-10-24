@@ -39,6 +39,9 @@ Environment=UV_PYTHON_DOWNLOADS=never
 Environment=HOMELAB_UV={{ homelab_builder_code_dir }}/bin/uv
 Environment=HOMELAB_PYTHON={{ host_python_version }}
 Environment=HOMELAB_NFPM={{ homelab_builder_nfpm_dir }}/nfpm
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout and
+# stderr log at notice, or a failed run's traceback never reaches the journal.
+SyslogLevel=notice
 TimeoutStartSec=20min
 ExecStart={{ homelab_builder_code_dir }}/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ homelab_builder_code_dir }}/host_package_builder.py
 # `+` runs the copy as root outside the sandbox, `-` keeps a failed copy from failing the unit.
