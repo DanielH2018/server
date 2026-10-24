@@ -1219,6 +1219,12 @@ The expected results are:
   the tmpfiles file lists, or `/var/run/docker.sock`. Each one carries `create_host_path:
   false`. A fixture source under `/run/homelab-secrets/` is flagged, and so is a relative
   source with no tmpfiles line. The test asserts it found `alloy/data` and `wg-easy/config`.
+- *Memory floor (H5.2b follow-up).* The Docker daemon refuses a memory limit or reservation
+  under 6 MiB at `up`, though the Compose model and `config -q` accept it. The canary's first
+  run failed on a 2M reservation (2026-10-24). Every compose file the package installs is read
+  for `deploy.resources.{limits,reservations}.memory`, `mem_limit` and `mem_reservation`. A
+  fixture reservation of 2M, a limit of 5M or 512k, and an unreadable size are flagged, and 6M
+  with a 16M limit passes. The test asserts it found the canary's own 16M and 6M.
 - *Engine upgrade.* A test parses `engine-upgrade.yml`. It asserts five things:
     - a task before the apt probe masks `homelab-updater.timer`, and a later task, still
       before any `state: stopped`, waits on `homelab-updater.service` and

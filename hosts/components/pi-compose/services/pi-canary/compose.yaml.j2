@@ -25,11 +25,15 @@ services:
       - no-new-privileges:true
     environment:
       - HOMELAB_DOMAIN={{ domain }}
+    # The daemon refuses a memory limit or reservation under 6 MiB ("Minimum memory reservation
+    # allowed is 6MB"), though the Compose model and `config -q` accept it: the canary's first
+    # run failed on a 2M reservation. hosts/lib/tests/_compose_tree.py:memory_problems refuses
+    # any packaged compose file below that floor. The CPU values sit above the daemon's 0.001.
     deploy:
       resources:
         limits:
           cpus: '0.05'
-          memory: 8M
+          memory: 16M
         reservations:
           cpus: '0.01'
-          memory: 2M
+          memory: 6M

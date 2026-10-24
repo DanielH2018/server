@@ -16,6 +16,7 @@ from _compose_tree import (
     COMPOSE,
     REAL,
     bind_problems,
+    memory_problems,
     project_of,
     project_problems,
     text,
@@ -46,6 +47,21 @@ def test_the_real_project_passes_the_project_and_bind_censuses(package):
     listed = tmpfiles_dirs((REAL / "tmpfiles.d" / "homelab-compose.conf").read_text())
     assert project_problems(project) == []
     assert bind_problems(project, listed)[0] == []
+
+
+def test_every_packaged_compose_file_asks_the_daemon_for_at_least_6_mib(package):
+    """The daemon refused the canary's 2M reservation at `up` (the Pi's first run, 2026-10-24).
+
+    The census reads every compose file the package installs and finds the canary's own values,
+    so a census that read no file, or no memory field, would fail here rather than pass.
+    """
+    project = project_of(package)
+    assert memory_problems(project) == []
+    canary = project["services"]["pi-canary"]["deploy"]["resources"]
+    assert (canary["limits"]["memory"], canary["reservations"]["memory"]) == (
+        "16M",
+        "6M",
+    )
 
 
 def test_the_canary_reads_no_secret_and_gets_the_domain_at_build_time(package):
