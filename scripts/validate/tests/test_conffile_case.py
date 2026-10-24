@@ -32,7 +32,6 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from lib import proc_testing
 from lib.proc_testing import DEFAULT_TIMEOUT
 from validate.validate_lib import host_fixtures as fx
 from validate.validate_lib.host_container import CaseFailed
@@ -40,7 +39,6 @@ from validate.validate_lib.host_container import CaseFailed
 MODULE = "validate.validate_lib.conffile_case"
 SOURCE = "scripts/validate/validate_lib/conffile_case.py"
 CASES = "scripts/validate/host_package_cases.py"
-FIXTURE_SPECS = "hosts/lib/tests/container/fixture"
 # The functions the fix adds to the module, each reached through getattr.
 OWNER_DEBS = "owner_debs"
 OUTCOME = "outcome"
@@ -126,13 +124,8 @@ def _owner_builds(tmp_path: Path) -> tuple[Path, Path, Path, str]:
 
 def _declared_edits(tmp_path: Path) -> list[dict]:
     """Every line-arm edit a rendered fixture variant's manifest declares."""
-    listed = proc_testing.run(
-        ["git", "ls-files", "--", f"{FIXTURE_SPECS}/*.yml"], cwd=fx.REPO, check=True
-    ).stdout.split()
-    assert listed
     edits = []
-    for spec in listed:
-        variant = Path(spec).stem
+    for variant in fx.VARIANTS:
         out = fx.render_fixture(variant, tmp_path / variant, payload_bytes=16)
         manifest = json.loads((out / "root/usr/lib/homelab/manifest.json").read_text())
         edits += manifest.get("lines", {}).get("edits", [])
@@ -180,21 +173,34 @@ def test_a_homelab_fixture_declares_a_line_edit_on_the_owning_fixtures_conffile(
 # What the case records.
 
 
-def test_an_upgrade_dpkg_installed_is_recorded_as_kept():
+# `outcome(before, offered, after, line_kept)` takes the owner's installed version before the
+# upgrade, the version the repository offered, the installed version after it, and whether the
+# arm's line was still in the conffile after the upgrade and before the next reconcile.
+
+
+def test_an_upgrade_dpkg_installed_with_the_local_file_kept_is_recorded_as_kept():
     outcome = _function(OUTCOME)
-    assert outcome("0.1", "0.2", "0.2") == KEPT
+    assert outcome("0.1", "0.2", "0.2", True) == KEPT
 
 
 def test_an_upgrade_dpkg_left_at_the_old_version_is_recorded_as_held_back():
     outcome = _function(OUTCOME)
-    assert outcome("0.1", "0.2", "0.1") == HELD_BACK
+    assert outcome("0.1", "0.2", "0.1", True) == HELD_BACK
+
+
+def test_an_upgrade_that_replaced_the_local_file_fails_the_case():
+    # Neither outcome --force-confold allows. The next reconcile re-adds the line, so only
+    # this check sees it.
+    outcome = _function(OUTCOME)
+    with pytest.raises(CaseFailed):
+        outcome("0.1", "0.2", "0.2", False)
 
 
 @pytest.mark.parametrize("after", ["", "0.3"])
 def test_an_installed_version_that_is_neither_fails_the_case(after):
     outcome = _function(OUTCOME)
     with pytest.raises(CaseFailed):
-        outcome("0.1", "0.2", after)
+        outcome("0.1", "0.2", after, True)
 
 
 # Where and how the job runs the cases.
@@ -224,10 +230,28 @@ def test_the_host_packages_job_runs_the_conffile_case():
     )
 
 
-def _strings(node: ast.AST) -> list[tuple[int, str]]:
-    """Each string constant under `node`, an f-string's literal parts joined, with its line."""
-    found = []
+def _docstrings(node: ast.AST) -> set[int]:
+    """The ids of the docstring constants under `node`, which say nothing about what runs."""
+    found = set()
     for each in ast.walk(node):
+        body = getattr(each, "body", None)
+        if (
+            isinstance(body, list)
+            and body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+        ):
+            found.add(id(body[0].value))
+    return found
+
+
+def _strings(node: ast.AST) -> list[tuple[int, str]]:
+    """Each string constant under `node` but its docstrings, an f-string's parts joined."""
+    found = []
+    skip = _docstrings(node)
+    for each in ast.walk(node):
+        if id(each) in skip:
+            continue
         if isinstance(each, ast.JoinedStr):
             text = "".join(
                 part.value
@@ -241,24 +265,31 @@ def _strings(node: ast.AST) -> list[tuple[int, str]]:
 
 
 def _upgrades_then_reconciles(source: str) -> list[str]:
-    """The top-level functions that upgrade non-interactively with --force-confold, then reconcile.
+    """The functions that upgrade non-interactively with --force-confold, then reconcile.
 
-    The upgrade is one command string carrying both `noninteractive` and `--force-confold`. The
-    reconcile is a later string, in the same function, naming `homelab-reconcile`.
+    The upgrade is a string carrying `--force-confold` in a module that also names
+    `noninteractive` (a `DEBIAN_FRONTEND`, perhaps in a constant the command interpolates) or
+    `unattended-upgrade` (the tool itself). The reconcile is a later string, in the same
+    function, naming `homelab-reconcile`.
     """
     found = []
-    for node in ast.parse(source).body:
+    tree = ast.parse(source)
+    unattended = any(
+        "noninteractive" in text or "unattended-upgrade" in text
+        for _, text in _strings(tree)
+    )
+    for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
         strings = _strings(node)
-        upgrades = [
-            line
-            for line, text in strings
-            if "--force-confold" in text and "noninteractive" in text
-        ]
-        if upgrades and any(
-            line > min(upgrades) and "homelab-reconcile" in text
-            for line, text in strings
+        upgrades = [line for line, text in strings if "--force-confold" in text]
+        if (
+            upgrades
+            and unattended
+            and any(
+                line > min(upgrades) and "homelab-reconcile" in text
+                for line, text in strings
+            )
         ):
             found.append(node.name)
     return found
@@ -269,5 +300,6 @@ def test_the_case_upgrades_non_interactively_under_force_confold_then_reconciles
     source = (fx.REPO / SOURCE).read_text()
     assert _upgrades_then_reconciles(source)
     # Red proofs: an interactive upgrade, and an upgrade with no reconcile after it, do not count.
-    assert not _upgrades_then_reconciles(source.replace("noninteractive", "readline"))
+    interactive = source.replace("noninteractive", "readline")
+    assert not _upgrades_then_reconciles(interactive.replace("unattended-upgrade", "x"))
     assert not _upgrades_then_reconciles(source.replace("homelab-reconcile", "nothing"))
