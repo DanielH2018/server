@@ -91,6 +91,11 @@ TEMPLATE_SOURCE_READERS = {
         "the `*_push_token` NAMES are a render INPUT — they decide which gated tiles render "
         "at all, so they are read before the render rather than out of it"
     ),
+    "setup/test_pi_service_lists_census.py": (
+        "the red proof copies monitor-bridge's env template with the Pi's second key removed, "
+        "to show the census flags a reader that reads `containers_list` alone; a render has "
+        "no source to edit"
+    ),
     "services/test_n8n_build_is_pinned.py": (
         "Renovate's `matchString` runs against `Dockerfile.j2` on disk, braces intact; a "
         "render is not what Renovate sees"

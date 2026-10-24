@@ -1708,6 +1708,12 @@ workloads run, with `imagePullPolicy: IfNotPresent` and a script that exits at o
 Job completes when the kubelet holds every image. `<tag>` depends on `<tag>-prepull`, so the
 old pod keeps serving through the pull and the rollout pays only the container start.
 
+A role that also sets `flux_prepull_workloads` scopes the Jobs to the Deployments and
+StatefulSets it names (`scripts/renderer/renderer_lib/ordering.py:prepull_workloads`, #5875).
+Only those must name a node and carry `sh`, and a name the render lacks fails it.
+observability names Grafana alone: its 482 MB image is the role's one large pull, while
+Loki, Tempo and kube-state-metrics pin no node and ship no shell.
+
 - **The wait moves, it does not go away.** `<tag>-prepull`'s `timeout` is the role's
   `flux_prepull_timeout`, and it holds a
   `kustomize-controller` worker for the pull. It sits on `verify`'s chained timeout like any
@@ -1723,7 +1729,7 @@ old pod keeps serving through the pull and the rollout pays only the container s
 - **The Job and the pod are scheduled separately.** A node cordoned between the two sends the
   pod elsewhere, and there the rollout pays the cold pull. The rollout's own budget stays the
   backstop for that case.
-- **Every image must carry `sh`.** Each container runs `sh /opt/prepull/prepull.sh`, a
+- **Every image the Jobs pull must carry `sh`.** Each container runs `sh /opt/prepull/prepull.sh`, a
   mounted script that echoes one line. It is a shell script because n8n's image and the
   `alpine` init container of its runners carry no `python3` (#5546), and a container that
   cannot start fails the Job. The census's script-delivery rule admits the shell form only in

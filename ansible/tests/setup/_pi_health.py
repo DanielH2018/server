@@ -132,7 +132,8 @@ SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
 GZ_STATE_VAR = "optimize_pi_gz_integrity_state_file"
 
 
-# The Pi's own containers_list, so the recovery heartbeat's watch set is the one the host deploys.
+# The Pi's own containers_list and compose_services, so the recovery heartbeat's watch set is the
+# one the host deploys.
 PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
 
 
@@ -140,8 +141,9 @@ def render(name, tmp_path, jinja_vars=None):
     """The real template, rendered through `_shell_render`, with its absolute paths repointed
     at temp files.
 
-    `containers_list` is the Pi's own (host_vars/daniel-pi.yml) rather than a group default, so
-    the accessor's inventory context does not carry it -- it goes in as an override. Everything
+    `containers_list` and `compose_services` are the Pi's own (host_vars/daniel-pi.yml) rather
+    than a group default, so the accessor's inventory context does not carry them -- they go in
+    as overrides. Everything
     else the templates read (domain, the ingress VIP, the gz-integrity defaults) comes from
     that same context, the one `validate/shell_templates.py` lints
     against. `jinja_vars` is laid on top, for a caller overriding any key by name -- the
@@ -149,6 +151,7 @@ def render(name, tmp_path, jinja_vars=None):
     """
     overrides = {
         "containers_list": PI_HOST_VARS["containers_list"],
+        "compose_services": PI_HOST_VARS["compose_services"],
         **(jinja_vars or {}),
     }
     body = render_shell_script(

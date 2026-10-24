@@ -24,7 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 
-from lib.ansible_inventory import PI_HOST, PI_HOST_VARS, containers_entries_in
+from lib.ansible_inventory import PI_HOST, PI_HOST_VARS, pi_entries_in
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
 
@@ -189,8 +189,9 @@ def resolve_ip(container):
 def declared_on_pi(container, host_vars=None):
     """Does daniel-pi's inventory declare a Docker service by this name?
 
-    The Pi is the only Docker host left, so its `containers_list` is the whole population an
-    absent container can be measured against.
+    The Pi is the only Docker host left, so its `containers_list` and `compose_services` are
+    the whole population an absent container can be measured against. A host_vars file that
+    lacks either key raises, as `pi_entries_in` does, and is not read as a skip.
 
     Args:
         container: The service name an absent container was asked about.
@@ -208,4 +209,4 @@ def declared_on_pi(container, host_vars=None):
     except OSError, yaml.YAMLError:
         # Fail closed: an unreadable inventory must not turn a missing container into a skip.
         return True
-    return container in {entry["name"] for entry in containers_entries_in(data)}
+    return container in {entry["name"] for entry in pi_entries_in(data)}
