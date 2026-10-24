@@ -59,7 +59,8 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   prospective: a record shipped before it still carries the token for the 744h retention window.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
-  `HostLogErrors` counts syslog's fatal-pattern lines per machine and program. The stage runs
+  `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
+  `HostOutOfMemoryKill` pages on the first host-wide OOM kill. The stage runs
   only `stage.regex` and `stage.labels`, because probe.py and the alert-history dashboard parse
   the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
   label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.

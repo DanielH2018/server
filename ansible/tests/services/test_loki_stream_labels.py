@@ -217,6 +217,7 @@ def test_the_consumer_census_finds_its_named_members():
         "homelab-logs.yaml LokiPodLogsSilent",
         "homelab-logs.yaml WorkloadLogErrors",
         "homelab-logs.yaml HostLogErrors",
+        "homelab-logs.yaml HostOutOfMemoryKill",
         "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent",
         "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent",
     ):
