@@ -351,7 +351,7 @@ against the volume's default target.
 
 **Scheduled since 2026-08-19; nightly and rotating since 2026-08-20.**
 The CronJob `longhorn-restore-drill` in `homelab` (`ansible/roles/k8s/longhorn-restore-drill/`,
-script `longhorn-restore-drill.sh.j2`) is scheduled for 04:10 UTC every night, suspended until
+script `longhorn-restore-drill.sh.j2`) is scheduled for 04:10 UTC every night, running since
 H2.3e, in place of the root cron and `/usr/local/bin/longhorn-restore-drill.sh` that ran it until
 H2.3d. Each run restores the
 newest backup of ONE volume into a throwaway volume,
