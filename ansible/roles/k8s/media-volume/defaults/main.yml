@@ -32,12 +32,14 @@ media_volume_host_path: /srv/media
 # be no larger than the capacity.
 media_volume_size: 400Gi
 
-# The claim k8s/manifests renders and applies for this role (#3387). ReadWriteMany matches the
-# PV and the live claim; a claim's access modes are immutable once created.
+# The claim the renderer emits for this role, which the media-volume Kustomization applies
+# (#3387). ReadWriteMany matches the PV and the live claim; a claim's access modes are immutable
+# once created.
 #
-# k8s/manifests applies the claims BEFORE the directory that creates `media-local` and the PV.
-# On a fresh cluster the claim is therefore created first and waits Pending; the PV's
-# pre-bound `claimRef` binds it once the PV exists.
+# The media-volume Kustomization applies the claim, `media-local` and the PV together. After a
+# handback, k8s/manifests applies the claims BEFORE the directory that creates them. On a fresh
+# cluster a claim created first waits Pending either way; the PV's pre-bound `claimRef` binds it
+# once the PV exists.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ media_volume_claim }}"
     storage_class: "{{ media_volume_storage_class }}"

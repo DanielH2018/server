@@ -107,6 +107,15 @@ def test_a_lookup_into_templates_top_level_is_flagged():
     assert misplaced_template_lookups(src) == ["services.yaml.j2"]
 
 
+def test_a_shell_script_lookup_at_top_level_is_clean():
+    """The accept half: a script is rendered and linted by the shell gate, not parsed here."""
+    assert misplaced_template_lookups(_EMBED % "restore-drill.sh.j2") == []
+    # The reject half stays: the same name without the script suffix is still flagged.
+    assert misplaced_template_lookups(_EMBED % "restore-drill.yaml.j2") == [
+        "restore-drill.yaml.j2"
+    ]
+
+
 def test_a_lookup_with_a_variable_target_is_not_judged():
     # image-builder passes the Dockerfile path as a var; nothing literal to place.
     assert misplaced_template_lookups("{{ lookup('template', src) | indent(4) }}") == []

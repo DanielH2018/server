@@ -1,0 +1,13 @@
+# The Plan Jobs' deadline bounds (H6, *SUC through Flux*). Upstream's default is 900 seconds. The
+# server Plan sets 3600 and the agent Plan 5400 in `jobActiveDeadlineSecs`, and the controller
+# caps a Plan's deadline at the MAX below, so the MAX must admit the agent's. The literals equal
+# `system_upgrade_server_deadline_secs` and `system_upgrade_agent_deadline_secs` in
+# defaults/main.yml, which ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py holds.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: default-controller-env
+  namespace: system-upgrade
+data:
+  SYSTEM_UPGRADE_JOB_ACTIVE_DEADLINE_SECONDS: "3600"
+  SYSTEM_UPGRADE_JOB_ACTIVE_DEADLINE_SECONDS_MAX: "5400"

@@ -1,0 +1,16 @@
+{
+  "checksum": "1b6bdb48c777b5ca214d39816ec15e3b4f9e019856314c284bc80979d418710f",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/system-upgrade/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py": "de53c3b375ccd0a1d10f8bce5bde039906883f37e0eb228ac1709d5698c022b7",
+      "scripts/dev/vendor_manifest.py": "f0c0c9df684a1ed3d858ec17f02c8e7c279dbb7595180eb00d70a50e42a9d7ef",
+      "scripts/lib/k8s_roles.py:role_fields": "c624b4743a1a76ed4a04c080967852378de4747b373abfb09680cec8356ff64e",
+      "scripts/lib/repo_paths.py": "c5243cd7430b6f03c1ef9bd7094346e19e2fb633bf826683fb4f787f234362f3",
+      "scripts/renderer/tests/test_renderer_crd_census.py": "7fa9c323c1792f6a53133bd2b9c79da13b3f8314adc5516a32d64e2acd22e5e9"
+    },
+    "python": "3.14",
+    "verified_sha": "35a19551f"
+  }
+}

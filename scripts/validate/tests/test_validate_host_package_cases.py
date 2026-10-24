@@ -141,6 +141,30 @@ def test_the_pi_disarmed_variant_drops_only_the_recovery_timers_link(tmp_path):
     assert fx.RECOVERY_TIMER not in manifest["enable_links"]
 
 
+def test_a_disarmed_variant_given_a_ciphertext_ships_it_and_changes_only_the_manifest(
+    tmp_path,
+):
+    # The by-hand and disarm cases install the real Pi package, which ships `secrets-unit`, so
+    # they seal it to a key the container holds (`secrets_case.seal_pi`).
+    seal = tmp_path / "seal"
+    seal.mkdir()
+    cipher = "ciphertext-for-this-test-only\n"
+    (seal / f"{fx.HOST}.sops.yaml").write_text(cipher)
+
+    plain = fx.pi_disarmed_variant(tmp_path / "plain")
+    sealed = fx.pi_disarmed_variant(tmp_path / "sealed", sops_dir=seal)
+
+    shipped = f"/usr/lib/homelab/secrets/{fx.HOST}.sops.yaml"
+    assert _installed(sealed) == _installed(plain)
+    assert (sealed / f"root{shipped}").read_text() == cipher
+    differing = {
+        path
+        for path in _installed(plain)
+        if (plain / f"root{path}").read_bytes() != (sealed / f"root{path}").read_bytes()
+    }
+    assert differing == {shipped, "/usr/lib/homelab/manifest.json"}
+
+
 def test_the_box_address_comes_from_the_shipped_source(tmp_path):
     host_mode.write_packages([host_mode.render_package(fx.UPDATER)], tmp_path)
     assert fx.box_address(tmp_path) == BOX

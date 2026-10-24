@@ -387,8 +387,12 @@ def test_the_leg_runs_before_the_guest_is_handed_any_credential():
     on a guest that can reach production.
     """
     body = rendered_orchestrator()
+    boot = body.index("boot_guest() {")
+    assert "\n  fence_check" in body[boot : body.index("\n}\n", boot)], (
+        "boot_guest() no longer runs the fence leg"
+    )
     main = body.index("main() {")
-    leg = body.index("\n  fence_check\n", main)
+    leg = body.index("\n  boot_guest\n", main)
     for marker, what in (
         ('. "$AGENT_ENV"', "the cluster token is read"),
         ("etcd-s3.env", "the R2 credentials are staged"),

@@ -1,0 +1,11 @@
+# Shipped by homelab-daniel-server. Its enable link ships only while nut_host_watchdog_armed is
+# true; reconcile stops the timer on the install that drops the link.
+[Unit]
+Description=Check the UPS secondary's link to upsd every {{ nut_host_watchdog_interval_minutes }} minutes
+
+[Timer]
+OnCalendar=*:0/{{ nut_host_watchdog_interval_minutes }}
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

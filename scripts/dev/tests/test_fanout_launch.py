@@ -178,7 +178,7 @@ def test_systemd_run_itself_finds_the_executable_under_the_launching_users_home(
     ssh as the agent user has no ~/.local/bin, so every launch there failed (#4192)."""
     for review in (False, True):
         cmd = systemd_run_command("b", home="/var/lib/claude", review=review)
-        assert cmd.startswith(f"env PATH={unit_path('/var/lib/claude')} systemd-run ")
+        assert f"; then env PATH={unit_path('/var/lib/claude')} systemd-run " in cmd
 
 
 def test_the_unit_is_bounded_by_a_runtime_cap_and_a_budget():

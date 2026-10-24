@@ -26,7 +26,7 @@ CONTRACT_PARTS = (
     "Required evidence, every cycle:",
     "Next-run review:",
 )
-# Each token script, the credential its unit loads, and the interim file it loads it from.
+# Each token script's unit and the credential it loads from /run/credstore (H4.5).
 CREDENTIALS = {
     "homelab-pi-sd-health.service": "pi_sd_health_push_token",
     "homelab-pi-recovery.service": "pi_recovery_push_token",
@@ -97,7 +97,10 @@ def test_each_token_script_reads_its_credential_and_embeds_no_token(
     package, service, key
 ):
     unit = _text(package, f"{UNITS}/{service}")
-    assert f"LoadCredential={key}:/etc/homelab/interim/{key}\n" in unit
+    assert f"LoadCredential={key}:/run/credstore/{key}\n" in unit
+    assert "/etc/homelab/interim" not in unit
+    assert "After=homelab-secrets.service\n" in unit
+    assert "Wants=homelab-secrets.service\n" in unit
     script = _text(package, unit.split("ExecStart=", 1)[1].split("\n", 1)[0])
     assert f'"${{CREDENTIALS_DIRECTORY:-}}/{key}"' in script
     assert "/api/push/${PUSH_TOKEN}" in script
@@ -153,3 +156,10 @@ def test_the_retired_crons_and_scripts_are_legacy_entries(package):
         {"path": f"/usr/local/bin/{name}.sh"} for name in scripts
     ]
     assert all(entry in package.legacy for entry in expected), package.legacy
+
+
+def test_the_package_ships_the_secrets_unit_and_names_both_credentials_it_loads(
+    package,
+):
+    assert "homelab-secrets.service" in package.units()
+    assert sorted(package.credentials) == sorted(CREDENTIALS.values())

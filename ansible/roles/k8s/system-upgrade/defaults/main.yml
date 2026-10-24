@@ -1,0 +1,116 @@
+---
+# system-upgrade-controller (SUC) and the two Plans that upgrade k3s (target slice H6). Flux
+# applies this role. The Plans select no node until H6.3c and H6.3d widen `system_upgrade_nodes`.
+#
+# THE K3S PIN LIVES HERE. `k3s_version`, `k3s_install_script_url` and `k3s_install_script_sha256`
+# moved from roles/setup/k3s/defaults/main.yml, so a pin change routes to this Flux-owned tag and
+# the deployer writes no `manual_plane` line for it. roles/setup/k3s reads this file with
+# `include_vars` for the fresh-host install. The Renovate annotation, the comments and the
+# manual sha256 finish moved with the keys.
+#
+# k3s is pinned because the installer picks the latest stable unless told otherwise. SUC pins
+# the Plans to the same version, and both Plans render it.
+#
+# The `+k3sN` suffix is semver build metadata, which Renovate ignores when comparing: an
+# upstream bump (v1.36.2 -> v1.37.0) is offered, a same-version re-tag (+k3s1 -> +k3s2) is not.
+# renovate: datasource=github-releases depName=k3s-io/k3s
+k3s_version: v1.37.1+k3s1  # noqa var-naming[no-role-prefix]
+# The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
+# can differ from the tag's and moves with no signal, and the script runs as root on both
+# nodes. Renovate bumps k3s_version through the annotation above; the sha256 is a MANUAL
+# finish on that PR (same class as sops_setup's binary):
+#   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
+k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"  # noqa var-naming[no-role-prefix]
+k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b  # noqa var-naming[no-role-prefix]
+
+# The controller manifest and the Plan CRD are in-tree copies under files/upstream/, byte for
+# byte what each item's `url` serves. No render may fetch a URL (D5, C1), so the renderer
+# attaches the copies to this tag's bundle verbatim. scripts/dev/vendor_manifest.py owns the
+# item's shape and the refresh:
+#   uv run python scripts/dev/vendor_manifest.py system-upgrade
+# A bump of the version is a hand refresh in the same PR, which also moves the controller image
+# below: ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py holds the image tag equal to this version.
+# renovate: datasource=github-releases depName=rancher/system-upgrade-controller
+system_upgrade_controller_version: v0.20.2
+system_upgrade_vendored_manifests:
+  - name: system-upgrade-controller.yaml
+    url: "https://github.com/rancher/system-upgrade-controller/releases/download/{{ system_upgrade_controller_version }}/system-upgrade-controller.yaml"
+    fetched_url: "https://github.com/rancher/system-upgrade-controller/releases/download/v0.20.2/system-upgrade-controller.yaml"
+    sha256: "fd474b662d1f2b74ab150d95b6482869e1fd1f27ceee54b13e94b92292097969"
+  - name: crd.yaml
+    url: "https://github.com/rancher/system-upgrade-controller/releases/download/{{ system_upgrade_controller_version }}/crd.yaml"
+    fetched_url: "https://github.com/rancher/system-upgrade-controller/releases/download/v0.20.2/crd.yaml"
+    sha256: "1fb061e0d8bf9534da0145e614a9e03ca376cd5d1adcca17d13cfa12e211c48c"
+
+# The controller's image, by digest. The vendored Deployment names it by tag, so
+# files/patches/system-upgrade-controller.yaml sets this reference instead. A kustomize patch is
+# copied verbatim and cannot read a variable, so
+# ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py::test_the_controller_patch_holds_the_image_pin
+# holds the patch equal to this key. Renovate does not bump it alone: renovate.json disables the
+# image rule, because the tag must equal the vendored manifest's version above.
+system_upgrade_controller_image: rancher/system-upgrade-controller:v0.20.2@sha256:61b68d4372baf7ae90fb0f879feea1c082381a8b7547cc5ec85d393c497b11cb
+
+# The image of each Plan's `prepare` container, which runs the gate script from the host's
+# /usr/lib/homelab/ (H6.3a). The same python:3.14-alpine digest the other stdlib-only Jobs run,
+# and Renovate's k8s-images manager moves them in one PR.
+system_upgrade_gate_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+
+# The nodes the Plans select, by `kubernetes.io/hostname`. EMPTY SELECTS NO NODE: the Plans
+# render `[no-node-selected]`, a valid label value that no node carries. A PR widens the list
+# one node at a time (H6.3c: daniel-box, H6.3d: daniel-server), and setting it back to empty is
+# the durable pause. The immediate pause is an operator write: label a node
+# `homelab/k3s-upgrade-paused` and SUC skips it at once.
+system_upgrade_nodes: []
+
+# Each Plan's Job deadline. SUC starts both Jobs when the Plans resolve, so the agent's deadline
+# covers the server's 60 minutes plus 30 for Longhorn's recovery and the agent's own upgrade.
+# The controller caps a Plan's deadline at SYSTEM_UPGRADE_JOB_ACTIVE_DEADLINE_SECONDS_MAX, which
+# files/patches/system-upgrade-controller-env.yaml sets to 5400.
+system_upgrade_server_deadline_secs: 3600
+system_upgrade_agent_deadline_secs: 5400
+
+# DECIDED: this tag renders prune: false. Its render holds the Plan CRD, and the CRD census
+# (scripts/renderer/tests/test_renderer_crd_census.py) refuses a CRD under prune: deleting the
+# CRD deletes every Plan. The cost: a Plan removed from the render stays live and keeps
+# selecting its nodes until the operator deletes it (**operator-only**), so a revert of a PR
+# that added a Plan is followed by `kubectl -n system-upgrade delete plan <name>`.
+flux_prune: false  # noqa var-naming[no-role-prefix]
+
+# DECIDED: forward-only (H1's flag). A failed or timed-out revision that changes this tag holds
+# without resetting `prod`, so `promote` never lowers the Plans below a version a node already
+# runs. The flag does not make `k3s_version` one of H1's gated pins: this slice's gates run in
+# each Plan's `prepare`.
+flux_forward_only: true  # noqa var-naming[no-role-prefix]
+
+# The Kustomization's timeout: the agent Plan's 90-minute deadline plus ten minutes. A healthy
+# bump ends well inside it, and a Job that fails or runs out its deadline turns the
+# Kustomization red first.
+flux_timeout: 100m  # noqa var-naming[no-role-prefix]
+
+# How Flux reads a Plan's status (H6, *The Plans' outcome reaches flux/system-upgrade*). SUC's
+# Plan status has no observedGeneration, so the expressions reject a status that predates the
+# apply by comparing `latestVersion` with the version SUC resolves from the pin. SUC stores that
+# version with `+` replaced by `-` (`MungeVersion`), so the renderer renders the literal below
+# from `k3s_version`. A missing field reads as stale, through has(). Flux evaluates `inProgress`,
+# then `failed`, then `current`, and the first true one decides.
+flux_health_check_exprs:  # noqa var-naming[no-role-prefix]
+  - apiVersion: upgrade.cattle.io/v1
+    kind: Plan
+    inProgress: >-
+      !has(status.latestVersion)
+      || status.latestVersion != '{{ k3s_version | replace('+', '-') }}'
+      || (has(status.applying) && size(status.applying) > 0
+      && !(has(status.conditions) && status.conditions.exists(c, c.type == 'Complete'
+      && c.reason == 'JobFailed')))
+    failed: >-
+      has(status.conditions) && status.conditions.exists(c, c.type == 'Complete'
+      && c.status == 'False' && c.reason == 'JobFailed')
+    current: >-
+      has(status.conditions) && status.conditions.exists(c, c.type == 'Complete'
+      && c.status == 'True') && has(status.latestVersion)
+      && status.latestVersion == '{{ k3s_version | replace('+', '-') }}'
+
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
+# merge here is not a routine bump.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "platform — a merged change to a Plan upgrades the k3s binary on every node it selects; the Plans select no node until H6.3c, and the gates, deadlines and forward-only hold are the protection"  # noqa var-naming[no-role-prefix]

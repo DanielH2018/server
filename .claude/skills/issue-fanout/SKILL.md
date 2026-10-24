@@ -458,6 +458,14 @@ Each agent starts with none of this conversation's context, so its brief must ca
   three times, and `launch.py` appends `fanout_lib/headless_system_prompt.md` to its system
   prompt. A subagent in this fallback path gets neither, so the sentence in its brief is all
   it has.
+- **What a headless batch may run without asking.** A `claude -p` batch opens no permission
+  dialog. Every launch, and every review-pipeline phase, names `claude-guard prompt-server`
+  as its `--permission-prompt-tool` (`scripts/dev/fanout_lib/prompt_tool.py`). So an ask is
+  answered by the guard's allow rules, exactly as in an interactive session, and refused
+  otherwise. A refusal reads "claude-guard: this headless session has no interactive
+  approver". The fix is to reshape the command, or report it, never to look for a bypass. A
+  host user without `~/.local/bin/claude-guard` cannot launch a batch: the `systemd-run` step
+  fails and names the missing shim.
 - That it closes a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`, and may
   **not** use `--refuted` or `--accepted` — those are terminal and operator-only; an agent
   holding that authority could bury a real finding invisibly.

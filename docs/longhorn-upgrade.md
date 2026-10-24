@@ -53,7 +53,9 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    loss. The nightly drill's `last-success` stamp must be younger than
    `k3s_longhorn_restore_drill_max_age_days`, the same window backup health's check 7 pages
    on. `docs/longhorn-disaster-recovery.md` names the two places the stamp lives. A stale stamp means: fix the drill first, or run it by hand
-   (`sudo /usr/local/bin/longhorn-restore-drill.sh`).
+   (an **operator-only** Job from the CronJob: `kubectl -n homelab create job
+   --from=cronjob/longhorn-restore-drill longhorn-restore-drill-manual-1`, outside the 04:10 UTC
+   slot; `docs/k3s-node-plane-crons-and-incidents.md` has the pinned form).
 3. **Every volume accounted for.** Attached or detached, and healthy (an idle volume reports
    `unknown`). A volume mid-attach, `degraded` or `faulted` before the hop cannot be told apart
    from upgrade damage after it.

@@ -15,12 +15,12 @@ component's are. A component directory under `hosts/components/` holds a `compon
       - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
       - {key: homelab-archive-keyring, dst: /usr/share/keyrings/homelab-archive-keyring.gpg}
 
-A `src` ending `.j2` renders through the renderer's strict environment. Any other `src` is
-copied byte for byte. A `lib` entry copies `hosts/lib/<name>`, a script several packages ship,
-byte for byte. A `key` entry copies `hosts/keys/<name>.gpg`, a public keyring hosts trust, byte
-for byte. A `shared` entry copies one of the `SHARED_FILES`, a file an Ansible role still
-installs, byte for byte. Those three are the only sources outside the component a file entry
-may name.
+A `src` ending `.j2` renders through the renderer's strict environment, and a `src` of
+`role:<name>` loads from the component's role templates. Any other `src` is copied byte for byte,
+as are the three sources outside the component a file entry may name: a `lib` entry
+(`hosts/lib/<name>`, a script several packages ship), a `key` entry (`hosts/keys/<name>.gpg`, a
+public keyring hosts trust) and a `shared` entry (one of the `SHARED_FILES`, a file an Ansible role
+still installs).
 
 A package or component may also carry `units`, `enable` and `legacy` (host_manifest.py), a
 file entry's `activate:` field and a `ufw:` map (host_arms.py). A host package installs
@@ -52,7 +52,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-import json
 import re
 from pathlib import Path, PurePosixPath
 
@@ -74,6 +73,7 @@ from renderer.renderer_lib.host_sources import (
     role_sources,
     template_source,
 )
+from renderer.renderer_lib import host_compose
 from renderer.renderer_lib.host_arms import ARM_KEYS, add_activation, add_arms, has_arms
 from renderer.renderer_lib.host_outputs import (
     SECRETS_COMPONENT,
@@ -89,12 +89,8 @@ from renderer.renderer_lib.host_package import (
     Package,
 )
 from renderer.renderer_lib.placeholders import placeholder_vars
-from renderer.renderer_lib.host_tools import (
-    ARCHES,
-    PINS_FILE,
-    parse_tools,
-    tool_path,
-)
+from renderer.renderer_lib.host_tools import parse_tools, tool_path
+from renderer.renderer_lib.host_write import write_packages as write_packages
 from renderer.renderer_lib.host_manifest import (
     DROPIN as DROPIN,
     UNIT_DIR as UNIT_DIR,
@@ -132,6 +128,7 @@ PACKAGE_KEYS = frozenset(
 )
 COMPONENT_KEYS = frozenset(
     {
+        "compose",
         "credentials",
         "defaults",
         "depends",
@@ -218,61 +215,6 @@ def render_package(
     return package
 
 
-def write_packages(packages: list[Package], out: Path) -> list[Path]:
-    """Write each package's `root/` and `nfpm.yaml` under `out`; return the files written.
-
-    Raises:
-        RenderRefused: A package directory already exists under `out`. Nothing is written.
-    """
-    for package in packages:
-        if (out / package.directory).exists():
-            raise RenderRefused(
-                f"{out / package.directory} exists; render into an empty --out"
-            )
-    written = []
-    for package in packages:
-        # A package with tools renders once per architecture, so nfpm runs once for each.
-        trees = (
-            [(out / package.directory / arch, arch) for arch in ARCHES]
-            if package.tools
-            else [(out / package.directory, "all")]
-        )
-        for base, arch in trees:
-            written += _write_tree(package, base, arch)
-    return written
-
-
-def _write_tree(package: Package, base: Path, arch: str) -> list[Path]:
-    """Write one package tree, `root/`, `scripts/`, `nfpm.yaml` and any tool pins, at `base`."""
-    written = []
-    base.mkdir(parents=True, exist_ok=True)
-    for dst, (content, mode) in sorted(package.files.items()):
-        path = base / "root" / dst.lstrip("/")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
-        path.chmod(mode)
-        written.append(path)
-    for dst, target in sorted(package.links.items()):
-        path = base / "root" / dst.lstrip("/")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # A host package's link may point at the updater's unit, absent from this root.
-        path.symlink_to(target)
-        written.append(path)
-    for name, content in sorted(package.scripts.items()):
-        path = base / "scripts" / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
-        path.chmod(0o755)
-        written.append(path)
-    (base / "nfpm.yaml").write_text(package.nfpm_spec(arch))
-    written.append(base / "nfpm.yaml")
-    if package.tools:
-        pins = {tool: arches[arch].as_json() for tool, arches in package.tools.items()}
-        (base / PINS_FILE).write_text(json.dumps(pins, indent=2, sort_keys=True) + "\n")
-        written.append(base / PINS_FILE)
-    return written
-
-
 def _render(
     package: Package,
     spec_path: Path,
@@ -323,8 +265,7 @@ def _render_maintainer_scripts(
 ) -> None:
     """Render each listed maintainer script from `hosts/lib/maintainer-scripts/`.
 
-    Each template sees the host's context plus `package_units`, the units the package
-    installs, which is the list `prerm` stops.
+    Each template sees the host's context plus `package_units`, the list of units `prerm` stops.
     """
     directory = lib / "maintainer-scripts"
     for name in names:
@@ -389,7 +330,8 @@ def _render_unit(
     outputs = spec.get("outputs") or []
     arms = {key: spec[key] for key in ARM_KEYS if spec.get(key)}
     role, defaults = role_sources(spec, directory)
-    if not (files or legacy or enable or outputs or arms):
+    compose = spec.get("compose")
+    if not (files or legacy or enable or outputs or arms or compose):
         return
     ctx, reasons = host_context(host, defaults, inventory, withheld)
     env = confined_env(directory)
@@ -415,21 +357,40 @@ def _render_unit(
             )
         )
 
-    def secret_text(src: str, keys: frozenset[str]) -> str:
-        """`src` with the secrets in `keys` read as sentinels, for `host_outputs.py`."""
-        base, name = template_source(role, src, directory)
+    def secret_render(base: Path, name: str, keys: frozenset[str], extra: dict) -> str:
+        """`base/name` with the secrets in `keys` read as sentinels and `extra` in the context."""
         source = confined(base, name)
         if not name.endswith(".j2"):
             return source.read_text()
-        context = host_context(host, defaults, inventory, withheld, keys)
-        return _render_template(confined_env(base), name, *context, base)
+        sub, why = host_context(host, defaults, inventory, withheld, keys)
+        sub |= {"secret_placeholders": {k: sub[k] for k in sorted(keys)}, **extra}
+        return _render_template(confined_env(base), name, sub, why, base)
+
+    def secret_text(src: str, keys: frozenset[str]) -> str:
+        """`src` with the secrets in `keys` read as sentinels, for `host_outputs.py`."""
+        return secret_render(*template_source(role, src, directory), keys, {})
+
+    referenced = None
+    if compose:
+        data_root = f"/home/{ctx['sys_user']}/server/containers"
+        referenced = host_compose.add_compose(
+            package,
+            directory,
+            compose,
+            ctx.get(host_compose.LIST_KEY),
+            withheld,
+            data_root,
+            secret_render,
+        )
 
     if not isinstance(outputs, list):
         raise RenderRefused(f"{directory}: outputs {outputs!r} is not a list")
     for entry in outputs:
         add_output(package, directory, entry, withheld, secret_text)
+    if referenced is not None:
+        host_compose.check_env_output(package, directory, referenced)
     keys = lib.parent / "keys"
-    for entry in files:
+    for entry in host_compose.deferred_last(files):
         sources = {"src", "lib", "key", "shared"} & set(entry)
         if "dst" not in entry or not sources:
             raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")
@@ -449,6 +410,7 @@ def _render_unit(
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
         mode = file_mode(entry.get("mode", "0644"), directory, dst)
+        ctx = host_compose.inputs_context(package, directory, entry, ctx)
         if entry.get("compose") is True:
             if "src" not in entry:
                 raise RenderRefused(f"{directory}: compose file {dst} needs a src")
@@ -476,10 +438,11 @@ def _render_unit(
             source = lib.parent.parent / SHARED_FILES[name]
             package.files[dst] = (source.read_bytes(), mode)
             continue
-        src = str(entry["src"])
-        source = confined(directory, src)
+        base, src = template_source(role, str(entry["src"]), directory)
+        source = confined(base, src)
         if src.endswith(".j2"):
-            content = _render_template(env, src, ctx, reasons, directory).encode()
+            tenv = confined_env(base)
+            content = _render_template(tenv, src, ctx, reasons, base).encode()
         else:
             content = source.read_bytes()
         package.files[dst] = (content, mode)

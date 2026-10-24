@@ -16,7 +16,11 @@ from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.ordering import Ordering, prepull_timeouts
+from renderer.renderer_lib.ordering import (
+    Ordering,
+    prepull_timeouts,
+    prepull_workloads,
+)
 from renderer.renderer_lib.prepull import SCRIPT, SCRIPT_NAME, prepull_files, targets
 
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
@@ -225,3 +229,53 @@ def test_a_prepull_timeout_that_is_not_a_literal_duration_is_a_problem(tmp_path,
     found, problems = prepull_timeouts(["app"], tmp_path)
     assert found == {}
     assert len(problems) == 1 and problems[0].startswith("app's flux_prepull_timeout")
+
+
+UNPLACED = "      containers:\n        - {name: lone, image: 'lone:4'}\n"
+
+
+def _named(name: str, spec: str) -> str:
+    return _deployment(spec)["deployment.yaml"].replace("name: app", f"name: {name}", 1)
+
+
+def test_a_scoped_prepull_pulls_for_the_named_workloads_alone():
+    """An unplaced workload outside the scope neither fails the render nor joins the Job."""
+    files = {"a.yaml": _named("app", PINNED), "b.yaml": _named("lone", UNPLACED)}
+    with pytest.raises(RenderError, match="names no node"):
+        targets("app", files)
+    [(_, images)] = targets("app", files, ("app",))
+    assert images == ["app:1", "side:2"]
+
+
+def test_a_scoped_prepull_naming_a_workload_the_render_lacks_fails():
+    with pytest.raises(RenderError, match="names grafna, which"):
+        targets("app", _deployment(PINNED), ("app", "grafna"))
+
+
+def test_observability_scopes_its_prepull_to_grafana():
+    """The named member: observability names Grafana, and code-server names nothing."""
+    assert prepull_workloads(["code-server", "observability"]) == (
+        {"observability": ("grafana",)},
+        [],
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "problem"),
+    [
+        (
+            "flux_prepull_timeout: 600s\nflux_prepull_workloads: grafana\n",
+            "not a non-empty",
+        ),
+        ("flux_prepull_timeout: 600s\nflux_prepull_workloads: []\n", "not a non-empty"),
+        ("flux_prepull_workloads: [grafana]\n", "no flux_prepull_timeout"),
+    ],
+)
+def test_a_prepull_scope_that_cannot_apply_is_a_problem(tmp_path, text, problem):
+    defaults = tmp_path / "app" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text(text)
+    found, problems = prepull_workloads(["app"], tmp_path)
+    assert found == {}
+    [line] = problems
+    assert problem in line

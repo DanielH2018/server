@@ -101,6 +101,12 @@ def test_the_pis_real_manifest_runs_no_ufw_and_no_activation_command(tmp_path):
     node = Node(tmp_path)
     package = host_mode.render_host("daniel-pi")
     node.manifest = json.loads(package.files["/usr/lib/homelab/manifest.json"][0])
+    # The package ships `secrets-unit` (H4.5): reconcile needs its secrets.json and credentials.
+    secrets = package.files["/usr/lib/homelab/secrets.json"][0]
+    (node.root / "usr/lib/homelab").mkdir(parents=True, exist_ok=True)
+    (node.root / "usr/lib/homelab/secrets.json").write_bytes(secrets)
+    for key in json.loads(secrets)["credentials"]:
+        node.credential(key)
     for name in node.manifest["units"]:
         node.state["units"][name] = {
             "load": "loaded",

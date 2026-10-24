@@ -14,6 +14,15 @@
 #     cluster start falls through to the upstream after 2s, which is the property A1's
 #     drop-in exists to guarantee.
 
+- name: Read the k3s pin from the system-upgrade role
+  tags: [k3s_agent]
+  # H6.1b moved `k3s_version`, `k3s_install_script_url` and `k3s_install_script_sha256` to the
+  # Flux-owned role that drives the SUC Plans, so a pin change routes to that tag and writes no
+  # `manual_plane` line. This install reads the same file, and only on a fresh host (H6.3c).
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/roles/k8s/system-upgrade/defaults/main.yml"
+  when: has_repo_checkout | bool
+
 - name: Refuse to run on an agent host that already runs Docker
   tags: [k3s_agent]
   # Same assert as server.yml, same reason: k3s brings its own containerd and its iptables

@@ -2,8 +2,16 @@
 # the three Pi heartbeats. Since H3.9b it also ships the enable link for homelab-updater.timer,
 # which arms the Pi's unattended updates. The first install of that link needs one hand start of
 # homelab-updater.service (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*).
+#
+# Since H4.5 it ships the secrets unit too. The unit decrypts the two push tokens into
+# /run/credstore, and the two token heartbeats load them from there. The interim files under
+# /etc/homelab/interim/ stay until H4.6. ansible/vars/hosts/daniel-pi.sops.yaml carries every key
+# this tree names, and `host_secrets.py sync daniel-pi` rewrites it (operator-only).
 description: daniel-pi's homelab host package
-components: [reconcile, kuma-push, pi-heartbeats]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats]
+credentials:
+  - pi_sd_health_push_token
+  - pi_recovery_push_token
 # H3.11: the Pi is the arm64 pilot of homelab-tools, which ships sops and chezmoi under
 # /usr/lib/homelab/bin. An unversioned Depends already satisfied never upgrades the dependency,
 # so homelab-updater's steps 4 and 5 cover every installed homelab-* package.

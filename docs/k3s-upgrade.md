@@ -1,7 +1,7 @@
 # k3s control-plane upgrade runbook
 
 A k3s bump reinstalls the control plane on a single-server cluster, so it runs by hand. Renovate
-raises the PR and the `k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md)`
+raises the PR and the `k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md; k8s_autodeploy: false)`
 rule blocks its automerge, which means the daily unattended `/renovate-prs` run can never land it.
 This page is what an operator follows instead.
 
@@ -16,7 +16,9 @@ then follows this page before merging. A patch bump needs the refresh too, becau
 compares the full tag. `test_renovate_k3s_cap_follows_the_schema` holds the cap one minor above
 the schema.
 
-The pin is `k3s_version` in `ansible/roles/setup/k3s/defaults/main.yml`. It covers both nodes:
+The pin is `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`, moved there from
+`ansible/roles/setup/k3s/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
+It covers both nodes:
 `server.yml` installs daniel-box, `agent.yml` installs daniel-server, and both pass it to the same
 installer as `INSTALL_K3S_VERSION`. The installer is `install.sh` from that same release tag,
 fetched with `checksum:` against `k3s_install_script_sha256` in the same file — so a bump has a
@@ -35,7 +37,8 @@ Merging does not park the deployer either way — see *After merging the pin* be
 2. Record pre-upgrade state.
 3. Upgrade the server node, verify.
 4. Upgrade the agent node, verify.
-5. Merge the pin, then clear the `manual_plane` line the deployer records for `k3s`.
+5. Merge the pin. The pin writes no `manual_plane` line (H6.1b), so only a change elsewhere under
+   `ansible/roles/setup/k3s/` leaves one to clear.
 
 ## The gates — before any install
 
@@ -194,18 +197,23 @@ uv run python scripts/diagnostics/probe.py monitors
 
 ## After merging the pin
 
-The deployer records a pin change instead of parking on it. `k3s` is in
-`_SETUP_ROLES_OUTSIDE_INITIAL_SETUP` (`deploy_setup_roles.py`), so `tick_applies_setup_role`
-returns false for it. `handle_broad` (`deploy_handlers.py`) then fast-forwards the primary
-checkout and writes a `manual_plane` line for `k3s` to `/var/lib/gitops-deploy/owed.jsonl`. Only
-the bring-up playbooks in `_BROAD_MANUAL_PREFIXES` (`deploy_changes.py`) still park the tick. A
-pin change alone touches none of them, so other sessions' deploys are not held. Before 2026-09-11
-a `k3s` change did park the tick (issue #1467).
+A pin change no longer reaches the deployer's setup plane. The pin lives in the Flux-owned
+`system-upgrade` role (H6.1b), so a bump routes to the `system-upgrade` tag, which `land.sh`
+waits on through promotion, and the deployer writes no `manual_plane` line for `k3s`. The two
+Plans select no node until H6.3c, so merging the pin upgrades nothing: this runbook's hand apply
+is still the upgrade, and no line reminds you that it is owed. Another change under
+`ansible/roles/setup/k3s/` still takes the setup plane's path. `k3s` is routed to
+`k3s-bringup.yml`, not to `initial_setup.yml` (`deploy_setup_roles.py:roles_outside_initial_setup_in`),
+so `tick_applies_setup_role` returns false for it. `handle_broad` (`deploy_handlers.py`) then
+fast-forwards the primary checkout and writes a `manual_plane` line for `k3s` to
+`/var/lib/gitops-deploy/owed.jsonl`. Only the bring-up playbooks in `_BROAD_MANUAL_PREFIXES`
+(`deploy_changes.py`) still park the tick. Before 2026-09-11 a `k3s` change did park the tick
+(issue #1467).
 
-The recorded line pages **GitOps Deploy — Status** six hours later unless something clears it.
-The cluster is already upgraded by step 4, so the hand-apply the line asks for is a verification
-run, not a change. After the merge, run the apply the deployer printed if you want that
-verification, then clear the line:
+A recorded line pages **GitOps Deploy — Status** six hours later unless something clears it.
+When the cluster is already upgraded by step 4, the hand-apply the line asks for is a
+verification run, not a change. After the merge, run the apply the deployer printed if you want
+that verification, then clear the line:
 
 ```bash
 uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
