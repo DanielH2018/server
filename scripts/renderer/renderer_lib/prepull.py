@@ -36,10 +36,15 @@ Job. The scheduler places the Job and the workload's new pod separately, so a no
 cordoned between the two still pays a cold pull. Every image must carry `sh`, which runs the
 script.
 
+A role that also sets `flux_prepull_workloads` pulls for the Deployments and StatefulSets it
+names and no others (`ordering.prepull_workloads`, #5875). Only those must name a node and
+carry `sh`. observability names Grafana alone: its 482 MB image is the one large pull, and
+loki, tempo and kube-state-metrics pin no node and ship no shell.
+
 DECIDED: the no-op is a shell script, not Python. The kubelet runs each pulled image, so the
 interpreter must be in every image a workload names. n8n's image and the runners' `alpine`
 init container carry no `python3` (#5546), and a container that cannot start fails the Job
-the way a deadline would. Every image the pre-pull roles name carries `sh`. The script runs
+the way a deadline would. Every image the pre-pull Jobs pull carries `sh`. The script runs
 no network call, so the Job census holds it byte-identical to `SCRIPT` instead of reading it
 the way it reads a Python script.
 """
@@ -67,7 +72,7 @@ from renderer.renderer_lib.bundle import (
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.ordering import prepull_timeouts
+from renderer.renderer_lib.ordering import prepull_timeouts, prepull_workloads
 
 HOSTNAME = "kubernetes.io/hostname"
 WORKLOADS = frozenset({"Deployment", "StatefulSet"})
@@ -80,13 +85,14 @@ SCRIPT = (
 COMMAND = ["sh", f"{MOUNT}/{SCRIPT_NAME}"]
 
 
-def _pod_specs(files: Mapping[str, str]) -> list[dict]:
+def _pod_specs(files: Mapping[str, str]) -> list[tuple[str, dict]]:
     specs = []
     for text in files.values():
         for doc in yaml_fast.safe_load_all(text):
             if isinstance(doc, dict) and doc.get("kind") in WORKLOADS:
+                name = str((doc.get("metadata") or {}).get("name", ""))
                 template = (doc.get("spec") or {}).get("template") or {}
-                specs.append(template.get("spec") or {})
+                specs.append((name, template.get("spec") or {}))
     return specs
 
 
@@ -140,18 +146,37 @@ def placement(spec: Mapping) -> dict:
     return found
 
 
-def targets(tag: str, files: Mapping[str, str]) -> list[tuple[dict, list[str]]]:
+def targets(
+    tag: str, files: Mapping[str, str], workloads: Iterable[str] | None = None
+) -> list[tuple[dict, list[str]]]:
     """Each distinct placement among `tag`'s rendered workloads, with the images run there.
 
+    Args:
+        tag: The deploy tag.
+        files: The tag's rendered files, by name.
+        workloads: The workload names to pull for (`flux_prepull_workloads`), or None for
+            every Deployment and StatefulSet in the render.
+
     Raises:
-        RenderError: The render holds no Deployment or StatefulSet, or one names no node.
+        RenderError: The render holds no Deployment or StatefulSet, holds none of a name in
+            `workloads`, or holds one to pull for that names no node.
     """
-    specs = _pod_specs(files)
-    if not specs:
+    named = _pod_specs(files)
+    if not named:
         raise RenderError(
             f"{tag} sets flux_prepull_timeout, and its render holds no Deployment or "
             "StatefulSet whose images a pre-pull could fetch"
         )
+    if workloads is not None:
+        wanted = list(workloads)
+        missing = sorted(set(wanted) - {name for name, _ in named})
+        if missing:
+            raise RenderError(
+                f"{tag}'s flux_prepull_workloads names {', '.join(missing)}, which its render "
+                "holds no Deployment or StatefulSet of"
+            )
+        named = [(name, spec) for name, spec in named if name in wanted]
+    specs = [spec for _, spec in named]
     if not all(nodes(s) for s in specs):
         raise RenderError(
             f"{tag} sets flux_prepull_timeout, and a workload in its render names no node by "
@@ -266,12 +291,13 @@ def attach_prepulls(
         roles: The role tree whose defaults set `flux_prepull_timeout`.
 
     Raises:
-        RenderError: A tag's timeout cannot be read, or its render holds no workload or one
-            that names no node.
+        RenderError: A tag's timeout or workload names cannot be read, or its render holds
+            no workload, lacks a named one, or holds one to pull for that names no node.
     """
-    timeouts, problems = prepull_timeouts(
-        set(published) & {t.tag for t in rendered}, roles
-    )
+    tags = set(published) & {t.tag for t in rendered}
+    timeouts, problems = prepull_timeouts(tags, roles)
+    scopes, scope_problems = prepull_workloads(tags, roles)
+    problems += scope_problems
     if problems:
         raise RenderError("; ".join(problems))
     attached = []
@@ -279,6 +305,6 @@ def attach_prepulls(
         if tag.tag not in timeouts:
             attached.append(tag)
             continue
-        pulls = targets(tag.tag, tag.files)
+        pulls = targets(tag.tag, tag.files, scopes.get(tag.tag))
         attached.append(replace(tag, prepull=prepull_files(tag.tag, pulls)))
     return attached
