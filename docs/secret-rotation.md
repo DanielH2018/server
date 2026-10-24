@@ -284,7 +284,10 @@ not rotated again by the weekly cron. Examples:
   restarts the container, and the pod never turns Ready. Flux's `traefik` Kustomization
   waits on that pod and goes red. That guard is an outage, not a prevention: the roll is
   `Recreate`, so no old pod serves meanwhile. The delete step and the reads below prevent it.
-  The `crowdsec-verify` Job does not: it depends on the `crowdsec` Kustomization alone.
+  The `crowdsec-verify` Job does not prevent it either. It waits on the `traefik` Kustomization
+  as well as on `crowdsec` (`flux_verify_after` in the `crowdsec` role's defaults), so it
+  probes the rolled Traefik pod. It therefore fails, or never starts, after the outage
+  has begun.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
   (fresh `last_pull`) and a `kubectl -n homelab logs deploy/traefik` free of LAPI 403s.
   (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and
