@@ -228,10 +228,12 @@ def test_health_from_a_checkout_behind_the_roles_merge_is_unreadable(
 def test_a_squash_merged_branch_holding_origins_role_is_not_stale(
     tmp_path, monkeypatch
 ):
-    """A session's branch after its PR squash-merged lacks the squash commit, not the role.
+    """A regression guard for the content exemption: a squash-merged branch is not stale.
 
     `origin/master` carries the role change as a commit the branch never had, yet the role's
     files match. Refusing it would fail the post-merge gate for exactly the roles the PR changed.
+    It passes before #5912's change, which refused no role it held, and fails when the stale
+    check drops the `git diff` half; `..._changed_after_this_checkout_is_stale` is the refusal.
     """
     scrub_process_git_env(monkeypatch)
     repo, roles_dir, a, _b = _behind_origin(tmp_path)
@@ -241,6 +243,60 @@ def test_a_squash_merged_branch_holding_origins_role_is_not_stale(
     git(repo, "update-ref", "refs/remotes/origin/master", squash)
     git(repo, "checkout", "-q", "--detach", a)
     commit(repo, "branch commit", **upstream)
+    assert (
+        health_checkout.stale_checkout_reason("metallb", roles_dir, lambda _r: True)
+        is None
+    )
+
+
+_HOST_VARS = "ansible/inventory/host_vars/daniel-box.yml"
+
+
+def _owner_entry(owner=None):
+    line = f"    owner: {owner}\n" if owner else ""
+    return f"containers_list:\n  - name: metallb\n    platform: k8s\n{line}"
+
+
+def _owner_flip(tmp_path, monkeypatch):
+    """A repo whose `origin/master` flipped metallb to `owner: flux` after commit A (#5912)."""
+    scrub_process_git_env(monkeypatch)
+    repo = init_repo(tmp_path / "repo")
+    a = commit(
+        repo,
+        "add",
+        **{
+            "ansible/roles/k8s/metallb/tasks/main.yml": "---\n",
+            _HOST_VARS: _owner_entry(),
+        },
+    )
+    flip = commit(repo, "flip", **{_HOST_VARS: _owner_entry("flux")})
+    git(repo, "update-ref", "refs/remotes/origin/master", flip)
+    return repo, repo / "ansible" / "roles" / "k8s", a
+
+
+def test_an_owner_flip_on_origin_after_this_checkout_is_stale(tmp_path, monkeypatch):
+    """The gate path follows `owner`, which an H1 flip changes outside the role directory."""
+    repo, roles_dir, a = _owner_flip(tmp_path, monkeypatch)
+    git(repo, "checkout", "-q", "--detach", a)
+    reason = health_checkout.stale_checkout_reason(
+        "metallb", roles_dir, lambda _r: True
+    )
+    assert reason is not None
+    assert "owner" in reason and "flux" in reason and "ansible" in reason
+    assert not [m for m in detach_notify.NOT_APPLICABLE_MARKERS if m in reason]
+
+
+def test_a_branch_holding_the_flip_itself_is_not_stale(tmp_path, monkeypatch):
+    """A regression guard: the flip PR's own branch, and its squash-merged form, can judge."""
+    repo, roles_dir, a = _owner_flip(tmp_path, monkeypatch)
+    git(repo, "checkout", "-q", "--detach", a)
+    commit(repo, "the branch's own flip", **{_HOST_VARS: _owner_entry("flux")})
+    assert (
+        health_checkout.stale_checkout_reason("metallb", roles_dir, lambda _r: True)
+        is None
+    )
+    # Unmerged: origin/master still reads the old owner, and the branch flips it.
+    git(repo, "update-ref", "refs/remotes/origin/master", a)
     assert (
         health_checkout.stale_checkout_reason("metallb", roles_dir, lambda _r: True)
         is None

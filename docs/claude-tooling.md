@@ -249,7 +249,7 @@ check runs only once its tag resolves to a k8s role.
 The gate reads the role's workloads from the role's files in the checkout it runs from. It
 exits 75 rather than judge from an old definition: when `origin/master` holds the role and this
 checkout does not, and when `origin/master` changed the role after this checkout's HEAD
-(`scripts/diagnostics/probe_lib/health_checkout.py`, #5909 and #5912). The read uses the local
+(`scripts/diagnostics/probe_lib/health_checkout.py`, #5909 and #5912). It also exits 75 when `origin/master` changed the tag's `owner` in host_vars since this checkout, because `owner` picks the gate path. The read uses the local
 `origin/master` ref, so it is as fresh as the last fetch. To gate a merged change, run the probe
 from a checkout at or after the merge commit.
 

@@ -20,10 +20,12 @@ probe from a checkout at or after the merge.
 
 import subprocess
 import sys as _sys
+import tempfile
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from lib.ansible_inventory import K8S_HOST_VARS
 from lib.git import git
 from lib.repo_paths import K8S_ROLES, REPO
 
@@ -90,6 +92,57 @@ def role_changed_on_origin(role, roles_dir=K8S_ROLES):
     return newer if same.returncode == 1 else None
 
 
+def _owner_at(rev, role, top, rel):
+    """`role`'s `owner` in the k8s host_vars file at `rev`, or "" for an Ansible-owned entry.
+
+    Raises:
+        LookupError: `rev` has no such file, so there is nothing to compare.
+    """
+    from lib.k8s_roles import tag_owners
+
+    res = git("show", f"{rev}:{rel}", cwd=top, check=False, timeout=10)
+    if res.returncode != 0:
+        raise LookupError(rel)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _Path(tmp) / _Path(rel).name
+        path.write_text(res.stdout)
+        return tag_owners(path).get(role, "")
+
+
+def owner_changed_on_origin(role, roles_dir=K8S_ROLES, host_vars=K8S_HOST_VARS):
+    """`(here, origin)` when `origin/master` moved `role`'s `owner` since this checkout, else None.
+
+    `run_health` picks the gate path from `owner` (a Flux revision against an Ansible release
+    record), and an H1 flip changes it in host_vars, not under the role (#5912). The owner is
+    stale when `origin/master` changed it since the merge base and HEAD does not hold the new
+    value: a branch that flips the owner itself, or one whose flip already squash-merged, is
+    not. The file is read from the repository holding `roles_dir` at the path `host_vars` has
+    in this one. None on any failure, as for `role_changed_on_origin`.
+    """
+    try:
+        top = git(
+            "rev-parse", "--show-toplevel", cwd=roles_dir, check=False, timeout=10
+        ).stdout.strip()
+        base = git(
+            "merge-base",
+            "HEAD",
+            "origin/master",
+            cwd=roles_dir,
+            check=False,
+            timeout=10,
+        ).stdout.strip()
+        if not top or not base:
+            return None
+        rel = _Path(host_vars).resolve().relative_to(REPO.resolve()).as_posix()
+        origin = _owner_at("origin/master", role, top, rel)
+        here = _owner_at("HEAD", role, top, rel)
+        if origin in (here, _owner_at(base, role, top, rel)):
+            return None
+    except OSError, ValueError, LookupError, subprocess.TimeoutExpired:
+        return None
+    return here, origin
+
+
 def stale_checkout_reason(role, roles_dir=K8S_ROLES, on_origin=role_on_origin):
     """Why this checkout cannot judge `role`, or None when it can.
 
@@ -99,6 +152,14 @@ def stale_checkout_reason(role, roles_dir=K8S_ROLES, on_origin=role_on_origin):
     The text carries none of `detach_notify.NOT_APPLICABLE_MARKERS`, so the deploy notifier
     reports the tag as unread rather than as skipped.
     """
+    owners = owner_changed_on_origin(role, roles_dir)
+    if owners is not None:
+        here, origin = (o or "ansible" for o in owners)
+        return (
+            f"origin/master changed the owner of {role!r} to {origin}, but this checkout "
+            f"({_Path(roles_dir)}) still reads {here}, so it would gate the wrong deploy path "
+            "— no verdict was formed; re-run probe.py from a checkout at or after that change"
+        )
     if (_Path(roles_dir) / role).is_dir():
         newer = role_changed_on_origin(role, roles_dir)
         if newer is None:
