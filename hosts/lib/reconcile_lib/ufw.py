@@ -10,7 +10,7 @@ does not hold*. A host package's manifest lists "ufw" in `reconcilers` and carri
 The arm labels every rule it writes: `comment 'homelab:<id>'`, or `homelab:keep:<id>` for a rule
 it must never delete. A `spec` is the rule exactly as `ufw show added` prints it after `ufw `.
 
-How ufw 0.36.2-6 behaves, measured on Ubuntu 24.04 (docs/host-packages.md, *The ufw arm*):
+How ufw 0.36.2-6 behaves, measured on Ubuntu 24.04 (docs/host-packages.md, *The UFW arm*):
 appending a spec that already exists under another comment relabels that rule in place. `insert`
 of an existing spec prints "Skipping inserting existing rule" and keeps the old comment. `delete`
 with no comment deletes the rule whatever its comment, and a delete whose comment differs

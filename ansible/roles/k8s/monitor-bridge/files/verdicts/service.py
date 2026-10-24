@@ -133,6 +133,7 @@ def host_packages(
     now: float,
     max_fetch_age_s: float,
     max_lag_s: float,
+    drift: list[tuple[dict[str, str], float]] | None = None,
 ) -> tuple[bool, str]:
     """Pure: is the host-package builder fetching, and is master getting built?
 
@@ -152,7 +153,18 @@ def host_packages(
     fetch without it is a file the builder did not write. A label-set change can leave two
     unbuilt series for one scrape; the oldest non-zero one is judged. Every message that has a
     series to quote names its `reason` and `sha`.
+
+    `drift` is every `homelab_host_reconcile_drift` series above zero, on any host: the items a
+    reconcile arm left alone (H7, *Which outcomes hold the host*). It never changes the verdict,
+    because drift has no deadline and holding on it would wedge a revert. A non-zero count only
+    adds `; drift: <host> <arm>=<n>` to the message, so an operator reading the tile sees it.
     """
+    held = sorted(
+        (labels["host"], labels["arm"], int(value))
+        for labels, value in drift or []
+        if value and "host" in labels and "arm" in labels
+    )
+    note = "; drift: " + ", ".join("%s %s=%d" % entry for entry in held) if held else ""
     nonzero = [(labels, v) for labels, v in unbuilt if v]
     oldest = min(nonzero, key=lambda lv: lv[1]) if nonzero else None
     shown = oldest[0] if oldest else (unbuilt[0][0] if unbuilt else None)
@@ -177,10 +189,10 @@ def host_packages(
             % ((now - oldest[1]) / 60, max_lag_s / 60)
         )
     if problems:
-        return False, "%s%s" % ("; ".join(problems), which)
+        return False, "%s%s%s" % ("; ".join(problems), which, note)
     if oldest:
-        return True, "unbuilt for %.0fm%s" % ((now - oldest[1]) / 60, which)
-    return True, "builder caught up%s" % which
+        return True, "unbuilt for %.0fm%s%s" % ((now - oldest[1]) / 60, which, note)
+    return True, "builder caught up%s%s" % (which, note)
 
 
 # Sonarr's two self-clearing title holds, verbatim from

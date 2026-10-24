@@ -107,3 +107,60 @@ def test_it_reads_the_builder_series_with_no_daniel_server_pin(cfg):
     assert any("homelab_builder_fetch_timestamp_seconds" in q for q in queries)
     assert any("homelab_builder_unbuilt_since_timestamp_seconds" in q for q in queries)
     assert not any("origin=" in q for q in queries), queries
+
+
+# Reconcile drift (H7, *Which outcomes hold the host*): named in the message, never a verdict.
+
+
+def _drift(host, arm, count):
+    return ({"host": host, "arm": arm}, float(count))
+
+
+def _run_with_drift(cfg, fetch_age_s, unbuilt, drift):
+    fetch = NOW - fetch_age_s
+    rows = {"homelab_builder_unbuilt": unbuilt, "homelab_host_reconcile_drift": drift}
+    src = FakeSources(
+        prom_scalar=lambda q: fetch,
+        prom_vector=lambda q: next(v for k, v in rows.items() if k in q),
+    )
+    return checks.gitops.check_host_packages(cfg, src, now=NOW), src
+
+
+def test_a_non_zero_drift_count_is_named_in_the_message_without_going_down(cfg):
+    (ok, msg), _ = _run_with_drift(
+        cfg,
+        60,
+        [_unbuilt(0)],
+        [_drift("daniel-pi", "ufw", 2), _drift("daniel-box", "legacy", 1)],
+    )
+    assert ok, msg
+    assert "drift: daniel-box legacy=1, daniel-pi ufw=2" in msg
+
+
+def test_drift_is_named_on_a_red_verdict_too_and_does_not_cause_it(cfg):
+    (ok, msg), _ = _run_with_drift(
+        cfg, 31 * 60, [_unbuilt(0)], [_drift("daniel-pi", "ufw", 1)]
+    )
+    assert not ok
+    assert "fetch" in msg and "drift: daniel-pi ufw=1" in msg
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        pytest.param([], id="no-series"),
+        pytest.param([_drift("daniel-pi", "ufw", 0)], id="zero"),
+        pytest.param([({"reason": "ok", "sha": SHA}, 5.0)], id="not-a-drift-series"),
+    ],
+)
+def test_no_drift_leaves_the_message_as_it_was(cfg, drift):
+    (ok, msg), _ = _run_with_drift(cfg, 60, [_unbuilt(0)], drift)
+    assert ok and "drift" not in msg
+
+
+def test_the_drift_query_names_no_job_because_the_pi_scrapes_as_node_pi(cfg):
+    _, src = _run_with_drift(cfg, 60, [_unbuilt(0)], [])
+    queries = [
+        q for q in src.queries("prom_vector") if "homelab_host_reconcile_drift" in q
+    ]
+    assert queries and not any("job=" in q or "origin=" in q for q in queries), queries

@@ -4,7 +4,9 @@
 The design is H3's *The reconcile unit* (docs/target-architecture/host/h3-pi-pilot.md), and the
 step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
 host's /usr/bin/python3, which is 3.12 on Ubuntu 24.04. It uses the standard library only, and
-hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar.
+hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The activation step,
+the ufw arm and the metrics file live in the reconcile_lib package beside it, which the same
+component ships; the reconcile-size census counts both against one line ceiling.
 
 Usage: homelab-reconcile        (no arguments; exit 0 when every step succeeded, 1 otherwise)
 
@@ -18,14 +20,19 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
      "enable_links": ["<unit>", ...],
      "legacy": [{"path": "/abs/path"}, {"cron": "<name>", "user": "<user>"},
                 {"cron_file": "<name under /etc/cron.d>"}, {"unit": "<Ansible-era unit>"}],
-     "reconcilers": [],
+     "reconcilers": [] | ["ufw"],
+     "activations": {"<packaged path>": "<action>"},
+     "ufw": {"rules": [...], "legacy": [...]},
      "secrets_inputs_sha256": "<hex>"}
 
 `units` names every unit reconcile manages, another homelab package's and another package's
 drop-in target included. `enable_links` names each unit whose enable link the manifest's
-packages ship. No reconciler kind exists yet: H4 adds the udev reload and H7 adds ufw and
-libvirt, so a manifest listing one fails the run here. `secrets_inputs_sha256` is present only
-when the package ships the `secrets-unit` component, and every secrets rule below keys on it.
+packages ship. `reconcilers` lists the arms the manifest carries state for. Only "ufw" exists,
+and its section's schema is the docstring of reconcile_lib/ufw.py; H4 adds the udev reload and
+H7 adds libvirt, so a manifest listing another kind fails the run here. `activations` maps a
+packaged file to the action step 3b runs when its hash changes (reconcile_lib/activate.py).
+`secrets_inputs_sha256` is present only when the package ships the `secrets-unit` component, and
+every secrets rule below keys on it.
 
 The restart contract (docs/target-architecture/host/h4-secrets-unit.md, *The restart contract*):
 reconcile is the only process that starts or restarts a unit outside the boot path. It never starts
@@ -45,11 +52,20 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "units": {"<unit>": {"file": "<sha256>", "dropin": "<sha256>"} | null},
      "enable_links": ["<unit>", ...],
      "retired": ["<legacy entry as canonical JSON>", ...],
+     "files": {"<packaged path>": "<sha256>"},     (activated files, by the hash that ran)
+     "pending": {"<unit>": "<InvocationID>"},      (units owed a restart: the manual: actions)
+     "drift": {"<arm>": <items the arm left alone>},
+     "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
      "secrets_inputs_sha256": "<hex>"}   (only after a run in which homelab-secrets succeeded)
 
 homelab-updater reads only `result` and `last_ok`. Each per-entry item advances only when its
 step succeeded on it, or when the step's rule left it alone, so the next run retries exactly
 the actions that failed. A `null` hash reads as changed.
+
+Drift is an item an arm or a rule left alone on purpose: a ufw rule the floor kept, or a legacy
+service that is still running. It is counted in `drift`, never fails the run, and is retried by
+the next run. A fault fails the run, which holds the host. The run also writes
+homelab_host_reconcile.prom (reconcile_lib/textfile.py).
 
 HOMELAB_ROOT prefixes every path this reads or writes. Only the tests in hosts/lib/tests/ set it.
 """

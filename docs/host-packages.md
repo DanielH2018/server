@@ -65,6 +65,62 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   once that unit is active and every credential and output in `secrets.json` exists. A package
   without the field makes no call that names `homelab-secrets`, as the Pi's does until H4.5.
 
+## Activation, pending state and drift
+
+`dpkg` installs a packaged file and applies nothing. A file entry in a `component.yml` therefore
+carries `activate:`, and reconcile runs that action in step 3b when the installed file's hash
+changes. The grammar and the validations are the docstring of
+`hosts/lib/reconcile_lib/activate.py`. The design is H7's *How moved config becomes live*.
+
+- **A validation failure is a fault.** `sshd -t` or `fail2ban-client -t` fails, or reconcile
+  cannot parse a sysctl or journald file. The running service stays as it was, the run exits 1,
+  the host holds, and reconcile writes `/run/homelab/validate-failed`. The next run that passes
+  every validation removes the flag. `homelab-reboot.timer`, which H7.7 adds, refuses to reboot
+  while the flag exists.
+- **Reboot-pending and activation-pending.** A `reboot` action creates
+  `/run/homelab/reboot-pending`, which the next boot clears. A `manual:<unit>` action, or any
+  action on a unit the manifest marks `manual` or `windowed`, records the unit's `InvocationID`
+  in `applied.json`. The record clears when the unit restarts. Reconcile writes both states to
+  `homelab_host_reboot_pending{host}` and `homelab_host_activation_pending{host,unit}` in
+  `homelab_host_reconcile.prom`, beside the updater's `homelab_host.prom`.
+- **Drift is not a failure.** `homelab_host_reconcile_drift{host,arm}` counts items an arm
+  left alone on purpose: UFW rules the floor kept, and legacy services that are still running.
+  The run succeeds, so a revert still updates the host. The `host_packages` check names a
+  non-zero count in its message and does not go down. To retry the items before the host's next
+  package version, run `sudo systemctl start homelab-reconcile.service` on the host
+  (**operator-only**).
+
+## The UFW arm
+
+A host package declares firewall rules in a `ufw:` key, and the UFW arm of reconcile
+(`hosts/lib/reconcile_lib/ufw.py`) keeps them. The arm labels every rule it writes with
+`comment 'homelab:<id>'`, or `homelab:keep:<id>` for the SSH and join rules it must never
+delete. A manifest that declares no UFW rule, and has never declared one, makes the arm run no
+`ufw` command at all.
+
+UFW 0.36.2-6, measured on Ubuntu 24.04 by extracting the package and driving its Python front
+end with `--rootdir` on a copy of the stock `/etc/ufw`:
+
+| Command | Result |
+|---|---|
+| `ufw allow 80/tcp comment 'x'`, then `ufw allow 80/tcp comment 'y'` | one rule, comment `y`: appending an existing spec relabels it in place |
+| `ufw insert 1 allow 8/tcp comment 'b2'` for a spec that exists | `Skipping inserting existing rule`; the old comment stays |
+| `ufw delete allow 80/tcp` | deletes the rule whatever its comment |
+| `ufw delete allow 22/tcp comment 'zzz'` | `Could not delete non-existent rule`; a different comment matches nothing |
+| `ufw show added` | `ufw <spec> comment '<text>'` per rule, in order, and `(None)` for an empty list |
+
+The measurement did not cover exit codes, and it did not cover the `Status: inactive` output of
+`ufw status numbered`, which needs root and iptables. The container case that records both is an
+open follow-up. The stub in `hosts/lib/tests/_reconcile_stub.py` replays the table above.
+
+So the arm adopts a rule that predates it, such as the live hosts' `limit 22/tcp` with no comment, by
+appending it again, and it uses `insert 1` only for a spec that is missing. A legacy entry that
+names a spec a declaration shares never deletes it, because that rule is the adopted one.
+
+Reconcile enables UFW only when `ufw status` reads `Status: inactive`, and only once the keep
+rules `ssh-limit` and `lan-ssh` are declared and present. A rebuilt host is the case it exists
+for. The live hosts are active, so there the step does nothing.
+
 ## Clearing a deployer hold that a failed `homelab_builder` or `gitops_deploy` apply wrote
 
 The GitOps tick applies `homelab_builder` on daniel-box through the setup plane. From PR H3.5a
