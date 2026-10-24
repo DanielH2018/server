@@ -187,6 +187,13 @@ def test_a_base_without_the_workflow_is_a_job_change():
     assert host_packages.job_differs(None, _WORKFLOW, "host_packages")
 
 
+def test_an_edit_to_any_named_job_is_a_change():
+    """CI names the build job and the cases job, and an edit to either runs the cases (#6151)."""
+    edited = _WORKFLOW.replace("prek run", "prek run --all-files")
+    assert not host_packages.jobs_differ(_WORKFLOW, edited, ["host_packages"])
+    assert host_packages.jobs_differ(_WORKFLOW, edited, ["host_packages", "hooks"])
+
+
 def test_the_same_tree_renders_the_same_fixture(tmp_path):
     """The payload variant's random payload would make every pair of renders differ."""
     assert host_packages.render_fixtures(REPO, tmp_path)

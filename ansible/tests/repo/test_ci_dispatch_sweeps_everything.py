@@ -56,6 +56,7 @@ KNOWN_JOBS = frozenset(
         "pytest",
         "deck_mod",
         "sops_manifest_type_proof",
+        "host_packages_build",
         "host_packages",
         "prek",
         "renovate-config",

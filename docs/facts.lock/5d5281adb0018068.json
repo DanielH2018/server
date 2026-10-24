@@ -1,15 +1,15 @@
 {
-  "checksum": "7518af280dfc6eb3e4aeed9e5a923ebd709612504468d991436da6ec919b79f9",
+  "checksum": "e0edc52d5ec854543f439c39caa57495c20b43e4db51592fb88729284f5a4cfb",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#What the builder half writes (H3.5a)",
   "row": {
     "atoms": {
       "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES": "3f81b936e547a1f209adc44850bb650f09e7593d579bb2dc2c323212d694ee91",
       "ansible/roles/setup/homelab_builder/defaults/main.yml": "c9368611cd4475f54e4cca7e7e6198975f554c467717d3e402f2c04db013d9eb",
-      "ansible/roles/setup/homelab_builder/tests/test_builder_units.py::test_the_nfpm_pin_is_ci_s": "6882bf35ecc43bba14f26938954750a6f1c3a98b0a394d9765e4f1df8df351ab",
+      "ansible/roles/setup/homelab_builder/tests/test_builder_units.py::test_the_nfpm_pin_is_ci_s": "8a7b71d2bf5bb70321543025900c8b57307d723aab1a000d3fd90ed100dd750f",
       "ansible/roles/setup/initial_setup/defaults/main.yml": "038f8d5e922ec5d60ebb27f34361b20028bf520bf94c2c71d60e44eed56aa58e"
     },
     "python": "3.14",
-    "verified_sha": "65b1917f5"
+    "verified_sha": "7f00645e0"
   }
 }

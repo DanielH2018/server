@@ -45,6 +45,7 @@ KNOWN_JOBS = frozenset(
         "deck_mod",
         "flux_roundtrip",
         "sops_manifest_type_proof",
+        "host_packages_build",
         "host_packages",
         "host_tools_arm64",
         GATE_JOB,
@@ -65,6 +66,7 @@ GATE_READS = frozenset(
         "deck_mod",
         "flux_roundtrip",
         "sops_manifest_type_proof",
+        "host_packages_build",
         "host_packages",
         "host_tools_arm64",
     }

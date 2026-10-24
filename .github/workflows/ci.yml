@@ -1069,12 +1069,22 @@ jobs:
           kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true
 
   # Target slice H3's host packages (docs/target-architecture/host/h3-pi-pilot.md, *CI (builds,
-  # never signs)*). It renders every package at the head and at the merge base on every run,
-  # with no path filter, because a group_vars edit can change a render. When no rendered tree
-  # differs, the build, lint and container steps skip and the job ends green. Otherwise each
-  # matrix leg builds the test image for its Ubuntu release and runs the updater cases in it
-  # (steps 4 and 5). The job has no `name:`, so GitHub shows each leg as `host_packages
-  # (<release>, <python>)`, and later host slices filter `gh run view` on that prefix.
+  # never signs)*), in two jobs. `host_packages_build` renders every package at the head and at
+  # the merge base on every run, with no path filter, because a group_vars edit can change a
+  # render. When no rendered tree differs, its build and lint steps skip and it ends green.
+  # Otherwise it builds both renders with the pinned nfpm, lints them, and hands the build on:
+  # the arm64 homelab-tools .deb to `host_tools_arm64`, and the render, the debs and nfpm to
+  # `host_packages`. Each `host_packages` matrix leg builds the test image for its Ubuntu release
+  # and runs the updater cases in it (steps 4 and 5).
+  #
+  # The build is a job of its own so that `host_tools_arm64` waits for the build alone (#6151).
+  # As one job, the arm64 job started only after both legs' 36s image build and 243s of cases,
+  # although the build was done about 80s in (run 40125170130). The cases legs now pay one more
+  # job's setup and the hand-off's transfer before their image build.
+  #
+  # `host_packages` has no `name:`, so GitHub shows each leg as `host_packages (<release>,
+  # <python>)`, and later host slices filter `gh run view` on that prefix. The build job's
+  # `name:` therefore does not start with `host_packages`.
   #
   # The merge base is HEAD's first parent on every event but a dispatch. On a pull request HEAD
   # is the merge ref, whose first parent is the base branch tip; on a push it is the previous
@@ -1084,22 +1094,17 @@ jobs:
   # nfpm is fetched and checked against its pinned sha256 on every run, ahead of the diff. A
   # Renovate PR that bumps the pin changes no render, so with the fetch behind the diff gate a
   # wrong digest or a 404 URL would reach master green.
-  host_packages:
+  host_packages_build:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    name: build the host packages (render, nfpm, lint)
     runs-on: ubuntu-26.04
-    # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
-    # apt's retries can take minutes, and the cases boot three containers per leg.
-    timeout-minutes: 30
-    strategy:
-      # Each leg reports its own conclusion, so one release's failure does not hide the other's.
-      fail-fast: false
-      matrix:
-        # The releases the fleet runs or is moving to (C5), each with the python3 minor it
-        # carries, which reconcile runs under.
-        include:
-          - {release: "24.04", python: "3.12"}
-          - {release: "26.04", python: "3.14"}
+    timeout-minutes: 15
+    # What the `host_packages` legs gate their steps on, from the render step below.
+    outputs:
+      changed: ${{ steps.render.outputs.changed }}
+      cases: ${{ steps.render.outputs.cases }}
+      upgrade: ${{ steps.render.outputs.upgrade }}
     env:
       # The custom manager in renovate.json reads this annotation and moves the version and the
       # digest in one PR. The digest is the sha256 of nfpm_<version>_Linux_x86_64.tar.gz, which
@@ -1135,9 +1140,10 @@ jobs:
       # fixture specs, and the cases' own code. CASE_INPUTS is the one list of them, and
       # ansible/tests/repo/test_host_package_case_inputs_census.py holds it to every
       # `validate` module the cases script imports. The renderer is a render input, so it
-      # reaches the cases through `changed` when it alters a real render. The job's own steps
-      # invoke the cases, so an edit to this job counts too. `job-changed` compares it as
-      # parsed YAML, so a comment-only edit, or an edit to another job, does not. The cases'
+      # reaches the cases through `changed` when it alters a real render. This job builds what
+      # the cases read and the `host_packages` job invokes them, so an edit to either job counts
+      # too. `job-changed` compares each as parsed YAML, so a comment-only edit, or an edit to
+      # another job, does not. The cases'
       # fixture exercises renderer paths no real package does, so `fixture-changed` renders it
       # in each tree with that tree's renderer, and a differing fixture counts too (#5066).
       #
@@ -1192,9 +1198,9 @@ jobs:
           fi
           if [ "$cases" = false ]; then
             job=$(uv run python scripts/validate/host_packages.py job-changed "$base" \
-              --workflow .github/workflows/ci.yml --job host_packages)
+              --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages)
             if [ "$job" = true ]; then
-              echo "::notice::This PR changes the host_packages job's steps, so the cases run."
+              echo "::notice::This PR changes the host package jobs' steps, so the cases run."
               cases=true
             fi
           fi
@@ -1280,12 +1286,11 @@ jobs:
               dpkg-deb --contents "$deb"
             done
 
-      # The `host_tools_arm64` job installs this build on a real arm64 runner. One matrix leg
-      # uploads it, because both legs build the same file.
+      # The `host_tools_arm64` job installs this build on a real arm64 runner.
       - name: Hand the arm64 homelab-tools build to the arm64 job
         if: >-
-          matrix.release == '24.04' && (github.event_name == 'workflow_dispatch'
-          || steps.render.outputs.changed == 'true' || steps.render.outputs.cases == 'true')
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: homelab-tools-arm64
@@ -1321,17 +1326,84 @@ jobs:
           grep -q 'conffiles lists /etc/homelab-red.conf' "$RUNNER_TEMP/red.log"
           grep -qF "postinst:2: 'rm -rf /etc/foo'" "$RUNNER_TEMP/red.log"
 
+      # The `host_packages` legs read the render and the debs, and build their fixture packages
+      # with the same nfpm. One tarball carries all three, because an artifact's zip does not
+      # keep a file's mode and the render ships executable maintainer scripts.
+      - name: Hand the render, the debs and nfpm to the cases legs
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
+        run: tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP" render debs bin/nfpm
+
+      - name: Upload the hand-off for the cases legs
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: host-packages-build
+          path: ${{ runner.temp }}/host-packages-build.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  # Steps 4 and 5 of the host packages, one leg per release. The header above
+  # `host_packages_build` says what each job does. Every step but the checkout and the setup
+  # skips when that job built nothing, and the leg ends green.
+  host_packages:
+    needs: [prove, host_packages_build]
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    runs-on: ubuntu-26.04
+    # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
+    # apt's retries can take minutes, and the cases boot three containers per leg.
+    timeout-minutes: 30
+    strategy:
+      # Each leg reports its own conclusion, so one release's failure does not hide the other's.
+      fail-fast: false
+      matrix:
+        # The releases the fleet runs or is moving to (C5), each with the python3 minor it
+        # carries, which reconcile runs under.
+        include:
+          - {release: "24.04", python: "3.12"}
+          - {release: "26.04", python: "3.14"}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes or fetches
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - name: Download the hand-off from the build job
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: host-packages-build
+          path: ${{ runner.temp }}/handoff
+
+      # The tarball unpacks to the paths the build job wrote, so the cases read `$RUNNER_TEMP/render`
+      # and `$RUNNER_TEMP/debs` as they did when both halves were one job.
+      - name: Unpack the render, the debs and nfpm
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        run: |
+          set -euo pipefail
+          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/nfpm" --version
+
       # Step 4. The Dockerfile pins the release by digest and the packages by snapshot. The
       # runner's CA bundle reaches the build only, for the snapshot archive's https redirect.
       # The early exit is in the script, not the `if:`, because a dispatch must reach this
       # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
       - name: Build the test image for this release
         if: >-
-          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
-          || steps.render.outputs.cases == 'true'
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
-          UPGRADE: ${{ steps.render.outputs.upgrade }}
+          UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
         run: |
           set -euo pipefail
           if [ "$UPGRADE" != true ]; then
@@ -1350,12 +1422,12 @@ jobs:
       # Step 5: every case, on this leg's release. The script's docstring lists them.
       - name: Run the updater cases in systemd containers
         if: >-
-          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
-          || steps.render.outputs.cases == 'true'
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
-          UPGRADE: ${{ steps.render.outputs.upgrade }}
+          UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no case can upgrade; no case runs."
@@ -1366,7 +1438,7 @@ jobs:
             --work "$RUNNER_TEMP/cases"
 
   # Target slice H3.11, the `arm64` half of homelab-tools (docs/target-architecture/host/
-  # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages` job builds
+  # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages_build` job builds
   # both architectures with the pinned nfpm and uploads the `arm64` .deb. This job installs it
   # in the test image, built here for `arm64`, and runs each tool's `--version`, so a binary
   # that does not execute on `arm64` fails before the Pi installs it.
@@ -1375,10 +1447,12 @@ jobs:
   # repository, the job falls back to QEMU on `ubuntu-26.04`, and the PR that does so records the
   # run time (Open question 9). A run that leaves this job queued is that refusal.
   #
-  # When `host_packages` built no homelab-tools, because no render changed, there is no
+  # It waits for `host_packages_build` alone, not for the cases legs (#6151).
+  #
+  # When `host_packages_build` built no homelab-tools, because no render changed, there is no
   # artifact and the job ends green with a notice.
   host_tools_arm64:
-    needs: [prove, host_packages]
+    needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
@@ -1388,7 +1462,7 @@ jobs:
           persist-credentials: false  # nothing here pushes or fetches
 
       - name: Download the arm64 homelab-tools build
-        continue-on-error: true  # no artifact when host_packages built nothing
+        continue-on-error: true  # no artifact when host_packages_build built nothing
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: homelab-tools-arm64
@@ -1400,7 +1474,7 @@ jobs:
           shopt -s nullglob
           debs=("$RUNNER_TEMP"/debs/homelab-tools_*_arm64.deb)
           if [ "${#debs[@]}" -eq 0 ]; then
-            echo "::notice::host_packages built no homelab-tools, so there is nothing to install."
+            echo "::notice::host_packages_build built no homelab-tools, so there is nothing to install."
             exit 0
           fi
           docker build --build-arg RELEASE=24.04 --build-context runner-ca=/etc/ssl/certs \
@@ -1425,7 +1499,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pr_gates, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages, host_tools_arm64]
+    needs: [prove, hooks, pr_gates, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -1458,13 +1532,15 @@ jobs:
           DECK_MOD: ${{ needs.deck_mod.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
           SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
+          HOST_PACKAGES_BUILD: ${{ needs.host_packages_build.result }}
           HOST_PACKAGES: ${{ needs.host_packages.result }}
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
           echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
             "ansible-lint=$ANSIBLE_LINT" \
             "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
-            "host-packages=$HOST_PACKAGES host-tools-arm64=$HOST_TOOLS_ARM64"
+            "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
+            "host-tools-arm64=$HOST_TOOLS_ARM64"
           # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
           # dependent ran (#5783).
@@ -1473,7 +1549,8 @@ jobs:
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
           ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
-            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES" \
+            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
+            && ok "$HOST_PACKAGES" \
             && ok "$HOST_TOOLS_ARM64"
 
       # Records what this green run tested, for the push run's `prove` job (#5489). On a pull
