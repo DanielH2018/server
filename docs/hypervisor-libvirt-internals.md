@@ -142,6 +142,38 @@ look like a k3s server node whose k3s is stopped and the script runs there unmod
 persists after a run is `/var/log/etcd-restore-drill/<run-id>/` — drill stdout, `restore.log`
 and `server.log` — pruned at `hypervisor_etcd_drill_log_retention_days`.
 
+## The SUC rehearsal mode
+
+`etcd-restore-drill-vm --rehearse-suc` (H6.1b2) rehearses the `system-upgrade` Plan on this
+guest before it touches production. It is run by hand and never scheduled. The H6 plan's
+*Rehearsal in a drill guest* section owns the design. This section holds what the code does.
+
+- **What runs.** The orchestrator builds the guest behind the same fence. It then ships a
+  guest-side script and the rendered bundle, and installs k3s at `--guest-version` from the
+  release installer checked against the pinned sha256. A registry pod on the node and Flux's
+  `source-controller` and `kustomize-controller` follow. The guest downloads the pinned `flux` CLI, pushes the
+  bundle to that registry, and applies an OCIRepository and the rendered Kustomization.
+- **The overlay.** `files/suc_rehearsal.py` points the rehearsed Plan's `kubernetes.io/hostname`
+  clause at the guest and drops `prepare`. It also drops the Kustomization's `dependsOn`,
+  `postBuild` and `decryption`, which the guest cannot resolve. It refuses a Plan with no hostname
+  clause, a Kustomization with no `healthCheckExprs`, and a placeholder left in the bundle, because
+  each would let the run pass without exercising the Plan.
+- **The verdict.** `--expect upgrade` passes when the node's `plan.upgrade.cattle.io/<plan>` label
+  equals the Plan's `latestHash`, the kubelet reports the Plan's version, and the Kustomization
+  reads Ready at the pushed revision. `--expect red` passes when that Kustomization is not Ready
+  and the Plan's own `Complete` condition is `False` with reason `JobFailed`. A Kustomization that
+  is red for another reason does not pass. The Kustomization's reason and message are written
+  verbatim to `rehearsal-verdict.txt`, which H6.1c reads to pin the string.
+- **What it leaves alone.** It stages no cluster token and no R2 credential. It writes no
+  `last-success-full` stamp, no textfile verdict and no Kuma push, so a rehearsal never stands in
+  for the monthly drill. It takes the drill's lock, so the cron and a rehearsal cannot hold the
+  guest together. It ignores `hypervisor_etcd_drill_armed`, which is the cron's switch.
+- **Evidence.** The run directory under `/var/log/etcd-restore-drill/` also holds
+  `rehearsal-snapshot.json` (the last read of the guest) and `rehearsal-state.txt` (the objects and
+  the k3s log).
+- **Not proven.** The guest has no Longhorn and one node. It proves the server Plan and the Flux
+  apply, not the gates or the agent's wait.
+
 ## Why monitor-bridge never reads this drill's local stamp
 
 Nothing in the cluster reads the full drill's local stamp directly. monitor-bridge reads

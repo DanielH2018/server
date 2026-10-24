@@ -347,6 +347,7 @@ extra-paths = [
   "ansible/roles/k8s/crowdsec/files",
   "ansible/roles/k8s/artifacts/files",
   "ansible/roles/setup/k3s/files",
+  "ansible/roles/setup/hypervisor/files",
   "ansible/roles/setup/renovate_notify/files",
   "ansible/roles/setup/renovate_agent/files",
   "ansible/roles/setup/homelab_builder/files",
