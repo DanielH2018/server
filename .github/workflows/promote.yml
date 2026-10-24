@@ -29,8 +29,9 @@ name: promote
 #            deployer's Discord channel, with the webhook and no token.
 #   tag      packages: write. Checks out nothing. Tags `prod`'s digest `last-good` when that
 #            tag is absent, moves `prod` to T, and records its digest in PROD_DIGEST.
-#   verify   contents: read, statuses: read. Runs `promote.py verify T`, which waits on T's
-#            commit statuses for T's changed set and prints `good` or `failed`.
+#   verify   contents: read, statuses: read, packages: read. Runs `promote.py verify T`,
+#            which waits on T's commit statuses for T's changed set and prints `good` or
+#            `failed`, or `superseded` once a later run has moved `prod` past T.
 #   settle   packages: write, actions: write. Checks out nothing. A good verdict moves
 #            `last-good` to T. When T changes a snapshot role (D5.2b1), anything else writes
 #            DEPLOY_HOLD as `<T> stateful=<names>`, tags T `held` and leaves `prod`. When T
@@ -731,9 +732,12 @@ jobs:
     timeout-minutes: 335
     # No concurrency group: a pending job in `promote` can be evicted. `decide` waits while
     # `prod` differs from `last-good` instead (the DECIDED marker in promote_lib/verify_promotion.py).
+    # packages: read is for `prod`'s digest, which ends the wait as `superseded` once a later
+    # run has moved it past T (D7.2, promote_lib/superseded.py).
     permissions:
       contents: read
       statuses: read
+      packages: read
     outputs:
       verdict: ${{ steps.verify.outputs.verdict }}
       failed: ${{ steps.verify.outputs.failed }}
@@ -758,10 +762,12 @@ jobs:
           TARGET: ${{ needs.promote.outputs.target }}
           PRIOR: ${{ needs.promote.outputs.prior }}
           MOVED_AT: ${{ needs.tag.outputs.moved_at }}
+          DIGEST: ${{ needs.promote.outputs.digest }}
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
           uv run --frozen python scripts/deploy_tools/promote.py verify "$TARGET"
           --bundle-dir "$RUNNER_TEMP/verify-input" --prior "$PRIOR" --moved-at "$MOVED_AT"
+          --digest "$DIGEST"
 
   settle:
     needs: [promote, tag, verify]
@@ -866,6 +872,13 @@ jobs:
             echo "prod is at '${live:-absent}', not sha-$TARGET's $DIGEST: a later run moved it, so this run writes nothing and dispatches nothing"
             return 1
           }
+          # `verify` already read `prod` past T, so its verdict is not this run's to apply,
+          # even when the read below would fail.
+          if [ "$VERDICT" = superseded ]; then
+            echo "verify read prod moved past sha-$TARGET, so this run writes nothing and dispatches nothing"
+            echo "owned=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if ! owns_prod; then
             echo "owned=false" >> "$GITHUB_OUTPUT"
             exit 0
