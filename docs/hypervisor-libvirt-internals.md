@@ -157,7 +157,9 @@ guest before it touches production. It is run by hand and never scheduled. The H
   clause at the guest and drops `prepare`. It also drops the Kustomization's `dependsOn`,
   `postBuild` and `decryption`, which the guest cannot resolve. It refuses a Plan with no hostname
   clause, a Kustomization with no `healthCheckExprs`, and a placeholder left in the bundle, because
-  each would let the run pass without exercising the Plan.
+  each would let the run pass without exercising the Plan. The helper needs PyYAML, so the
+  orchestrator runs it with `.venv/bin/python` under `--repo`. That environment exists once
+  `uv run` has run in the checkout, which rendering the bundle does.
 - **The verdict.** `--expect upgrade` passes when the node's `plan.upgrade.cattle.io/<plan>` label
   equals the Plan's `latestHash`, the kubelet reports the Plan's version, and the Kustomization
   reads Ready at the pushed revision. `--expect red` passes when that Kustomization is not Ready

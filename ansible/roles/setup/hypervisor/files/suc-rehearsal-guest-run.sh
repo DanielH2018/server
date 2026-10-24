@@ -74,8 +74,8 @@ cmd_publish() {
   out="$(flux push artifact "oci://$1:5000/homelab:rehearsal" --path="$STAGE/bundle" \
     --source=suc-rehearsal --revision="rehearsal@sha1:$(printf '%040d' 0)" \
     --insecure-registry --output=json)" || die "flux push artifact failed"
-  digest="$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])')" \
-    || die "flux push printed no digest"
+  digest="$(printf '%s' "$out" | sed -n 's/.*"digest": *"\(sha256:[0-9a-f]*\)".*/\1/p' | head -1)"
+  [[ -n "$digest" ]] || die "flux push printed no digest: $out"
   # The guest's OCIRepository is named like production's, so the rendered Kustomization follows it.
   "${KUBECTL[@]}" apply -f - <<EOF || die "the OCIRepository was not applied"
 apiVersion: source.toolkit.fluxcd.io/v1

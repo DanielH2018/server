@@ -165,7 +165,7 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 # for over a minute and must not age the file. A failed write logs and the run goes on.
 write_verdict() {
   local check="$1" status="$2" success=0
-  [[ "$REHEARSE" == 1 ]] && return 0
+  [[ "${REHEARSE:-0}" == 1 ]] && return 0
   [[ "$status" == "up" ]] && success=1
   write_check_textfile "$check" "$success" "$(date +%s)" "$DEADLINE_S" \
     || logger -t "$TAG" "textfile write to ${TEXTFILE_DIR} failed (${check} status=${status})"
@@ -506,7 +506,10 @@ rehearse_suc() {
     [[ -r "$f" ]] || fail "$f missing — run initial_setup --tags hypervisor"
   done
   command -v qemu-img >/dev/null || fail "qemu-img not on PATH"
-  command -v python3 >/dev/null || fail "python3 not on PATH"
+  # The helper needs PyYAML, so it runs in the repo's own environment. That environment exists
+  # once `uv run` has run in the checkout, which rendering the bundle does.
+  RH_PY="$RH_REPO/.venv/bin/python"
+  [[ -x "$RH_PY" ]] || fail "$RH_PY is missing: run uv run python --version in $RH_REPO first"
 
   # A previous run that died between create and destroy leaves a guest and a disk. Teardown also
   # removes $WORK, so it runs before $WORK is made.
@@ -516,9 +519,9 @@ rehearse_suc() {
 
   local out k v from target
   local -A pin=()
-  out="$(python3 -I "$SUC_HELPER" pins "$RH_REPO" 2>&1)" || fail "reading the pins failed: $out"
+  out="$("$RH_PY" -I "$SUC_HELPER" pins "$RH_REPO" 2>&1)" || fail "reading the pins failed: $out"
   while IFS='=' read -r k v; do [[ -n "$k" ]] && pin["$k"]="$v"; done <<<"$out"
-  target="$(python3 -I "$SUC_HELPER" overlay "$RH_RENDERED" "$WORK/stage" "$NAME" "$RH_PLAN" 2>&1)" \
+  target="$("$RH_PY" -I "$SUC_HELPER" overlay "$RH_RENDERED" "$WORK/stage" "$NAME" "$RH_PLAN" 2>&1)" \
     || fail "preparing the bundle failed: $target"
   target="${target#target_version=}"
   from="${RH_VERSION:-${pin[k3s_version]}}"
@@ -547,7 +550,7 @@ rehearse_suc() {
     guest_running || { verdict="the guest exited during the rehearsal"; break; }
     snap="$(RH_STEP_TIMEOUT=60 rh snapshot "$NAME" "$RH_PLAN" 2>/dev/null)" || snap=""
     if [[ -n "$snap" ]]; then
-      verdict="$(printf '%s' "$snap" | python3 -I "$SUC_HELPER" judge "$RH_EXPECT" "$RH_PLAN" "$target" "$NAME" "$digest")" \
+      verdict="$(printf '%s' "$snap" | "$RH_PY" -I "$SUC_HELPER" judge "$RH_EXPECT" "$RH_PLAN" "$target" "$NAME" "$digest")" \
         && { ok=1; break; }
     else
       verdict="WAIT the guest's API server did not answer"

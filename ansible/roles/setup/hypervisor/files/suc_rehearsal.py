@@ -212,7 +212,9 @@ def judge(expect, plan_name, target, hostname, digest, snap):
 
 def main(argv):
     try:
-        if argv[:1] == ["pins"] and len(argv) == 2:
+        if argv[:1] in (["-h"], ["--help"]):
+            print(__doc__)
+        elif argv[:1] == ["pins"] and len(argv) == 2:
             print("\n".join(f"{k}={v}" for k, v in pins(argv[1]).items()))
         elif argv[:1] == ["overlay"] and len(argv) == 5:
             print(f"target_version={overlay(*argv[1:])}")

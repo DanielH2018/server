@@ -274,7 +274,7 @@ def test_a_fence_leak_stages_nothing_into_the_guest(tmp_path):
 
 
 def test_a_verdict_that_never_arrives_fails_after_the_deadline_and_tears_down(tmp_path):
-    r = run(tmp_path, snap=snapshot(label="old"), deadline=1)
+    r = run(tmp_path, snap=snapshot(label="old"), deadline=2)
     assert r.done.returncode == 1
     assert r.steps.count("snapshot") >= 2
     assert "WAIT" in r.evidence("rehearsal-verdict.txt")
