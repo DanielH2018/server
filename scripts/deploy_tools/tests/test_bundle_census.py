@@ -460,8 +460,8 @@ def test_an_unpublished_plumbing_tag_is_not_judged(tmp_path):
     )
 
 
-def test_the_named_members_cover_the_six_plumbing_tags():
-    """Named members: H1's *Plumbing tags are never pruned* names one list per tag."""
+def test_the_named_members_cover_the_six_plumbing_tags_and_the_drill():
+    """Named members: H1's *Plumbing tags are never pruned* names one list per tag, and H2.3b one."""
     assert set(bundle_census.NAMED_MEMBERS) == {
         "cluster-base",
         "metallb",
@@ -469,6 +469,7 @@ def test_the_named_members_cover_the_six_plumbing_tags():
         "longhorn",
         "longhorn-backup",
         "longhorn-reconcile",
+        "longhorn-restore-drill",
     }
     assert ("PriorityClass", "homelab-critical") in bundle_census.NAMED_MEMBERS[
         "cluster-base"

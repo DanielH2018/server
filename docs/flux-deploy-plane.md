@@ -1268,7 +1268,8 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
   33006s against the cap's 19800s. Longhorn v1.13.0 raised the `longhorn` timeout from 2m to
   10m, which moved the chain from 31920s (#5972), D5 step 29's `flux` and
   `flux-deferred` moved it from 32016s, and D5 step 30's `homelab-namespace`, which every
-  tag rendering into `homelab` depends on, moved it from 32256s. The soak's wait is therefore clamped at the
+  tag rendering into `homelab` depends on, moved it from 32256s. H2.3b's `longhorn-restore-drill`,
+  which waits on `homelab-namespace` and `longhorn`, moved it from 33006s to 33126s. The soak's wait is therefore clamped at the
   cap, as `verify`'s is, and the `# DECIDED:` at `chained_timeout.py:VERIFY_CAP_S` records
   why the clamp stands (#5868).
 
