@@ -204,6 +204,12 @@ class Fakes:
     # changed since the PR's merge base. Empty is a PR already up to date with master, and an
     # exception is raised in place of an answer.
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
+    # What the master `ci.yml` runs listing answers, one entry per call, as `pace.py` reads it:
+    # `{status, created_at}` per run. Empty is a master with no CI backlog, and an exception is
+    # raised in place of an answer.
+    master_runs: list[list[dict[str, str]] | Exception] = field(
+        default_factory=lambda: [[]]
+    )
     # `tools.owners_at`: each tag that sets `owner` at a ref, by ref. A ref absent here has
     # none. An exception is raised in place of a map.
     owners: dict[str, dict[str, str] | Exception] = field(default_factory=dict)
@@ -297,6 +303,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     )
     view_seq = {k: _seq(v, calls, f"gh:{k}") for k, v in views.items()}
     compare_seq = _seq(f.compare, calls, "gh:compare")
+    runs_seq = _seq(f.master_runs, calls, "gh:master-runs")
 
     def gh_json(*args, **kwargs):
         if args[:2] == ("api", "repos/{owner}/{repo}"):
@@ -310,6 +317,11 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return [f.pr_reviews]
         if args[0] == "api" and "/compare/" in args[1]:
             answer = compare_seq(*args, **kwargs)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        if args[0] == "api" and "/workflows/ci.yml/runs?branch=" in args[1]:
+            answer = runs_seq(*args, **kwargs)
             if isinstance(answer, Exception):
                 raise answer
             return answer
