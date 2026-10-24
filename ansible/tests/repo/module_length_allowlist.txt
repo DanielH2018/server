@@ -39,4 +39,4 @@ scripts/deploy_tools/narrow_lib/order_only_runner.py 508
 scripts/deploy_tools/tests/test_digest_covers.py 435
 scripts/diagnostics/probe_lib/cli_parser.py 501
 scripts/lib/exit_codes.py 641  # conjoined: each family's constants and its CONTRACTS row are held to each other by test_exit_codes.py, so a family split out would import _c and Code from here and CONTRACTS would import it back; the readers of CONTRACTS live in exit_messages.py
-scripts/validate/host_package_cases.py 456
+scripts/validate/host_package_cases.py 455

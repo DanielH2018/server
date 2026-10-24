@@ -81,5 +81,16 @@ RUN set -eu; \
         'Signed-By: /srv/repo/homelab-test-keyring.gpg' \
         > /etc/apt/sources.list.d/homelab.sources
 
+# The apt-docker, apt-azlux and apt-github-cli components ship the Docker, Azlux and GitHub CLI
+# sources (H7.24a). The real Pi package ships two, and every updater run reads sources.list.d, so
+# the three are diverted like homelab.sources: dpkg unpacks them outside sources.list.d and no
+# case reaches the upstream hosts. validate_lib/repos_case.py removes the diversions to prove the real install.
+RUN set -eu; \
+    for source in docker github-cli azlux; do \
+        dpkg-divert --local --no-rename \
+            --divert "/var/lib/homelab-test/$source.sources.shipped" \
+            --add "/etc/apt/sources.list.d/$source.sources"; \
+    done
+
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]

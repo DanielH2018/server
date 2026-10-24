@@ -1,0 +1,10 @@
+# Docker's apt source and key (H7.24a, docs/target-architecture/host/h7-delete-ansible.md, old
+# step H7.1). Only daniel-pi installs Docker, so only its package lists this component. The files
+# land at the paths docker_install wrote, so dpkg takes them over; none is a conffile, so an
+# existing copy is overwritten without a prompt.
+#
+# docker.asc is the key as published: sha256 1500c1f5...a570, fingerprint 9DC85822 9FC7DD38
+# 854AE2D8 8D81803C 0EBFCD88. scripts/renderer/tests/test_apt_source_components.py holds the digest.
+files:
+  - {src: docker.sources, dst: /etc/apt/sources.list.d/docker.sources}
+  - {src: docker.asc, dst: /etc/apt/keyrings/docker.asc}

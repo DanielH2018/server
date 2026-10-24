@@ -17,11 +17,14 @@
 # sits above the component's defaults (H3, *Component variables*). A package-level `defaults:` map
 # reaches only the package's own files, never a component's.
 description: daniel-box's homelab host package
-components: [reconcile, secrets-unit, k3s-restart, kuma-push, nut-secondary]
+components: [reconcile, secrets-unit, k3s-restart, kuma-push, nut-secondary, apt-github-cli]
 credentials:
   - k3s_readonly_token
   - ups_secondary_push_token
 maintainer_scripts: [preinst, postinst, prerm]
+# H7.24a: nfpm, for the builder this host runs.
+depends:
+  - homelab-tools
 files:
   # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).
   - {src: tmpfiles.d/homelab-k3s-restart.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-restart.conf}

@@ -527,8 +527,11 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 - **Package names:**
   - `homelab-<hostname>`, one per host;
-  - `homelab-updater`, the pull timer;
-  - `homelab-repos`, the third-party apt sources and keyrings.
+  - `homelab-updater`, the pull timer.
+
+  The third-party apt sources and keyrings ship in the host packages that use them, as the
+  `apt-docker`, `apt-azlux` and `apt-github-cli` components (operator ruling, 2026-10-24). No
+  shared `homelab-repos` package exists, because no source is used by every host.
 - **Version.** `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`,
   with `Architecture: all`. `<chosen>` is the commit the builder builds: the newest commit on
   `origin/master`'s first-parent chain with a green CI verdict, which can be older than the

@@ -7,59 +7,7 @@
 # chezmoi_setup is NOT one of the readers. DanielH2018/dotfiles is public and clones
 # anonymously, so the dotfiles land whether or not this host has logged in.
 
-- name: Ensure the APT keyring directory exists
-  tags: [github_cli]
-  ansible.builtin.file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-
-- name: Install the GitHub CLI GPG key
-  tags: [github_cli]
-  # Explicit mode, never a umask-inheriting `command`: initial_setup sets UMASK 027 earlier
-  # in this play, and a 0640 keyring is unreadable by apt's unprivileged _apt user, which
-  # reports the repo as unsigned. See docker_install for the failure this causes.
-  #
-  # The checksum is the bytes of the keyring as published. Unlike docker_install
-  # there is no fingerprint check after this task, so the checksum is the ONLY thing standing
-  # between a swapped key and apt trusting it. A keyring GitHub re-publishes fails here as a
-  # mismatch: verify the new fingerprint against cli.github.com, then update the hash.
-  ansible.builtin.get_url:
-    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
-    dest: /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    mode: "0644"
-    owner: root
-    group: root
-    checksum: sha256:6084d5d7bd8e288441e0e94fc6275570895da18e6751f70f057485dc2d1a811b
-  become: true
-
-- name: Add the GitHub CLI APT repository
-  tags: [github_cli]
-  # deb822 (.sources), not the deprecated one-line form. daniel-server still has the old
-  # github-cli.list from a hand install; the cleanup task below removes it.
-  ansible.builtin.deb822_repository:
-    name: github-cli
-    types: [deb]
-    uris: https://cli.github.com/packages
-    suites: stable
-    components: [main]
-    architectures: ["{{ repo_arch }}"]
-    signed_by: /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    state: present
-  vars:
-    repo_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
-  become: true
-
-- name: Remove the deprecated one-line GitHub CLI APT source
-  tags: [github_cli]
-  ansible.builtin.file:
-    path: /etc/apt/sources.list.d/github-cli.list
-    state: absent
-  become: true
-
+# The GitHub CLI apt source and its key come from the apt-github-cli component of the host package (H7.24a).
 - name: Install the GitHub CLI
   tags: [github_cli]
   ansible.builtin.apt:
