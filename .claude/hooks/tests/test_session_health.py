@@ -264,7 +264,9 @@ def test_stale_worktree_lines_swallows_a_timeout():
 
 # settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
 # buffers — the whole banner, parked-deployer warning included. The worktree read is
-# the slow step (it reaches GitHub), so it is bounded inside that budget and runs after a flush.
+# the slow step (it reaches GitHub), so its own cap sits inside that budget. Since #6153 every
+# probe runs before anything prints, under `TOTAL_DEADLINE_S`, and the flush only orders the
+# banner ahead of the worktree lines (test_session_health_deadline.py pins the deadline).
 
 
 def test_the_worktree_read_is_bounded_well_inside_the_hook_budget():

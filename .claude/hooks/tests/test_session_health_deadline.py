@@ -67,7 +67,10 @@ def test_a_probe_past_the_deadline_is_named_and_the_rest_still_print(capsys):
         target_problems=lambda: ["  ✗ target loki [loki:3100] down"],
         stale_worktree_lines=hung,
     )
-    assert _mod.main(deadline=0.2, **probes) == 0
+    try:
+        assert _mod.main(deadline=0.2, **probes) == 0
+    finally:
+        never.set()
     out = capsys.readouterr().out
     assert "loki" in out
     assert "the removable-worktree survey did not finish within 0.2s" in out

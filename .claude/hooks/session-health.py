@@ -615,8 +615,9 @@ def main(
     for line in unlabelled:
         print(line)
 
-    # Flushed before the worktree lines, which come from the slowest probe, so a failure
-    # printing them cannot cost the lines above.
+    # What keeps the banner inside the hook's budget is `deadline`, not this flush: every
+    # probe has finished or been given up on by now. The flush only puts the banner on the
+    # pipe ahead of the worktree lines.
     sys.stdout.flush()
     for line in worktrees + fanout:
         print(line)
