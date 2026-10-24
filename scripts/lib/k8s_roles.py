@@ -155,7 +155,7 @@ def misplaced_template_lookups(source: str) -> list[str]:
     schema-checked as nothing (a document with no `kind` is skipped) and placement-checked as
     nothing.
 
-    Only a literal path is judged. A target passed as a variable (image-builder's
+    A `*.sh.j2` target is not judged: it is a script, not app config. Only a literal path is judged. A target passed as a variable (image-builder's
     `lookup('template', src)`) resolves at task time from the caller's vars, which a text scan
     cannot see; those roles are in SKIP_ROLES regardless. Comments are stripped first — a
     `{# #}` block and a `#` line — so a comment that names a lookup by example (pihole's
@@ -165,7 +165,14 @@ def misplaced_template_lookups(source: str) -> list[str]:
     misplaced = []
     for call in _TEMPLATE_LOOKUP.finditer(source):
         path = _TEMPLATES_PATH.search(call.group(1))
-        if path and not path.group(1).startswith("config/"):
+        # A `*.sh.j2` is a shell script the shell-template gate renders and lints, and
+        # `is_manifest_template` already keeps it out of the manifest corpus, so a script a
+        # ConfigMap embeds may sit at `templates/` top level (longhorn-restore-drill).
+        if (
+            path
+            and not path.group(1).startswith("config/")
+            and not path.group(1).endswith(".sh.j2")
+        ):
             misplaced.append(path.group(1))
     return misplaced
 

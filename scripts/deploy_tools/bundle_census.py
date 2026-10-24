@@ -23,8 +23,9 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
 Beside it, the per-tag object census (`member_census`, H1.1c) fails a published tag whose
 render drops one of its `NAMED_MEMBERS`. A plumbing tag sets `prune: false`, so a dropped
 object stays serving and nothing reports it; the named members are the objects whose loss
-matters most. `longhorn-restore-drill` prunes, and its one member, the stamp ConfigMap, carries
-`prune: disabled`, so it too stays live and nothing reports it (H2.3b). The census applies to a
+matters most. `longhorn-restore-drill` prunes, but its stamp ConfigMap carries
+`prune: disabled`, so it stays live and nothing reports it (H2.3b). The drill's CronJob joined
+the ConfigMap as a named member at H2.3d. The census applies to a
 tag from the commit that publishes it, so a tag the bundle does not publish yet is not judged.
 
 The allowlist comes from the renderer's inputs, never from its output, so a renderer bug
@@ -341,7 +342,7 @@ def census(
 
 
 # Each plumbing tag's named members, as (kind, metadata.name), from H1's *Plumbing tags are
-# never pruned*, plus the restore drill's (H2.3b). Change a row in the PR that changes that list.
+# never pruned*, plus the restore drill's (H2.3b, and its CronJob at H2.3d). Change a row in the PR that changes that list.
 NAMED_MEMBERS: dict[str, frozenset[tuple[str, str]]] = {
     "cluster-base": frozenset(
         {
@@ -364,7 +365,10 @@ NAMED_MEMBERS: dict[str, frozenset[tuple[str, str]]] = {
     # Not a plumbing tag: it prunes. Its stamp ConfigMap holds state no render restores and
     # carries `prune: disabled`, so a render that drops it leaves it live (H2 Open question 12).
     "longhorn-restore-drill": frozenset(
-        {("ConfigMap", "longhorn-restore-drill-stamps")}
+        {
+            ("ConfigMap", "longhorn-restore-drill-stamps"),
+            ("CronJob", "longhorn-restore-drill"),
+        }
     ),
 }
 

@@ -15,11 +15,12 @@ clear in December unless both are.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from lib.repo_paths import ALL_VARS, K3S_DEFAULTS, LONGHORN_BACKUP_ROLE, ROLES
+from lib.repo_paths import ALL_VARS, K8S_ROLES, LONGHORN_BACKUP_ROLE, ROLES
 from _helpers import load_yaml
 
 PI_PEER_DEFAULTS = ROLES / "k8s/pi-peer-backup/defaults/main.yml"
 BACKUP_DEFAULTS = LONGHORN_BACKUP_ROLE / "defaults" / "main.yml"
+DRILL_DEFAULTS = K8S_ROLES / "longhorn-restore-drill" / "defaults" / "main.yml"
 
 # One date under each offset America/Chicago uses.
 CDT_DAY = datetime(2026, 9, 19, tzinfo=ZoneInfo("UTC"))
@@ -44,11 +45,11 @@ def _utc_minutes(local_cron: str, tz: str) -> set[tuple[int, int]]:
 
 def _longhorn_slots() -> dict[str, tuple[int, int]]:
     """Every Longhorn job that attaches or snapshots a backed-up volume, by UTC slot."""
-    k3s = load_yaml(K3S_DEFAULTS)
+    drill = load_yaml(DRILL_DEFAULTS)
     backup = load_yaml(BACKUP_DEFAULTS)
     return {
         "daily backup": _hhmm(backup["k3s_longhorn_backup_cron"]),
-        "restore drill": _hhmm(k3s["k3s_longhorn_restore_drill_cron"]),
+        "restore drill": _hhmm(drill["k3s_longhorn_restore_drill_cron"]),
         "weekly shard": _hhmm(backup["k3s_longhorn_weekly_backup_minute_hour"]),
     }
 

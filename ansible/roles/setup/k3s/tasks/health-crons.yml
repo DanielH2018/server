@@ -347,19 +347,29 @@
     cron_file: b2-budget-listing
   become: true
 
-- name: Schedule the Longhorn restore drill
+# The restore drill is a CronJob in the `longhorn-restore-drill` Flux role since H2.3d. Nothing
+# removes a cron file or a script the role stops declaring, so these two arms retire the host
+# copies. An absent arm names no schedule field, because the schedule key left this role's
+# defaults with the drill. The CronJob ships suspended, so deleting the cron here leaves no
+# scheduled drill until H2.3e unsuspends it; the arms must be applied, and the cron file seen
+# gone, before that flip.
+- name: Retire the host Longhorn restore drill cron
   tags: [backup-health]
-  # Runs as ROOT, unlike the heartbeat beside it. The drill creates and deletes Volume/PV/PVC
-  # objects and runs a pod; the read-only ServiceAccount the heartbeat uses is Forbidden on all
-  # of it. Root's k3s kubectl reads /etc/rancher/k3s/k3s.yaml and has the cluster-admin cert.
   ansible.builtin.cron:
     name: "Longhorn restore drill"
-    minute: "{{ k3s_longhorn_restore_drill_cron.split()[0] }}"
-    hour: "{{ k3s_longhorn_restore_drill_cron.split()[1] }}"
-    day: "{{ k3s_longhorn_restore_drill_cron.split()[2] }}"
-    user: root
-    job: "/usr/local/bin/longhorn-restore-drill.sh"
     cron_file: longhorn-restore-drill
+    user: root
+    state: absent
+  become: true
+
+- name: Retire the host Longhorn restore drill script
+  tags: [backup-health]
+  # `/usr/local/bin/longhorn-restore-drill.sh` is a symlink through
+  # `/opt/homelab/current/k3s-backup-health`, which release_bin.yml only ever creates. Once
+  # `current` swings to a release without the drill, the link dangles, so this arm removes it.
+  ansible.builtin.file:
+    path: /usr/local/bin/longhorn-restore-drill.sh
+    state: absent
   become: true
 
 # node-exporter's textfile collector reads this directory through a hostPath with no `type`, so

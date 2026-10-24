@@ -155,7 +155,7 @@ def test_task_whose_script_does_not_read_the_env_file_is_ignored():
         "ansible.builtin.import_tasks": "release_bin.yml",
         "vars": {
             "release_bin_templates": [
-                "ansible/roles/setup/k3s/templates/longhorn-restore-drill.sh.j2",
+                "ansible/roles/setup/k3s/templates/longhorn-trim-volumes.sh.j2",
             ],
         },
     }
