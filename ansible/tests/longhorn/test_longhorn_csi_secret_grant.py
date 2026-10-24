@@ -95,3 +95,10 @@ def test_the_patched_render_is_clean():
 
 def test_the_render_drops_both_upstream_objects():
     assert DELETED <= _deleted(_patch_docs())
+
+
+def test_each_delete_patch_names_an_upstream_object():
+    # kustomize refuses a build whose patch matches nothing, so a release that renames or
+    # drops a deleted object would fail the whole `longhorn` apply rather than this test.
+    upstream = {(d["kind"], d["metadata"]["name"]) for d in _docs(UPSTREAM.read_text())}
+    assert _deleted(_patch_docs()) - upstream == set()
