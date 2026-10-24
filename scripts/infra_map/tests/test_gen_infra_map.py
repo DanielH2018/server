@@ -33,6 +33,7 @@ from _infra_map import (
     docker_host,
     live_ok,
     model_for,
+    pi_host,
     service,
 )
 
@@ -100,7 +101,7 @@ def test_declared_services_omits_hostname_for_unrouted_services():
 
 
 def test_declared_services_tolerates_a_missing_containers_list():
-    assert g.declared_services("daniel-pi", {}, GLOBALS) == []
+    assert g.declared_services("daniel-server", {}, GLOBALS) == []
 
 
 def test_declared_services_skips_entries_without_a_name():
@@ -308,6 +309,7 @@ def test_build_model_counts_routed_and_sso_gated_services():
                 {"name": "autoheal"},
             ]
         ),
+        "daniel-pi": pi_host([]),
     }
     model = g.build_model(GLOBALS, host_vars, {}, "now", ROLES)
     server = next(h for h in model["hosts"] if h["name"] == "daniel-server")

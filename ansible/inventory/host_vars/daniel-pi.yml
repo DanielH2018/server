@@ -33,7 +33,7 @@ ansible_ssh_timeout: 30
 has_gitops: false
 # The only Docker host, so this is the one host that
 # opts IN to the engine (group_vars/all.yml defaults it false). Every service in
-# containers_list below runs on it.
+# containers_list and compose_services below runs on it.
 has_docker: true
 # A 512 MB Zero 2 W: the one host where a heavy apt step OOM-kills without the disk-backed
 # swapfile, so initial_setup's swap + watchdog-stop preamble and its apt-show-versions purge
@@ -121,3 +121,11 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
+# The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
+# A service lives in exactly one of this key and containers_list: Ansible's Docker play
+# deploys containers_list, and the package deploys this key. Entries keep containers_list's
+# field names. Empty until H5.6 moves the first service. Every reader of the Pi's services
+# reads both keys and fails on a missing one, so keep the key even when it is empty. The
+# cluster templates that read it are named in
+# docs/target-architecture/host/h5-pi-compose.md (The service list).
+compose_services: []

@@ -14,8 +14,8 @@
 # unhealthy Pi containers stop self-recovering; if docker-proxy dies, Alloy's docker_sd finds
 # no targets and this host's container logs stop reaching Loki, while Alloy keeps running
 # with zero targets. Kuma sees wg-easy from outside; docker-proxy-lifecycle it does not.
-# This heartbeat watches EVERY container the host deploys (containers_list, plus the docker-proxy
-# role's sub-proxies, which are services inside its compose file rather than list entries)
+# This heartbeat watches EVERY container the host deploys (containers_list and compose_services,
+# plus the docker-proxy role's sub-proxies, which are services inside its compose file rather than list entries)
 # and pushes `up` only while all of them run, to the static "Daniel Pi Recovery" Kuma push
 # monitor (uptime-kuma role), every 5 min.
 # Dead-man's-switch: an explicit `down` names the dead container fast, while a dead timer/host
@@ -54,8 +54,12 @@ if ! PUSH_TOKEN=$(cat "$TOKEN_FILE" 2>/dev/null) || [ -z "$PUSH_TOKEN" ]; then
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
-{# The watch set is DERIVED, not listed: every containers_list entry this host deploys, plus
-    the sub-proxies the docker-proxy role's compose file declares beside its list entry
+{# The watch set is DERIVED, not listed: every entry this host deploys in either of the Pi's two
+    lists (containers_list, which Ansible's Docker play deploys, and compose_services, which the
+    package deploys; a service sits in exactly one), sorted by name, so a move between the
+    lists leaves the script unchanged. Neither key has a default, so a missing one fails the
+    render. The set also holds the sub-proxies the docker-proxy role's compose file declares
+    beside its list entry
     (docker-proxy-lifecycle always; docker-proxy-codeserver only under has_code_server, the
     same gate the compose template uses). A blanket `docker ps -a --filter status=exited`
     would catch those for free and also resurrect a container an operator `docker stop`ped
@@ -63,7 +67,7 @@ PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
     this. Until #1910 the set was hardcoded to autoheal + docker-proxy, so glances, wg-easy
     and docker-proxy-lifecycle sat Exited/RestartCount 0 after a failed start until a human
     noticed. #}
-{% set _names = containers_list | map(attribute='name') | list %}
+{% set _names = (containers_list + compose_services) | map(attribute='name') | sort | list %}
 {% if 'docker-proxy' in _names %}
 {%   set _names = _names + ['docker-proxy-lifecycle'] %}
 {%   if has_code_server | default(false) %}

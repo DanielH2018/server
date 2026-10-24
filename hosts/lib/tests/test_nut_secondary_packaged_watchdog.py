@@ -1,9 +1,9 @@
 """The packaged branch of the UPS watchdog, rendered the way a host package renders it (H4.3b3).
 
-No package renders this branch yet. H4.3c's `nut-secondary` component sets
-`nut_host_watchdog_packaged` and renders the role's template in host mode, where no secret
-exists. These tests render the template that way for daniel-server now, so the branch is known
-to render, to read no secret and to be valid shell before a package depends on it.
+Since H4.3c, daniel-server's `nut-secondary` component sets `nut_host_watchdog_packaged` and
+renders the role's template in host mode, where no secret exists. These tests render the template
+that way for daniel-server directly, so the branch is known to render, to read no secret and to
+be valid shell, whatever the component's file entry does with it.
 
 Run: uv run pytest hosts/lib/tests/test_nut_secondary_packaged_watchdog.py
 """
