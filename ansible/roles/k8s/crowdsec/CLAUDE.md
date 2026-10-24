@@ -98,7 +98,8 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
   on the port of the `crowdsec-jobs` item in this role's `metrics` list. The export runs
   beside the Kuma push until M6's Cutover-2. observability's `crowdsec-jobs` scrape job and
   the `pod-producers` shadow rules read it, and netpol-baseline's Prometheus grant admits the
-  port.
+  port. autofix-bridge ships the same file in its own ConfigMap (M6 B7), so an edit to
+  `jobs_metrics.py` changes two pods.
 - **Run a job by hand** (operator-only, the read-only ServiceAccount is refused `pods/exec`):
   `sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec-jobs -- python3
   /jobs/crowdsec_jobs.py --run crowdsec-appsec-verify`. It pushes as a scheduled run does.

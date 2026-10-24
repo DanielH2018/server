@@ -27,6 +27,13 @@ pi_peer_backup_k8s_size: 128Mi
 # clear under both offsets.
 pi_peer_backup_k8s_schedule: "0 23 * * *"
 
+# The ConfigMap the script writes its verdict to as annotations, which kube-state-metrics exports
+# (M6 batch B7). The shadow rule PiPeerBackupNotReporting holds the CronJob's last successful run
+# to three periods of the schedule above, 259200s. The rule file is plain YAML, so
+# ansible/tests/services/test_pod_producer_rule_literals.py holds its literals to this name and
+# that schedule.
+pi_peer_backup_k8s_verdict_configmap: pi-peer-backup-verdict
+
 # The one directory the pull key may read. Named once because two places must agree on it:
 # the CronJob's PI_SRC and the forced command sshd pins the key to (files/pi-peer-backup-shell.sh
 # refuses any other path).

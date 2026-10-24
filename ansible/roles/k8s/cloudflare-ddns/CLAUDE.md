@@ -48,6 +48,13 @@ conventions.
 - Each Deployment pushes its own Kuma heartbeat over its own token — a shared token would
   hide either arm going stale behind the other still pushing.
 
+- favonia's image serves no metrics, so two shadow rule families watch it (M6 batch B7).
+  `CloudflareDdnsUnavailable` in observability's `pods` group reads each Deployment's available
+  replicas. `CloudflareDdnsDirectUpdateSilent` and `CloudflareDdnsProxiedUpdateSilent` in
+  loki-homelab's `homelab-logs.yaml` fire when a pod logs none of "are already up to date",
+  "Updated an outdated" or "Added a new" for 15 minutes. The pod name separates the two,
+  because both containers are named `cloudflare-ddns`.
+
 ## Editing
 - Manifests: `templates/deployment-direct.yaml.j2`, `templates/deployment-proxied.yaml.j2`,
   `templates/secret.yaml.j2`.

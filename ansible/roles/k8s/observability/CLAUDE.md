@@ -104,7 +104,9 @@ this goes QUIET.
 
 kube-state-metrics collects ConfigMaps for one annotation, `homelab/check-verdict`, and CronJobs
 for their last successful time (M6 B6b). The two health CronJobs of configarr and janitorr
-write the annotation, and the `pod-producers` rule group reads it. The Prometheus job drops
+write the annotation, and the `pod-producers` rule group reads it. The pi-peer-backup CronJob
+writes it too (M6 B7), and the `pods` rule group reads it beside the autofix-bridge exporter and
+the cloudflare-ddns Deployments' availability. The Prometheus job drops
 every other ConfigMap and CronJob family. The ClusterRole's ConfigMap `list` grant cannot be
 narrowed by name, and no collector exports ConfigMap `data`.
 

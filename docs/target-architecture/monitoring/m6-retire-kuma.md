@@ -1193,8 +1193,37 @@ reach A6-7a, fail the bijection test and lose its only pager.
           test (M5's departure from M1 convention 2). Every rule edit restarts Loki and the
           Alloy DaemonSet (M5 *Baseline*). Its red proof is M5's: a `lokitool` parse, a
           selector entry in `test_loki_stream_labels.py`'s census, and a live evaluation.
-    - **pi-peer-backup** uses the CronJob recipe, which adds `cronjobs,jobs` to
-      kube-state-metrics.
+    - **pi-peer-backup** uses the CronJob recipe. B6b already added the kube-state-metrics
+      collectors it needs, so B7 changes no kube-state-metrics argument.
+    - **The shadow PR, as written.** One PR covers the four producers.
+        - **File and group.** The rules are the `pods` group in `files/rules/pods.yaml`. The
+          cloudflare-ddns log rules are in loki-homelab's `homelab-logs.yaml`.
+        - **autofix-bridge** ships crowdsec's `jobs_metrics.py` in its ConfigMap rather than
+          monitor-bridge's `verdict_export.py`, because that module's listener lives in
+          `deploy_pipeline.py`, which imports the whole bridge. The `check` label is
+          `arr-autoblock`. `jobs_metrics.py` has no row-count gauge, so `AutofixBridgeStale`'s
+          missing-row arm reads no `homelab_check_success` series while `up` is 1. The pair keeps
+          `for: 10m`, `critical` and `shadow`. The design named only the pair, but the tile's
+          DOWN needs a verdict rule too, so `ArrAutoBlockFailing` (`warning`, no `for:`) ports it.
+          The inhibit on `ScrapeTargetDown{job="autofix-bridge"}` waits for Cutover-1b.
+        - **cloudflare-ddns.** `CloudflareDdnsUnavailable` is `warning` with `verify: "true"`,
+          because the health gate reads `critical` alerts and `verify` ones, and the tile has no
+          severity tag. It overlaps `K8sDeploymentZeroAvailable`. The two LogQL rules match
+          "are already up to date", "Updated an outdated" or "Added a new" over 15 minutes. They
+          match neither the Kuma ping line, which stops at Cutover-2, nor the "Checking the IP
+          addresses" line, which prints after a failed cycle too. They are slower than the tiles
+          (6 minutes, one missed beat) by design.
+        - **pi-peer-backup** has no kubectl, so its script sends one merge PATCH with curl and a
+          ServiceAccount token. The Role grants `patch` on `pi-peer-backup-verdict` and no
+          `get`, because the script sends no GET. The pod now mounts an API token. The gate run
+          skips the export. `PiPeerBackupNotReporting` waits three nights (259200s), 12 hours
+          longer than the tile's 60 hours.
+        - **`service` labels** name the thing checked: `autofix-bridge`, `cloudflare-ddns` and
+          `pi-peer-backup`.
+        - **`CheckWithoutPager`** gains four terms: Arr Auto-Block, Cloudflare DDNS Direct and
+          Cloudflare DDNS Proxied at `[2h]`, and WG Pi Peer Backup at `[120h10m]` (2 x 216000s +
+          10m). **`KUMA_RETIRING_TAGS`** gains `pi-peer-backup` alone, because the other two pods
+          log to no stream `swallowed_verdicts` reads.
 - **B8, the probes:**
     - Modules: `tcp_connect`, `dns`, and keyword checks through
       `fail_if_body_not_matches_regexp`.

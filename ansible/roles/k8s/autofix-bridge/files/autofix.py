@@ -32,6 +32,8 @@ Environment (all optional; deployment.yaml.j2 sets them, the credentials from en
     KUMA_URL, KUMA_PUSH_ARR_AUTOBLOCK                        the Uptime Kuma push monitor
     ARR_DISCORD_WEBHOOK_URL    Discord webhook for each action
     HEARTBEAT_FILE            file touched after every cycle (default /tmp/heartbeat)
+    CHECK_EXPORTER_PORT       port that serves the cycle's verdict as `homelab_check_*` gauges
+                              on /metrics (default 0: none; `--once` never serves)
 """
 
 import json
@@ -41,6 +43,7 @@ import urllib.parse
 import urllib.request
 
 import bridge.common
+import jobs_metrics
 from bridge.common import HTTP_TIMEOUT, _env, clamp_discord, sanitize
 from kuma_push import kuma_push
 
@@ -49,6 +52,13 @@ HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
 # No default: deployment.yaml.j2 renders it from the uptime-kuma entry's port, the only source.
 KUMA_URL = _env("KUMA_URL", "").rstrip("/")
 KUMA_PUSH = _env("KUMA_PUSH_ARR_AUTOBLOCK", "")
+# M6 batch B7: the cycle's verdict also leaves the pod as gauges, beside the Kuma push. The
+# `check` label is the Kuma tile's token name, and the deadline is three cycles: one missed
+# cycle is a slow poll and two is a hung one, so the third is the first that is not noise.
+# Unset or 0 serves nothing, which keeps a hand-run and the tests off the port.
+CHECK_EXPORTER_PORT = int(_env("CHECK_EXPORTER_PORT", "0"))
+CHECK = "arr-autoblock"
+DEADLINE_CYCLES = 3
 
 SONARR_URL = _env("SONARR_URL", "http://sonarr:8989").rstrip("/")
 SONARR_API_KEY = _env("SONARR_API_KEY", "")
@@ -339,28 +349,62 @@ def run_once(streaks):
     return True, "queue clean (%s)" % ", ".join(a[0] for a in configured)
 
 
+def start_exporter(port, interval, factory=jobs_metrics.Exposition):
+    """Starts the check exporter on `port` and returns it, or returns None when `port` is 0.
+
+    The one `check` is covered by a deadline of DEADLINE_CYCLES intervals. `factory` is the
+    exposition class; a test passes a recorder so no port is bound.
+    """
+    if not port:
+        return None
+    exposition = factory({CHECK: DEADLINE_CYCLES * interval})
+    exposition.serve(port)
+    return exposition
+
+
+def cycle_verdict(streaks, run=None):
+    """Returns `(ok, msg)` for one cycle; a cycle that raises is a DOWN naming the error.
+
+    An unreachable *arr or a failed mutation must not kill the loop. `run` defaults to
+    `run_once`; a test passes a stub.
+    """
+    try:
+        return (run or run_once)(streaks)
+    except Exception as e:
+        return False, "autofix-bridge error: %s" % e
+
+
+def report_cycle(exposition, ok, msg, push_fn=None):
+    """Logs a cycle's verdict, records it to the exporter, then pushes it to Kuma.
+
+    The record comes before the push, because `kuma_push` retries a rollout's 404 window for up
+    to about 90s and a scrape in that gap must not read the previous cycle's verdict.
+    `push_fn` defaults to `push`; a test passes a recorder.
+    """
+    bridge.common.log("OK  " if ok else "DOWN", msg)
+    if exposition:
+        exposition.record(CHECK, ok, time.time())
+    (push_fn or push)(ok, msg)
+
+
 def main():
     """Runs the poll+decide+act loop, pushing a Kuma heartbeat after every cycle.
 
     Loops forever at INTERVAL seconds unless invoked with --once, in which case it runs a
     single cycle and returns. A cycle's own exception is caught, logged, and pushed as a
-    DOWN status rather than allowed to kill the loop.
+    DOWN status rather than allowed to kill the loop. Each verdict also reaches the exporter
+    (`report_cycle`), which `--once` never starts.
     """
     once = "--once" in sys.argv
     streaks = {}
+    exposition = None if once else start_exporter(CHECK_EXPORTER_PORT, INTERVAL)
     bridge.common.log(
         "autofix-bridge starting (interval=%ss, dry_run=%s, once=%s)"
         % (INTERVAL, DRY_RUN, once)
     )
     while True:
-        try:
-            ok, msg = run_once(streaks)
-        except (
-            Exception
-        ) as e:  # an unreachable *arr / failed mutation must not kill the loop
-            ok, msg = False, "autofix-bridge error: %s" % e
-        bridge.common.log("OK  " if ok else "DOWN", msg)
-        push(ok, msg)
+        ok, msg = cycle_verdict(streaks)
+        report_cycle(exposition, ok, msg)
         bridge.common.touch_heartbeat(HEARTBEAT_FILE)
 
         if once:

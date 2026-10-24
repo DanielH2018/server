@@ -273,6 +273,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "hosts",
         "extra-probes",
         "pod-producers",
+        "pods",
     ]
     assert keys == {
         "alerting-meta.yaml",
@@ -300,6 +301,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "hosts.yaml",
         "extra-probes.yaml",
         "pod-producers.yaml",
+        "pods.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()

@@ -414,7 +414,7 @@ def test_loki_sets_name_every_m5_rule():
         "LokiRulerNotEvaluating",
         "LokiRulerNotificationsFailing",
     }
-    assert set(loki_sets(shadow=True)) == {"LokiHomelabDown", "WorkloadLogErrors"}
+    assert set(loki_sets(shadow=True)) >= {"LokiHomelabDown", "WorkloadLogErrors"}
 
 
 def test_container_sets_name_every_a2_rule_and_all_are_shadow():

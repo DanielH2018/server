@@ -136,6 +136,10 @@ pythonpath = [
   "ansible/roles/setup/gitops_deploy/files",
   "ansible/roles/setup/deploy_ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
+  # crowdsec/files: jobs_metrics.py is the same cross-role pattern, staged into autofix-bridge's
+  # ConfigMap rather than duplicated (M6 batch B7). Without this, `from jobs_metrics import ...`
+  # in autofix.py resolves only when a crowdsec test collected first.
+  "ansible/roles/k8s/crowdsec/files",
   # flux_job_connect.py is the one transport of every Job script Flux runs, and
   # arr-notification's seed imports it from here on the controller path too.
   "ansible/roles/k8s/manifests/files",

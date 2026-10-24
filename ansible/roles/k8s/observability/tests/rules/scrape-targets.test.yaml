@@ -146,6 +146,33 @@ tests:
                 have gone stale. Read the exporter pod's events and log, or the host's unit for
                 a static target.
 
+  # autofix-bridge's check exporter (M6 batch B7): its own rule names the service, and the
+  # catch-all excludes the job, so exactly one rule pages it.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="autofix-bridge", instance="autofix-bridge.homelab.svc:9183"}'
+        values: '1x2 0x20'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ScrapeTargetDown
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: ScrapeTargetDown
+        exp_alerts:
+          - exp_labels:
+              job: autofix-bridge
+              instance: autofix-bridge.homelab.svc:9183
+              severity: warning
+              service: autofix-bridge
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus cannot scrape the autofix-bridge target autofix-bridge.homelab.svc:9183.
+              description: >-
+                autofix-bridge.homelab.svc:9183 of job autofix-bridge has failed its scrape for 10
+                minutes, so its exporter is down or unreachable from Prometheus and its series
+                have gone stale. Read the exporter pod's events and log, or the host's unit for
+                a static target.
+
   # The exporter's failed scrape. The target carries service=homepage, and the rule's literal replaces it.
   - interval: 1m
     input_series:

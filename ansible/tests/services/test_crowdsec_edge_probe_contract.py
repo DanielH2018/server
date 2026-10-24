@@ -19,18 +19,15 @@ Run: uv run pytest ansible/tests/services/test_crowdsec_edge_probe_contract.py
 import os
 import re
 import subprocess
-import sys
 
 import pytest
 
 from _compose_render import rendered_text
-from _helpers import K8S_ROLES, SETUP_ROLES
+from _helpers import SETUP_ROLES
 from lib.proc_testing import write_exec
 
-# crowdsec's verify module ships from its role's files/, which pytest puts on sys.path only for
-# that role's own tests.
-sys.path.insert(0, str(K8S_ROLES / "crowdsec" / "files"))
-
+# crowdsec's verify module ships from its role's files/, which `pythonpath` in pyproject.toml
+# puts on sys.path (autofix-bridge's ConfigMap carries crowdsec's jobs_metrics.py).
 import crowdsec_verify
 
 PROBE = SETUP_ROLES / "k8s_host_files" / "files" / "crowdsec-edge-probe.sh"

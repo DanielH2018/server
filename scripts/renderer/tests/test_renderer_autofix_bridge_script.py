@@ -26,11 +26,12 @@ from renderer.renderer_lib.restart import (
 TAG = "autofix-bridge"
 CONFIG_MAP = "autofix-bridge-script"
 CONFIG_MAP_FILE = "script-configmap.yaml"
-# The three modules the pod imports, each key with the file it must equal.
+# The four modules the pod imports, each key with the file it must equal.
 MODULES = {
     "autofix.py": ANSIBLE / "roles/k8s/autofix-bridge/files/autofix.py",
     "bridge_common.py": ANSIBLE / "roles/k8s/monitor-bridge/files/bridge/common.py",
     "kuma_push.py": ANSIBLE / "roles/setup/common/files/kuma_push.py",
+    "jobs_metrics.py": ANSIBLE / "roles/k8s/crowdsec/files/jobs_metrics.py",
 }
 ALL = frozenset({"ConfigMap", "Secret"})
 

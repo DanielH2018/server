@@ -1,0 +1,450 @@
+# promtool unit tests for files/rules/pods.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# autofix-bridge's series carry the labels the live scrape gives them: job `autofix-bridge`,
+# instance autofix-bridge.homelab.svc:9183 and `check="arr-autoblock"`, with the deadline the
+# exporter sets, three cycles of 300s. A timestamp written `0+60x40` equals the evaluation time in
+# seconds, so the loop is fresh. The two cases the design names for AutofixBridgeStale are a stale
+# timestamp and a missing row; a single missed scrape and a restart's partial first cycle must
+# stay quiet, and so must a dead exporter, which AutofixBridgeDown owns. The CronJob's series
+# come from the kube-state-metrics job, with the annotation as the label kube-state-metrics gives
+# it. Each firing case also asserts the evaluation just short of the `for:` hold, so a shortened
+# hold fails here.
+rule_files:
+  - ../../files/rules/pods.yaml
+evaluation_interval: 1m
+tests:
+  # ArrAutoBlockFailing: a down verdict fires at once, an up verdict does not.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ArrAutoBlockFailing
+        exp_alerts:
+          - exp_labels:
+              job: autofix-bridge
+              instance: autofix-bridge.homelab.svc:9183
+              check: arr-autoblock
+              severity: warning
+              service: autofix-bridge
+              shadow: 'true'
+            exp_annotations:
+              summary: autofix-bridge's last cycle failed.
+              description: 'The *arr auto-block loop reported down: Sonarr or Radarr was unreachable,
+                a blocklist or search call failed, or more than the per-cycle cap of queue items were
+                eligible at once, so it acted on none. Read the autofix-bridge pod''s log in the homelab
+                namespace.'
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ArrAutoBlockFailing
+        exp_alerts: []
+  # AutofixBridgeDown, arm one: a target that reads up 0 for the whole hold.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AutofixBridgeDown
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: AutofixBridgeDown
+        exp_alerts:
+          - exp_labels:
+              job: autofix-bridge
+              instance: autofix-bridge.homelab.svc:9183
+              severity: critical
+              service: autofix-bridge
+              shadow: 'true'
+            exp_annotations:
+              summary: Prometheus cannot scrape autofix-bridge's check exporter.
+              description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
+                the autofix-bridge pod is down or the autofix-bridge scrape job is gone from prometheus.yml.
+                Read the pod's events and log in the homelab namespace.
+  # AutofixBridgeDown, arm two: the scrape job is missing, so there is no `up` series at all.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AutofixBridgeDown
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: AutofixBridgeDown
+        exp_alerts:
+          - exp_labels:
+              job: autofix-bridge
+              severity: critical
+              service: autofix-bridge
+              shadow: 'true'
+            exp_annotations:
+              summary: Prometheus cannot scrape autofix-bridge's check exporter.
+              description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
+                the autofix-bridge pod is down or the autofix-bridge scrape job is gone from prometheus.yml.
+                Read the pod's events and log in the homelab namespace.
+  # A restart: the pod is gone for 4 minutes (up 0, then no series), then returns. Quiet.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '1x5 0x4 1x25'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: AutofixBridgeDown
+        exp_alerts: []
+  # One missed scrape: a single 0 between healthy samples. Quiet.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '1x10 0 1x25'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: AutofixBridgeDown
+        exp_alerts: []
+  # AutofixBridgeStale, arm one: the timestamp stops moving at minute 0. The deadline is 900s, so
+  # it ages out at minute 15, and the 10m hold fires it at minute 25.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '1x40'
+      - series: homelab_check_success{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '1x40'
+      - series: homelab_check_last_run_timestamp_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '0x40'
+      - series: homelab_check_deadline_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '900x40'
+    alert_rule_test:
+      - eval_time: 24m
+        alertname: AutofixBridgeStale
+        exp_alerts: []
+      - eval_time: 27m
+        alertname: AutofixBridgeStale
+        exp_alerts:
+          - exp_labels:
+              job: autofix-bridge
+              instance: autofix-bridge.homelab.svc:9183
+              check: arr-autoblock
+              severity: critical
+              service: autofix-bridge
+              shadow: 'true'
+            exp_annotations:
+              summary: autofix-bridge's loop has stopped recording its cycle verdict.
+              description: For 10 minutes either the cycle's homelab_check_last_run_timestamp_seconds
+                has aged past its homelab_check_deadline_seconds, or the exporter is up and serves no
+                homelab_check_success. The scrape works, so the loop is hung or never completes a cycle.
+                Read the autofix-bridge pod's log in the homelab namespace.
+  # A fresh timestamp: the loop records every minute. Quiet.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '1x40'
+      - series: homelab_check_success{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '1x40'
+      - series: homelab_check_last_run_timestamp_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: 0+60x40
+      - series: homelab_check_deadline_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '900x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: AutofixBridgeStale
+        exp_alerts: []
+  # AutofixBridgeStale, arm two: the exporter is up and fresh, but the success row never appears.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '1x40'
+      - series: homelab_check_last_run_timestamp_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: 0+60x40
+      - series: homelab_check_deadline_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '900x40'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: AutofixBridgeStale
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: AutofixBridgeStale
+        exp_alerts:
+          - exp_labels:
+              job: autofix-bridge
+              severity: critical
+              service: autofix-bridge
+              shadow: 'true'
+            exp_annotations:
+              summary: autofix-bridge's loop has stopped recording its cycle verdict.
+              description: For 10 minutes either the cycle's homelab_check_last_run_timestamp_seconds
+                has aged past its homelab_check_deadline_seconds, or the exporter is up and serves no
+                homelab_check_success. The scrape works, so the loop is hung or never completes a cycle.
+                Read the autofix-bridge pod's log in the homelab namespace.
+  # A restart's partial first cycle: the exporter serves the timestamp and deadline from its
+  # start, and the first cycle's success gauge appears 5 minutes later. Quiet at every step.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '1x40'
+      - series: homelab_check_success{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '_x5 1x35'
+      - series: homelab_check_last_run_timestamp_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: 0+60x40
+      - series: homelab_check_deadline_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '900x40'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: AutofixBridgeStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: AutofixBridgeStale
+        exp_alerts: []
+  # One missed scrape: Prometheus marks every series stale for that one evaluation and `up` reads
+  # 0, so neither arm holds. Quiet.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '1x10 0 1x25'
+      - series: homelab_check_success{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '1x10 stale 1x25'
+      - series: homelab_check_last_run_timestamp_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '0+60x10 stale 660+60x25'
+      - series: homelab_check_deadline_seconds{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183",check="arr-autoblock"}
+        values: '900x10 stale 900x25'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AutofixBridgeStale
+        exp_alerts: []
+  # A dead exporter: `up` reads 0 and no check series exists. AutofixBridgeStale stays quiet,
+  # because AutofixBridgeDown owns that case.
+  - interval: 1m
+    input_series:
+      - series: up{job="autofix-bridge",instance="autofix-bridge.homelab.svc:9183"}
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AutofixBridgeStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: AutofixBridgeDown
+        exp_alerts:
+          - exp_labels:
+              job: autofix-bridge
+              instance: autofix-bridge.homelab.svc:9183
+              severity: critical
+              service: autofix-bridge
+              shadow: 'true'
+            exp_annotations:
+              summary: Prometheus cannot scrape autofix-bridge's check exporter.
+              description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
+                the autofix-bridge pod is down or the autofix-bridge scrape job is gone from prometheus.yml.
+                Read the pod's events and log in the homelab namespace.
+  # CloudflareDdnsUnavailable: the direct Deployment has no available replica for the whole hold.
+  - interval: 1m
+    input_series:
+      - series: kube_deployment_status_replicas_available{job="kube-state-metrics",namespace="homelab",deployment="cloudflare-ddns-direct"}
+        values: '0x30'
+      - series: kube_deployment_status_replicas_available{job="kube-state-metrics",namespace="homelab",deployment="cloudflare-ddns-proxied"}
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: CloudflareDdnsUnavailable
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: CloudflareDdnsUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              namespace: homelab
+              deployment: cloudflare-ddns-direct
+              severity: warning
+              service: cloudflare-ddns
+              verify: 'true'
+              shadow: 'true'
+            exp_annotations:
+              summary: A cloudflare-ddns Deployment has no available replica.
+              description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
+                for 10 minutes, or kube-state-metrics reports none, so its Cloudflare A records are not
+                being kept current. The `deployment` label says which. Read that Deployment's pod events
+                and log in the homelab namespace.
+  # The proxied Deployment alone is unavailable. The selector must reach both names.
+  - interval: 1m
+    input_series:
+      - series: kube_deployment_status_replicas_available{job="kube-state-metrics",namespace="homelab",deployment="cloudflare-ddns-direct"}
+        values: '1x30'
+      - series: kube_deployment_status_replicas_available{job="kube-state-metrics",namespace="homelab",deployment="cloudflare-ddns-proxied"}
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: CloudflareDdnsUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              namespace: homelab
+              deployment: cloudflare-ddns-proxied
+              severity: warning
+              service: cloudflare-ddns
+              verify: 'true'
+              shadow: 'true'
+            exp_annotations:
+              summary: A cloudflare-ddns Deployment has no available replica.
+              description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
+                for 10 minutes, or kube-state-metrics reports none, so its Cloudflare A records are not
+                being kept current. The `deployment` label says which. Read that Deployment's pod events
+                and log in the homelab namespace.
+  # A rolling update: the pod is gone for 3 minutes, then returns. Quiet.
+  - interval: 1m
+    input_series:
+      - series: kube_deployment_status_replicas_available{job="kube-state-metrics",namespace="homelab",deployment="cloudflare-ddns-direct"}
+        values: '1x5 0x3 1x25'
+      - series: kube_deployment_status_replicas_available{job="kube-state-metrics",namespace="homelab",deployment="cloudflare-ddns-proxied"}
+        values: '1x33'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: CloudflareDdnsUnavailable
+        exp_alerts: []
+  # A Deployment that is gone from kube-state-metrics: the absent arm fires.
+  - interval: 1m
+    input_series:
+      - series: kube_deployment_status_replicas_available{job="kube-state-metrics",namespace="homelab",deployment="cloudflare-ddns-proxied"}
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: CloudflareDdnsUnavailable
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              deployment: cloudflare-ddns-direct
+              severity: warning
+              service: cloudflare-ddns
+              verify: 'true'
+              shadow: 'true'
+            exp_annotations:
+              summary: A cloudflare-ddns Deployment has no available replica.
+              description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
+                for 10 minutes, or kube-state-metrics reports none, so its Cloudflare A records are not
+                being kept current. The `deployment` label says which. Read that Deployment's pod events
+                and log in the homelab namespace.
+  # A dead kube-state-metrics leaves both Deployments to ScrapeTargetDown: no series, `up` 0.
+  - interval: 1m
+    input_series:
+      - series: up{job="kube-state-metrics",instance="kube-state-metrics:8080"}
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: CloudflareDdnsUnavailable
+        exp_alerts: []
+  # PiPeerBackupFailed: a down annotation fires at once, an up annotation does not.
+  - interval: 1m
+    input_series:
+      - series: kube_configmap_annotations{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",configmap="pi-peer-backup-verdict",annotation_homelab_check_verdict="down"}
+        values: 1x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PiPeerBackupFailed
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              configmap: pi-peer-backup-verdict
+              annotation_homelab_check_verdict: down
+              severity: warning
+              service: pi-peer-backup
+              shadow: 'true'
+            exp_annotations:
+              summary: The nightly daniel-pi peer-key backup failed.
+              description: 'The pi-peer-backup script reported down: rsync from daniel-pi failed, daniel-pi''s
+                host key no longer matches the committed pin, or fewer than two files came back. The WireGuard
+                peer keys are un-rebuildable, so the last good copy is the only one. Read the annotation
+                `homelab/check-message` on the pi-peer-backup-verdict ConfigMap, then `kubectl -n homelab
+                logs` on the newest pi-peer-backup Job.'
+  - interval: 1m
+    input_series:
+      - series: kube_configmap_annotations{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",configmap="pi-peer-backup-verdict",annotation_homelab_check_verdict="up"}
+        values: 1x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PiPeerBackupFailed
+        exp_alerts: []
+  # PiPeerBackupNotReporting, zero-series case: no run clock at all. The 72h range sees nothing,
+  # so the absent arm fires once the 5m hold passes.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PiPeerBackupNotReporting
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: PiPeerBackupNotReporting
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              cronjob: pi-peer-backup
+              severity: warning
+              service: pi-peer-backup
+              shadow: 'true'
+            exp_annotations:
+              summary: The pi-peer-backup CronJob has not succeeded in three nights.
+              description: The pi-peer-backup CronJob has no successful run newer than 72 hours, so the
+                WireGuard peer keys have not been copied off daniel-pi for three nights. Read `kubectl
+                -n homelab get jobs` for its newest Job and that Job's logs. A failed export of the verdict
+                ends the run with exit 1.
+  # The run clock stops at minute 0. It passes 259200s (4320m) and the 5m hold ends at 4326m.
+  - interval: 1m
+    input_series:
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="pi-peer-backup"}
+        values: '0x4400'
+    alert_rule_test:
+      - eval_time: 4320m
+        alertname: PiPeerBackupNotReporting
+        exp_alerts: []
+      - eval_time: 4324m
+        alertname: PiPeerBackupNotReporting
+        exp_alerts: []
+      - eval_time: 4330m
+        alertname: PiPeerBackupNotReporting
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              cronjob: pi-peer-backup
+              severity: warning
+              service: pi-peer-backup
+              shadow: 'true'
+            exp_annotations:
+              summary: The pi-peer-backup CronJob has not succeeded in three nights.
+              description: The pi-peer-backup CronJob has no successful run newer than 72 hours, so the
+                WireGuard peer keys have not been copied off daniel-pi for three nights. Read `kubectl
+                -n homelab get jobs` for its newest Job and that Job's logs. A failed export of the verdict
+                ends the run with exit 1.
+  # A run clock that keeps pace with the evaluation time (a run every minute, as fast as a
+  # test can say it): never stale, never fires.
+  - interval: 1m
+    input_series:
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="pi-peer-backup"}
+        values: 0+60x4400
+    alert_rule_test:
+      - eval_time: 4330m
+        alertname: PiPeerBackupNotReporting
+        exp_alerts: []
+  # A nightly run: the clock moves every 1440 minutes and lags the evaluation by under 3 days.
+  # Quiet through the whole 3-day window, even right before the next run lands.
+  - interval: 1m
+    input_series:
+      - series: kube_cronjob_status_last_successful_time{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",cronjob="pi-peer-backup"}
+        values: '0x1439 86400x1440 172800x1440 259200x1440'
+    alert_rule_test:
+      - eval_time: 4300m
+        alertname: PiPeerBackupNotReporting
+        exp_alerts: []
+  # A dead kube-state-metrics leaves the run clock to ScrapeTargetDown: no series, `up` 0.
+  - interval: 1m
+    input_series:
+      - series: up{job="kube-state-metrics",instance="kube-state-metrics:8080"}
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: PiPeerBackupNotReporting
+        exp_alerts: []

@@ -26,6 +26,12 @@ autofix_bridge_modules:
   - name: kuma_push.py
     path: kuma_push.py
     src: "{{ playbook_dir }}/roles/setup/common/files/kuma_push.py"
+  # crowdsec's check exporter (M6 batch B6b): the stdlib `homelab_check_*` gauge server, shipped
+  # cross-role like the two above so the verdict has one implementation. autofix.py serves the
+  # cycle's verdict through it on CHECK_EXPORTER_PORT.
+  - name: jobs_metrics.py
+    path: jobs_metrics.py
+    src: "{{ playbook_dir }}/roles/k8s/crowdsec/files/jobs_metrics.py"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the auto-remediation twin of monitor-bridge — a broken deploy silently stops
