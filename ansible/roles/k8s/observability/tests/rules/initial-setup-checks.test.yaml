@@ -28,7 +28,7 @@ tests:
             exp_annotations:
               summary: daniel-box's generated-docs refresh has stopped reporting.
               description: >-
-                No docs-refresh verdict newer than 46800s reached Prometheus from daniel-box's
+                No docs-refresh verdict newer than 13 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the generated docs are refreshing. Read
                 the `Refresh generated docs` cron and the `docs-refresh` syslog tag, then
                 /var/lib/node-exporter-textfile/docs-refresh.prom on the host.
@@ -42,7 +42,7 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly eval sweep has stopped reporting.
               description: >-
-                No eval-run verdict newer than 626400s reached Prometheus from daniel-box's
+                No eval-run verdict newer than 7 days 6 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the eval sweep is running. Read the
                 `Homelab eval sweep` cron and the `eval-run` syslog tag, then
                 /var/lib/node-exporter-textfile/eval-run.prom on the host.
@@ -56,7 +56,7 @@ tests:
             exp_annotations:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
-                No secret-rotation-audit verdict newer than 90000s reached Prometheus from
+                No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms secret rotation is being
                 audited. Read `systemctl status kuma-check-secret-rotation-audit` on daniel-box,
                 then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
@@ -70,7 +70,7 @@ tests:
             exp_annotations:
               summary: daniel-server's setup-drift check has stopped reporting.
               description: >-
-                No setup-drift-check verdict newer than 90000s reached Prometheus from
+                No setup-drift-check verdict newer than 25 hours reached Prometheus from
                 daniel-server's textfile collector, so nothing confirms the setup plane is being
                 compared with the repo. Read `systemctl status kuma-check-setup-drift` on
                 daniel-server, then /var/lib/node-exporter-textfile/setup-drift-check.prom on
@@ -85,7 +85,7 @@ tests:
             exp_annotations:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
-                No loki-read-route-health verdict newer than 7200s reached Prometheus from
+                No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the Loki read route is
                 being witnessed. Read `systemctl status kuma-check-loki-read-route` on
                 daniel-box, then /var/lib/node-exporter-textfile/loki-read-route-health.prom on
@@ -94,7 +94,7 @@ tests:
             exp_annotations:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-
-                No loki-read-route-health verdict newer than 7200s reached Prometheus from
+                No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-server's textfile collector, so nothing confirms the Loki read route is
                 being witnessed. Read `systemctl status kuma-check-loki-read-route` on
                 daniel-server, then /var/lib/node-exporter-textfile/loki-read-route-health.prom
@@ -253,7 +253,7 @@ tests:
             exp_annotations:
               summary: daniel-box's generated-docs refresh has stopped reporting.
               description: >-
-                No docs-refresh verdict newer than 46800s reached Prometheus from daniel-box's
+                No docs-refresh verdict newer than 13 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the generated docs are refreshing. Read
                 the `Refresh generated docs` cron and the `docs-refresh` syslog tag, then
                 /var/lib/node-exporter-textfile/docs-refresh.prom on the host.
@@ -274,7 +274,7 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly eval sweep has stopped reporting.
               description: >-
-                No eval-run verdict newer than 626400s reached Prometheus from daniel-box's
+                No eval-run verdict newer than 7 days 6 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the eval sweep is running. Read the
                 `Homelab eval sweep` cron and the `eval-run` syslog tag, then
                 /var/lib/node-exporter-textfile/eval-run.prom on the host.
@@ -295,7 +295,7 @@ tests:
             exp_annotations:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
-                No secret-rotation-audit verdict newer than 90000s reached Prometheus from
+                No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms secret rotation is being
                 audited. Read `systemctl status kuma-check-secret-rotation-audit` on daniel-box,
                 then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
@@ -316,7 +316,7 @@ tests:
             exp_annotations:
               summary: daniel-server's setup-drift check has stopped reporting.
               description: >-
-                No setup-drift-check verdict newer than 90000s reached Prometheus from
+                No setup-drift-check verdict newer than 25 hours reached Prometheus from
                 daniel-server's textfile collector, so nothing confirms the setup plane is being
                 compared with the repo. Read `systemctl status kuma-check-setup-drift` on
                 daniel-server, then /var/lib/node-exporter-textfile/setup-drift-check.prom on
@@ -344,7 +344,7 @@ tests:
             exp_annotations:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
-                No loki-read-route-health verdict newer than 7200s reached Prometheus from
+                No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the Loki read route is
                 being witnessed. Read `systemctl status kuma-check-loki-read-route` on
                 daniel-box, then /var/lib/node-exporter-textfile/loki-read-route-health.prom on
@@ -372,7 +372,7 @@ tests:
             exp_annotations:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-
-                No loki-read-route-health verdict newer than 7200s reached Prometheus from
+                No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-server's textfile collector, so nothing confirms the Loki read route is
                 being witnessed. Read `systemctl status kuma-check-loki-read-route` on
                 daniel-server, then /var/lib/node-exporter-textfile/loki-read-route-health.prom
@@ -398,7 +398,7 @@ tests:
             exp_annotations:
               summary: daniel-box's generated-docs refresh has stopped reporting.
               description: >-
-                No docs-refresh verdict newer than 46800s reached Prometheus from daniel-box's
+                No docs-refresh verdict newer than 13 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the generated docs are refreshing. Read
                 the `Refresh generated docs` cron and the `docs-refresh` syslog tag, then
                 /var/lib/node-exporter-textfile/docs-refresh.prom on the host.
@@ -419,7 +419,7 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly eval sweep has stopped reporting.
               description: >-
-                No eval-run verdict newer than 626400s reached Prometheus from daniel-box's
+                No eval-run verdict newer than 7 days 6 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the eval sweep is running. Read the
                 `Homelab eval sweep` cron and the `eval-run` syslog tag, then
                 /var/lib/node-exporter-textfile/eval-run.prom on the host.
@@ -440,7 +440,7 @@ tests:
             exp_annotations:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
-                No secret-rotation-audit verdict newer than 90000s reached Prometheus from
+                No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms secret rotation is being
                 audited. Read `systemctl status kuma-check-secret-rotation-audit` on daniel-box,
                 then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
@@ -461,7 +461,7 @@ tests:
             exp_annotations:
               summary: daniel-server's setup-drift check has stopped reporting.
               description: >-
-                No setup-drift-check verdict newer than 90000s reached Prometheus from
+                No setup-drift-check verdict newer than 25 hours reached Prometheus from
                 daniel-server's textfile collector, so nothing confirms the setup plane is being
                 compared with the repo. Read `systemctl status kuma-check-setup-drift` on
                 daniel-server, then /var/lib/node-exporter-textfile/setup-drift-check.prom on
@@ -489,7 +489,7 @@ tests:
             exp_annotations:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
-                No loki-read-route-health verdict newer than 7200s reached Prometheus from
+                No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the Loki read route is
                 being witnessed. Read `systemctl status kuma-check-loki-read-route` on
                 daniel-box, then /var/lib/node-exporter-textfile/loki-read-route-health.prom on
@@ -517,7 +517,7 @@ tests:
             exp_annotations:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-
-                No loki-read-route-health verdict newer than 7200s reached Prometheus from
+                No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-server's textfile collector, so nothing confirms the Loki read route is
                 being witnessed. Read `systemctl status kuma-check-loki-read-route` on
                 daniel-server, then /var/lib/node-exporter-textfile/loki-read-route-health.prom

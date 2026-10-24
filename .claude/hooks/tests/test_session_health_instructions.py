@@ -87,6 +87,7 @@ def _session(
         _mod.main(
             read_payload=lambda: payload,
             target_problems=lambda: [],
+            stale_release_problems=lambda: [],
             master_moved_problems=lambda: [],
             parked_deployer_problems=lambda: [],
             other_live_sessions=lambda cwd: [],

@@ -41,8 +41,15 @@ from _loki_streams import (
 def test_the_alloy_config_is_actually_readable():
     """A path typo would make _alloy_relabel_targets() return an empty set, silently reducing
     the vocabulary to the transcribed floor and re-opening the gap this closes."""
-    assert _alloy_relabel_targets() >= {"container", "pod", "namespace", "machine"}, (
-        "the expected target_label values did not parse from the Alloy config — the path or "
+    # `program` is the one label a `stage.labels` block sets rather than a relabel rule.
+    assert _alloy_relabel_targets() >= {
+        "container",
+        "pod",
+        "namespace",
+        "machine",
+        "program",
+    }, (
+        "the expected label names did not parse from the Alloy config — the path or "
         "the config shape changed, and the derived half of LOKI_STREAM_LABELS is now inert"
     )
 

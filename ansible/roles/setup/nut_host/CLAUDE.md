@@ -1,92 +1,32 @@
-# nut_host — host half of the UPS shutdown chain
+# nut_host — emptied; the host packages own the UPS shutdown chain's host half
 
-The host-side pieces of the UPS stack: the udev rule that lets the `k8s/nut` pod open the
-APC UPS over USB, and a **secondary `upsmon`** on each armed host that powers the host off
-when the primary declares FSD. **The role ends on `ups_host` since H4.3c**, because the
-`homelab-daniel-server` package owns daniel-server's half (see *Where it runs*). The role
-applies to daniel-box alone. The primary `upsd`/`upsmon` is the `k8s/nut` pod, pinned to
-`ups_host`; `ansible/roles/k8s/nut/CLAUDE.md` owns the chain end to end and this file covers
-only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
+The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` marker in
+`ansible/roles/setup/nut_host/tasks/main.yml`. H7.33 emptied it. It stays until H7.20a, because
+`ansible/initial_setup.yml` names it and an edit to that playbook parks the deployer. Repo-root
+`CLAUDE.md` has the conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "nut_host"` when `inventory_hostname == ups_host or
-  nut_host_secondary_armed | bool`; ends on hosts where `inventory_hostname == ups_host`
-  (leading `meta: end_role`)
-- **Crons (1):**
-  - `UPS secondary watchdog` — `*/10 * * * *`
+  nut_host_secondary_armed | bool`; ends on hosts where `True` (leading `meta: end_role`)
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
 <!-- /generated_from -->
 
-## Where it runs
-- A setup-plane role: `ansible/initial_setup.yml` includes it, `deploy.yml` does not, and
-  `deploy.sh --tags nut_host` exits 2 having deployed nothing. Apply it with
-  `uv run ansible-playbook ansible/initial_setup.yml --tags nut_host -e target=<host>`, once
-  per host.
-- Gate: `when: inventory_hostname == ups_host or nut_host_secondary_armed | bool`. Any host
-  other than `ups_host` runs the client half, and only after `nut_host_secondary_armed: true`
-  is set in its `host_vars` — daniel-box since 2026-08-28.
-- **The role ends on `ups_host`.** Its first task is `meta: end_role` with
-  `when: inventory_hostname == ups_host`, under a `# DECIDED` marker. Since H4.3c the
-  `homelab-daniel-server` package owns daniel-server's half: the udev rule, the `nut-monitor`
-  drop-in and the `homelab-ups-watchdog` timer, all from `hosts/components/nut-secondary/`.
-  The guard lives in the role because an `initial_setup.yml` edit is in
-  `_BROAD_MANUAL_PREFIXES` and parks every session's landing. `setup_gates.role_end_guard`
-  reads it, so the two-writer census, `land_reach` and the *Applied by* line all know the role
-  ends there. Reviving daniel-server's half under Ansible means deleting the guard, and
-  the package's legacy entries then collide with the role in the census.
-- A secondary upsmon exists to power its host off, so arm a further host only after the
-  console-attended `upsmon -c fsd` drill.
-- **It lived at `ansible/roles/nut_host/` until 2026-09-17.** Outside `roles/setup/` it was
-  invisible to the deployer's `_BROAD_SETUP_PREFIXES` and to `land.sh`'s plane note, so PR
-  #1915 landed on master with its change unapplied and unreported on both hosts (#1916).
-  `ansible.cfg`'s `roles_path` lists `ansible/roles/setup/`, so the bare `role: nut_host` in
-  `initial_setup.yml` resolved unchanged across the move.
-  `ansible/tests/setup/test_initial_setup_roles_are_visible_to_the_deployer.py` refuses a
-  sibling in that position.
+## Where the work went
+`hosts/components/nut-secondary/` owns the secondary `upsmon` on both cluster nodes: the
+`nut-monitor` drop-in that points upsmon at the rendered
+`/var/lib/homelab-secrets/etc/nut/upsmon.conf`, the `homelab-ups-watchdog` timer, and
+the APC udev rule, which matches nothing on daniel-box. `ansible/roles/k8s/nut/CLAUDE.md` owns the chain end to end.
 
-## What it does (`tasks/main.yml`)
-1. **udev** — none since H4.3c. The package ships `/usr/lib/udev/rules.d/99-homelab-nut-apc.rules`,
-   and reconcile reloads udev when it changes. `test_nut_host_secondary.py` refuses a task that
-   writes under `/etc/udev/rules.d/` or runs `udevadm`.
-2. **Endpoint resolution** (every other host) — reads the `nut` Service's ClusterIP with
-   `kubectl`, sets `nut_host_upsd_host`, and **fails the play** when `upsd` does not answer
-   there. A secondary that cannot reach `upsd` would never see FSD, so the failure is loud
-   on purpose.
-3. **NUT client** — installs `nut-client`, renders `/etc/nut/nut.conf` (netclient mode) and
-   `/etc/nut/upsmon.conf` (the `MONITOR` line against `nut_host_upsd_host`, the
-   `nut_monitor_*` SOPS credentials, and the `FINALDELAY` whose comment records why the two
-   hosts are not staggered), then enables `nut-monitor`.
-4. **Watchdog** (`nut_host_watchdog_armed`, default true) — renders
-   `/etc/nut/kuma-push.env` (the `ups_secondary_push_token`, root-only) and
-   `/usr/local/bin/ups-secondary-health.sh` at `0700`, and schedules it every
-   `nut_host_watchdog_interval_minutes` (10) as a `cron_file`. On daniel-server a package timer
-   runs the same template's packaged branch instead. The script is `0700`, not
-   `0755`, because it renders a credential inline;
-   `test_secret_bearing_host_scripts_are_not_world_readable.py` enforces that for every path
-   `secret_bearing_host_paths()` names.
-5. **Render stamp** — `stamp_render.yml` records the three templates' repo hashes so
-   `setup-drift-check.sh` (armed on daniel-server via `setup_drift_check_hosts`) reports a
-   stale render. After a template moves or changes, that check reports drift until this
-   role is re-applied on the host.
+- daniel-server's package is `homelab-daniel-server`, and its MONITOR line names `127.0.0.1`.
+- daniel-box's package is `homelab-daniel-box`, and its MONITOR line names the `nut` Service's
+  pinned ClusterIP (`nut_k8s_cluster_ip` in `ansible/roles/k8s/nut/defaults/main.yml`).
+- The component still renders this role's `defaults/main.yml` and its two templates
+  (`host-upsmon.conf.j2`, `ups-secondary-health.sh.j2`) in place, through `role: nut_host`.
+  H7.20a moves them into the component before it deletes the directory.
 
-## The watchdog cron changes no state
-`ups-secondary-health.sh` reads `upsmon.conf`, `systemctl is-active nut-monitor` and
-`upsc ups.status`, logs a verdict, and pushes `up`/`down` to the Kuma tile
-`UPS Secondary (<host>)`. It restarts, writes and deletes nothing, which is why
-`test_setup_cron_roles_have_a_contract.py` lists this role in `EXEMPT` rather than asking it for
-an `## Autonomous-role contract`. The actor that does change state is `upsmon` itself, a
-systemd service and not a cron, and `k8s/nut/CLAUDE.md` documents what it does on FSD.
-
-Each run also writes `ups-secondary-health.prom` to node_exporter's textfile directory before the
-push (M6 batch B4). Prometheus reads it as `homelab_check_*{check="ups-secondary-health"}`, and the
-shadow rules in `observability/files/rules/other-setup-checks.yaml` compare it with the tile. A
-host without the push token still writes the verdict.
-
-## Verify
-- `probe.py monitors` names `UPS Secondary (<host>)` per armed host; a `down` there carries
-  the script's own diagnosis (`nut-monitor is inactive`, `upsd unreachable at …`).
-- `ssh <host> systemctl is-active nut-monitor` and `ssh <host> upsc <endpoint> ups.status`
-  are the two reads the cron makes; run them by hand when the tile disagrees with the pod.
-- `ssh daniel-box stat -c '%a %U' /usr/local/bin/ups-secondary-health.sh` reads `700 root`.
-- On daniel-server, `ssh daniel-server systemctl show -p DropInPaths nut-monitor` names
-  `50-homelab.conf`, and `systemctl is-active homelab-ups-watchdog.timer` prints `active`.
+## Rollback
+A revert of H7.33 restores the tasks, and the operator then re-applies the role on daniel-box
+after `homelab_host_applied_info` shows the reverted version: `cd /home/ubuntu/server && uv run
+ansible-playbook ansible/initial_setup.yml --tags nut_host` (operator-only).
