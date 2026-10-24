@@ -77,7 +77,7 @@ KNOWN_EDGES = {
         "renovate_agent",
         "renovate_notify",
     },
-    "ansible/roles/setup/common/files/host_lib.py": {
+    "hosts/lib/host_lib.py": {
         "fake_remux",
         "gitops_deploy",
         "homelab_builder",
@@ -98,8 +98,8 @@ KNOWN_EDGES = {
     },
 }
 KNOWN_K8S_EDGES = {
-    "ansible/roles/setup/common/files/host_lib.py": {"configarr", "janitorr"},
-    "ansible/roles/setup/common/files/kuma_push.py": {
+    "hosts/lib/host_lib.py": {"configarr", "janitorr"},
+    "hosts/lib/kuma_push.py": {
         "autofix-bridge",
         "configarr",
         "crowdsec",
@@ -147,10 +147,22 @@ def _k8s_task_docs() -> dict[str, object]:
     }
 
 
+# A module the setup roles ship that sits outside the setup tree since H7.2e: the shared
+# `hosts/lib/` modules and the `scripts/lib/longhorn_lib/` package. No role owns them, so every
+# role naming one is a shipper. The lookbehind keeps `old_hosts/lib/x.py`-shaped words out.
+_SHARED_FILE = re.compile(
+    r"(?<![\w.])((?:hosts/lib/|scripts/lib/longhorn_lib/)[\w-]+\.py)"
+)
+
+
 def cross_role_files(
     task_texts: dict[str, str], pattern: re.Pattern = _REFERENCE
 ) -> dict[str, frozenset[str]]:
-    """Each setup-role path a role's task text names under ANOTHER role, mapped to those roles."""
+    """Each path a role's task text ships from outside itself, mapped to those roles.
+
+    That is a setup-role path named under ANOTHER role, and a shared module under `hosts/lib/`
+    or `scripts/lib/longhorn_lib/`, which no role owns.
+    """
     edges: dict[str, set[str]] = {}
     for role, text in task_texts.items():
         for owner, kind, rel in pattern.findall(text):
@@ -159,6 +171,8 @@ def cross_role_files(
             edges.setdefault(f"ansible/roles/setup/{owner}/{kind}/{rel}", set()).add(
                 role
             )
+        for shared in _SHARED_FILE.findall(text):
+            edges.setdefault(shared, set()).add(role)
     return {path: frozenset(roles) for path, roles in edges.items()}
 
 
@@ -321,9 +335,9 @@ def test_a_role_naming_its_own_files_is_clean():
 
 
 def test_a_role_naming_commons_file_is_flagged():
-    common = "src: ansible/roles/setup/common/files/host_lib.py\n"
+    common = "src: hosts/lib/host_lib.py\n"
     assert cross_role_files({"owner": common}) == {
-        "ansible/roles/setup/common/files/host_lib.py": frozenset({"owner"})
+        "hosts/lib/host_lib.py": frozenset({"owner"})
     }
 
 
@@ -364,3 +378,17 @@ def test_a_k8s_role_importing_a_setup_task_file_is_flagged():
     assert cross_role_files({"svc": task + sibling}, _K8S_REFERENCE) == {
         "ansible/roles/setup/common/tasks/shared.yml": frozenset({"svc"})
     }
+
+
+def test_a_role_shipping_a_shared_module_from_outside_the_setup_tree_is_flagged():
+    task = 'src: "{{ playbook_dir }}/../hosts/lib/ci_verdict.py"\n'
+    loop = "- live: /opt/x/longhorn_backups.py\n  src: scripts/lib/longhorn_lib/longhorn_backups.py\n"
+    assert cross_role_files({"consumer": task + loop}) == {
+        "hosts/lib/ci_verdict.py": frozenset({"consumer"}),
+        "scripts/lib/longhorn_lib/longhorn_backups.py": frozenset({"consumer"}),
+    }
+
+
+def test_a_path_that_only_ends_like_a_shared_module_is_clean():
+    prose = "see old_hosts/lib/host_lib.py and hosts/lib/homelab-reconcile\n"
+    assert cross_role_files({"consumer": prose}) == {}

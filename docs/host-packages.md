@@ -507,11 +507,15 @@ new version, which costs each host one install.
 ### `reason="no-green"` that persists: a renamed CI job
 
 The builder grades each commit over `CI_CONTEXTS`, which the role renders from
-`gitops_deploy_ci_contexts`. When a CI job is renamed, no commit carries the old context, so no
-commit is ever green. Change `gitops_deploy_ci_contexts` in
-`ansible/roles/setup/gitops_deploy/defaults/main.yml` to the new name, spelled exactly as
-`ci.yml`'s `name:`, and merge that. The tick re-applies both `gitops_deploy` and
-`homelab_builder`, because that defaults file is a cross-role row naming this role.
+`ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
+commit is ever green. Change `ci_required_contexts` in `ansible/inventory/group_vars/all.yml` to
+the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The key is a deploy-plane
+change, so the tick re-renders neither settings file. Re-apply both roles by hand on daniel-box
+(**operator-only**):
+
+```bash
+cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy,homelab_builder
+```
 
 ### `reason="keyring"`
 
@@ -530,14 +534,13 @@ procedure above. The first builder run after the fix builds.
 ### `reason="ci"`
 
 The builder refuses to grade anything, because `CI_CONTEXTS` is empty or
-`CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `gitops_deploy_ci_contexts` or
-`gitops_deploy_ci_ancestor_walk_max` in `ansible/roles/setup/gitops_deploy/defaults/main.yml`
-and merge it. The tick re-applies `homelab_builder`, which renders the builder's settings
-again. If the settings file on the host was edited or lost, re-apply the role by hand instead
+`CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `ci_required_contexts` or
+`ci_ancestor_walk_max` in `ansible/inventory/group_vars/all.yml`, merge it, and re-apply the
+role by hand, because the tick re-renders no settings file for that file
 (**operator-only**):
 
 ```bash
-uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
+cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
 ```
 
 ### `reason="token"` and `reason="build"`

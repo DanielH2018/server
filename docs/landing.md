@@ -198,10 +198,10 @@ the deployer reads, so its verdict and the tick's agree by construction. Hand-po
 polls across 213 wait episodes before it existed.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
-SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `deploy_git.py` is the list, and a commit whose
+SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `hosts/lib/ci_verdict.py` is the list, and a commit whose
 merge was immediately followed by another reads `cancelled` permanently. The rule covers the
 gate job too: ci.yml runs `prek` under `always()`, so a cancelled run still runs the gate, which
-fails on its cancelled needs. `deploy_git.ci_verdict` leaves that gate out unless a need in the
+fails on its cancelled needs. `ci_verdict.ci_verdict` leaves that gate out unless a need in the
 same run failed outright (#5931). `await_ci.py` follows
 the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
 no verdict (cancelled/stale) — following the tip <tip>`, and it is normal. It also fires when

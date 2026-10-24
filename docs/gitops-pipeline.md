@@ -36,7 +36,7 @@ every 10 minutes (`gitops_deploy_tick_interval`). One tick, in order:
    in `deploy_logic.py`).
 3. Walk back to the newest green ancestor, when that verdict is pending or red: the tick asks
    GitHub about each earlier commit in the incoming range, newest first, and deploys the first
-   one whose own CI is green (`ci_walk_candidates()` in `deploy_logic.py`, bounded by
+   one whose own CI is green (`ci_walk_candidates()` in `hosts/lib/ci_verdict.py`, bounded by
    `CI_ANCESTOR_WALK_MAX`). A red commit is skipped, never chosen. Merges arrive faster than the
    CI sweep finishes, so the tip is pending on most ticks that would deploy; gating on it alone
    parked a green commit behind the CI sweep of every later merge.
@@ -628,11 +628,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     `target.origin`, and the ff-merge, the changed-path diff, the declarations read and the
     narrowing all read it. A `fail` ancestor is skipped, and a held SHA is dropped from the
     candidates whether it arrives as the tip or below one. The walk runs ONLY on a tick that would
-    otherwise defer, and `CI_ANCESTOR_WALK_MAX` (`gitops_deploy_ci_ancestor_walk_max`, 10) bounds
+    otherwise defer, and `CI_ANCESTOR_WALK_MAX` (`ci_ancestor_walk_max` in `group_vars/all.yml`, 10) bounds
     it, counting the tip's own request. **An UNAUTHENTICATED host does not walk at all** and says
     so in the journal, because a ten-request burst per tick would exhaust the anonymous limit and
     every reader's next call would read `HTTP Error 403`, which this gate maps to `pending`. The
-    rule is `deploy_git.ci_walk_candidates`, which carries the `DECIDED:` marker. The property the
+    rule is `ci_verdict.ci_walk_candidates`, which carries the `DECIDED:` marker. The property the
     gate keeps is that **the tree the host runs always has its own green CI verdict.** One line
     names the choice: `ci: origin <tip8> is <pending|fail>; fast-forwarding to the newest green
     ancestor <sha8> (<n> behind the tip)`.

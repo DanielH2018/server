@@ -62,7 +62,7 @@ from lib import yaml_fast
 from docs.reference import crons as crons_mod
 from lib.git import git
 from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kubectl
-from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K3S_FILES, REPO, ROLES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, REPO, ROLES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -70,7 +70,7 @@ from gitops_hold import DeployerSnapshot
 from gitops_markers import MARKERS, STATE_DIR
 
 # The drill's stamp ConfigMap parser, shared with backup health and the Longhorn upgrade gate.
-_sys.path.insert(0, str(K3S_FILES))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 
 LATE_MULTIPLIER = 2

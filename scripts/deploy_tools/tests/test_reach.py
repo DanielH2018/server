@@ -8,7 +8,7 @@ from reach import reach, tag_for
 _SERVICE = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
 _BRINGUP = "ansible/k3s-bringup.yml"
 # A setup-role file that two k8s roles ship a copy of, and that no k8s role `lookup()`s.
-_COPIED = "ansible/roles/setup/common/files/host_lib.py"
+_COPIED = "hosts/lib/host_lib.py"
 # A monitor-bridge file uptime-kuma `lookup()`s to render one tile per check (#3781).
 _LOOKED_UP = "ansible/roles/k8s/monitor-bridge/files/check_table.py"
 

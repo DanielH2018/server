@@ -46,8 +46,16 @@ import re
 # Both resolve via longhorn_backup_health.py's own sys.path.insert(0, <own dir>), which runs
 # before it imports this module. That directory holds this package and host_lib.py, which is
 # copied there as a sibling at release time (/opt/longhorn-backup-health/, health-crons.yml).
-# The test suite reaches host_lib through the `ansible/roles/setup/common/files` pythonpath
-# entry in pyproject.toml.
+# In the checkout the inserts below stand in for that copy.
+import sys as _sys
+from pathlib import Path as _Path
+
+# In the checkout, `hosts/lib` holds host_lib.py and `scripts/lib` holds this package. On a
+# host both sit beside the reader, whose directory is already on sys.path, so these inserts
+# name directories that do not exist there and change nothing.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import host_lib
 from longhorn_lib import longhorn_backups
 

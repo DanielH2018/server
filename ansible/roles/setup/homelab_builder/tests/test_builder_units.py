@@ -16,12 +16,17 @@ from _helpers import SETUP_ROLES, load_defaults, load_tasks, render_expr, task_n
 from _setup_render import render_setup_text
 
 from lib import yaml_fast
-from lib.repo_paths import REPO
+from lib.repo_paths import ALL_VARS, REPO
 
 ROLE = SETUP_ROLES / "homelab_builder"
 
 DEFAULTS = load_defaults(ROLE)
 GITOPS_DEFAULTS = load_defaults(SETUP_ROLES / "gitops_deploy")
+# The CI gate and walk bound the builder shares with every deploy path (H7.2e).
+_GROUP_VARS = yaml_fast.safe_load(ALL_VARS.read_text())
+SHARED_CI_KEYS = {
+    key: _GROUP_VARS[key] for key in ("ci_required_contexts", "ci_ancestor_walk_max")
+}
 BUILDER_TASKS = load_tasks(ROLE / "tasks" / "builder.yml")
 PUBLISH = ROLE / "files" / "publish-textfile.sh"
 
@@ -151,9 +156,9 @@ def test_the_timer_fires_every_two_minutes():
     assert got["OnUnitActiveSec"] == ["2min"]
 
 
-def _settings(**gitops_overrides) -> dict[str, str]:
-    """The settings file rendered as the task renders it: its `vars:` over the deployer's defaults."""
-    gitops = {**GITOPS_DEFAULTS, **gitops_overrides}
+def _settings(**overrides) -> dict[str, str]:
+    """The settings file rendered as the task renders it: its `vars:` over the shared keys."""
+    gitops = {**GITOPS_DEFAULTS, **SHARED_CI_KEYS, **overrides}
     task = task_named(BUILDER_TASKS, "Write the builder's configuration")
     task_vars = {k: render_expr(v, **gitops) for k, v in task["vars"].items()}
     text = render("config.env.j2", **task_vars)
@@ -161,8 +166,8 @@ def _settings(**gitops_overrides) -> dict[str, str]:
 
 
 def ci_contexts_problem(settings: dict[str, str]) -> str | None:
-    """None when CI_CONTEXTS is the deployer's list, read from gitops_deploy's defaults file."""
-    want = ",".join(GITOPS_DEFAULTS["gitops_deploy_ci_contexts"])
+    """None when CI_CONTEXTS is the shared list, read from group_vars/all.yml."""
+    want = ",".join(SHARED_CI_KEYS["ci_required_contexts"])
     got = settings.get("CI_CONTEXTS")
     return (
         None if got == want else f"CI_CONTEXTS={got!r}, the deployer's list is {want!r}"
@@ -174,12 +179,12 @@ def test_the_settings_carry_the_deployers_ci_contexts_is_clean():
     assert ci_contexts_problem(settings) is None
     assert settings["CI_CONTEXTS"].startswith("prek ")
     assert settings["CI_ANCESTOR_WALK_MAX"] == str(
-        GITOPS_DEFAULTS["gitops_deploy_ci_ancestor_walk_max"]
+        SHARED_CI_KEYS["ci_ancestor_walk_max"]
     )
 
 
 def test_a_settings_render_from_another_list_is_flagged():
-    assert ci_contexts_problem(_settings(gitops_deploy_ci_contexts=["other"]))
+    assert ci_contexts_problem(_settings(ci_required_contexts=["other"]))
 
 
 def prom_urls_problem(settings: dict[str, str], cluster_ip: str) -> str | None:

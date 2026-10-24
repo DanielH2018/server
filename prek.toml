@@ -403,7 +403,7 @@ pass_filenames = false
 # `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
 # `rotate` writes the cluster file in process, which loads the renderer: `cluster_vars` imports
 # `scripts/renderer/` and, through it, the filter plugins and render helpers listed below.
-files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/.*\\.py|scripts/renderer/.*\\.py|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|estate|exit_codes|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|plain_scalar|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|hosts/lib/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/.*\\.py|scripts/renderer/.*\\.py|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|estate|exit_codes|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|plain_scalar|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # The cluster's SOPS files (target slice D3): the cluster file
 # ansible/vars/cluster-vars.sops.env, the manifests under ansible/vars/cluster-manifests/ and
@@ -425,7 +425,7 @@ name = "Cluster SOPS files are ciphertext written by cluster_vars.py"
 entry = "uv run --frozen python scripts/secrets_mgmt/cluster_vars.py check --no-render --base HEAD"
 language = "system"
 pass_filenames = false
-files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py$)"
+files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|hosts/lib/(host_lib|kuma_push)\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py$)"
 
 # Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
 # (gitops_deploy, secret-rotate, secret-rotation-audit) runs `uv run --frozen`, which installs
@@ -698,7 +698,7 @@ name = "Lander deadlines cover the soak"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/setup/test_lander_deadlines_cover_the_soak.py"
 language = "system"
 pass_filenames = false
-files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|ansible/roles/setup/(common|gitops_deploy)/files/.*\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/releases[^/]*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|ansible/roles/setup/gitops_deploy/files/.*\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/releases[^/]*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests. The
 # render reaches scripts/validate/k8s_manifests.py and its validate_lib through pytest's

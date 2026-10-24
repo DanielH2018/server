@@ -18,7 +18,7 @@ rejection — HTTP 401 or 403 — and stops only on those. Everything else retri
 failing before a response exists (couldn't connect / timeout / TLS), a 5xx *response*, and
 any OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 share a
 code, so a genuinely bad token burns the retry budget before its log line appears — the
-same trade the Python twin `ansible/roles/setup/common/files/kuma_push.py` accepts. The final line
+same trade the Python twin `hosts/lib/kuma_push.py` accepts. The final line
 says which of the two it was: Kuma's own rejection is `application/json`, Traefik's
 no-router page is `text/plain`, and the library appends `by=kuma` from the content type. Kuma
 answers 404 for any exception, so on a final `by=kuma` failure the library also logs Kuma's own

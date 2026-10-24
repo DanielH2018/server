@@ -72,7 +72,7 @@ Each arm is a rule and the function that holds it; the record page has its incid
   (`deploy_handlers.py:_rollback_k8s`). **That rollback is local-only** — the bad pin is still on
   master, so revert it there.
 - **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
-  `deploy_git.ci_verdict`); this is the ONLY gate. `deploy_git._CI_NO_VERDICT_CONCLUSIONS` are
+  `hosts/lib/ci_verdict.py:ci_verdict`); this is the ONLY gate. `ci_verdict._CI_NO_VERDICT_CONCLUSIONS` are
   **no verdict, not failure** (`docs/landing.md` owns that rule), and `CI_CONTEXTS` must match
   `ci.yml`'s `name:` exactly. `docs/gitops-pipeline.md`'s *The safety arms, in full* has the
   ancestor-walk fallback and the rulesets that guard the merge itself.

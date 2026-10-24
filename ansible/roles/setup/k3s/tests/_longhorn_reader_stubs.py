@@ -17,10 +17,13 @@ import sys
 from pathlib import Path
 
 from lib.proc_testing import write_exec
-from lib.repo_paths import K3S_FILES
+from lib.repo_paths import HOST_LIB_FILES, K3S_FILES, REPO
 
 READER = K3S_FILES / "longhorn_backup_health.py"
-HOST_LIB_DIR = Path(__file__).resolve().parents[2] / "common" / "files"
+# On the host the reader's libraries and host_lib.py sit beside it. In the checkout they are
+# `hosts/lib/host_lib.py` and `scripts/lib/longhorn_lib/`, so the subprocess needs both roots.
+HOST_LIB_DIR = HOST_LIB_FILES
+LONGHORN_LIB_ROOT = REPO / "scripts" / "lib"
 
 # The epoch every dated fixture here is measured from — the same one test_longhorn_backup_health
 # pins. A fixture stamped `time.time() - age` would measure its age across the suite's own
@@ -130,7 +133,9 @@ def _reader_env(tmp_path, **overrides) -> dict:
     test points it at its own stub, so it has no default here.
     """
     env = dict(os.environ)
-    env["PYTHONPATH"] = f"{HOST_LIB_DIR}:{env.get('PYTHONPATH', '')}"
+    env["PYTHONPATH"] = (
+        f"{HOST_LIB_DIR}:{LONGHORN_LIB_ROOT}:{env.get('PYTHONPATH', '')}"
+    )
     env["LONGHORN_RESTORE_DRILL_STAMP_DIR"] = str(tmp_path / "no-such-drill-dir")
     env.update(
         {
