@@ -25,12 +25,19 @@ host probes stay green.
 - **Merging a bump of `k3s_longhorn_version` is the upgrade** (H1 Open question 6). `land.sh`
   runs the `longhorn-upgrade` gates before it merges, Longhorn supports no downgrade and one
   minor per hop, so read `docs/longhorn-upgrade.md` before you bump the pin.
-- **Four patches change upstream objects**, all under `files/patches/`. The renderer lists them
+- **Five patches change upstream objects**, all under `files/patches/`. The renderer lists them
   as the Kustomization's `patches:`, and each names its target by kind, name and namespace.
     - `longhorn-manager.yaml` adds a memory request and no limit to the manager container.
       A kustomize patch is copied verbatim and cannot read a variable, so
       `ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_manager_patch_holds_the_value_of_the_defaults_key`
       holds the literal equal to `k3s_longhorn_manager_memory_request`.
+    - `longhorn-global-manager.yaml` gives the Deployment v1.13 added a memory request, no
+      limit, and two replicas instead of upstream's three (#5968). The replicas elect one
+      leader, so on two nodes a third adds no failover.
+      `ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_global_manager_patch_requests_the_defaults_value_and_no_limit`
+      and `::test_global_manager_patch_holds_the_replicas_of_the_defaults_key` hold the
+      literals equal to `k3s_longhorn_global_manager_memory_request` and
+      `k3s_longhorn_global_manager_replicas`.
     - `longhorn-storageclass.yaml` replaces the class inside upstream's `longhorn-storageclass`
       ConfigMap, which longhorn-manager reads to create the `longhorn` class. The class omits
       `numberOfReplicas`, because a StorageClass parameter beats the `default-replica-count`

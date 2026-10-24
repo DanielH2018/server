@@ -1,0 +1,2 @@
+The certificate example.com expires within 14 days.
+Cleared 2026-10-24 08:15 UTC, after starting 2026-10-23 22:00 UTC

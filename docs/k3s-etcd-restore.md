@@ -237,6 +237,18 @@ gate 3 needs the API server up.
 Single-server cluster, so this is a `--cluster-reset` restore on daniel-box. **It rolls the whole
 cluster back to the snapshot's moment** — anything created since is gone.
 
+**First mask the two timers that restart or replace k3s unattended** (H6), so neither fires while
+k3s is stopped or half restored. `homelab-k3s-restart.timer` would restart the unit inside its
+window, and `homelab-updater.timer` installs package changes that reach it. Mask them before the
+stop, and unmask them only once the checks under *After the restore* pass. Do not start the
+restore on a weekday between 11:32 and 11:40 (host time) without masking first.
+
+```bash
+sudo systemctl mask --now homelab-k3s-restart.timer homelab-updater.timer
+```
+
+Then stop k3s and restore:
+
 ```bash
 sudo systemctl stop k3s
 sudo -i
@@ -286,3 +298,11 @@ If it does not rejoin, re-run the documented join:
    staged manifest dirs it diffs against are mode 0700, so a non-`sudo` run now fails fast
    (`exit 64`, "must run as root") rather than doing anything useful — it needs root to see the
    real manifest set at all.
+
+Last, unmask the two timers once steps 1 to 4 pass, and start them so the next window and the next
+update run on schedule:
+
+```bash
+sudo systemctl unmask homelab-k3s-restart.timer homelab-updater.timer
+sudo systemctl start homelab-k3s-restart.timer homelab-updater.timer
+```
