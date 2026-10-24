@@ -6,6 +6,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 User=node_exporter
 Group=node_exporter
 # The collector set the container ran, minus the --path.* remaps a container needed to see the

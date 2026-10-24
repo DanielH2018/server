@@ -17,6 +17,8 @@ ConditionPathExists=/var/lib/kuma-check/{{ kuma_check_name }}.down
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 ExecStart=/usr/bin/systemctl start --no-block kuma-check-{{ kuma_check_name }}.service
 
 [Install]

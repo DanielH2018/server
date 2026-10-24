@@ -16,6 +16,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 User={{ kuma_check_user }}
 {% if kuma_check_env_file | default('') %}
 EnvironmentFile={{ kuma_check_env_file }}

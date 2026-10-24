@@ -8,6 +8,8 @@ OnFailure=claude-rc-alert.service
 
 [Service]
 Type=simple
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 User={{ claude_code_user }}
 Group={{ claude_code_user }}
 WorkingDirectory={{ claude_code_rc_workdir }}
