@@ -330,3 +330,86 @@ def test_a_tag_with_no_live_object_is_unreadable_not_clean():
         tk.run_takeover(
             _ns(), render=lambda tag, out: [_render()], read=lambda c, d: None
         )
+
+
+# A tag's vendored files reach the render under `upstream/` and `patches/` (#5721). Each of
+# these tags vendors files, and traefik-crds renders nothing else. The value is one object
+# the tag's `files/upstream/` declares, which the census must reach.
+VENDORED_TAGS = {
+    "traefik-crds": ("CustomResourceDefinition", None, "ingressroutes.traefik.io"),
+    "metallb": ("Deployment", "metallb-system", "controller"),
+    "longhorn": ("DaemonSet", "longhorn-system", "longhorn-manager"),
+}
+
+
+def _identity(doc):
+    meta = doc.get("metadata") or {}
+    return (doc.get("kind"), meta.get("namespace"), meta.get("name"))
+
+
+def _kustomized_objects(out, tag):
+    """The objects each rendered kustomization lists under `resources`, never `patches`.
+
+    The kustomization is the renderer's own output and names what Flux applies, so it is the
+    oracle for what the census must compare. A patch is not an object of its own.
+    """
+    from lib import yaml_fast
+
+    found = set()
+    for directory in (out / "cluster" / tag, out / "cluster" / f"{tag}-deferred"):
+        kustomization = directory / "kustomization.yaml"
+        if not kustomization.is_file():
+            continue
+        for resource in yaml_fast.safe_load(kustomization.read_text())["resources"]:
+            for doc in yaml_fast.safe_load_all((directory / resource).read_text()):
+                if doc:
+                    found.add(_identity(doc))
+    return found
+
+
+@pytest.mark.parametrize("tag", sorted(VENDORED_TAGS))
+def test_render_tag_returns_every_object_the_kustomization_applies(tag, tmp_path):
+    docs = tk.render_tag(tag, tmp_path)
+    expected = _kustomized_objects(tmp_path, tag)
+    assert VENDORED_TAGS[tag] in expected, f"{tag}'s render lost its upstream file"
+    assert {_identity(d) for d in docs} == expected
+
+
+def _upstream_crd_names():
+    """The CRD names traefik-crds' vendored files declare, read from the role, not the render."""
+    from lib import yaml_fast
+    from lib.repo_paths import K8S_ROLES
+
+    return sorted(
+        doc["metadata"]["name"]
+        for path in sorted(
+            (K8S_ROLES / "traefik-crds" / "files" / "upstream").glob("*")
+        )
+        for doc in yaml_fast.safe_load_all(path.read_text())
+        if doc and doc.get("kind") == "CustomResourceDefinition"
+    )
+
+
+def test_takeover_of_a_vendored_only_tag_lists_the_live_crds_it_compares(capsys):
+    """`probe.py takeover traefik-crds` compares each live CRD rather than none (#5721)."""
+    names = _upstream_crd_names()
+    assert any(n == "ingressroutes.traefik.io" for n in names)
+
+    def read(_cluster, doc):
+        # A live CRD that only kustomize-controller's own apply would own: nothing to strip.
+        return {
+            "apiVersion": doc.get("apiVersion"),
+            "kind": doc.get("kind"),
+            "metadata": {"name": doc["metadata"]["name"], "managedFields": []},
+            "spec": doc.get("spec"),
+        }
+
+    try:
+        code = tk.run_takeover(_ns("traefik-crds"), read=read)
+    except Unreadable:
+        code = None
+    lines = capsys.readouterr().out.splitlines()
+    for name in names:
+        assert f"  CustomResourceDefinition {name}: strips nothing" in lines
+    assert f"across {len(names)} live object(s)" in lines[-1]
+    assert code == 0
