@@ -1167,6 +1167,7 @@ jobs:
             scripts/validate/validate_lib/conffile_case.py
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/package_roots.py
+            scripts/validate/validate_lib/repos_case.py
             scripts/validate/validate_lib/secrets_case.py
             scripts/validate/validate_lib/pi_host_seed.py
         run: |

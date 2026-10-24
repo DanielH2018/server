@@ -121,6 +121,13 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   `docs/security-tools.md` has the exit-code table. The script runs from the cron rather than
   from a `kuma-check-*` timer, because a timer reruns a red check, and each rerun here is
   another full-filesystem scan.
+- **Both scans also write a node_exporter textfile, so their liveness survives Kuma's
+  retirement** (#6168). Before the push, each calls `write_check_textfile` from
+  `homelab-check-lib.sh`, as check `aide-check` or `rkhunter-check`. Its `DEADLINE_S` equals
+  the tile's interval: 626400s for AIDE and 612000s for rkhunter. The `host-checks` rule group
+  reads the files with a `Failed` and a `NotReporting` rule per scan per host, in shadow until
+  M6's batch B9 cuts the tiles over. A cron moved without its `DEADLINE_S`, its tile and its
+  rules fails `ansible/tests/setup/test_integrity_scan_rule_literals.py`.
 - **`aide-check.sh` runs one scan at a time.** It takes `/run/lock/aide-check.lock` with
   `flock -n`, and a run that finds the lock held pushes DOWN without starting a second scan.
   The tile's deadline counts from its last push, so a scan that never finishes stays silent

@@ -75,8 +75,6 @@ EXEMPT: dict[str, str] = {
         "regenerates a derived HTML artifact from the tree; a stale map is visible in the "
         "page's own timestamp and changes nothing else"
     ),
-    "initial_setup: cron `Weekly rkhunter malware scan`": _KUMA,
-    "initial_setup: cron `Weekly AIDE file integrity check`": _KUMA,
     "k3s: cron `Longhorn filesystem trim`": (
         "touches a cron-fired stamp that longhorn-backup-health.sh reads into its own "
         "textfile verdict"

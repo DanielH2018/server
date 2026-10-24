@@ -56,12 +56,15 @@ reachout_verdict() {
 
 # write_check_textfile CHECK SUCCESS VERDICT_TS DEADLINE_S [LINE...]
 # M3's producer metric contract (docs/target-architecture/monitoring/m3-textfile-timer.md): writes
-# $TEXTFILE_DIR/CHECK.prom with the three homelab_check_* series, then each LINE verbatim as a
-# detail series. TEXTFILE_DIR defaults to the real path, so a test needs no root. Atomic: mktemp's
+# $TEXTFILE_DIR/CHECK.prom with the four homelab_check_* series, then each LINE verbatim as a
+# detail series. TEXTFILE_DIR defaults to the real path, so a test needs no root.
+# homelab_check_duration_seconds is CHECK_DURATION_S when the caller sets it, else bash's $SECONDS,
+# which counts from the start of the sourcing script: a cron or timer script's run time up to its
+# verdict, with no change to the caller (#6166). Atomic: mktemp's
 # suffix never ends in .prom, chmod 0644 because mktemp makes 0600 and the collector reads as
 # uid 65534, then one mv. Returns non-zero on failure and removes its temp file; the caller logs.
 write_check_textfile() {
-  local check="$1" success="$2" ts="$3" deadline="$4" dir tmp
+  local check="$1" success="$2" ts="$3" deadline="$4" duration="${CHECK_DURATION_S:-$SECONDS}" dir tmp
   shift 4
   dir=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
   tmp=$(mktemp "$dir/$check.prom.XXXXXX" 2>/dev/null) || return 1
@@ -75,6 +78,9 @@ write_check_textfile() {
     echo "# HELP homelab_check_deadline_seconds Longest legitimate gap between two of the check's writes."
     echo "# TYPE homelab_check_deadline_seconds gauge"
     echo "homelab_check_deadline_seconds{check=\"$check\"} $deadline"
+    echo "# HELP homelab_check_duration_seconds Seconds the check's run took to reach its verdict."
+    echo "# TYPE homelab_check_duration_seconds gauge"
+    echo "homelab_check_duration_seconds{check=\"$check\"} $duration"
     [ "$#" -eq 0 ] || printf '%s\n' "$@"
   } >"$tmp" || {
     rm -f "$tmp"

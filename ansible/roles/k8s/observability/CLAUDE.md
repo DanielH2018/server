@@ -154,6 +154,20 @@ It also carries `FanoutSlotsIdleWithFreeWork`, in shadow until #5658 is ruled: f
 for an hour with no fan-out batch live on either node, read from the server lander's
 `findings_issues` gauge and the per-batch cgroup series.
 
+**`HostCheckOverdue` is the host checks' catch-all deadman, never a replacement for a pair.**
+One rule per host compares each check's timestamp with the
+`homelab_check_deadline_seconds` the check declares, so a new producer is covered before
+its own `Failed`/`NotReporting` pair exists (#6166). It cannot see a file that is gone,
+because only a check's name says which series should exist, and it fires beside every
+pair's stale arm. It stays shadow until an Alertmanager inhibit keyed on `check` and
+`origin` lets it page alone. The per-check literals and their pin tests stay, for the
+reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
+series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
+change from `homelab_host_reboot_pending_since_seconds`, which a later package change never
+moves, and requires that time to follow `node_boot_time_seconds`: the updater rewrites the
+reconcile file only when a package changes, so a stale `homelab_host_reboot_pending 1`
+survives the reboot that cleared it.
+
 **`ScrapeTargetDown` is one rule per owning role, and a new scrape job needs a line in one.**
 `files/rules/scrape-targets.yaml` gives each rule a literal `service`, because a static scrape
 job has no other source for it. The last rule catches a job that none of the others names, with

@@ -41,6 +41,10 @@ TILES = {
 WEEK_S = 7 * 24 * 3600
 
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
+# The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
+# own directory, which node_exporter scrapes.
+REAL_CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 REAL_ENV = "/etc/homelab/aide-kuma-push.env"
 REAL_AIDE = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide"
 REAL_CAP = "REPORT_MAX_LINES=2000"
@@ -112,7 +116,7 @@ def _run_check(
         *SCRIPT,
         overrides={"domain": "example.test", "k3s_metallb_ingress_vip": "10.0.0.240"},
     )
-    for needle in (REAL_LIB, REAL_ENV, REAL_AIDE, REAL_CAP, REAL_LOCK):
+    for needle in (REAL_LIB, REAL_ENV, REAL_AIDE, REAL_CAP, REAL_LOCK, REAL_CHECK_LIB):
         assert needle in body, (
             f"{needle} is no longer in aide-check.sh; this harness repoints it"
         )
@@ -132,6 +136,7 @@ def _run_check(
     )
     body = (
         body.replace(REAL_LIB, str(lib))
+        .replace(REAL_CHECK_LIB, str(CHECK_LIB))
         .replace(REAL_ENV, str(env_file))
         .replace(REAL_AIDE, str(aide))
         .replace(REAL_CAP, f"REPORT_MAX_LINES={cap}")
@@ -139,6 +144,8 @@ def _run_check(
     )
     script = write_exec(tmp_path / "aide-check.sh", body)
     pushed, logged, ran = (tmp_path / n for n in ("pushed", "logged", "ran"))
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir(exist_ok=True)
     with open(lock_file, "w") as holder:
         if lock_held:
             fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -147,6 +154,7 @@ def _run_check(
             env={
                 **os.environ,
                 "KUMA_PUSH_OUT": str(pushed),
+                "TEXTFILE_DIR": str(textfile_dir),
                 "LOGGER_OUT": str(logged),
                 "AIDE_RAN": str(ran),
             },
@@ -193,6 +201,30 @@ def test_a_held_lock_pushes_down_without_starting_a_second_scan(tmp_path):
     assert "previous aide-check run still holds" in pushed[1]
     assert any(line.startswith("aide-check: status=down") for line in logged), logged
     assert code == 1
+
+
+def _textfile(root, check):
+    """The `homelab_check_*` values the run wrote, keyed by series name."""
+    prom = (root / "textfile" / f"{check}.prom").read_text()
+    return dict(
+        re.findall(rf'^(homelab_check_\w+)\{{check="{check}"\}} (\d+)$', prom, re.M)
+    )
+
+
+def test_a_completed_check_writes_success_1_with_the_tiles_deadline(tmp_path):
+    """The liveness path that outlives Kuma (#6168): the file exists even when no push does."""
+    _run_check(tmp_path, DIFF_REPORT, rc=1, token="")
+    series = _textfile(tmp_path, "aide-check")
+    assert series["homelab_check_success"] == "1"
+    assert series["homelab_check_deadline_seconds"] == "626400"
+
+
+def test_an_error_exit_and_a_held_lock_each_write_success_0(tmp_path):
+    for name, held in (("error", False), ("held", True)):
+        root = tmp_path / name
+        root.mkdir()
+        _run_check(root, ERROR_REPORT, rc=17, lock_held=held)
+        assert _textfile(root, "aide-check")["homelab_check_success"] == "0", name
 
 
 def test_a_free_lock_lets_the_scan_run(tmp_path):

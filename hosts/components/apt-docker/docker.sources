@@ -1,0 +1,7 @@
+# Shipped by the apt-docker component: Docker's apt repository, for the Pi's engine packages.
+# Suites names noble because daniel-pi runs Ubuntu 24.04; a release upgrade needs a new suite here.
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: noble
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc

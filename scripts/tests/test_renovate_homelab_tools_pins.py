@@ -21,7 +21,11 @@ from _renovate import (
 )
 
 SPEC = "hosts/packages/homelab-tools/package.yml"
-DEPS = {"sops": "getsops/sops", "chezmoi": "twpayne/chezmoi"}
+DEPS = {
+    "sops": "getsops/sops",
+    "chezmoi": "twpayne/chezmoi",
+    "nfpm": "goreleaser/nfpm",
+}
 
 
 def tools_pins(managers: list[dict], text: str) -> list[tuple[str, str, str]]:
@@ -57,8 +61,8 @@ def _spec_pins() -> list[tuple[str, str, str]]:
 def test_the_manager_reads_every_version_and_digest_pair_of_the_spec() -> None:
     found = tools_pins(_CONFIG_MANAGERS, (_REPO / SPEC).read_text())
     assert found == _spec_pins()
-    # Non-vacuity: two tools, two architectures.
-    assert len(found) == 4
+    # Non-vacuity: three tools, two architectures.
+    assert len(found) == 6
 
 
 def test_a_missing_or_version_only_manager_is_flagged() -> None:
