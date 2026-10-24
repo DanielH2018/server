@@ -11,8 +11,8 @@ alone is not enough, because cosign v3.1.3 reads a registry error on its bundle 
 bundle" (#4829). The last test runs the step's own script against a fake cosign and curl, since
 `workflow_run` never runs a branch's copy of the file.
 
-These checks sit beside `test_promote_workflow.py` rather than in it because that module is
-near the 500-line test-module cap. `drill_problems` names every broken property. The real
+These checks sit beside `test_promote_workflow.py` rather than in it because that module was
+near the test-module line cap. `drill_problems` names every broken property. The real
 file must produce none, and each red fixture breaks one.
 
 Run: uv run pytest ansible/tests/repo/test_promote_drill_workflow.py

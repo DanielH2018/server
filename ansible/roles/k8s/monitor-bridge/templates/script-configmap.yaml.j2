@@ -13,7 +13,7 @@
   into a `last-applied-configuration` annotation capped at 262144 bytes. The modules total about
   700 KB as JSON and the largest package about 200 KB, so neither one ConfigMap nor one per
   package stays clear of the cap as the bridge grows. One module stays far under it, because
-  modules split at 600 lines. The renderer test holds every one under half the cap.
+  modules split at the module-length cap. The renderer test holds every one under half the cap.
 
   The name derivation (`.py` dropped, `/` and `_` to `-`) is repeated in deployment.yaml.j2;
   the renderer test fails when a projected source names a ConfigMap this file does not render.

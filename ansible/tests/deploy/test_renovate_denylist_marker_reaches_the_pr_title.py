@@ -21,7 +21,7 @@ rest) group one dependency most of the time too. Their title then reads `Update 
 raised before the flag arrives bare-titled, so the prompt keeps reading both tells.
 
 This guard sits apart from `test_renovate_automerge_follows_the_autodeploy_denylist.py`, which
-owns the two denylist rules, only because that module is at its 500-line cap and
+owns the two denylist rules, only because that module was at its line cap and
 `module_length_allowlist.txt` refuses a tracked file. It imports that module's prefixes, so a
 rename of either rule's marker fails there rather than drifting here.
 

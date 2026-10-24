@@ -4,7 +4,7 @@ A bridge-fed tile takes one DOWN beat per bridge push plus one per heartbeat win
 so a value written as minutes (360) resends once a DAY. The spacing is derivable from the two
 cadences the repo already declares, so a value that reads as hours fails here rather than in a
 multi-day outage. Its own module because
-`test_kuma_static_monitors.py` sits at the 500-line test cap.
+`test_kuma_static_monitors.py` was at the test-module line cap.
 """
 
 from _kuma_entities import ROLE_DEFAULTS, _entities, bridge_env

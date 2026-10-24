@@ -31,7 +31,7 @@ from lib.git_testing import commit, git, init_repo
 from _ratchet_census import (
     LENGTHS,
     PATCHES,
-    line_counts,
+    code_line_counts,
     monkeypatch_counts,
     module_fixtures_by_dir,
     module_fixtures_for,
@@ -43,11 +43,13 @@ from _ratchet import (
     TEST_CAP,
     Ratchet,
     cap_for,
+    code_lines,
     conjoined_reasons,
     function_differs,
     function_source,
     parse_allowlist,
     raised_entries,
+    reasons_with_history,
 )
 
 # One file per top-level tree that holds Python, asserted by name so the census cannot go
@@ -100,6 +102,7 @@ def base() -> str | None:
 
 # Two tests read the census, each ~3s over the tree, and neither mutates it (#5501).
 patch_counts = cache(monkeypatch_counts)
+lengths = cache(code_line_counts)
 
 
 def _base_ref() -> str:
@@ -128,6 +131,18 @@ def differs_from_base(rel: str) -> bool:
     return run_git("diff", "--quiet", _base_ref(), "--", rel).returncode != 0
 
 
+def edited_since(run: Callable[..., CompletedProcess[str]], ref: str) -> frozenset[str]:
+    """Every path whose working-tree content differs from `ref`. Raises when git fails.
+
+    An empty answer from a failed read would hand the guard-change exemption back to every
+    file the branch edited.
+    """
+    found = run("diff", "--name-only", "-z", ref)
+    if found.returncode:
+        raise RuntimeError(f"git diff --name-only {ref} failed: {found.stderr.strip()}")
+    return frozenset(rel for rel in found.stdout.split("\0") if rel)
+
+
 def guard_differs_from_base() -> bool:
     """Whether this branch changes the rules, which is what lets it add a path to a list."""
     if any(differs_from_base(rel) for rel in WHOLE_FILE_GUARDS):
@@ -152,6 +167,31 @@ def test_a_test_module_gets_the_test_cap():
     assert cap_for("scripts/docs/conftest.py") == TEST_CAP
 
 
+def test_a_docstring_a_comment_and_a_blank_line_are_not_code():
+    text = (
+        '"""Module docstring,\n\nover three lines."""\n'
+        "\n"
+        "# A comment.\n"
+        "class A:\n"
+        '    """Class docstring."""\n'
+        "    def f(self):\n"
+        "        '''Function\n        docstring.'''\n"
+        "        return 1  # trailing comment\n"
+    )
+    assert code_lines(text) == 3
+
+
+def test_a_string_that_is_not_a_docstring_is_code_on_every_line():
+    text = 'def f():\n    x = 1\n    """Second statement,\n    so not a docstring."""\n'
+    assert code_lines(text) == 4
+    assert code_lines('X = """one\ntwo\nthree"""\n') == 3
+
+
+def test_a_file_that_does_not_parse_raises_rather_than_counting_zero():
+    with pytest.raises(SyntaxError):
+        code_lines("def f(:\n    pass\n")
+
+
 def test_the_parser_accepts_a_clean_allowlist():
     text = "# a comment\n\nscripts/a.py 700\nscripts/b.py 610\n"
     assert parse_allowlist(text) == {"scripts/a.py": 700, "scripts/b.py": 610}
@@ -168,7 +208,7 @@ def test_the_parser_rejects_a_malformed_line():
 
 
 def test_a_tree_within_its_caps_and_at_its_allowlist_is_clean():
-    counts = {"scripts/a.py": 599, "scripts/big.py": 900}
+    counts = {"scripts/a.py": 449, "scripts/big.py": 900}
     allow = {"scripts/big.py": 900}
     assert LENGTHS.violations(counts, allow) == []
 
@@ -294,6 +334,44 @@ def test_a_reworded_reason_that_names_no_new_max_does_not_let_an_entry_rise():
     assert len(flagged) == 1
 
 
+# Each must-flag reason is one the allowlist carried before the rule existed.
+_HISTORY_FLAGGED = {
+    "scripts/dev/fanout_lib/review/review.py": (
+        "the red phase and green gate call _claude only Pipeline defines; reaping every "
+        "test run it starts took it to 663 (#4508); moving the hold reports out took it to "
+        "647 (#4737); the green-gate contest took it to 655 (#5400)"
+    ),
+    "scripts/lib/exit_codes.py": (
+        "the readers of CONTRACTS live in exit_messages.py. The shadow_diff.py family took "
+        "it to 807, and deploy.sh's exit 5 (DEPLOY_FLUX_OWNED, D2.1b) to 817"
+    ),
+}
+_HISTORY_CLEAN = {
+    "hosts/lib/k3s_gates.py": (
+        "the checks share ReadError, Getter and the API path constants, and the script "
+        "ships as the single stdlib file /usr/lib/homelab/k3s_gates.py"
+    ),
+    "scripts/a.py": "680 since the new marker reads through `read` (#4301, D2.1b, exit 5)",
+    "scripts/tests/test_a.py": "420: every row reads the census's private helpers",
+}
+
+
+def test_a_conjoined_reason_that_logs_earlier_raises_is_flagged():
+    flagged = reasons_with_history(_HISTORY_FLAGGED)
+    assert [line.split(":")[0] for line in flagged] == sorted(_HISTORY_FLAGGED)
+    assert "663, 647, 655" in flagged[0]
+
+
+def test_a_conjoined_reason_naming_one_max_or_none_is_clean():
+    """Issue numbers, slice names and small numbers such as an exit code are not counts."""
+    assert reasons_with_history(_HISTORY_CLEAN) == []
+
+
+def test_the_live_conjoined_reasons_name_one_max_at_most():
+    offenders = reasons_with_history(conjoined_reasons(LENGTHS.path.read_text()))
+    assert not offenders, "\n".join(offenders)
+
+
 def test_adding_a_path_master_does_not_track_is_clean():
     """A renamed or brand-new file has to be able to enter the list."""
     added = {"scripts/new.py": 900}
@@ -318,6 +396,37 @@ def test_a_raised_entry_is_clean_when_this_commit_changes_the_guard():
         {"scripts/a.py": 900}, {"scripts/a.py": 901}, "list.txt", guard_changed=True
     )
     assert clean == []
+
+
+def test_a_changed_guard_exempts_no_file_the_branch_edited():
+    """A comment edit to a guard file must not wave through growth in a module it touched.
+
+    The pairs are the two guard-change tests above, where the path was not edited.
+    """
+    flagged = raised_entries(
+        {"scripts/a.py": 900},
+        {"scripts/a.py": 901, "scripts/old.py": 900},
+        "list.txt",
+        guard_changed=True,
+        edited={"scripts/a.py", "scripts/old.py"},
+    )
+    assert len(flagged) == 2
+    assert "up from 900" in flagged[0] and "added to list.txt" in flagged[1]
+
+
+def test_the_edited_read_sees_an_uncommitted_change_and_nothing_else(tmp_path):
+    repo = init_repo(tmp_path)
+    base = commit(repo, "base", **{"a.py": "x\n", "b.py": "y\n"})
+    (repo / "a.py").write_text("x\nz\n")
+    edited = edited_since(lambda *a: git(repo, *a, check=False), base)
+    assert edited == {"a.py"}
+
+
+def test_the_edited_read_raises_rather_than_returning_nothing(tmp_path):
+    repo = init_repo(tmp_path)
+    commit(repo, "base", **{"a.py": "x\n"})
+    with pytest.raises(RuntimeError):
+        edited_since(lambda *a: git(repo, *a, check=False), "no-such-ref")
 
 
 _HELPERS_BEFORE = (
@@ -352,7 +461,7 @@ def test_a_conftest_fixture_reaches_a_test_below_it_but_not_a_sibling_tree():
 
 def test_the_census_reaches_every_tree_that_holds_python():
     """Without this, every assertion below passes on a census that has gone quiet."""
-    counts = line_counts()
+    counts = lengths()
     assert CENSUS_MEMBERS <= set(counts), CENSUS_MEMBERS - set(counts)
     assert sum(1 for rel in counts if cap_for(rel) == TEST_CAP) >= 100
     assert sum(1 for rel in counts if cap_for(rel) == NON_TEST_CAP) >= 100
@@ -366,7 +475,7 @@ def test_the_module_fixture_census_finds_the_fixtures_it_names():
 
 
 def test_no_module_is_longer_than_its_cap_or_its_allowlist_entry():
-    offenders = LENGTHS.violations(line_counts(), LENGTHS.allowlist())
+    offenders = LENGTHS.violations(lengths(), LENGTHS.allowlist())
     assert not offenders, "\n".join(offenders)
 
 
@@ -460,6 +569,7 @@ def test_no_allowlist_entry_rose_against_the_merge_base(ratchet: Ratchet):
         ratchet.path.name,
         untracked_on_master=[p for p in new if not tracked_on_base(p)],
         guard_changed=guard_differs_from_base(),
+        edited=edited_since(run_git, _base_ref()),
         conjoined=conjoined_reasons(ratchet.path.read_text())
         if ratchet is LENGTHS
         else None,
@@ -472,7 +582,7 @@ def test_no_allowlist_entry_rose_against_the_merge_base(ratchet: Ratchet):
 
 def test_the_live_length_ratchet_flags_a_lowered_entry():
     """The pairs above prove the comparison; this proves the census feeds the real list."""
-    _assert_a_lowered_entry_is_flagged(LENGTHS, line_counts())
+    _assert_a_lowered_entry_is_flagged(LENGTHS, lengths())
 
 
 def test_the_live_monkeypatch_ratchet_flags_a_lowered_entry():

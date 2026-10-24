@@ -6,7 +6,7 @@ under-counts each session's at-start bytes (#4656). session-health.py calls
 `log_unevented_loads` once per session open to write those two rows itself, and once per
 compaction to row `MEMORY.md` again (#4668).
 
-Split out of session-health.py, which sits at its 600-line cap. Package name is `hooklib`,
+Split out of session-health.py when it reached its line cap. Package name is `hooklib`,
 not `lib`, for the reason `worktree_lines.py` gives.
 """
 
