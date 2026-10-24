@@ -35,3 +35,66 @@ groups:
             to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no
             registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror
             --replicas=1`.
+      # node-exporter's ghcr-mirror-pull sidecar GETs nut's manifest through each node's ghcr.io
+      # mirror endpoint every 600s (#5542). containerd falls back to ghcr.io past a broken
+      # mirror, so while the WAN is up nothing else sees one. The `for:` rides out the weekly GC:
+      # registry-gc.sh holds the mirror at zero for at most 1620s (the pod-exit and Job-delete
+      # waits of 120s each, registry_k8s_gc_deadline_s of 1200s and the 180s rollout wait), and
+      # a down verdict stands until the next write 600s later, so 37 minutes at most. 45m
+      # clears that, and a mirror the GC left at zero is GhcrMirrorScaledToZero's page as well.
+      - alert: GhcrMirrorPullFailed
+        expr: homelab_check_success{check="ghcr-mirror-pull"} == 0
+        for: 45m
+        labels:
+          severity: warning
+          service: registry
+        annotations:
+          summary: "{{ $labels.origin }} cannot pull nut's manifest through its ghcr.io mirror endpoint."
+          description: >-
+            The ghcr-mirror-pull check on {{ $labels.origin }} has failed for 45 minutes. A GET of
+            nut's manifest through the node's ghcr.io mirror endpoint was refused, timed out or
+            answered an error, or the nut-ghcr-mirror-probe ConfigMap names no tag. containerd
+            still pulls ghcr.io images straight from GHCR, so nothing breaks until a WAN outage,
+            when nut cannot cold-start. Read the `ghcr-mirror-pull` container log of the
+            node-exporter pod on {{ $labels.origin }}, then the ghcr-mirror pod, its
+            NetworkPolicy and the node's registries.yaml.
+      # A sidecar that stopped writing, per node, because the absent arm cannot name a node it
+      # never saw. The 3000s literals equal DEADLINE_S in node-exporter's
+      # files/ghcr-mirror-pull.sh, and ansible/roles/k8s/node-exporter/tests/test_ghcr_mirror_pull.py
+      # pins them to it. `unless` leaves a dead exporter to ScrapeTargetDown.
+      - alert: GhcrMirrorPullNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull",origin="daniel-box"} > 3000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull",origin="daniel-box"}[3000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: registry
+        annotations:
+          summary: daniel-box's ghcr.io mirror pull check has stopped reporting.
+          description: >-
+            No ghcr-mirror-pull verdict newer than 3000s reached Prometheus from daniel-box's
+            textfile collector, so nothing is watching whether the node's ghcr.io mirror
+            endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull`
+            container on daniel-box.
+      - alert: GhcrMirrorPullNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull",origin="daniel-server"} > 3000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull",origin="daniel-server"}[3000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: registry
+        annotations:
+          summary: daniel-server's ghcr.io mirror pull check has stopped reporting.
+          description: >-
+            No ghcr-mirror-pull verdict newer than 3000s reached Prometheus from daniel-server's
+            textfile collector, so nothing is watching whether the node's ghcr.io mirror
+            endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull`
+            container on daniel-server.
