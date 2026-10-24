@@ -78,6 +78,11 @@ creation_rules:
     age: "age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp"
   - path_regex: vars/hosts/daniel-pi\.sops\.yaml$
     age: "age1ezk4lhnysjwv6g8lv6m295e8x923nr99fgclhjw9xjc9fdrpkumsc5k0nc,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp"
+  # daniel-box is the host and daniel-box's key at once, so its rule lists two keys: daniel-box,
+  # then recovery. No daniel-box file exists yet. H6.3b writes it with `host_secrets.py sync`,
+  # when the first daniel-box credential makes the package ship a `secrets-unit` (H6.2).
+  - path_regex: vars/hosts/daniel-box\.sops\.yaml$
+    age: "age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp"
   - path_regex: .*(vars|secrets)\/.*\.ya?ml$
     # Recipients (multi-recipient = OR; ANY one key decrypts the whole file).
     # First key = daniel-server, second = OFF-BOX RECOVERY key (private half lives only in the

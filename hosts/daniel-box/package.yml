@@ -1,0 +1,10 @@
+# daniel-box's host package (H6.2). It starts with `reconcile` only. daniel-box runs k3s and the
+# deployer, and no path moves out of Ansible's hands in this version: the builder, the
+# repository and every daniel-box timer stay with Ansible until H7
+# (docs/target-architecture/host/h6-k3s-suc.md, *Steps, as PRs*, item 5).
+#
+# The package carries no credential, so it has no `secrets-unit` and no
+# ansible/vars/hosts/daniel-box.sops.yaml. H6.3b adds both with the first daniel-box key.
+description: daniel-box's homelab host package
+components: [reconcile]
+maintainer_scripts: [preinst, postinst, prerm]

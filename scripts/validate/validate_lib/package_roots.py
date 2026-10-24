@@ -32,8 +32,14 @@ from pathlib import Path
 
 from lib import yaml_fast
 
-# The named set. Add a package here when it joins the scans. daniel-server joined in H4.2.
-NAMED = ("homelab-updater", "homelab-daniel-pi", "homelab-daniel-server")
+# The named set. Add a package here when it joins the scans. daniel-server joined in H4.2 and
+# daniel-box in H6.2.
+NAMED = (
+    "homelab-updater",
+    "homelab-daniel-pi",
+    "homelab-daniel-server",
+    "homelab-daniel-box",
+)
 
 SOPS_DIR = "usr/lib/homelab/secrets"
 TEMPLATES = "usr/lib/homelab/secret-templates"
