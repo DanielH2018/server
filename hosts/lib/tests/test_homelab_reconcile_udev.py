@@ -7,6 +7,7 @@ Run: uv run pytest hosts/lib/tests/test_homelab_reconcile_udev.py
 """
 
 import pytest
+from _reconcile_arms import red
 from _reconcile_host import Node
 
 RULE = "99-homelab-nut-apc.rules"
@@ -50,7 +51,7 @@ def test_a_rule_whose_hash_changed_reloads_and_triggers_again(node):
     assert node.udevadm() == [RELOAD, TRIGGER]
 
 
-def test_a_dropped_rule_makes_no_udevadm_call_and_leaves_the_record(node):
+def dropped_rule_scenario(node: Node) -> None:
     node.rule(RULE)
     settled(node)
     node.drop_rule(RULE)
@@ -61,6 +62,21 @@ def test_a_dropped_rule_makes_no_udevadm_call_and_leaves_the_record(node):
     node.rule(RULE)
     settled(node)
     assert node.udevadm() == [RELOAD, TRIGGER]
+
+
+def test_a_dropped_rule_makes_no_udevadm_call_and_leaves_the_record(node):
+    dropped_rule_scenario(node)
+
+
+def test_an_arm_that_triggers_on_a_dropped_rule_is_flagged(tmp_path):
+    # Red fixture: comparing the whole map reads a drop as a change, so it calls udevadm.
+    red(
+        tmp_path,
+        dropped_rule_scenario,
+        "reconcile_lib/udev.py",
+        "if all(known.get(path) == digest for path, digest in shipped.items()):",
+        "if known == shipped:",
+    )
 
 
 def test_a_failed_trigger_fails_the_run_and_the_next_run_retries_it(node):
