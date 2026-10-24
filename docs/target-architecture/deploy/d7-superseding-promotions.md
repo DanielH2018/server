@@ -355,7 +355,9 @@ refuses.
    refuses. Recommendation: do not build D7.1 to D7.5 at this cadence. Re-measure when
    merges or verification times grow, for example once a typical `verify` exceeds 10
    minutes or waits reach a third of promotions. D7.1 has no value on its own, because
-   nothing races `settle` while every run waits. Resolution: the operator rules.
+   nothing races `settle` while every run waits. **Ruled on 2026-10-24:** the operator
+   read these numbers and chose to build D7.1 to D7.5 as planned. D7.6 stays a ruling of
+   its own.
 1. **Should a stalled verification be cut short instead?** The 296-minute wait came
    from a `verify` that reached its cap. A shorter derived timeout, or a `verify` that
    fails a name once its Kustomization reads `Stalled`, would remove more waiting than
