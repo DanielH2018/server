@@ -102,6 +102,61 @@ groups:
             {{ $labels.container }} logged {{ $value }} lines matching panic, fatal, traceback
             or out of memory in the last hour, so it may be failing at its job while its pod
             reads Ready. Read that container's log in loki-homelab to see the lines.
+      # The host counterpart of WorkloadLogErrors (#6163): the same pattern over the cluster
+      # hosts' syslog, keyed by the rsyslog program tag that config.alloy.j2's
+      # `loki.process "host"` stage extracts into `program`.
+      #
+      # The window is 6h, not WorkloadLogErrors' 1h. A failing `uv run` cron writes one
+      # `Traceback` line per run, so an hourly cron that fails every run reaches 4 lines inside
+      # one window and pages, where a 1h window would hold it at 1 forever. `> 3` keeps a single
+      # transient failure quiet. Measured 2026-10-24 over the five rotated syslog files (from
+      # 2026-09-20) on both cluster hosts, the program-windows above 3 were:
+      #   - daniel-box `uv`, 2026-10-05 to 10-08: 49038 tracebacks, about 4200 per window;
+      #   - daniel-box `flock` and `release-staleness-check`: git's `fatal: unable to access`
+      #     during GitHub outages, a handful of windows;
+      #   - daniel-server `kernel`, 2026-09-24 and 09-28: 34 and 29 `Memory cgroup out of
+      #     memory` lines, a container OOM storm against its limits.
+      # `uv` merges every `uv run` cron into one key, so the line itself names the script.
+      #
+      # Only `syslog`, and only the cluster hosts. Authlog stays out because sudo's `COMMAND=`
+      # lines echo their arguments, so a `grep fatal` run under sudo would count. daniel-pi's
+      # `pi_health` stream also carries job="syslog" but never passes the stage, so it has no
+      # `program` and the `machine` matcher keeps it out.
+      #
+      # Not shadow: the label exists for a rule that runs beside a Kuma tile, and no Kuma tile
+      # covers host syslog. `service` is a literal, as on every rule here, because
+      # test_alertmanager_routing.py routes each rule by its own labels; the alert's `machine`
+      # label names the host.
+      - alert: HostLogErrors
+        expr: sum by (machine, program) (count_over_time({job="syslog", machine!="daniel-pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [6h])) > 3
+        labels:
+          severity: warning
+          service: host-syslog
+        annotations:
+          summary: '{{ $labels.program }} on {{ $labels.machine }} logged more than 3 fatal-pattern lines in 6 hours.'
+          description: >-
+            {{ $labels.program }} on {{ $labels.machine }} logged {{ $value }} syslog lines
+            matching panic, fatal, traceback or out of memory in the last 6 hours. Read
+            {job="syslog", program="{{ $labels.program }}"} in loki-homelab to see the lines.
+      # A host-wide OOM kill pages on the first one. The kernel writes one "Out of memory:
+      # Killed process" line per kill, which HostLogErrors' `> 3` would never reach. The match is
+      # case-sensitive on purpose: a container hitting its own limit logs "Memory cgroup out of
+      # memory: Killed process" in lower case, which HostLogErrors counts and the shadow
+      # ContainerOOMKilled covers. Measured 2026-10-24, neither cluster host logged a host-wide
+      # kill since 2026-09-20.
+      - alert: HostOutOfMemoryKill
+        expr: >-
+          sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Out of memory: Killed process" [1h])) > 0
+        labels:
+          severity: warning
+          service: host-syslog
+        annotations:
+          summary: The kernel on {{ $labels.machine }} OOM-killed a process in the last hour.
+          description: >-
+            The kernel on {{ $labels.machine }} logged {{ $value }} host-wide "Out of memory:
+            Killed process" lines in the last hour, so the node ran out of memory rather than a
+            container hitting its limit. Read {job="syslog", program="kernel"} in loki-homelab
+            for the killed process and the memory report above it.
       # The update line of each cloudflare-ddns Deployment, ported by M6's batch B7. favonia's
       # image serves no metrics, so the log is the only evidence an update cycle succeeded. Every
       # 5m cycle logs, per domain, either "are already up to date" (a cached or a checked no-op)

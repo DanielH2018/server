@@ -1,12 +1,14 @@
 {
-  "checksum": "063f993705702a415a36ff80eb3af94dba1fc3115d7e6e65a06e0694e0510e0b",
+  "checksum": "b5894e14baf2ff2f16cf03b8147c8ee182cdb76ec37384cb0316c6d79c266674",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/nut/CLAUDE.md#Timer vs. safety net",
   "row": {
     "atoms": {
-      "ansible/tests/setup/test_nut_host_secondary.py": "d2cbe0a9538f4ed8bfddf57db86236d5623fad840c7afa47de285195c1114a74"
+      "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2": "889ec4c42db4da2fb071e30b7a764515f52579451529eab49011b42d017e6784",
+      "ansible/tests/setup/test_nut_host_secondary.py": "d2cbe0a9538f4ed8bfddf57db86236d5623fad840c7afa47de285195c1114a74",
+      "hosts/components/nut-secondary/component.yml": "9b1c24a9a1e6bce47f7ae5a87a527db14c4a74fffc797b0500535672d2cedca0"
     },
     "python": "3.14",
-    "verified_sha": "55862020d"
+    "verified_sha": "eab40596f"
   }
 }

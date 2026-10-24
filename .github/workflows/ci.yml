@@ -532,7 +532,7 @@ jobs:
     # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
     # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
-      DOTFILES_SHA: 155bcad29ae1bef5a64edc650799fe66d018d65d
+      DOTFILES_SHA: 506f7956c39aa70065d815d3f5a81a27ff71f840
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1125,6 +1125,7 @@ jobs:
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/package_roots.py
             scripts/validate/validate_lib/secrets_case.py
+            scripts/validate/validate_lib/pi_host_seed.py
         run: |
           set -euo pipefail
           if [ "$EVENT" = workflow_dispatch ]; then

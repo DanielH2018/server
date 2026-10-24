@@ -1,10 +1,11 @@
 {
-  "checksum": "aee8889500f02a16ea56b324ea1e53e12abc95f430ae8ed15249bf206cc3609e",
+  "checksum": "e45595a09ed73f973eea82224b077c1a86aa2cd94c28c36986e115884176582f",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Alert plane",
   "row": {
     "atoms": {
       "ansible/roles/k8s/observability/files/rules/workload-service.yaml": "a973bb8dbf5aebe06af189962e276130d2ed6da50fd1aee3066922a417dbb112",
+      "ansible/roles/k8s/observability/tests/alertmanager/": "747a55d293a6c36eebfe78507eff0f75b6436357a7e5cb0d8cdfc97691161f3d",
       "ansible/tests/k8s/test_rendered_properties.py": "ea957a6f30e9a9042258fdb461ec377aba69a4a65aedf18095eeea1daf7e11f0",
       "ansible/tests/k8s/test_workload_service_overrides.py": "0ac69454a611040c26c8143d62022d197a8cb78c54b69b51f16fc1fa3abdb941",
       "ansible/tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute_with_kumas_window": "0af14f1ef04921efec8cb1db1cde1cf3024f7a0290be343f2d41b7596340c7df",
@@ -14,9 +15,10 @@
       "ansible/tests/services/test_scrape_target_rule_jobs.py": "f6bdfb94920365ebc6be80b7869ef864e27ce88defb54076f12f6fd09b9f3a90",
       "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86",
       "docs/target-architecture/monitoring/m1-alertmanager.md": "8ce5bbad833af2f17f1389dc2f42dc8f0e352dab2c320e646ffb8f319c2e7a98",
-      "docs/target-architecture/monitoring/m4-blackbox-ingress.md": "9801543adbf865bc66804029c04e6b8ac75e1cd61d09159c979806f4f389df38"
+      "docs/target-architecture/monitoring/m4-blackbox-ingress.md": "9801543adbf865bc66804029c04e6b8ac75e1cd61d09159c979806f4f389df38",
+      "scripts/validate/notification_renders.py:render_problems": "878ac2e910af92c705c09a01fde99e85b523f269ca4bc8811b024882ab5229b6"
     },
     "python": "3.14",
-    "verified_sha": "242255504"
+    "verified_sha": "5483ccfd9"
   }
 }

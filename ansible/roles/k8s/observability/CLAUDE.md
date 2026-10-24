@@ -125,6 +125,13 @@ expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file
 `observability_rule_groups` names it. The routing tree, the receivers and the rule conventions
 are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
 
+**The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
+the Discord and email bodies, and `ansible/roles/k8s/observability/tests/alertmanager/` holds
+four alert groups with the text each body must render for them.
+`scripts/validate/notification_renders.py:render_problems` fails any difference. To change the
+text, edit the template, run `uv run python scripts/validate/alert_rules.py --write-renders`,
+and review the rewritten `.txt` files.
+
 **The weekly reboot mutes every paging route, never the Watchdog.** The `weekly-reboot` time
 interval derives from the reboot cron's `weekly_reboot_*` values and the mute's lead and
 recovery allowance in `group_vars/all.yml`, which Kuma's maintenance window also reads. A

@@ -48,7 +48,7 @@ groups:
         annotations:
           summary: daniel-box's root disk check has stopped reporting.
           description: >-
-            No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+            No disk-health verdict newer than 25 minutes reached Prometheus from daniel-box's
             textfile collector, so nothing is watching the root disk. Read the `daniel-box disk
             health` cron and the `disk-health` syslog tag, then
             /var/lib/node-exporter-textfile/disk-health.prom on the host.
@@ -87,7 +87,7 @@ groups:
         annotations:
           summary: The peer artifact sync on daniel-box has stopped reporting.
           description: >-
-            No sync-artifacts verdict newer than 900s reached Prometheus from daniel-box's
+            No sync-artifacts verdict newer than 15 minutes reached Prometheus from daniel-box's
             textfile collector, so the cron stopped, or its flock is held by a hung run. Read the
             `Sync peer Claude artifacts` cron and `journalctl -t sync-artifacts`, then
             /var/lib/node-exporter-textfile/sync-artifacts.prom on the host.
@@ -118,7 +118,7 @@ groups:
         annotations:
           summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
           description: >-
-            No claude-otel-health verdict newer than 1500s reached Prometheus from daniel-box's
+            No claude-otel-health verdict newer than 25 minutes reached Prometheus from daniel-box's
             textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
             telemetry health` cron and `journalctl -t claude-otel-health`, then
             /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
@@ -158,7 +158,7 @@ groups:
         annotations:
           summary: daniel-box's longhorn-backup-health check has stopped reporting.
           description: >-
-            No longhorn-backup-health verdict newer than 1500s reached Prometheus from daniel-box's
+            No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from daniel-box's
             textfile collector, so nothing is watching the Longhorn backup plane. Read the `Longhorn
             backup health` cron and the `longhorn-backup-health` syslog tag, then
             /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
@@ -189,7 +189,7 @@ groups:
         annotations:
           summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
           description: >-
-            No etcd-snapshot-offbox verdict newer than 90000s reached Prometheus from daniel-box's
+            No etcd-snapshot-offbox verdict newer than 25 hours reached Prometheus from daniel-box's
             textfile collector, so nothing is watching the off-box etcd snapshot. Read the `Off-box
             etcd snapshot` cron and the `etcd-snapshot-offbox` syslog tag, then
             /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
@@ -219,9 +219,9 @@ groups:
           service: daniel-box
           shadow: "true"
         annotations:
-          summary: daniel-box's manifest-prune-check check has stopped reporting.
+          summary: daniel-box's manifest-prune-check has stopped reporting.
           description: >-
-            No manifest-prune-check verdict newer than 90000s reached Prometheus from daniel-box's
+            No manifest-prune-check verdict newer than 25 hours reached Prometheus from daniel-box's
             textfile collector, so nothing is watching deployed-artifact drift. Read the
             `kuma-check-manifest-prune` timer and the `manifest-prune-check` syslog tag, then
             /var/lib/node-exporter-textfile/manifest-prune-check.prom on the host.
@@ -251,9 +251,9 @@ groups:
           service: daniel-box
           shadow: "true"
         annotations:
-          summary: daniel-box's release-staleness-check check has stopped reporting.
+          summary: daniel-box's release-staleness-check has stopped reporting.
           description: >-
-            No release-staleness-check verdict newer than 3900s reached Prometheus from daniel-box's
+            No release-staleness-check verdict newer than 65 minutes reached Prometheus from daniel-box's
             textfile collector, so nothing is watching release staleness. Read the `Release
             staleness drift check` cron and the `release-staleness-check` syslog tag, then
             /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
@@ -282,9 +282,9 @@ groups:
           service: daniel-box
           shadow: "true"
         annotations:
-          summary: daniel-box's live-drift-check check has stopped reporting.
+          summary: daniel-box's live-drift-check has stopped reporting.
           description: >-
-            No live-drift-check verdict newer than 90000s reached Prometheus from daniel-box's
+            No live-drift-check verdict newer than 25 hours reached Prometheus from daniel-box's
             textfile collector, so nothing is watching live-object drift. Read the
             `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
             /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
@@ -389,7 +389,7 @@ groups:
         annotations:
           summary: daniel-box's iSCSI session check has stopped reporting.
           description: >-
-            No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-box's
+            No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-box's
             textfile collector, so nothing is watching the node's iSCSI sessions. Read the
             log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
       - alert: IscsiSessionsNotReporting
@@ -406,9 +406,152 @@ groups:
         annotations:
           summary: daniel-server's iSCSI session check has stopped reporting.
           description: >-
-            No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-server's
+            No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-server's
             textfile collector, so nothing is watching the node's iSCSI sessions. Read the
             log of the node-exporter pod's `iscsi-sessions` container on daniel-server.
+      # The claude_code timers (#6165). Each service writes its file from an ExecStartPost=, which
+      # systemd runs only after a clean ExecStart=, so the file only ever says success 1 and these
+      # rules have no Failed twin: OnFailure= pages a crash at once, and NotReporting catches a
+      # timer that stopped firing, which pages nothing else. Not shadow, because no Kuma tile
+      # watches these timers. One rule per host whose host_vars arm the timer. Setting the
+      # timer's flag false stops it, and the rule then fires on purpose: delete the rule in the
+      # same PR. Each deadline is the one the service renders through
+      # roles/setup/claude_code/templates/timer-textfile.j2, and
+      # ansible/tests/setup/test_claude_timer_rule_literals.py pins both literals to it.
+      - alert: ClaudeCloneSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="daniel-box"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="daniel-box"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The agent clone sync on daniel-box has stopped reporting.
+          description: >-
+            No claude-clone-sync verdict newer than 2100s reached Prometheus from daniel-box's textfile
+            collector, so the agent's clone fast-forward has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on daniel-box. If `claude_code_agent_user_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeCloneSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="daniel-server"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="daniel-server"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The agent clone sync on daniel-server has stopped reporting.
+          description: >-
+            No claude-clone-sync verdict newer than 2100s reached Prometheus from daniel-server's textfile
+            collector, so the agent's clone fast-forward has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on daniel-server. If `claude_code_agent_user_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeDotfilesSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="daniel-box"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="daniel-box"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The agent dotfiles sync on daniel-box has stopped reporting.
+          description: >-
+            No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from daniel-box's textfile
+            collector, so the agent's dotfiles apply has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync` on daniel-box. If `claude_code_agent_dotfiles` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeDotfilesSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="daniel-server"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="daniel-server"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The agent dotfiles sync on daniel-server has stopped reporting.
+          description: >-
+            No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from daniel-server's textfile
+            collector, so the agent's dotfiles apply has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync` on daniel-server. If `claude_code_agent_dotfiles` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeMemorySyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-memory-sync",origin="daniel-box"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-memory-sync",origin="daniel-box"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The Claude memory sync from daniel-box has stopped reporting.
+          description: >-
+            No claude-memory-sync verdict newer than 2100s reached Prometheus from daniel-box's textfile
+            collector, so the memory store copy to daniel-server has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-memory-sync.timer` and `journalctl -u claude-memory-sync` on daniel-box. If `claude_code_memory_sync_enabled` was set false on purpose,
+            delete this rule. A run the ExecCondition skips, because daniel-box's MEMORY.md is
+            empty, writes nothing either, and an empty store is not a healthy state.
+      - alert: ClaudeTriagePollNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="daniel-box"} > 660
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="daniel-box"}[660s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The triage poller on daniel-box has stopped reporting.
+          description: >-
+            No claude-triage-poll verdict newer than 660s reached Prometheus from daniel-box's textfile
+            collector, so the monitor triage poll has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-triage-poll.timer` and `journalctl -u claude-triage-poll` on daniel-box. If `claude_code_triage_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeFanoutLanderNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-fanout-server-lander",origin="daniel-box"} > 3300
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-fanout-server-lander",origin="daniel-box"}[3300s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The fan-out server lander on daniel-box has stopped reporting.
+          description: >-
+            No claude-fanout-server-lander verdict newer than 3300s reached Prometheus from daniel-box's textfile
+            collector, so the fan-out server lander has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-fanout-server-lander.timer` and `journalctl -u claude-fanout-server-lander` on daniel-box. If `claude_code_fanout_server_lander_enabled` was set false on purpose,
+            delete this rule.
       # One rule per k3s node whose host_vars set k3s_node_static_link, reading that link. Each
       # such node falls back to WiFi when the link drops (docs/k3s-node-plane-crons-and-incidents.md),
       # so it stays Ready on a slower link and nothing else reports it. The carrier arm catches
@@ -463,7 +606,7 @@ groups:
           severity: critical
           service: daniel-server
         annotations:
-          summary: daniel-server holds after a failed reconcile.
+          summary: daniel-server's homelab package reconcile failed, so it installs no newer package.
           description: >-
             homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes, so the host
             holds and installs no newer homelab package. Read `journalctl -u homelab-updater -u
@@ -479,7 +622,7 @@ groups:
           severity: critical
           service: daniel-pi
         annotations:
-          summary: daniel-pi holds after a failed reconcile.
+          summary: daniel-pi's homelab package reconcile failed, so it installs no newer package.
           description: >-
             homelab_host_reconcile_ok on daniel-pi has read 0 for 15 minutes, so the host holds
             and installs no newer homelab package. Read `journalctl -u homelab-updater -u
@@ -495,7 +638,7 @@ groups:
           severity: critical
           service: daniel-box
         annotations:
-          summary: daniel-box holds after a failed reconcile.
+          summary: daniel-box's homelab package reconcile failed, so it installs no newer package.
           description: >-
             homelab_host_reconcile_ok on daniel-box has read 0 for 15 minutes, so the host holds
             and installs no newer homelab package. Read `journalctl -u homelab-updater -u
@@ -546,9 +689,9 @@ groups:
           severity: critical
           service: daniel-pi
         annotations:
-          summary: daniel-pi has had no successful homelab update for 11400s.
+          summary: daniel-pi has had no successful homelab update for 3 hours 10 minutes.
           description: >-
-            No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is up
+            No homelab-updater run on daniel-pi has succeeded in 3 hours 10 minutes, or its exporter is up
             and serves no success timestamp. A failed fetch, a stopped homelab-apt-repo.service,
             a firewall rule, a keyring mismatch and a stopped timer each leave it stale. Read
             `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on

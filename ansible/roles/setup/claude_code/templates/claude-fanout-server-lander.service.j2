@@ -36,3 +36,8 @@ KillMode=process
 # Room for two checkouts, each a `git worktree add` and a first `uv run` sync, and two starts.
 TimeoutStartSec=30min
 ExecStart=/usr/local/bin/uv run --no-python-downloads python scripts/dev/fanout.py land-server --primary {{ claude_code_operator_checkout }}
+# The textfile that tells a timer which stopped firing from one that runs clean (#6165).
+# timer-textfile.j2 has the shape and the deadline rule.
+# 1800 is TimeoutStartSec above, the longest a healthy run may take.
+{% from 'timer-textfile.j2' import timer_textfile with context %}
+{{ timer_textfile('claude-fanout-server-lander', claude_code_fanout_server_lander_interval, 1800) }}

@@ -73,7 +73,7 @@ groups:
           requires: wan
           shadow: "true"
         annotations:
-          summary: Cloudflare's published IP ranges differ from cloudflare_ips, or the fetch failed.
+          summary: Cloudflare's published IP ranges differ from the repo's cloudflare_ips list, or fetching them failed.
           description: >-
             cloudflare_ips in group_vars/all.yml sets Traefik's trustedIPs and the netpol
             allow-list. Update it and redeploy traefik, netpol-baseline and monitor-bridge. A
@@ -197,7 +197,7 @@ groups:
           service: gitops-deploy
           shadow: "true"
         annotations:
-          summary: The pull-based deployer on daniel-box has not ticked within GITOPS_MAX_AGE_MIN.
+          summary: The pull-based deployer on daniel-box has stopped ticking.
           description: >-
             The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or
             unparseable. Run systemctl status gitops-deploy.timer on daniel-box and read the

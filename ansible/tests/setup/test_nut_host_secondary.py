@@ -12,13 +12,13 @@ DISARMED BY DEFAULT. A secondary upsmon exists to power the machine off. Arming 
 control-plane node without the console-attended drill risks an unplanned cluster shutdown, and
 nothing about a wrong configuration is visible while mains power is up.
 
-THE USB HALF IS PACKAGE-OWNED. The udev rule belongs to the host the UPS is plugged into, and
-since H4.3c the homelab-daniel-server package installs it. The role writes no udev rule and runs
-no udevadm, and it ends on that host, so one path never has two writers.
+THE HOST HALF IS PACKAGE-OWNED. Since H4.3c the homelab-daniel-server package installs the udev
+rule, and since H7.33 both cluster nodes' packages install the secondary upsmon. The role is one
+unconditional `end_role`, so one path never has two writers.
 
-THE ENDPOINT IS PROVEN, NOT ASSUMED. The nut Service does not pin its clusterIP, so a cross-node
-secondary's endpoint is a deploy-time snapshot. An unreachable endpoint installs a shutdown chain
-that never fires — indistinguishable from a working one until the power cut it exists for.
+THE ENDPOINT IS PINNED. The nut Service pins its clusterIP, and daniel-box's package renders that
+literal address. An address nothing re-resolves would install a shutdown chain that never fires,
+indistinguishable from a working one until the power cut it exists for.
 
 Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 """
@@ -29,10 +29,10 @@ import json
 import re
 
 from _kuma_monitors import entity, monitors_text, tile_is_gated_on
-from _setup_render import render_setup_text
 from _shell_render import rendered_shell_text
 from deploy_tools.setup_lib import setup_gates
 from lib.proc_testing import run
+from lib.repo_paths import REPO
 
 
 ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
@@ -40,6 +40,9 @@ TASKS = (ROLE / "tasks" / "main.yml").read_text()
 ALL_VARS_TEXT = ALL_VARS.read_text()
 SETUP = (ANSIBLE / "initial_setup.yml").read_text()
 NUT_DEFAULTS = ANSIBLE / "roles" / "k8s" / "nut" / "defaults" / "main.yml"
+NUT_SERVICE = ANSIBLE / "roles" / "k8s" / "nut" / "templates" / "service.yaml.j2"
+NUT_COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
+NUT_TIMER = NUT_COMPONENT.parent / "units" / "homelab-ups-watchdog.timer.j2"
 
 # Measured on daniel-server, `upsc apc-ups@127.0.0.1`: battery.runtime 987 at
 # battery.charge 100 and ups.load 43. A floor, not a guarantee — it falls with battery age and
@@ -70,95 +73,58 @@ def test_the_play_gate_reads_the_arm_flag():
     )
 
 
-def udev_tasks(text: str) -> list[str]:
-    """The names of the tasks in `text` that write under /etc/udev/rules.d/ or run udevadm."""
-    docs = list(yaml_fast.safe_load_all(text))
-    tasks = [t for doc in docs if isinstance(doc, list) for t in doc]
-    return [
-        str(task.get("name"))
-        for task in tasks
-        if "/etc/udev/rules.d/" in str(task) or "udevadm" in str(task)
-    ]
+def test_the_role_is_one_unconditional_end_role():
+    """H7.33 emptied the role: both cluster nodes' secondary is package-owned.
 
-
-OLD_UDEV_TASK = """
-- name: Install udev rule for APC UPS USB permissions
-  ansible.builtin.copy:
-    dest: /etc/udev/rules.d/99-nut-apc.rules
-    content: 'SUBSYSTEM=="usb"'
-  when: inventory_hostname == ups_host
-- name: Reload udev rules
-  ansible.builtin.command: udevadm control --reload-rules
-"""
-
-
-def test_no_task_writes_a_udev_rule_or_runs_udevadm():
-    """The packaged rule at /usr/lib/udev/rules.d/ is the only writer (H4.3c)."""
-    assert udev_tasks(TASKS) == []
-
-
-def test_a_task_list_holding_the_old_udev_tasks_is_flagged():
-    assert udev_tasks(OLD_UDEV_TASK) == [
-        "Install udev rule for APC UPS USB permissions",
-        "Reload udev rules",
-    ]
-
-
-def test_the_role_ends_on_the_ups_host():
-    """Its leading task ends the role there, so the package's half has no second writer."""
-    assert setup_gates.role_end_guard(ROLE) == "inventory_hostname == ups_host"
-
-
-def test_the_endpoint_is_templated_not_hardcoded_to_loopback():
-    """A cross-node secondary cannot use the pod's loopback hostPort.
-
-    Asserted by rendering the conf at an address the inventory does not hold. Matching
-    `@{{ nut_host_upsd_host }}` in the source instead holds only while the endpoint is spelled
-    that way, and a spelling the pattern misses leaves the guard matching nothing (#3202).
+    A guard that names a host would let the tick write the old files again on that host, and a
+    second task would give the role work the packages do not own.
     """
-    rendered = render_setup_text(
-        "nut_host", "host-upsmon.conf.j2", {"nut_host_upsd_host": "198.51.100.7"}
-    )
-    monitor = [ln for ln in rendered.splitlines() if ln.startswith("MONITOR ")]
+    assert setup_gates.role_end_guard(ROLE) == "True"
+    [task] = yaml_fast.safe_load(TASKS)
+    assert task["ansible.builtin.meta"] == "end_role"
+
+
+def daniel_box_package(tmp_path):
+    """daniel-box's package rendered against a stand-in ciphertext file.
+
+    The real `ansible/vars/hosts/daniel-box.sops.yaml` is operator-written, so the render
+    reads a placeholder here; only the rendered templates are under test.
+    """
+    from renderer.renderer_lib import host as host_mode
+
+    (tmp_path / "daniel-box.sops.yaml").write_text("placeholder: ENC[AES256_GCM,x]\n")
+    return host_mode.render_host("daniel-box", sops_dir=tmp_path)
+
+
+def test_daniel_boxs_package_names_the_pinned_clusterip(tmp_path):
+    """A cross-node secondary cannot use the pod's loopback hostPort; it names the pinned Service.
+
+    The pin sits in two files, the nut role's defaults and the component's defaults, because
+    the host render cannot read a k8s role. This pins them together, and pins the rendered
+    MONITOR line to the value, so a spelling the extractor misses cannot empty the guard.
+    """
+    pin = yaml_fast.safe_load(NUT_DEFAULTS.read_text())["nut_k8s_cluster_ip"]
+    component = yaml_fast.safe_load(NUT_COMPONENT.read_text())
+    assert component["defaults"]["nut_host_upsd_clusterip"] == pin
+    assert "clusterIP: {{ nut_k8s_cluster_ip }}" in NUT_SERVICE.read_text()
+    package = daniel_box_package(tmp_path)
+    template = "/usr/lib/homelab/secret-templates/etc/nut/upsmon.conf"
+    monitor = [
+        ln
+        for ln in package.files[template][0].decode().splitlines()
+        if ln.startswith("MONITOR ")
+    ]
     assert len(monitor) == 1, f"expected one MONITOR line, got {monitor}"
-    assert "@198.51.100.7 " in monitor[0], (
-        "the MONITOR endpoint must come from nut_host_upsd_host: 127.0.0.1 is correct only on "
-        f"the host whose node runs the nut pod. Rendered: {monitor[0].split()[1]!r}"
-    )
+    assert monitor[0].split()[1] == f"apc-ups@{pin}"
 
 
-def test_reachability_is_asserted_before_the_chain_is_installed():
-    """An unreachable endpoint must fail the deploy, not install a dead shutdown chain."""
-    assert "ansible.builtin.wait_for" in TASKS and "port: 3493" in TASKS, (
-        "the cross-node path must prove upsd is reachable before rendering upsmon.conf — the "
-        "clusterIP is a deploy-time snapshot and nothing else would notice it going stale"
-    )
-
-
-def test_the_reachability_failure_names_both_causes():
-    """An empty lookup and an unroutable IP need different fixes, so the message must separate them."""
-    for phrase in ("Service was not found", "flannel.1"):
-        assert phrase in TASKS, (
-            "the failure message must distinguish 'no Service' from 'not routable / not "
-            "admitted by the NetworkPolicy' — they have different remedies"
-        )
-
-
-def test_no_task_is_tagged_so_the_lookup_cannot_be_split_from_its_consumer():
-    """A tag here can only separate the endpoint resolution from the template that reads it.
-
-    `nut_host` runs from initial_setup.yml alone, which has no config/deploy tag split. Tagging
-    the ClusterIP lookup while the set_fact and the template stay untagged means a --skip-tags run
-    renders `MONITOR <ups>@` from the `| default('')`, and skips the reachability assert that
-    would have caught it — a dead shutdown chain written with no error.
-    """
-    docs = list(yaml_fast.safe_load_all(TASKS))
-    tasks = [t for doc in docs if isinstance(doc, list) for t in doc]
-    tagged = [t.get("name") for t in tasks if t.get("tags")]
-    assert not tagged, (
-        "tasks %r carry tags; the endpoint lookup, the set_fact that stores it and the "
-        "upsmon.conf template must be selected or skipped as one unit" % tagged
-    )
+def test_daniel_boxs_watchdog_unit_loads_its_own_tiles_token(tmp_path):
+    """The package must list the credential the unit loads, and it must not be daniel-server's."""
+    package = daniel_box_package(tmp_path)
+    unit = package.files["/usr/lib/systemd/system/homelab-ups-watchdog.service"][0]
+    assert b"/run/credstore/ups_secondary_push_token" in unit
+    assert b"ups_secondary_daniel_server_push_token" not in unit
+    assert "ups_secondary_push_token" in package.credentials
 
 
 # ── The ONBATT timer, once any host beyond ups_host is armed ────────────────────────────────
@@ -242,7 +208,6 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
 # reads, both look exactly like a working one.
 
 WATCHDOG = rendered_shell_text("setup", "nut_host", "ups-secondary-health.sh.j2")
-WATCHDOG_ENV = (ROLE / "templates" / "kuma-push.env.j2").read_text()
 NUT_HOST_DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
 
 # The two tiles and the variable each is gated on, one per watching host.
@@ -252,11 +217,6 @@ TILES = {
         "ups-secondary-daniel-server.json",
         "ups_secondary_daniel_server_push_token",
     ),
-}
-# Two values no secret holds, so a render carrying one carries THAT host's value.
-SENTINELS = {
-    "ups_secondary_push_token": "ups-secondary-box-sentinel",
-    "ups_secondary_daniel_server_push_token": "ups-secondary-server-sentinel",
 }
 
 
@@ -339,58 +299,6 @@ def test_the_watchdog_logs_above_the_journald_store_cap():
     assert "daemon.info" not in WATCHDOG
 
 
-def test_the_watchdog_renders_its_own_env_file():
-    """/etc/rancher/k3s/kuma-push.env is a whole-content template owned by roles/setup/k3s.
-
-    Adding a key to it from this role would be clobbered on that role's next run, leaving the
-    cron with no token — which reads as the monitor going silent, not as a broken deploy.
-    """
-    # Asserted on the `source` line, not on any mention: the script's own comment names the
-    # k3s file to explain why it is not used, and a bare substring check would trip on that.
-    assert ". /etc/nut/kuma-push.env" in WATCHDOG
-    assert ". /etc/rancher/" not in WATCHDOG
-    assert "ups_secondary_push_token" in WATCHDOG_ENV
-
-
-def test_the_env_file_selects_the_token_by_host():
-    """daniel-box and ups_host (daniel-server) must render DIFFERENT values.
-
-    Two hosts pushing the same token would let either host's `up` satisfy Kuma's push
-    deadline, masking the other's `down`. Read from two renders with a different sentinel
-    behind each variable: the per-host SELECTION is the claim, and at inventory values both
-    resolve to the same STUB, which cannot show it (#3202).
-    """
-    rendered = {
-        host: render_setup_text(
-            "nut_host",
-            "kuma-push.env.j2",
-            {"inventory_hostname": host, "ups_host": "daniel-server", **SENTINELS},
-        )
-        for host in TILES
-    }
-    box, server = (SENTINELS[v] for _, v in TILES.values())
-    assert box in rendered["daniel-box"] and server not in rendered["daniel-box"], (
-        f"daniel-box renders {rendered['daniel-box'].splitlines()[-1]!r}"
-    )
-    assert (
-        server in rendered["daniel-server"] and box not in rendered["daniel-server"]
-    ), (
-        "the env template must select by host, or both hosts push one monitor; daniel-server "
-        f"renders {rendered['daniel-server'].splitlines()[-1]!r}"
-    )
-
-
-def test_the_env_file_token_selection_is_mandatory():
-    """A missed host selection must fail the deploy, not render an empty token.
-
-    The script's own empty-token branch is a silent `logger …; exit 0`, so a token that
-    resolves empty pushes nothing and logs nothing anyone watches — the failure has to happen
-    here, at render time, instead.
-    """
-    assert "ups_secondary_push_token | mandatory" in WATCHDOG_ENV
-    assert "ups_secondary_daniel_server_push_token | mandatory" in WATCHDOG_ENV
-
-
 def test_the_tile_is_gated_on_its_token():
     """An ungated tile sits red from creation until the secret exists.
 
@@ -434,13 +342,14 @@ def test_the_tile_deadline_is_derived_from_the_cron_cadence():
             f"{tile}'s deadline does not follow nut_host_watchdog_interval_minutes — a hardcoded "
             "interval survives a schedule change and grants the wrong grace"
         )
-    assert "*/{{ nut_host_watchdog_interval_minutes }}" in TASKS
+    assert "*:0/{{ nut_host_watchdog_interval_minutes }}" in NUT_TIMER.read_text()
 
 
 def test_the_watchdog_is_armable_and_armed():
     assert NUT_HOST_DEFAULTS["nut_host_watchdog_armed"] is True
     assert NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] == 10
-    assert "nut_host_watchdog_armed | bool" in TASKS
+    enable = yaml_fast.safe_load(NUT_COMPONENT.read_text())["enable"]
+    assert enable["homelab-ups-watchdog.timer"]["when"] == "nut_host_watchdog_armed"
 
 
 def test_the_watchdog_does_not_page_on_battery_state():
