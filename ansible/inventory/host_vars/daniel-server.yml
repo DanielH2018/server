@@ -49,6 +49,11 @@ claude_code_agent_user_enabled: true
 # daniel-box's agent logs in here as `claude` with the key agent_peers.yml generates there.
 # False removes the key and the ssh-users membership.
 claude_agent_ssh_login_enabled: true
+# The agent user takes the operator's dotfiles here too, as on daniel-box. A fan-out batch
+# launched as `claude` needs the claude-guard shim they deploy: since #6116 every headless
+# launch names claude-guard's prompt server, and refuses to start without the shim (#6117).
+# Rollback: delete this line; the hand-picked config copy comes back on the next apply.
+claude_code_agent_dotfiles: true
 
 # DECIDED: 18G fleet cap, derived the way defaults/main.yml derives daniel-box's 14G.
 # Measured on daniel-server 2026-10-17. Re-derive all of it if you change this:
