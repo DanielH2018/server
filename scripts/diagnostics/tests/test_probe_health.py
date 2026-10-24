@@ -12,6 +12,7 @@ the CronJob path. Shared fakes are in `_probe_health_fixtures.py`.
 Run: uv run pytest scripts/diagnostics/tests/test_probe_health.py
 """
 
+import pytest
 from _probe_health_fixtures import NOW, pods
 
 from diagnostics.probe_lib import health, health_docker, health_rollout
@@ -134,6 +135,30 @@ def test_health_absent_but_declared_is_flagged():
 def test_declared_on_pi_reads_the_pis_containers_list():
     assert health_docker.declared_on_pi("wg-easy") is True
     assert health_docker.declared_on_pi("definitely-not-a-service") is False
+
+
+def _pi_inventory(tmp_path, text):
+    path = tmp_path / "daniel-pi.yml"
+    path.write_text(text)
+    return path
+
+
+def test_declared_on_pi_reads_a_service_that_moved_to_compose_services(tmp_path):
+    """ACCEPT: a name in the second key is declared, and a name in neither is not (H5.1)."""
+    path = _pi_inventory(
+        tmp_path,
+        "containers_list:\n  - name: autoheal\ncompose_services:\n  - name: alloy\n",
+    )
+    assert health_docker.declared_on_pi("alloy", path) is True
+    assert health_docker.declared_on_pi("autoheal", path) is True
+    assert health_docker.declared_on_pi("wg-easy", path) is False
+
+
+def test_declared_on_pi_raises_when_either_service_key_is_missing(tmp_path):
+    """REJECT: a file without `compose_services` is not read as a list that omits the name."""
+    path = _pi_inventory(tmp_path, "containers_list:\n  - name: alloy\n")
+    with pytest.raises(ValueError, match="compose_services"):
+        health_docker.declared_on_pi("alloy", path)
 
 
 def test_declared_on_pi_fails_closed_on_an_unreadable_inventory(tmp_path):

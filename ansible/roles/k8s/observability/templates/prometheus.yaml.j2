@@ -376,10 +376,12 @@ data:
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
       # One tcp_connect target per container the Pi publishes a port for, from the same
       # `published_ports` selection as monitor-bridge's PI_PUBLISHED_PORTS, so a container added
-      # to daniel-pi's containers_list gets a probe with no edit here. `service` is the container
-      # name. A container recreated by a deploy closes its port for a few seconds, which
-      # PiPortDead's `for:` rides out. A container that comes back attached to no Docker network
-      # stays closed until someone recreates it, and that is what this job exists to catch.
+      # to daniel-pi's containers_list or compose_services gets a probe with no edit here. The
+      # targets sort by name, so a service moving between the two keys moves no target.
+      # `service` is the container name. A container recreated by a deploy closes its port for a
+      # few seconds, which PiPortDead's `for:` rides out. A container that comes back attached
+      # to no Docker network stays closed until someone recreates it, and that is what this job
+      # exists to catch.
       - job_name: blackbox-pi-ports
         scrape_interval: 1m
         # A contended Pi can take over the default 10s to accept a connect, which the exporter
@@ -388,7 +390,7 @@ data:
         scrape_timeout: 30s
         metrics_path: /probe
         static_configs:
-{% for published in hostvars['daniel-pi'].containers_list | published_ports %}
+{% for published in (((hostvars['daniel-pi'].containers_list | published_ports) + (hostvars['daniel-pi'].compose_services | published_ports)) | sort) %}
           - targets: ['{{ hostvars['daniel-pi'].server_ip }}:{{ published.split(':')[1] }}']
             labels: {service: {{ published.split(':')[0] }}, module: tcp_connect}
 {% endfor %}
@@ -562,7 +564,7 @@ data:
         scrape_interval: 1m
         scrape_timeout: 30s
         static_configs:
-          - targets: ['{{ k8s_pi_client_ip }}:{{ hostvars['daniel-pi'].containers_list | entry_port('alloy') }}']
+          - targets: ['{{ k8s_pi_client_ip }}:{{ (hostvars['daniel-pi'].containers_list + hostvars['daniel-pi'].compose_services) | entry_port('alloy') }}']
             labels:
               origin: daniel-pi
               instance: daniel-pi
