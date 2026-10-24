@@ -17,7 +17,7 @@ from typing import Any
 # and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
-from lib.ansible_inventory import containers_entries_in
+from lib.ansible_inventory import PI_HOST, containers_entries_in, pi_entries_in
 
 from infra_map.constants import (
     _CONTAINER_NAME,
@@ -150,10 +150,19 @@ def load_inventory(
 
 
 def declared_services(host: str, host_vars: dict, global_vars: dict) -> list[dict]:
-    """Flatten a host's ``containers_list`` into normalized service records."""
+    """Flatten a host's ``containers_list`` into normalized service records.
+
+    daniel-pi reads ``compose_services`` too (H5), so a service that moved into the Pi's
+    Compose project keeps its declaration; ``pi_entries_in`` raises when either key is missing.
+    """
     variables = {**global_vars, **host_vars}
     services = []
-    for entry in containers_entries_in(host_vars):
+    entries = (
+        pi_entries_in(host_vars)
+        if host == PI_HOST
+        else containers_entries_in(host_vars)
+    )
+    for entry in entries:
         name = entry["name"]
         platform = entry.get("platform", "docker")
         hostname = resolve_vars(entry.get("hostname", name), variables)

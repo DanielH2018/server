@@ -2087,6 +2087,28 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
     - **H7.12a** The paired PR in `DanielH2018/dotfiles` adds the per-user tooling: uv, the
       pinned Python, Claude Code, `claude_guard`, `claude_worktree`, prek, `github_cli` and
       `chezmoi_setup`'s config. It merges first, under that repo's own rules.
+      The operator ruled on four open questions on 2026-10-24, and
+      [DanielH2018/dotfiles#997](https://github.com/DanielH2018/dotfiles/pull/997) follows them:
+      1. **Pins.** The dotfiles repo moves to Ansible's pins: uv `0.13.4`
+         (`initial_setup_uv_version`), prek `0.5.5` and Python `3.14.6` (`host_python_version`).
+         Both installers write the same `~/.local/bin`, so a differing pin made each apply undo
+         the other. Ansible does not change. Until H7.39 deletes its tasks, a bump of one of the
+         three lands in both repos together.
+      2. **Agent apply.** An `agent = true` apply installs uv, the pinned Python, prek and
+         Claude Code as the agent user, so the dotfiles repo lifts the `is-agent` gate on its
+         python-tools script. `claude_guard` and `claude_worktree` deploy to the agent from the
+         dotfiles repo, not as copies of the operator's. Each installer leaves a tool alone
+         when it is already at the pin, so it changes nothing on a home that
+         `common/tasks/agent_user.yml` has filled, and that task keeps running until H7.39.
+      3. **Hosts.** The sets mirror Ansible's `has_chezmoi`, `has_github_cli` and
+         `dev_tooling_hosts`. An agent apply installs the tooling only on `dev_tooling_hosts`
+         (daniel-box and daniel-server). The other two sets name daniel-box alone, and the
+         dotfiles repo already installs `gh` and its credential helper on any Linux host, so
+         it does not narrow them.
+      4. **Seed.** Only `chezmoi_setup`'s three prompt answers need a non-interactive path.
+         `chezmoi init` with `--promptBool` and `--promptString` for them runs with no tty and
+         no config, and a dotfiles test runs that command. Bootstrap step 5 installs the
+         chezmoi binary, and H7.12b's unit passes the three flags instead of a seed file.
     - **H7.12b** The agent users join `sysusers.d` with their live uids. A package unit that
       runs as each agent installs its tooling and its clone. `claude_agents.py`'s checks move
       to the renderer, if the host render still reads `claude_code_agents`.
