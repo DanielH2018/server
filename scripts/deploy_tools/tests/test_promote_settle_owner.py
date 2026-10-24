@@ -93,7 +93,7 @@ def test_a_hold_written_after_decide_moves_nothing_is_flagged(tmp_path, jobs):
     result, calls, output = _move(tmp_path, jobs, FAKE_HOLD=f"{T} failed=bento-pdf")
     assert result.returncode == 0, result.stderr
     assert (calls, output) == ([], "")
-    assert "written after decide read it" in result.stdout
+    assert "not the 'none' decide read" in result.stdout
 
 
 def test_an_unreadable_hold_moves_nothing_and_fails(tmp_path, jobs):
@@ -138,3 +138,37 @@ def test_a_failed_superseding_tag_moves_nothing(tmp_path, jobs):
     assert result.returncode != 0
     assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag superseding"]
     assert output == ""
+
+
+REVERT_HOLD = f"{T} failed=bento-pdf"
+
+
+def test_a_revert_rule_move_under_the_hold_decide_read_moves_prod_is_clean(
+    tmp_path, jobs
+):
+    """The revert rule promotes while a `failed=` hold stands, so that hold is not a refusal."""
+    result, calls, _ = _move(
+        tmp_path, jobs, FAKE_HOLD=REVERT_HOLD, HOLD_READ=REVERT_HOLD
+    )
+    assert result.returncode == 0, result.stderr
+    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag prod"]
+
+
+def test_a_hold_that_changed_since_decide_read_it_moves_nothing_is_flagged(
+    tmp_path, jobs
+):
+    result, calls, output = _move(
+        tmp_path, jobs, FAKE_HOLD=f"{T} unverified", HOLD_READ=REVERT_HOLD
+    )
+    assert (result.returncode, calls, output) == (0, [], "")
+
+
+def test_a_superseding_move_after_last_good_moved_moves_nothing_is_flagged(
+    tmp_path, jobs
+):
+    """The superseded run settled first, so T's base and reset digest are stale."""
+    result, calls, output = _move(
+        tmp_path, jobs, SUPERSEDES="b" * 40, FAKE_LAST_GOOD_DIGEST="sha256:" + "9" * 64
+    )
+    assert (result.returncode, calls, output) == (0, [], "")
+    assert "settled first" in result.stdout
