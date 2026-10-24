@@ -159,10 +159,14 @@ before an enable of UFW applies it.
   misses would be appended again on every run, and a libvirt XML without a `<uuid>` would make
   `net-define` collide with the live object. Both fail the render.
 
-The container job does not yet run the line arm's two owning-package upgrade cases: an upgrade
-of the owning package that keeps the local conffile, and one that ships a changed conffile. The
-tests in `hosts/lib/tests/test_reconcile_lines_arm.py` cover the arm's side of both. The
-`dpkg` side is an open follow-up, because it needs the `host_packages` container job.
+The line arm's two owning-package upgrade cases run on both sides. The tests in
+`hosts/lib/tests/test_reconcile_lines_arm.py` cover the arm's side with stub `dpkg`. The
+`host_packages` container job covers the `dpkg` side (`scripts/validate/validate_lib/conffile_case.py`).
+It installs a fixture package that owns a conffile, then a homelab fixture whose `lines:` edit lands
+in it, and upgrades the owner under `--force-confold`: once with the conffile unchanged and once
+changed. Each upgrade records whether `dpkg` kept the local file or held the package back. The
+case fails when the line was gone before the next reconcile, and checks it again after that
+reconcile.
 
 ### Getting a host out of one of these holds
 

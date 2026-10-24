@@ -25,9 +25,10 @@ HOST_INPUTS = (
     "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
     "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
     # What a component's `role:` renders (`host_sources.ROLE_SOURCES`): the role's defaults and
-    # the template daniel-server's package renders in place (H4.3a).
+    # the two templates daniel-server's package renders in place (H4.3a, H4.3c).
     "ansible/roles/setup/nut_host/defaults/main.yml",
     "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2",
+    "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
     # Past the plan's list, found by the audit test: ansible-core reads `ansible.cfg` from the
     # render's working directory, and `homelab_render.py` imports the other two at load, for
     # cluster mode.

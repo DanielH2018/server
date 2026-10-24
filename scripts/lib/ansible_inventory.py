@@ -63,6 +63,37 @@ def containers_entries_in(data: dict | None) -> list[dict]:
     return [e for e in entries if isinstance(e, dict) and e.get("name")]
 
 
+# The two keys that list the Pi's services (H5): Ansible's Docker play deploys `containers_list`,
+# and the `homelab-daniel-pi` package deploys `compose_services`. A service is in exactly one.
+PI_LIST_KEYS = ("containers_list", "compose_services")
+
+
+def pi_entries_in(data: dict | None) -> list[dict]:
+    """The named entries of both Pi service lists in an already-parsed host_vars mapping.
+
+    `containers_list` entries come first, then `compose_services`, each filtered as
+    ``containers_entries_in`` filters. A list set to null reads as empty, as there. A mapping
+    that lacks either key raises, so a reader of the Pi's services cannot keep reading one key
+    after a service moves to the other and look healthy (H5, *The service list*).
+
+    Raises:
+        ValueError: `data` lacks `containers_list` or `compose_services`.
+    """
+    data = data or {}
+    missing = [key for key in PI_LIST_KEYS if key not in data]
+    if missing:
+        raise ValueError(
+            f"the Pi's host_vars lack {' and '.join(missing)}; every reader of the Pi's "
+            "services reads both keys"
+        )
+    return [
+        e
+        for key in PI_LIST_KEYS
+        for e in data[key] or []
+        if isinstance(e, dict) and e.get("name")
+    ]
+
+
 @dataclass(frozen=True)
 class Host:
     """One host line of ``hosts.ini``.

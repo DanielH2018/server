@@ -27,8 +27,9 @@ k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix
 # The rollout budget, declared once. Read as Flux's health-check `timeout` and by
 # `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift. After a
 # handback, k8s/manifests' rollout wait reads it too. A first boot installing DOCKER_MODS
-# takes up to 10 minutes; the 300s k8s/manifests default times out against the startupProbe
-# that allows it.
+# takes up to 10 minutes. That is the whole 600s default (Flux's, and
+# manifests_rollout_timeout_default after a handback), so the default leaves no margin over the
+# startupProbe that allows it.
 # The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
 # fails on ProgressDeadlineExceeded whatever `--timeout` says, so the last 60s of this budget
 # is unreachable unless the deadline is rendered from this variable too.
@@ -72,7 +73,8 @@ radarr_k8s_log_rotate: "10"
 # fails if the three drift apart.
 radarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
 
-# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+# The claim the renderer emits for this role. The radarr Kustomization applies it after the
+# radarr-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply snapshot.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ radarr_k8s_claim }}"
     storage_class: "{{ radarr_k8s_storage_class }}"

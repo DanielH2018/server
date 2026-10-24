@@ -12,8 +12,9 @@ DISARMED BY DEFAULT. A secondary upsmon exists to power the machine off. Arming 
 control-plane node without the console-attended drill risks an unplanned cluster shutdown, and
 nothing about a wrong configuration is visible while mains power is up.
 
-THE USB HALF STAYS PUT. The udev rule and the driver belong to the host the UPS is plugged into.
-Rendering them elsewhere would be inert at best and misleading at worst.
+THE USB HALF IS PACKAGE-OWNED. The udev rule belongs to the host the UPS is plugged into, and
+since H4.3c the homelab-daniel-server package installs it. The role writes no udev rule and runs
+no udevadm, and it ends on that host, so one path never has two writers.
 
 THE ENDPOINT IS PROVEN, NOT ASSUMED. The nut Service does not pin its clusterIP, so a cross-node
 secondary's endpoint is a deploy-time snapshot. An unreachable endpoint installs a shutdown chain
@@ -30,6 +31,7 @@ import re
 from _kuma_monitors import entity, monitors_text, tile_is_gated_on
 from _setup_render import render_setup_text
 from _shell_render import rendered_shell_text
+from deploy_tools.setup_lib import setup_gates
 from lib.proc_testing import run
 
 
@@ -68,21 +70,43 @@ def test_the_play_gate_reads_the_arm_flag():
     )
 
 
-def test_the_usb_half_is_confined_to_the_ups_host():
-    """udev rules and the driver belong to the host the UPS is physically attached to."""
-    docs = list(yaml_fast.safe_load_all(TASKS))
+def udev_tasks(text: str) -> list[str]:
+    """The names of the tasks in `text` that write under /etc/udev/rules.d/ or run udevadm."""
+    docs = list(yaml_fast.safe_load_all(text))
     tasks = [t for doc in docs if isinstance(doc, list) for t in doc]
-    usb = [
-        t
-        for t in tasks
-        if "udev" in (t.get("name") or "").lower() or "USB" in (t.get("name") or "")
+    return [
+        str(task.get("name"))
+        for task in tasks
+        if "/etc/udev/rules.d/" in str(task) or "udevadm" in str(task)
     ]
-    assert usb, "expected the udev tasks to still exist"
-    for task in usb:
-        assert "ups_host" in str(task.get("when", "")), (
-            "%r must be gated on ups_host — the USB half is meaningless on a host with no "
-            "UPS attached" % task.get("name")
-        )
+
+
+OLD_UDEV_TASK = """
+- name: Install udev rule for APC UPS USB permissions
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/99-nut-apc.rules
+    content: 'SUBSYSTEM=="usb"'
+  when: inventory_hostname == ups_host
+- name: Reload udev rules
+  ansible.builtin.command: udevadm control --reload-rules
+"""
+
+
+def test_no_task_writes_a_udev_rule_or_runs_udevadm():
+    """The packaged rule at /usr/lib/udev/rules.d/ is the only writer (H4.3c)."""
+    assert udev_tasks(TASKS) == []
+
+
+def test_a_task_list_holding_the_old_udev_tasks_is_flagged():
+    assert udev_tasks(OLD_UDEV_TASK) == [
+        "Install udev rule for APC UPS USB permissions",
+        "Reload udev rules",
+    ]
+
+
+def test_the_role_ends_on_the_ups_host():
+    """Its leading task ends the role there, so the package's half has no second writer."""
+    assert setup_gates.role_end_guard(ROLE) == "inventory_hostname == ups_host"
 
 
 def test_the_endpoint_is_templated_not_hardcoded_to_loopback():

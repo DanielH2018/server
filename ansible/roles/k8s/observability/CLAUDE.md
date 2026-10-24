@@ -43,6 +43,13 @@ The working-out lives in `docs/observability-dashboards.md`.
 
 **`probe.py health observability` gates every workload in the role**, none of them named observability.
 
+**The `observability-prepull` Kustomization pulls Grafana's image before its `Recreate`**, so the
+dashboards serve through a 482 MB Docker Hub pull (`flux_prepull_timeout` in
+`defaults/main.yml`, #5867). `flux_prepull_workloads` scopes the Job to Grafana alone (#5875).
+The other Deployments pin no node, and the Loki, Tempo and kube-state-metrics images carry no
+`sh` for the Job's script. Grafana prefers `k8s_primary_node` so the Job has a node to copy. A
+pod the scheduler sends elsewhere after the Job ran pays the cold pull.
+
 ## Eviction tiers
 
 DECIDED: observability tiers — Prometheus and Alertmanager are `homelab-critical`; the other

@@ -15,6 +15,7 @@ PR H4.1b, the restart contract in reconcile: [#6063](https://github.com/DanielH2
 PR H4.2, daniel-server's age key, SOPS file and bring-up: [#6069](https://github.com/DanielH2018/server/pull/6069). The per-host file arrives by the operator's `host_secrets.py sync` commit on the PR's branch, so the PR stays a draft until then. `bootstrap-host.sh` reads the keyring from beside itself, so the operator copies it out of `hosts/keys/` first.
 PR H4.3a, daniel-server's `upsmon.conf`, rendered and read by nothing: [#6082](https://github.com/DanielH2018/server/pull/6082). The operator's `host_secrets.py sync` added `nut_monitor_password`. It added the `nut-secondary` component and a `role:` key in component.yml, which names a `host_sources.ROLE_SOURCES` role whose defaults sit beneath the component's and whose template a `role:<name>.j2` `src` renders in place. `HOST_INPUTS` gained that role's defaults and the one template.
 PR H4.3b1, the `kuma-push` component and reconcile's udev arm: [#6089](https://github.com/DanielH2018/server/pull/6089). It republishes `homelab-daniel-pi` and `homelab-daniel-server`. The arm hashes `/usr/lib/udev/rules.d/NN-homelab-*.rules` from disk instead of reading a manifest field, so no renderer change was needed, and it lives in `reconcile_lib/udev.py`. The Pi's `kuma-push-lib.sh` kept its sha256, path and package.
+PR H4.3c, NUT on daniel-server: [#6096](https://github.com/DanielH2018/server/pull/6096). It republishes `homelab-daniel-server` and ends the `nut_host` role on `ups_host`. A component file entry now takes `src: role:<template>`, as an output does, and `HOST_INPUTS` gained the watchdog template. The rollout text's step 2 is inexact: the output's new dependent changes `secrets.json`, so `secrets_inputs_sha256` moves and reconcile restarts `homelab-secrets` once before it restarts `nut-monitor`. The NUT container cases of *Verification* have no PR, so the environ read stands in for them.
 PR H4.4, the Pi's SOPS creation rule: [#6092](https://github.com/DanielH2018/server/pull/6092). It carries only the rule and `docs/break-glass.md` item 12. The Pi's file, `credentials:`, `LIVE_HOST_FILES` entry and `check` member moved to H4.5, because `host_outputs.py:finish` refuses a credential without a `secrets-unit`. The Pi's bootstrap step 3 ran on 2026-10-24.
 
 This slice adds `homelab-secrets.service`, which decrypts a per-host SOPS file on the host
@@ -916,7 +917,7 @@ meaning.
           checkout. `Setup Plane Drift (agent hosts)` therefore reads DOWN from its first run
           that sees the edited template until the apply.
         - The landing note names this apply already:
-          `scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_the_same_run`
+          `scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_no_run`
           pins it at `70591c307`.
         - **Operator-only**, after merge, on daniel-server, from its own checkout at the merge
           commit or later: `uv run ansible-playbook ansible/initial_setup.yml --tags nut_host -e target=daniel-server`.
@@ -1478,7 +1479,7 @@ and before the slice closes.
       the token, the udev rule the package ships, and the boot order.
     - In `scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py`,
       `test_nut_host_reaches_daniel_box_and_daniel_server` expects daniel-box only, and
-      `test_the_landing_owes_daniel_server_the_same_run` asserts that the note does not
+      `test_the_landing_owes_daniel_server_no_run` asserts that the note does not
       name daniel-server. The module docstring and the two test names change with them.
     - `ansible/roles/setup/nut_host/CLAUDE.md` says the role ends on `ups_host` and why, and
       that the `ups_host` half is package-owned. Its generated glance block is regenerated,
@@ -1939,7 +1940,7 @@ How each was handled, with the evidence:
   reports drift until the role is re-applied. H4.3b3 keeps its scope and adds the
   **operator-only** `--tags nut_host` apply on daniel-server, which the landing note
   already names
-  (`scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_the_same_run`).
+  (`scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_no_run`).
   The tile `Setup Plane Drift (agent hosts)` reads DOWN until then. The template branch did
   not move into H4.3c, which would undo R10-15's split. The Rollback mirrors the apply.
 - **C1-04.** `nut_host/tasks/main.yml` writes the rule with `MODE="0666"`, and H4.3c retires

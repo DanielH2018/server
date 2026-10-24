@@ -106,11 +106,12 @@ traefik_k8s_acme_storage: 128Mi
 # acme.json is regenerable, and losing it costs one ACME re-issue rather than data.
 traefik_k8s_acme_storage_class: longhorn
 
-# The ACME claim k8s/manifests renders and applies for this role (#3387). An expression rather
-# than a plain list, because traefik_k8s_manage_acme must reach the claim: a staging cluster
-# with ACME off renders no claim at all. `dict(...)` rather than a `{...}` literal: the offline
-# renders (scripts/lib/k8s_context.py:_PURE_TEMPLATE) evaluate a whole-value expression to its
-# own type only when it holds no brace, and otherwise hand on the list's text.
+# The ACME claim the renderer emits for this role, which the traefik Kustomization applies
+# (#3387). An expression rather than a plain list, because traefik_k8s_manage_acme must reach
+# the claim: a staging cluster with ACME off renders no claim at all. `dict(...)` rather than a
+# `{...}` literal: the offline renders (scripts/lib/k8s_context.py:_PURE_TEMPLATE) evaluate a
+# whole-value expression to its own type only when it holds no brace, and otherwise hand on the
+# list's text.
 k8s_claims: >-  # noqa var-naming[no-role-prefix]
   {{ [dict(name='traefik-acme', storage_class=traefik_k8s_acme_storage_class, size=traefik_k8s_acme_storage)] if traefik_k8s_manage_acme | bool else [] }}
 

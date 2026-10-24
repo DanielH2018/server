@@ -893,15 +893,25 @@ move changes nothing in the cluster but the commit Flux reports. The workflow ha
 
 The repository variable `DEPLOY_HOLD` stops promotion. The value `none` means no hold, and any
 other value holds, so a mistyped hold still holds. An empty or missing variable makes `decide`
-print `error`, and no tag moves. Setting or clearing a hold is **operator-only**:
+print `error`, and no tag moves. To set a hold, write a reason. To clear it, write `none`:
 
 ```bash
+gh variable set DEPLOY_HOLD --body <reason> -R DanielH2018/server
 gh variable set DEPLOY_HOLD --body none -R DanielH2018/server
 ```
 
-An agent session cannot run that command, nor write `PROD_DIGEST` or move a tag: the
-`block-footguns` hook denies them (`.claude/hooks/_deploy_plane_rule.py`). Reading either
-variable with `gh variable get` stays allowed.
+The `block-footguns` hook (`.claude/hooks/_deploy_plane_rule.py`) treats each direction
+differently:
+
+- **Setting a hold** stops promotion, so an agent session may run it without asking. Read the
+  variable first: a set over a standing hold replaces the SHA and names it records, which
+  `settle` and the revert rule read.
+- **Clearing a hold**, deleting the variable, and any `PROD_DIGEST` write raise a permission
+  prompt. The operator approves the agent's command rather than typing it. A write whose value
+  the hook cannot read, such as a `gh api` call or a body from stdin, prompts the same way.
+- **Moving a tag** is denied outright.
+
+Reading either variable with `gh variable get` stays allowed.
 
 A dispatch from master with the input `sha` publishes and promotes from that commit rather
 than master's tip. `render` refuses it unless it descends from `origin/master`, then re-reads
@@ -1032,8 +1042,9 @@ would never post T's statuses, and the timeout would write a false hold. A run t
 settles leaves `prod` and `last-good` apart, and every later run reports `current`. Slice
 D2.6d's `PromotionStalled` alert pages that stall.
 
-**Clearing a hold** is **operator-only**: set `DEPLOY_HOLD` back to `none` (*Publishing and
-promotion*), then dispatch `promote` with `-f sha=<master tip>`. `decide` promotes the newest
+**Clearing a hold** is the operator's decision: set `DEPLOY_HOLD` back to `none` (*Publishing
+and promotion*), then dispatch `promote` with `-f sha=<master tip>`. An agent may run the clear
+once the operator approves its permission prompt. `decide` promotes the newest
 eligible commit.
 
 **The revert rule is off.** `promote.REVERT_RULE` is `False`. Turning it on is an
@@ -1697,6 +1708,12 @@ workloads run, with `imagePullPolicy: IfNotPresent` and a script that exits at o
 Job completes when the kubelet holds every image. `<tag>` depends on `<tag>-prepull`, so the
 old pod keeps serving through the pull and the rollout pays only the container start.
 
+A role that also sets `flux_prepull_workloads` scopes the Jobs to the Deployments and
+StatefulSets it names (`scripts/renderer/renderer_lib/ordering.py:prepull_workloads`, #5875).
+Only those must name a node and carry `sh`, and a name the render lacks fails it.
+observability names Grafana alone: its 482 MB image is the role's one large pull, while
+Loki, Tempo and kube-state-metrics pin no node and ship no shell.
+
 - **The wait moves, it does not go away.** `<tag>-prepull`'s `timeout` is the role's
   `flux_prepull_timeout`, and it holds a
   `kustomize-controller` worker for the pull. It sits on `verify`'s chained timeout like any
@@ -1712,7 +1729,7 @@ old pod keeps serving through the pull and the rollout pays only the container s
 - **The Job and the pod are scheduled separately.** A node cordoned between the two sends the
   pod elsewhere, and there the rollout pays the cold pull. The rollout's own budget stays the
   backstop for that case.
-- **Every image must carry `sh`.** Each container runs `sh /opt/prepull/prepull.sh`, a
+- **Every image the Jobs pull must carry `sh`.** Each container runs `sh /opt/prepull/prepull.sh`, a
   mounted script that echoes one line. It is a shell script because n8n's image and the
   `alpine` init container of its runners carry no `python3` (#5546), and a container that
   cannot start fails the Job. The census's script-delivery rule admits the shell form only in
