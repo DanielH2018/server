@@ -100,7 +100,7 @@ def encrypt(c: Container, values: dict[str, str]) -> str:
 # finds no service to adopt and no image to pull, so a no-output `docker` lets its six steps pass.
 # The package, the unit and the scripts stay the real ones.
 DOCKER_STUB_PATH = "/usr/local/bin/docker"
-DOCKER_STUB = "#!/bin/sh\\nexit 0\\n"
+DOCKER_STUB = r"#!/bin/sh\nexit 0\n"
 
 
 def stub_docker(c: Container) -> None:
