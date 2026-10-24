@@ -113,3 +113,26 @@ def test_a_state_dropped_from_the_allow_list_is_flagged():
     assert problems == [
         f'LonghornVolumeDegraded: expr lacks `state!~"{safe_robustness()}"`'
     ]
+
+
+# Claims nothing reclaims, so the fullness page is their only bound. registry's push store has
+# had no garbage collection since D5 retired it, and its verify Job's seed adds one python image
+# per `flux_job_image` pin (#5752). PVCFull's exclusion equals PVC_EXCLUDE, which the test above
+# holds, so one check of PVC_EXCLUDE covers both arms.
+UNCOLLECTED_CLAIMS = frozenset({"registry-data"})
+
+
+def excluded_uncollected(env: dict[str, str]) -> list[str]:
+    """Each uncollected claim PVC_EXCLUDE drops from the fullness page."""
+    dropped = {c.strip() for c in env["PVC_EXCLUDE"].split(",")}
+    return sorted(UNCOLLECTED_CLAIMS & dropped)
+
+
+def test_no_uncollected_claim_is_excluded_from_the_fullness_page():
+    # fact: ansible/roles/k8s/registry/CLAUDE.md#Notable
+    assert excluded_uncollected(bridge_env()) == []
+
+
+def test_an_uncollected_claim_in_the_exclusion_is_flagged():
+    env = {**bridge_env(), "PVC_EXCLUDE": "media-data,registry-data"}
+    assert excluded_uncollected(env) == ["registry-data"]

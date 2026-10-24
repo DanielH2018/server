@@ -57,3 +57,105 @@ tests:
               service: registry
               severity: warning
             exp_annotations: *annotations
+
+  # daniel-server's mirror pull fails from minute 0 while daniel-box's passes. The failure fires
+  # after its 45m hold, for daniel-server alone, and both check files stay fresh.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="ghcr-mirror-pull", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x60'
+      - series: 'homelab_check_success{check="ghcr-mirror-pull", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x60'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x60'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 44m
+        alertname: GhcrMirrorPullFailed
+        exp_alerts: []
+      - eval_time: 46m
+        alertname: GhcrMirrorPullFailed
+        exp_alerts:
+          - exp_labels:
+              check: ghcr-mirror-pull
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              service: registry
+              severity: warning
+            exp_annotations:
+              summary: daniel-server cannot pull nut's manifest through its ghcr.io mirror endpoint.
+              description: "The ghcr-mirror-pull check on daniel-server has failed for 45 minutes. A GET of nut's manifest through the node's ghcr.io mirror endpoint was refused, timed out or answered an error, or the nut-ghcr-mirror-probe ConfigMap names no tag. containerd still pulls ghcr.io images straight from GHCR, so nothing breaks until a WAN outage, when nut cannot cold-start. Read the `ghcr-mirror-pull` container log of the node-exporter pod on daniel-server, then the ghcr-mirror pod, its NetworkPolicy and the node's registries.yaml."
+      - eval_time: 46m
+        alertname: GhcrMirrorPullNotReporting
+        exp_alerts: []
+
+  # The longest GC hold: the mirror is at zero for 27 minutes, and the down verdict stands until
+  # the next write 10 minutes later. 37 minutes of failure stay under the hold, so nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="ghcr-mirror-pull", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x37 1x40'
+    alert_rule_test:
+      - eval_time: 37m
+        alertname: GhcrMirrorPullFailed
+        exp_alerts: []
+      - eval_time: 77m
+        alertname: GhcrMirrorPullFailed
+        exp_alerts: []
+
+  # daniel-box's check file stopped being refreshed at 0 while its exporter stays up, and
+  # daniel-server's stays fresh. The stale-file arm fires once the timestamp is more than 3000s
+  # old, between minutes 50 and 51.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x60'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x60'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: GhcrMirrorPullNotReporting
+        exp_alerts: []
+      - eval_time: 51m
+        alertname: GhcrMirrorPullNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: ghcr-mirror-pull
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: registry
+              severity: warning
+            exp_annotations:
+              summary: daniel-box's ghcr.io mirror pull check has stopped reporting.
+              description: "No ghcr-mirror-pull verdict newer than 3000s reached Prometheus from daniel-box's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-box."
+
+  # No check file on daniel-server at all: the absent arm fires once 3000s pass with no series.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="ghcr-mirror-pull", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x60'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 51m
+        alertname: GhcrMirrorPullNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: ghcr-mirror-pull
+              origin: daniel-server
+              service: registry
+              severity: warning
+            exp_annotations:
+              summary: daniel-server's ghcr.io mirror pull check has stopped reporting.
+              description: "No ghcr-mirror-pull verdict newer than 3000s reached Prometheus from daniel-server's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-server."
