@@ -152,7 +152,29 @@ if ! docker version --format '{% raw %}{{.Server.Version}}{% endraw %}' >/dev/nu
     tr '\n' ' ' | cut -c1-400)"
 fi
 
-if [ -z "$DOWN" ]; then
+# THE COMPOSE ARM (H5.2b, the interim failure signal). compose-run writes homelab_compose.prom
+# whatever the outcome, and a run that failed leaves every container as it was, so the loop above
+# can read all-clear while the package's project is not up. This reads the result and acts on
+# nothing. An absent file adds nothing, because it is absent by design until the first run. A file
+# that exists but cannot be read, or holds no result line, is reported: reading it as absent would
+# turn a broken signal into an all-clear. M1's rule on homelab_compose_up_result replaces this arm.
+COMPOSE_PROM="${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}/homelab_compose.prom"
+COMPOSE_MSG=""
+if [ -e "$COMPOSE_PROM" ] || [ -L "$COMPOSE_PROM" ]; then
+  if ! COMPOSE_BODY="$(cat "$COMPOSE_PROM" 2>/dev/null)"; then
+    COMPOSE_MSG="homelab-compose: ${COMPOSE_PROM} exists and cannot be read"
+  else
+    COMPOSE_LINE="$(grep -m1 '^homelab_compose_up_result[{ ]' <<<"$COMPOSE_BODY")"
+    COMPOSE_SHA="$(sed -n 's/.*sha="\([^"]*\)".*/\1/p' <<<"$COMPOSE_LINE")"
+    if [ -z "$COMPOSE_LINE" ]; then
+      COMPOSE_MSG="homelab-compose: ${COMPOSE_PROM} holds no homelab_compose_up_result"
+    elif [ "${COMPOSE_LINE##* }" != "1" ]; then
+      COMPOSE_MSG="homelab-compose: the last run failed (homelab_compose_up_result ${COMPOSE_LINE##* } at ${COMPOSE_SHA:-unknown})"
+    fi
+  fi
+fi
+
+if [ -z "$DOWN" ] && [ -z "$COMPOSE_MSG" ]; then
   STATUS=up;   MSG="all {{ _names | length }} containers running"
 else
   # DECIDED: STATUS stays `down` even when the restart worked. Pushing `up` after a
@@ -165,9 +187,13 @@ else
   # declined 2026-09-11: those two episodes ARE the loop this rule exists to keep visible, and
   # no evidence was offered against the original reasoning. The recurring fault worth fixing is
   # that autoheal stops at all, filed separately.
-  STATUS=down; MSG="not running: ${DOWN}"
-  [ -n "$RECOVERED" ] && MSG="${MSG}; restarted: ${RECOVERED}"
-  [ -n "$FAILED" ] && MSG="${MSG}; restart FAILED: ${FAILED}"
+  STATUS=down; MSG=""
+  if [ -n "$DOWN" ]; then
+    MSG="not running: ${DOWN}"
+    [ -n "$RECOVERED" ] && MSG="${MSG}; restarted: ${RECOVERED}"
+    [ -n "$FAILED" ] && MSG="${MSG}; restart FAILED: ${FAILED}"
+  fi
+  [ -n "$COMPOSE_MSG" ] && MSG="${MSG:+${MSG}; }${COMPOSE_MSG}"
   [ -n "$DAEMON" ] && MSG="${MSG}; dockerd: ${DAEMON% }"
 fi
 

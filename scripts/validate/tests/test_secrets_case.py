@@ -119,6 +119,8 @@ def test_seal_pi_rebuilds_the_real_pi_package_and_both_variants_with_the_sealed_
     )
 
     assert any("age-keygen -o" in command for command in c.commands)
+    # The real package's compose unit runs in a container with no engine, so `docker` is stubbed.
+    assert any(case.DOCKER_STUB_PATH in command for command in c.commands)
     assert any("homelab-tools_1_amd64.deb" in command for command in c.commands)
     assert set(cases.added) == {"pi-head", "pi-dropin", "pi-disarmed"}
     assert all(

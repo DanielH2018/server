@@ -13,6 +13,9 @@ is exercised with the same shape it is deployed with (port, hostname, networks,
 use_authelia). Commented-out services are skipped automatically (they are not in
 the parsed list).
 
+A service in ``compose_services`` (the Pi package's Compose project, H5) renders from
+``hosts/components/pi-compose/services/<name>/compose.yaml.j2`` and gets the same checks.
+
 Run directly (``python3 scripts/validate/compose_templates.py``) or via the
 ``validate-compose-templates`` prek hook. Exits non-zero if any template fails to
 render or produces invalid YAML.
@@ -20,6 +23,7 @@ render or produces invalid YAML.
 
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import yaml
 
@@ -36,6 +40,7 @@ from lib.cli_help import answer_help
 from lib.ansible_jinja_env import template_env
 from lib.ansible_inventory import containers_entries_in
 from lib.render_context import render_context
+from lib.repo_paths import REPO
 from lib.render_guard import (
     ANSIBLE,
     HOST_VARS,
@@ -45,6 +50,9 @@ from lib.render_guard import (
 )
 
 ROLES = ANSIBLE / "roles" / "containers"
+# The Pi package's services (H5): one `compose.yaml.j2` tree per `compose_services` entry. A moved
+# service renders from here instead of ROLES, and both trees get the same checks.
+COMPONENT_SERVICES = REPO / "hosts" / "components" / "pi-compose" / "services"
 
 
 def _unescaped_dollars(value) -> list[str]:
@@ -249,19 +257,51 @@ def check_container(host: str, ci: dict) -> str | None:
             "docker-compose.yml.j2 — a Docker entry must render a compose file"
         )
 
-    env = template_env(ROLES / name / "templates")
-    ctx = render_context(tpl, host=host, overrides={"container_item": ci})
-    # A template reads its OWN entry through `container_item`; leaving the list in would let
+    return _check_rendered(name, "docker-compose.yml.j2", tpl, host, ci)
+
+
+def check_component_service(
+    host: str, ci: dict, root: Path = COMPONENT_SERVICES
+) -> str | None:
+    """Render one `compose_services` entry's template for `host`; return an error or None.
+
+    `root` is the directory of service trees, injectable so a test can point at a fixture.
+    """
+    name = ci.get("name")
+    if not name:
+        return None
+    tpl = root / name / "compose.yaml.j2"
+    if not tpl.is_file():
+        return (
+            f"no hosts/components/pi-compose/services/{name}/compose.yaml.j2 — a "
+            "compose_services entry must render a compose file"
+        )
+    return _check_rendered(name, "compose.yaml.j2", tpl, host, ci)
+
+
+def _check_rendered(
+    name: str, template: str, tpl: Path, host: str, ci: dict
+) -> str | None:
+    """Render `tpl` with `ci` as its `container_item` and run every check on the result."""
+    env = template_env(tpl.parent)
+    # A component template reads its secrets as plain names, and no role defaults sit under it.
+    ctx = render_context(
+        tpl if tpl.is_relative_to(ROLES) else None,
+        host=host,
+        overrides={"container_item": ci},
+    )
+    # A template reads its OWN entry through `container_item`; leaving the lists in would let
     # one render against another service's entry.
     ctx.pop("containers_list", None)
-    rendered, err = render_or_error(env, "docker-compose.yml.j2", ctx)
+    ctx.pop("compose_services", None)
+    rendered, err = render_or_error(env, template, ctx)
     if rendered is None:
         return err
 
     try:
         docs = list(yaml_fast.safe_load_all(rendered))
     except yaml.YAMLError as exc:
-        print(f"\n----- rendered {name}/docker-compose.yml.j2 -----", file=sys.stderr)
+        print(f"\n----- rendered {name}/{template} -----", file=sys.stderr)
         dump_numbered(rendered)
         return f"invalid YAML: {exc}"
 
@@ -345,6 +385,19 @@ def main(argv: Sequence[str] = ()) -> int:
                 print(f"  [FAIL] {name}: {err}", file=sys.stderr)
             else:
                 ok(f"  [ok]   {name}")
+
+        # The Pi package's services (H5): a Docker platform of their own, so none is k8s.
+        packaged = host_vars.get("compose_services") or []
+        if packaged:
+            print(f"== {host_file.name} ({len(packaged)} packaged services) ==")
+        for ci in packaged:
+            err = check_component_service(host_file.stem, ci)
+            checked += 1
+            if err:
+                failures += 1
+                print(f"  [FAIL] {ci['name']}: {err}", file=sys.stderr)
+            else:
+                ok(f"  [ok]   {ci['name']}")
 
     print(f"\n{checked} template(s) checked, {failures} failure(s).")
     return 1 if failures else 0
