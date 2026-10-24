@@ -136,8 +136,11 @@ nfpm failure at the chosen commit, a value the plan's list does not name. `tools
 that fails after a refusal is logged, and the run keeps the refusal's reason. A failing run exits 1 once per reason and tip,
 then 0 on a repeat, so `OnFailure=` pages once for each condition. A refusal that came from an
 exception writes one stderr line, which systemd puts in the journal: the reason, the exception's type
-and message, its cause and the call chain that raised it (#6074). A failed fetch exits 0 and
-writes nothing: the fetch timestamp then ages, which H3.5c's fetch-age arm pages on.
+and message, its cause and the call chain that raised it (#6074). The journal keeps that line
+only because both units set `SyslogLevel=notice`: initial_setup's journald drop-in stores notice
+and above, and a unit's output defaults to info (#6127). ENFORCED:
+`ansible/roles/setup/homelab_builder/tests/test_builder_units.py::test_each_units_output_logs_at_a_level_journald_stores`.
+A failed fetch exits 0 and writes nothing: the fetch timestamp then ages, which H3.5c's fetch-age arm pages on.
 
 ## The `homelab-tools` step (H3.11)
 
