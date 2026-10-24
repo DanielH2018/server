@@ -345,7 +345,7 @@ Instead it reads the cluster every 30 seconds:
   (`docs/volume-snapshot-drills.md`, *Choosing the branch*).
 - **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
   line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
-  **operator-only**. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
+  the operator's decision, approved through the permission prompt the agent's clear raises. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
   its verification (`docs/flux-deploy-plane.md`, *Verification*).
 - **`nothing-to-deploy`, from land-wait's `suspended`, exit 0.** Every tag Flux applies for
   the PR is `suspended` in the merge commit's `digests.json`, so Flux applies nothing for

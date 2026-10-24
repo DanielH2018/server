@@ -15,12 +15,12 @@ component's are. A component directory under `hosts/components/` holds a `compon
       - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
       - {key: homelab-archive-keyring, dst: /usr/share/keyrings/homelab-archive-keyring.gpg}
 
-A `src` ending `.j2` renders through the renderer's strict environment. Any other `src` is
-copied byte for byte. A `lib` entry copies `hosts/lib/<name>`, a script several packages ship,
-byte for byte. A `key` entry copies `hosts/keys/<name>.gpg`, a public keyring hosts trust, byte
-for byte. A `shared` entry copies one of the `SHARED_FILES`, a file an Ansible role still
-installs, byte for byte. Those three are the only sources outside the component a file entry
-may name.
+A `src` ending `.j2` renders through the renderer's strict environment, and a `src` of
+`role:<name>` loads from the component's role templates. Any other `src` is copied byte for byte,
+as are the three sources outside the component a file entry may name: a `lib` entry
+(`hosts/lib/<name>`, a script several packages ship), a `key` entry (`hosts/keys/<name>.gpg`, a
+public keyring hosts trust) and a `shared` entry (one of the `SHARED_FILES`, a file an Ansible role
+still installs).
 
 A package or component may also carry `units`, `enable` and `legacy` (host_manifest.py), a
 file entry's `activate:` field and a `ufw:` map (host_arms.py). A host package installs
@@ -265,8 +265,7 @@ def _render_maintainer_scripts(
 ) -> None:
     """Render each listed maintainer script from `hosts/lib/maintainer-scripts/`.
 
-    Each template sees the host's context plus `package_units`, the units the package
-    installs, which is the list `prerm` stops.
+    Each template sees the host's context plus `package_units`, the list of units `prerm` stops.
     """
     directory = lib / "maintainer-scripts"
     for name in names:
@@ -439,10 +438,11 @@ def _render_unit(
             source = lib.parent.parent / SHARED_FILES[name]
             package.files[dst] = (source.read_bytes(), mode)
             continue
-        src = str(entry["src"])
-        source = confined(directory, src)
+        base, src = template_source(role, str(entry["src"]), directory)
+        source = confined(base, src)
         if src.endswith(".j2"):
-            content = _render_template(env, src, ctx, reasons, directory).encode()
+            tenv = confined_env(base)
+            content = _render_template(tenv, src, ctx, reasons, base).encode()
         else:
             content = source.read_bytes()
         package.files[dst] = (content, mode)

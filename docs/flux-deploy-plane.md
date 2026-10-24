@@ -893,15 +893,25 @@ move changes nothing in the cluster but the commit Flux reports. The workflow ha
 
 The repository variable `DEPLOY_HOLD` stops promotion. The value `none` means no hold, and any
 other value holds, so a mistyped hold still holds. An empty or missing variable makes `decide`
-print `error`, and no tag moves. Setting or clearing a hold is **operator-only**:
+print `error`, and no tag moves. To set a hold, write a reason. To clear it, write `none`:
 
 ```bash
+gh variable set DEPLOY_HOLD --body <reason> -R DanielH2018/server
 gh variable set DEPLOY_HOLD --body none -R DanielH2018/server
 ```
 
-An agent session cannot run that command, nor write `PROD_DIGEST` or move a tag: the
-`block-footguns` hook denies them (`.claude/hooks/_deploy_plane_rule.py`). Reading either
-variable with `gh variable get` stays allowed.
+The `block-footguns` hook (`.claude/hooks/_deploy_plane_rule.py`) treats each direction
+differently:
+
+- **Setting a hold** stops promotion, so an agent session may run it without asking. Read the
+  variable first: a set over a standing hold replaces the SHA and names it records, which
+  `settle` and the revert rule read.
+- **Clearing a hold**, deleting the variable, and any `PROD_DIGEST` write raise a permission
+  prompt. The operator approves the agent's command rather than typing it. A write whose value
+  the hook cannot read, such as a `gh api` call or a body from stdin, prompts the same way.
+- **Moving a tag** is denied outright.
+
+Reading either variable with `gh variable get` stays allowed.
 
 A dispatch from master with the input `sha` publishes and promotes from that commit rather
 than master's tip. `render` refuses it unless it descends from `origin/master`, then re-reads
@@ -1032,8 +1042,9 @@ would never post T's statuses, and the timeout would write a false hold. A run t
 settles leaves `prod` and `last-good` apart, and every later run reports `current`. Slice
 D2.6d's `PromotionStalled` alert pages that stall.
 
-**Clearing a hold** is **operator-only**: set `DEPLOY_HOLD` back to `none` (*Publishing and
-promotion*), then dispatch `promote` with `-f sha=<master tip>`. `decide` promotes the newest
+**Clearing a hold** is the operator's decision: set `DEPLOY_HOLD` back to `none` (*Publishing
+and promotion*), then dispatch `promote` with `-f sha=<master tip>`. An agent may run the clear
+once the operator approves its permission prompt. `decide` promotes the newest
 eligible commit.
 
 **The revert rule is off.** `promote.REVERT_RULE` is `False`. Turning it on is an
@@ -1325,7 +1336,9 @@ file in that order, each applying its own `./cluster/<tag><suffix>`. `<tag>-snap
 `<tag>`'s edges, and `<tag>` then depends on `<tag>-snapshot`, so the role applies only after its
 snapshot is taken. `<tag>-prepull` does the same beside it, never after it (*The pre-pull Job*
 below). `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
-tag has one, `<tag>` otherwise. A `K8S_APPLIES_LAST` tag waits on no other tag's
+tag has one, `<tag>` otherwise. It also depends on the last Kustomization of each tag the role
+names in `flux_verify_after`, so its Jobs probe that tag's rolled pod; `crowdsec` names `traefik`
+(`ordering.verify_after`, #5999). A `K8S_APPLIES_LAST` tag waits on no other tag's
 `-snapshot` or `-verify`. A published tag whose role declares `k8s_autodeploy_snapshot_pvcs`
 renders `<tag>-snapshot` (*The snapshot Job* below). A published tag whose role ships
 `templates/verify/*.yaml.j2` renders `<tag>-verify`; sonarr and radarr were the first, in D5.20.

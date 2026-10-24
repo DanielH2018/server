@@ -18,7 +18,9 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   pre-apply checks, does the same, so a failing check holds the role (#5719). It also depends
   on the role that creates a namespace one of its documents names, as `<tag>-deferred` does.
   `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the tag
-  renders one, `<tag>` otherwise (D5.1a1);
+  renders one, `<tag>` otherwise (D5.1a1). It also depends on the last Kustomization of each
+  tag its role names in `flux_verify_after`, by the same flux-owned rule, so its Jobs probe
+  that tag's rolled workload rather than the one it replaces (#5999);
 - an edge to a Kustomization that a suspended tag owns is dropped, and the annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
   `DependencyNotReady` until the resume (C3 *Suspension*, D5.1b). `drop_suspended` is the one step.
   D5.3b2's `soak` keeps no edge at all (D5 Open question 19), and `soak.py` routes every tag's
@@ -27,7 +29,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 `substitution` decides which Kustomizations substitute, and so which take the `cluster-vars`
 edge. `bundle.py` adds that edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds' suffixes,
-`verify_files` and `cronjob_gates` read which roles call for `<tag>-verify`,
+`verify_files` and `cronjob_gates` read which roles call for `<tag>-verify`, `verify_after`
+which other tags it waits on,
 `prepull_timeouts` which call for `<tag>-prepull`, and `precheck_files` which call for
 `<tag>-precheck`. Like `bundle.py`, this module imports
 neither Ansible nor Jinja. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
@@ -92,6 +95,9 @@ PRECHECK_TEMPLATES_DIR = "precheck"
 # classes a gate takes (`cronjob_gates`).
 CRONJOB_GATES = "flux_cronjob_gates"
 GATE_KINDS = frozenset({"verify", "mutation"})
+# The role default that names the other tags whose rolled workload `<tag>-verify` probes
+# (`verify_after`, #5999).
+VERIFY_AFTER = "flux_verify_after"
 
 
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
@@ -138,6 +144,8 @@ class Ordering:
         workload_namespace: `k8s_namespace`, whose Namespace the shared kind
             `homelab-namespace` creates. A tag with a document in it depends on that kind.
             None generates no such edge.
+        verify_after: Each tag mapped to the other tags its `<tag>-verify` waits on, from
+            its role's `flux_verify_after` (`verify_after`).
     """
 
     deps: Mapping[str, Iterable[str]] = field(default_factory=dict)
@@ -146,6 +154,7 @@ class Ordering:
     flux_owned: frozenset[str] | None = None
     suspended: frozenset[str] = frozenset()
     workload_namespace: str | None = None
+    verify_after: Mapping[str, Iterable[str]] = field(default_factory=dict)
 
 
 NO_EDGES = Edges()
@@ -244,6 +253,43 @@ def cronjob_gates(
             problems += [f"{tag}'s {CRONJOB_GATES}: {line}" for line in wrong]
             continue
         found[tag] = {str(name): dict(gate) for name, gate in value.items()}
+    return found, problems
+
+
+def verify_after(
+    tags: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Each tag whose role sets `flux_verify_after` mapped to it, and one line per problem.
+
+    The value lists the other tags whose rolled workload the role's verify Jobs probe, so
+    `<tag>-verify` waits on each one's last Kustomization as well as on its own tag's
+    (#5999). crowdsec's `crowdsec-verify` names `traefik`: its ban proof reads the edge's
+    answer, and without the edge it can pass against the Traefik pod a `Recreate` roll is
+    about to replace. A value must be a literal non-empty list of tag names; any other value
+    is a problem and its tag is left out.
+    """
+    found, problems = {}, []
+    for tag in sorted(set(tags)):
+        path = roles / tag / "defaults" / "main.yml"
+        try:
+            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        except (OSError, yaml.YAMLError) as err:
+            problems.append(f"could not read {tag}'s {VERIFY_AFTER}: {err}")
+            continue
+        value = (defaults or {}).get(VERIFY_AFTER)
+        if value is None:
+            continue
+        if not (
+            isinstance(value, list)
+            and value
+            and all(isinstance(name, str) and name and name != tag for name in value)
+        ):
+            problems.append(
+                f"{tag}'s {VERIFY_AFTER} is {value!r}, not a literal non-empty list of "
+                "other tags' names"
+            )
+            continue
+        found[tag] = sorted(set(value))
     return found, problems
 
 
@@ -443,8 +489,19 @@ def kustomization_edges(
             )
         edges[tag] = Edges(edges[tag].kept | set(before), edges[tag].dropped)
         if tag + VERIFY_SUFFIX in directories:
+            # The other tags' last Kustomizations, read from `directories`: a flux-owned tag
+            # outside the render is kept by its own name, as a tag's edge onto it is.
+            wanted = set(ordering.verify_after.get(tag, ())) - {tag}
+            after = {
+                other + DEFERRED_SUFFIX
+                if other + DEFERRED_SUFFIX in directories
+                else other
+                for other in wanted & owned
+            }
             last = tag + DEFERRED_SUFFIX if tag + DEFERRED_SUFFIX in edges else tag
-            edges[tag + VERIFY_SUFFIX] = Edges(frozenset({last}))
+            edges[tag + VERIFY_SUFFIX] = Edges(
+                frozenset({last} | after), frozenset(wanted - owned)
+            )
     return drop_suspended(edges, ordering.suspended)
 
 
