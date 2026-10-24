@@ -6,7 +6,8 @@
 // every Grafana dashboard were written against `job`, `container`, `pod`, `namespace`,
 // `machine` and `stream` — and against the ABSENCE of `app`, which is how the HA ban check
 // went blind on 2026-08-23. The `alloy-emits-the-loki-labels-consumers-select-on` row of
-// ansible/tests/k8s/_config_property_rows.py guards the set.
+// ansible/tests/k8s/_config_property_rows.py guards the set. The host streams also carry
+// `program`, the rsyslog tag the `loki.process "host"` stage extracts.
 //
 // Replaced Promtail on 2026-09-02, six months after Promtail's 2026-03-02 end of life. Three
 // things Promtail did implicitly are explicit here: node scoping is a field selector (Alloy
@@ -143,7 +144,7 @@ local.file_match "syslog" {
 
 loki.source.file "syslog" {
   targets    = local.file_match.syslog.targets
-  forward_to = [loki.write.homelab.receiver]
+  forward_to = [loki.process.host.receiver]
 }
 
 local.file_match "authlog" {
@@ -152,7 +153,29 @@ local.file_match "authlog" {
 
 loki.source.file "authlog" {
   targets    = local.file_match.authlog.targets
+  forward_to = [loki.process.host.receiver]
+}
+
+// Label each host line with its rsyslog program tag (issue #6163), so the HostLogErrors rule
+// in files/rules/homelab-logs.yaml can count error lines per program. rsyslog writes
+// "<rfc3339> <host> <tag>[<pid>]: <msg>", and the capture stops at `[`, `:` or a space, so
+// `uv[1333]:` labels as `uv` and `postfix/qmgr[812]:` as `postfix/qmgr`. Measured 2026-10-24,
+// 26 distinct tags on daniel-server and 64 on daniel-box, so the label stays low-cardinality.
+//
+// THE LINE IS NOT REWRITTEN. stage.regex only fills the extracted map and stage.labels only
+// promotes a key to a label; there is no stage.output or stage.replace here. probe.py's
+// SYSLOG_ALERT_LOGQL and the alert-history dashboard parse the raw rsyslog line, so a stage
+// that changed it would blind both. A line the expression does not match passes unlabelled.
+loki.process "host" {
   forward_to = [loki.write.homelab.receiver]
+
+  stage.regex {
+    expression = "^\\S+ \\S+ (?P<program>[^\\[:\\s]+)"
+  }
+
+  stage.labels {
+    values = { program = "" }
+  }
 }
 
 {% if k3s_audit_log_enabled | default(false) %}
