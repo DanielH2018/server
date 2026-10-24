@@ -2,21 +2,10 @@
 # Pinned upstream versions. Bump deliberately — Longhorn has version-to-version
 # upgrade constraints and does not support arbitrary version skips.
 #
-# k3s is pinned because the install task re-runs the installer whenever k3s_server_args
-# changes, and get.k3s.io installs the latest stable unless told otherwise — an unpinned
-# reconfigure would silently upgrade the control plane as a side effect of editing a flag.
-#
-# The `+k3sN` suffix is semver build metadata, which Renovate ignores when comparing: an
-# upstream bump (v1.36.2 -> v1.37.0) is offered, a same-version re-tag (+k3s1 -> +k3s2) is not.
-# renovate: datasource=github-releases depName=k3s-io/k3s
-k3s_version: v1.37.1+k3s1
-# The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
-# can differ from the tag's and moves with no signal, and the script runs as root on both
-# nodes. Renovate bumps k3s_version through the annotation above; the sha256 is a MANUAL
-# finish on that PR (same class as sops_setup's binary):
-#   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
-k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
-k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
+# The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) is the
+# `system-upgrade` role's (roles/k8s/system-upgrade/defaults/main.yml, H6.1b), because that role
+# drives the SUC Plans that upgrade k3s. tasks/server.yml and tasks/agent.yml read it with
+# `include_vars` for the fresh-host install.
 # The Longhorn pin, k3s_longhorn_version, is the `longhorn` role's (roles/k8s/longhorn/defaults/main.yml).
 
 # Where k3s's own stdout/stderr goes on both node types (tasks/unit-logging.yml). journald

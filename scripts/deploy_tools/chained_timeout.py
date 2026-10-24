@@ -43,7 +43,8 @@ CONCURRENT = 5
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (ansible/tests/repo/test_promote_workflow_verify.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
-# (#5868: 33126s with 116 Kustomizations, against 19800s; it was 33006s until H2.3b added
+# (#5868: 35526s with 117 Kustomizations, against 19800s; it was 33126s until H6.1b added
+# `system-upgrade`, whose 100m `flux_timeout` is the longest of any tag, 33006s until H2.3b added
 # `longhorn-restore-drill`, which waits on `homelab-namespace` and `longhorn`, 32256s until D5 step 30 added
 # `homelab-namespace`, which every tag rendering into `homelab` depends on, 32016s until D5
 # step 29 added `flux` and `flux-deferred`, and 31920s until Longhorn v1.13.0 raised the

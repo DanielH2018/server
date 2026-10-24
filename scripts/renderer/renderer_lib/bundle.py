@@ -203,6 +203,7 @@ def tag_kustomization(
     prune: bool = True,
     suspend: bool = False,
     content: str | None = None,
+    health_check_exprs: list | None = None,
 ) -> dict:
     """The Kustomization `tag`, as D2's *The per-tag Kustomization* shows it.
 
@@ -222,6 +223,8 @@ def tag_kustomization(
         prune: False for a role whose defaults set `flux_prune: false` (`role_fields`).
         suspend: True for a role whose defaults set `flux_suspend: true`, the one value written.
         content: The tag's `own` digest, written as `CONTENT_DIGEST` unless None.
+        health_check_exprs: The role's `flux_health_check_exprs`, written as
+            `spec.healthCheckExprs` unless empty (C3 *Per-role fields*, H6.1b).
     """
     spec: dict = {
         "sourceRef": {"kind": "OCIRepository", "name": ROOT},
@@ -247,6 +250,8 @@ def tag_kustomization(
         spec["decryption"] = dict(DECRYPTION)
     if suspend:
         spec["suspend"] = True
+    if health_check_exprs:
+        spec["healthCheckExprs"] = health_check_exprs
     metadata: dict = {"name": tag, "namespace": FLUX_NAMESPACE}
     annotations = {ANSIBLE_OWNED_DEPS: edges.dropped, SUSPENDED_DEPS: edges.suspended}
     annotations = {k: ",".join(sorted(v)) for k, v in annotations.items() if v}
@@ -337,7 +342,7 @@ def flux_files(
         fields: Each tag's per-role fields: `prune` (`role_fields`) for `<tag>` alone,
             `timeout` for `<tag>` and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`,
             `verify_timeout` for `<tag>-verify` and `precheck_timeout` for `<tag>-precheck`
-            (`verify_timeout`), `suspend` for all.
+            (`verify_timeout`), `suspend` for all, `health_check_exprs` for `<tag>` alone.
         contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
     decrypting = frozenset(decrypting)
@@ -371,6 +376,7 @@ def flux_files(
                 own.get("prune", True) if name == tag else True,
                 own.get("suspend", False),
                 (contents or {}).get(name) if name == tag else None,
+                own.get("health_check_exprs") if name == tag else None,
             )
             for name in names
         ]

@@ -87,6 +87,10 @@ LONGHORN_RECONCILE_ROLE = K8S_ROLES / "longhorn-reconcile"
 # defaults since H1.7b. The k3s role's defaults keep the host crons' keys.
 LONGHORN_BACKUP_ROLE = K8S_ROLES / "longhorn-backup"
 K3S_DEFAULTS = K3S_ROLE / "defaults" / "main.yml"
+# The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) lives in the
+# Flux-owned `system-upgrade` role's defaults since H6.1b, so a pin change routes to that tag.
+# `K3S_DEFAULTS` keeps every other key, which did not move.
+SYSTEM_UPGRADE_DEFAULTS = K8S_ROLES / "system-upgrade" / "defaults" / "main.yml"
 # The k3s role's own Python, which the host crons run: `longhorn_backup_health.py`,
 # `live_drift_check.py` and `manifest_declares.py`. `longhorn_lib/`, which the first imports,
 # lives in `scripts/lib/` since H7.2e.

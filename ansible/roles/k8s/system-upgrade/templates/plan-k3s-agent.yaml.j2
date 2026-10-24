@@ -1,0 +1,39 @@
+# The k3s agent Plan (H6), the server Plan's twin. It selects the nodes in `system_upgrade_nodes`
+# that carry no control-plane label, and no node while the list is empty. `prepare` runs in
+# `agent` mode, which first waits for the server Plan. SUC starts both Plans' Jobs when they
+# resolve, so this deadline covers the server's 60 minutes plus 30 for Longhorn's recovery and
+# the agent's own upgrade. A fail-fast `prepare` is not an option: SUC's Job allows a few failed
+# pods, and the last one ends in `JobFailed` within minutes.
+apiVersion: upgrade.cattle.io/v1
+kind: Plan
+metadata:
+  name: k3s-agent
+  namespace: system-upgrade
+spec:
+  concurrency: 1
+  version: "{{ k3s_version }}"
+  serviceAccountName: k3s-plan
+  jobActiveDeadlineSecs: {{ system_upgrade_agent_deadline_secs }}
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+      - key: kubernetes.io/hostname
+        operator: In
+        values:
+{% for node in (system_upgrade_nodes or ['no-node-selected']) %}
+          - {{ node }}
+{% endfor %}
+      - key: homelab/k3s-upgrade-paused
+        operator: DoesNotExist
+  prepare:
+    image: {{ system_upgrade_gate_image }}
+    command:
+      - python3
+    args:
+      - /host/usr/lib/homelab/k3s_gates.py
+      - agent
+      - --host-root
+      - /host
+  upgrade:
+    image: rancher/k3s-upgrade

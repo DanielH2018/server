@@ -53,6 +53,18 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "The version inside each `fetched_url` of the system-upgrade role's vendored manifests (H6.1b). `scripts/dev/vendor_manifest.py` writes the URL it fetched as a literal beside the pin, so the `# renovate:` annotation on `system_upgrade_controller_version` moves the templated `url` and leaves `fetched_url` behind. This manager reads the same release from `fetched_url`, so a bump PR moves both and `vendor_manifest.py --check` then names the refresh the PR still owes: the files under `files/upstream/`, the sha256 and the controller image digest. Same depName and datasource as the annotation, so the rule that groups it takes the one PR.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/system-upgrade/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "fetched_url:[ \\t]*\"https://github\\.com/rancher/system-upgrade-controller/releases/download/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/[A-Za-z0-9.-]+\""
+      ],
+      "depNameTemplate": "rancher/system-upgrade-controller",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
       "description": "Pinned hook revisions in prek.toml. Renovate's built-in pre-commit manager only scans .pre-commit-config.yaml, not prek.toml, so these (pre-commit-hooks, ansible-lint, gitleaks) would age silently. Match each GitHub repo URL with its adjacent rev tag.",
       "managerFilePatterns": [
         "/(^|/)prek\\.toml$/"
@@ -190,7 +202,7 @@
     },
     {
       "customType": "regex",
-      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (`KIND_NODE_IMAGE`, issue #5173), pinned by tag and digest. The tag's Kubernetes minor follows `k3s_version` in roles/setup/k3s, so the proof runs on the API server the cluster runs; ansible/tests/repo/test_kind_node_image_follows_k3s.py fails a k3s minor bump that left the image behind, and the `kind` packageRule offers this pin patch and digest updates only, because a minor no k3s pin has reached yet would be red against that test. ONE matchString spans the annotation and the env line, and Renovate rewrites both the tag and the digest inside it. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
+      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (`KIND_NODE_IMAGE`, issue #5173), pinned by tag and digest. The tag's Kubernetes minor follows `k3s_version` in roles/k8s/system-upgrade, so the proof runs on the API server the cluster runs; ansible/tests/repo/test_kind_node_image_follows_k3s.py fails a k3s minor bump that left the image behind, and the `kind` packageRule offers this pin patch and digest updates only, because a minor no k3s pin has reached yet would be red against that test. ONE matchString spans the annotation and the env line, and Renovate rewrites both the tag and the digest inside it. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -661,6 +673,7 @@
         "ansible/roles/k8s/qbittorrent/defaults/main.yml",
         "ansible/roles/k8s/registry/defaults/main.yml",
         "ansible/roles/k8s/scrutiny/defaults/main.yml",
+        "ansible/roles/k8s/system-upgrade/defaults/main.yml",
         "ansible/roles/k8s/tdarr/defaults/main.yml",
         "ansible/roles/k8s/terraria/defaults/main.yml",
         "ansible/roles/k8s/traefik/defaults/main.yml",
@@ -898,19 +911,20 @@
       "automerge": false
     },
     {
-      "description": "k3s control plane (`k3s_version` in roles/setup/k3s/defaults). NEVER automerged: a k3s bump reinstalls the control plane on a single-server cluster, and it stays a hand apply of `k3s-bringup.yml` by the operator, following docs/k3s-upgrade.md, until H6 moves k3s into a package. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag. Split from MetalLB and Longhorn by H1.1g, whose two rules below name the merge gate instead. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
+      "description": "k3s control plane (`k3s_version` in roles/k8s/system-upgrade/defaults, moved there by H6.1b). NEVER automerged: a k3s bump reinstalls the control plane on a single-server cluster, and until H6.3c it stays a hand apply of `k3s-bringup.yml` by the operator, following docs/k3s-upgrade.md. The pin now routes to the Flux-owned `system-upgrade` tag, so the deployer no longer writes a `manual_plane` line for it and nothing reminds the operator that the bump is owed. After H6.3c SUC applies a bump to the nodes its Plans select. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag. Split from MetalLB and Longhorn by H1.1g, whose two rules below name the merge gate instead. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
       "matchDatasources": [
         "github-releases"
       ],
       "matchPackageNames": [
         "k3s-io/k3s"
       ],
-      "groupName": "k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md)",
+      "groupName": "k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
       ],
       "updateNotScheduled": false,
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
@@ -964,6 +978,39 @@
       "enabled": false
     },
     {
+      "description": "No Renovate PR for `system_upgrade_controller_image` (H6.1b). The pin carries the tag of the vendored controller manifest, which `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py` holds equal to `system_upgrade_controller_version`, and a digest-only bump could only open a PR that moves the image away from the vendored file. The version bump below moves the image by hand in the same PR. Scoped to the docker datasource under roles/k8s, so the `rancher/system-upgrade-controller` release annotation the rule below tracks is untouched.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/**"
+      ],
+      "matchPackageNames": [
+        "rancher/system-upgrade-controller"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "system-upgrade-controller (`system_upgrade_controller_version`). NEVER automerged: a bump changes the controller that upgrades k3s on every node. The vendored `files/upstream/` copies and the controller image pin move by hand in the same PR (`uv run python scripts/dev/vendor_manifest.py system-upgrade`, then the image digest in `defaults/main.yml` and `files/patches/system-upgrade-controller.yaml`), because Renovate cannot refresh either.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "rancher/system-upgrade-controller"
+      ],
+      "groupName": "system-upgrade-controller (manual — refresh the vendored manifests and the image digest in the same PR; k8s_autodeploy: false)",
+      "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
+      "groupSingleUpdates": true,
+      "automerge": false
+    },
+    {
       "description": "k3s stays on the minor whose Kubernetes schemas are vendored under scripts/validate/schemas/kubernetes.io/. scripts/validate/tests/test_k8s_schema.py::test_vendored_core_schemas_match_the_cluster holds those schemas to the exact Kubernetes tag k3s_version names, so a k3s minor PR cannot pass CI until its schemas are refreshed in the same PR, and upgrading the cluster ahead of the repo pin sets up a cross-minor downgrade on the next k3s_server run (#2367). Renovate still offers patch releases inside the cap. Raising the cap by one minor is the start of a minor upgrade: docs/k3s-upgrade.md. test_renovate_k3s_cap_follows_the_schema asserts the cap is one minor above K8S_SCHEMA_VERSION.",
       "matchDatasources": [
         "github-releases"
@@ -973,7 +1020,7 @@
       ],
       "allowedVersions": "<1.38",
       "prBodyNotes": [
-        "A k3s bump is a hand-run control-plane upgrade, never a plain merge. In this PR: set `k3s_install_script_sha256` beside `k3s_version` in `ansible/roles/setup/k3s/defaults/main.yml`, then run `uv run python scripts/validate/refresh_vendored_schemas.py` and commit the schemas it writes — even for a patch release, because `test_vendored_core_schemas_match_the_cluster` compares the full Kubernetes tag. For a new minor, also set `K8S_SCHEMA_VERSION` in `scripts/validate/validate_lib/k8s_schema.py`, raise this cap by one minor, and delete the previous `scripts/validate/schemas/kubernetes.io/v<old minor>/`. Then follow `docs/k3s-upgrade.md` before merging."
+        "A k3s bump is a hand-run control-plane upgrade, never a plain merge. In this PR: set `k3s_install_script_sha256` beside `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`, then run `uv run python scripts/validate/refresh_vendored_schemas.py` and commit the schemas it writes — even for a patch release, because `test_vendored_core_schemas_match_the_cluster` compares the full Kubernetes tag. For a new minor, also set `K8S_SCHEMA_VERSION` in `scripts/validate/validate_lib/k8s_schema.py`, raise this cap by one minor, and delete the previous `scripts/validate/schemas/kubernetes.io/v<old minor>/`. Then follow `docs/k3s-upgrade.md` before merging."
       ]
     },
     {

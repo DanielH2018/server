@@ -22,7 +22,7 @@ from pathlib import PurePosixPath
 
 import pytest
 
-from lib.repo_paths import ALL_VARS, K3S_DEFAULTS, REPO
+from lib.repo_paths import ALL_VARS, REPO, SYSTEM_UPGRADE_DEFAULTS
 from _renovate import (
     _CONFIG_MANAGERS,
     _MANAGERS,
@@ -134,13 +134,14 @@ def test_group_vars_images_are_tracked() -> None:
 
 
 # Repo-relative, because the managerFilePatterns it is matched against are.
-_CONTROL_PLANE_DEFAULTS = K3S_DEFAULTS.relative_to(REPO).as_posix()
+_CONTROL_PLANE_DEFAULTS = SYSTEM_UPGRADE_DEFAULTS.relative_to(REPO).as_posix()
 
 
 def test_control_plane_version_pins_are_tracked() -> None:
-    """Every `*_version:` pin in roles/setup/k3s/defaults must be matched by a customManager.
+    """Every `*_version:` pin in roles/k8s/system-upgrade/defaults must be matched by a customManager.
 
-    k3s, MetalLB and Longhorn are pinned here, and the k8s-images manager one directory over
+    k3s and system-upgrade-controller are pinned here (H6.1b moved the k3s pin from
+    roles/setup/k3s), and the k8s-images manager one directory over
     scans roles/k8s/*/defaults and matches `_image:` keys, so neither its file patterns nor the
     per-image coverage test above can see these. Widening that test's glob would NOT have caught
     it — these are version vars, not image vars — which is why this is a separate guard.
@@ -149,7 +150,7 @@ def test_control_plane_version_pins_are_tracked() -> None:
     component pinned here later (cilium, cert-manager, a k3s addon) fails this test until it is
     tracked, instead of quietly repeating the same escape.
     """
-    text = K3S_DEFAULTS.read_text()
+    text = SYSTEM_UPGRADE_DEFAULTS.read_text()
     pins = re.findall(r"^([a-z0-9_]*_version):\s*\"?(v[^\"\s]+)", text, re.MULTILINE)
     assert pins, (
         f"no `<name>_version: vX.Y.Z` pins found in {_CONTROL_PLANE_DEFAULTS} — either they "
@@ -351,9 +352,12 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
 # Every `image:` line in a k8s deployment template must come from a Jinja variable, not a
 # literal — a literal bypasses the k8s-defaults customManager above entirely (it only scans
 # defaults/main.yml, never templates/*.j2), so it would age with NO update signal at all, worse
-# than even the `latest` disable bug. Empty by design: every k8s template's image is a var. Add
+# than even the `latest` disable bug. One exception below; every other k8s template's image is a var. Add
 # an entry here only as a deliberate, reviewed exception; it defeats the point otherwise.
-IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset()
+# `rancher/k3s-upgrade` is the one exception (H6.1b): a SUC Plan's `upgrade.image` names the
+# repository alone, and SUC appends the Plan's `version` as the tag, so the pin that ages is
+# `k3s_version`, which an annotation tracks (H6 *Open questions* 12).
+IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset({"rancher/k3s-upgrade"})
 
 
 def test_no_literal_image_lines_in_k8s_templates() -> None:

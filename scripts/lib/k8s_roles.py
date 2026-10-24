@@ -21,6 +21,7 @@ import re
 from collections.abc import Collection, Iterable
 from pathlib import Path
 
+import jinja2
 import yaml
 
 from lib import yaml_fast
@@ -465,6 +466,38 @@ def snapshot_claims(
 _DURATION = re.compile(r"(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+")
 
 
+_CHECK_KEYS = frozenset({"apiVersion", "kind", "inProgress", "failed", "current"})
+
+
+def _health_check_exprs(defaults: dict) -> tuple[list[dict], str | None]:
+    """The role's `flux_health_check_exprs`, each string rendered against its defaults.
+
+    Returns:
+        The list (empty when the role sets none) and the problem, or None. A string renders
+        under `StrictUndefined`, so a name the defaults lack is a problem and not an empty string.
+    """
+    raw = defaults.get("flux_health_check_exprs")
+    if raw is None:
+        return [], None
+    if not (isinstance(raw, list) and all(isinstance(item, dict) for item in raw)):
+        return [], f"flux_health_check_exprs is {raw!r}, not a list of mappings"
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    rendered = []
+    for item in raw:
+        if not {"apiVersion", "current"} <= set(item) or set(item) - _CHECK_KEYS:
+            return (
+                [],
+                f"flux_health_check_exprs item {sorted(item)} is not a CustomHealthCheck",
+            )
+        try:
+            rendered.append(
+                {k: env.from_string(str(v)).render(defaults) for k, v in item.items()}
+            )
+        except jinja2.TemplateError as err:
+            return [], f"flux_health_check_exprs does not render: {err}"
+    return rendered, None
+
+
 def role_fields(
     tags: Iterable[str], roles: Path = K8S_ROLES
 ) -> tuple[dict[str, dict], list[str]]:
@@ -476,7 +509,12 @@ def role_fields(
       drops an object leaves it serving (H1 *Plumbing tags are never pruned*);
     - `manifests_rollout_timeout` renders as `timeout`. The manifests role's own rollout
       wait reads the same defaults key, though an include var of that name overrides it there;
-    - `flux_suspend: true` renders `suspend: true` (C3 *Suspension*, D5.1b).
+    - `flux_suspend: true` renders `suspend: true` (C3 *Suspension*, D5.1b);
+    - `flux_timeout` renders as `timeout` and wins over `manifests_rollout_timeout`, for a
+      role whose Kustomization waits longer than its rollout does (H6.1b);
+    - `flux_health_check_exprs` renders as `spec.healthCheckExprs` on `<tag>` alone, for a role
+      whose custom resources Flux must judge (H6.1b). Each string renders as Jinja against the
+      role's own defaults, so an expression follows the pin it compares with.
 
     `prune` goes on `<tag>` alone, and `<tag>-deferred` keeps `prune: true`, as H1 states it:
     "prune: false on that Kustomization, and prune: true everywhere else". The operator ruled
@@ -494,7 +532,8 @@ def role_fields(
 
     Returns:
         Each tag whose defaults set a field mapped to the fields it sets, from
-        `{"prune": False, "timeout": ..., "suspend": True}`; a tag that sets none is left out.
+        `{"prune": False, "timeout": ..., "suspend": True, "health_check_exprs": [...]}`; a
+        tag that sets none is left out.
     """
     found: dict[str, dict] = {}
     problems = []
@@ -528,6 +567,21 @@ def role_fields(
                 )
                 continue
             fields["timeout"] = timeout
+        own_timeout = defaults.get("flux_timeout")
+        if own_timeout is not None:
+            if not (isinstance(own_timeout, str) and _DURATION.fullmatch(own_timeout)):
+                problems.append(
+                    f"{tag}'s flux_timeout is {own_timeout!r}, not a literal duration "
+                    "such as 100m, so its Kustomization timeout cannot be read"
+                )
+                continue
+            fields["timeout"] = own_timeout
+        exprs, error = _health_check_exprs(defaults)
+        if error:
+            problems.append(f"{tag}'s {error}")
+            continue
+        if exprs:
+            fields["health_check_exprs"] = exprs
         if fields:
             found[tag] = fields
     return found, problems
