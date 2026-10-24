@@ -788,6 +788,7 @@
  "ansible/tests/setup/test_initial_setup_host_gates.py": 0.02,
  "ansible/tests/setup/test_initial_setup_roles_are_visible_to_the_deployer.py": 0.0,
  "ansible/tests/setup/test_initial_setup_tasks_have_a_subject_tag.py": 0.01,
+ "ansible/tests/setup/test_integrity_scan_rule_literals.py": 0.33,
  "ansible/tests/setup/test_journald_syslog_forwarding.py": 0.0,
  "ansible/tests/setup/test_k3s_agent_hosts.py": 0.0,
  "ansible/tests/setup/test_k3s_control_plane_hardening.py": 0.0,

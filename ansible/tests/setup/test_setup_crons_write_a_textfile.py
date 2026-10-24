@@ -66,8 +66,6 @@ EXEMPT: dict[str, str] = {
     "initial_setup: cron `Weekly firmware update`": _GAP,
     "initial_setup: cron `Weekly system restart`": _HC,
     "initial_setup: cron `Clean unused Docker images`": _HC,
-    "initial_setup: cron `Weekly rkhunter malware scan`": _KUMA,
-    "initial_setup: cron `Weekly AIDE file integrity check`": _KUMA,
     "k3s: cron `Longhorn filesystem trim`": (
         "touches a cron-fired stamp that longhorn-backup-health.sh reads into its own "
         "textfile verdict"
