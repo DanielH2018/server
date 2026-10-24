@@ -45,10 +45,14 @@ SCRIPT = "pi-recovery-health"
 UNIT_DIR = "/usr/lib/systemd/system"
 LINK = f"{UNIT_DIR}/timers.target.wants/{RECOVERY_TIMER}"
 
-# The watch set the rendered script must carry: every containers_list name on daniel-pi, plus
-# the sub-proxy the docker-proxy role's compose file declares beside its list entry. Named
-# rather than counted so the failure says which container the script stopped watching.
-PI_CONTAINERS = [c["name"] for c in PI_HOST_VARS["containers_list"]]
+# The watch set the rendered script must carry: every containers_list and compose_services name
+# on daniel-pi, plus the sub-proxy the docker-proxy role's compose file declares beside its list
+# entry. Named rather than counted so the failure says which container the script stopped
+# watching.
+PI_CONTAINERS = [
+    c["name"]
+    for c in PI_HOST_VARS["containers_list"] + PI_HOST_VARS["compose_services"]
+]
 EXPECTED_WATCH_SET = {*PI_CONTAINERS, "docker-proxy-lifecycle"}
 # A compose sub-service, not a containers_list entry, so iterating the list alone would miss it.
 MUST_WATCH = frozenset(
@@ -72,6 +76,49 @@ def test_the_watch_set_is_every_deployed_container(tmp_path):
     assert rendered == EXPECTED_WATCH_SET, (
         f"rendered {sorted(rendered)} but the host deploys {sorted(EXPECTED_WATCH_SET)}"
     )
+
+
+def _watch_set(tmp_path, jinja_vars) -> set[str]:
+    run(SCRIPT, tmp_path, running=ALL, jinja_vars=jinja_vars)
+    body = (tmp_path / f"{SCRIPT}.sh").read_text()
+    line = next(line for line in body.splitlines() if line.startswith("CONTAINERS=("))
+    return set(line[len("CONTAINERS=(") : -1].split())
+
+
+def test_a_container_moved_to_compose_services_is_still_watched(tmp_path):
+    """ACCEPT and REJECT: autoheal in the second key stays watched (H5.1).
+
+    The fixture is what makes a derivation over `containers_list` alone fail: that derivation
+    would name every container but autoheal here, the REJECT half of this case.
+    """
+    kept = [c for c in PI_HOST_VARS["containers_list"] if c["name"] != "autoheal"]
+    moved = [c for c in PI_HOST_VARS["containers_list"] if c["name"] == "autoheal"]
+    jinja_vars = {"containers_list": kept, "compose_services": moved}
+
+    assert "autoheal" not in {c["name"] for c in kept}
+    assert _watch_set(tmp_path, jinja_vars) == EXPECTED_WATCH_SET
+
+
+def test_the_watch_set_is_independent_of_which_key_holds_an_entry(tmp_path):
+    """The rendered script is byte-identical across a move, so the package does not churn."""
+    whole = tmp_path / "whole"
+    split = tmp_path / "split"
+    whole.mkdir()
+    split.mkdir()
+    pi = PI_HOST_VARS["containers_list"]
+    run(SCRIPT, whole, running=ALL)
+    run(
+        SCRIPT,
+        split,
+        running=ALL,
+        jinja_vars={"containers_list": pi[:2], "compose_services": pi[2:]},
+    )
+    # The harness repoints two absolute paths into the run's own directory; the rest is the render.
+    rendered = [
+        (d / f"{SCRIPT}.sh").read_text().replace(str(d), "<run>")
+        for d in (whole, split)
+    ]
+    assert rendered[0] == rendered[1]
 
 
 def test_a_healthy_cycle_pushes_up(tmp_path):
