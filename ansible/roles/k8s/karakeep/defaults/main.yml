@@ -136,7 +136,9 @@ karakeep_k8s_meili_size: 2Gi
 # template on a machine that has never deployed. It is 17K, far inside the 1M ConfigMap ceiling.
 # test_karakeep_time_tagger_script.py pins it to the upstream commit URL and sha256.
 
-# The claims k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+# The claims the renderer emits for this role. The karakeep Kustomization applies them after the
+# karakeep-snapshot Job; after a handback, k8s/manifests applies them ahead of the pre-apply
+# snapshot.
 # karakeep-meili is a plain claim on longhorn-nobackup: the Meilisearch index is derived from
 # db.db and rebuilt with "Reindex All Bookmarks", so it is neither seeded nor worth B2
 # transactions.

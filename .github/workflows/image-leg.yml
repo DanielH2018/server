@@ -1,0 +1,53 @@
+name: image-leg
+
+# Runs the pytest tests marked `image`: they execute a script and its fixtures inside a pinned
+# container image with `docker run`. The `pytest` shards in ci.yml have no Docker daemon, and
+# leakguard blocks a socket in them, so `addopts` in pyproject.toml deselects the marker there
+# and this job is the only place those tests run.
+#
+# A separate workflow rather than a ci.yml job, on purpose. Every ci.yml job must be read by the
+# `prek` gate (ansible/tests/repo/test_every_ci_job_is_gated.py), which would make this one a
+# merge blocker through that required context and add it to the deployer's gate lists. The
+# operator decides later whether this check is required, as image-smoke.yml's is. Until then a
+# red run is visible on the PR and blocks nothing.
+#
+# It runs on a PR that touches what the image tests read or this file, and on a dispatch. The
+# `paths:` filter is safe here because the check is not a required context: a skipped trigger
+# cannot leave a required check waiting.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/image-leg.yml"
+      - "ansible/roles/k8s/longhorn-restore-drill/**"
+      - "ansible/tests/longhorn/**"
+      - "ansible/tests/_shell_render.py"
+      - "scripts/lib/proc_testing.py"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  image-leg:
+    name: image-leg (scripts run under their pinned image)
+    if: ${{ github.event.pull_request.draft != true }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20  # a cold pull of the 320 MB runner image is the slow step
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      # `-m image` replaces the `not ui and not image` in addopts. The path is the narrowest one
+      # that collects a marked module; `-n 0` keeps the pull on one process.
+      - name: Run the image tests
+        run: uv run python -m pytest --color yes -n 0 -m image ansible/tests/longhorn/

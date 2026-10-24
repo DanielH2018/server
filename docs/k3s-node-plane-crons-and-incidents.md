@@ -11,20 +11,40 @@ the role doc's `## Notable`.
 The drill restores the newest backup of one eligible volume into a new volume, mounts it in a
 throwaway pod, checks the data is real, and tears everything down. Three refinements bound it.
 
-**An operator pin drills one volume without disturbing the rotation** (#2183). Pass the PVC name:
-`sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>`, or `RESTORE_DRILL_PIN=<pvc>` for a caller
-that cannot pass an argument. A hand run stamps the `success.<pvc>` key but not `last-success`, so it
-proves the volume without hiding a dead nightly cron from check 7, and it leaves the published
-candidate list whole so check 8's coverage window keeps its size. Backdating an `attempts.<pvc>` key to steer the rotation is no longer the way in.
+**An operator pin drills one volume without disturbing the rotation** (#2183). The drill is the
+CronJob `longhorn-restore-drill` in `homelab` since H2.3d (`ansible/roles/k8s/longhorn-restore-drill/`),
+and it ships suspended until H2.3e. A hand run is **operator-only**, because the agent's kubeconfig
+cannot create a Job, and it runs outside the 04:10 UTC slot. A plain run creates a Job from the
+CronJob, which works on a suspended CronJob:
+
+```bash
+kubectl -n homelab create job --from=cronjob/longhorn-restore-drill longhorn-restore-drill-manual-1
+```
+
+A pinned run sets `RESTORE_DRILL_PIN` in the container, which `create job` cannot do. Render the
+Job with `--dry-run=client -o json`, add the variable with `jq`, and create it:
+
+```bash
+kubectl -n homelab create job --from=cronjob/longhorn-restore-drill longhorn-restore-drill-pin-1 \
+  --dry-run=client -o json \
+  | jq '.spec.template.spec.containers[0].env += [{"name":"RESTORE_DRILL_PIN","value":"<pvc>"}]' \
+  | kubectl create -f -
+```
+
+A hand run stamps the `success.<pvc>` key but not `last-success`, so it proves the volume without
+hiding a dead nightly run from check 7, and it leaves the published candidate list whole so check
+8's coverage window keeps its size. Backdating an `attempts.<pvc>` key to steer the rotation is no
+longer the way in. The evidence is the pod log, read with
+`probe.py loki-query '{container="longhorn-restore-drill"}'`.
 
 **A volume whose content is legitimately empty is declared, and the declaration is bounded by
 size** (#2393). The name goes in
-`ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_pvcs`, and the
+`ansible/roles/k8s/longhorn-restore-drill/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_pvcs`, and the
 drill waives its two content assertions for that name — everything else it proves for that volume
 it still proves. n8n-files restored to `files=0` on 2026-08-30, could not be re-drilled for
 another rotation, and check 8 paged `not restore-proven in 31d`. The name is not enough on its
 own: the waiver holds only while the source volume's `status.actualSize` stays under
-`ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_max_actual_bytes`.
+`ansible/roles/k8s/longhorn-restore-drill/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_max_actual_bytes`.
 By name alone it applied whatever the volume held, and nothing else in the drill compares restored
 content with the source, so once n8n-files starts holding data an empty restore would still have
 stamped success and check 8 would still have read it as restore-proven. Over the ceiling the
@@ -39,14 +59,15 @@ for its own rotation slot, so a permanently broken volume costs two nights a cyc
 every night.
 
 **The drill's state is the ConfigMap `longhorn-restore-drill-stamps`, not a host directory**
-(H2.3c). The script reads it once per run and writes each stamp with a merge `patch` as root, whose
-`k3s kubectl` uses the admin kubeconfig and needs no Role. The first run with no `imported-at` key
-converts `/var/lib/longhorn-restore-drill` into keys; that arm exists only until the drill moves
-to a CronJob, which cannot see the directory. A ConfigMap that does not exist fails the run with
-`stamp ConfigMap absent`, and a failed patch fails it before the restore starts. The script
-traps TERM and INT to run its cleanup through the exit, and its `mktemp` template ends in
-`XXXXXX` because Busybox's `mktemp` rejects a suffix. The key table is in
-`docs/longhorn-disaster-recovery.md`.
+(H2.3c). The script reads it once per run and writes each stamp with a merge `patch`. It runs as
+the `longhorn-restore-drill` ServiceAccount, whose Role grants `get` and `patch` on that one
+ConfigMap. The one-time import of `/var/lib/longhorn-restore-drill` left with the move to the
+CronJob (H2.3d), because a pod cannot see the directory. A ConfigMap that does not exist fails the
+run with `stamp ConfigMap absent`, and a failed patch fails it before the restore starts. The
+script traps TERM and INT to run its cleanup through the exit, so the kubelet's SIGTERM at the
+Job's deadline removes the Volume, PV, PVC and probe pod of the restore. Its `mktemp` template
+ends in `XXXXXX` because busybox's `mktemp` rejects a suffix, and `alpine/k8s` ships busybox. The key table
+is in `docs/longhorn-disaster-recovery.md`.
 
 Eligibility is the `recurring-job-group.longhorn.io/*` label, with the `no-backup` group excluded
 by name. The volume is chosen least recently attempted, not least recently succeeded, so one
@@ -54,8 +75,8 @@ permanently broken volume cannot starve the rest.
 
 ## A `logger` line is evidence only because two checks read it
 
-The trim, the drill and the two B2 accounting crons log every run through `logger`, readable in
-Loki. That is evidence only because check 9 of `longhorn-backup-health.sh` reads it (#2418). It
+The trim and the two B2 accounting crons log every run through `logger`, readable in Loki. The
+drill's lines are the pod log of its CronJob since H2.3d, and check 7 reads its stamp instead. That is evidence only because check 9 of `longhorn-backup-health.sh` reads it (#2418). It
 pushes DOWN on the trim's `ABORT:` line, on a non-zero `N failed` in its newest summary line, or
 on an `UNPRICED` line from `b2-deletions` anywhere in
 `ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Before that

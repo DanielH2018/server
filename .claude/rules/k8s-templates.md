@@ -10,7 +10,7 @@ paths:
 `lookup('template')` goes in **`templates/config/`** (CouchDB's `local.ini`, HA's
 `secrets.yaml.j2`); a file it carries verbatim with `lookup('file')` goes in `files/` (HA's
 `configuration.yaml`). `scripts/validate/k8s_manifests.py` enforces both directions — it fails
-a `lookup('template')` naming a `templates/` path outside `config/`, and a top-level template
+a `lookup('template')` naming a `templates/` path outside `config/` (a `*.sh.j2` script is the exception: the shell gate renders it), and a top-level template
 that renders a document with no `kind` — and `is_manifest_template` in
 `scripts/lib/k8s_roles.py` names the two shapes it exempts (`Dockerfile*`, `*.sh.j2`).
 

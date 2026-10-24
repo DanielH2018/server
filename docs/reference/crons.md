@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-10-19 06:17 UTC
-generated_sha: ddc360330
+generated_at: 2026-10-24 14:25 UTC
+generated_sha: 409537e7c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,14 +12,14 @@ generated_sha: ddc360330
 
 # Scheduled jobs
 
-30 cron entrie(s) installed across the roles.
+29 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
 
 | Job | Schedule | Host | User | Changes state | Defined in |
 |---|---|---|---|---|---|
-| B2 backup budget listing | `20 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| B2 backup budget listing | `20 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | B2 deletion accounting | `10 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Claude Code telemetry health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/claude_code/tasks/node_crons.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
@@ -28,7 +28,6 @@ generated_sha: ddc360330
 | Homelab eval sweep | `0 2 * * 0` | daniel-box | `ubuntu` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Longhorn backup health | `*/10 * * * *` | every host in the play | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn filesystem trim | `10 6 * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Longhorn restore drill | `10 4 * * *` | every host in the play | `root` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Off-box etcd snapshot | `45 2 * * *` | every host in the play | `root` | yes (snapshot) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Refresh generated docs | `17 6,18 * * *` | daniel-box | `ubuntu` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Refresh homelab infrastructure map | `*/15 * * * *` | daniel-box | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |

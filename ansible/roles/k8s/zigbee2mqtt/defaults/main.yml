@@ -38,7 +38,9 @@ zigbee2mqtt_k8s_claim: zigbee2mqtt-data
 zigbee2mqtt_k8s_storage_class: longhorn
 zigbee2mqtt_k8s_size: 2Gi
 
-# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+# The claim the renderer emits for this role. The zigbee2mqtt Kustomization applies it after the
+# zigbee2mqtt-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply
+# snapshot.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ zigbee2mqtt_k8s_claim }}"
     storage_class: "{{ zigbee2mqtt_k8s_storage_class }}"

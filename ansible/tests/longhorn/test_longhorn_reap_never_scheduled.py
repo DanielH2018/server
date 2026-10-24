@@ -142,16 +142,16 @@ def test_both_reapers_exist_in_scripts_backup() -> None:
     assert not missing, f"reaper script(s) gone or renamed: {missing}"
 
 
-def test_census_finds_the_scheduled_drill() -> None:
+def test_census_finds_the_scheduled_heartbeat() -> None:
     """Non-vacuity: the scanner must see a real schedule before its silence means anything.
 
-    The restore drill is a `cron:` task in `k3s/tasks/health-crons.yml`, and the kuma-check
+    The backup-plane heartbeat is a `cron:` task in `k3s/tasks/health-crons.yml`, and the kuma-check
     timers reach the census through their `kuma_check_exec` var; both surfaces have to be read
     for a silent scan to mean "nothing schedules a reaper".
     """
     texts = scheduled_texts(SETUP)
-    assert any("longhorn-restore-drill.sh" in t for t in texts.values()), (
-        "the cron census no longer sees the restore drill — the scanner is reading nothing"
+    assert any("longhorn-backup-health.sh" in t for t in texts.values()), (
+        "the cron census no longer sees the backup-health heartbeat — the scanner is reading nothing"
     )
     assert any("kuma_check_exec" in t for t in texts.values()), (
         "the census no longer sees a kuma_check_timer.yml import's vars"
