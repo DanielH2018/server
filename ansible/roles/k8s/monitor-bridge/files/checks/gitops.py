@@ -320,15 +320,21 @@ def check_host_packages(
     deployer's state directory outside the Prometheus gate, and a Prometheus-sourced arm there
     would page on every Prometheus outage. The query names no origin, because only daniel-box
     runs the builder, and `bridge.net.origin_sel` would pin daniel-server.
+
+    A third query reads `homelab_host_reconcile_drift` on every host and puts a non-zero count
+    in the message. It never changes the verdict (`verdicts.service.host_packages`).
     """
     fetch = src.prom_scalar('homelab_builder_fetch_timestamp_seconds{job="node"}')
     unbuilt = src.prom_vector(
         'homelab_builder_unbuilt_since_timestamp_seconds{job="node"}'
     )
+    # Every host's reconcile drift, so no `job=` selector: the Pi scrapes as `node-pi`.
+    drift = src.prom_vector("homelab_host_reconcile_drift > 0")
     return host_packages(
         fetch,
         unbuilt,
         now if now is not None else time.time(),
         cfg.BUILDER_MAX_FETCH_AGE_S,
         cfg.BUILDER_MAX_LAG_S,
+        drift,
     )

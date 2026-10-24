@@ -21,26 +21,11 @@ for byte. A `shared` entry copies one of the `SHARED_FILES`, a file an Ansible r
 installs, byte for byte. Those three are the only sources outside the component a file entry
 may name.
 
-A package or component may also carry `units`, a policy for each unit reconcile must not
-restart on a change, `enable`, the enable links it installs, and `legacy`, the Ansible-era
-entries reconcile retires (H3, *The host handoff rule*)::
-
-    units: {homelab-x.service: {policy: manual}}    # or windowed
-    enable:                                         # see host_manifest.add_enable_links
-      homelab-x.timer: timers.target
-      homelab-y.timer: {target: timers.target, when: x_enabled}
-    legacy:
-      - {path: /usr/local/bin/x.sh}
-      - {cron: "X heartbeat", user: "{{ sys_user }}"}
-      - {cron_file: x}
-      - {unit: x.service}
-
-Each legacy value renders with the host's context. An enable entry's `when:` is a Jinja
-expression evaluated in that context, and the link ships only when it is true. Each enable link
-ships as an nfpm `type: symlink` entry. A host package installs
-`/usr/lib/homelab/manifest.json`, which `host_manifest` builds from these keys and the units and
+A package or component may also carry `units`, `enable` and `legacy` (host_manifest.py), a
+file entry's `activate:` field and a `ufw:` map (host_arms.py). A host package installs
+`/usr/lib/homelab/manifest.json`, which `host_manifest` builds from them and from the units and
 enable links the packages install. A shared package installs no manifest, and lists no legacy
-entry and no enable link.
+entry, no enable link and no ufw rule.
 
 A component may list `depends:`, `Depends` entries its package gains.
 A package spec may also list `maintainer_scripts`, each rendered from
@@ -85,7 +70,9 @@ from renderer.renderer_lib.host_sources import (
     ConfinedLoader,
     confined,
     file_mode,
+    lib_source,
 )
+from renderer.renderer_lib.host_arms import add_activation, add_ufw
 from renderer.renderer_lib.host_outputs import (
     SECRETS_COMPONENT,
     add_credentials,
@@ -137,6 +124,7 @@ PACKAGE_KEYS = frozenset(
         "maintainer_scripts",
         "outputs",
         "tools",
+        "ufw",
         "units",
     }
 )
@@ -149,6 +137,7 @@ COMPONENT_KEYS = frozenset(
         "files",
         "legacy",
         "outputs",
+        "ufw",
         "units",
     }
 )
@@ -219,6 +208,8 @@ def render_package(
         raise RenderRefused(
             f"{name}: a shared package lists no enable link; its host package does"
         )
+    if package.ufw_rules or package.ufw_legacy:
+        raise RenderRefused(f"{name}: a shared package declares no ufw rule")
     return package
 
 
@@ -392,7 +383,8 @@ def _render_unit(
     enable = spec.get("enable") or {}
     legacy = spec.get("legacy") or []
     outputs = spec.get("outputs") or []
-    if not files and not legacy and not enable and not outputs:
+    ufw = spec.get("ufw") or {}
+    if not (files or legacy or enable or outputs or ufw):
         return
     ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
     env = renderer_env(directory)
@@ -403,6 +395,13 @@ def _render_unit(
         enable,
         lambda expression: _evaluate(env, expression, ctx, reasons, directory),
     )
+    if ufw:
+        add_ufw(
+            package,
+            directory,
+            ufw,
+            lambda text: _render_string(env, text, ctx, reasons, directory),
+        )
     for entry in legacy:
         package.legacy.append(
             legacy_entry(
@@ -443,6 +442,7 @@ def _render_unit(
                 f"{directory}: dst {dst!r} is not a plain absolute path"
             )
         refuse_wants_file(directory, destination)
+        add_activation(package, directory, dst, entry.get("activate"))
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
         mode = file_mode(entry.get("mode", "0644"), directory, dst)
@@ -456,7 +456,7 @@ def _render_unit(
             continue
         if "lib" in entry:
             # A plain name has no `.j2` suffix, so a lib script is copied, never rendered.
-            source = confined(lib, _plain_name(entry["lib"], "lib script"))
+            source = lib_source(lib, entry["lib"])
             package.files[dst] = (source.read_bytes(), mode)
             continue
         if "key" in entry:

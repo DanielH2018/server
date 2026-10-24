@@ -6,7 +6,10 @@
 (`eval_when_strict`), because a wide guess there is a `--tags` run that matches nothing
 (#3933). One module so the two read a gate identically. `role_end_guard` and
 `role_end_hosts` read a role's leading `meta: end_role` guard the same way for the
-two-writer census, `land_reach` and the glance generator.
+two-writer census, `land_reach` and the glance generator. `packaged_guard_hosts` reads the
+`when:` of a task or an import that names a role's `<role>_packaged_hosts` map, with the role's
+defaults layered under `group_vars` (docs/target-architecture/host/h7-delete-ansible.md,
+*Moving one host at a time*).
 """
 
 import functools
@@ -30,14 +33,25 @@ HOSTS = tuple(h.name for h in HOMESERVERS)
 
 
 def _host_vars(
-    host: str, all_vars: Path = ALL_VARS, host_vars_dir: Path = HOST_VARS
+    host: str,
+    all_vars: Path = ALL_VARS,
+    host_vars_dir: Path = HOST_VARS,
+    role_defaults: Path | None = None,
 ) -> dict:
-    """`all_vars` overridden by `host_vars_dir`/<host>.yml.
+    """`all_vars` overridden by `host_vars_dir`/<host>.yml, over `role_defaults` when given.
+
+    Ansible's precedence puts a role's `defaults/main.yml` below `group_vars`, so it seeds the
+    merge. A role with no defaults file seeds nothing.
 
     The same precedence Ansible resolves a `when:` variable through (a host_vars key always
     wins over the group default). Defaults to this repo's group_vars/all.yml and host_vars/.
     """
-    merged = dict(_vars_file(all_vars))
+    merged = (
+        dict(_vars_file(role_defaults))
+        if role_defaults and role_defaults.exists()
+        else {}
+    )
+    merged.update(_vars_file(all_vars))
     hv = host_vars_dir / f"{host}.yml"
     if hv.exists():
         merged.update(_vars_file(hv))
@@ -64,7 +78,11 @@ class GateUnreadable(Exception):
 
 
 def eval_when_strict(
-    expr: object, host: str, all_vars: Path = ALL_VARS, host_vars_dir: Path = HOST_VARS
+    expr: object,
+    host: str,
+    all_vars: Path = ALL_VARS,
+    host_vars_dir: Path = HOST_VARS,
+    role_defaults: Path | None = None,
 ) -> bool:
     """A `when:` value for one host, read as Ansible would, or `GateUnreadable`.
 
@@ -84,7 +102,7 @@ def eval_when_strict(
         expr = " and ".join(f"({e})" for e in expr)
     if not isinstance(expr, str):
         raise GateUnreadable(f"`when: {expr!r}` is not an expression")
-    ns = dict(_host_vars(host, all_vars, host_vars_dir))
+    ns = dict(_host_vars(host, all_vars, host_vars_dir, role_defaults))
     ns["inventory_hostname"] = host
     py_expr = expr.replace("| bool", "").replace("|bool", "")
     try:
@@ -168,3 +186,40 @@ def role_end_hosts(
         except GateUnreadable:
             continue
     return frozenset(ended)
+
+
+PACKAGED_HOSTS = "_packaged_hosts"
+
+
+def packaged_guard_hosts(
+    whens: Iterable[object],
+    hosts: Iterable[str],
+    role_dir: Path,
+    all_vars: Path = ALL_VARS,
+    host_vars_dir: Path = HOST_VARS,
+) -> frozenset[str]:
+    """The hosts on which a `<role>_packaged_hosts` guard among `whens` is False.
+
+    A task or an import carrying `when: inventory_hostname not in <role>_packaged_hosts[...]`
+    skips on a host whose package owns the subject, so that host counts as not written by the
+    task. Only a `when:` naming the map is read; every other condition reads a registered result
+    or a runtime fact and is left as true, which keeps the answer wide. Each guard is read
+    strictly, with the role's `defaults/main.yml` under `group_vars`, because a guess here would
+    hide a second writer.
+
+    Raises:
+        GateUnreadable: a guard naming the map cannot be evaluated for a host.
+    """
+    exprs = [
+        expr
+        for when in whens
+        for expr in (when if isinstance(when, list) else [when])
+        if isinstance(expr, str) and PACKAGED_HOSTS in expr
+    ]
+    defaults = role_dir / "defaults" / "main.yml"
+    return frozenset(
+        host
+        for host in hosts
+        for expr in exprs
+        if not eval_when_strict(expr, host, all_vars, host_vars_dir, defaults)
+    )

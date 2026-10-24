@@ -53,6 +53,9 @@ class Package:
         credentials: The secret keys `homelab-secrets` writes to `/run/credstore`.
         outputs: Each secret-bearing output, in the shape `secrets.json` carries.
         secrets_inputs_sha256: The hash reconcile compares, set only when `secrets-unit` is.
+        activations: Each file whose change reconcile activates, mapped to the action.
+        ufw_rules: The ufw rules the package declares, each with its values rendered.
+        ufw_legacy: The Ansible-era ufw rules reconcile deletes once replaced.
     """
 
     name: str
@@ -69,6 +72,9 @@ class Package:
     credentials: list[str] = field(default_factory=list)
     outputs: list[dict] = field(default_factory=list)
     secrets_inputs_sha256: str | None = None
+    activations: dict[str, str] = field(default_factory=dict)
+    ufw_rules: list[dict] = field(default_factory=list)
+    ufw_legacy: list[dict] = field(default_factory=list)
 
     def installed_paths(self) -> list[str]:
         """Every path the package installs: its files and the path of each pinned tool."""

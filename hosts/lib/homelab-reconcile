@@ -4,7 +4,9 @@
 The design is H3's *The reconcile unit* (docs/target-architecture/host/h3-pi-pilot.md), and the
 step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
 host's /usr/bin/python3, which is 3.12 on Ubuntu 24.04. It uses the standard library only, and
-hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar.
+hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The activation step,
+the ufw arm and the metrics file live in the reconcile_lib package beside it, which the same
+component ships; the reconcile-size census counts both against one line ceiling.
 
 Usage: homelab-reconcile        (no arguments; exit 0 when every step succeeded, 1 otherwise)
 
@@ -18,14 +20,19 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
      "enable_links": ["<unit>", ...],
      "legacy": [{"path": "/abs/path"}, {"cron": "<name>", "user": "<user>"},
                 {"cron_file": "<name under /etc/cron.d>"}, {"unit": "<Ansible-era unit>"}],
-     "reconcilers": [],
+     "reconcilers": [] | ["ufw"],
+     "activations": {"<packaged path>": "<action>"},
+     "ufw": {"rules": [...], "legacy": [...]},
      "secrets_inputs_sha256": "<hex>"}
 
 `units` names every unit reconcile manages, another homelab package's and another package's
 drop-in target included. `enable_links` names each unit whose enable link the manifest's
-packages ship. No reconciler kind exists yet: H4 adds the udev reload and H7 adds ufw and
-libvirt, so a manifest listing one fails the run here. `secrets_inputs_sha256` is present only
-when the package ships the `secrets-unit` component, and every secrets rule below keys on it.
+packages ship. `reconcilers` lists the arms the manifest carries state for. Only "ufw" exists,
+and its section's schema is the docstring of reconcile_lib/ufw.py; H4 adds the udev reload and
+H7 adds libvirt, so a manifest listing another kind fails the run here. `activations` maps a
+packaged file to the action step 3b runs when its hash changes (reconcile_lib/activate.py).
+`secrets_inputs_sha256` is present only when the package ships the `secrets-unit` component, and
+every secrets rule below keys on it.
 
 The restart contract (docs/target-architecture/host/h4-secrets-unit.md, *The restart contract*):
 reconcile is the only process that starts or restarts a unit outside the boot path. It never starts
@@ -45,11 +52,20 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "units": {"<unit>": {"file": "<sha256>", "dropin": "<sha256>"} | null},
      "enable_links": ["<unit>", ...],
      "retired": ["<legacy entry as canonical JSON>", ...],
+     "files": {"<packaged path>": "<sha256>"},     (activated files, by the hash that ran)
+     "pending": {"<unit>": "<InvocationID>"},      (units owed a restart: the manual: actions)
+     "drift": {"<arm>": <items the arm left alone>},
+     "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
      "secrets_inputs_sha256": "<hex>"}   (only after a run in which homelab-secrets succeeded)
 
 homelab-updater reads only `result` and `last_ok`. Each per-entry item advances only when its
 step succeeded on it, or when the step's rule left it alone, so the next run retries exactly
 the actions that failed. A `null` hash reads as changed.
+
+Drift is an item an arm or a rule left alone on purpose: a ufw rule the floor kept, or a legacy
+service that is still running. It is counted in `drift`, never fails the run, and is retried by
+the next run. A fault fails the run, which holds the host. The run also writes
+homelab_host_reconcile.prom (reconcile_lib/textfile.py).
 
 HOMELAB_ROOT prefixes every path this reads or writes. Only the tests in hosts/lib/tests/ set it.
 """
@@ -60,12 +76,13 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
 
-ROOT = Path(os.environ.get("HOMELAB_ROOT", "/"))
+from reconcile_lib import activate, textfile, ufw
+from reconcile_lib.common import ROOT, run, say, systemctl, under_root
+
 LOCK = ROOT / "var/lib/dpkg/lock-frontend"
 MANIFEST = ROOT / "usr/lib/homelab/manifest.json"
 APPLIED = ROOT / "var/lib/homelab-reconcile/applied.json"
@@ -94,25 +111,6 @@ NOT_LOADED = 5
 
 class ManifestError(Exception):
     """The manifest is missing or malformed, so reconcile acts on nothing."""
-
-
-def say(message: str) -> None:
-    print(f"homelab-reconcile: {message}", file=sys.stderr)
-
-
-def under_root(path: Path) -> Path:
-    return ROOT / path.relative_to("/")
-
-
-def run(*argv: str, stdin: str | None = None) -> subprocess.CompletedProcess:
-    try:
-        return subprocess.run(argv, input=stdin, capture_output=True, text=True)
-    except OSError as exc:
-        return subprocess.CompletedProcess(argv, 127, "", str(exc))
-
-
-def systemctl(*args: str) -> subprocess.CompletedProcess:
-    return run("systemctl", *args)
 
 
 def is_homelab(unit: str) -> bool:
@@ -173,11 +171,21 @@ def parse_manifest(text: str) -> dict:
         )
     if not isinstance(reconcilers, list):
         raise ManifestError(f"{MANIFEST}: reconcilers is not a list")
+    activations = manifest.get("activations", {})
+    if not activate.valid_activations(activations):
+        raise ManifestError(f"{MANIFEST}: activations {activations!r} is malformed")
+    section = manifest.get("ufw")
+    if ("ufw" in reconcilers or section is not None) and not (
+        ufw.valid(section) and "ufw" in reconcilers
+    ):
+        raise ManifestError(f"{MANIFEST}: the ufw section is malformed or unlisted")
     parsed = {
         "units": units,
         "enable_links": links,
         "legacy": legacy,
-        "reconcilers": reconcilers,
+        "reconcilers": [name for name in reconcilers if name != "ufw"],
+        "activations": activations,
+        "ufw": section,
     }
     digest = manifest.get("secrets_inputs_sha256")
     if digest is not None:
@@ -578,6 +586,21 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     # Step 3: restart the set. A failed or skipped unit keeps its old hash, so it stays changed.
     failed = {u for u in restart_set if not bring_up(u, "restart", outputs, queued)}
     ok = ok and not failed
+
+    # Step 3b: the `activate:` action of each packaged file whose hash changed. A unit step 3
+    # called already gets no second call.
+    raw_files, raw_pending = prev.get("files"), prev.get("pending")
+    pending = activate.refresh_pending(
+        raw_pending if isinstance(raw_pending, dict) else {}, manifest["activations"]
+    )
+    activated, files_state = activate.activate(
+        manifest["activations"],
+        raw_files if isinstance(raw_files, dict) else {},
+        units,
+        {unit: unit not in failed for unit in restart_set},
+        pending,
+    )
+    ok = ok and activated
     if not secrets_ran:
         failed.add(SECRETS_UNIT)
     for unit, (new, old) in hashes.items():
@@ -590,32 +613,57 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     # Step 4: retire the legacy entries not yet retired. A package that ships `secrets-unit`
     # retires none until every credential and output exists and homelab-secrets is active.
     prev_retired = set(prev.get("retired") or [])
-    retired = []
+    retired, drift = [], {"legacy": 0}
     waiting = None
     for entry in manifest["legacy"]:
         key = legacy_key(entry)
         if key not in prev_retired and digest and waiting is None:
             waiting = not (secrets and secrets_ready(credentials, outputs))
-        if key in prev_retired or (not waiting and retire(entry)):
+        # A running service is never stopped to retire it: the entry stays and counts as drift.
+        if key not in prev_retired and not waiting and running_service(entry):
+            drift["legacy"] += 1
+            say(f"keeping {key}: the service is running, so it retires once it is not")
+        elif key in prev_retired or (not waiting and retire(entry)):
             retired.append(key)
         else:
             if waiting:
                 say(f"keeping {key}: the secrets do not all exist yet")
             ok = False
 
-    # Step 5: the per-kind reconcilers. This version knows none.
+    # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest["reconcilers"]:
         say(f"the manifest lists reconciler {name!r}, which this version does not have")
         ok = False
+    prev_ufw = prev.get("ufw")
+    arm_ok, arm_state, drift["ufw"] = ufw.reconcile(
+        manifest["ufw"], prev_ufw if isinstance(prev_ufw, dict) else None
+    )
+    ok = ok and arm_ok
 
     state = {
         "units": units_state,
         "enable_links": sorted(links_state),
         "retired": sorted(retired),
+        "files": files_state,
+        "pending": pending,
+        "drift": drift,
     }
+    if arm_state is not None:
+        state["ufw"] = arm_state
+    else:
+        del drift["ufw"]
     if secrets_state:
         state["secrets_inputs_sha256"] = secrets_state
     return ok, state
+
+
+def running_service(entry: dict) -> bool:
+    """True for a legacy entry that names a service systemd is running or starting."""
+    unit = entry.get("unit", "")
+    return (
+        unit.endswith(".service")
+        and systemctl("is-active", unit).stdout.strip() in activate.RUNNING
+    )
 
 
 def left_alone(unit: str, units: dict, links: set[str], manual: set[str]) -> bool:
@@ -647,7 +695,16 @@ def main() -> int:
     text, prev, installed = read_under_lock(packages)
     versions = {name: version for name, (_, version) in installed.items()}
 
-    kept = ("units", "enable_links", "retired", "secrets_inputs_sha256")
+    kept = (
+        "units",
+        "enable_links",
+        "retired",
+        "secrets_inputs_sha256",
+        "files",
+        "pending",
+        "drift",
+        "ufw",
+    )
     state = {k: prev[k] for k in kept if k in prev}
     broken = [name for name, (status, _) in installed.items() if status != "ii "]
     if broken:
@@ -670,6 +727,7 @@ def main() -> int:
     if isinstance(last_ok, dict):
         state["last_ok"] = last_ok
     write_applied(state)
+    textfile.write(host, state)
     return 0 if ok else 1
 
 
