@@ -1,6 +1,8 @@
 # D7 — Superseding promotions
 
-Status: PLANNED
+Status: PLANNED. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in #6145, D7.4 in
+#6156, the refactor D7.5 needed in #6159, and D7.5 itself. `SUPERSEDE` stays `False` until
+the operator rules on D7.6.
 
 Depends on: D5, through #5704's soak fix (the soak Job exits once `homelab` no longer
 holds its revision). D2.5's in-flight guard and D5.2b1's hold without a reset are the
@@ -123,10 +125,11 @@ settles.
 
 1. `SUPERSEDE` is `True` in `promote.py`. It ships `False`, as `REVERT_RULE` did.
 1. `DEPLOY_HOLD` reads `none`.
-1. The chain is short. `PROMOTE_CHAIN` holds `<last-good digest> <depth>`, and `decide`
-   supersedes only while the depth is below `SUPERSEDE_MAX_DEPTH`, which is 2. So P
-   itself was promoted from `last-good`, and at most one supersession happens per
-   verification. A value whose digest is not `last-good`'s reads as depth 0.
+1. The chain is short. `prod`'s digest is not the one the OCI tag `superseding` names.
+   `tag` writes that tag on T before it moves `prod` over P, so a T that superseded a run
+   is never superseded itself, and at most one supersession happens per verification.
+   `prod` never returns to that digest once it moves on: it moves forward, or back to
+   `last-good`.
 1. P has no failure yet. No name in P's set reads `failure` or `error` on P's commit.
    `decide` already makes this read for its H1.1i record. A P that is failing settles
    as failed, and T waits for that.
@@ -168,8 +171,9 @@ against `prod`'s bundle, the suspended-tag check and the forward-only gate.
   owns the dispatch.
 - **`tag` re-reads `DEPLOY_HOLD`** just before it moves `prod`, and moves nothing when
   it reads anything but `none`.
-- **`tag` writes `PROMOTE_CHAIN`** after each move. The depth is 1 when the prior
-  digest is `last-good`'s, and otherwise the stored depth plus 1.
+- **`tag` tags T `superseding`** before it moves `prod`, when `decide` named the run T
+  supersedes in its `supersedes` output. Tagged after the move, a failed write would leave
+  a T that the next run may supersede again.
 
 ### What `land-wait` changes
 
@@ -238,7 +242,7 @@ for any P with a failure in flight. What each interleaving leaves:
 +  prod_digest() != T      -> superseded (each poll, and before failed)
  promote.yml
    tag
-+    re-read DEPLOY_HOLD; write PROMOTE_CHAIN
++    re-read DEPLOY_HOLD; tag T superseding before the move
    verify
 +    packages: read
    settle
@@ -279,13 +283,15 @@ supersedes another.
    `verify_promotion.py:verify`, the verdict in `report`, `packages: read` on the job,
    and `settle`'s branch for the verdict. `land-wait` re-reads `homelab` before a soak
    failure ends the wait. About 150 lines.
-1. **D7.3 — the base.** `expected_set` and `prior_statuses` take the base. With
-   nothing in flight the base is `prod`, so every promotion decides as before; the
-   pair proves it on a fixture where `last-good` equals `prod`. About 100 lines.
-1. **D7.4 — `PROMOTE_CHAIN`.** **Operator-only:** create the repository variable with
-   the value `none`. Then `tag` writes it, and `decide` reads it. About 80 lines.
-1. **D7.5 — `supersedable` behind `SUPERSEDE = False`.** The eight conditions and the
-   case table's pairs. `decide` prints the superseded commit as `superseded=<P>`, and
+1. **D7.3 — the base. Folded into D7.5.** On its own it added a parameter nothing passed
+   until D7.5, so it ships with the code that passes it.
+1. **D7.4 — the `superseding` tag.** `tag` tags T `superseding` before the move when
+   `decide`'s `supersedes` output is set, and the retention rule keeps the tagged
+   version. It replaces the `PROMOTE_CHAIN` variable this plan first named (Open question
+   3), so no operator step creates state. About 60 lines.
+1. **D7.5 — `supersedable` behind `SUPERSEDE = False`, and the base.** The eight
+   conditions and the case table's pairs. `expected_set` and `prior_statuses` take the
+   base, which is `prod` unless T supersedes. `decide` prints the superseded commit as `superseded=<P>`, and
    the `post` job's hold message names it beside T. About 200 lines.
 1. **D7.6 — turn it on.** **Operator-only ruling**, in a one-line PR of its own, as
    for `REVERT_RULE`.
@@ -332,8 +338,8 @@ supersedes another.
 
 ## Tests and docs that change in the same PR
 
-- `docs/flux-deploy-plane.md`, *Verification* and *Publishing and promotion*, in D7.2,
-  D7.3 and D7.5.
+- `docs/flux-deploy-plane.md`, *Verification* and *Publishing and promotion*, in D7.2
+  and D7.5.
 - `docs/landing.md`, the `soak-failed` bullet, in D7.2.
 - The marker `DECIDED a verification in flight is guarded by two checks` in
   `verify_promotion.py` gains a sentence in D7.5: the guard is a wait unless
@@ -363,12 +369,14 @@ refuses.
    fails a name once its Kustomization reads `Stalled`, would remove more waiting than
    this slice does. That is C2's open request on the shape of `verify` (D4 Open question
    14), not this slice. Resolution: weigh it in that request.
-1. **`SUPERSEDE_MAX_DEPTH`.** 2 allows one supersession per verification. A larger
-   value shortens waits under bursts and lengthens the longest time `last-good` can
-   stay behind. Resolution: start at 2, and revisit with the stall alert's history.
-1. **Does a state variable beat a derivation?** `PROMOTE_CHAIN` is new state. The depth
-   can also be derived from the promote runs between `last-good`'s move and now, at a
-   cost of an Actions read per `decide`. Resolution: in D7.4's review.
+1. **One supersession per verification.** A deeper chain shortens waits under bursts
+   and lengthens the longest time `last-good` can stay behind. Resolution: start at one,
+   and revisit with the stall alert's history. A deeper chain needs a counter in place of
+   the `superseding` tag.
+1. **Does a state variable beat a derivation?** Resolved in D7.4: an OCI tag, written
+   by `tag` beside `prod`, in place of a repository variable. It needs no operator step,
+   it is read with the registry HEAD `decide` already makes, and it follows the `held`
+   tag's pattern.
 1. **The C2 request on the shape of `verify`** (D4 Open question 14). If `verify`
    becomes a short re-entering job or a poller, the `superseded` read moves with it.
    Resolution: whichever lands second carries the read.

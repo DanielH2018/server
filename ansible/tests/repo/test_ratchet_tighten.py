@@ -72,8 +72,8 @@ def test_comments_blank_lines_and_order_survive_the_rewrite():
 
 
 def test_a_test_module_is_measured_against_the_test_cap():
-    """`cap_of` is the ratchet's own, so a 520-line test module is not read as under its cap."""
-    text = f"{HEADER}scripts/tests/test_a.py 560\n"
-    counts = {"scripts/tests/test_a.py": 520}
-    assert tighten(text, counts, cap_for) == f"{HEADER}scripts/tests/test_a.py 520\n"
-    assert tighten(text, {"scripts/tests/test_a.py": 480}, cap_for) == HEADER
+    """`cap_of` is the ratchet's own, so a 420-line test module is not read as under its cap."""
+    text = f"{HEADER}scripts/tests/test_a.py 440\n"
+    counts = {"scripts/tests/test_a.py": 420}
+    assert tighten(text, counts, cap_for) == f"{HEADER}scripts/tests/test_a.py 420\n"
+    assert tighten(text, {"scripts/tests/test_a.py": 380}, cap_for) == HEADER

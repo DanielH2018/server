@@ -31,6 +31,14 @@ FLEET = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 WIRED_NODES = frozenset({"daniel-box", "daniel-server"})
 
 
+def _duration(seconds: int) -> str:
+    """`seconds` as the annotations write a duration: minutes under 2h, else hours and minutes."""
+    if seconds < 2 * 3600:
+        return f"{seconds // 60} minutes"
+    hours, minutes = divmod(seconds // 60, 60)
+    return f"{hours} hours" + (f" {minutes} minutes" if minutes else "")
+
+
 def update_stale_rule(host: str, job: str, limit_seconds: int) -> dict:
     """The `HostUpdateStale` rule for one entry of `observability_expected_hosts`."""
     series = (
@@ -44,9 +52,9 @@ def update_stale_rule(host: str, job: str, limit_seconds: int) -> dict:
         ),
         "labels": {"severity": "critical", "service": host},
         "annotations": {
-            "summary": f"{host} has had no successful homelab update for {limit_seconds}s.",
+            "summary": f"{host} has had no successful homelab update for {_duration(limit_seconds)}.",
             "description": (
-                f"No homelab-updater run on {host} has succeeded in {limit_seconds}s, or its "
+                f"No homelab-updater run on {host} has succeeded in {_duration(limit_seconds)}, or its "
                 "exporter is up and serves no success timestamp. A failed fetch, a stopped "
                 "homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped "
                 "timer each leave it stale. Read `systemctl status homelab-updater.timer` and "

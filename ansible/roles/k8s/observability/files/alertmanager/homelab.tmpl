@@ -3,13 +3,74 @@
   verbatim with lookup('file'), so Jinja never parses it.
 
   homelab.title is the Discord title and the email subject: the status, the firing count, the
-  alert name and its C7 `service` label. homelab.message lists each alert with its severity,
-  its summary and description, and its runbook when the rule names one.
+  alert name and its C7 `service` label.
+
+  homelab.message is the Discord body and homelab.email the email body. Both list the firing
+  alerts first, each with its severity, summary, start time and runbook. A notification can
+  carry firing and resolved alerts of one group together, so the resolved ones go under their
+  own heading, with their summary and the time they cleared. A resolved alert never repeats
+  its description, because the description says what to fix. When every alert in the group
+  shares one description, it prints once after the list rather than once per alert.
+
+  Discord renders <t:UNIX:R> as a relative time in the reader's own timezone. Email cannot,
+  so homelab.email prints UTC. ansible/roles/k8s/observability/tests/alertmanager/ holds the
+  rendered output for three groups, which scripts/validate/alert_rules.py compares against
+  amtool's render of this file.
 */}}
 {{ define "homelab.title" }}[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.service }} ({{ . }}){{ end }}{{ end }}
 
-{{ define "homelab.message" }}{{ range .Alerts }}**{{ .Labels.severity }}** {{ .Annotations.summary }}
-{{ with .Annotations.description }}{{ . }}
-{{ end }}{{ with .Annotations.runbook_url }}Runbook: {{ . }}
+{{ define "homelab.message" -}}
+{{ $shared := .CommonAnnotations.description -}}
+{{ $mixed := and .Alerts.Firing .Alerts.Resolved -}}
+{{ if $mixed }}**Firing ({{ len .Alerts.Firing }})**
+
+{{ end -}}
+{{ range .Alerts.Firing -}}
+**{{ .Labels.severity | toUpper }}** {{ .Annotations.summary }}
+{{ if not $shared }}{{ with .Annotations.description }}{{ . }}
+{{ end }}{{ end -}}
+Started <t:{{ .StartsAt.Unix }}:R>
+{{ with .Annotations.runbook_url }}Runbook: {{ . }}
 {{ end }}
-{{ end }}{{ end }}
+{{ end -}}
+{{ if and .Alerts.Firing $shared }}{{ $shared }}
+
+{{ end -}}
+{{ if .Alerts.Resolved }}{{ if $mixed }}**Resolved ({{ len .Alerts.Resolved }})**
+
+{{ end -}}
+{{ range .Alerts.Resolved -}}
+{{ .Annotations.summary }}
+Cleared <t:{{ .EndsAt.Unix }}:R>, after starting <t:{{ .StartsAt.Unix }}:f>
+
+{{ end -}}
+{{ end -}}
+{{ end }}
+
+{{ define "homelab.email" -}}
+{{ $shared := .CommonAnnotations.description -}}
+{{ $mixed := and .Alerts.Firing .Alerts.Resolved -}}
+{{ if $mixed }}FIRING ({{ len .Alerts.Firing }})
+
+{{ end -}}
+{{ range .Alerts.Firing -}}
+{{ .Labels.severity | toUpper }}: {{ .Annotations.summary }}
+{{ if not $shared }}{{ with .Annotations.description }}{{ . }}
+{{ end }}{{ end -}}
+Started {{ .StartsAt.UTC.Format "2006-01-02 15:04 MST" }}
+{{ with .Annotations.runbook_url }}Runbook: {{ . }}
+{{ end }}
+{{ end -}}
+{{ if and .Alerts.Firing $shared }}{{ $shared }}
+
+{{ end -}}
+{{ if .Alerts.Resolved }}{{ if $mixed }}RESOLVED ({{ len .Alerts.Resolved }})
+
+{{ end -}}
+{{ range .Alerts.Resolved -}}
+{{ .Annotations.summary }}
+Cleared {{ .EndsAt.UTC.Format "2006-01-02 15:04 MST" }}, after starting {{ .StartsAt.UTC.Format "2006-01-02 15:04 MST" }}
+
+{{ end -}}
+{{ end -}}
+{{ end }}

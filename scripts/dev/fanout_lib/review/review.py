@@ -166,7 +166,7 @@ STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
-# DECIDED: one module over the 600-line guideline rather than a mixin. The red phase and the
+# DECIDED: one module, even past the line guideline, rather than a mixin. The red phase and the
 # green gate read the pipeline's state and call its `_claude`, `_git` and argv builders, so a
 # module holding them alone could not be read without this class (#3661's `conjoined:` rule).
 class Pipeline:
