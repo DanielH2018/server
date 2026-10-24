@@ -62,7 +62,7 @@ from lib import yaml_fast
 from docs.reference import crons as crons_mod
 from lib.git import git
 from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kubectl
-from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, REPO, ROLES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K8S_ROLES, REPO, ROLES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -230,8 +230,8 @@ def longhorn_restore_drill_run(
 ) -> LoopRun:
     """The daily Longhorn PVC restore drill.
 
-    Cadence: k3s_longhorn_restore_drill_cron (roles/setup/k3s/defaults/main.yml, resolved
-    directly -- see the module docstring).
+    Cadence: k3s_longhorn_restore_drill_cron (roles/k8s/longhorn-restore-drill/defaults/main.yml,
+    resolved directly -- see the module docstring).
 
     Reads `last-success` from the drill's stamp ConfigMap through `lib.kubectl` on `prod`, under
     the docs-refresh cron's KUBECONFIG, and from `state_dir` while the ConfigMap is absent or
@@ -295,8 +295,12 @@ def etcd_restore_drill_run(
     return LoopRun(when, f"list-only restore proven (snapshot {snapshot})")
 
 
+# The drill's schedule moved with the drill to its Flux role at H2.3d.
+DRILL_DEFAULTS = K8S_ROLES / "longhorn-restore-drill" / "defaults" / "main.yml"
+
+
 def _k3s_default_var(name: str, defaults_path: Path = K3S_DEFAULTS) -> str | None:
-    """A single scalar default from roles/setup/k3s/defaults/main.yml."""
+    """A single scalar default from roles/setup/k3s/defaults/main.yml, or the path given."""
     try:
         data = yaml_fast.safe_load(defaults_path.read_text())
     except OSError, yaml.YAMLError:
@@ -319,7 +323,9 @@ def _cron_job_cadence(job_name: str, roles: Path = ROLES) -> float | None:
 def _loops(
     roles: Path = ROLES, tools: Tools = DEFAULT_TOOLS
 ) -> list[tuple[str, LoopRun, float | None]]:
-    longhorn_default = _k3s_default_var("k3s_longhorn_restore_drill_cron")
+    longhorn_default = _k3s_default_var(
+        "k3s_longhorn_restore_drill_cron", DRILL_DEFAULTS
+    )
     etcd_default = _k3s_default_var("k3s_etcd_restore_drill_cron")
     return [
         ("gitops-deploy", gitops_deploy_run(), 10.0),

@@ -2,9 +2,9 @@
 """The restore drill keeps its state in a ConfigMap (H2.3c), and survives a signal and BusyBox.
 
 These tests RUN the rendered script through the shared harness in `_restore_drill.py`, whose fake
-API keeps the ConfigMap across runs. They cover the one-time import of the old stamp directory,
-the NotFound arm, the stamp-before-restore ordering, the TERM and INT traps, and a `mktemp`
-template that BusyBox accepts.
+API keeps the ConfigMap across runs. They cover the NotFound arm, the stamp-before-restore
+ordering, the TERM and INT traps, and a `mktemp` template that BusyBox accepts. The image leg in
+`test_longhorn_restore_drill_image.py` runs the last of those under the pinned runner image.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_state.py
 """
@@ -18,51 +18,11 @@ from pathlib import Path
 import pytest
 
 from _restore_drill import harness
-from _restore_drill import selected
 
 A = "a-config"
 B = "b-config"
 
 _OLD = 1_700_000_000
-
-
-def _file(path: Path, content: str = "", mtime: int | None = None) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
-    if mtime is not None:
-        os.utime(path, (mtime, mtime))
-
-
-def test_the_first_run_imports_the_old_stamp_directory_and_a_later_run_does_not(
-    tmp_path: Path,
-) -> None:
-    """The import converts mtimes and contents to keys, and `imported-at` stops a second one."""
-    run = harness(tmp_path, [A, B], imported=False)
-    stamps = run.stamp_dir
-    _file(stamps / "attempts" / A, mtime=_OLD)
-    _file(stamps / "retries" / A, mtime=_OLD + 1)
-    _file(stamps / "seen" / A, mtime=_OLD - 1)
-    _file(stamps / "success" / A, f"{_OLD + 2}\n")
-    _file(stamps / "last-success", f"{_OLD + 3}\n")
-    _file(stamps / "excluded_nopvc", "pvc-x\n")
-
-    first = run()
-    # The imported attempt stamp for A is what makes B, which has none, the rotation's pick.
-    assert selected(run, first) == B
-    assert {k: run.cm[k] for k in run.cm if k.endswith(f".{A}")} == {
-        f"attempts.{A}": str(_OLD),
-        f"retries.{A}": str(_OLD + 1),
-        f"seen.{A}": str(_OLD - 1),
-        f"success.{A}": str(_OLD + 2),
-    }
-    assert run.cm["last-success"] == str(_OLD + 3)
-    imported_at = run.cm["imported-at"]
-    assert imported_at.isdigit() and int(imported_at) > _OLD
-
-    _file(stamps / "success" / "late", "5\n")
-    run()
-    assert run.cm["imported-at"] == imported_at
-    assert "success.late" not in run.cm
 
 
 @pytest.mark.parametrize(

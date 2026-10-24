@@ -267,12 +267,11 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     # cluster image would be structurally blind to the one image (the WAF core) whose staleness
     # is a security problem.
     #
-    # roles/setup/*/defaults/main.yml is included for the same reason: k3s_longhorn_restore_drill_image
-    # (busybox:stable, roles/setup/k3s/defaults/main.yml) is one directory over from the k8s
-    # role defaults, so a role-defaults-only glob would leave it matched by no manager and by no
-    # test (this is the *_image: sibling of the *_version: pins in the same file that
-    # test_control_plane_version_pins_are_tracked already covers — separate guard, same file,
-    # different key, so neither doubles up on the other).
+    # roles/setup/*/defaults/main.yml is included for the same reason: registry_k8s_image and
+    # registry_k8s_netpol_probe_image (roles/setup/k8s_host_files/defaults/main.yml) sit one
+    # directory over from the k8s role defaults, so a role-defaults-only glob would leave them
+    # matched by no manager and by no test. The restore drill's busybox probe image was the first
+    # such pin and moved into the k8s tree at H2.3d.
     defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
     defaults += sorted((_REPO / "ansible/roles/setup").glob("*/defaults/main.yml"))

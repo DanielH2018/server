@@ -1,0 +1,21 @@
+{#
+  The restore drill's script (H2.3d). The CronJob mounts it at /config and runs it with bash.
+
+  The script is embedded from `longhorn-restore-drill.sh.j2`, which the shell-template gate also
+  renders and lints, so the script that runs here is the script that gate checked. No secret goes
+  in here: the drill reads no credential, and the pod's ServiceAccount (rbac.yaml.j2) is its only
+  identity.
+
+  The script's `${VAR}` expansions reach the pod untouched because this tag's render holds no
+  cluster-vars placeholder, so its Kustomization carries no `postBuild` and Flux substitutes
+  nothing. ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py holds that.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: longhorn-restore-drill
+  namespace: {{ longhorn_drill_namespace }}
+data:
+  longhorn-restore-drill.sh: |
+{{ lookup('template', playbook_dir + '/roles/k8s/longhorn-restore-drill/templates/longhorn-restore-drill.sh.j2') | indent(4, true) }}

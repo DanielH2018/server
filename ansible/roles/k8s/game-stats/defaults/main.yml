@@ -24,7 +24,7 @@ game_stats_valheim_claim: valheim-stats-data
 game_stats_valheim_pvc_size: 1Gi
 game_stats_valheim_storage_class: longhorn
 
-# The claims k8s/manifests renders and applies for this role, ahead of the workload.
+# The claims the renderer emits for this role, which the game-stats Kustomization applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ game_stats_terraria_claim }}"
     storage_class: "{{ game_stats_terraria_storage_class }}"

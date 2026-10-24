@@ -1,5 +1,7 @@
 """The `longhorn-restore-drill` tag renders an empty stamp ConfigMap that Flux creates once and keeps (H2.3b).
 
+From H2.3d the tag also renders the drill's CronJob, a second named member of the per-tag census.
+
 The drill's rotation, retry and seen state moves into `longhorn-restore-drill-stamps` (H2.3c),
 and no render can restore it. Two annotations protect it. `ssa: IfNotPresent` stops Flux
 reverting the drill's writes. `prune: disabled` keeps the object when a revert or a render bug
@@ -63,13 +65,19 @@ def test_the_tag_is_flux_owned_and_waits_on_longhorn():
     }
 
 
-def test_the_census_finds_the_stamp_in_the_real_render_and_flags_its_loss(tmp_path):
+def test_the_census_finds_the_stamp_and_the_cronjob_in_the_real_render_and_flags_their_loss(
+    tmp_path,
+):
     out = tmp_path / "out"
     assert homelab_render.cluster(out, [TAG], None) == 0
     assert bundle_census.member_census(out, [TAG]) == []
     # Red case: a render whose kustomization no longer lists the ConfigMap.
     (out / "cluster" / TAG / "kustomization.yaml").write_text(kustomization_text([]))
     assert bundle_census.member_census(out, [TAG]) == [
-        f"{TAG} renders no ConfigMap longhorn-restore-drill-stamps, a named member: a "
+        f"{TAG} renders no {kind} {name}, a named member: a "
         "plumbing tag that drops it leaves it serving with nothing managing it"
+        for kind, name in (
+            ("ConfigMap", "longhorn-restore-drill-stamps"),
+            ("CronJob", "longhorn-restore-drill"),
+        )
     ]
