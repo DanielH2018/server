@@ -1,6 +1,6 @@
 """Ansible filter plugin rendering the Longhorn RecurringJob group labels from `longhorn_backups`.
 
-`roles/setup/k3s/files/longhorn_lib/longhorn_backups.py` names the backup groups once for every Python
+`scripts/lib/longhorn_lib/longhorn_backups.py` names the backup groups once for every Python
 reader (#3737). The k3s role's label tasks and RecurringJob template used to spell the same
 names out, and a one-byte difference renames a live group: its volumes drop out of their
 RecurringJob and nothing fails. These filters let the tasks take each name from the module
@@ -32,10 +32,10 @@ import sys as _sys
 from pathlib import Path as _Path
 
 # `longhorn_lib.longhorn_backups` imports `host_lib` by bare name, because on the host the
-# package and host_lib.py are copied side by side. Here they live in two roles' `files/`, so
-# both go on the path.
-_ROLES = _Path(__file__).resolve().parents[1] / "roles" / "setup"
-for _files in (_ROLES / "common" / "files", _ROLES / "k3s" / "files"):
+# package and host_lib.py are copied side by side. Here they sit in two directories, `hosts/lib`
+# and `scripts/lib`, so both go on the path.
+_REPO = _Path(__file__).resolve().parents[2]
+for _files in (_REPO / "hosts" / "lib", _REPO / "scripts" / "lib"):
     if str(_files) not in _sys.path:
         _sys.path.insert(0, str(_files))
 

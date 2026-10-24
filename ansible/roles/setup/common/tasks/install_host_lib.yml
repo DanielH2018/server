@@ -26,7 +26,7 @@
 #
 # `src` is absolute off `{{ playbook_dir }}` rather than a bare basename. A task file imported
 # from another role resolves `copy:` src against the role that OWNS the file, so a bare
-# `host_lib.py` would look in roles/setup/common/files — which happens to be right — but the
+# `host_lib.py` would look in roles/setup/common/files, which no longer holds it. The
 # two k8s callers (configarr, janitorr) import this from a different plane entirely, and
 # release_bin.yml records the same resolution trap for `template:`. Naming the path outright
 # means the answer does not depend on which role imported it.
@@ -46,7 +46,7 @@
 
 - name: Install the shared host_lib helper in {{ host_lib_dir }}
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/roles/setup/common/files/{{ item }}"
+    src: "{{ playbook_dir }}/../hosts/lib/{{ item }}"
     dest: "{{ host_lib_dir }}/{{ item }}"
     owner: "{{ host_lib_owner | default('root') }}"
     group: "{{ host_lib_owner | default('root') }}"

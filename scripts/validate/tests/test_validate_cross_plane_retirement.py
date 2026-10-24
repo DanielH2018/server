@@ -38,12 +38,12 @@ def documented_include_vars(text: str) -> str:
 @pytest.fixture(scope="module")
 def head_snapshot(tmp_path_factory) -> gate.Snapshot:
     tree = tmp_path_factory.mktemp("head")
-    gate.extract("HEAD", tree, ("ansible", "scripts"))
+    gate.extract("HEAD", tree, ("ansible", "scripts", "hosts"))
     return gate.snapshot(tree, ROLES)
 
 
 def retired_step_1(tmp_path: Path, include_vars: str) -> gate.Snapshot:
-    gate.extract("HEAD", tmp_path, ("ansible", "scripts"))
+    gate.extract("HEAD", tmp_path, ("ansible", "scripts", "hosts"))
     for template in (tmp_path / ROLE / "templates").iterdir():
         template.unlink()
     tasks = tmp_path / ROLE / "tasks/main.yml"

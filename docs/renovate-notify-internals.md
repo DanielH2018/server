@@ -113,7 +113,7 @@ dashboard-level arms, `files/pending_logic.py` for everything that parses, times
 Pending-Status-Checks item. `notify_logic` imports `PENDING_HEADER` from `pending_logic` and
 nothing goes the other way, so the pair cannot cycle. The fetch/persist/post shell is
 `files/renovate_notify.py`, which imports from both. `host_lib.py` is copied in from
-`roles/setup/common/files/` — edit it there, not here.
+`hosts/lib/` — edit it there, not here.
 
 ## What a dry run does not prove
 

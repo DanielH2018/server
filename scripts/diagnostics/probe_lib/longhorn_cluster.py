@@ -23,12 +23,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.core import Unreadable
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
-from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
+from lib.repo_paths import HOST_LIB_FILES
 
 # The Backup CR reader and the backup group and target names, shared with the backup-health
 # cron (#3735, #3737); it imports host_lib, so both directories go on sys.path.
 _sys.path.insert(0, str(HOST_LIB_FILES))
-_sys.path.insert(0, str(K3S_FILES))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 
 

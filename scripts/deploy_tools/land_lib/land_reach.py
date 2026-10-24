@@ -26,10 +26,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS, REPO
+from lib.repo_paths import (
+    ALL_VARS,
+    ANSIBLE,
+    GITOPS_DEPLOY_FILES,
+    HOST_LIB_FILES,
+    HOST_VARS,
+    REPO,
+)
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+
+sys.path.insert(0, str(HOST_LIB_FILES))
 from deployer_lib import deploy_cross_role
 from deployer_lib.deploy_logic import (
     _is_test_only_path,

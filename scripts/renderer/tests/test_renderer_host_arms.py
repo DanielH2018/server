@@ -8,7 +8,6 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_host_arms.py
 
 import importlib.machinery
 import json
-import sys
 import types
 
 import pytest
@@ -24,7 +23,6 @@ SSHD = "/etc/ssh/sshd_config.d/50-homelab.conf"
 
 def _reconcile():
     """`hosts/lib/homelab-reconcile` as a module, so its own parsers judge the manifest."""
-    sys.path.insert(0, str(LIB))  # for reconcile_lib, which sits beside the script
     loader = importlib.machinery.SourceFileLoader(
         "homelab_reconcile", str(LIB / "homelab-reconcile")
     )

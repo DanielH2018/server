@@ -27,6 +27,7 @@ from pathlib import Path
 from _gitops_deploy_allowed import ALLOWED, ENTRY
 from _helpers import REPO
 from lib.proc_testing import run
+from lib.repo_paths import HOST_LIB_FILES
 
 FILES = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"
 # The `deploy_*` modules live in this namespace package beside the entry point (#4355). ALLOWED
@@ -203,37 +204,38 @@ def test_a_from_import_of_the_io_surface_is_flagged():
     assert _aliased_imports(source, QUALIFIED) == {"deploy_alerts"}
 
 
-def test_deploy_logic_imports_without_the_common_files_path():
-    """The index must import with ONLY the role's files/ on sys.path — no `host_lib`.
+def test_deploy_logic_imports_without_host_lib():
+    """The index must not load `host_lib`, though `hosts/lib` is on `sys.path` for `ci_verdict`.
 
-    `scripts/deploy_tools/await_ci.py` and `land_tags.py` both reach
-    the deployer's decisions through `deploy_logic`, and each puts only this directory on
-    `sys.path`. `host_lib` lives in `roles/setup/common/files`, which those tools never add, so
-    any module-level import chain from `deploy_logic` down to `deploy_config` breaks `land.sh`
-    with a `ModuleNotFoundError` five frames from anything the tool is about. Only a test that
-    shells out notices a re-export that drags such a chain in. This asserts it directly.
+    `scripts/deploy_tools/await_ci.py` and `land_tags.py` both reach the deployer's decisions
+    through `deploy_logic`, and each puts the role's files/ and `hosts/lib` on `sys.path`
+    (`deploy_git` imports `ci_verdict` from the second). `host_lib` sits beside `ci_verdict`
+    there since H7.2e, so the path no longer tells a pure chain from an impure one. A module-level
+    import chain from `deploy_logic` down to `deploy_config` would load `host_lib` and its
+    `kuma_push` into every `land.sh` run. This asserts it directly, from `sys.modules`.
 
-    A subprocess rather than an import: the in-process `sys.path` already carries every role's
-    files/ by the time this test runs, so nothing checked in-process can see the difference.
+    A subprocess rather than an in-process import: the in-process `sys.modules` already holds
+    `host_lib` by the time this test runs, so nothing checked there can see the difference.
     """
     env = dict(os.environ)
-    env["PYTHONPATH"] = str(FILES)
+    env["PYTHONPATH"] = os.pathsep.join([str(FILES), str(HOST_LIB_FILES)])
 
-    def _import(module: str) -> subprocess.CompletedProcess:
-        return run([sys.executable, "-c", f"import {module}"], env=env)
+    def _loaded(module: str) -> subprocess.CompletedProcess:
+        code = f"import sys, {module}; print('host_lib' in sys.modules)"
+        return run([sys.executable, "-c", code], env=env)
 
-    pure = _import(f"{PACKAGE}.deploy_logic")
+    pure = _loaded(f"{PACKAGE}.deploy_logic")
     assert pure.returncode == 0, pure.stderr
+    assert pure.stdout.strip() == "False", "deploy_logic loaded host_lib"
     # The reject half, through the identical env: `deploy_config` is the module the chain ended
-    # at, and it MUST fail here. Without this, the test above passes just as happily when the
-    # subprocess can no longer see the difference at all — an inherited path entry, a stray
-    # PYTHONPATH, or `host_lib` landing in files/ one day.
-    impure = _import(f"{PACKAGE}.deploy_config")
-    assert impure.returncode != 0, (
-        "deploy_config imported with only files/ on the path — this test can no longer tell "
-        "a pure import chain from an impure one"
+    # at, and it MUST load `host_lib` here. Without this, the test above passes just as happily
+    # when the subprocess can no longer see the difference at all.
+    impure = _loaded(f"{PACKAGE}.deploy_config")
+    assert impure.returncode == 0, impure.stderr
+    assert impure.stdout.strip() == "True", (
+        "deploy_config did not load host_lib — this test can no longer tell a pure import "
+        "chain from an impure one"
     )
-    assert "host_lib" in impure.stderr, impure.stderr
 
 
 def test_the_pure_modules_the_index_re_exports_are_import_pure():

@@ -44,16 +44,19 @@ def _parse(subject: Subject) -> ast.AST | None:
 
 FUTURE_ANNOTATIONS = re.compile(r"^from __future__ import annotations\b", re.MULTILINE)
 
-# DECIDED: host-shipped `ansible/roles/*/*/files/*.py` is EXEMPT, and the exemption is not
-# cosmetic. Those programs run under the hosts' own interpreter, not the repo's uv env:
-# `python3 -V` on daniel-server and daniel-pi both report 3.12.3 (measured 2026-09-05), and the
-# k8s `files/*.py` run under whatever python their pod image ships. Below 3.14 there is no PEP
-# 649, so annotations evaluate EAGERLY at def/class time and the import is load-bearing
-# insurance against a forward reference — `def merge(self, other: Foo) -> Foo:` inside
-# `class Foo` raises NameError without it. The repo suite cannot observe that: it runs on 3.14,
-# where every such annotation is lazy either way. So the exemption is what keeps a green suite
-# from authorising a cron-time NameError on a host.
-HOST_SHIPPED = re.compile(r"^ansible/roles/[^/]+/[^/]+/files/")
+# DECIDED: host-shipped `ansible/roles/*/*/files/*.py` (and, since H7.2e, `hosts/lib/` and
+# `scripts/lib/longhorn_lib/`) is EXEMPT, and the exemption is not cosmetic. Those programs
+# run under the hosts' own interpreter, not the repo's uv env: `python3 -V` on daniel-server
+# and daniel-pi both report 3.12.3 (measured 2026-09-05), and the k8s `files/*.py` run under
+# whatever python their pod image ships. Below 3.14 there is no PEP 649, so annotations
+# evaluate EAGERLY at def/class time and the import is load-bearing insurance against a
+# forward reference — `def merge(self, other: Foo) -> Foo:` inside `class Foo` raises
+# NameError without it. The repo suite cannot observe that: it runs on 3.14, where every such
+# annotation is lazy either way. So the exemption is what keeps a green suite from
+# authorising a cron-time NameError on a host.
+HOST_SHIPPED = re.compile(
+    r"^(ansible/roles/[^/]+/[^/]+/files/|hosts/lib/[^/]+\.py$|scripts/lib/longhorn_lib/)"
+)
 
 
 def _uv_run_modules() -> list[str]:
@@ -390,7 +393,7 @@ ROWS = (
         must_find=frozenset(
             {
                 "ansible/filter_plugins/toposort.py",
-                "ansible/roles/setup/common/files/host_lib.py",
+                "hosts/lib/host_lib.py",
                 "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
                 "ansible/roles/k8s/monitor-bridge/files/registry.py",
                 "ansible/roles/k8s/homelab-mcp/files/safe_reads.py",
@@ -492,7 +495,6 @@ def test_the_future_annotations_exemption_finds_the_host_shipped_modules():
     """An exemption that matched nothing would gate host scripts on a rule their 3.12 cannot take."""
     exempt = {rel for rel in tracked("*.py") if HOST_SHIPPED.match(rel)}
     assert len(exempt) >= 20
-    assert {
-        "ansible/roles/setup/common/files/host_lib.py",
-        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py",
-    } <= exempt
+    assert {"hosts/lib/host_lib.py", "hosts/lib/ci_verdict.py"} <= exempt
+    assert "scripts/lib/longhorn_lib/longhorn_backups.py" in exempt
+    assert not any(HOST_SHIPPED.match(rel) for rel in tracked("hosts/lib/tests/*.py"))

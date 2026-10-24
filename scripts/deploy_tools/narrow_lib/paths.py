@@ -16,12 +16,15 @@ from pathlib import Path
 
 from lib.git import git
 from lib.narrow_git import CannotNarrow
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
 # The deployer's own `files/`, for the one rule this module shares with the tick itself. Reached
 # as a path entry rather than a copy, the way `narrow_broad` reaches `deploy_logic`; the import
 # stays inside `is_prose`, because only the path entry is free at module import.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+
+
+_sys.path.insert(0, str(HOST_LIB_FILES))
 
 
 def is_prose(path: str) -> bool:

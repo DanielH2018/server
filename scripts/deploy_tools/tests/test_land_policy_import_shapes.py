@@ -149,10 +149,10 @@ REFUSED = {
         [_added("scripts/deploy_tools/disk_report.py")],
         {
             "scripts/deploy_tools/disk_report.py": F,
-            "ansible/roles/setup/common/files/disk_report.py": F,
+            "hosts/lib/disk_report.py": F,
         },
         "scripts/deploy_tools/disk_report.py (shadows "
-        "ansible/roles/setup/common/files/disk_report.py in another import root)",
+        "hosts/lib/disk_report.py in another import root)",
     ),
     "a non-empty __init__.py": (
         [_added("scripts/home_assistant/__init__.py")],
@@ -287,6 +287,6 @@ def test_the_import_roots_are_the_landers_own_inserts():
         "scripts",
         "scripts/deploy_tools",
         "ansible/roles/setup/gitops_deploy/files",
-        "ansible/roles/setup/common/files",
+        "hosts/lib",
     } <= set(roots)
     assert "" not in roots

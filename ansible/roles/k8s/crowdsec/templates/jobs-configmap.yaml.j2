@@ -60,4 +60,4 @@ data:
   flux_job_connect.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/manifests/files/flux_job_connect.py') | indent(4, true) }}
   kuma_push.py: |
-{{ lookup('file', playbook_dir + '/roles/setup/common/files/kuma_push.py') | indent(4, true) }}
+{{ lookup('file', playbook_dir + '/../hosts/lib/kuma_push.py') | indent(4, true) }}

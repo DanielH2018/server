@@ -2,17 +2,15 @@
 
 `ci_verdict` folds GitHub's check-runs into pass / fail / pending, and the shape that matters
 is fail-closed: an absent run, an unfinished run and a cancelled run are all "no verdict",
-never a pass. The required context names are read from defaults/main.yml and checked against
+never a pass. The required context names are read from group_vars/all.yml and checked against
 ci.yml's job names, because a renamed job holds the verdict at pending forever.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_git_ci.py
 
-import pathlib
-
 import yaml
 
-from lib.repo_paths import REPO as _REPO_ROOT
+from lib.repo_paths import ALL_VARS, REPO as _REPO_ROOT
 
 import pytest
 
@@ -27,7 +25,7 @@ from deployer_lib.deploy_git import (
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 
 _CI_YML = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
-_GITOPS_DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
+_GROUP_VARS = ALL_VARS
 
 
 def _ci_job_names() -> set[str]:
@@ -36,14 +34,13 @@ def _ci_job_names() -> set[str]:
 
 
 def _required_contexts() -> list[str]:
-    defaults = yaml.safe_load(_GITOPS_DEFAULTS.read_text())
-    return defaults["gitops_deploy_ci_contexts"]
+    return yaml.safe_load(_GROUP_VARS.read_text())["ci_required_contexts"]
 
 
 def test_required_ci_contexts_are_real_ci_yml_job_names():
-    """`gitops_deploy_ci_contexts` holds GitHub check-run names, which are ci.yml's job `name:`.
+    """`ci_required_contexts` holds GitHub check-run names, which are ci.yml's job `name:`.
 
-    The string was hand-copied into ci.yml, defaults/main.yml and this file, and the test
+    The string was hand-copied into ci.yml, the role defaults and this file, and the test
     asserted against its own copy — so it could not see drift in the other two. A rename in
     ci.yml holds `ci_verdict` at `pending` forever: `fetch_ci_verdict` finds no run of the
     required name, `next_action` returns `ci_pending`, and the host parks until the 6h
@@ -52,12 +49,12 @@ def test_required_ci_contexts_are_real_ci_yml_job_names():
     names = _ci_job_names()
     contexts = _required_contexts()
     assert names, "parsed no job names out of %s" % _CI_YML
-    assert contexts, "parsed no gitops_deploy_ci_contexts out of %s" % _GITOPS_DEFAULTS
+    assert contexts, "parsed no ci_required_contexts out of %s" % _GROUP_VARS
     assert all(isinstance(c, str) and c.strip() for c in contexts), contexts
 
     missing = sorted(set(contexts) - names)
     assert not missing, (
-        "gitops_deploy_ci_contexts names check-runs that no ci.yml job produces, so the CI "
+        "ci_required_contexts names check-runs that no ci.yml job produces, so the CI "
         "gate can never go green: %s (ci.yml jobs: %s)" % (missing, sorted(names))
     )
 

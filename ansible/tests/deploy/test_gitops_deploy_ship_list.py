@@ -23,7 +23,7 @@ flattens the package puts the libraries exactly where the removal task deletes t
 deployer then fails at import on every tick. The last tests install the shipped files into a
 scratch directory the way the role does, and import the entry point from there.
 
-`host_lib.py` is installed by its own task from `roles/setup/common/files/` and is not in this
+`host_lib.py` is installed by its own task from `hosts/lib/` and is not in this
 role's files/, so it is outside the set this test derives. Its stamp pair is asserted directly.
 
 Run: uv run pytest ansible/tests/deploy/test_gitops_deploy_ship_list.py
@@ -48,8 +48,11 @@ TESTS = ROLE / "tests"
 ENTRYPOINT = "gitops_deploy.py"
 INSTALL_DIR = "/opt/gitops-deploy"
 COPY_TASK = "Install deployer Python files"
+# The module `deploy_git` imports from hosts/lib/, which the role's own task installs.
+HOST_LIB_ONLY = ("ci_verdict.py",)
 REMOVE_TASK = "Remove the deployer libraries that moved into deployer_lib"
 STAMP_TASK = "Record the deployed gitops-deploy code"
+CI_GATE_TASK = "Install the CI gate module beside the deployer"
 
 
 def _task(name):
@@ -166,10 +169,27 @@ def test_stamp_pairs_point_at_the_installed_path():
         assert (REPO / pair["src"]).is_file(), pair
 
 
-def test_host_lib_is_stamped_from_the_common_role():
-    """host_lib.py is installed by its own task from roles/setup/common; keep its pair."""
+def test_host_lib_is_stamped_from_hosts_lib():
+    """host_lib.py is installed by its own task from hosts/lib/; keep its pair."""
     srcs = {p["src"] for p in _stamp_pairs()}
-    assert "ansible/roles/setup/common/files/host_lib.py" in srcs
+    assert "hosts/lib/host_lib.py" in srcs
+
+
+def test_the_ci_gate_module_lands_before_the_copy_loop_and_is_stamped():
+    """`deploy_git` imports `ci_verdict` by bare name, so it must be on the host first.
+
+    A `deploy_git.py` that lands before `ci_verdict.py` dies at import on the next tick. The
+    module sits in `hosts/lib/`, outside this role's files/, so it has its own task and pair.
+    """
+    names = [t.get("name") for t in load_tasks(INSTALL)]
+    assert names.index(CI_GATE_TASK) < names.index(COPY_TASK)
+    copy = _task(CI_GATE_TASK)["ansible.builtin.copy"]
+    assert copy["dest"] == f"{INSTALL_DIR}/ci_verdict.py"
+    assert copy["src"].endswith("/../hosts/lib/ci_verdict.py")
+    assert {
+        "live": f"{INSTALL_DIR}/ci_verdict.py",
+        "src": "hosts/lib/ci_verdict.py",
+    } in (_stamp_pairs())
 
 
 # --- The import census ---------------------------------------------------------------------
@@ -215,7 +235,7 @@ def test_every_module_the_entrypoint_reaches_is_shipped():
     )
 
 
-def _install(tmp_path, dest_template=None):
+def _install(tmp_path, dest_template=None, omit=()):
     """Lay the shipped files out under `tmp_path` as the role does, then run its removal."""
     for rel, live in _installed(dest_template).items():
         target = tmp_path / live.removeprefix(f"{INSTALL_DIR}/")
@@ -223,7 +243,11 @@ def _install(tmp_path, dest_template=None):
         shutil.copy(FILES / rel, target)
     for name in _task(REMOVE_TASK)["loop"]:
         (tmp_path / name).unlink(missing_ok=True)
-    for name in ("host_lib.py", "kuma_push.py"):
+    for name in (
+        "host_lib.py",
+        "kuma_push.py",
+        *sorted(set(HOST_LIB_ONLY) - set(omit)),
+    ):
         shutil.copy(HOST_LIB_FILES / name, tmp_path / name)
 
 
@@ -300,3 +324,10 @@ def test_module_missing_from_stamp_pairs_is_flagged(tmp_path):
     assert _missing_from_stamp_pairs(_stamp_pairs(), runtime) == [
         f"{PACKAGE}/deploy_classify.py"
     ]
+
+
+def test_a_scratch_install_without_the_ci_gate_module_fails_to_import(tmp_path):
+    """The reject half: `deploy_git` imports `ci_verdict`, so the install must carry it."""
+    _install(tmp_path, omit=HOST_LIB_ONLY)
+    proc = _import_entrypoint(tmp_path)
+    assert "No module named 'ci_verdict'" in proc.stderr, proc.stderr
