@@ -1423,6 +1423,7 @@
  "scripts/tests/test_vale_scope.py": 0.0,
  "scripts/validate/tests/test_alert_tools_guard.py": 0.89,
  "scripts/validate/tests/test_backup_health_shim.py": 0.9,
+ "scripts/validate/tests/test_conffile_case.py": 1.24,
  "scripts/validate/tests/test_cross_plane_extract.py": 0.05,
  "scripts/validate/tests/test_cross_plane_snapshot_revision.py": 0.0,
  "scripts/validate/tests/test_every_validator_has_a_red_proof.py": 0.0,
