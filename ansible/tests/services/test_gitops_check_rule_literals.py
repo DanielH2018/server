@@ -13,6 +13,7 @@ import re
 
 import pytest
 from _helpers import K8S_ROLES
+from _setup_render import rendered_setup_text
 from _shell_render import render_shell_script
 from lib import yaml_fast
 
@@ -115,7 +116,6 @@ def test_every_producer_names_the_check_label_its_rule_reads(prefix):
 # GitOpsTickStale reads the deployer's own textfile, which no DEADLINE_S renders. Its deadline must
 # outlast the longest healthy gap between two ticks' writes: one whole tick, which systemd caps at
 # the unit's TimeoutStartSec, then one timer interval before the next starts (#6164).
-GITOPS_ROLE = K8S_ROLES.parent / "setup" / "gitops_deploy"
 SPAN = re.compile(r"(\d+)(min|s)")
 
 
@@ -136,10 +136,11 @@ def tick_stale_problems(expr: str, longest_gap: int) -> list[str]:
 
 
 def shipped_longest_gap() -> int:
-    unit = (GITOPS_ROLE / "templates" / "gitops-deploy.service.j2").read_text()
+    unit = rendered_setup_text("gitops_deploy", "gitops-deploy.service.j2")
+    timer = rendered_setup_text("gitops_deploy", "gitops-deploy.timer.j2")
     [timeout] = re.findall(r"^TimeoutStartSec=(\S+)$", unit, re.M)
-    defaults = yaml_fast.safe_load((GITOPS_ROLE / "defaults" / "main.yml").read_text())
-    return span_seconds(timeout) + span_seconds(defaults["gitops_deploy_tick_interval"])
+    [interval] = re.findall(r"^OnUnitActiveSec=(\S+)$", timer, re.M)
+    return span_seconds(timeout) + span_seconds(interval)
 
 
 def tick_stale_expr(text: str) -> str:
