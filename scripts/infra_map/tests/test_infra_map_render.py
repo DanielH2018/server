@@ -23,6 +23,7 @@ from _infra_map import (
     docker_host,
     live_ok,
     model_for,
+    pi_host,
 )
 
 
@@ -68,6 +69,7 @@ def test_render_html_escapes_values_from_the_inventory():
     host_vars = {
         "daniel-box": docker_host([]),
         "daniel-server": docker_host([{"name": "<script>evil</script>", "port": 1}]),
+        "daniel-pi": pi_host([]),
     }
     page = g.render_html(g.build_model(GLOBALS, host_vars, {}, "now", ROLES))
     assert "<script>evil" not in page
@@ -99,7 +101,11 @@ def test_the_diagram_labels_edges_with_addresses_from_the_inventory():
         "domain": "example.test",
     }
     model = g.build_model(
-        global_vars, {"daniel-box": docker_host([])}, {}, "now", ROLES
+        global_vars,
+        {"daniel-box": docker_host([]), "daniel-pi": pi_host([])},
+        {},
+        "now",
+        ROLES,
     )
     figure = diagram.diagram_view(model)
     assert "10.9.9.9" in figure

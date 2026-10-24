@@ -78,7 +78,9 @@ tdarr_k8s_configs_size: 1Gi
 # point. B2 Reachable is the readout for whether its incrementals strain B2's TRANSACTION cap.
 tdarr_k8s_storage_class: longhorn
 
-# The claims k8s/manifests renders and applies for this role, ahead of the workload.
+# The claims the renderer emits for this role. The tdarr Kustomization applies them after the
+# tdarr-snapshot Job; after a handback, k8s/manifests applies them ahead of the pre-apply
+# snapshot.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ tdarr_k8s_server_claim }}"
     storage_class: "{{ tdarr_k8s_storage_class }}"

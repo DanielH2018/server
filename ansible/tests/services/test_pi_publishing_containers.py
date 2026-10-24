@@ -3,7 +3,7 @@
 
 monitor-bridge's detached-container arm compares each Pi container's live published ports
 against `PI_PUBLISHED_PORTS`, which `config/env.yaml.j2` renders from daniel-pi's
-`containers_list` — every entry with a `port`. The derivation is what keeps the set from
+`containers_list` and `compose_services` — every entry with a `port`. The derivation is what keeps the set from
 drifting as containers come and go, but a derivation can also silently drop a name it was
 written to cover, which is the failure this pins: `selectattr('port', 'defined')` returning
 one name instead of two reads as a narrowing nobody sees, and the arm goes blind to whichever
@@ -30,6 +30,7 @@ Run: uv run pytest ansible/tests/services/test_pi_publishing_containers.py
 
 from _helpers import HOST_VARS
 from _k8s_render import render_pod_env
+from lib.ansible_inventory import pi_entries_in
 from validate.k8s_manifests import load_yaml
 
 ROLE = "monitor-bridge"
@@ -57,12 +58,16 @@ def _hostvars(pi_containers: list | None = None) -> dict[str, dict]:
     """
     found = {host: load_yaml(HOST_VARS / f"{host}.yml") for host in HOSTS}
     if pi_containers is not None:
-        found["daniel-pi"] = {**found["daniel-pi"], "containers_list": pi_containers}
+        found["daniel-pi"] = {
+            **found["daniel-pi"],
+            "containers_list": pi_containers,
+            "compose_services": [],
+        }
     return found
 
 
 def _pi_containers() -> list:
-    return load_yaml(HOST_VARS / "daniel-pi.yml")["containers_list"]
+    return pi_entries_in(load_yaml(HOST_VARS / "daniel-pi.yml"))
 
 
 def published(pi_containers: list | None = None) -> dict[str, int]:
@@ -149,3 +154,20 @@ def test_a_udp_only_container_does_not_join_the_set():
     assert with_udp == base, (
         f"a container publishing only UDP changed the watched set: {with_udp!r} vs {base!r}"
     )
+
+
+def test_a_publisher_moved_to_compose_services_is_still_watched():
+    """The H5 move leaves the set unchanged: the second key is read, and the order is by name."""
+    pi = load_yaml(HOST_VARS / "daniel-pi.yml")
+    moved = {
+        **pi,
+        "containers_list": [e for e in pi["containers_list"] if e["name"] != "alloy"],
+    }
+    moved["compose_services"] = [
+        e for e in pi["containers_list"] if e["name"] == "alloy"
+    ]
+    found = {host: load_yaml(HOST_VARS / f"{host}.yml") for host in HOSTS}
+    found["daniel-pi"] = moved
+    raw = render_pod_env(ROLE, {"hostvars": found})[ENV_VAR]
+    assert raw == render_pod_env(ROLE, {"hostvars": _hostvars()})[ENV_VAR]
+    assert raw == "alloy:12345,wg-easy:51821"

@@ -175,3 +175,11 @@ hypervisor_etcd_drill_fence_deadline: 90
 # deploys from this value. Re-read it with `kubectl -n longhorn-system get svc longhorn-frontend`
 # on daniel-box when the leg reports it stale.
 hypervisor_etcd_drill_fence_longhorn_url: http://10.43.152.244/v1/nodes
+
+# The SUC rehearsal mode of the orchestrator (`--rehearse-suc`, H6.1b2). The host-side helper
+# reads the pins from a checkout and judges the guest, and the guest-side script is copied into
+# the guest for the run. The deadline is how long the Plan may take to reach its verdict after
+# the bundle is published: a server upgrade is about ten minutes, plus the pulls and the restart.
+hypervisor_suc_rehearsal_helper_path: /usr/local/lib/suc_rehearsal.py
+hypervisor_suc_rehearsal_guest_script_path: /usr/local/lib/suc-rehearsal-guest-run.sh
+hypervisor_suc_rehearsal_deadline: 2400

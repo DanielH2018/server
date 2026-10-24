@@ -1,0 +1,53 @@
+# The k3s upgrade Jobs (target slice H6, docs/target-architecture/host/h6-k3s-suc.md, *Alerts*).
+# Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim.
+#
+# kube-state-metrics collects Jobs (`jobs` in --resources and in its ClusterRole), and SUC runs
+# every Plan as a Job in the `system-upgrade` namespace. `service` is the deploy tag that owns
+# the Jobs, so `probe.py health system-upgrade` reads these alerts.
+groups:
+  - name: k3s-upgrade
+    rules:
+      # The alert reads the Job's `Failed` condition, not the failed-pod count. SUC sets
+      # BackoffLimit on a Job, so a pod can fail inside a Job that then succeeds, and a pod
+      # count with `for: 0m` would page on it. `keep_firing_for` outlasts the 900-second TTL
+      # after which SUC deletes a failed Job, and the next Job's deadline of up to 90 minutes.
+      # Without it the alert would resolve when SUC deletes the failed Job, then fire again
+      # when the re-created Job fails. It is the only page for a selector-only change, which
+      # promotes before any Job exists, for the operator removing a pause label, and for a Job
+      # SUC re-creates after its TTL.
+      - alert: K3sUpgradeJobFailed
+        expr: kube_job_failed{namespace="system-upgrade", condition="true"} == 1
+        for: 0m
+        keep_firing_for: 2h
+        labels:
+          severity: critical
+          service: system-upgrade
+        annotations:
+          summary: A k3s upgrade Job in system-upgrade has failed.
+          description: >-
+            Job {{ $labels.job_name }} carries a Failed condition. Read the Plan's conditions
+            with kubectl -n system-upgrade get plans, then the Job's pods. A refusing prepare
+            gate that outlasts the Job deadline ends here too. docs/k3s-upgrade.md says how to
+            clear the hold and retry.
+      # The nodes run one kubelet version except while SUC upgrades them, server first. The
+      # server Plan finishes, Longhorn recovers and the agent waits 15 minutes after the
+      # server's start, so a healthy bump holds two versions for well under the 2-hour hold.
+      # The `absent()` arm pages the gap in the other direction: without kube_node_info the
+      # skew cannot be judged, and a rule that reads clean when its series vanish would hide a
+      # node left on the old version behind a lost scrape. It carries the family's zero-series
+      # case, because kube_job_failed is absent whenever no upgrade Job exists.
+      - alert: K3sNodeVersionSkew
+        expr: >-
+          count(count by (kubelet_version) (kube_node_info)) > 1
+          or absent(kube_node_info)
+        for: 2h
+        labels:
+          severity: warning
+          service: system-upgrade
+        annotations:
+          summary: The nodes report more than one kubelet version, or none at all.
+          description: >-
+            For 2 hours either kube_node_info has carried more than one kubelet_version, so an
+            upgrade left one node behind, or the series has been absent, so the skew cannot be
+            judged. Read kubectl get nodes, then the Plans with kubectl -n system-upgrade get
+            plans. docs/k3s-upgrade.md says how to finish or retry the upgrade.

@@ -180,8 +180,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
     path on one machine and nowhere else. The Pi is a recipient of its own file only. Its
     public half appears in the `vars/hosts/daniel-pi\.sops\.yaml$` creation rule of
     `ansible/.sops.yaml`, beside daniel-box's key and the recovery key (item 1), and in no
-    other rule. The Pi's file arrives with H4.5. Until then the key decrypts nothing, so a
-    lost key costs nothing yet.
+    other rule. The file arrived with H4.5. Since then the key decrypts the two push tokens that
+    the Pi's heartbeats load from `/run/credstore`, so a lost key costs those two values.
     - **To restore it** onto a rebuilt Pi, run `sudo hosts/bootstrap-host.sh daniel-pi`. Its
       step 3 creates a fresh key at the same path and prints the public key. No copy of the
       old key exists to restore. Replace the Pi's public key in the Pi's creation rule. Then,

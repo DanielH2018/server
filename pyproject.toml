@@ -97,7 +97,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # run that collected nothing read exactly like one that passed. Reviewers had to override
 # addopts to get a count back. The default verbosity
 # costs ~2 header lines per xdist worker and prints the count every time.
-addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share"
+addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share"
 # Every warning is a failure. Measured before enabling: the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's
@@ -111,6 +111,7 @@ filterwarnings = [
 # a real browser against live LAN routes and read SOPS, none of which a GitHub runner has.
 # Run them with `uv run pytest -m ui`, which overrides the default -m.
 markers = [
+  "image: runs a script inside its pinned container image with `docker run`; deselected from the pytest shards (no Docker daemon) and run by .github/workflows/image-leg.yml with `-m image`",
   "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (ansible/tests/repo/test_uptime_robot_keywords.py)",
 ]
 # filter_plugins: lets test_toposort import toposort. hosts/lib: host_lib is a cross-role
@@ -189,7 +190,7 @@ extend-exclude = [
 # hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar. The
 # repository signer runs under daniel-box's /usr/bin/python3 for the same reason, and
 # ansible/roles/setup/homelab_builder/tests/test_repo_signer.py holds it to the same grammar.
-per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py" = "py312" }
+per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -347,6 +348,7 @@ extra-paths = [
   "ansible/roles/k8s/crowdsec/files",
   "ansible/roles/k8s/artifacts/files",
   "ansible/roles/setup/k3s/files",
+  "ansible/roles/setup/hypervisor/files",
   "ansible/roles/setup/renovate_notify/files",
   "ansible/roles/setup/renovate_agent/files",
   "ansible/roles/setup/homelab_builder/files",

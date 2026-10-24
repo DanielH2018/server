@@ -1,0 +1,13 @@
+{
+  "checksum": "bb6dcbd36a536a7c130205b55e86b0795e3681452c4fb76356c6242845bad8ba",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/system-upgrade/CLAUDE.md#system-upgrade — system-upgrade-controller and the two k3s Plans",
+  "row": {
+    "atoms": {
+      "docs/adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md": "4b50b5219622e7d292890b21d618fdcfdf540fea160e9b5b50fb74f92a911f53",
+      "docs/target-architecture/host/h6-k3s-suc.md": "0216a71d4a28997ac0e75b29513f69cd20a1a28748e0834cb32ad22b74e04cfc"
+    },
+    "python": "3.14",
+    "verified_sha": "35a19551f"
+  }
+}

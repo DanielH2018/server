@@ -40,7 +40,6 @@ from _shell_render import (
 from lib import yaml_fast
 from lib.render_guard import containers_entries_in, entry_platform
 from validate.shell_templates import discover_templates
-from lib.repo_paths import K3S_ROLE
 
 # The Pi's roles whose templates the accessor must render. Derived from `containers_list` below
 # as well, so this names what must still be deployed there rather than only what is.
@@ -176,7 +175,7 @@ def test_an_unrendered_dockerfile_is_named_rather_than_missed() -> None:
 GUARDED_SHELL_TEMPLATES = frozenset(
     {
         ("setup", "claude_code", "sync-artifacts.sh.j2"),
-        ("setup", "k3s", "longhorn-restore-drill.sh.j2"),
+        ("k8s", "longhorn-restore-drill", "longhorn-restore-drill.sh.j2"),
         ("setup", "k3s", "longhorn-backup-health.sh.j2"),
     }
 )
@@ -227,21 +226,23 @@ def test_a_shell_render_takes_an_override_the_inventory_does_not_hold() -> None:
 
 
 def test_an_override_beats_a_default_the_role_itself_declares() -> None:
-    """The restore-drill harness renders into a `tmp_path`, which is a key the role DOES declare.
+    """The restore-drill harness overrides a key the role DOES declare.
 
     The case above proves an override lands where nothing else defines the name. This one proves
-    precedence: if the role's own default won, `ansible/tests/longhorn/_restore_drill.py` would
-    render the production stamp tree and its tests would write there.
+    precedence: if the role's own default won, a test that overrides the drill's timeout would
+    still read the production value.
     """
-    declared = load_defaults(K3S_ROLE)["k3s_longhorn_restore_drill_stamp_dir"]
+    declared = load_defaults(ROLES / "k8s" / "longhorn-restore-drill")[
+        "k3s_longhorn_restore_drill_timeout_s"
+    ]
     script = render_shell_script(
-        "setup",
-        "k3s",
+        "k8s",
+        "longhorn-restore-drill",
         "longhorn-restore-drill.sh.j2",
-        overrides={"k3s_longhorn_restore_drill_stamp_dir": "/tmp/drill-stamps"},
+        overrides={"k3s_longhorn_restore_drill_timeout_s": 1234},
     )
-    assert 'STAMP_DIR="/tmp/drill-stamps"' in script
-    assert declared not in script
+    assert "+ 1234 ))" in script
+    assert f"+ {declared} ))" not in script
 
 
 def test_a_shell_template_that_is_not_in_the_tree_fails_the_caller() -> None:
@@ -252,8 +253,8 @@ def test_a_shell_template_that_is_not_in_the_tree_fails_the_caller() -> None:
 def test_a_shell_function_the_script_does_not_define_is_named() -> None:
     with pytest.raises(AssertionError, match=r"no_such_function\(\) is gone"):
         rendered_shell_function(
-            "setup",
-            "k3s",
+            "k8s",
+            "longhorn-restore-drill",
             "longhorn-restore-drill.sh.j2",
             "no_such_function",
         )

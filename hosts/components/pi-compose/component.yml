@@ -1,0 +1,24 @@
+# The Pi's Compose project (H5, docs/target-architecture/host/h5-pi-compose.md). H5.2a1 ships the
+# renderer's inputs: the Compose env template and the tmpfiles file. No package lists this
+# component yet, so nothing installs from it.
+#
+# The renderer reads two more keys that this file does not carry yet, because
+# `scripts/validate/unit_templates.py` renders a component no host lists through a shared package,
+# and a shared package refuses `outputs:`:
+#
+#   compose: services             # the directory of per-service trees (host_compose.py)
+#   outputs:
+#     - src: compose.env.j2       # one line per key in `keys`
+#       path: /usr/lib/homelab/compose/compose.env
+#       owner: root
+#       group: root
+#       mode: "0600"
+#       keys: [domain]            # exactly the secrets the compose files read
+#       dependents: [homelab-compose.service]
+#       format: dotenv            # homelab-secrets refuses a `'` or a newline in a value
+#
+# H5.2b adds them with the canary and lists the component in hosts/daniel-pi/package.yml, in the
+# PR that ships the enable link. `hosts/lib/tests/test_pi_compose_renderer.py` renders this
+# component's files with those keys added, against fixture services, until then.
+files:
+  - {src: tmpfiles.d/homelab-compose.conf, dst: /usr/lib/tmpfiles.d/homelab-compose.conf}

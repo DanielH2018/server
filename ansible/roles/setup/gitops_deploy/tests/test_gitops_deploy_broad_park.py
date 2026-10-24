@@ -12,8 +12,7 @@ a hand is always going to apply.
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
 """
 
-# ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
-
+from deployer_lib import deploy_cross_role
 from deployer_lib import deploy_defer
 from deployer_lib import deploy_locks
 from deployer_lib import deploy_narrow
@@ -321,13 +320,16 @@ def test_a_mixed_range_writes_one_receipt_naming_both_halves(
 
 
 def test_a_filter_plugin_a_bring_up_role_calls_records_that_role(
-    gitops_deploy, tick, state
+    gitops_deploy, tick, state, monkeypatch
 ):
-    """#3874: `k3s` renders `weekly_backup_group`, and no `deploy.yml` run re-renders it.
+    """#3874: a bring-up role renders a plugin's filter; the setup caller gets the ledger line.
 
-    The deploy plane still narrows to its own callers; the setup caller gets the ledger line.
+    No `k3s` task calls a filter plugin since H2.3d, so this test sets the table row itself.
     """
-    tick.paths = ["ansible/filter_plugins/longhorn_groups.py"]
+    plugin = "ansible/filter_plugins/longhorn_groups.py"
+    table = deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS
+    monkeypatch.setitem(table, plugin, frozenset({"k3s"}))
+    tick.paths = [plugin]
     tick.narrow = (0, "sonarr")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]

@@ -1,0 +1,132 @@
+# promtool unit tests for files/rules/k3s-upgrade.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# K3sUpgradeJobFailed has a case that fires it, a case that keeps it firing after the series
+# disappears, and three that keep it silent: a failed-pod count alone, a Job whose Failed
+# condition is false, and a failed Job in another namespace. K3sNodeVersionSkew has the family's
+# zero-series case, which fires it after its 2h hold, a skew case that fires it, and one with a
+# single version that keeps it silent. Promtool uses synthetic series, so it cannot prove
+# kube-state-metrics emits them; the H6.1b landing queries kube_job_failed for namespace
+# `homelab` live.
+rule_files:
+  - ../../files/rules/k3s-upgrade.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so kube_node_info is absent. K3sNodeVersionSkew fires
+  # once its 2h hold passes, and not before. K3sUpgradeJobFailed stays quiet, because no Job
+  # exists in steady state.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 119m
+        alertname: K3sNodeVersionSkew
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: K3sNodeVersionSkew
+        exp_alerts: &skew
+          - exp_labels:
+              severity: warning
+              service: system-upgrade
+            exp_annotations:
+              summary: The nodes report more than one kubelet version, or none at all.
+              description: >-
+                For 2 hours either kube_node_info has carried more than one kubelet_version, so
+                an upgrade left one node behind, or the series has been absent, so the skew
+                cannot be judged. Read kubectl get nodes, then the Plans with kubectl -n
+                system-upgrade get plans. docs/k3s-upgrade.md says how to finish or retry the
+                upgrade.
+      - eval_time: 2h
+        alertname: K3sUpgradeJobFailed
+        exp_alerts: []
+
+  # Two kubelet versions: the alert fires after the hold and not before it.
+  - interval: 1m
+    input_series:
+      - series: 'kube_node_info{node="daniel-box", kubelet_version="v1.37.2+k3s1"}'
+        values: '1x200'
+      - series: 'kube_node_info{node="daniel-server", kubelet_version="v1.37.1+k3s1"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 119m
+        alertname: K3sNodeVersionSkew
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: K3sNodeVersionSkew
+        exp_alerts: *skew
+
+  # One version on both nodes stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'kube_node_info{node="daniel-box", kubelet_version="v1.37.1+k3s1"}'
+        values: '1x200'
+      - series: 'kube_node_info{node="daniel-server", kubelet_version="v1.37.1+k3s1"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: K3sNodeVersionSkew
+        exp_alerts: []
+
+  # The Failed condition is true for 5 minutes, then SUC deletes the Job and the series vanish.
+  # The alert fires at once (for: 0m) and keeps firing for 2 hours after the last true sample,
+  # and resolves after that.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_failed{namespace="system-upgrade", job_name="apply-k3s-server-on-daniel-box-with-abc", condition="true"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: K3sUpgradeJobFailed
+        exp_alerts: &failed
+          - exp_labels:
+              namespace: system-upgrade
+              job_name: apply-k3s-server-on-daniel-box-with-abc
+              condition: "true"
+              severity: critical
+              service: system-upgrade
+            exp_annotations:
+              summary: A k3s upgrade Job in system-upgrade has failed.
+              description: >-
+                Job apply-k3s-server-on-daniel-box-with-abc carries a Failed condition. Read the
+                Plan's conditions with kubectl -n system-upgrade get plans, then the Job's pods.
+                A refusing prepare gate that outlasts the Job deadline ends here too.
+                docs/k3s-upgrade.md says how to clear the hold and retry.
+      - eval_time: 2h
+        alertname: K3sUpgradeJobFailed
+        exp_alerts: *failed
+      # The red case past the hold: the last sample is at 5m and counts for the 5m lookback, so
+      # the last true evaluation is at 9m and the alert resolves after 9m plus 2h. A shortened
+      # `keep_firing_for` fails the 2h case above, and a lengthened one fails this.
+      - eval_time: 2h15m
+        alertname: K3sUpgradeJobFailed
+        exp_alerts: []
+
+  # The pod count alone does not fire it: a pod can fail inside a Job that then succeeds.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_status_failed{namespace="system-upgrade", job_name="apply-k3s-server-on-daniel-box-with-abc"}'
+        values: '2x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: K3sUpgradeJobFailed
+        exp_alerts: []
+
+  # A condition series with condition="false" reads 1 for a Job that has not failed.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_failed{namespace="system-upgrade", job_name="apply-k3s-server-on-daniel-box-with-abc", condition="false"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: K3sUpgradeJobFailed
+        exp_alerts: []
+
+  # A failed Job in another namespace is not this alert's.
+  - interval: 1m
+    input_series:
+      - series: 'kube_job_failed{namespace="homelab", job_name="snapshot-x", condition="true"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: K3sUpgradeJobFailed
+        exp_alerts: []

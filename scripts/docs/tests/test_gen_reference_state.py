@@ -287,14 +287,16 @@ def test_live_crons_still_carry_the_jobs_state_matches_by_name():
     required = {
         "Refresh generated docs",
         "Weekly secret rotation (auto tier)",
-        "Longhorn restore drill",
         "etcd restore drill",
     }
     assert required <= names
 
 
-def test_live_k3s_defaults_still_carry_the_drill_cron_vars():
-    assert g._k3s_default_var("k3s_longhorn_restore_drill_cron") is not None
+def test_live_defaults_still_carry_the_drill_cron_vars():
+    assert (
+        g._k3s_default_var("k3s_longhorn_restore_drill_cron", g.DRILL_DEFAULTS)
+        is not None
+    )
     assert g._k3s_default_var("k3s_etcd_restore_drill_cron") is not None
 
 
