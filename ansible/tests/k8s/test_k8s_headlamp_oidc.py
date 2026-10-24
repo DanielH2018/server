@@ -8,6 +8,7 @@ role. `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` owns the API server
 """
 
 from lib import yaml_fast
+from _k8s_render import rendered_docs
 from _manifest_guards import (
     K8S,
     _k8s_entries,
@@ -192,3 +193,37 @@ def test_headlamp_keeps_its_serviceaccount_token_mounted():
         spec = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=enabled)
         assert spec["serviceAccountName"] == "headlamp", enabled
         assert spec["automountServiceAccountToken"] is True, enabled
+
+
+def _authelia_oidc_provider() -> dict:
+    """The rendered Authelia `identity_providers.oidc` block.
+
+    The config is a YAML document inside a Secret's `stringData`, so it is loaded twice.
+    """
+    for role, _name, doc in rendered_docs():
+        if role != "authelia" or not isinstance(doc, dict):
+            continue
+        raw = (doc.get("stringData") or {}).get("configuration.yml")
+        if raw:
+            return (yaml_fast.safe_load(raw).get("identity_providers") or {}).get(
+                "oidc"
+            ) or {}
+    return {}
+
+
+def test_headlamp_login_lasts_eighteen_hours():
+    """A Headlamp login lasts exactly as long as its id_token.
+
+    Headlamp forwards the id_token to the API server on every call, and without the
+    `offline_access` scope it holds no refresh token to mint another, so Authelia's id_token
+    lifespan is the login's length. The global lifespan is 1h, which signed the dashboard out
+    every hour; the client names a custom lifespan instead. A `lifespan` naming no entry under
+    `lifespans.custom` makes Authelia refuse to start, so the name is checked against the map.
+    """
+    oidc = _authelia_oidc_provider()
+    (client,) = [c for c in oidc.get("clients") or [] if c["client_id"] == "headlamp"]
+    custom = (oidc.get("lifespans") or {}).get("custom") or {}
+    assert client.get("lifespan") in custom, (
+        f"headlamp names lifespan {client.get('lifespan')!r}; custom has {sorted(custom)}"
+    )
+    assert custom[client["lifespan"]]["id_token"] == "18h"
