@@ -46,6 +46,8 @@ CHANGED = ("0.3", "# fixture-conffile-owner's conffile, changed\nsetting=changed
 KEPT = "kept"
 HELD_BACK = "held back"
 NAME = "upgrade the owner of a conffile the line arm edits"
+# systemd's MESSAGE_ID for "Starting <unit>...", logged once per start job.
+UNIT_STARTING = "7d4958e842da4a758f6c1cdc7b36dcc5"
 
 
 def owner_debs(out: Path) -> list[Path]:
@@ -123,11 +125,18 @@ def _has_line(c: Container) -> bool:
 
 
 def _reconcile(c: Container, unit: str) -> None:
-    """Run `unit`, reconcile's oneshot, to its end; assert a new run happened and succeeded."""
-    invocation = f"systemctl show -P InvocationID {unit}"
-    before = c.ok(invocation)
+    """Run `unit`, reconcile's oneshot, to its end; assert one new run happened and succeeded.
+
+    The run is counted in the journal. systemd unloads an inactive oneshot, so its
+    InvocationID reads "" before and after a run, and cannot tell one happened.
+    """
+    cursor = c.ok("journalctl -n 0 --show-cursor").rsplit("cursor: ", 1)[-1].strip()
     status = c.sh(f"systemctl start {unit}").returncode
-    expect(c.ok(invocation) != before, f"{unit} did not run")
+    starts = c.ok(
+        f"journalctl --after-cursor={shlex.quote(cursor)} -o cat"
+        f" UNIT={unit} MESSAGE_ID={UNIT_STARTING}"
+    ).splitlines()
+    expect(len(starts) == 1, f"{unit} started {len(starts)} times, not once")
     expect(status == 0, f"{unit} exited non-zero ({status})")
 
 
@@ -174,7 +183,7 @@ def _body(cases, c: Container) -> list[str]:
         f" /srv/debs/{updater.name} /srv/debs/{host.name}"
     )
     # Joins the start the postinst queued. Without it, the checked start below could merge into
-    # that queued run and keep its InvocationID, which reads as no run at all.
+    # that queued run, and its journal would hold no start of its own.
     c.ok("systemctl start homelab-reconcile.service")
     _reconcile(c, "homelab-reconcile.service")
     expect(_has_line(c), f"reconcile did not write {LINE!r} into {CONFFILE}")
