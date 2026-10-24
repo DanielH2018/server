@@ -1833,6 +1833,11 @@ which journald does not store on these hosts, so it reads zero on every run.
 3. **The window.** `k3s_restart_window` is weekdays from the 2nd to the 31st, at 11:32 on
    daniel-box and at 11:52 on daniel-server. Resolution: the operator confirms or moves
    them in H6.3b's review, and the derivation test re-checks any move.
+   Ruled 2026-10-24: the operator confirmed 11:32 for daniel-box and the five derivation-test
+   exemptions: the `Sync peer Claude artifacts` cron, the `crowdsec-home-ips` CronJob,
+   `homelab-builder.timer`, `claude-triage-poll.timer` and `claude-fanout-server-lander.timer`.
+   A collision needs a k3s config change in the same window, and each job reruns within its
+   own period.
 4. **The join token.** H6 moves no token, because the agent's token is the server token
    (Baseline). Putting it in SOPS would hold the credential that `docs/break-glass.md` item 2
    keeps out of band. Resolution: H7's fresh join decides. The k3s docs allow adding an
