@@ -1,5 +1,5 @@
 {
-  "checksum": "aee8889500f02a16ea56b324ea1e53e12abc95f430ae8ed15249bf206cc3609e",
+  "checksum": "abcad6f630092fd33c92685d2debc87ed423f20903212b3cb57336f95e01c5ca",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Alert plane",
   "row": {
@@ -14,9 +14,10 @@
       "ansible/tests/services/test_scrape_target_rule_jobs.py": "f6bdfb94920365ebc6be80b7869ef864e27ce88defb54076f12f6fd09b9f3a90",
       "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86",
       "docs/target-architecture/monitoring/m1-alertmanager.md": "8ce5bbad833af2f17f1389dc2f42dc8f0e352dab2c320e646ffb8f319c2e7a98",
+      "docs/target-architecture/monitoring/m3-textfile-timer.md": "402f3a50127fa4d5c5e118f35c17cfbe9c7b73a5d58fb938703fcd801959e2ab",
       "docs/target-architecture/monitoring/m4-blackbox-ingress.md": "9801543adbf865bc66804029c04e6b8ac75e1cd61d09159c979806f4f389df38"
     },
     "python": "3.14",
-    "verified_sha": "242255504"
+    "verified_sha": "7b9fa18c0"
   }
 }

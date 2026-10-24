@@ -4,9 +4,10 @@
 # Usage: aide-check.sh [-h|--help]
 # Takes no arguments. Cron job "Weekly AIDE file integrity check" runs it as root on every host,
 # Monday 03:00. It runs `aide --check` against /var/lib/aide/aide.db at idle CPU and IO priority,
-# writes the report to the journal under the `aide` tag, and pushes a verdict to this host's
-# "AIDE Integrity (<host>)" Kuma monitor using the token in /etc/homelab/aide-kuma-push.env.
-# Running it by hand is safe, but it takes as long as the cron run and it pushes.
+# writes the report to the journal under the `aide` tag, writes the verdict to the node_exporter
+# textfile as check `aide-check`, and pushes it to this host's "AIDE Integrity (<host>)" Kuma
+# monitor using the token in /etc/homelab/aide-kuma-push.env. Running it by hand is safe, but it
+# takes as long as the cron run and it pushes.
 #
 # WHY A SCRIPT (#4594). The cron used to pipe `aide --check` straight into `logger -t aide`. The
 # pipeline's exit status was logger's, and nothing read the tag, so every host exited
@@ -32,6 +33,17 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t aide-check "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t aide-check "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: the cron runs weekly (Monday 03:00,
+# integrity.yml), 604800s, and the extra 6h is the slack the "AIDE Integrity" tile keeps
+# (interval 626400) for a run that takes longer than the last. Move it with the cron (#6168).
+# ansible/tests/services/test_integrity_scan_rule_literals.py pins the rules' literals to it.
+DEADLINE_S=626400
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
@@ -56,6 +68,10 @@ AIDE_PUSH_TOKEN=""
 # caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
 report() {
   logger -p daemon.notice -t aide-check "status=${STATUS} ${MSG}"
+  # The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and
+  # the file must not wait on Kuma. A failed write logs and the run goes on to its push.
+  write_check_textfile aide-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t aide-check "textfile write failed (status=${STATUS})"
   if [[ -z "$AIDE_PUSH_TOKEN" ]]; then
     # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
     # matches registry names against raw template text and cannot tell a log line from a render.

@@ -1251,3 +1251,274 @@ tests:
       - eval_time: 30m
         alertname: OtlpDoorNotReporting
         exp_alerts: []
+
+  # daniel-pi's AIDE check writes a fresh red verdict. AideCheckFailed fires for daniel-pi from
+  # the `node-pi` job, and AideCheckNotReporting stays quiet for it while the file is fresh.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="aide-check", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="aide-check", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x10'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AideCheckFailed
+        exp_alerts:
+          - exp_labels:
+              check: aide-check
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-pi's weekly AIDE check did not complete.
+              description: >-
+                aide-check.sh on daniel-pi ended with status=down: AIDE exited with an error and
+                checked nothing, or the previous week's run still held the lock. Differences
+                from the baseline read up. Run `journalctl -t aide-check` and `journalctl -t
+                aide` on daniel-pi.
+
+  # No AIDE file on any host, and daniel-pi's exporter is down. The absent_over_time arm fires
+  # for the two k3s nodes, and daniel-pi's rule leaves its dead exporter to the `targets` check
+  # because its `unless` clause reads `node-pi`, not `node`.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x10'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x10'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AideCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: aide-check
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's weekly AIDE check has stopped reporting.
+              description: >-
+                No aide-check verdict newer than 626400s reached Prometheus from daniel-box's
+                textfile collector, so nothing confirms the file-integrity scan still runs. Read
+                the `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+                /var/lib/node-exporter-textfile/aide-check.prom on the host.
+          - exp_labels:
+              check: aide-check
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-server's weekly AIDE check has stopped reporting.
+              description: >-
+                No aide-check verdict newer than 626400s reached Prometheus from daniel-server's
+                textfile collector, so nothing confirms the file-integrity scan still runs. Read
+                the `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+                /var/lib/node-exporter-textfile/aide-check.prom on the host.
+
+  # daniel-server's rkhunter file holds a verdict taken 611000s before time 0, so the test runs
+  # minutes rather than a week. RkhunterScanNotReporting's first arm stays quiet at 10m
+  # (611600s old) and fires at 20m, past the 612000s deadline. The verdict was green, so
+  # RkhunterScanFailed stays quiet. The other two exporters read down, which keeps their hosts'
+  # absent arms out of the case.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x25'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x25'
+      - series: 'homelab_check_success{check="rkhunter-check", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="rkhunter-check", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-611000x25'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x25'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RkhunterScanNotReporting
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: RkhunterScanFailed
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: RkhunterScanNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: rkhunter-check
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-server's weekly rkhunter scan has stopped reporting.
+              description: >-
+                No rkhunter-check verdict newer than 612000s reached Prometheus from
+                daniel-server's textfile collector, so nothing confirms the malware scan still
+                runs. Read the `Weekly rkhunter malware scan` cron and `journalctl -t
+                rkhunter-check`, then /var/lib/node-exporter-textfile/rkhunter-check.prom on the
+                host.
+
+  # A check no per-check rule names stops writing at time 0 with a 600s deadline. HostCheckOverdue
+  # stays quiet at 9m and fires at 11m from its own deadline series. A pod exporter's check with
+  # the same origin and an older timestamp is pods.yaml's to page, so it never appears here.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="new-producer", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x15'
+      - series: 'homelab_check_deadline_seconds{check="new-producer", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '600x15'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="cycle", instance="10.0.0.9:9100", job="autofix-bridge", origin="daniel-box"}'
+        values: '0x15'
+      - series: 'homelab_check_deadline_seconds{check="cycle", instance="10.0.0.9:9100", job="autofix-bridge", origin="daniel-box"}'
+        values: '60x15'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: HostCheckOverdue
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: HostCheckOverdue
+        exp_alerts:
+          - exp_labels:
+              check: new-producer
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's new-producer check is past its own deadline.
+              description: >-
+                The new-producer textfile on daniel-box holds a verdict older than the
+                homelab_check_deadline_seconds it declares, so its producer stopped writing.
+                Read /var/lib/node-exporter-textfile/new-producer.prom on the host, then the
+                journal of the cron or timer that writes it.
+
+  # daniel-pi's collector fails from minute 3. Its own TextfileCollectorError fires after 10m.
+  - interval: 1m
+    input_series:
+      - series: 'node_textfile_scrape_error{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x2 1x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: TextfileCollectorError
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+              shadow: "true"
+            exp_annotations:
+              summary: node_exporter on daniel-pi cannot read a textfile.
+              description: >-
+                node_exporter's textfile collector on daniel-pi has failed for 10 minutes, so a
+                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
+                series in it is gone. Read node_textfile_mtime_seconds for the files it still
+                sees, and `journalctl -u node_exporter` on daniel-pi.
+
+  # The Pi's compose run reads 1, then 0 from minute 3. ComposeUpFailed fires with no hold.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_compose_up_result{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi", sha="abcdef012345"}'
+        values: '1x2 0x5'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ComposeUpFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ComposeUpFailed
+        exp_alerts:
+          - exp_labels:
+              host: daniel-pi
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              sha: abcdef012345
+              severity: warning
+              service: daniel-pi
+              shadow: "true"
+            exp_annotations:
+              summary: The Pi's last Compose run did not bring the project up.
+              description: >-
+                compose-run on daniel-pi wrote homelab_compose_up_result 0 at package
+                abcdef012345: a key check, the config check, an image pull, compose-adopt or
+                `docker compose up --wait` failed. Read `journalctl -u homelab-compose` and
+                `docker ps -a` on daniel-pi.
+
+  # Both nodes' reconcile files read reboot-pending 1, written 690000s before time 0. daniel-box
+  # booted before the write, so it owes the reboot: quiet at 10m (690600s, under the 691200s
+  # bound) and firing at 30m. daniel-server booted after the write, so its 1 is the file left
+  # from before that boot, and its rule stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_reboot_pending{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x35'
+      - series: 'node_textfile_mtime_seconds{file="/textfile/homelab_host_reconcile.prom", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '-690000x35'
+      - series: 'node_boot_time_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '-1000000x35'
+      - series: 'homelab_host_reboot_pending{host="daniel-server", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x35'
+      - series: 'node_textfile_mtime_seconds{file="/textfile/homelab_host_reconcile.prom", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-690000x35'
+      - series: 'node_boot_time_seconds{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-600000x35'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HostRebootOverdue
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: HostRebootOverdue
+        exp_alerts:
+          - exp_labels:
+              host: daniel-box
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box has owed a reboot for more than 8 days.
+              description: >-
+                Reconcile recorded a reboot-class package change on daniel-box more than 8 days
+                ago, and the host has not booted since, so the weekly reboot did not run or was
+                refused. Read `journalctl -t weekly-restart` on daniel-box and
+                docs/host-packages.md, "Reboot-pending and activation-pending", then reboot the
+                host.
+
+  # daniel-box's rkhunter scan writes a fresh red verdict, and RkhunterScanFailed fires for it.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="rkhunter-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RkhunterScanFailed
+        exp_alerts:
+          - exp_labels:
+              check: rkhunter-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's weekly rkhunter scan warned or did not complete.
+              description: >-
+                rkhunter-check.sh on daniel-box ended with status=down: rkhunter raised a
+                warning, a suspect file or a possible rootkit, or the scan wrote no summary. An
+                account change clears when the script is run again by hand. Read
+                /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-box.

@@ -29,7 +29,7 @@ from _helpers import ROLES, load_tasks, walk_tasks
 from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script
-from test_aide_check import LOGGER_STUB
+from test_aide_check import LOGGER_STUB, _textfile
 
 SCRIPT = ("setup", "initial_setup", "rkhunter-check.sh.j2")
 PUSH_ENV = "rkhunter-kuma-push.env.j2"
@@ -51,6 +51,10 @@ WEEK_S = 7 * 24 * 3600
 LAST_WEEK = 1790733721
 
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
+# The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
+# own directory, which node_exporter scrapes.
+REAL_CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 REAL_ENV = "/etc/homelab/rkhunter-kuma-push.env"
 REAL_LOG = "RKHUNTER_LOG=/var/log/rkhunter.log"
 REAL_RKHUNTER = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter"
@@ -102,7 +106,7 @@ def _run_check(
         *SCRIPT,
         overrides={"domain": "example.test", "k3s_metallb_ingress_vip": "10.0.0.240"},
     )
-    for needle in (REAL_LIB, REAL_ENV, REAL_LOG, REAL_RKHUNTER):
+    for needle in (REAL_LIB, REAL_ENV, REAL_LOG, REAL_RKHUNTER, REAL_CHECK_LIB):
         assert needle in body, (
             f"{needle} is no longer in rkhunter-check.sh; this harness repoints it"
         )
@@ -128,17 +132,21 @@ def _run_check(
     )
     body = (
         body.replace(REAL_LIB, str(lib))
+        .replace(REAL_CHECK_LIB, str(CHECK_LIB))
         .replace(REAL_ENV, str(env_file))
         .replace(REAL_LOG, f"RKHUNTER_LOG={log_path}")
         .replace(REAL_RKHUNTER, str(rkhunter))
     )
     script = write_exec(tmp_path / "rkhunter-check.sh", body)
     pushed, logged, ran = (tmp_path / n for n in ("pushed", "logged", "ran"))
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir(exist_ok=True)
     result = run(
         [str(script)],
         env={
             **os.environ,
             "KUMA_PUSH_OUT": str(pushed),
+            "TEXTFILE_DIR": str(textfile_dir),
             "LOGGER_OUT": str(logged),
             "RKH_RAN": str(ran),
         },
@@ -180,6 +188,20 @@ def test_a_warning_pushes_down_naming_the_first(tmp_path):
     assert (
         "rkhunter: Warning: User 'claude' has been added to the passwd file." in logged
     )
+
+
+def test_each_verdict_is_written_to_the_textfile_with_the_tiles_deadline(tmp_path):
+    """The liveness path that outlives Kuma (#6168): clean writes 1, a warning writes 0."""
+    for name, rc, log, success in (
+        ("clean", 0, _log(), "1"),
+        ("warning", 1, _log(warnings=WARNINGS), "0"),
+    ):
+        root = tmp_path / name
+        root.mkdir()
+        _run_check(root, "", rc=rc, log=log)
+        series = _textfile(root, "rkhunter-check")
+        assert series["homelab_check_success"] == success, name
+        assert series["homelab_check_deadline_seconds"] == "612000"
 
 
 def test_a_suspect_file_pushes_down(tmp_path):

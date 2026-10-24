@@ -4,9 +4,10 @@
 # Usage: rkhunter-check.sh [-h|--help]
 # Takes no arguments. Cron job "Weekly rkhunter malware scan" runs it as root on every host,
 # Wednesday 02:00. It runs `rkhunter --check` at idle CPU and IO priority, writes the warnings to
-# the journal under the `rkhunter` tag, and pushes a verdict to this host's
-# "rkhunter Scan (<host>)" Kuma monitor using the token in /etc/homelab/rkhunter-kuma-push.env.
-# Running it by hand is safe; a scan takes two to three minutes, and it pushes.
+# the journal under the `rkhunter` tag, writes the verdict to the node_exporter textfile as check
+# `rkhunter-check`, and pushes it to this host's "rkhunter Scan (<host>)" Kuma monitor using the
+# token in /etc/homelab/rkhunter-kuma-push.env. Running it by hand is safe; a scan takes two to
+# three minutes, and it pushes.
 #
 # WHY A SCRIPT (#4598). The cron used to pipe `rkhunter --check` straight into
 # `logger -t rkhunter`. The pipeline's exit status was logger's, and nothing read the tag, so a
@@ -31,6 +32,17 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t rkhunter-check "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t rkhunter-check "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: the cron runs weekly (Wednesday 02:00,
+# integrity.yml), 604800s, and the extra 2h is the slack the "rkhunter Scan" tile keeps
+# (interval 612000) for a run that takes far longer than the last. Move it with the cron (#6168).
+# ansible/tests/services/test_integrity_scan_rule_literals.py pins the rules' literals to it.
+DEADLINE_S=612000
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
@@ -116,6 +128,11 @@ fi
 # `probe.py alerts` could never reconstruct this monitor. NOTICE rather than INFO — journald here
 # caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
 logger -p daemon.notice -t rkhunter-check "status=${STATUS} ${MSG}"
+
+# The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and the
+# file must not wait on Kuma. A failed write logs and the run goes on to its push.
+write_check_textfile rkhunter-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t rkhunter-check "textfile write failed (status=${STATUS})"
 
 if [[ -z "$RKHUNTER_PUSH_TOKEN" ]]; then
   # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word

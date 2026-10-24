@@ -30,7 +30,7 @@ def _bash(tmp_path, body, textfile_dir=None):
     )
 
 
-def test_write_check_textfile_writes_the_three_series_and_detail_lines_atomically(
+def test_write_check_textfile_writes_the_four_series_and_detail_lines_atomically(
     tmp_path,
 ):
     result = _bash(
@@ -47,6 +47,32 @@ def test_write_check_textfile_writes_the_three_series_and_detail_lines_atomicall
     assert 'homelab_check_last_run_timestamp_seconds{check="demo"} 1760000000' in lines
     assert 'homelab_check_deadline_seconds{check="demo"} 900' in lines
     assert 'detail{check="demo"} 7' in lines
+
+
+def _duration(tmp_path, body):
+    result = _bash(tmp_path, body)
+    assert result.returncode == 0, result.stderr
+    prefix = 'homelab_check_duration_seconds{check="demo"} '
+    [line] = [
+        line
+        for line in (tmp_path / "textfile" / "demo.prom").read_text().splitlines()
+        if line.startswith(prefix)
+    ]
+    return int(line.removeprefix(prefix))
+
+
+def test_write_check_textfile_records_the_scripts_run_time_with_no_caller_change(
+    tmp_path,
+):
+    # Assigning SECONDS sets bash's run-time counter, so this stands in for a 40s scan.
+    assert (
+        40 <= _duration(tmp_path, "SECONDS=40\nwrite_check_textfile demo 1 1 900") < 45
+    )
+
+
+def test_write_check_textfile_takes_the_callers_duration_when_it_sets_one(tmp_path):
+    body = "SECONDS=40\nCHECK_DURATION_S=7 write_check_textfile demo 1 1 900"
+    assert _duration(tmp_path, body) == 7
 
 
 def test_write_check_textfile_failure_returns_non_zero_and_leaves_no_file(tmp_path):
