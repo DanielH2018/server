@@ -124,7 +124,8 @@ POLL_S = 30
 # a newer one cancels it, so a pending `settle` could be evicted with its hold unwritten.
 # Unguarded, a second run could move `prod` past a T that `verify` still waits on, Flux would
 # never post T's statuses, and the timeout would write a false hold and reset `prod` under the
-# second run's verified commit. So `decide` waits while `prod` differs from `last-good`, which
+# second run's verified commit. So `decide` waits while `prod` differs from `last-good` (unless
+# `promote_lib/supersede.py` lets T supersede the run, D7), which
 # it does only between a run's `tag` and its `settle`, at two HEADs a poll. And `tag` moves
 # `prod` only while it still names the digest `decide` read, which closes the gap between one
 # run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that never settles stalls promotion as `current`, which D2.6d's
