@@ -360,8 +360,9 @@ a pinned backup ID dies the day retention deletes it.
 `recurring-job-group.longhorn.io/*` label other than `no-backup` — the same selector check 4 uses,
 and the only one that cannot drift from what the RecurringJobs really select. Each night the
 least-recently-*attempted* candidate is drilled, so a full cycle takes one night per candidate.
-The drill writes the candidates to `/var/lib/longhorn-restore-drill/candidates`, one per line, so
-`wc -l` on that file gives the cycle length in nights. Ordering by attempt rather than by success
+The drill writes the candidates to the `candidates` key of the ConfigMap
+`longhorn-restore-drill-stamps`, one per line, so counting that key's lines gives the cycle length
+in nights. Ordering by attempt rather than by success
 is deliberate: a volume that fails every drill would otherwise stay the least-recently succeeded
 forever, be picked every night, and starve every other candidate.
 
@@ -376,17 +377,17 @@ month, zero egress), and the 16 MiB block change of 2026-08-19 cut B2's per-rest
 — a whole cycle now costs less than one day's measured baseline Class B spend.
 
 **Checks 7 and 8 of the backup heartbeat watch it**, and they answer different questions. Check 7
-is liveness: the drill writes `/var/lib/longhorn-restore-drill/last-success` only after its data
+is liveness: the drill writes the ConfigMap's `last-success` key only after its data
 assertions pass, and check 7 pages when that stamp is missing, unparseable, or older than
 `k3s_longhorn_restore_drill_max_age_days` (3 — two tolerated bad nights). It fails closed: a drill
 that has never run is reported, not skipped.
 
 Check 8 is coverage, and rotation is what made it necessary — a green check 7 now means one
-candidate volume restored. It reads the candidate list the drill publishes to
-`/var/lib/longhorn-restore-drill/candidates` and pages, by name, for any candidate whose
-`success/<pvc>` stamp is missing or older than one full cycle plus
+candidate volume restored. It reads the candidate list the drill publishes to the
+`candidates` key and pages, by name, for any candidate whose
+`success.<pvc>` key is missing or older than one full cycle plus
 `k3s_longhorn_restore_drill_coverage_slack_days`. The grace is measured **per volume**, from the
-`seen/<pvc>` marker the drill writes the first time that volume appears as a candidate — so a
+`seen.<pvc>` key the drill writes the first time that volume appears as a candidate — so a
 fresh deploy does not page for volumes whose turn has not come, and neither does a volume that
 joins the backup set later. A rotation-wide start date would flag every such volume the day it
 joined.
@@ -394,24 +395,28 @@ joined.
 The candidate list is written after the drill's `actualSize` cap
 (`k3s_longhorn_restore_drill_max_actual_bytes`), so a volume that grows past the cap would leave
 the rotation and check 8 together. The drill therefore also writes
-`/var/lib/longhorn-restore-drill/excluded_oversize`, one `<pvc>\t<actualSize>` line per backed-up
+the `excluded_oversize` key, one `<pvc>\t<actualSize>` line per backed-up
 volume the cap keeps out, and the heartbeat pages naming each one. The page clears on the next
 drill run after the cap is raised, the volume's snapshots are pruned and trimmed, or the volume
 moves to `no-backup`.
 
 The drill also restores into a PVC in the source volume's namespace, so it skips a backed-up
 volume whose `status.kubernetesStatus.pvcName` is empty, such as a released PVC whose volume is
-still in a backup group. It writes each one to `/var/lib/longhorn-restore-drill/excluded_nopvc`,
+still in a backup group. It writes each one to the `excluded_nopvc` key,
 one volume name per line, and the heartbeat pages naming it. A volume that is both over the cap
 and unbound is listed only in `excluded_oversize`. The page clears on the next drill run after a
 PVC is bound to the volume again, the volume is deleted, or it moves to `no-backup`.
 
-**The stamps have a second store, read first.** Checks 7 and 8, gate 2 of
-`docs/longhorn-upgrade.md` and the drill's row of `docs/reference/state.md` each read the
-ConfigMap `longhorn-restore-drill-stamps` in `k3s_longhorn_restore_drill_namespace` (`homelab`)
-before the directory. Each ConfigMap key stands for one file:
+**The drill's stamps live in a ConfigMap.** The drill, checks 7 and 8, gate 2 of
+`docs/longhorn-upgrade.md` and the drill's row of `docs/reference/state.md` each use the
+ConfigMap `longhorn-restore-drill-stamps` in `k3s_longhorn_restore_drill_namespace` (`homelab`).
+The drill reads it once per run with `get` and writes each stamp with a merge `patch`. A missing
+key is epoch 0. A failed patch fails the run, so a run that cannot stamp restores nothing, and a
+ConfigMap that does not exist fails the run with `stamp ConfigMap absent`. The first run that finds
+no `imported-at` key converts the old host directory into keys in one patch, and later runs import
+nothing. Each ConfigMap key replaces one file of that directory:
 
-| ConfigMap key | File under `/var/lib/longhorn-restore-drill/` | Value |
+| ConfigMap key | File under `/var/lib/longhorn-restore-drill/` (read by the import only) | Value |
 |---|---|---|
 | `last-success` | `last-success` | the file's content, an epoch |
 | `candidates` | `candidates` | the file's content, one PVC per line |
@@ -427,8 +432,9 @@ gate exits 69, and the state page marks the row unreadable. Two rules apply only
 ConfigMap. A candidate with no `seen.<pvc>` key takes the ConfigMap's `creationTimestamp` as its
 seen time, so check 8 flags it once the coverage window passes instead of skipping it. Check 8
 also pages at once, in either store, when the candidate list is non-empty and no candidate has a
-seen entry, because that means the drill's state did not persist. Nothing writes the ConfigMap
-until the drill moves to it (H2.3c of `docs/target-architecture/host/h2-shrink-host-plane.md`).
+seen entry, because that means the drill's state did not persist. The directory fallback goes
+when the readers drop their file arm (H2.3f of
+`docs/target-architecture/host/h2-shrink-host-plane.md`).
 
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
