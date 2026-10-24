@@ -30,10 +30,10 @@ reaches master (H3.11). A digest that differs from its pin fails the command.
 binary, and `placeholders` fails on a `${key}` the root's SOPS file does not carry (H4.1c). The job
 runs them on every PR, ahead of its steps that stand down on an unchanged tree.
 
-`job-changed` says whether one job of a workflow parses differently at a commit than in the
-working tree. The job's own steps invoke the container cases, so a PR that edits them runs the
-cases (#5004). The comparison is of the parsed YAML, so an edit to a comment alone does not
-count.
+`job-changed` says whether any `--job` it names parses differently at a commit than in the
+working tree. CI's two host package jobs build what the container cases read and invoke them, so
+a PR that edits either runs the cases (#5004, #6151). The comparison is of the parsed YAML, so an
+edit to a comment alone does not count.
 
 `fixture-changed` says whether the container cases' fixture `homelab-daniel-pi` renders
 differently in two trees, each with the renderer and the fixture that tree holds. The fixture
@@ -50,7 +50,7 @@ Usage:
     uv run python scripts/validate/host_packages.py scan-roots /tmp/head --gitleaks BIN --config FILE
     uv run python scripts/validate/host_packages.py placeholders /tmp/head
     uv run python scripts/validate/host_packages.py job-changed BASE_SHA \
-        --workflow .github/workflows/ci.yml --job host_packages
+        --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages
     uv run python scripts/validate/host_packages.py fixture-changed /tmp/base-tree .
 
 Exit codes: 0 the render, diff or lint succeeded and the lint found nothing; 1 the lint found a
@@ -279,11 +279,16 @@ def job_differs(before: str | None, after: str, job: str) -> bool:
     return parsed(before) != parsed(after)
 
 
-def job_changed(base: str, workflow: Path, job: str) -> bool:
-    """Whether `job` in `workflow` differs between commit `base` and the working tree."""
+def jobs_differ(before: str | None, after: str, jobs: list[str]) -> bool:
+    """Whether any of `jobs` differs between two texts of one workflow (see `job_differs`)."""
+    return any(job_differs(before, after, job) for job in jobs)
+
+
+def job_changed(base: str, workflow: Path, jobs: list[str]) -> bool:
+    """Whether any of `jobs` in `workflow` differs between commit `base` and the working tree."""
     shown = git("show", f"{base}:{workflow.as_posix()}", check=False)
     before = shown.stdout if shown.returncode == 0 else None
-    return job_differs(before, workflow.read_text(), job)
+    return jobs_differ(before, workflow.read_text(), jobs)
 
 
 # Run by `tree`'s own interpreter in isolated mode, so that tree's `validate_lib` and renderer
@@ -389,7 +394,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     job_cmd.add_argument("base", metavar="BASE")
     job_cmd.add_argument("--workflow", type=Path, required=True)
-    job_cmd.add_argument("--job", required=True)
+    job_cmd.add_argument(
+        "--job",
+        required=True,
+        action="append",
+        help="a job id under `jobs:`; repeat it to name several, and any one differing counts",
+    )
     for command, text in (
         ("scan-roots", "gitleaks over each named package root of RENDER"),
         ("prove-scan", "gitleaks' red proof for the path allowlist"),

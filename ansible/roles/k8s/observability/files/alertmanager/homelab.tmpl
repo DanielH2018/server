@@ -9,18 +9,20 @@
   alerts first, each with its severity, summary, start time and runbook. A notification can
   carry firing and resolved alerts of one group together, so the resolved ones go under their
   own heading, with their summary and the time they cleared. A resolved alert never repeats
-  its description, because the description says what to fix. When every alert in the group
-  shares one description, it prints once after the list rather than once per alert.
+  its description, because the description says what to fix. When two or more firing alerts
+  share one description, it prints once after the list rather than once per alert. A single
+  firing alert keeps its description under its summary, because .CommonAnnotations of a
+  one-alert group is that alert's own annotations.
 
   Discord renders <t:UNIX:R> as a relative time in the reader's own timezone. Email cannot,
   so homelab.email prints UTC. ansible/roles/k8s/observability/tests/alertmanager/ holds the
-  rendered output for three groups, which scripts/validate/alert_rules.py compares against
+  rendered output for four groups, which scripts/validate/alert_rules.py compares against
   amtool's render of this file.
 */}}
 {{ define "homelab.title" }}[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.service }} ({{ . }}){{ end }}{{ end }}
 
 {{ define "homelab.message" -}}
-{{ $shared := .CommonAnnotations.description -}}
+{{ $shared := "" }}{{ if gt (len .Alerts.Firing) 1 }}{{ $shared = .CommonAnnotations.description }}{{ end -}}
 {{ $mixed := and .Alerts.Firing .Alerts.Resolved -}}
 {{ if $mixed }}**Firing ({{ len .Alerts.Firing }})**
 
@@ -48,7 +50,7 @@ Cleared <t:{{ .EndsAt.Unix }}:R>, after starting <t:{{ .StartsAt.Unix }}:f>
 {{ end }}
 
 {{ define "homelab.email" -}}
-{{ $shared := .CommonAnnotations.description -}}
+{{ $shared := "" }}{{ if gt (len .Alerts.Firing) 1 }}{{ $shared = .CommonAnnotations.description }}{{ end -}}
 {{ $mixed := and .Alerts.Firing .Alerts.Resolved -}}
 {{ if $mixed }}FIRING ({{ len .Alerts.Firing }})
 

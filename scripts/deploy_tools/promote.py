@@ -183,6 +183,7 @@ def decide(
     """
     try:
         flight = supersede.in_flight(reads) if supersede_on else None
+        hold_read = "none"
         if flight is not None:
             held, prod_digest, last_good = None, flight.prod, flight.last_good
         else:
@@ -192,6 +193,7 @@ def decide(
             if settled.stop is not None:
                 return Decision(settled.stop[0], reason=settled.stop[1])
             held, prod_digest, last_good = settled.held, settled.prod, settled.last_good
+            hold_read = settled.hold
         required = frozenset(reads.contexts())
         prod = reads.prod()
         tip = reads.tip()
@@ -306,6 +308,7 @@ def decide(
                     prod_bundle,
                     last_good_bundle,
                     supersedes=(prod or "") if flight is not None else "",
+                    hold_read=hold_read,
                 )
                 if flight is None or not (decision.no_reset or decision.stateful):
                     return decision
@@ -380,6 +383,7 @@ def report(trigger: str, decision: Decision, github_output: str | None) -> int:
                 f"no_reset={','.join(decision.no_reset)}\n"
                 f"stateful={','.join(decision.stateful)}\n"
                 f"supersedes={decision.supersedes}\n"
+                f"hold_read={decision.hold_read}\n"
                 f"suspended_hold={decision.hold if stateful.SUSPENDED in decision.hold else ''}\n"
             )
     return FAILED if decision.verdict == "error" else OK

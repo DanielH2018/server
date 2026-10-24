@@ -33,6 +33,7 @@ NOTHING_MOVES = {
     "stateful": "",
     "suspended_hold": "",
     "supersedes": "",
+    "hold_read": "none",
 }
 
 

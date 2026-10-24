@@ -1,7 +1,7 @@
-"""CASE_INPUTS, the host_packages job's list of the container cases' inputs, against the files.
+"""CASE_INPUTS, the host_packages_build job's list of the container cases' inputs, against the files.
 
 The render step in ci.yml sets `cases=true` when a PR changes a path CASE_INPUTS names, and the
-four container steps run on it as they run on a differing render (#5004). The list is the one
+container steps run on it as they run on a differing render (#5004). The list is the one
 place those inputs are named, so an input missing from it is an input whose PR skips the cases.
 `test_host_package_cases_run_on_their_inputs.py` proves the trigger fires for each input; this
 module proves the list holds every input there is: the cases script, every `validate` module it
@@ -19,7 +19,8 @@ from lib import yaml_fast
 from lib.git_testing import git_out
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
-JOB = "host_packages"
+# The render step sits in the build job and the image step in the cases legs (#6151).
+JOBS = ("host_packages_build", "host_packages")
 CASES_SCRIPT = "scripts/validate/host_package_cases.py"
 DOCKERFILE = "hosts/lib/tests/container/Dockerfile"
 IMAGE_STEP = "Build the test image for this release"
@@ -29,7 +30,8 @@ _CASE_PACKAGES = ("validate",)
 
 
 def _job_steps() -> list[dict]:
-    return yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"][JOB]["steps"]
+    jobs = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]
+    return [step for job in JOBS for step in jobs[job]["steps"]]
 
 
 def _case_input_pathspecs() -> list[str]:
@@ -101,7 +103,7 @@ def test_case_inputs_cover_the_cases_script_its_imports_and_the_image_context() 
     )
     missing = _uncovered(members, _case_input_pathspecs())
     assert not missing, (
-        f"CASE_INPUTS on {JOB}'s render step does not list {missing}; a PR changing only "
+        f"CASE_INPUTS on {JOBS[0]}'s render step does not list {missing}; a PR changing only "
         f"one of them changes no render and skips the container cases (#5004)"
     )
 

@@ -303,7 +303,7 @@ before CI does, run `uv run pytest` yourself. A fan-out batch is the exception: 
 paths, and `.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run, because a
 local full run held 2.3 GiB and CI's run is the one the pipeline waits on. A pre-push hook that re-ran the suite was removed on 2026-10-02: it
 cost 89s on an idle daniel-box and 235s under load on every push, for a verdict CI repeats
-in about 61s.
+in parallel shards. The slowest of those took 4m29s on 2026-10-24 (run 40125170130).
 The `validate-compose-templates` hook shells out to `uv` (see **Python & Tests**), so uv must be
 installed for a full `prek run`. `mkdocs-strict` builds the docs site the way the cron does
 and fails on a broken `--8<--` include or a dead internal link; its site directory is covered
