@@ -48,9 +48,7 @@ navidrome_k8s_mem_limit: 512Mi
 navidrome_k8s_cpu_request: "50m"
 navidrome_k8s_mem_request: 64Mi
 
-# The claim the renderer emits for this role. The navidrome Kustomization applies it after the
-# navidrome-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply
-# snapshot.
+# The claim the renderer emits for this role, which the navidrome Kustomization applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ navidrome_k8s_claim }}"
     storage_class: "{{ navidrome_k8s_storage_class }}"
