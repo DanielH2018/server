@@ -39,6 +39,8 @@ from _hook_common import primary_checkout
 # post-merge gate `land.sh` and the deploy notifier also run; `takeover` is the D5 flip gate,
 # which renders a tag to compare with what Flux would strip.
 GATE_SUBCOMMANDS = frozenset({"health", "takeover"})
+# The root options of `probe_lib/cli_parser.py:_build_parser` that take a separate value.
+_VALUED_ROOT_OPTIONS = frozenset({"--cluster"})
 # The directories whose files the probe reads to form a verdict: role templates, inventory and
 # host_vars under ansible/, and the probe and its tables under scripts/.
 _READ_PATHS = ("ansible", "scripts")
@@ -62,6 +64,23 @@ def _git(tree: Path, *args: str) -> subprocess.CompletedProcess | None:
         return None
 
 
+def _subcommand(args: Sequence[str]) -> str | None:
+    """The probe subcommand in `args`, the words after `probe.py`, or None when there is none.
+
+    Skips the root options, and the separate value of each one in `_VALUED_ROOT_OPTIONS`, so
+    `--cluster stage health x` reads as `health` rather than `stage`.
+    """
+    skip = False
+    for word in args:
+        if skip:
+            skip = False
+        elif word in _VALUED_ROOT_OPTIONS:
+            skip = True
+        elif not word.startswith("-"):
+            return word
+    return None
+
+
 def _gate_run(words: Sequence[str], cwd: Path) -> tuple[Path, Sequence[str]] | None:
     """The probe's checkout and its arguments, when this stage is a gate run; else None.
 
@@ -75,8 +94,7 @@ def _gate_run(words: Sequence[str], cwd: Path) -> tuple[Path, Sequence[str]] | N
     at = names.index("probe.py")
     if at and names[0] not in ("uv", "python", "python3"):
         return None
-    subcommand = next((w for w in words[at + 1 :] if not w.startswith("-")), None)
-    if subcommand not in GATE_SUBCOMMANDS:
+    if _subcommand(words[at + 1 :]) not in GATE_SUBCOMMANDS:
         return None
     script = cwd / Path(words[at]).expanduser()
     return script.resolve().parents[2], words[at + 1 :]

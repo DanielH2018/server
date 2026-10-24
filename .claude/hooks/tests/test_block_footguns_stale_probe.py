@@ -48,7 +48,11 @@ def _move_origin(primary: Path, path: str, text: str) -> str:
     return sha
 
 
-@pytest.mark.parametrize("subcommand", ["health", "takeover"])
+@pytest.mark.parametrize(
+    "subcommand",
+    # The root `--cluster` takes a separate value, which is not the subcommand.
+    ["health", "takeover", "--cluster stage health"],
+)
 def test_a_gate_from_a_worktree_behind_a_role_change_is_flagged(repo, subcommand):
     primary, worktree = repo
     _move_origin(primary, _ROLE_FILE, "replicas: 2\n")
