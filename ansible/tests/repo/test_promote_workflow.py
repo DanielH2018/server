@@ -76,7 +76,7 @@ PERMISSIONS = {
         "statuses": "read",
     },
     "tag": {"packages": "write"},
-    "verify": {"contents": "read", "statuses": "read"},
+    "verify": {"contents": "read", "statuses": "read", "packages": "read"},
     "settle": {"packages": "write", "actions": "write"},
     "post": {"contents": "read"},
     "reset-check": {"contents": "read", "packages": "read", "actions": "read"},

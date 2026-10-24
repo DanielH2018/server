@@ -342,7 +342,10 @@ Instead it reads the cluster every 30 seconds:
   prints the read-only command that names the services the soak failed:
   `kubectl -n flux-system get pods -l app=soak -o jsonpath='{.items[*].status.containerStatuses[0].state.terminated.message}'`.
   `verify` holds the same revision, and for a revision with no snapshot role resets `prod`
-  (`docs/volume-snapshot-drills.md`, *Choosing the branch*).
+  (`docs/volume-snapshot-drills.md`, *Choosing the branch*). A failure read once `homelab`
+  has moved to a descendant of R does not end the wait: a later revision superseded R's
+  soak, which exits once `homelab` leaves R (#5704), and the wait reads that revision's soak
+  instead (D7.2).
 - **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
   line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
   the operator's decision, approved through the permission prompt the agent's clear raises. `promote`'s `settle` job writes a `failed=` hold when a promotion fails

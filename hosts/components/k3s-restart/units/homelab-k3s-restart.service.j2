@@ -1,0 +1,21 @@
+# Shipped by homelab-{{ inventory_hostname }}. Started by homelab-k3s-restart.timer inside the host's
+# window. component.yml carries the contract.
+[Unit]
+Description=Restart {{ k3s_restart_unit }} once for a changed k3s configuration, behind the gates
+Wants=homelab-secrets.service
+After=homelab-secrets.service
+
+[Service]
+Type=oneshot
+# 300 s for the restart's poll, 60 s for the gates, and about 60 s for the record and the metrics.
+TimeoutStartSec=7min
+# The mark `prepare` reads (k3s_gates.py RESTART_MARKER): systemd creates the directory before
+# ExecStart runs and removes it when the unit stops, a kill or a timeout included.
+RuntimeDirectory=homelab-k3s-restart
+# journald stores notice and above on these hosts (MaxLevelStore=notice).
+SyslogLevel=notice
+LoadCredential=k3s_readonly_token:/run/credstore/k3s_readonly_token
+ExecStart=/usr/lib/homelab/homelab-k3s-restart --host {{ inventory_hostname }} --unit {{ k3s_restart_unit }} --server {{ k3s_restart_server }} --ca-file {{ k3s_restart_ca_file }}{% if k3s_restart_deploy_lock %} --deploy-lock{% endif %}{% if k3s_restart_guard_server_restart %} --guard-server-restart{% endif %}
+
+# A run killed after it restarted k3s records its attempt as failed at once, not at the next window.
+ExecStopPost=/usr/lib/homelab/homelab-k3s-restart --stop-post --host {{ inventory_hostname }}

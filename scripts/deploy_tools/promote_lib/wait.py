@@ -21,7 +21,9 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
                    (D5.3b3). One `deploy-annotation` line records it.
     deploy-failed  DEPLOY_HOLD holds a value other than `none`. Cause `promote-held`. Or
                    R carries a `flux/soak` `failure` or `error`, read before `verify` writes
-                   the hold. Cause `soak-failed`.
+                   the hold. Cause `soak-failed`. A soak failure read once `homelab` has
+                   moved to a descendant of R keeps the wait going instead: a later
+                   revision superseded R's soak (D7.2), and R's own verdict comes from it.
     gave-up        LAND_WAIT_TIMEOUT_S passed, or the later deadline below. Cause
                    `promote-timeout`.
     suspended      Every one of `--services` is `suspended` in M's `digests.json`, so Flux
@@ -369,7 +371,15 @@ def land_wait(
                 deadline = max(deadline, started + soak_deadline_s(items))
             if not pending and not all_paused and SOAK in cs.names:
                 soak = _soak_state(reads, revision)
-                if soak in SOAK_FAILED_STATES:
+                moved = (
+                    _moved_past(reads, revision) if soak in SOAK_FAILED_STATES else ""
+                )
+                if moved:
+                    pending = [
+                        f"{SOAK_CONTEXT} on {revision[:8]} ({soak}, superseded by "
+                        f"{moved[:8]})"
+                    ]
+                elif soak in SOAK_FAILED_STATES:
                     return WaitResult(
                         "deploy-failed",
                         SOAK_CAUSE,
@@ -450,6 +460,24 @@ def soak_deadline_s(items: list[dict]) -> int:
         return 2 * (seconds(spec.get("timeout", "")) + OCI_INTERVAL_S + 2 * 60)
     except ValueError:
         return 0
+
+
+def _moved_past(reads: WaitReads, revision: str) -> str:
+    """`homelab`'s commit when it has moved to a descendant of R, else "".
+
+    A later revision that supersedes R ends R's soak with `failure` (#5704), so a soak failure
+    read after `homelab` moved past R is a supersession, not a verdict on R (D7.2). A read
+    that fails counts as not moved, so the failure stands.
+    """
+    try:
+        items = reads.kustomizations()
+    except READ_ERRORS:
+        return ""
+    root = next((i for i in items if _name(i) == ROOT), None)
+    commit = origin_commit(root) if root is not None else None
+    if not commit or commit == revision or not reads.is_ancestor(revision, commit):
+        return ""
+    return commit
 
 
 def _soak_state(reads: WaitReads, revision: str) -> str:

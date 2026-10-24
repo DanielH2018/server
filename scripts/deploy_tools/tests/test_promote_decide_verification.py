@@ -374,7 +374,11 @@ def test_verify_excuses_from_decides_record_and_never_reads_prods_commit(
     world.transport.status_times[tip] = "2026-10-15T01:02:00Z"
     sent = len(world.transport.requests)
     args = argparse.Namespace(
-        target=tip, prior=c0, bundle_dir=bundle_dir, moved_at=MOVED_AT.isoformat()
+        target=tip,
+        prior=c0,
+        bundle_dir=bundle_dir,
+        moved_at=MOVED_AT.isoformat(),
+        digest="",
     )
     assert vp.run(world.clients(), args, None) == 0
     assert "excused longhorn" in capsys.readouterr().out
