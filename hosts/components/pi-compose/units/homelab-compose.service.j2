@@ -30,6 +30,8 @@ After=docker.service homelab-secrets.service
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 RemainAfterExit=yes
 Environment=COMPOSE_PARALLEL_LIMIT=1
 MemoryAccounting=yes

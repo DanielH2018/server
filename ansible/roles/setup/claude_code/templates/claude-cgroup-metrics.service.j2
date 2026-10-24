@@ -3,5 +3,7 @@ Description=Write claude-rc.service / user-1000.slice cgroup counters for node-e
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 Environment="CLAUDE_WATCH_UIDS={{ claude_code_watch_uids | join(' ') }}"
 ExecStart=/usr/local/bin/claude-cgroup-metrics.sh

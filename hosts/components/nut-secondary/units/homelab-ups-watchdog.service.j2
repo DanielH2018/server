@@ -7,5 +7,7 @@ After=homelab-secrets.service
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 ExecStart=/usr/lib/homelab/ups-secondary-health
 LoadCredential=kuma_push_token:/run/credstore/{{ nut_host_watchdog_token_key }}

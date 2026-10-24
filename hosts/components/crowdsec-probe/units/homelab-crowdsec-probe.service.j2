@@ -4,6 +4,8 @@ Description=Probe the edge VIP from daniel-pi for crowdsec's off-cluster verify
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 User={{ sys_user }}
 # jellyfin's hostname matches a real router from any client address (the script's header).
 ExecStart=/usr/lib/homelab/crowdsec-edge-probe jellyfin.local.{{ domain }} {{ k3s_metallb_ingress_vip }}

@@ -135,6 +135,11 @@ TEMPLATE_SOURCE_READERS = {
         "no role-scoped render context carries; the `OnFailure=<name>-alert.service` scan "
         "reads a literal unit name that no variable feeds"
     ),
+    "setup/test_setup_crons_write_a_textfile.py": (
+        "a census over every setup role's timer and service templates, asking whether one "
+        "calls write_check_textfile or imports the macro that does. A render needs each "
+        "role's host context and a guess at loop items, and the call is the same text either way"
+    ),
     "deploy/test_setup_render_manifest.py": (
         "hashes the template's raw BYTES — a trailing newline and a truncated-read "
         "comparison, neither of which survives a render"

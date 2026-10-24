@@ -10,6 +10,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 # Unprivileged and unable to gain privilege, holding exactly one capability: the right to
 # bind 53. DynamicUser gives it a per-boot uid with no home, no shell and no presence in
 # /etc/passwd, so there is no account here to reuse for anything else.
