@@ -81,7 +81,7 @@ from validate.validate_lib.host_container import (
     list_problems,
     release_fetched,
 )
-from validate.validate_lib import conffile_case, secrets_case
+from validate.validate_lib import conffile_case, pi_host_seed, secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -464,6 +464,7 @@ class Cases:
 
         def body() -> None:
             secrets_case.seal_pi(self, c)
+            pi_host_seed.seed_pi_host(c)
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
                 for label in ("updater-head", "pi-head", *self.tools)
@@ -513,6 +514,7 @@ class Cases:
 
         def body() -> None:
             secrets_case.seal_pi(self, c)
+            pi_host_seed.seed_pi_host(c)
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
                 for label in ("updater-head", "pi-head", *self.tools)
