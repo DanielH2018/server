@@ -2,8 +2,9 @@
 
 The tag that holds the nightly restore drill's cluster objects: the empty ConfigMap
 `longhorn-restore-drill-stamps` (H2.3b), and since H2.3d the script ConfigMap, the CronJob, the
-ServiceAccount and the RBAC. The CronJob ships `suspend: true`. H2.3e unsuspends it after the
-operator confirms the host cron file `/etc/cron.d/longhorn-restore-drill` is gone.
+ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H2.3e set
+`suspend: false` after the operator confirmed the host cron file
+`/etc/cron.d/longhorn-restore-drill` was gone.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -62,10 +63,12 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
   `ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py::test_an_undeclared_volume_still_fails_with_no_files`,
   `ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py::test_a_filled_declared_volume_fails_and_stamps_nothing`,
   `ansible/tests/longhorn/test_longhorn_restore_drill_retry.py::test_a_retry_already_spent_leaves_the_rotation_alone`.
-- **Mode.** `suspend` in `templates/cronjob.yaml.j2` is the lever. Both runners name their restore
-  `restore-drill-${PVC}` and `cleanup()` deletes that name on every exit, so a scheduled run beside
-  a host-cron run could tear down the other's restore. ENFORCED:
-  `ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_cronjob_ships_suspended_and_never_overlaps`.
+- **Mode.** `suspend` in `templates/cronjob.yaml.j2` is the lever, and it is `false`. Both runners
+  name their restore `restore-drill-${PVC}` and `cleanup()` deletes that name on every exit, so a
+  scheduled run beside a host-cron run could tear down the other's restore. The host cron file is
+  gone, so the CronJob is the only runner. Setting `suspend: true` again is the first step of any
+  revert that restores the host cron. ENFORCED:
+  `ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_cronjob_is_unsuspended_and_never_overlaps`.
 - **Abort valves.** The Job's `activeDeadlineSeconds` is the restore timeout plus the probe pod's
   300-second bound plus a 600-second margin. The kubelet's SIGTERM at the deadline runs the
   script's `cleanup` through its TERM trap, within the 300-second grace period. ENFORCED:

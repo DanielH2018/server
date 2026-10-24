@@ -5,11 +5,12 @@
   restore drill` and its script /usr/local/bin/longhorn-restore-drill.sh. The script's header is
   the design, and this role's CLAUDE.md has the contract.
 
-  `suspend: true` until H2.3e. Both runners name their restore `restore-drill-${PVC}`, and
-  `cleanup()` deletes that name on every exit, so a CronJob run beside the host cron could tear
-  down the host run's restore. H2.3e flips it after the operator confirms the host cron file is
-  gone. A suspended CronJob still takes `kubectl create job --from=cronjob/...`, which is how the
-  hand run in this role's CLAUDE.md works.
+  `suspend: false` since H2.3e. The CronJob shipped suspended at H2.3d, because both runners name
+  their restore `restore-drill-${PVC}` and `cleanup()` deletes that name on every exit, so a
+  CronJob run beside the host cron could tear down the host run's restore. H2.3e flipped it after
+  the operator confirmed the host cron file was gone. `kubectl create job --from=cronjob/...`
+  takes the CronJob whether or not it is suspended, which is how the hand run in this role's
+  CLAUDE.md works.
 
   `concurrencyPolicy: Forbid` keeps two scheduled runs off each other. The deadline and the grace
   period come from this role's defaults, and test_longhorn_restore_drill_deadline.py holds the
@@ -35,7 +36,7 @@ metadata:
 spec:
   schedule: "{{ k3s_longhorn_restore_drill_cron }}"
   timeZone: Etc/UTC
-  suspend: true
+  suspend: false
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: {{ longhorn_restore_drill_starting_deadline_seconds }}
   successfulJobsHistoryLimit: 3
