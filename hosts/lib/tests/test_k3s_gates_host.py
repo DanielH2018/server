@@ -25,7 +25,8 @@ import gitops_markers
 import k3s_gates
 
 SCRIPT = Path(k3s_gates.__file__)
-# The scripts that must never create or write the deploy lock. H6.3b adds the restart script.
+# The scripts that must never create or write the deploy lock. The restart script's own AST check
+# is in test_k3s_restart.py, because it writes its state files, which this check forbids.
 LOCK_READERS = (SCRIPT,)
 
 

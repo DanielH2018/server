@@ -115,6 +115,13 @@ nothing goes the other way, so the pair cannot cycle. The fetch/persist/post she
 `files/renovate_notify.py`, which imports from both. `host_lib.py` is copied in from
 `hosts/lib/` — edit it there, not here.
 
+`notify_logic` also carries a copy of the deployer's check-runs page walk, because the notifier
+cannot import `deployer_lib`. GitHub serves a check-runs or combined-status read with no
+`per_page` as one page of 30 entries, so a failing entry past that page once read as green
+(#6002). The copy walks every page of both reads, and a read short of `total_count` fails the
+run instead of posting a digest that omits the PR.
+`tests/test_renovate_notify.py` holds the copy equal to the deployer's.
+
 ## What a dry run does not prove
 
 `--dry-run` logs what it would post and persists neither the fingerprint nor the liveness
