@@ -239,5 +239,10 @@ def test_the_seed_answers_agent_true() -> None:
     assert '    profile = "server"\n' in seed
 
 
-def test_daniel_box_switches_the_dotfiles_on() -> None:
-    assert load_yaml(HOST_VARS / "daniel-box.yml")["claude_code_agent_dotfiles"] is True
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
+def test_every_agent_host_switches_the_dotfiles_on(host: str) -> None:
+    """Each host with the agent user gives it the dotfiles, whose claude-guard shim every
+    headless launch needs (#6117)."""
+    host_vars = load_yaml(HOST_VARS / f"{host}.yml")
+    assert host_vars["claude_code_agent_user_enabled"] is True
+    assert host_vars["claude_code_agent_dotfiles"] is True
