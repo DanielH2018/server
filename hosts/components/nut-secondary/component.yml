@@ -1,13 +1,15 @@
-# daniel-server's secondary upsmon, the client half of the UPS shutdown chain (H4,
-# docs/target-architecture/host/h4-secrets-unit.md, *NUT on daniel-server*). From H4.3c the package
-# owns the host half: nut-monitor reads the rendered upsmon.conf through a drop-in, a timer runs the
-# UPS watchdog, and the APC udev rule installs from the package. daniel-box keeps the Ansible-owned
-# nut_host role until H7.8, so both hosts render the role's templates.
+# The secondary upsmon, the client half of the UPS shutdown chain, on both cluster nodes (H4,
+# docs/target-architecture/host/h4-secrets-unit.md, *NUT on daniel-server*; daniel-box since H7.33).
+# The package owns the host half: nut-monitor reads the rendered upsmon.conf through a drop-in, a
+# timer runs the UPS watchdog, and the APC udev rule installs from the package. The udev rule
+# is harmless on daniel-box, which has no UPS on USB. The `nut_host` role is emptied
+# and ends on every host (H7.33).
 #
-# `role: nut_host` renders the role's own templates, because the role keeps owning them until H7.8
-# moves daniel-box. The role's defaults sit beneath this map, so `nut_host_upsd_host` resolves to
-# 127.0.0.1 here (inventory_hostname == ups_host). The `defaults:` map below sets the one flag that
-# switches ups-secondary-health.sh.j2 to its packaged branch (H4.3b3).
+# `role: nut_host` renders the role's own templates, which stay in the role directory until
+# H7.20a moves them. The role's defaults sit beneath this map, so `nut_host_upsd_host` resolves to
+# 127.0.0.1 on daniel-server (inventory_hostname == ups_host) and to `nut_host_upsd_clusterip` on
+# daniel-box. The `defaults:` map below sets the one flag that switches ups-secondary-health.sh.j2
+# to its packaged branch (H4.3b3).
 #
 # The output persists, against C5's default, because nut-monitor must start at boot even when the
 # decrypt cannot run (*Persisted outputs*). It installs to
@@ -28,6 +30,10 @@
 role: nut_host
 defaults:
   nut_host_watchdog_packaged: true
+  # The nut Service's pinned ClusterIP, which any host but ups_host (daniel-box) names in its
+  # MONITOR line (H7.33). ups_host reads 127.0.0.1 instead, so daniel-server ignores the value.
+  # roles/k8s/nut/defaults/main.yml:nut_k8s_cluster_ip is the other copy; a test pins the two.
+  nut_host_upsd_clusterip: 10.43.171.124
 depends:
   - nut-client
 outputs:

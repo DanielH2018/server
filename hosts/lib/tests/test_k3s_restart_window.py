@@ -204,10 +204,14 @@ def job_schedules() -> tuple[list[Schedule], set[str], set[str]]:
 def box_package(tmp_path_factory):
     root = tmp_path_factory.mktemp("box")
     secrets = root / "secrets.yml"
-    secrets.write_text("k3s_readonly_token: x\n")
+    secrets.write_text(
+        "k3s_readonly_token: x\nups_secondary_push_token: x\nnut_monitor_password: x\n"
+    )
     sops = root / "sops"
     sops.mkdir()
-    (sops / "daniel-box.sops.yaml").write_text("k3s_readonly_token: x\n")
+    (sops / "daniel-box.sops.yaml").write_text(
+        "k3s_readonly_token: x\nups_secondary_push_token: x\nnut_monitor_password: x\n"
+    )
     return host_mode.render_host("daniel-box", secrets=secrets, sops_dir=sops)
 
 

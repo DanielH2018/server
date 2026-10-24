@@ -28,9 +28,13 @@ TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-restart.conf"
 @pytest.fixture(scope="module")
 def package(tmp_path_factory):
     root = tmp_path_factory.mktemp("box")
-    (root / "secrets.yml").write_text("k3s_readonly_token: x\n")
+    (root / "secrets.yml").write_text(
+        "k3s_readonly_token: x\nups_secondary_push_token: x\nnut_monitor_password: x\n"
+    )
     (root / "sops").mkdir()
-    (root / "sops/daniel-box.sops.yaml").write_text("k3s_readonly_token: x\n")
+    (root / "sops/daniel-box.sops.yaml").write_text(
+        "k3s_readonly_token: x\nups_secondary_push_token: x\nnut_monitor_password: x\n"
+    )
     return host_mode.render_host(
         "daniel-box", secrets=root / "secrets.yml", sops_dir=root / "sops"
     )
@@ -106,7 +110,12 @@ def test_a_host_without_a_window_fails_the_render():
 
 def test_the_timer_is_enabled_from_timers_target(package):
     link = f"{SYSTEM}timers.target.wants/homelab-k3s-restart.timer"
-    assert package.links == {link: "../homelab-k3s-restart.timer"}
+    # The UPS watchdog timer (H7.33) is the package's other enable link.
+    watchdog = f"{SYSTEM}timers.target.wants/homelab-ups-watchdog.timer"
+    assert package.links == {
+        link: "../homelab-k3s-restart.timer",
+        watchdog: "../homelab-ups-watchdog.timer",
+    }
 
 
 def test_the_credential_and_the_secrets_unit_are_in_the_package(package):
