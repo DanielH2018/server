@@ -1042,7 +1042,7 @@ dispatches nothing. A failed read applies the verdict as before. `tag` reads `DE
 again just before it moves `prod`, and moves nothing under a hold written after `decide`
 read it. No run supersedes another until D7 turns `SUPERSEDE` on
 (`docs/target-architecture/deploy/d7-superseding-promotions.md`), so both reads are inert
-until then. `ansible/tests/repo/test_promote_prod_owner.py` runs both steps against fake
+until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
 binaries.
 
 `verify` and `settle` join no concurrency group: GitHub keeps one pending job per group and a
