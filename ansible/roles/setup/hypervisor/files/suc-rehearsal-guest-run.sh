@@ -47,7 +47,9 @@ RACE_WAIT_S="${SUC_RACE_WAIT_S:-240}"
 retry_race() {
   local deadline=$((SECONDS + RACE_WAIT_S)) out rc
   while :; do
-    out="$(printf '%s\n' "${RACE_INPUT:-}" | "$@" 2>&1)"
+    # A here-string, not a pipe: a command that never reads stdin would otherwise race the writer,
+    # and under pipefail the writer's SIGPIPE fails the attempt.
+    out="$("$@" 2>&1 <<<"${RACE_INPUT:-}")"
     rc=$?
     if ((rc == 0)); then
       [[ -z "$out" ]] || printf '%s\n' "$out"
