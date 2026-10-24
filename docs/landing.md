@@ -87,6 +87,23 @@ the call until its checks pass. A refused merge is printed once and the wait con
 merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both flags in one
 run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
+**A master CI backlog holds a green PR's merge.** Before the direct merge, `land_lib/pace.py`
+counts the master push runs of `ci.yml` that are not completed. At 2 or more it prints
+`pacing the merge: …` and waits for the next poll. A full sweep is about 17 jobs against the
+account's 20-job runner cap, so a second unfinished sweep already queues. On 2026-10-24, eight
+concurrent landings left six master runs unfinished, their jobs waited 8-17 minutes for a
+runner, and each landing waited 29-61 minutes for its merge commit's verdict (#5526).
+
+- The count is a read, not a lock. Two landings that read at the same poll can both merge.
+  Pacing lowers the average queue depth; it does not close the race that makes the `prove`
+  job's tested-tree skip miss.
+- A run unfinished more than 2 hours after its creation is wedged and not counted.
+- The wait counts against `merge_timeout`. A backlog that never drains ends at
+  `merge-timeout`, whose message names the pacing; re-run the same command.
+- A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
+- `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
+- A PR armed by hand with `gh pr merge --auto` merges without this check.
+
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
