@@ -83,6 +83,7 @@ def _run_main(
         _mod.main,
         read_payload=lambda: payload,
         target_problems=lambda: targets or [],
+        stale_release_problems=lambda: [],
         master_moved_problems=lambda: master_moved or [],
         parked_deployer_problems=lambda: parked or [],
         other_live_sessions=lambda cwd: sessions or [],
@@ -373,7 +374,7 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
         "other_live_sessions or master_moved_problems (both report through this string).\n"
         + proc.stdout
     )
-    # target_problems() runs unconditionally on every call to main(), so curl/journalctl
+    # target_problems() and stale_release_problems() run unconditionally on every call to main(), so curl/journalctl
     # are always exercised — unlike gh, which only fires per worktree on disk and so isn't
     # asserted here. A stub silently dropped from PATH is
     # indistinguishable from a passing run without this: the real binaries would just run

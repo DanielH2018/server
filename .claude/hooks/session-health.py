@@ -44,8 +44,11 @@ Stdout is injected as session context by Claude Code (same mechanism the remembe
 # DECIDED: the gen-hooks block above carries no `matcher`, so the hook also fires on `compact`.
 # A compaction is not a no-op here: `main` rows `MEMORY.md` under `compact` before it returns,
 # because Claude Code reloads the file with no InstructionsLoaded event (#4668). A
-# `startup|resume|clear` matcher would drop that row (#6153).
+# `startup|resume|clear` matcher would drop that row (#6153). A second, `compact`-only entry
+# pointing at a row-only script saves nothing: `run-hook.sh` starts the same `uv run`
+# interpreter for every registration, and that start is the whole cost of a compaction here.
 
+import functools
 import os
 import subprocess
 import sys
@@ -352,11 +355,21 @@ def _run(cmd, timeout):
 
 
 def target_problems():
-    """hooklib's scrape-target and stale-release lines, bound to this file's `_run` and REPO."""
+    """hooklib's scrape-target lines, bound to this file's `_run` and REPO."""
     if service_lines is None:
         return []
-    lines = service_lines.target_problems(_run, REPO)
-    return lines + service_lines.stale_release_problems(_run)
+    return service_lines.target_problems(_run, REPO)
+
+
+def stale_release_problems():
+    """hooklib's stale-release line, bound to this file's `_run`.
+
+    A probe of its own rather than the tail of `target_problems`, so a slow journal read past
+    the deadline cannot cost the down-target lines that already finished.
+    """
+    if service_lines is None:
+        return []
+    return service_lines.stale_release_problems(_run)
 
 
 def master_moved_problems(git=None):
@@ -415,7 +428,15 @@ def master_moved_problems(git=None):
     ]
 
 
-def other_live_sessions(cwd, *, run=None, git_dirty=None):
+# How long the per-worktree reads in `other_live_sessions` may take together, after
+# `git worktree list`. Under TOTAL_DEADLINE_S, so a slow tree is named on its own line before
+# the outer deadline gives up on the whole session list.
+SESSION_SCAN_DEADLINE_S = 6
+
+
+def other_live_sessions(
+    cwd, *, run=None, git_dirty=None, deadline=SESSION_SCAN_DEADLINE_S
+):
     """Lines describing the other Claude sessions working this repo right now.
 
     Derived from git and /proc rather than from anything a session declares, so it cannot
@@ -423,6 +444,7 @@ def other_live_sessions(cwd, *, run=None, git_dirty=None):
     another session is already in a role is what stops two of them editing it at once.
 
     `run` and `git_dirty` default to `_run` and `lib.git.git_dirty`; a test passes fakes.
+    `deadline` bounds the per-worktree reads together; a test passes a short one.
     """
     run = run or _run
     # scripts/, which holds `lib/`. A stale insert would fail silently: the except below
@@ -440,14 +462,7 @@ def other_live_sessions(cwd, *, run=None, git_dirty=None):
         # but say so. The silence is what let the path bug live for a month.
         return [f"  ⚠ other-session detection is broken: {exc}"]
 
-    lines = []
-    for tree in parse_worktree_list(
-        run(["git", "worktree", "list", "--porcelain"], 5).stdout
-    )[1:]:
-        if os.path.realpath(tree.path) == os.path.realpath(cwd):
-            continue
-        if not (tree.locked and session_is_alive(tree.lock_reason)):
-            continue
+    def describe(tree):
         changed = run(
             ["git", "-C", tree.path, "diff", "--name-only", "origin/master...HEAD"], 5
         ).stdout
@@ -466,9 +481,31 @@ def other_live_sessions(cwd, *, run=None, git_dirty=None):
             shown += f", +{len(paths) - 4} more"
         if dirty:
             shown += " (+ uncommitted)"
-        name = with_label(tree.branch or os.path.basename(tree.path), tree.path)
-        lines.append(f"  • {name} — {shown}")
-    return lines
+        return [f"  • {name_of(tree)} — {shown}"]
+
+    def name_of(tree):
+        return with_label(tree.branch or os.path.basename(tree.path), tree.path)
+
+    live = [
+        tree
+        for tree in parse_worktree_list(
+            run(["git", "worktree", "list", "--porcelain"], 5).stdout
+        )[1:]
+        if os.path.realpath(tree.path) != os.path.realpath(cwd)
+        and tree.locked
+        and session_is_alive(tree.lock_reason)
+    ]
+    # One thread per live worktree, each with its own diff and dirty read: run in turn, a
+    # handful of sessions on a loaded box passed the banner's deadline and lost the whole
+    # list. A tree that does not finish costs its own line, never its siblings' (#6153).
+    sections = run_sections(
+        [
+            (f"the scan of {name_of(tree)}", functools.partial(describe, tree))
+            for tree in live
+        ],
+        deadline,
+    )
+    return [line for lines in sections for line in lines]
 
 
 def unlabelled_worktree_lines(cwd, *, run=None):
@@ -500,8 +537,10 @@ def unlabelled_worktree_lines(cwd, *, run=None):
 WORKTREE_TIMEOUT_S = 5
 
 # How long every probe together may take, from when they start. The 15s hook budget less
-# the `uv run` interpreter start that comes before `main`, with room left to print. No probe's
-# own cap (`probe.py targets` 6s, every git read 5s) reaches it alone.
+# the `uv run` interpreter start that comes before `main`, with room left to print. One
+# probe can still chain past it: the scrape-target probe runs `probe.py targets` (6s) and then
+# one 5s `kubectl` read per down target. That probe then prints the `did not finish` line,
+# and every other probe's lines still print.
 TOTAL_DEADLINE_S = 10
 
 
@@ -537,6 +576,7 @@ def main(
     *,
     read_payload=read_payload,
     target_problems=target_problems,
+    stale_release_problems=stale_release_problems,
     master_moved_problems=master_moved_problems,
     parked_deployer_problems=parked_deployer_problems,
     other_live_sessions=other_live_sessions,
@@ -578,6 +618,7 @@ def main(
     cwd = os.getcwd()
     (
         targets,
+        stale_release,
         master_moved,
         parked,
         sessions,
@@ -586,7 +627,8 @@ def main(
         fanout,
     ) = run_sections(
         [
-            ("the scrape-target and stale-release check", target_problems),
+            ("the scrape-target check", target_problems),
+            ("the stale-release check", stale_release_problems),
             ("the behind-master check", master_moved_problems),
             ("the parked-deployer check", parked_deployer_problems),
             ("the other-session scan", lambda: other_live_sessions(cwd)),
@@ -598,7 +640,7 @@ def main(
     )
     # master_moved last deliberately: "this branch is behind origin/master" is the SYMPTOM of a
     # parked deployer, so the cause reads first.
-    problems = targets + parked + master_moved
+    problems = targets + stale_release + parked + master_moved
 
     banner = format_banner(problems, landing=bool(parked))
     if banner:
