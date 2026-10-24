@@ -1030,8 +1030,10 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       Job every 900 seconds meanwhile, which re-fires the alert. To stop that, the operator
       labels daniel-box `homelab/k3s-upgrade-paused=true`. Then the operator clears the
       hold (**operator-only**) with `gh variable set DEPLOY_HOLD --body none -R
-      DanielH2018/server`. The next `promote` moves `prod` to the revert, and Flux prunes
-      the drill Plan. The operator then removes the label, and silences or waits out the
+      DanielH2018/server`. The next `promote` moves `prod` to the revert, but the tag renders
+      `prune: false` (the CRD census requires it for any tag rendering a CRD), so Flux does
+      not prune the drill Plan. **Operator-only:** `kubectl -n system-upgrade delete plan
+      k3s-redproof` removes it. The operator then removes the label, and silences or waits out the
       alert's 2-hour `keep_firing_for`.
 5. **H6.2 daniel-box's package (about 60 lines).**
     - **Operator-only:** copy daniel-box's age key to `/etc/homelab/age.key`, as H4.2 did on
@@ -1453,14 +1455,21 @@ which journald does not store on these hosts, so it reads zero on every run.
 ## Rollback
 
 - **H6.1a:** revert.
-- **H6.1b:** revert. Flux prunes the Plans. The CRD and Namespace stay because they are
-  prune-exempt, and the operator deletes them by hand if the role is abandoned. The pin
+- **H6.1b:** revert. The `system-upgrade` tag renders `prune: false`, because the CRD census
+  (`scripts/renderer/tests/test_renderer_crd_census.py`) requires `flux_prune: false` for any
+  tag that renders a CRD. Flux therefore does not prune the Plans, the CRD or the Namespace.
+  **Operator-only:** after the revert lands, delete the Plans by hand with `kubectl -n
+  system-upgrade delete plan k3s-server k3s-agent`, because Flux no longer owns their removal.
+  Both select no node, so a Plan left live upgrades nothing, but SUC keeps reconciling it. The operator deletes the
+  CRD and Namespace by hand as well if the role is abandoned. The pin
   returns to `setup/k3s`. The revert removes the `system-upgrade` entry from
   `containers_list`. D2.1c records a removed Flux-born entry by its fields too, so the
   revert reaches the same readers as H6.1b and no own tag. Before D6.12, the revert
   therefore follows H6.1b's narrow procedure: the recorded narrow output,
   D1.2's stop rule before the PR and before `land.sh`, and the same refusal exit.
-- **H6.1c:** the drill's own revert is part of the step.
+- **H6.1c:** the drill's own revert is part of the step. Flux does not prune the drill Plan
+  (see H6.1b above), so the revert is followed by the **operator-only** `kubectl -n
+  system-upgrade delete plan k3s-redproof`.
 - **H6.2:** `sudo apt-get remove homelab-daniel-box` on daniel-box. This is valid only before
   H6.4a. After H6.4a, removing the package deletes files that `ExecStart` names.
 - **H6.3a and H6.3b:** revert. dpkg removes the restart unit and the script. Before H6.3c,
@@ -1885,6 +1894,16 @@ which journald does not store on these hosts, so it reads zero on every run.
     accepts it, the k3s `registries.yaml` that H6's config drop-ins carry gains a
     `mirrors."ghcr.io"` entry pointing at that registry. Resolution: the PR that carries the
     entry lands after D5 Open question 2 is ruled, and before nut's Wave C PR.
+16. **The Job backoff limit (opened 2026-10-24, for H6.3c).** The vendored controller manifest
+    sets `SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT: "99"` in `default-controller-env`
+    (`ansible/roles/k8s/system-upgrade/files/upstream/system-upgrade-controller.yaml:201`).
+    The Baseline and *Gates at apply time* say a failing `prepare` ends in `JobFailed` after
+    three pods, from `job.go`'s `BackoffLimit` 2. If v0.20.2's `job.go` reads that variable,
+    a failing `prepare` retries until the Job deadline instead, and `JobFailed` arrives only
+    at 3600 or 5400 seconds. That changes the agent-deadline argument, the timing of
+    `K3sUpgradeJobFailed` and the red-path drill's expected time to red. Resolution: before
+    H6.3c widens a Plan, read `job.go` at the pinned version, then either restate those three
+    places or set the variable in `files/patches/system-upgrade-controller-env.yaml`.
 
 ## Review log
 

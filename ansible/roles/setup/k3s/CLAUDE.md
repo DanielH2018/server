@@ -56,6 +56,12 @@ selection sees every task's own tags.
 some carrying a `DECIDED` marker. `files/` holds the Python the crons run, tested under
 `tests/`; `templates/` holds the cron scripts and the manifests this role applies.
 
+**The k3s pin is not in this role's defaults.** `k3s_version`, `k3s_install_script_url` and
+`k3s_install_script_sha256` live in `ansible/roles/k8s/system-upgrade/defaults/main.yml`
+since H6.1b, so a pin change routes to the Flux-owned `system-upgrade` tag and writes no
+`manual_plane` line for this role. `tasks/server.yml` and `tasks/agent.yml` read the file with
+`include_vars`. `SYSTEM_UPGRADE_DEFAULTS` in `scripts/lib/repo_paths.py` is the Python readers' path.
+
 Backup tiering, restoring a volume, restoring etcd and the two upgrade runbooks each have a
 docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recovery.md`,
 `docs/k3s-etcd-restore.md`, `docs/k3s-upgrade.md`, `docs/longhorn-upgrade.md`.

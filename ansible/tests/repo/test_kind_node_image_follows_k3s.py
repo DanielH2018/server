@@ -3,7 +3,7 @@
 CI's `sops_manifest_type_proof` job (target slice D3, PR D3.3d) measures what kustomize-controller
 and the API server do with an all-digit Secret value, in a kind cluster. The answer is only the
 cluster's answer while the kind node's API server is on `k3s_version`'s minor, in
-`ansible/roles/setup/k3s/defaults/main.yml`. Renovate offers the node image patch and digest
+`ansible/roles/k8s/system-upgrade/defaults/main.yml`. Renovate offers the node image patch and digest
 bumps only (issue #5173), so a k3s minor bump is what fails here, and the person finishing it
 moves `KIND_NODE_IMAGE` to a tag the pinned kind release lists.
 
@@ -16,7 +16,7 @@ from lib import yaml_fast
 from _helpers import REPO
 
 CI_REL = ".github/workflows/ci.yml"
-K3S_DEFAULTS_REL = "ansible/roles/setup/k3s/defaults/main.yml"
+K3S_DEFAULTS_REL = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
 STEP = "Create the kind cluster, the registry and the pinned Flux controllers"
 
 _MINOR = re.compile(r"^v?(\d+)\.(\d+)\.")

@@ -1,7 +1,8 @@
 """The forward-only tags are the H1 plan's list, as far as the tree holds their roles (#5926).
 
 The H1 plan's *Forward-only tags and the promote rule* names `metallb`, `coredns`, `longhorn`
-and `longhorn-backup`. `promote_lib/forward_only.py` treats a role as forward-only when its
+and `longhorn-backup`, and H6.1b adds `system-upgrade` (the H6 plan's *SUC through Flux*, so a
+failed Plan revision never lowers a Plan below a version a node runs). `promote_lib/forward_only.py` treats a role as forward-only when its
 `defaults/main.yml` sets `flux_forward_only: true` on a top-level line, and a failed revision
 that changes such a tag holds without resetting `prod`. A plan tag whose role ships without
 the flag loses that hold silently, which is how H1.3 shipped `metallb` (#5926).
@@ -16,7 +17,9 @@ from deploy_tools.promote_lib.forward_only import FORWARD_ONLY_FLAG
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
 
-PLAN_FORWARD_ONLY = frozenset({"metallb", "coredns", "longhorn", "longhorn-backup"})
+PLAN_FORWARD_ONLY = frozenset(
+    {"metallb", "coredns", "longhorn", "longhorn-backup", "system-upgrade"}
+)
 # forward_only_roles' `git grep` pre-filter: an indented or commented key never reaches it.
 _FLAG_LINE = re.compile(rf"^{FORWARD_ONLY_FLAG}:", re.MULTILINE)
 

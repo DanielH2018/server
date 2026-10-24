@@ -1,0 +1,16 @@
+# Pins the controller by digest and gives its pod the platform tier's class. The vendored
+# Deployment names the image by tag, and a kustomize patch is copied verbatim and cannot read a
+# variable, so ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py holds this reference equal to
+# `system_upgrade_controller_image` in defaults/main.yml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: system-upgrade-controller
+  namespace: system-upgrade
+spec:
+  template:
+    spec:
+      priorityClassName: homelab-critical
+      containers:
+        - name: system-upgrade-controller
+          image: rancher/system-upgrade-controller:v0.20.2@sha256:61b68d4372baf7ae90fb0f879feea1c082381a8b7547cc5ec85d393c497b11cb

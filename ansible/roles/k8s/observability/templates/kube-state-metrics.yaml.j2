@@ -69,7 +69,7 @@ rules:
   # Jobs, for the start, completion and outcome of the soak, snapshot and verify Jobs a landing
   # waits on (#5675), which files/rules/gate-jobs.yaml records as durations. A Job's spec
   # names an image and a command, never a secret value. The Prometheus job drops every family
-  # but those four and kube_job_status_active.
+  # but those four, kube_job_status_active and kube_job_failed (K3sUpgradeJobFailed, H6.1b).
   - apiGroups: [batch]
     resources: [jobs]
     verbs: [list, watch]

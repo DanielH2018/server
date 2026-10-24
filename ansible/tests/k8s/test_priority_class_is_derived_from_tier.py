@@ -35,6 +35,7 @@ _CLASS_AT_DERIVATION = {
     "nut": "homelab-critical",
     "wg-easy": "homelab-critical",
     "flux": "homelab-critical",
+    "system-upgrade": "homelab-critical",
     "mosquitto": "homelab-automation",
     "zigbee2mqtt": "homelab-automation",
     "home-assistant": "homelab-automation",
