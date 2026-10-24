@@ -460,7 +460,6 @@
  "ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py": 0.0,
  "ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py": 0.77,
  "ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py": 0.08,
- "ansible/tests/longhorn/test_longhorn_restore_drill_image.py": 30.0,
  "ansible/tests/longhorn/test_longhorn_restore_drill_nopvc.py": 0.23,
  "ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py": 0.22,
  "ansible/tests/longhorn/test_longhorn_restore_drill_oversize.py": 0.19,

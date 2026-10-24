@@ -309,9 +309,9 @@ def test_every_deselected_marker_in_addopts_is_one_the_guard_exempts(
             clause = clause.strip()
             if clause.startswith("not "):
                 deselected.add(clause.removeprefix("not ").strip())
-    assert deselected == {leakguard._LIVE_MARKER}, (
+    assert deselected == {leakguard._LIVE_MARKER, leakguard._IMAGE_MARKER}, (
         f"addopts deselects {sorted(deselected)} by default, but the leak guard exempts only "
-        f"`{leakguard._LIVE_MARKER}`. A deselected tier never runs in CI, so a guard that "
+        f"`{leakguard._LIVE_MARKER}` and `{leakguard._IMAGE_MARKER}`. A deselected tier never runs in CI, so a guard that "
         "breaks it stays green — exempt the marker in ansible/tests/leakguard.py, or say here "
         "why this one is safe to leave guarded."
     )
@@ -451,3 +451,10 @@ def test_without_the_plugin_the_agent_profile_moves_the_server_checkout(
         tmp_path, _READS_SERVER_CHECKOUT, plugin=False, extra_env=_PROFILE_ENV
     )
     assert proc.returncode != 0, proc.stdout + proc.stderr
+
+
+def test_the_image_marker_is_one_the_image_suite_actually_carries() -> None:
+    """Non-vacuity: a renamed marker would exempt nothing and be deselected from every job."""
+    name = "test_longhorn_restore_drill_image.py"
+    suite = REPO / "ansible" / "tests" / "longhorn" / name
+    assert f"pytestmark = pytest.mark.{leakguard._IMAGE_MARKER}" in suite.read_text()

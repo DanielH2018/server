@@ -19,6 +19,9 @@ import pytest
 
 from _restore_drill import harness, image_leg_available, launch_in_image
 
+# Run by .github/workflows/image-leg.yml with `-m image`; the pytest shards deselect it.
+pytestmark = pytest.mark.image
+
 A = "a-config"
 
 # The template as it stood before H2.3c: a suffix after the X's, which BusyBox's mktemp refuses.
