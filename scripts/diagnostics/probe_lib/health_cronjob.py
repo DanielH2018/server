@@ -203,6 +203,44 @@ def _schedule_interval_seconds(schedule):
     return None
 
 
+def declared_suspended(docs, default_namespace):
+    """`namespace/name` of each CronJob among `docs` whose rendered spec sets `suspend: true`.
+
+    The intent half of the suspend check: a role's manifest says a CronJob ships suspended on
+    purpose (the restore drill did, until H2.3e), and the live object is held to that.
+    """
+    return frozenset(
+        f"{(doc.get('metadata') or {}).get('namespace') or default_namespace}/"
+        f"{(doc.get('metadata') or {}).get('name')}"
+        for doc in docs
+        if doc.get("kind") == "CronJob"
+        and (doc.get("spec") or {}).get("suspend") is True
+    )
+
+
+def format_suspended(name, cronjob, declared):
+    """(text, exit code) for a live-suspended CronJob, or None when it is not suspended.
+
+    A suspended CronJob fires no Job, so the gate has no run to read and would fail it as "no
+    evidence it has ever run". That is right for a CronJob that should run and wrong for one the
+    manifest suspends on purpose, so the two read differently. `declared` is the set
+    `declared_suspended` builds from the same render the gate resolves its targets with.
+
+      - Suspended live and in the manifest: a pass, with nothing to gate until it is unsuspended.
+      - Suspended live and not in the manifest: a failure. Someone suspended it by hand, which
+        is drift and not intent, and the drill or sync it runs has stopped.
+    """
+    if cronjob is None or (cronjob.get("spec") or {}).get("suspend") is not True:
+        return None
+    if name in declared:
+        return f"{name}: suspended; nothing to gate until it is unsuspended", 0
+    return (
+        f"{name}: suspended in the cluster, but its manifest does not declare "
+        "`suspend: true` — drift, not intent; unsuspend it or declare it",
+        1,
+    )
+
+
 def format_cronjob_health(name, cronjob, latest_job, pods, deploy_applied_at, now):
     """(text, exit code) for one CronJob-only workload's post-deploy verification.
 

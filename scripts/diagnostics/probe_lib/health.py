@@ -58,7 +58,13 @@ from diagnostics.probe_lib.core import PI_HOST
 from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
 from diagnostics.probe_lib import health_backup_targets, health_cronjob
 from diagnostics.probe_lib.health_render import render_context as _render_context
-from diagnostics.probe_lib.health_cronjob import format_cronjob_health, latest_owned_job
+from diagnostics.probe_lib.health_render import rendered_docs
+from diagnostics.probe_lib.health_cronjob import (
+    declared_suspended,
+    format_cronjob_health,
+    format_suspended,
+    latest_owned_job,
+)
 from diagnostics.probe_lib.health_docker import (
     declared_on_pi,
     format_health,
@@ -111,33 +117,16 @@ def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
     Raises on a render failure rather than returning None. Fail closed: a role whose templates
     stopped rendering must not degrade to the guess-the-name path, where a miss reads as a skip.
     """
-    # Checked before the render context is built, so a block tag (`config`, `deploy`, `cron`)
-    # costs a directory stat rather than 0.44s of ansible + jsonschema imports, and a
-    # broken renderer environment cannot fail a tag that was never a role.
-    role_dir = roles_dir / role
-    if not role_dir.is_dir():
+    # `rendered_docs` checks the role directory before it builds the render context, so a block
+    # tag (`config`, `deploy`, `cron`) costs a directory stat rather than 0.44s of ansible +
+    # jsonschema imports, and a broken renderer environment cannot fail a tag that was never a
+    # role.
+    docs = rendered_docs(role, roles_dir)
+    if docs is None:
         return None
-
-    validator, entries = _render_context()
-    if role in validator.SKIP_ROLES or role not in entries:
-        return None
-
-    templates = sorted(
-        p
-        for p in (role_dir / "templates").glob("*.j2")
-        if validator.is_manifest_template(p)
-    )
-    ctx = validator.render_context(
-        role_dir, overrides={"container_item": entries[role]}, strict=True
-    )
     targets = set()
-    for tpl in templates:
-        err, docs = validator.check_template(role, tpl, ctx)
-        if err:
-            raise RuntimeError(f"{role}/{tpl.name} failed to render: {err}")
-        for doc in docs:
-            if not isinstance(doc, dict) or doc.get("kind") not in kinds:
-                continue
+    for doc in docs:
+        if doc.get("kind") in kinds:
             meta = doc.get("metadata") or {}
             targets.add(
                 (
@@ -146,7 +135,7 @@ def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
                     meta.get("name"),
                 )
             )
-    targets |= vendored_targets(role_dir, default_namespace, kinds)
+    targets |= vendored_targets(roles_dir / role, default_namespace, kinds)
     return sorted(targets)
 
 
@@ -413,18 +402,25 @@ def _fetch_cronjob(role, name, namespace, cluster, tools=DEFAULT_TOOLS):
     return cronjob, latest_job, pods, revision
 
 
-def format_role_cronjob_health(role, checked, now):
+def format_role_cronjob_health(role, checked, now, suspended=frozenset()):
     """(text, exit code) for a role whose manifests declare at least one CronJob.
 
     `checked` is [(namespace, name, cronjob doc or None, latest Job or None, pods doc or
     None, reference)], as `_fetch_cronjob` reads it. Mirrors format_role_health's shape and
     its NOT_APPLICABLE_MARKERS constraint: a CronJob the manifests declare and the cluster
     lacks reads as a failure here too, via format_cronjob_health's "no CronJob" message.
+
+    `suspended` is the `namespace/name` set whose manifest declares `suspend: true`
+    (`health_cronjob.declared_suspended`). A live-suspended CronJob in it passes with no Job
+    to read, and one outside it fails as drift (`health_cronjob.format_suspended`).
     """
     unhealthy, lines = [], []
     for namespace, name, cronjob, latest_job, pods, deploy_applied_at in checked:
-        text, code = format_cronjob_health(
-            f"{namespace}/{name}", cronjob, latest_job, pods, deploy_applied_at, now
+        full = f"{namespace}/{name}"
+        text, code = format_suspended(
+            full, cronjob, suspended
+        ) or format_cronjob_health(
+            full, cronjob, latest_job, pods, deploy_applied_at, now
         )
         lines.append(f"  {text}")
         if code:
@@ -456,13 +452,14 @@ def run_health(
     roles_dir=K8S_ROLES,
     prom=health_alerts.DEFAULT_PROM,
     on_origin=health_checkout.role_on_origin,
+    stale_reason=health_checkout.stale_checkout_reason,
 ):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
     k8s first because that is where ~50 of the ~55 services live. `tools` is the kubectl
     boundary of the k8s reads, injectable so a test can fail them without patching.
     `roles_dir` is where the k8s roles live, injectable so a test can resolve a fixture role;
-    `on_origin` is the git read behind the stale-checkout refusal (`health_checkout`).
+    `stale_reason` is the stale-checkout refusal (`health_checkout`) and `on_origin` its git read.
     `prom` is the alert plane's Prometheus boundary, read for a role-resolved tag only: the
     Pi's `--docker` path and a guessed workload name stay on the rollout verdict alone.
     """
@@ -506,6 +503,11 @@ def run_health(
         print(f"{container}: {refusal}", file=_sys.stderr)
         return PROBE_UNREADABLE
 
+    # Before the resolver: an old definition of the role yields no verdict (#5912).
+    if stale := stale_reason(container, roles_dir, on_origin):
+        print(f"{container}: {stale}", file=_sys.stderr)
+        return PROBE_UNREADABLE
+
     ns = core.k8s_namespace()
     read = functools.partial(_read, cluster, tools=tools)
     try:
@@ -518,10 +520,6 @@ def run_health(
         return 1
 
     if targets is None:
-        stale = health_checkout.stale_checkout_reason(container, roles_dir, on_origin)
-        if stale:
-            print(f"{container}: {stale}", file=_sys.stderr)
-            return PROBE_UNREADABLE
         # Not a k8s role, so the tag is the only name available. A miss here means "this tag
         # is not a k8s workload name", which is exactly what lets --docker take over.
         workload, pods = _fetch_workload(container, ns, cluster, tools)
@@ -558,7 +556,8 @@ def run_health(
                 )
                 for namespace, name in cronjob_targets
             ]
-            text, code = format_role_cronjob_health(container, checked, now)
+            declared = declared_suspended(rendered_docs(container, roles_dir) or [], ns)
+            text, code = format_role_cronjob_health(container, checked, now, declared)
             text, code = _with_alert_plane(container, text, code, None, prom, read)
             print(text)
             return code

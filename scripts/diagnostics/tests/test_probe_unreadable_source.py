@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import probe
 from diagnostics.probe_lib import core, health_docker, readonly_rbac, vip_placement
 from lib.exit_codes import TEMP_FAIL, contract
+from _probe_health_fixtures import current_checkout
 
 PROBE = "scripts/diagnostics/probe.py"
 CURL_ERROR = "curl: (6) Could not resolve host: prometheus.local.example.test"
@@ -164,7 +165,11 @@ def _k8s_tools(stderr):
 
 def test_a_failed_kubectl_read_under_health_is_unreadable_not_missing(capsys):
     tools = _k8s_tools("Unable to connect to the server: dial tcp: i/o timeout")
-    rc = _exit_code(lambda: health.run_health("jellyfin", served="prod", tools=tools))
+    rc = _exit_code(
+        lambda: health.run_health(
+            "jellyfin", served="prod", tools=tools, stale_reason=current_checkout
+        )
+    )
     captured = capsys.readouterr()
     assert rc == TEMP_FAIL
     assert "MISSING" not in captured.out
@@ -175,7 +180,11 @@ def test_a_notfound_kubectl_read_under_health_is_still_missing(capsys):
     tools = _k8s_tools(
         'Error from server (NotFound): deployments.apps "jellyfin" not found'
     )
-    rc = _exit_code(lambda: health.run_health("jellyfin", served="prod", tools=tools))
+    rc = _exit_code(
+        lambda: health.run_health(
+            "jellyfin", served="prod", tools=tools, stale_reason=current_checkout
+        )
+    )
     assert rc == 1
     assert "MISSING" in capsys.readouterr().out
 

@@ -1,0 +1,114 @@
+#!/bin/sh
+# Bring the Pi's `homelab` Compose project up (H5, docs/target-architecture/host/h5-pi-compose.md,
+# *homelab-compose.service*). homelab-compose.service runs this as root.
+#
+# Six steps, in this order. Every check that can refuse runs before compose-adopt, so adopt removes
+# an Ansible-era container only in a run that can create its replacement at once.
+#   1 key check    every ${key} the installed compose files read has a non-empty value in compose.env
+#   2 model check  `config -q` validates the merged project
+#   3 pull         `docker pull` for an image the host lacks. Every image is digest-pinned.
+#   4 adoption     compose-adopt
+#   5 start        `up -d --remove-orphans --wait`
+#   6 metric       homelab_compose.prom in node_exporter's textfile directory, whatever the outcome
+#
+# The script prints no value Compose interpolated, and it starts or restarts no unit: reconcile is
+# the only process that does (H4, *The restart contract*).
+#
+# HOMELAB_ROOT prefixes every path, so a test runs it against a scratch tree.
+set -u
+
+root=${HOMELAB_ROOT:-}
+compose_dir=$root/usr/lib/homelab/compose
+project_file=$compose_dir/compose.yaml
+env_file=$compose_dir/compose.env
+textfile_dir=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
+adopt=$(dirname "$0")/compose-adopt
+
+say() {
+  printf 'compose-run: %s\n' "$*" >&2
+}
+
+# The keys the installed compose files read, one per line. `$$` is Compose's escape for a literal
+# `$`, so it is removed before the search. C1's `$${literal}` therefore adds no key.
+referenced_keys() {
+  # shellcheck disable=SC2016 # the pattern is a literal `${`, not an expansion
+  find "$compose_dir" -name compose.yaml -type f -exec cat {} + |
+    sed 's/\$\$//g' |
+    grep -o '\${[A-Za-z0-9_]*}' |
+    sed 's/^\${//; s/}$//' |
+    sort -u
+}
+
+check_keys() {
+  keys=$(referenced_keys) || keys=
+  for key in $keys; do
+    if [ ! -r "$env_file" ]; then
+      say "refusing: $env_file is missing or unreadable, and the project reads $key"
+      return 1
+    fi
+    if ! grep -q "^$key='.\{1,\}'\$" "$env_file"; then
+      say "refusing: compose.env has no value for $key"
+      return 1
+    fi
+  done
+}
+
+pull_missing_images() {
+  images=$(docker compose -f "$project_file" config --images) || return 1
+  for image in $images; do
+    docker image inspect "$image" >/dev/null 2>&1 && continue
+    say "pulling $image"
+    docker pull --quiet "$image" >/dev/null || return 1
+  done
+}
+
+run_steps() {
+  [ -n "${HOMELAB_COMPOSE_WAIT_TIMEOUT:-}" ] || {
+    say "refusing: HOMELAB_COMPOSE_WAIT_TIMEOUT is unset"
+    return 1
+  }
+  check_keys || return 1
+  docker compose -f "$project_file" config -q || return 1
+  pull_missing_images || return 1
+  "$adopt" "$project_file" || return 1
+  docker compose -f "$project_file" up -d --remove-orphans --wait \
+    --wait-timeout "$HOMELAB_COMPOSE_WAIT_TIMEOUT" || return 1
+}
+
+# C5 fixes the package version as `0.<count>+g<12-hex sha>`. Anything else reads as `unknown`,
+# which no ancestry check accepts, so a landing waits rather than settling on it.
+package_sha() {
+  version=$(dpkg-query -W -f '${Version}' homelab-daniel-pi 2>/dev/null) || version=
+  sha=$(printf '%s\n' "$version" | sed -n 's/^.*+g\([0-9a-f]\{12\}\)$/\1/p')
+  printf '%s\n' "${sha:-unknown}"
+}
+
+# M3's textfile convention: mktemp in the same directory, chmod 0644 (mktemp makes 0600, which
+# node_exporter and the recovery heartbeat could not read), then one mv.
+write_metric() {
+  result=$1 duration=$2 finished=$3
+  tmp=$(mktemp "$textfile_dir/homelab_compose.prom.XXXXXX" 2>/dev/null) || return 1
+  {
+    echo "# HELP homelab_compose_up_result 1 when the last compose-run brought the project up, 0 when it did not."
+    echo "# TYPE homelab_compose_up_result gauge"
+    echo "homelab_compose_up_result{host=\"daniel-pi\",sha=\"$(package_sha)\"} $result"
+    echo "# HELP homelab_compose_up_timestamp_seconds Unix time the last compose-run ended."
+    echo "# TYPE homelab_compose_up_timestamp_seconds gauge"
+    echo "homelab_compose_up_timestamp_seconds{host=\"daniel-pi\"} $finished"
+    echo "# HELP homelab_compose_up_duration_seconds Seconds the last compose-run took."
+    echo "# TYPE homelab_compose_up_duration_seconds gauge"
+    echo "homelab_compose_up_duration_seconds{host=\"daniel-pi\"} $duration"
+  } >"$tmp"
+  if ! chmod 0644 "$tmp" || ! mv "$tmp" "$textfile_dir/homelab_compose.prom"; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+started=$(date +%s)
+run_steps
+code=$?
+finished=$(date +%s)
+if [ "$code" -eq 0 ]; then result=1; else result=0; fi
+write_metric "$result" "$((finished - started))" "$finished" || say "could not write homelab_compose.prom"
+exit "$code"

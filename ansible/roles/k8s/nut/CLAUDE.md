@@ -28,6 +28,11 @@ the pin is physical and never unwinds.
   41.65 MB in four layers. On 2026-10-18 its largest layer (28.2 MB) pulled at 0.36-0.45 MB/s
   from GHCR or through a cold mirror, and in 0.4 s from a warm one. A cold pull of the whole
   image takes about two minutes, well inside Flux's default 600s `timeout`.
+- **The role also renders `nut-ghcr-mirror-probe`**, a ConfigMap holding the repository and
+  content tag node-exporter's `ghcr-mirror-pull` sidecar GETs through each node's mirror
+  (#5542). Only this role's render sees its own tag. No nut pod names the ConfigMap, so it
+  adds nothing to the restart checksum the renderer stamps on nut, and adding it rolled
+  nothing.
 - **Flux applies it, not Ansible** (D5.17, Wave C's UPS PR, which went alone). Its
   `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
   deployer all skip it. A merged change reaches the cluster when `promote` publishes and

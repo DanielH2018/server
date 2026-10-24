@@ -11,7 +11,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from _probe_health_fixtures import NOW, pods
+from _probe_health_fixtures import NOW, current_checkout, pods
 
 from diagnostics.probe_lib import health, health_cronjob
 from diagnostics.probe_lib.health_kubectl import (
@@ -258,6 +258,7 @@ def test_run_health_reads_the_revision_for_a_flux_owned_cronjob_role(capsys):
         served="prod",
         tools=_tools(jobs, _kustomization()),
         on_origin=lambda role: True,
+        stale_reason=current_checkout,
     )
     assert code == 1
     assert "no gate Job carries the revision Flux applies" in capsys.readouterr().out

@@ -1,0 +1,58 @@
+# The Pi's Compose project (H5, docs/target-architecture/host/h5-pi-compose.md). H5.2a1 ships the
+# renderer's inputs: the Compose env template and the tmpfiles file. H5.2a3 ships the unit and its
+# two scripts. No package lists this component yet, so nothing installs from it.
+#
+# Autonomous-role contract (compose-adopt removes containers unattended).
+# - Scope / exclusions: compose-adopt removes a container only when its name is a service the
+#   merged project declares and its com.docker.compose.project label is not `homelab`. It touches
+#   no other container, image, volume or network. compose-run's `up --remove-orphans` removes a
+#   `homelab` container that the project no longer declares, and nothing from another project.
+# - Mode (explicit and reversible): the unit ships without an enable link until H5.2b. Without the
+#   link, reconcile's step 2 never starts it and H4's restart set skips it. Removing the link
+#   from the package in a later version stops the boot start, and `sudo systemctl mask
+#   homelab-compose.service` stops every other start until it is unmasked.
+# - Authoritative sources: `docker compose config --services` for the names, and `docker ps -a`
+#   for each container's project label, read before any removal.
+# - Required evidence, every run: one `logger -t compose-adopt` line for each removal, naming the
+#   container and its old project, and homelab_compose.prom in node_exporter's textfile
+#   directory with the result, the package's SHA and the run's duration.
+# - Next-run review: a removal line after the first run that moved a service means a container
+#   keeps returning under another project. Find the starter before widening anything here.
+#
+# ENFORCED: hosts/lib/tests/test_pi_compose_scripts.py (the stub-docker cases for compose-run and
+# compose-adopt), hosts/lib/tests/test_pi_compose_unit.py (the unit's timeout and restart contract).
+#
+# The renderer reads two more keys that this file does not carry yet, because
+# `scripts/validate/unit_templates.py` renders a component no host lists through a shared package,
+# and a shared package refuses `outputs:`:
+#
+#   compose: services             # the directory of per-service trees (host_compose.py)
+#   outputs:
+#     - src: compose.env.j2       # one line per key in `keys`
+#       path: /usr/lib/homelab/compose/compose.env
+#       owner: root
+#       group: root
+#       mode: "0600"
+#       keys: [domain]            # exactly the secrets the compose files read
+#       dependents: [homelab-compose.service]
+#       format: dotenv            # homelab-secrets refuses a `'` or a newline in a value
+#
+# H5.2b adds them with the canary and lists the component in hosts/daniel-pi/package.yml, in the
+# PR that ships the enable link. `hosts/lib/tests/test_pi_compose_renderer.py` renders this
+# component's files with those keys added, against fixture services, until then.
+defaults:
+  # The unit's wait timeout reads the Pi's healthcheck variables (inventory/host_vars/daniel-pi.yml),
+  # which beat these. A shared-package render, which has no host, uses the values below, the
+  # docker-proxy template's own.
+  container_healthcheck_interval: 10s
+  container_healthcheck_timeout: 5s
+  container_healthcheck_retries: 3
+  # The largest start_period any service in the project declares. docker-proxy's is 10s. A move PR
+  # that adds a larger one raises this value, and the unit's wait grows with it.
+  compose_start_period: 10s
+files:
+  - {src: tmpfiles.d/homelab-compose.conf, dst: /usr/lib/tmpfiles.d/homelab-compose.conf}
+  - {src: compose-run, dst: /usr/lib/homelab/compose-run, mode: "0755"}
+  - {src: compose-adopt, dst: /usr/lib/homelab/compose-adopt, mode: "0755"}
+  # Marked inputs_sha256: it renders after every other file, with the hash over the project's files.
+  - {src: units/homelab-compose.service.j2, dst: /usr/lib/systemd/system/homelab-compose.service, inputs_sha256: true}

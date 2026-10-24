@@ -13,9 +13,10 @@ direction, a row coming back to its k8s role, is the host-write census's
 (`ansible/tests/repo/_host_write_rows.py`): the move drops the role's `allow` entry, so a host
 write there fails `k8s-role-tasks-write-no-host`.
 
-pi-peer-backup's two rows and crowdsec's edge probe rows write daniel-pi, and the play runs on
-daniel-box, so `rows_on_the_wrong_host` also holds each to `delegate_to: daniel-pi`, and
-crowdsec's absent arms, which clean daniel-box, to no delegation.
+pi-peer-backup's two rows write daniel-pi, and the play runs on daniel-box, so
+`rows_on_the_wrong_host` also holds each to `delegate_to: daniel-pi`, and crowdsec's absent arms,
+which clean daniel-box, to no delegation. crowdsec's edge probe rows left for the Pi package in
+H5.14.
 
 Red-proof: a fixture role under `tmp_path` whose `main.yml` no longer imports the file, one
 whose task writes a different path, one whose task drops its owner, one whose loop drops a
@@ -29,7 +30,7 @@ import shutil
 from pathlib import Path
 
 from _helpers import SETUP_ROLES, imported_task_files, leaf_tasks, load_tasks
-from _k8s_host_files_expected import CROWDSEC_ARMS, EXPECTED_LOOPS, EXPECTED_ROWS
+from _k8s_host_files_expected import EXPECTED_LOOPS, EXPECTED_ROWS
 
 ROLE = SETUP_ROLES / "k8s_host_files"
 
@@ -74,10 +75,6 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "artifacts.yml: Ensure the star list directory exists",
         "configarr.yml: Remove the retired configarr health reader from the host",
         "configarr.yml: Remove the retired configarr sync heartbeat cron",
-        "crowdsec.yml: Enable the edge probe timer on daniel-pi",
-        "crowdsec.yml: Install the edge probe script on daniel-pi",
-        "crowdsec.yml: Install the edge probe service on daniel-pi",
-        "crowdsec.yml: Install the edge probe timer on daniel-pi",
         "crowdsec.yml: Remove the retired AppSec verify cron",
         "crowdsec.yml: Remove the retired bouncer-prune cron",
         "crowdsec.yml: Remove the retired crowdsec cron scripts from the host",
@@ -170,7 +167,7 @@ def test_a_media_volume_row_that_drops_a_directory_from_its_loop_is_flagged(tmp_
 # {task file: the rows in it that write on daniel-pi}. Every other row there runs on the play's
 # host, daniel-box.
 PI_ROWS = {
-    "crowdsec.yml": set(EXPECTED_ROWS["crowdsec.yml"]) - set(CROWDSEC_ARMS),
+    "crowdsec.yml": set(),
     "pi-peer-backup.yml": set(EXPECTED_ROWS["pi-peer-backup.yml"]),
 }
 
@@ -194,19 +191,6 @@ def rows_on_the_wrong_host(role_dir: Path = ROLE) -> list[str]:
 
 def test_the_daniel_pi_rows_run_on_daniel_pi():
     assert rows_on_the_wrong_host() == []
-
-
-def test_a_crowdsec_probe_block_that_drops_its_delegation_is_flagged(tmp_path):
-    role_dir = _fixture_role(tmp_path)
-    probe = role_dir / "tasks" / "crowdsec.yml"
-    line = "  delegate_to: daniel-pi\n"
-    assert line in probe.read_text()
-    probe.write_text(probe.read_text().replace(line, ""))
-    assert rows_on_the_wrong_host(role_dir) == [
-        f"crowdsec.yml: {name}"
-        for name in EXPECTED_ROWS["crowdsec.yml"]
-        if name not in CROWDSEC_ARMS
-    ]
 
 
 def test_a_crowdsec_arm_delegated_to_the_pi_is_flagged(tmp_path):

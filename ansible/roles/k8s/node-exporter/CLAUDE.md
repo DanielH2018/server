@@ -50,8 +50,8 @@ The `node-exporter-textfile` hostPath, `/var/lib/node-exporter-textfile` on each
 mounted at `/textfile` and read by `--collector.textfile.directory`. A host producer drops a
 `*.prom` file there, and Prometheus scrapes it with no change to this role.
 
-- **Two producers.** One is a host timer writing into the hostPath, and the other is a
-  sidecar of this DaemonSet writing into its own directory.
+- **Three producers.** One is a host timer writing into the hostPath, and the other two are
+  sidecars of this DaemonSet, each writing into its own directory.
 - **The host producer: `claude_cgroup.prom`.** The `setup/claude_code` role installs
   `ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh` and
   `claude-cgroup-metrics.timer`, which runs it as root every 30s on both nodes (every host
@@ -80,6 +80,17 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   older than the script's `DEADLINE_S`.
   `ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py::test_both_not_reporting_rules_carry_the_scripts_deadline`
   pins the rule literals to it. `docs/longhorn-disaster-recovery.md` has the cleanup.
+- **The sidecar producer: `ghcr-mirror-pull.prom` (#5542).** The `ghcr-mirror-pull`
+  container runs `ansible/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh`, inlined the same
+  way. Every 600 s it GETs nut's manifest through the node's ghcr.io mirror endpoint with
+  busybox's wget, and writes the verdict into the `node-exporter-ghcr-mirror-textfile`
+  emptyDir. It lives here because this pod is hostNetwork, so the GET reaches the registry's
+  fence from the node grant containerd's pulls use, where a pod-network check is refused.
+  `NODE_NAME`, from the downward API, picks the endpoint: the loopback hostPort on
+  `k8s_registry_node`, the pinned ClusterIP elsewhere. The tag comes from nut's
+  `nut-ghcr-mirror-probe` ConfigMap, the one ConfigMap this pod names from another role's
+  render. It is mounted as an optional directory, so a new tag arrives without a roll and a
+  missing ConfigMap writes a down verdict. The registry role's `CLAUDE.md` names the two alerts.
 - **M3's producer metric contract governs every file here**
   (`docs/target-architecture/monitoring/m3-textfile-timer.md`, *The producer metric
   contract*). A *check file* carries a verdict and follows the whole contract. A *gauge set*,

@@ -23,10 +23,11 @@ Deployment, one Service, no volume, no route, no secret of its own.
   Kustomization's `wait` replaces the rollout wait.
   `k8s_autodeploy` no longer gates an apply, because the deployer skips the tag. It still
   decides whether Renovate automerges the image bump.
-- **Its Kustomization has no `dependsOn: pihole`.** pihole is still Ansible-owned, so the
-  renderer drops the edge and records it as `homelab/ansible-owned-deps: pihole`. The edge
-  becomes a real `dependsOn` in the first render after pihole moves to Flux. The `pihole-env`
-  Secret exists already, so the drop changes nothing at apply.
+- **Its Kustomization carries `dependsOn: pihole`.** pihole is flux-owned too, so the renderer
+  turns the entry's `depends_on: [pihole]` into a real `dependsOn` rather than dropping it into
+  the `homelab/ansible-owned-deps` annotation. Flux therefore applies this tag only after
+  pihole's Kustomization is Ready, which is where the `pihole-env` Secret this pod reads comes
+  from (below).
 
 ## Why an exporter and not a native scrape
 

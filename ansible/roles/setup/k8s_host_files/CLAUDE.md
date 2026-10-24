@@ -5,7 +5,7 @@ Flux: docs's site directory, pi-peer-backup's two Pi writes, traefik's absent ar
 ghcr-mirror GC, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
 artifacts' three directory tasks (the star list directory among them), media-volume's media
 directories, observability's retired dashboard staging trees, uptime-kuma's stale
-autokuma-claims staging directory and crowdsec's edge probe timer on daniel-pi. A Flux-owned
+autokuma-claims staging directory. A Flux-owned
 role has no Ansible apply left to carry them, so each lands here in its own conversion PR. The plan is
 `docs/target-architecture/deploy/d5-bulk-move.md`, sections *Host-side rows* and *The
 `k8s_host_files` role enters the setup plane once (D5.1h)*.
@@ -25,7 +25,6 @@ The redirect is what a shell with non-blocking stdio needs.
   'daniel-box'`
 - **Crons (1):**
   - `Registry garbage collection` — `20 4 * * 0`
-- **Timer:** `crowdsec-edge-probe.timer` (`OnBootSec=1min`, `OnUnitActiveSec=1min`)
 <!-- /generated_from -->
 
 ## What it holds
@@ -52,11 +51,11 @@ the directory k8s/volume-claim staged autokuma-data's claim under. registry's pu
 retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` manifest nothing
 reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it: the Job
 manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. crowdsec's first conversion
-PR wrote `tasks/crowdsec.yml`, which installs the edge probe's script, service and timer on
-daniel-pi for crowdsec's off-cluster verify. It is the role's first timer and its first
-templates. crowdsec's second conversion PR (#5742) added the absent arms for the four crons
-H2.4b and H2.4c retired and their scripts. They run on daniel-box, outside the file's
-daniel-pi block. They moved only after H2.4c deployed, because in crowdsec's own role they ran
+PR wrote `tasks/crowdsec.yml`, which installed the edge probe's script, service and timer on
+daniel-pi for crowdsec's off-cluster verify. H5.14 moved those into the Pi package
+(`hosts/components/crowdsec-probe/`) and deleted the tasks, so no timer is left here.
+crowdsec's second conversion PR (#5742) added the absent arms for the four crons
+H2.4b and H2.4c retired and their scripts. They run on daniel-box. They moved only after H2.4c deployed, because in crowdsec's own role they ran
 ahead of its manifests, and the setup plane cannot order itself against a k8s deploy. A row drops its source role's `when: not k8s_dry_run` guard and its `config` tag,
 because `initial_setup.yml` has no dry-run mode.
 
@@ -88,8 +87,8 @@ Two tests in `ansible/tests/setup/` hold those rules:
 
 - `ansible/tests/setup/test_k8s_host_files_render.py` renders every template here under
   `StrictUndefined`, with this role's defaults and the inventory. A template reading a
-  variable that only a `roles/k8s/` defaults file defines fails it. crowdsec's edge probe
-  units are its named members.
+  variable that only a `roles/k8s/` defaults file defines fails it. Its named members are
+  the registry GC templates.
 - `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults or
   imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
   that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`, and
@@ -97,9 +96,7 @@ Two tests in `ansible/tests/setup/` hold those rules:
   and `artifacts_stars_dir`. media-volume's PR added `media_volume_host_path` and the
   `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
   when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, the one
-  directory the wrapper lets the key read. crowdsec's edge probe copies nothing: its service
-  reads the VIP from `group_vars`, its one allowed source, so moving the VIP needs a hand apply
-  of this role. It also holds
+  directory the wrapper lets the key read. It also holds
   `docs-refresh.sh.j2`'s `SITE_DIR` equal to docs' default, the third copy of that path.
 
 A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
@@ -116,8 +113,7 @@ script against a store tree built in `tmp_path`.
 
 The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
 that touches it. It holds host directories, the absent arms for configarr's, janitorr's and
-crowdsec's retired crons, pi-peer-backup's two daniel-pi writes and crowdsec's edge probe
-timer on daniel-pi.
+crowdsec's retired crons and pi-peer-backup's two daniel-pi writes.
 
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a
@@ -139,12 +135,7 @@ timer on daniel-pi.
   `hold_plane` entry naming `initial_setup.yml`, and the tick applies nothing more until the
   hold clears.
 - **Required evidence:** the tick's receipt and `land.sh`'s `VERDICT:` line for every PR that
-  changes this role. crowdsec's probe timer appends `<time> http=<code>` once a minute to
-  `/var/log/pi-health/crowdsec-edge-probe.status`, which the Pi's Alloy counts by status.
-  Read the file's tail over `ssh daniel-pi`, or the counter with `probe.py metric
-  'loki_process_custom_crowdsec_edge_probe_total'`. To stop the probe, revert
-  `tasks/crowdsec.yml`, then disable `crowdsec-edge-probe.timer` on the Pi by hand
-  (operator-only). The file then stops growing and stays bounded.
+  changes this role.
 - **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes a `Registry GC`
   Kuma push and a `registry-gc` healthchecks.io ping, and the `registry-gc` journal
   (`journalctl -t registry-gc`) shows the mirror phase. A conversion apply leaves the cron
