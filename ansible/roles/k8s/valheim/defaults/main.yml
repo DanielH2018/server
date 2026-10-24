@@ -198,7 +198,7 @@ valheim_k8s_mem_limit: 9216Mi
 valheim_k8s_cpu_request: "750m"
 valheim_k8s_mem_request: 3072Mi
 
-# The claims k8s/manifests renders and applies for this role, ahead of the workload: the
+# The claims the renderer emits for this role, which the valheim Kustomization applies: the
 # backed-up world claim and the nobackup SteamCMD install.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ valheim_k8s_claim }}"
