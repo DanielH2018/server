@@ -168,6 +168,14 @@ containers_list:
     platform: k8s
     owner: flux
     depends_on: [longhorn]
+  # The restore drill's stamp ConfigMap (H2.3b), and from H2.3d its CronJob. Its objects live in
+  # `homelab`, which `longhorn` cannot reach on a fresh cluster before step 8 of H1's DR order, so
+  # it is a tag of its own. It depends on `longhorn` for the Longhorn CRDs the CronJob will name.
+  # It prunes, except the stamp ConfigMap, and it is untiered, so `NEVER_SHED` omits it.
+  - name: longhorn-restore-drill
+    platform: k8s
+    owner: flux
+    depends_on: [longhorn]
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
   # the shed set.
