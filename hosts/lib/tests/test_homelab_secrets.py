@@ -250,3 +250,68 @@ def test_the_script_runs_under_the_hosts_python3_with_the_3_12_grammar():
     assert SCRIPT.stat().st_mode & 0o111
     assert parses_under_3_12(SCRIPT.read_text())
     assert not parses_under_3_12(SCRIPT.read_text() + 'label = t"{name}"\n')
+
+
+ENV_TEMPLATE = "A='${a}'\nB='${b}'\n"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["it's", "'", "line1\nline2", "trailing\n", "cr\rhere"],
+    ids=["inner-quote", "lone-quote", "newline", "trailing-newline", "carriage-return"],
+)
+def test_a_dotenv_output_refuses_a_value_with_a_quote_or_line_break(host, bad, capsys):
+    host.decrypts_to(a=bad, b="fine")
+    host.output("compose.env", ENV_TEMPLATE, keys=["a", "b"], format="dotenv")
+    host.output("plain.env", "${b}", keys=["b"])
+
+    assert host.run() == 1
+
+    assert not host.path("/run/homelab-secrets/compose.env").exists()
+    assert host.read("/run/homelab-secrets/plain.env") == "fine"
+    err = capsys.readouterr().err
+    assert "the value of a holds a quote or a line break" in err
+    assert bad.strip() not in err
+
+
+def test_a_dotenv_output_renders_a_value_with_no_quote_or_line_break(host):
+    value = 'p@ss "w0rd" $x #y \\ {z} `t`'
+    host.decrypts_to(a=value, b="fine")
+    host.output("compose.env", ENV_TEMPLATE, keys=["a", "b"], format="dotenv")
+
+    assert host.run() == 0
+    assert host.read("/run/homelab-secrets/compose.env") == f"A='{value}'\nB='fine'\n"
+
+
+def test_an_output_with_no_format_renders_the_same_values_unchecked(host):
+    host.decrypts_to(a="it's\nhere", b="fine")
+    host.output("other.env", ENV_TEMPLATE, keys=["a", "b"])
+
+    assert host.run() == 0
+    assert host.read("/run/homelab-secrets/other.env") == "A='it's\nhere'\nB='fine'\n"
+
+
+def test_the_dotenv_check_covers_only_the_keys_the_output_lists(host):
+    host.decrypts_to(a="fine", b="fine", unrelated="it's")
+    host.output("compose.env", ENV_TEMPLATE, keys=["a", "b"], format="dotenv")
+
+    assert host.run() == 0
+
+
+def test_a_refused_dotenv_value_leaves_the_old_file_in_place(host):
+    host.decrypts_to(a="old", b="fine")
+    host.output("compose.env", ENV_TEMPLATE, keys=["a", "b"], format="dotenv")
+    assert host.run() == 0
+
+    host.decrypts_to(a="new'value", b="fine")
+
+    assert host.run() == 1
+    assert host.read("/run/homelab-secrets/compose.env") == "A='old'\nB='fine'\n"
+
+
+def test_an_unknown_format_makes_the_manifest_invalid(host):
+    host.decrypts_to(a="fine", b="fine")
+    host.output("compose.env", ENV_TEMPLATE, keys=["a", "b"], format="yaml")
+
+    assert host.run() == 1
+    assert host.decrypts() == 0
