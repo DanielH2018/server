@@ -102,6 +102,36 @@ groups:
             {{ $labels.container }} logged {{ $value }} lines matching panic, fatal, traceback
             or out of memory in the last hour, so it may be failing at its job while its pod
             reads Ready. Read that container's log in loki-homelab to see the lines.
+      # The host counterpart of WorkloadLogErrors (#6163): the same pattern over the cluster
+      # hosts' syslog, keyed by the rsyslog program tag that config.alloy.j2's
+      # `loki.process "host"` stage extracts into `program`.
+      #
+      # The threshold is NOT WorkloadLogErrors' 20. Host syslog matches the pattern far less
+      # often, and 20 an hour would never have fired on the data: measured 2026-10-24 over 14
+      # days of daniel-box syslog, the busiest program-hours were `uv` at 12 and 8 (Python
+      # tracebacks from `uv run` crons) and `flock` at 6 and 4 (git's `fatal: unable to
+      # access` during a GitHub outage). daniel-server's syslog held none. `> 3` fires on those
+      # four hours and on none of the scattered single lines. `uv` merges every `uv run` cron
+      # into one key, so the line itself names the script.
+      #
+      # Only `syslog`, and only the cluster hosts. Authlog stays out because sudo's `COMMAND=`
+      # lines echo their arguments, so a `grep fatal` run under sudo would count. daniel-pi's
+      # `pi_health` stream also carries job="syslog" but never passes the stage, so it has no
+      # `program` and the `machine` matcher keeps it out.
+      #
+      # Not shadow: the label exists for a rule that runs beside a Kuma tile, and no Kuma tile
+      # covers host syslog.
+      - alert: HostLogErrors
+        expr: sum by (machine, program) (count_over_time({job="syslog", machine!="daniel-pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [1h])) > 3
+        labels:
+          severity: warning
+          service: '{{ $labels.machine }}'
+        annotations:
+          summary: '{{ $labels.program }} on {{ $labels.machine }} logged more than 3 fatal-pattern lines in an hour.'
+          description: >-
+            {{ $labels.program }} on {{ $labels.machine }} logged {{ $value }} syslog lines
+            matching panic, fatal, traceback or out of memory in the last hour. Read
+            {job="syslog", program="{{ $labels.program }}"} in loki-homelab to see the lines.
       # The update line of each cloudflare-ddns Deployment, ported by M6's batch B7. favonia's
       # image serves no metrics, so the log is the only evidence an update cycle succeeded. Every
       # 5m cycle logs, per domain, either "are already up to date" (a cached or a checked no-op)

@@ -216,6 +216,7 @@ def test_the_consumer_census_finds_its_named_members():
         "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
         "homelab-logs.yaml WorkloadLogErrors",
+        "homelab-logs.yaml HostLogErrors",
         "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent",
         "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent",
     ):
@@ -301,6 +302,41 @@ def test_a_loki_rule_on_an_app_label_is_flagged():
     assert _unknown_labels({"r": 'count_over_time({app="uptime-kuma"}[3h])'}) == {
         "r": ["app"]
     }
+
+
+def _unknown_grouping(exprs: dict[str, str]) -> dict[str, list[str]]:
+    """Each rule's `by (...)` labels that no stream carries.
+
+    A `sum by` on an absent label still fires, with that label empty, so the alert names no
+    program or container and nothing else reads as wrong.
+    """
+    found = {}
+    for name, expr in exprs.items():
+        grouped = {
+            label.strip()
+            for clause in re.findall(r"\bby\s*\(([^)]*)\)", expr)
+            for label in clause.split(",")
+            if label.strip()
+        }
+        if grouped - LOKI_STREAM_LABELS:
+            found[name] = sorted(grouped - LOKI_STREAM_LABELS)
+    return found
+
+
+def test_loki_rules_group_by_stream_labels_is_clean():
+    exprs = _loki_rule_exprs()
+    assert "by (machine, program)" in exprs["homelab-logs.yaml HostLogErrors"], (
+        "HostLogErrors no longer groups by program, so this check no longer reads it"
+    )
+    assert not _unknown_grouping(exprs), (
+        "a Loki rule groups by a label the Alloy streams do not carry, so its alert fires "
+        "with that label empty"
+    )
+
+
+def test_a_loki_rule_grouping_by_an_absent_label_is_flagged():
+    expr = 'sum by (machine, tag) (count_over_time({job="syslog"}[1h])) > 3'
+    assert _unknown_grouping({"r": expr}) == {"r": ["tag"]}
 
 
 def _unknown_machines(exprs: dict[str, str]) -> dict[str, list[str]]:
