@@ -27,7 +27,7 @@
  ".claude/hooks/tests/test_run_hook.py": 0.1,
  ".claude/hooks/tests/test_session_health.py": 0.42,
  ".claude/hooks/tests/test_session_health_contention.py": 0.0,
- ".claude/hooks/tests/test_session_health_deadline.py": 0.21,
+ ".claude/hooks/tests/test_session_health_deadline.py": 0.62,
  ".claude/hooks/tests/test_session_health_fanout.py": 0.05,
  ".claude/hooks/tests/test_session_health_host_independent.py": 0.91,
  ".claude/hooks/tests/test_session_health_instructions.py": 0.16,
