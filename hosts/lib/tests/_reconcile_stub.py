@@ -10,7 +10,8 @@ state.json keys:
     installed: package -> [three-letter dpkg status, version].
     units: unit -> {"load": loaded|masked|not-found, "active": active|inactive|failed,
         "enabled": enabled|disabled|static}. A unit missing here is not loaded.
-    fail: "<verb> <unit>" strings, each a systemctl call that exits 1.
+    fail: "<verb> <unit>" strings, each a systemctl call that exits 1, and "udevadm <subcommand>"
+        strings, each a udevadm call that exits 1.
     owned: paths `dpkg -S` reports a package owns.
     crontabs: user -> crontab text. A user missing here has no crontab.
     effects: "<verb> <unit>" -> {"write": {absolute path: text}, "queue": [unit, ...]}, what a
@@ -204,6 +205,13 @@ def fail2ban_client(state: dict, args: list[str]) -> int:
     return refusing(state, "fail2ban-client")
 
 
+def udevadm(state: dict, args: list[str]) -> int:
+    if f"udevadm {args[0]}" in state["fail"]:
+        print(f"udevadm {args[0]} failed.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def ufw(state: dict, args: list[str]) -> int:
     model = state["ufw"]
     rules = model["rules"]
@@ -283,6 +291,7 @@ HANDLERS = {
     "sshd": sshd,
     "fail2ban-client": fail2ban_client,
     "ufw": ufw,
+    "udevadm": udevadm,
     **arms.HANDLERS,
 }
 

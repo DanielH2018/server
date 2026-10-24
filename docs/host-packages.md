@@ -172,6 +172,16 @@ updater against the real reconcile through a uid mismatch. It proves that `--cle
 keeps the hold while the fault stands, and that installing a version which declares the live uid
 clears it. The commands are the ones in *Clearing a host's hold* (**operator-only**).
 
+## The `udev` arm
+
+Step 5 of reconcile reloads `udev` when a package's rule changes. A package ships a rule as
+`/usr/lib/udev/rules.d/NN-homelab-*.rules`. Reconcile hashes each such file and compares it with
+`udev` in `applied.json`. A rule that is new or whose hash differs runs
+`udevadm control --reload-rules` and then `udevadm trigger --subsystem-match=usb`. A host with no
+such rule, an unchanged rule and a dropped rule make no `udevadm` call. After a drop, a device
+keeps the mode of its last `udev` event until the next event, such as a re-plug, a trigger or a
+reboot. A failed call exits 1 and leaves the old hash, so the next run retries it.
+
 ## Clearing a deployer hold that a failed `homelab_builder` or `gitops_deploy` apply wrote
 
 The GitOps tick applies `homelab_builder` on daniel-box through the setup plane. From PR H3.5a

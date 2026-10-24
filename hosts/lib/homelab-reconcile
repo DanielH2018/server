@@ -29,8 +29,10 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
 `units` names every unit reconcile manages, another homelab package's and another package's
 drop-in target included. `enable_links` names each unit whose enable link the manifest's
 packages ship. `reconcilers` lists the arms the manifest carries state for. The four arms are in
-ARMS, and each section's schema is the docstring of its reconcile_lib module; H4 adds the udev
-reload, so a manifest listing another kind fails the run here. `activations` maps a
+ARMS, and each section's schema is the docstring of its reconcile_lib module, so a manifest
+listing another kind fails the run here. The udev arm (H4.3b1) is not one of them: it hashes the
+package's /usr/lib/udev/rules.d/NN-homelab-*.rules files, as reconcile_lib/udev.py says.
+`activations` maps a
 packaged file to the action step 3b runs when its hash changes (reconcile_lib/activate.py).
 `secrets_inputs_sha256` is present only when the package ships the `secrets-unit` component, and
 every secrets rule below keys on it.
@@ -58,6 +60,7 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "drift": {"<arm>": <items the arm left alone>},
      "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
      "users": {"names": [...]}, "libvirt": {"networks": {...}, "nwfilters": {...}},  (likewise)
+     "udev": {"<rule path>": "<sha256>", ...},     (only while a rule is shipped)
      "secrets_inputs_sha256": "<hex>"}   (only after a run in which homelab-secrets succeeded)
 
 homelab-updater reads only `result` and `last_ok`. Each per-entry item advances only when its
@@ -83,7 +86,7 @@ import sys
 import time
 from pathlib import Path
 
-from reconcile_lib import activate, libvirt, lines, textfile, ufw, users
+from reconcile_lib import activate, libvirt, lines, textfile, udev, ufw, users
 from reconcile_lib.common import ROOT, run, say, systemctl, under_root
 
 LOCK = ROOT / "var/lib/dpkg/lock-frontend"
@@ -651,6 +654,10 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         say(f"the manifest lists reconciler {name!r}, which this version does not have")
         ok = False
     ok = run_arms([name for name in ARMS if name not in EARLY], manifest, prev, arms, drift) and ok
+    udev_ok, udev_state = udev.reconcile(prev.get("udev"))
+    ok = ok and udev_ok
+    if udev_state:
+        arms["udev"] = udev_state
 
     state = {
         "units": units_state,
@@ -727,6 +734,7 @@ def main() -> int:
         "pending",
         "drift",
         "libvirt",
+        "udev",
         "ufw",
         "users",
     )
