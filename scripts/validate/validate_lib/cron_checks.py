@@ -122,7 +122,7 @@ def cron_kubeconfig_error(
             "KUBECONFIG — cron does not inherit one, and k3s.yaml is root-only, so this "
             "reports an EMPTY cluster rather than failing. Set KUBECONFIG in the script, in "
             "the cron job: line, or via env: yes on the cron task — or schedule it as root "
-            "(see longhorn-restore-drill.sh.j2)."
+            "(see etcd-snapshot-offbox.sh.j2)."
         )
     return None
 
@@ -165,6 +165,6 @@ def cron_uv_interpreter_error(
             "exporting UV_PYTHON_INSTALL_DIR — the pinned interpreter lives under the "
             "connection user's HOME, so root's uv finds none and may not fetch one. Add "
             '`export UV_PYTHON_INSTALL_DIR="/home/{{ sys_user }}/.local/share/uv/python"` '
-            "above the uv run line (see manifest-prune-check.sh.j2)."
+            "above the uv run line (see etcd-snapshot-offbox.sh.j2)."
         )
     return None

@@ -28,14 +28,20 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
     active, is stopped with no reboot (H3.8b's recovery disarm).
 
 A last case installs a fixture package that carries `secrets-unit` with a ciphertext encrypted to
-a throwaway age key, and runs `homelab-secrets` (H4.1c; `validate_lib/secrets_case.py`).
+a throwaway age key, and runs `homelab-secrets` (H4.1c; `validate_lib/secrets_case.py`). Another
+installs a package that owns a conffile, then the `conffile` fixture, whose line-arm edit lands in
+that conffile, and upgrades the owner twice under `--force-confold`: once with its conffile
+unchanged and once changed. Each upgrade records whether dpkg kept the local file or held the
+package back, and the line must survive to the next reconcile (#6088; `validate_lib/conffile_case.py`).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
 repository and none named after daniel-box's address.
 
 The real homelab-updater comes from the job's base and head builds. The by-hand and disarm
-cases install the head build of the real homelab-daniel-pi, `hosts/daniel-pi/`. Every other case needs a unit,
+cases install the head build of the real homelab-daniel-pi, `hosts/daniel-pi/`, rebuilt with a
+ciphertext encrypted to a throwaway age key in the container (`secrets_case.seal_pi`), because the
+real one ships `secrets-unit` and only the Pi's own key decrypts the operator's file. Every other case needs a unit,
 a file and a payload the real package does not ship, so it installs a fixture homelab-daniel-pi:
 `hosts/lib/tests/container/fixture/`'s specs, rendered by the real renderer with the real
 reconcile component and maintainer scripts.
@@ -75,7 +81,7 @@ from validate.validate_lib.host_container import (
     list_problems,
     release_fetched,
 )
-from validate.validate_lib import secrets_case
+from validate.validate_lib import conffile_case, secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -129,13 +135,13 @@ class Cases:
             path.mkdir(parents=True)
         for side in ("base", "head"):
             (deb,) = (debs / side).glob(f"{UPDATER}_*.deb")
-            self._add(f"updater-{side}", deb)
+            self.add(f"updater-{side}", deb)
         # The base is master before H3.6 or after it, so only the head build is sure to hold
         # the real Pi package. The fixture's head build carries the same file name.
         (deb,) = (debs / "head").glob(f"{HOST_PKG}_*.deb")
-        self._add("pi-head", deb, name=f"real-{deb.name}")
+        self.add("pi-head", deb, name=f"real-{deb.name}")
         for deb in sorted((debs / "head").glob("homelab-tools_*_amd64.deb")):
-            self._add("tools-head", deb)
+            self.add("tools-head", deb)
             self.tools = ("tools-head",)
         base, head = self.versions["updater-base"], self.versions["updater-head"]
         if not newer(head, base):
@@ -151,26 +157,26 @@ class Cases:
         }
         for variant, version in fixture_versions.items():
             rendered = render_fixture(variant, build_root / variant)
-            self._add(
+            self.add(
                 f"host-{variant}",
                 build(rendered, version, build_root / f"{variant}-deb"),
             )
         rendered = updater_variant(render / "head", build_root / "updater-unit")
-        self._add(
+        self.add(
             "updater-unit",
             build(rendered, f"{head}.1", build_root / "updater-unit-deb"),
         )
         rendered = pi_dropin_variant(render / "head", build_root / "pi-dropin")
-        self._add(
+        self.add(
             "pi-dropin", build(rendered, f"{head}.3", build_root / "pi-dropin-deb")
         )
         rendered = pi_disarmed_variant(build_root / "pi-disarmed")
-        self._add(
+        self.add(
             "pi-disarmed",
             build(rendered, f"{head}.4", build_root / "pi-disarmed-deb"),
         )
 
-    def _add(self, label: str, deb: Path, name: str | None = None) -> None:
+    def add(self, label: str, deb: Path, name: str | None = None) -> None:
         target = self.work / "debs" / (name or deb.name)
         shutil.copy(deb, target)
         self.debs[label] = target
@@ -457,6 +463,7 @@ class Cases:
         timer = f"{UPDATER}.timer"
 
         def body() -> None:
+            secrets_case.seal_pi(self, c)
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
                 for label in ("updater-head", "pi-head", *self.tools)
@@ -505,6 +512,7 @@ class Cases:
             return
 
         def body() -> None:
+            secrets_case.seal_pi(self, c)
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
                 for label in ("updater-head", "pi-head", *self.tools)
@@ -568,6 +576,7 @@ def main(argv: list[str] | None = None) -> int:
     cases.by_hand()
     cases.disarm()
     secrets_case.run(cases)
+    conffile_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

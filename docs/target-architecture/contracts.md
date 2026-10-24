@@ -331,9 +331,10 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   D2's `settle` is unchanged. D5 *A reset input* has the argument and the one residual race
   under the revert rule (D5).
 - **Clearing a hold.** Clearing `DEPLOY_HOLD` means setting it back to `none` with
-  `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Clearing by hand is
-  **operator-only**, and an agent hook denies that command (D1). *The revert rule* below is
-  the one exception.
+  `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Clearing by hand is the
+  operator's decision. An agent runs that command only through the permission prompt the
+  agent hook raises for it, so the operator approves each clear (D1). *The revert rule* below
+  is the one exception.
 - **The revert rule.** The operator adopted this rule on 2026-10-16, with the `soak`
   exclusion below (D5 Open question 17).
     - While `DEPLOY_HOLD` reads `<T> failed=<names>`, `decide` may promote a candidate U that

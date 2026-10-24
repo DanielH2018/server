@@ -122,7 +122,9 @@ qbittorrent_k8s_prefs_check_mem_limit: 128Mi
 qbittorrent_k8s_prefs_check_cpu_request: "10m"
 qbittorrent_k8s_prefs_check_mem_request: 32Mi
 
-# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+# The claim the renderer emits for this role. The qbittorrent Kustomization applies it after the
+# qbittorrent-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply
+# snapshot.
 # media-data is not here: it is the shared media claim, mounted by this role and owned elsewhere.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ qbittorrent_k8s_claim }}"

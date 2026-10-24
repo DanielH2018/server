@@ -177,6 +177,21 @@
     mode: "0755"
   become: true
 
+- name: Install the SUC rehearsal mode's helper and guest-side script
+  tags: [hypervisor-etcd-drill]
+  # Used only by `etcd-restore-drill-vm --rehearse-suc`, which an operator runs by hand. The cron
+  # never reads either file.
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: suc_rehearsal.py, dest: "{{ hypervisor_suc_rehearsal_helper_path }}" }
+    - { src: suc-rehearsal-guest-run.sh, dest: "{{ hypervisor_suc_rehearsal_guest_script_path }}" }
+  become: true
+
 - name: Install the drill orchestrator
   tags: [hypervisor-etcd-drill]
   ansible.builtin.template:

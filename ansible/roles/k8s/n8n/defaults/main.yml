@@ -52,7 +52,7 @@ n8n_k8s_files_claim: n8n-files
 n8n_k8s_files_storage_class: longhorn
 n8n_k8s_files_size: 1Gi
 
-# The claims k8s/manifests renders and applies for this role, ahead of the workload.
+# The claims the renderer emits for this role, which the n8n Kustomization applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ n8n_k8s_claim }}"
     storage_class: "{{ n8n_k8s_storage_class }}"

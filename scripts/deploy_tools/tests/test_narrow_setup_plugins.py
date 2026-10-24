@@ -106,23 +106,9 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
 @pytest.mark.parametrize(
     ("role", "plugin", "tags"),
     [
-        # `longhorn_groups.py` is `k3s`'s remaining plugin since H1.7a: the tier filters moved to
-        # `longhorn-reconcile`, so `service_tier.py` is no longer a `k3s` caller. The tags are the
-        # readers of `longhorn_backup_name`. H1.7b deleted the guard-map instances and the tasks
-        # that carried `longhorn`, `longhorn_backup` and `longhorn_r2`, so the host crons' tags
-        # are what remain.
-        (
-            "k3s",
-            "longhorn_groups.py",
-            {
-                "backup-health",
-                "disk-health",
-                "etcd-snapshot",
-                "live-drift",
-                "manifest-prune",
-                "release-staleness",
-            },
-        ),
+        # `longhorn_groups.py` had one `k3s` caller left after H1.7a, the restore drill's
+        # `longhorn_backup_name` calls. H2.3d moved the drill to its own Flux role, so no setup
+        # role calls a Longhorn filter and this walk keeps one named caller.
         ("gitops_deploy", "k8s_autodeploy.py", {"gitops-deploy-service"}),
     ],
 )

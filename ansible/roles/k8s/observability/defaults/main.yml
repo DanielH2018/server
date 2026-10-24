@@ -23,6 +23,20 @@ observability_k8s_alertmanager_image: prom/alertmanager:v0.34.1@sha256:e9733bafb
 # Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds
 # only preferences, version history and annotations. Recovery is deleting the PVC.
 observability_k8s_grafana_image: grafana/grafana:13.2.3@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
+
+# The budget of the observability-prepull Kustomization, whose Job pulls Grafana's image onto
+# its node before the observability Kustomization applies
+# (scripts/renderer/renderer_lib/prepull.py). Grafana is `Recreate`, so without it the
+# dashboards are down for the whole pull. MEASURED 2026-10-22 (#5867): the pinned amd64 image is
+# 482.3 MB from Docker Hub, which served a 420 MB layer at 23.5-25.2 MB/s on daniel-box, about
+# 20s for the image. 600s covers it down to 0.8 MB/s. The Job has no deadline, so a pull slower
+# still costs that revision its verdict, the Job keeps pulling, and Flux applies observability
+# on a later retry.
+flux_prepull_timeout: 600s  # noqa var-naming[no-role-prefix]
+# The Job pulls for Grafana alone (#5875). The role's other images are under 115 MB, their
+# Deployments pin no node, and grafana/loki, grafana/tempo and kube-state-metrics carry no `sh`
+# for the Job's no-op script, so a pre-pull of the whole role could neither place nor run.
+flux_prepull_workloads: [grafana]  # noqa var-naming[no-role-prefix]
 # Distinct from the metrics-server k3s already bundles: that serves the
 # resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
@@ -318,6 +332,7 @@ observability_rule_groups:
   - extra-probes
   - pod-producers
   - pods
+  - k3s-upgrade
 
 # The hosts whose homelab-updater must report, each with the scrape job that reads its node
 # exporter and the age in seconds past which its last successful update pages. host-checks.yaml

@@ -165,13 +165,15 @@ Say which of these applies, then stop:
 - A change in one of the bring-up playbooks — `bootstrap.yml`, `k3s-bringup.yml`,
   `initial_setup.yml`, the list
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
-  sits in the `local..origin` range. The deployer applies every other broad
-  change itself, but not the bring-up playbooks: those run by hand by construction. If it is
-  another session's, clearing it means applying their change; name it and stop.
+  sits in the `local..origin` range, and it is another session's. The deployer applies every
+  other broad change itself, but not the bring-up playbooks: those run by hand by
+  construction. Clearing it means applying their change; name it and stop.
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer
-  cannot apply. The role needs its playbook by hand, then `gitops_state.py clear-owed manual_plane
-  <role>`; the `land-after-merge` skill has the `--applied` form for a narrowed apply. Another
-  session's is theirs to clear.
+  cannot apply, and another session's PR created it. That line is theirs to clear. When your
+  own merged PR created the line, do not stop: run the playbook with exactly the tags the
+  line owes, from a tree whose `HEAD` is `origin/master`, then `gitops_state.py clear-owed
+  manual_plane <role>`. The operator granted that standing clearance on 2026-10-24. The
+  `land-after-merge` skill has the `--applied` form for a narrowed apply.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.

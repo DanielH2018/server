@@ -34,7 +34,14 @@ from pathlib import Path
 
 from validate import host_packages
 from validate.validate_lib.host_container import CaseFailed, Container, expect
-from validate.validate_lib.host_fixtures import HOST, build, render_fixture
+from renderer.renderer_lib import host as host_mode
+from validate.validate_lib.host_fixtures import (
+    HOST,
+    build,
+    pi_disarmed_variant,
+    pi_dropin_variant,
+    render_fixture,
+)
 
 AGE_KEY = "/etc/homelab/age.key"
 SOPS = "/usr/lib/homelab/bin/sops"
@@ -86,6 +93,47 @@ def encrypt(c: Container, values: dict[str, str]) -> str:
         f" --output-type yaml {HOST}.yaml > {HOST}.sops.yaml"
     )
     return c.ok(f"cat /tmp/seal/{HOST}.sops.yaml")
+
+
+def seal_pi(cases, c: Container, seal=None, make_deb=None) -> None:
+    """Rebuild the real Pi package and its two variants with a ciphertext `c` can decrypt.
+
+    The real package ships `secrets-unit` and the operator's ciphertext, which only the Pi's key
+    decrypts. Reconcile exits 1 when `homelab-secrets` cannot run, so a case that installs the
+    real package needs the same treatment the `sealed` fixture gets: a throwaway age key in `c`,
+    and a ciphertext encrypted to it for the real package's credentials, with fake values.
+    Only the ciphertext and the manifest hash derived from it differ from the real build.
+    `cases.debs` then names the sealed builds, at the versions of the real ones.
+
+    `seal` and `make_deb` default to `encrypt` and `build`; a test passes stand-ins.
+    """
+    seal, make_deb = seal or encrypt, make_deb or build
+    if not cases.tools:
+        raise CaseFailed(
+            "host_packages built no homelab-tools, so the container has no sops"
+        )
+    c.ok(
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y"
+        f" /srv/debs/{cases.debs[cases.tools[0]].name}"
+    )
+    c.ok(f"install -d -m 0755 /etc/homelab && age-keygen -o {AGE_KEY}")
+    credentials = host_mode.render_host(HOST).credentials
+    expect(bool(credentials), "the real Pi package lists no credential to seal")
+    sealed = seal(c, {key: f"fixture-only-{key}" for key in credentials})
+    root = cases.work / "build" / f"pi-sealed-{c.name}"
+    seal_dir = root / "sops"
+    seal_dir.mkdir(parents=True)
+    (seal_dir / f"{HOST}.sops.yaml").write_text(sealed)
+    head = root / "head"
+    host_mode.write_packages([host_mode.render_host(HOST, sops_dir=seal_dir)], head)
+    builds = {
+        "pi-head": head / "hosts" / HOST,
+        "pi-dropin": pi_dropin_variant(head, root / "dropin"),
+        "pi-disarmed": pi_disarmed_variant(root / "disarmed", sops_dir=seal_dir),
+    }
+    for label, directory in builds.items():
+        deb = make_deb(directory, cases.versions[label], root / f"{label}-deb")
+        cases.add(label, deb, name=f"sealed-{c.name}-{deb.name}")
 
 
 def _body(cases, c: Container) -> None:

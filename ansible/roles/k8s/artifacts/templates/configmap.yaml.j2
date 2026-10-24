@@ -33,7 +33,8 @@
 
   The names the indexer tags documents with are built from the live inventory rather than
   hand-listed, so a service added to either host starts being recognised on the next deploy.
-  BOTH hosts: daniel-box alone would miss the Pi's Docker services, and artifacts discussing
+  BOTH hosts, and both of the Pi's lists (containers_list and compose_services): daniel-box
+  alone would miss the Pi's Docker services, and artifacts discussing
   wg-easy or glances are exactly the ones a daniel-box-only list cannot tag. Platform
   components (Longhorn, k3s) carry no containers_list entry at all, and retired names are
   added on top — the oldest artifacts are about kopia, portainer and watchtower, which no
@@ -49,7 +50,7 @@ data:
   known_services.json: |
     {{ (
          (containers_list | entry_names)
-         + (hostvars['daniel-pi'].containers_list | default([]) | entry_names)
+         + ((hostvars['daniel-pi'].containers_list | entry_names) + (hostvars['daniel-pi'].compose_services | entry_names))
          + artifacts_platform_services
          + artifacts_retired_services
        ) | unique | sort | tojson }}

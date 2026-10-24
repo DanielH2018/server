@@ -9,6 +9,7 @@ Run: uv run pytest scripts/validate/tests/test_secrets_case.py
 
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 from validate.validate_lib import secrets_case as case
@@ -71,3 +72,68 @@ def test_a_manifest_that_differs_beyond_the_hash_is_flagged(renders):
     manifest["units"]["homelab-extra.service"] = {}
     path.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
     assert any("beyond" in p for p in case.compare_builds(real, fixture))
+
+
+class _Container(case.Container):
+    """A container that runs nothing and records the scripts it was asked to run."""
+
+    def __init__(self):
+        super().__init__("image", "homelab-host-test-stub", Path("/nonexistent"))
+        self.commands = []
+
+    def ok(self, script):
+        self.commands.append(script)
+        return ""
+
+
+class _Cases:
+    """The part of `host_package_cases.Cases` that `seal_pi` reads and writes."""
+
+    def __init__(self, tmp_path, tools=("tools-head",)):
+        self.work = tmp_path
+        self.tools = tools
+        self.debs = {"tools-head": Path("/x/homelab-tools_1_amd64.deb")}
+        self.versions = {"pi-head": "1.0", "pi-dropin": "1.0.3", "pi-disarmed": "1.0.4"}
+        self.added = {}
+
+    def add(self, label, deb, name=None):
+        self.added[label] = (deb, name)
+
+
+def test_seal_pi_rebuilds_the_real_pi_package_and_both_variants_with_the_sealed_ciphertext(
+    tmp_path,
+):
+    built = {}
+
+    def fake_build(directory, version, out):
+        built[version] = directory
+        return out / f"{version}.deb"
+
+    c, cases = _Container(), _Cases(tmp_path)
+
+    case.seal_pi(
+        cases,
+        c,
+        seal=lambda c, values: f"sealed:{sorted(values)}\n",
+        make_deb=fake_build,
+    )
+
+    assert any("age-keygen -o" in command for command in c.commands)
+    assert any("homelab-tools_1_amd64.deb" in command for command in c.commands)
+    assert set(cases.added) == {"pi-head", "pi-dropin", "pi-disarmed"}
+    assert all(
+        name.startswith("sealed-homelab-host-test-stub-")
+        for _, name in cases.added.values()
+    )
+    # Every build, at the real build's version, ships the sealed ciphertext for the two tokens.
+    assert set(built) == {"1.0", "1.0.3", "1.0.4"}
+    for directory in built.values():
+        shipped = directory / "root/usr/lib/homelab/secrets/daniel-pi.sops.yaml"
+        assert shipped.read_text() == (
+            "sealed:['pi_recovery_push_token', 'pi_sd_health_push_token']\n"
+        )
+
+
+def test_seal_pi_refuses_a_job_that_built_no_homelab_tools(tmp_path):
+    with pytest.raises(case.CaseFailed, match="no homelab-tools"):
+        case.seal_pi(_Cases(tmp_path, tools=()), _Container())

@@ -2,21 +2,10 @@
 # Pinned upstream versions. Bump deliberately — Longhorn has version-to-version
 # upgrade constraints and does not support arbitrary version skips.
 #
-# k3s is pinned because the install task re-runs the installer whenever k3s_server_args
-# changes, and get.k3s.io installs the latest stable unless told otherwise — an unpinned
-# reconfigure would silently upgrade the control plane as a side effect of editing a flag.
-#
-# The `+k3sN` suffix is semver build metadata, which Renovate ignores when comparing: an
-# upstream bump (v1.36.2 -> v1.37.0) is offered, a same-version re-tag (+k3s1 -> +k3s2) is not.
-# renovate: datasource=github-releases depName=k3s-io/k3s
-k3s_version: v1.37.1+k3s1
-# The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
-# can differ from the tag's and moves with no signal, and the script runs as root on both
-# nodes. Renovate bumps k3s_version through the annotation above; the sha256 is a MANUAL
-# finish on that PR (same class as sops_setup's binary):
-#   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
-k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
-k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
+# The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) is the
+# `system-upgrade` role's (roles/k8s/system-upgrade/defaults/main.yml, H6.1b), because that role
+# drives the SUC Plans that upgrade k3s. tasks/server.yml and tasks/agent.yml read it with
+# `include_vars` for the fresh-host install.
 # The Longhorn pin, k3s_longhorn_version, is the `longhorn` role's (roles/k8s/longhorn/defaults/main.yml).
 
 # Where k3s's own stdout/stderr goes on both node types (tasks/unit-logging.yml). journald
@@ -278,83 +267,19 @@ k3s_audit_log_maxsize: 100     # MiB before rotating
 # allowScheduling:false and asserts zero replicas landed.
 k3s_agent_longhorn_scheduling: true
 
-# Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
-# watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
+# The restore drill itself is the `longhorn-restore-drill` Flux role's (H2.3d): its schedule, its
+# volume pin, its size cap, its content floor, its timeout, its probe image and its empty-volume
+# waiver are that role's defaults, and no `setup/` file reads them. What stays here is what a host
+# reader reads: the namespace, the stamp directory, and the two bounds of backup health's checks
+# 7 and 8 further down.
 #
-# ROTATES over every volume declared for backup — one per night, least-recently-attempted first,
-# which is a full cycle in as many days as there are candidates. Empty means
-# rotate; setting this to a PVC name pins the drill to that one volume, which is a debugging
-# lever and not the normal mode. To drill one volume ONCE, do not set this: pass the PVC to the
-# script (`sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>`, or RESTORE_DRILL_PIN=<pvc>),
-# which overrides this value for that run only.
-#
-# Rotation is affordable because of the block size (`k3s_longhorn_backup_block_size`, in the `longhorn`
-# role's defaults): the whole B2
-# candidate set is ~250 blocks, so one night's drill costs 4-85 Class B (a GET per block) against
-# the 2,500/day cap, and a 25-day cycle costs less than a single day's measured baseline of
-# 253-363.
-#
-# R2 volumes are IN the rotation. Drilling an R2 volume proves Cloudflare and says nothing about
-# B2, the store under a transaction cap, but each target is proven on the nights its own volumes
-# come up. R2 restores are free (10M Class B/month, zero egress), so those four volumes cost
-# nothing on the axis that is scarce.
-k3s_longhorn_restore_drill_pvc: ""
-# Two readers. The drill falls back to it for a volume whose kubernetesStatus carries no
-# namespace; the rotation reads the namespace off each volume, because candidates are not all in
-# one place. Backup health's checks 7 and 8, the Longhorn upgrade gate and the docs state page read
-# the drill's stamp ConfigMap, `longhorn-restore-drill-stamps`, in this namespace.
+# The namespace the drill's stamp ConfigMap, `longhorn-restore-drill-stamps`, lives in. Backup
+# health's checks 7 and 8, the Longhorn upgrade gate and the docs state page read the ConfigMap in
+# this namespace. It mirrors the role's `longhorn_drill_namespace`, which the drill itself reads,
+# and ansible/tests/k8s/test_restore_drill_stamps.py holds the pair equal.
 k3s_longhorn_restore_drill_namespace: homelab
-# Skip a candidate whose actualSize exceeds this. Bounds one night's egress and wall-clock so a
-# slow restore cannot read as a failed one. A backed-up volume excluded here is undrilled, and the
-# drill publishes it to `excluded_oversize` so the backup heartbeat pages naming it. Raise
-# this and the timeout below together.
-# DECIDED: 4 GiB, raised from 2 GiB on 2026-08-24. The old value's rationale said it "excludes
-# NOTHING today — the largest candidate is valheim-config at ~1.3 GB", and both halves had gone
-# wrong: valheim-config was 2.83 GiB of actualSize and HAD been excluded (25 volumes declared
-# backed-up, 24 in the candidate file), and the 1.3 GB figure was its B2-STORED size while this cap
-# is applied to actualSize — the wrong quantity was compared when the cap was first set. Compare
-# `actualSize` from the Volume CR, never the stored-block total from `probe.py b2-longhorn`.
-# Cost of the raise is ~100 Class B GETs and ~1.34 GB egress once per 25-night rotation.
-k3s_longhorn_restore_drill_max_actual_bytes: 4294967296
-# A restored volume that mounts but is EMPTY is the failure mode this floor catches: an empty
-# filesystem passes every check that only asks whether the mount succeeded. Deliberately low —
-# this asserts "real data came back", not any particular size, so it does not need revisiting
-# when the service grows or shrinks. tdarr-configs holds five JSON files, 1007 bytes in total,
-# the whole of Tdarr's /app/configs, and must pass. The drill's `files > 0`
-# check is what rejects an empty mount; this floor only has to reject files that hold nothing.
-k3s_longhorn_restore_drill_min_bytes: 1
-# PVCs whose restore legitimately comes back with no files, so the two content assertions above
-# are waived for them and nothing else is. Everything the drill can still prove for such a volume
-# it does prove: the restore completes, the probe pod mounts it and reports. n8n-files is here
-# because n8n writes to /files only when a workflow does and none has — its actualSize has stayed
-# within 51.05-51.77 MB (bare ext4 metadata on a 1 GiB volume), and the drill restores it to
-# files=0.
-# A volume that starts holding data DOES leave the waiver behind, but the drill no longer depends
-# on anyone noticing: the ceiling below withdraws it. Remove the name anyway once that happens —
-# the list is a claim about the volume, and the waiver is dead weight once the content assertions
-# can pass.
-k3s_longhorn_restore_drill_empty_ok_pvcs:
-  - n8n-files
-# The waiver above applies only while the SOURCE volume's actualSize stays under this. Without
-# the ceiling the waiver applies by name alone, whatever the volume held, so an empty restore of
-# a volume that had filled up would still stamp success and check 8 would read it as
-# restore-proven.
-# 60 MiB: the recorded bare-ext4 band for the one declared volume is 51.05-51.77 MB, so this
-# clears the observed noise by ~11 MB while withdrawing the waiver
-# from anything that could plausibly be real data. Raising it widens the band of real content a
-# `files=0` restore would still be waived for, which is the whole thing this bounds.
-k3s_longhorn_restore_drill_empty_ok_max_actual_bytes: 62914560
-k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
-# A drill restores 51 MB in ~21s and the rotation admits volumes 25x that size: a slow restore
-# is not itself a failure, but a hung one must not leave a
-# Volume CR attached forever, and a timeout fires as a restore failure that nothing distinguishes
-# from a real one. Keep this above what k3s_longhorn_restore_drill_max_actual_bytes can take.
-# DECIDED: 2700s, raised from 1800s with the cap on 2026-08-24 — and this is NOT free to raise
-# further. The 04:10 cron is placed to clear the 05:15 manifest-prune window, which would otherwise
-# see the drill's transient restore-drill-* objects, so the timeout ceiling is 05:15 minus 04:10
-# minus a margin. 2700s ends by 04:55. A larger cap therefore cannot simply buy more time here:
-# past ~3900s the two windows collide and the cron must move first.
-k3s_longhorn_restore_drill_timeout_s: 2700
+# The host directory the drill kept its stamps in before H2.3c. Readers fall back to it while the
+# ConfigMap holds no `last-success`; H2.3f deletes the key, the fallback and the directory.
 k3s_longhorn_restore_drill_stamp_dir: /var/lib/longhorn-restore-drill
 
 # Where the trim script and the B2-accounting cron line touch a stamp before their work runs, owned by
@@ -362,10 +287,6 @@ k3s_longhorn_restore_drill_stamp_dir: /var/lib/longhorn-restore-drill
 # the stamps to tell "the cron fired and its run failed" from "the cron stopped firing",
 # which the /etc/cron.d stat cannot: initial_setup hardens that directory to 0700 root (#3677).
 k3s_cron_fired_stamp_dir: /var/lib/longhorn-cron-fired
-# 04:10 nightly: after the daily tier's 03:30 run and clear of every weekly shard's 04:30, so the
-# drill never contends with a backup in flight. Also clear of the 05:15 manifest-prune window,
-# which would otherwise see the drill's transient restore-drill-* objects.
-k3s_longhorn_restore_drill_cron: "10 4 * * *"
 # How stale the drill's last success may be before the heartbeat calls it out. Nightly cadence, so
 # this allows two consecutive failed or skipped nights — short enough that a drill which has
 # silently stopped is noticed within the week, long enough not to page on a single bad night.
@@ -851,11 +772,6 @@ k3s_render_stamp_groups:
       # what makes this group eligible for a versioned release at all — see release_bin.yml's
       # header.
       - ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2
-      # Longhorn restore drill. Check 7 (manifest-prune-check.sh) reads a stamp only this
-      # script writes, so it must ship under the same tag as the backup-plane heartbeat above —
-      # deploying one without the other either installs a drill nothing watches or leaves
-      # check 7 paging for a drill that was never installed.
-      - ansible/roles/setup/k3s/templates/longhorn-restore-drill.sh.j2
       # Longhorn filesystem-trim sweep. Runs as the sys_user through the read-only kubeconfig:
       # it reads volume state with kubectl and issues the trim through the longhorn-backend
       # API, which needs no Kubernetes write.

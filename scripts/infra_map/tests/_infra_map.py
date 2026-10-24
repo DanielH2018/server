@@ -31,6 +31,11 @@ def docker_host(containers_list):
     return {"server_ip": "10.0.0.161", "containers_list": containers_list}
 
 
+def pi_host(containers_list, compose_services=()):
+    """daniel-pi's host_vars, which carry both service keys (H5)."""
+    return {**docker_host(containers_list), "compose_services": list(compose_services)}
+
+
 def live_ok(data):
     return {"ok": True, "data": data, "error": ""}
 
@@ -100,7 +105,7 @@ def model_for(live, cluster=None):
             [{"name": "traefik", "platform": "k8s", "port": 8080}]
         ),
         "daniel-server": docker_host([]),
-        "daniel-pi": docker_host([{"name": "sonarr", "port": 8989}]),
+        "daniel-pi": pi_host([{"name": "sonarr", "port": 8989}]),
     }
     return g.build_model(
         GLOBALS, host_vars, live, "2026-08-07 03:00 CDT", ROLES, cluster

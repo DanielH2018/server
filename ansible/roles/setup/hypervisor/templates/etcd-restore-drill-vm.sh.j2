@@ -3,7 +3,9 @@
 # Rendered by roles/setup/hypervisor onto daniel-server; scheduled by the cron in etcd_drill.yml.
 #
 # Usage: etcd-restore-drill-vm.sh [-h|--help]
-# Takes no arguments. Root cron job "Full etcd restore drill in a throwaway guest" (cron file
+#        etcd-restore-drill-vm.sh --rehearse-suc --repo DIR --rendered DIR --expect upgrade|red
+#                                 [--guest-version VERSION] [--plan NAME]
+# With no arguments it is the monthly drill. Root cron job "Full etcd restore drill in a throwaway guest" (cron file
 # etcd-restore-drill-vm, schedule etcd_drill_full_cron) runs it on daniel-server and appends its
 # output to cron.log in the drill log directory. Running it by hand starts a real guest and a real
 # restore. Exit 0 = the drill passed; the evidence of each run is under LOG_ROOT/<utc-run-id>/.
@@ -35,11 +37,32 @@
 # it; the Kuma message and the syslog line say which. Each verdict that goes to Kuma is also written
 # to $TEXTFILE_DIR/<etcd-restore-drill-vm|etcd-restore-drill-egress-fence>.prom for node_exporter's
 # textfile collector, before its push (M6 batch B4; rules in other-setup-checks.yaml run in shadow).
+#
+# --rehearse-suc (H6.1b2) is the operator's rehearsal of the system-upgrade Plan, never scheduled.
+# It builds the same guest behind the same fence, installs k3s at --guest-version (default: the
+# repo's k3s pin) and applies the system-upgrade bundle rendered at --rendered (`homelab_render.py
+# cluster --out DIR --role flux --role system-upgrade`) through Flux from a registry inside the
+# guest, with --repo's checkout supplying the pins. --expect upgrade passes when the Plan moves the
+# guest to its version and the Kustomization reads Ready; --expect red passes when the Plan's Job
+# fails and the Kustomization is not Ready. The guest is handed no token and no R2 credential, and
+# the run writes no stamp, no textfile and no Kuma push, so the monthly drill's evidence is
+# untouched. docs/hypervisor-libvirt-internals.md has the long form.
 set -uo pipefail
 
-for arg in "$@"; do
-  case "$arg" in
+REHEARSE=0
+RH_REPO="" RH_RENDERED="" RH_EXPECT="" RH_VERSION="" RH_PLAN=k3s-server
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+    --rehearse-suc) REHEARSE=1; shift ;;
+    --repo | --rendered | --expect | --guest-version | --plan)
+      [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }
+      case "$1" in
+        --repo) RH_REPO="$2" ;; --rendered) RH_RENDERED="$2" ;; --expect) RH_EXPECT="$2" ;;
+        --guest-version) RH_VERSION="$2" ;; --plan) RH_PLAN="$2" ;;
+      esac
+      shift 2 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
@@ -78,6 +101,13 @@ S3_ENV="{{ hypervisor_etcd_drill_s3_env }}"
 AGENT_ENV=/etc/systemd/system/k3s-agent.service.env
 DRILL_SCRIPT="{{ hypervisor_etcd_drill_script_path }}"
 GUEST_RUN_SCRIPT="{{ hypervisor_etcd_drill_guest_script_path }}"
+# The rehearsal mode's two files: the host-side helper and the guest-side script.
+SUC_HELPER="{{ hypervisor_suc_rehearsal_helper_path }}"
+SUC_GUEST_SCRIPT="{{ hypervisor_suc_rehearsal_guest_script_path }}"
+# How long the Plan may take to reach the verdict (a server upgrade, about ten minutes, plus the
+# pulls), and how often the verdict is read. Polled in short ssh calls, never one held session.
+RH_DEADLINE="{{ hypervisor_suc_rehearsal_deadline }}"
+RH_POLL=15
 STAMP_DIR="{{ hypervisor_etcd_drill_stamp_dir }}"
 LOG_ROOT="{{ hypervisor_etcd_drill_log_dir }}"
 LOG_RETENTION_DAYS="{{ hypervisor_etcd_drill_log_retention_days }}"
@@ -116,6 +146,12 @@ PUSH_TOKEN="$ETCD_DRILL_FULL_PUSH_TOKEN"
 # The fence leg reports to a tile of its own, so an unproven range alarms as an unproven range
 # rather than riding along in the message of a passing drill push. See report_fence.
 FENCE_PUSH_TOKEN="$ETCD_DRILL_FENCE_PUSH_TOKEN"
+# DECIDED: a rehearsal pushes to neither Kuma tile, writes no textfile verdict and no stamp. Both
+# tiles and the stamp answer "did the MONTHLY drill run", and a rehearsal that refreshed them would
+# hide a month the cron skipped. Its syslog lines carry their own tag for the same reason.
+if [[ "$REHEARSE" == 1 ]]; then
+  PUSH_TOKEN="" FENCE_PUSH_TOKEN="" TAG=etcd-drill-suc-rehearsal
+fi
 
 VIRSH=(virsh --connect qemu:///system)
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -129,6 +165,7 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 # for over a minute and must not age the file. A failed write logs and the run goes on.
 write_verdict() {
   local check="$1" status="$2" success=0
+  [[ "${REHEARSE:-0}" == 1 ]] && return 0
   [[ "$status" == "up" ]] && success=1
   write_check_textfile "$check" "$success" "$(date +%s)" "$DEADLINE_S" \
     || logger -t "$TAG" "textfile write to ${TEXTFILE_DIR} failed (${check} status=${status})"
@@ -406,44 +443,10 @@ with the internet control target reachable. See $fence_log"
   fi
 }
 
-main() {
-  if [[ "$ARMED" != "1" ]]; then
-    logger -t "$TAG" "disarmed (hypervisor_etcd_drill_armed=false); nothing run"
-    exit 0
-  fi
-
-  exec 9>"$LOCK"
-  flock -n 9 || fail "another run holds $LOCK"
-
-  # Group-readable by the deploy user: the evidence carries no credential by construction (the
-  # token and the R2 env never leave the guest), and a run is diagnosed from a non-root shell.
-  install -d -m 750 -g "{{ sys_user }}" "$LOG_DIR"
-  # From here on the orchestrator's own lines go into the run's evidence dir, so they are pruned
-  # with it. cron.log (the cron's redirect) then holds only what escapes before this point.
-  exec >>"$LOG_DIR/orchestrator.log" 2>&1
-  prune_old_evidence
-
-  # Preflight: everything the guest will be handed must exist HERE first, so a missing piece
-  # fails before a guest is built rather than half-way through a run.
-  [[ -r "$XML" ]]              || fail "guest definition $XML missing — run initial_setup --tags hypervisor"
-  [[ -r "$BASE_IMAGE" ]]       || fail "base image $BASE_IMAGE missing"
-  [[ -r "$SEED" ]]             || fail "seed ISO $SEED missing"
-  [[ -r "$GUEST_HOSTKEY_PUB" ]] || fail "pinned guest host key $GUEST_HOSTKEY_PUB missing"
-  [[ -r "$IDENTITY" ]]         || fail "ssh identity $IDENTITY missing"
-  [[ -r "$S3_ENV" ]]           || fail "R2 env $S3_ENV missing"
-  [[ -r "$AGENT_ENV" ]]        || fail "$AGENT_ENV missing — is this host a k3s agent?"
-  [[ -x "$DRILL_SCRIPT" ]]     || fail "drill script $DRILL_SCRIPT missing — run initial_setup --tags hypervisor"
-  [[ -x "$GUEST_RUN_SCRIPT" ]] || fail "guest-side script $GUEST_RUN_SCRIPT missing"
-  command -v k3s >/dev/null    || fail "k3s not on PATH"
-  command -v qemu-img >/dev/null || fail "qemu-img not on PATH"
-
-  local k3s_version
-  k3s_version="$(k3s --version | head -1)"
-  log "run $RUN_ID; shipping $k3s_version into the guest"
-
-  # A previous run that died between create and destroy leaves a running guest and its disk.
-  teardown
-
+# The guest, from a fresh disk to "answers on the pinned key and the fence has been measured".
+# The drill and the rehearsal share it, so both reach the same point before a credential or a
+# bundle is handed over.
+boot_guest() {
   log "creating $DISK from $BASE_IMAGE"
   qemu-img convert -O qcow2 "$BASE_IMAGE" "$DISK" || fail "qemu-img convert failed"
   qemu-img resize "$DISK" "$DISK_SIZE" >/dev/null || fail "qemu-img resize failed"
@@ -468,6 +471,150 @@ main() {
   # Before the token and the R2 credentials go in, not after: this is the last point at which a
   # guest that can reach production has not yet been handed anything to reach it with.
   fence_check
+}
+
+# ── The SUC rehearsal mode (H6.1b2) ──────────────────────────────────────────────────────────
+# One bounded ssh call per guest-side step. `timeout` execs a program and cannot run ssh_guest,
+# so it takes the argv ssh_guest takes.
+rh() {
+  local -a argv
+  mapfile -t argv < <(ssh_argv)
+  timeout "${RH_STEP_TIMEOUT:-900}" "${argv[@]}" sudo /usr/local/bin/suc-rehearsal-guest-run "$@"
+}
+
+rh_evidence() {
+  RH_STEP_TIMEOUT=120 rh state >"$LOG_DIR/rehearsal-state.txt" 2>&1 || true
+}
+
+# A step that must succeed: when it fails, the guest's state goes into the evidence first.
+rh_step() {
+  local why="$1"
+  shift
+  rh "$@" && return 0
+  rh_evidence
+  fail "$why"
+}
+
+# Applies the system-upgrade Plan to a one-node guest through Flux and judges the outcome. It
+# returns 0 when the Plan behaved as --expect says, and ends the run through `fail` otherwise. The guest
+# gets no token and no R2 credential, so nothing here reads $S3_ENV or $AGENT_ENV.
+rehearse_suc() {
+  case "$RH_EXPECT" in upgrade | red) ;; *) fail "--expect must be upgrade or red" ;; esac
+  [[ -d "$RH_REPO" && -d "$RH_RENDERED" ]] || fail "--repo and --rendered must name directories"
+  local f
+  for f in "$XML" "$BASE_IMAGE" "$SEED" "$GUEST_HOSTKEY_PUB" "$IDENTITY" "$SUC_HELPER" "$SUC_GUEST_SCRIPT"; do
+    [[ -r "$f" ]] || fail "$f missing — run initial_setup --tags hypervisor"
+  done
+  command -v qemu-img >/dev/null || fail "qemu-img not on PATH"
+  # The helper needs PyYAML, so it runs in the repo's own environment. That environment exists
+  # once `uv run` has run in the checkout, which rendering the bundle does.
+  RH_PY="$RH_REPO/.venv/bin/python"
+  [[ -x "$RH_PY" ]] || fail "$RH_PY is missing: run uv run python --version in $RH_REPO first"
+
+  # A previous run that died between create and destroy leaves a guest and a disk. Teardown also
+  # removes $WORK, so it runs before $WORK is made.
+  teardown
+  WORK="$(mktemp -d)"
+  chmod 700 "$WORK"
+
+  local out k v from target
+  local -A pin=()
+  out="$("$RH_PY" -I "$SUC_HELPER" pins "$RH_REPO" 2>&1)" || fail "reading the pins failed: $out"
+  while IFS='=' read -r k v; do [[ -n "$k" ]] && pin["$k"]="$v"; done <<<"$out"
+  target="$("$RH_PY" -I "$SUC_HELPER" overlay "$RH_RENDERED" "$WORK/stage" "$NAME" "$RH_PLAN" 2>&1)" \
+    || fail "preparing the bundle failed: $target"
+  target="${target#target_version=}"
+  from="${RH_VERSION:-${pin[k3s_version]}}"
+  if [[ "$RH_EXPECT" == upgrade && "$from" == "$target" ]]; then
+    fail "the guest would start at the Plan's own version $target, so no upgrade could happen; pass --guest-version one release below it"
+  fi
+  log "rehearsing Plan $RH_PLAN (expect $RH_EXPECT): guest k3s $from, Plan version $target"
+
+  boot_guest
+  ssh_guest 'sudo tee /usr/local/bin/suc-rehearsal-guest-run >/dev/null && sudo chmod 755 /usr/local/bin/suc-rehearsal-guest-run' \
+    <"$SUC_GUEST_SCRIPT" || fail "could not ship the guest-side script"
+  tar -C "$WORK/stage" -cf - . \
+    | ssh_guest 'sudo install -d -m 700 /var/tmp/suc-rehearsal && sudo tar -C /var/tmp/suc-rehearsal --warning=no-timestamp -xf -' \
+    || fail "staging the bundle into the guest failed"
+
+  rh_step "k3s $from did not install in the guest" k3s "$from" "${pin[installer_url]}" "${pin[installer_sha256]}"
+  rh_step "the flux CLI did not install in the guest" flux-cli "${pin[flux_url]}" "${pin[flux_sha256]}"
+  rh_step "the registry and Flux's controllers did not come up in the guest" base "${pin[registry_image]}"
+  local published digest
+  published="$(rh publish "$GUEST_IP")" || { echo "$published"; rh_evidence; fail "publishing the bundle failed"; }
+  digest="$(sed -n 's/^digest=//p' <<<"$published" | tail -1)"
+  [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "flux push printed no digest: $published"
+
+  local verdict="" snap="" ok=0 deadline=$((SECONDS + RH_DEADLINE))
+  while (( SECONDS < deadline )); do
+    guest_running || { verdict="the guest exited during the rehearsal"; break; }
+    snap="$(RH_STEP_TIMEOUT=60 rh snapshot "$NAME" "$RH_PLAN" 2>/dev/null)" || snap=""
+    if [[ -n "$snap" ]]; then
+      verdict="$(printf '%s' "$snap" | "$RH_PY" -I "$SUC_HELPER" judge "$RH_EXPECT" "$RH_PLAN" "$target" "$NAME" "$digest")" \
+        && { ok=1; break; }
+    else
+      verdict="WAIT the guest's API server did not answer"
+    fi
+    sleep "$RH_POLL"
+  done
+  printf '%s\n' "$snap" >"$LOG_DIR/rehearsal-snapshot.json"
+  printf '%s\n' "$verdict" >"$LOG_DIR/rehearsal-verdict.txt"
+  rh_evidence
+  teardown
+
+  if (( ok )); then
+    report up "SUC rehearsal passed (expect $RH_EXPECT, Plan $RH_PLAN, guest k3s $from): $verdict"
+    return 0
+  fi
+  fail "SUC rehearsal FAILED (expect $RH_EXPECT, Plan $RH_PLAN, guest k3s $from): ${verdict:-no verdict in ${RH_DEADLINE}s}"
+}
+
+main() {
+  # The flag is the cron's switch. The rehearsal is run by hand and uses no R2 credential, so a
+  # disarmed drill does not block it.
+  if [[ "$ARMED" != "1" && "$REHEARSE" != 1 ]]; then
+    logger -t "$TAG" "disarmed (hypervisor_etcd_drill_armed=false); nothing run"
+    exit 0
+  fi
+
+  exec 9>"$LOCK"
+  flock -n 9 || fail "another run holds $LOCK"
+
+  # Group-readable by the deploy user: the evidence carries no credential by construction (the
+  # token and the R2 env never leave the guest), and a run is diagnosed from a non-root shell.
+  install -d -m 750 -g "{{ sys_user }}" "$LOG_DIR"
+  # From here on the orchestrator's own lines go into the run's evidence dir, so they are pruned
+  # with it. cron.log (the cron's redirect) then holds only what escapes before this point.
+  exec >>"$LOG_DIR/orchestrator.log" 2>&1
+  prune_old_evidence
+
+  if [[ "$REHEARSE" == 1 ]]; then
+    rehearse_suc
+    exit $?
+  fi
+
+  # Preflight: everything the guest will be handed must exist HERE first, so a missing piece
+  # fails before a guest is built rather than half-way through a run.
+  [[ -r "$XML" ]]              || fail "guest definition $XML missing — run initial_setup --tags hypervisor"
+  [[ -r "$BASE_IMAGE" ]]       || fail "base image $BASE_IMAGE missing"
+  [[ -r "$SEED" ]]             || fail "seed ISO $SEED missing"
+  [[ -r "$GUEST_HOSTKEY_PUB" ]] || fail "pinned guest host key $GUEST_HOSTKEY_PUB missing"
+  [[ -r "$IDENTITY" ]]         || fail "ssh identity $IDENTITY missing"
+  [[ -r "$S3_ENV" ]]           || fail "R2 env $S3_ENV missing"
+  [[ -r "$AGENT_ENV" ]]        || fail "$AGENT_ENV missing — is this host a k3s agent?"
+  [[ -x "$DRILL_SCRIPT" ]]     || fail "drill script $DRILL_SCRIPT missing — run initial_setup --tags hypervisor"
+  [[ -x "$GUEST_RUN_SCRIPT" ]] || fail "guest-side script $GUEST_RUN_SCRIPT missing"
+  command -v k3s >/dev/null    || fail "k3s not on PATH"
+  command -v qemu-img >/dev/null || fail "qemu-img not on PATH"
+
+  local k3s_version
+  k3s_version="$(k3s --version | head -1)"
+  log "run $RUN_ID; shipping $k3s_version into the guest"
+
+  # A previous run that died between create and destroy leaves a running guest and its disk.
+  teardown
+
+  boot_guest
 
   # Stage everything the drill reads, at the paths it reads them, as one tar. Root-owned here
   # so the modes and owners land as-is on the far side. The token is read from the agent env
