@@ -39,7 +39,6 @@ from deployer_lib.deploy_k8s import (
 from deployer_lib.deploy_state import DeployerState
 from deployer_lib.deploy_tick_types import TickPlan, TickTarget
 from deployer_lib.deploy_toolbox import DeployTools
-from gitops_markers import DEPLOY_PLAYBOOK
 
 # The two local-time slots a dirty working tree pages in, at ~08:00 and ~20:00 CT. They are
 # constants here rather than settings on `Config`: no config.env key sets them, and
@@ -269,7 +268,7 @@ def handle_broad(
             state.hold_failed_apply(origin, playbook, broad.held)
             # A deploy-plane apply annotates its services on success (`apply_broad_k8s`), so
             # its failure annotates them too (#6164). Nothing rolls a broad apply back.
-            if playbook == DEPLOY_PLAYBOOK and broad.apply:
+            if playbook == deploy_broad_k8s.DEPLOY_PLAYBOOK and broad.apply:
                 tools.emit_deploy_annotation(
                     set(tags) or {"full"}, origin, "fail", time.monotonic() - started
                 )
