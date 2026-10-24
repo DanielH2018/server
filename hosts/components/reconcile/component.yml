@@ -10,6 +10,7 @@ files:
   - {lib: reconcile_lib/libvirt.py, dst: /usr/lib/homelab/reconcile_lib/libvirt.py}
   - {lib: reconcile_lib/lines.py, dst: /usr/lib/homelab/reconcile_lib/lines.py}
   - {lib: reconcile_lib/textfile.py, dst: /usr/lib/homelab/reconcile_lib/textfile.py}
+  - {lib: reconcile_lib/udev.py, dst: /usr/lib/homelab/reconcile_lib/udev.py}
   - {lib: reconcile_lib/ufw.py, dst: /usr/lib/homelab/reconcile_lib/ufw.py}
   - {lib: reconcile_lib/users.py, dst: /usr/lib/homelab/reconcile_lib/users.py}
   - {src: units/homelab-reconcile.service, dst: /usr/lib/systemd/system/homelab-reconcile.service}

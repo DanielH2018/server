@@ -29,6 +29,7 @@ COMMANDS = (
     "usermod",
     "systemd-sysusers",
     "virsh",
+    "udevadm",
 )
 # The verbs that change a unit, as opposed to the reads reconcile asks before acting.
 ACTIONS = frozenset({"start", "stop", "restart", "try-restart", "disable"})
@@ -182,6 +183,19 @@ class Node:
             for call in self.calls("systemctl")
             if call["argv"][1] in WRITES
         ]
+
+    def rule(self, name: str, text: str = 'ACTION=="add"\n') -> None:
+        """Ship (or rewrite) the udev rule file `name` under /usr/lib/udev/rules.d."""
+        path = self.root / "usr/lib/udev/rules.d" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def drop_rule(self, name: str) -> None:
+        (self.root / "usr/lib/udev/rules.d" / name).unlink()
+
+    def udevadm(self) -> list[list[str]]:
+        """Each udevadm call, as its arguments."""
+        return [call["argv"][1:] for call in self.calls("udevadm")]
 
     def secrets(
         self,
