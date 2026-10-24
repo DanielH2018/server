@@ -4,7 +4,7 @@
 not through `deploy_tags.py hosts` against the primary checkout. A PR adding a Pi role and its
 containers_list entry together declares the role on daniel-pi in no checkout until the tick
 fast-forwards, so its first landing ran deploy.sh locally without `-e target=daniel-pi` and
-failed closed at the health gate. Kept out of test_land_tags.py, which sits at its line cap.
+failed closed at the health gate. Kept out of test_land_tags.py, which was at its line cap.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_landing_hosts_at.py
 """

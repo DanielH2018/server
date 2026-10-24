@@ -1,6 +1,6 @@
 """`clean` converges across passes, and a cleaned batch stays cleaned — Ruling 30.
 
-Split from test_fanout_clean.py, which sits at 415 of a 500-line ceiling. The behaviour
+Split from test_fanout_clean.py, then at 415 of a 500-line ceiling. The behaviour
 under test is a two-pass sequence, so these drive `main` over a saved manifest rather than
 `clean_one` directly.
 
