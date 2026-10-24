@@ -22,7 +22,11 @@ CONFIG = tomllib.loads((REPO / ".gitleaks.toml").read_text())
 
 
 def _entry() -> dict:
-    [entry] = [a for a in CONFIG["allowlists"] if a.get("regexTarget") == "line"]
+    [entry] = [
+        a
+        for a in CONFIG["allowlists"]
+        if a.get("regexTarget") == "line" and a["paths"][0].startswith("^out/")
+    ]
     return entry
 
 

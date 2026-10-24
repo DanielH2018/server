@@ -37,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import urllib.error
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -83,8 +84,22 @@ REASONS = frozenset(
 )
 
 
-def log(message: str) -> None:
-    print(f"homelab-builder: {message}", flush=True)
+def log(message: str, err: bool = False) -> None:
+    print(
+        f"homelab-builder: {message}",
+        file=sys.stderr if err else sys.stdout,
+        flush=True,
+    )
+
+
+def describe(exc: BaseException, token: str | None = None) -> str:
+    """An exception's type, message, cause and raising call chain (#6074); the token is masked."""
+    chain = ">".join(f.name for f in traceback.extract_tb(exc.__traceback__)) or "-"
+    text = f"{type(exc).__name__}: {exc} [step {chain}]"
+    cause = exc.__cause__
+    if cause is not None:
+        text += f" (caused by {type(cause).__name__}: {cause})"
+    return text.replace(token, "***") if token else text
 
 
 def version(count: int, sha: str) -> str:
@@ -170,6 +185,7 @@ class Builder(RolloutGate):
         self.state: dict = {}
         self.cache: dict[str, str] = {}
         self.requests = 0
+        self.token: str | None = None
 
     # ── state ─────────────────────────────────────────────────────────────────────────────
 
@@ -253,11 +269,13 @@ class Builder(RolloutGate):
                 return self._finish("ok" if last == tip else "no-green", tip, last)
             self.build(chosen)
         except Failure as exc:
-            return self._fail(exc.reason, tip, str(exc), last)
+            return self._fail(
+                exc.reason, tip, describe(exc, self.token), last, err=True
+            )
         except (RuntimeError, OSError) as exc:
             # A git, worktree or filesystem error. Left uncaught it would exit 1 on every run,
             # and OnFailure= would page every 2 minutes for one condition.
-            return self._fail("build", tip, f"{type(exc).__name__}: {exc}", last)
+            return self._fail("build", tip, describe(exc, self.token), last, err=True)
         self.state["last_built"] = chosen
         return self._finish("ok", tip, chosen)
 
@@ -501,9 +519,15 @@ class Builder(RolloutGate):
 
     # 8. The metric, and the once-per-condition exit.
     def _fail(
-        self, reason: str, tip: str | None, message: str, last: str | None = None
+        self,
+        reason: str,
+        tip: str | None,
+        message: str,
+        last: str | None = None,
+        err: bool = False,
     ) -> int:
-        log(f"{reason}: {message}")
+        # `err` marks a failure that came from an exception: stderr carries it to the journal.
+        log(f"{reason}: {message}", err=err)
         # The failure is recorded before the metric, whose git reads can fail for the reason
         # that ended the run. A raise there must not skip the record, or every run would
         # exit 1 and page.

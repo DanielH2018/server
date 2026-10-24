@@ -14,18 +14,23 @@
 # locally (`ansible_connection=local`) decrypts, because pre_tasks/load_secrets.yml decrypts on
 # the controller; a host driven over ssh needs no key and should not hold one.
 #
-# Three rules, four kinds of file. SOPS takes the FIRST rule whose path_regex matches, so the
-# two cluster rules must stay ahead of the generic rule: the generic rule also matches every
-# cluster manifest, and would encrypt it without the cluster key.
+# Four rules, five kinds of file. SOPS takes the FIRST rule whose path_regex matches, so the
+# cluster rules and the per-host rule must stay ahead of the generic rule: it also matches every
+# cluster manifest and every per-host file, and would encrypt each without its own recipients.
 #   1. cluster file       vars/cluster-vars.sops.env (dotenv) — cluster key + host keys
 #   2. cluster manifests  vars/cluster-manifests/<name>.sops.yaml — cluster key + host keys
-#   3. generic rule       vars/secrets.yml, and any other YAML under vars/ or secrets/ —
+#   3. per-host file      vars/hosts/<host>.sops.yaml — that host's key, daniel-box and the
+#                         recovery key (H4). The file is a copy of the keys the host's package
+#                         names, decrypted on the host. A host with such a file has its own
+#                         rule, and a host key added to or removed from the rules above does
+#                         not change it.
+#   4. generic rule       vars/secrets.yml, and any other YAML under vars/ or secrets/ —
 #                         host keys only. The cluster key is never a recipient here, so the
 #                         cluster cannot decrypt secrets.yml (ADR-0022).
-# Every rule lists the same host keys, so any host that decrypts secrets.yml can also
-# regenerate the cluster files. Adding or removing a host therefore edits all three `age:`
-# strings. A file that does not exist yet needs no command; SOPS uses the rule when it is
-# first written.
+# The first, second and fourth rules list the same host keys, so any host that decrypts
+# secrets.yml can also regenerate the cluster files. Adding or removing a host therefore edits
+# all three of their `age:` strings. A file that does not exist yet needs no command; SOPS uses
+# the rule when it is first written.
 #
 # Add a host:
 #   1. On that host:  ansible-playbook ansible/bootstrap.yml --limit <host>
@@ -62,6 +67,12 @@ creation_rules:
   - path_regex: vars/cluster-manifests/[^/]+\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$
     age: "age1wf2js7pakyty3qgn3mxwuz8gc277jdgd3guy283cmphgxdj62qeqk6tmnc,age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"
+  # A per-host file (H4) ships inside that host's package and is decrypted on that host with its
+  # own key, so the creation rule names the host's key, daniel-box's key and the recovery key.
+  # It goes ahead of the generic rule, whose pattern also matches ansible/vars/hosts/. Keys in
+  # order: daniel-server, daniel-box, recovery. The Pi's rule arrives with its own file (H4.4).
+  - path_regex: vars/hosts/daniel-server\.sops\.yaml$
+    age: "age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp"
   - path_regex: .*(vars|secrets)\/.*\.ya?ml$
     # Recipients (multi-recipient = OR; ANY one key decrypts the whole file).
     # First key = daniel-server, second = OFF-BOX RECOVERY key (private half lives only in the
