@@ -7,7 +7,7 @@ reached the cap for a test module.
 """
 
 # crowdsec's absent arms for the crons H2.4b and H2.4c retired (#5742). They run on daniel-box,
-# the play's host, outside the file's daniel-pi block.
+# the play's host.
 CROWDSEC_ARMS: dict[str, tuple[str, dict[str, str | bool]]] = {
     f"Remove the retired {label} cron": (
         "ansible.builtin.cron",
@@ -121,49 +121,7 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
             },
         ),
     },
-    # The edge probe rows run on daniel-pi through the block's `delegate_to`.
-    "crowdsec.yml": {
-        **CROWDSEC_ARMS,
-        "Install the edge probe script on daniel-pi": (
-            "ansible.builtin.copy",
-            {
-                "src": "crowdsec-edge-probe.sh",
-                "dest": "/usr/local/bin/crowdsec-edge-probe",
-                "owner": "root",
-                "group": "root",
-                "mode": "0755",
-            },
-        ),
-        "Install the edge probe service on daniel-pi": (
-            "ansible.builtin.template",
-            {
-                "src": "crowdsec-edge-probe.service.j2",
-                "dest": "/etc/systemd/system/crowdsec-edge-probe.service",
-                "owner": "root",
-                "group": "root",
-                "mode": "0644",
-            },
-        ),
-        "Install the edge probe timer on daniel-pi": (
-            "ansible.builtin.template",
-            {
-                "src": "crowdsec-edge-probe.timer.j2",
-                "dest": "/etc/systemd/system/crowdsec-edge-probe.timer",
-                "owner": "root",
-                "group": "root",
-                "mode": "0644",
-            },
-        ),
-        "Enable the edge probe timer on daniel-pi": (
-            "ansible.builtin.systemd",
-            {
-                "name": "crowdsec-edge-probe.timer",
-                "enabled": True,
-                "state": "started",
-                "daemon_reload": True,
-            },
-        ),
-    },
+    "crowdsec.yml": CROWDSEC_ARMS,
     # No mode, on purpose: the library keeps the directory modes it came with.
     "media-volume.yml": {
         "Create the media volume directories on the node": (

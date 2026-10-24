@@ -292,6 +292,26 @@ LAN session:
     A failure writes the hold again. With nothing newer published, this acts as
     `--clear-hold`.
 
+## The timers the Pi package ships
+
+`homelab-daniel-pi` links these timers in `timers.target`:
+
+- `homelab-updater.timer` installs the newest packages and runs reconcile;
+- `homelab-pi-sd-health.timer`, `homelab-pi-gz-integrity.timer` and `homelab-pi-recovery.timer`
+  run the three heartbeats of `hosts/components/pi-heartbeats/`;
+- `homelab-crowdsec-probe.timer` (H5.14, `hosts/components/crowdsec-probe/`) runs CrowdSec's edge
+  probe once a minute, as the same user as the heartbeats.
+
+To confirm the package owns the probe and its last run succeeded, run this read-only call:
+
+```bash
+ssh daniel-pi 'dpkg -S /usr/lib/systemd/system/homelab-crowdsec-probe.timer; systemctl show homelab-crowdsec-probe.service -p ExecMainExitTimestamp -p ExecMainStatus -p Result -p User; stat -c "%U %n" /var/log/pi-health'
+```
+
+To stop the probe for a while, run `sudo systemctl stop homelab-crowdsec-probe.timer` on the Pi.
+The next package install starts it again. To stop it for good, drop the timer's `enable:` line
+from the component in a package version. Reconcile stops the timer on the install that drops it.
+
 ## Stopping updates on one host
 
 To stop one host installing anything, mask its updater timer on that host:

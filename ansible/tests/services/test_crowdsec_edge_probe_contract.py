@@ -2,7 +2,7 @@
 
 Three files in three roles carry one contract, and each side passes its own tests alone:
 
-- the probe script (`setup/k8s_host_files/files/crowdsec-edge-probe.sh`) writes
+- the probe script (`hosts/components/crowdsec-probe/crowdsec-edge-probe.sh`) writes
   `<time> http=<code>` to a status file;
 - the Pi's Alloy (`containers/alloy/templates/config.alloy.j2`) tails that path, extracts
   `status` with a regex and counts it under a metric name;
@@ -23,14 +23,14 @@ import subprocess
 import pytest
 
 from _compose_render import rendered_text
-from _helpers import SETUP_ROLES
+from _helpers import REPO
 from lib.proc_testing import write_exec
 
 # crowdsec's verify module ships from its role's files/, which `pythonpath` in pyproject.toml
 # puts on sys.path (autofix-bridge's ConfigMap carries crowdsec's jobs_metrics.py).
 import crowdsec_verify
 
-PROBE = SETUP_ROLES / "k8s_host_files" / "files" / "crowdsec-edge-probe.sh"
+PROBE = REPO / "hosts" / "components" / "crowdsec-probe" / "crowdsec-edge-probe.sh"
 # Alloy's `loki.process` prefixes every `stage.metrics` name with this (its `metrics_prefix`
 # default), which is what Prometheus scrapes off `alloy-pi`.
 ALLOY_METRICS_PREFIX = "loki_process_custom_"
