@@ -64,7 +64,7 @@ def test_the_trim_rule_reads_state_and_a_running_replicaset_or_statefulset(
     state, workloads, joins, tmp_path
 ):
     volume = _volume(
-        "pvc-1", "homelab/authelia-config", "default", state=state, workloads=workloads
+        "pvc-1", "homelab/traefik-acme", "default", state=state, workloads=workloads
     )
     world = _world(volume)
     assert lr.main([], _env(tmp_path, TIERS), world) == 0
@@ -75,7 +75,7 @@ def test_the_label_is_the_per_job_key_and_never_a_trim_group(tmp_path):
     world = _world(
         _volume(
             "pvc-1",
-            "homelab/authelia-config",
+            "homelab/traefik-acme",
             "default",
             state="attached",
             workloads=RUNNING_RS,
@@ -90,10 +90,8 @@ def test_the_label_is_the_per_job_key_and_never_a_trim_group(tmp_path):
 
 # (claim, group labels before) -> group labels after a run that gives the volume the trim label.
 DEFAULT_ARM = [
-    pytest.param(
-        "homelab/authelia-config", [], ["default"], id="no-group-gains-default"
-    ),
-    pytest.param("homelab/authelia-config", ["default"], ["default"], id="has-default"),
+    pytest.param("homelab/traefik-acme", [], ["default"], id="no-group-gains-default"),
+    pytest.param("homelab/traefik-acme", ["default"], ["default"], id="has-default"),
     pytest.param(
         "homelab/crowdsec-db",
         ["no-backup"],
@@ -132,14 +130,15 @@ def _two_eligible():
     return _world(
         _volume(
             "pvc-a",
-            "homelab/authelia-config",
+            "homelab/traefik-acme",
             "default",
+            target="r2",  # the TIERS fixture routes this claim to r2; keep the target arm quiet
             state="attached",
             workloads=RUNNING_RS,
         ),
         _volume(
             "pvc-b",
-            "homelab/traefik-acme",
+            "homelab/authelia-config",
             "default",
             state="attached",
             workloads=RUNNING_RS,
@@ -150,7 +149,7 @@ def _two_eligible():
 def test_a_bound_keeps_the_trim_label_off_every_unlisted_claim(tmp_path):
     # fact: ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#What it writes, and how often (the autonomous-role contract)
     world = _two_eligible()
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/traefik-acme"]})
+    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
     assert lr.main([], env, world) == 0
     assert _trimmed(world) == ["pvc-b"]
 
@@ -171,7 +170,7 @@ def test_an_absent_bound_admits_every_volume_the_rule_admits(tmp_path):
 def test_the_label_leaves_a_volume_the_bound_or_the_rule_no_longer_admits(tmp_path):
     outside = _volume(
         "pvc-a",
-        "homelab/authelia-config",
+        "homelab/traefik-acme",
         "default",
         extra={TRIM: "enabled"},
         state="attached",
@@ -179,14 +178,14 @@ def test_the_label_leaves_a_volume_the_bound_or_the_rule_no_longer_admits(tmp_pa
     )
     detached = _volume(
         "pvc-b",
-        "homelab/traefik-acme",
+        "homelab/authelia-config",
         "default",
         extra={TRIM: "enabled"},
         state="detached",
         workloads=RUNNING_RS,
     )
     world = _world(outside, detached)
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/traefik-acme"]})
+    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
     assert lr.main([], env, world) == 0
     assert _trimmed(world) == []
     # The group label stays: only the trim label moves.
@@ -196,7 +195,7 @@ def test_the_label_leaves_a_volume_the_bound_or_the_rule_no_longer_admits(tmp_pa
 def test_a_second_run_with_the_trim_arm_changes_nothing(tmp_path, capsys):
     world = _two_eligible()
     world.volumes["pvc-b"]["metadata"]["labels"].clear()
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/traefik-acme"]})
+    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
     assert lr.main([], env, world) == 0
     assert len(world.writes()) == 1
     first = len(world.calls)
@@ -224,7 +223,7 @@ def test_the_would_admit_line_names_the_unbounded_set_whatever_the_bound(
     )
     world = _two_eligible()
     world.volumes.update({"pvc-c": detached, "pvc-d": job_only})
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/traefik-acme"]})
+    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
     assert lr.main([], env, world) == 0
     out = capsys.readouterr().out
     assert (
@@ -234,7 +233,7 @@ def test_the_would_admit_line_names_the_unbounded_set_whatever_the_bound(
 
 
 def test_the_would_admit_line_reads_none_when_the_rule_admits_nothing(tmp_path, capsys):
-    world = _world(_volume("pvc-1", "homelab/authelia-config", "default"))
+    world = _world(_volume("pvc-1", "homelab/traefik-acme", "default"))
     assert lr.main(["--report-only"], _env(tmp_path, TIERS), world) == 0
     assert "trim would-admit: none\n" in capsys.readouterr().out
 
@@ -243,7 +242,7 @@ def test_report_only_names_the_trim_change_and_writes_nothing(tmp_path, capsys):
     world = _world(
         _volume(
             "pvc-1",
-            "homelab/authelia-config",
+            "homelab/traefik-acme",
             state="attached",
             workloads=RUNNING_RS,
         )
@@ -299,7 +298,7 @@ def _needs(calls) -> set[tuple[str, str]]:
 def _trim_run_calls(tmp_path):
     world = _two_eligible()
     world.volumes["pvc-b"]["metadata"]["labels"].clear()
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/traefik-acme"]})
+    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
     assert lr.main([], env, world) == 0
     return world.calls
 
@@ -324,7 +323,7 @@ def test_the_configmap_renders_the_canary_bound_and_an_empty_bound_stays_empty()
     canary = load_defaults(K8S_ROLES / "longhorn-reconcile")[
         "longhorn_reconcile_trim_claims"
     ]
-    assert canary == ["homelab/traefik-acme"]
+    assert canary == ["homelab/authelia-config"]
 
     def tiers(overrides):
         (doc,) = yaml_fast.safe_load_all(

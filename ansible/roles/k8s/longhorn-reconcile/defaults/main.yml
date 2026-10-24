@@ -95,12 +95,14 @@ k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8
 # role) reaches one volume. An EMPTY list trims nothing; it is never read as "every volume".
 # H2.2b deletes this key, and the arm then covers every volume its rule admits.
 #
-# The canary is the smallest default-tier claim whose owner is a Deployment with one replica:
-# traefik-acme, 128 MiB (25 MB used), Deployment `traefik` at 1/1 replicas, `Recreate`. The blast
-# radius is that one volume. A trim discards only blocks ext4 has already freed, and the worst
-# backup outcome is one missed daily backup of it, which backup health's age check reports.
+# The canary is authelia-config, 1 GiB (61 MB used), owned by Deployment `authelia` at 1/1
+# replicas. The operator chose it on 2026-10-24 over the smaller traefik-acme, because
+# traefik-acme holds the issued TLS certificates, whose loss means a rate-limited re-issue, while
+# authelia-config is rendered from the repo. The blast radius is that one volume. A trim discards
+# only blocks ext4 has already freed, and the worst backup outcome is one missed daily backup of
+# it, which backup health's age check reports.
 longhorn_reconcile_trim_claims:
-  - homelab/traefik-acme
+  - homelab/authelia-config
 
 # The CronJob's one-off run per role revision, `longhorn-reconcile-deploy-gate-<spec digest8>` in
 # `longhorn-reconcile-verify`. It is a post-apply mutation: the run holds the tier labels and
