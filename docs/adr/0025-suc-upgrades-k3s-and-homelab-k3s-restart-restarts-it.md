@@ -1,7 +1,7 @@
 ---
 id: "0025"
 title: "SUC upgrades k3s, and `homelab-k3s-restart` restarts it"
-status: Proposed
+status: Accepted
 date: 2026-10-24
 governs: []
 ---
@@ -10,9 +10,9 @@ governs: []
 
 ## Status
 
-Proposed. Acceptance is **operator-only**. Slice H6 step H6.1a (the
-[H6 plan](../target-architecture/host/h6-k3s-suc.md)) records the approval, and PR H6.1b
-does not merge before it.
+Accepted. The operator accepted it on 2026-10-24. Slice H6 step H6.1a (the
+[H6 plan](../target-architecture/host/h6-k3s-suc.md)) records the approval, which PR H6.1b
+required before it could merge.
 
 ## Context
 
