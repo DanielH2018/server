@@ -28,7 +28,8 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 edge. `bundle.py` adds that edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds' suffixes,
 `verify_files` and `cronjob_gates` read which roles call for `<tag>-verify`,
-`prepull_timeouts` which call for `<tag>-prepull`, and `precheck_files` which call for
+`prepull_timeouts` which call for `<tag>-prepull`, `prepull_workloads` which scope it to named
+workloads, and `precheck_files` which call for
 `<tag>-precheck`. Like `bundle.py`, this module imports
 neither Ansible nor Jinja. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
@@ -74,6 +75,8 @@ TAG_KIND_SUFFIXES = (
 )
 # The role default that calls for `<tag>-prepull` and sets its Kustomization's `timeout`.
 PREPULL_TIMEOUT = "flux_prepull_timeout"
+# The role default that scopes `<tag>-prepull` to the named workloads instead of all of them.
+PREPULL_WORKLOADS = "flux_prepull_workloads"
 _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 # How far a `<tag>-verify` or `<tag>-precheck` timeout sits above its Jobs' longest `activeDeadlineSeconds`, so a
 # hung Job fails on its own deadline before Flux reports a bare timeout.
@@ -213,6 +216,50 @@ def prepull_timeouts(
             )
             continue
         found[tag] = value
+    return found, problems
+
+
+def prepull_workloads(
+    tags: Iterable[str], roles: Path = K8S_ROLES
+) -> tuple[dict[str, tuple[str, ...]], list[str]]:
+    """Each tag whose role sets `flux_prepull_workloads` mapped to it, and one line per problem.
+
+    The value names the Deployments and StatefulSets `<tag>-prepull` pulls for. A tag that
+    leaves it unset pulls for every workload in its render (#5875). observability names
+    Grafana alone, because its other workloads pin no node and three of their images carry no
+    `sh`. A value must be a non-empty list of names and must sit beside `flux_prepull_timeout`,
+    which alone calls for the pre-pull; any other value is a problem and its tag is left out.
+    """
+    found, problems = {}, []
+    for tag in sorted(set(tags)):
+        path = roles / tag / "defaults" / "main.yml"
+        try:
+            defaults = (
+                yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+            ) or {}
+        except (OSError, yaml.YAMLError) as err:
+            problems.append(f"could not read {tag}'s {PREPULL_WORKLOADS}: {err}")
+            continue
+        value = defaults.get(PREPULL_WORKLOADS)
+        if value is None:
+            continue
+        if not (
+            isinstance(value, list)
+            and value
+            and all(isinstance(name, str) and name for name in value)
+        ):
+            problems.append(
+                f"{tag}'s {PREPULL_WORKLOADS} is {value!r}, not a non-empty list of workload "
+                "names, so its pre-pull cannot be scoped"
+            )
+            continue
+        if PREPULL_TIMEOUT not in defaults:
+            problems.append(
+                f"{tag} sets {PREPULL_WORKLOADS} and no {PREPULL_TIMEOUT}, so no pre-pull "
+                "renders for the names to scope"
+            )
+            continue
+        found[tag] = tuple(value)
     return found, problems
 
 
