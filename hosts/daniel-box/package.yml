@@ -4,6 +4,10 @@
 # homelab-k3s-restart loads it to read the API. ansible/vars/hosts/daniel-box.sops.yaml carries
 # every key this tree names, and `host_secrets.py sync daniel-box` rewrites it (operator-only).
 #
+# H7.33 adds the UPS secondary (hosts/components/nut-secondary): its watchdog unit loads
+# `ups_secondary_push_token`, and its upsmon.conf output reads `nut_monitor_password`, both from
+# the same SOPS file.
+#
 # The builder, the repository and every daniel-box timer stay with Ansible until H7. The
 # `windowed` mark for k3s.service arrives in H6.4a with the first k3s.service drop-in, because the
 # renderer refuses a unit policy that no package installs or drops in on (item 5, Amended
@@ -13,9 +17,10 @@
 # sits above the component's defaults (H3, *Component variables*). A package-level `defaults:` map
 # reaches only the package's own files, never a component's.
 description: daniel-box's homelab host package
-components: [reconcile, secrets-unit, k3s-restart]
+components: [reconcile, secrets-unit, k3s-restart, kuma-push, nut-secondary]
 credentials:
   - k3s_readonly_token
+  - ups_secondary_push_token
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).

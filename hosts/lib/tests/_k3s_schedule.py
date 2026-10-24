@@ -70,10 +70,15 @@ def _weekdays(spec: str) -> set[int]:
     return days
 
 
+def _is_zone(token: str) -> bool:
+    """A time zone name has a `/` and no `:`; `*:0/10` is a clock with a step."""
+    return "/" in token and ":" not in token
+
+
 def calendar_fires(expr: str, day: date) -> list[int]:
     """Seconds of `day` (UTC) at which an `OnCalendar=` expression fires."""
     tokens = _KEYWORDS.get(expr.strip(), expr).split()
-    zone = ZoneInfo(tokens.pop()) if tokens and "/" in tokens[-1] else None
+    zone = ZoneInfo(tokens.pop()) if tokens and _is_zone(tokens[-1]) else None
     weekdays = None
     if tokens and re.match(r"[A-Za-z]", tokens[0]):
         weekdays = _weekdays(tokens.pop(0))
@@ -81,6 +86,8 @@ def calendar_fires(expr: str, day: date) -> list[int]:
     if tokens and "-" in tokens[0]:
         date_spec = tokens.pop(0)
     clock = tokens.pop(0) if tokens else "00:00:00"
+    if clock.count(":") == 1:
+        clock += ":00"
     if tokens or not re.fullmatch(r"[^:]+:[^:]+:[^:]+", clock):
         raise Unparseable(f"OnCalendar {expr!r}")
     if weekdays is not None and day.weekday() not in weekdays:

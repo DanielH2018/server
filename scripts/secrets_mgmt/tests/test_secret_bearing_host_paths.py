@@ -38,21 +38,17 @@ from secrets_mgmt.secret_bearing_host_paths import (
 # Path -> a secret name the census MUST report for it. Three entries chosen to span the shapes
 # the derivation has to cover, so a narrowing cannot survive by keeping one of them:
 #   * secret-rotation-audit.sh — the incident the module's docstring records (roles/setup/)
-#   * ups-secondary-health.sh  — setup/nut_host, a role initial_setup.yml alone applies (the
-#     "not just k8s" shape).
-#     Matched on a COMMENT mention: the script renders nothing and reads the endpoint out of
-#     /etc/nut/upsmon.conf at runtime. Kept deliberately — the census errs toward denying, and
-#     narrowing the matcher to Jinja expressions would drop a read-deny and this anchor with it
-#     The no_log census (ansible/tests/repo/) matches Jinja-only because a false hit
-#     there demands a task change, not a prompt. Its name is not `*_push_token`, so the
-#     census cannot silently narrow to push-token-shaped matches and still pass.
+#   * ups-secondary-health.sh  — pinned the comment-mention shape (a script that renders
+#     nothing and names the secret only in a comment, so the census errs toward denying) and a
+#     name that is not `*_push_token`, until H7.33 packaged the script and left no task that
+#     installs it. The census holds neither shape now, and the floor in
+#     test_secret_bearing_host_scripts_are_not_world_readable.py fell from 10 to 9.
 #   * secret-rotate.sh — its only reason to be in the census is `secret_rotation_push_token`,
 #     so nothing else pins the path.
 # The NAME is pinned alongside the path deliberately: a path survives a `GENERIC_NAMES` entry
 # or a tier flipped to `ignore` while losing the very name that made it dangerous.
 MUST_FIND = {
     "/usr/local/bin/secret-rotation-audit.sh": "secret_rotation_push_token",
-    "/usr/local/bin/ups-secondary-health.sh": "nut_monitor_password",
     "/usr/local/bin/secret-rotate.sh": "secret_rotation_push_token",
 }
 

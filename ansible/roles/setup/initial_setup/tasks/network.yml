@@ -3,6 +3,7 @@
 
 - name: Enable IPv4 forwarding
   tags: [sysctl]
+  when: inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
     value: "1"
@@ -38,10 +39,13 @@
     - all
     - default
   become: true
-  when: initial_setup_ufw_sysctl.stat.exists
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['sysctl']
+    - initial_setup_ufw_sysctl.stat.exists
 
 - name: Apply kernel security hardening
   tags: [sysctl]
+  when: inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   ansible.posix.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
