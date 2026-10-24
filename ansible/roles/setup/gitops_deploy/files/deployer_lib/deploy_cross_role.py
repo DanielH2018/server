@@ -77,7 +77,7 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/kuma-check-boot.service.j2": _KUMA_CHECK,
     f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
-    f"{_COMMON}/tasks/stamp_render.yml": _STAMPED | {"nut_host"},
+    f"{_COMMON}/tasks/stamp_render.yml": _STAMPED,
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),

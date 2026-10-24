@@ -22,10 +22,10 @@ from deploy_tools.land_lib import land_tags
 PR_1915_ROLE_FILE = "ansible/roles/setup/nut_host/tasks/main.yml"
 
 
-def test_nut_host_reaches_daniel_box_only():
-    # The role's leading `end_role` guard drops daniel-server, whose half the
-    # homelab-daniel-server package owns (H4.3c).
-    assert land_reach.setup_role_hosts("nut_host") == {"daniel-box"}
+def test_nut_host_reaches_no_host():
+    # The role's unconditional leading `end_role` drops daniel-server (H4.3c) and daniel-box
+    # (H7.33), whose halves their packages own.
+    assert land_reach.setup_role_hosts("nut_host") == frozenset()
 
 
 def test_the_tick_self_applies_nut_host_on_its_own_host():
