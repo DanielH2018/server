@@ -27,8 +27,11 @@ state.json keys:
         "reorder_on_enable" reverses the rules when ufw is enabled. `ufw status` prints only
         `Status: inactive` while inactive, which is why the arm reads
         `ufw show added`.
+    users, sysusers, expired, libvirt, conffiles: the users, libvirt and lines arms' state,
+        documented in `_reconcile_arms_stub.py`, which also holds those arms' commands.
 """
 
+import _reconcile_arms_stub as arms
 import fcntl
 import fnmatch
 import json
@@ -68,6 +71,8 @@ def hostname(state: dict, args: list[str]) -> int:
 
 
 def dpkg_query(state: dict, args: list[str]) -> int:
+    if args[2].startswith("${Conffiles}"):
+        return arms.conffiles(state, args[3])
     code = 0
     for package in args[3:]:
         if package in state["installed"]:
@@ -278,6 +283,7 @@ HANDLERS = {
     "sshd": sshd,
     "fail2ban-client": fail2ban_client,
     "ufw": ufw,
+    **arms.HANDLERS,
 }
 
 if __name__ == "__main__":
