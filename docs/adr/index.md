@@ -50,6 +50,7 @@ wrong is worth more than the record of one that did not.
 | [0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) | The cluster decrypts its own file with its own key, and never secrets.yml | Accepted | 2026-10-15 |
 | [0023](0023-fact-support-is-a-diff-notice.md) | Fact support is a diff notice, and the lock is retired | Accepted | 2026-10-17 |
 | [0024](0024-code-scanning-is-off.md) | Code scanning is off | Accepted | 2026-10-18 |
+| [0025](0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md) | SUC upgrades k3s, and `homelab-k3s-restart` restarts it | Accepted | 2026-10-24 |
 
 ## The long-form behind a record
 
