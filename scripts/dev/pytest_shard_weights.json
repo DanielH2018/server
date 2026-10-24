@@ -1284,6 +1284,7 @@
  "scripts/lib/tests/test_longhorn_backup_health.py": 0.0,
  "scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py": 0.0,
  "scripts/lib/tests/test_longhorn_backups.py": 0.29,
+ "scripts/lib/tests/test_longhorn_cluster_state.py": 0.0,
  "scripts/lib/tests/test_longhorn_restore_drill_checks.py": 0.0,
  "scripts/lib/tests/test_longhorn_skipped_volumes.py": 0.0,
  "scripts/lib/tests/test_narrow_git.py": 0.02,
