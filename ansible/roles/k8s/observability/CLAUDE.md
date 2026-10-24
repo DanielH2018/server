@@ -127,7 +127,7 @@ are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
 
 **The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
 the Discord and email bodies, and `ansible/roles/k8s/observability/tests/alertmanager/` holds
-three alert groups with the text each body must render for them.
+four alert groups with the text each body must render for them.
 `scripts/validate/notification_renders.py:render_problems` fails any difference. To change the
 text, edit the template, run `uv run python scripts/validate/alert_rules.py --write-renders`,
 and review the rewritten `.txt` files.
