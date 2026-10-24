@@ -303,3 +303,49 @@ def test_the_case_upgrades_non_interactively_under_force_confold_then_reconciles
     interactive = source.replace("noninteractive", "readline")
     assert not _upgrades_then_reconciles(interactive.replace("unattended-upgrade", "x"))
     assert not _upgrades_then_reconciles(source.replace("homelab-reconcile", "nothing"))
+
+
+def _confold_commands(source: str) -> list[tuple[str, str]]:
+    """Each string but a docstring that carries `--force-confold`, with its source text.
+
+    Adjacent literals are one node, so a command split over two lines is one string here.
+    """
+    found = []
+    tree = ast.parse(source)
+    skip = _docstrings(tree)
+    for node in ast.walk(tree):
+        if id(node) in skip:
+            continue
+        if isinstance(node, ast.JoinedStr | ast.Constant):
+            text = (
+                "".join(
+                    part.value
+                    for part in node.values
+                    if isinstance(part, ast.Constant) and isinstance(part.value, str)
+                )
+                if isinstance(node, ast.JoinedStr)
+                else node.value
+            )
+            if isinstance(text, str) and "--force-confold" in text:
+                found.append((text, ast.get_source_segment(source, node) or ""))
+    return found
+
+
+def test_the_force_confold_command_itself_runs_without_a_terminal():
+    # The module-wide check above passes while another command carries the frontend, so this
+    # one reads the upgrade command alone.
+    _module()
+    source = (fx.REPO / SOURCE).read_text()
+    commands = _confold_commands(source)
+    assert commands
+    assert all("DEBIAN_FRONTEND=noninteractive" in text for text, _ in commands)
+    # Red proof: the frontend dropped from the upgrade command only, kept everywhere else.
+    _, segment = commands[0]
+    interactive = source.replace(
+        segment, segment.replace("DEBIAN_FRONTEND=noninteractive ", "")
+    )
+    assert "DEBIAN_FRONTEND=noninteractive" in interactive
+    assert not all(
+        "DEBIAN_FRONTEND=noninteractive" in text
+        for text, _ in _confold_commands(interactive)
+    )

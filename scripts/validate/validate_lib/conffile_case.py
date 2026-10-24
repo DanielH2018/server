@@ -173,6 +173,9 @@ def _body(cases, c: Container) -> list[str]:
         "DEBIAN_FRONTEND=noninteractive apt-get install -y"
         f" /srv/debs/{updater.name} /srv/debs/{host.name}"
     )
+    # Joins the start the postinst queued. Without it, the checked start below could merge into
+    # that queued run and keep its InvocationID, which reads as no run at all.
+    c.ok("systemctl start homelab-reconcile.service")
     _reconcile(c, "homelab-reconcile.service")
     expect(_has_line(c), f"reconcile did not write {LINE!r} into {CONFFILE}")
     results = []
