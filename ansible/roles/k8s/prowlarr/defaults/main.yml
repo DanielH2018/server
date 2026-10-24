@@ -139,7 +139,9 @@ prowlarr_k8s_log_rotate: "10"
 # fails if the three drift apart.
 prowlarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
 
-# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+# The claim the renderer emits for this role. The prowlarr Kustomization applies it after the
+# prowlarr-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply
+# snapshot.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ prowlarr_k8s_claim }}"
     storage_class: "{{ prowlarr_k8s_storage_class }}"
