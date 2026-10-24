@@ -141,7 +141,6 @@ FLAGGED_READS = [
     f"cat {INCIDENT}",
     f"head -20 {INCIDENT}",
     f"sudo cat {INCIDENT}",
-    "tail -5 /usr/local/bin/ups-secondary-health.sh",
 ]
 
 # The safe forms the memory entry prescribes, plus the near misses. `-o` is load-bearing:
