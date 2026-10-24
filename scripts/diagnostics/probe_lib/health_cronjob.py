@@ -207,7 +207,7 @@ def declared_suspended(docs, default_namespace):
     """`namespace/name` of each CronJob among `docs` whose rendered spec sets `suspend: true`.
 
     The intent half of the suspend check: a role's manifest says a CronJob ships suspended on
-    purpose (the restore drill, until its unsuspend PR), and the live object is held to that.
+    purpose (the restore drill did, until H2.3e), and the live object is held to that.
     """
     return frozenset(
         f"{(doc.get('metadata') or {}).get('namespace') or default_namespace}/"

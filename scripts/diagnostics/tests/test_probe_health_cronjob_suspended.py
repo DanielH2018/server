@@ -1,15 +1,18 @@
 """`probe.py health` passes a CronJob that its manifest suspends on purpose, and fails one that is not.
 
-The restore drill ships `suspend: true` until its unsuspend PR (H2.3e). A suspended CronJob fires
-no Job, so the gate read it as "no evidence it has ever run". The intent is in the rendered
+The restore drill shipped `suspend: true` until its unsuspend PR (H2.3e). A suspended CronJob
+fires no Job, so the gate read it as "no evidence it has ever run". The intent is in the rendered
 manifest, so the gate passes a live-suspended CronJob only when the role's own render also says
 `suspend: true`. A CronJob suspended live whose manifest says it should run is drift and fails.
+No role in the tree declares `suspend: true` since H2.3e, so the real-render test sets it on the
+drill's rendered CronJob document.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_health_cronjob_suspended.py
 """
 
 import json
 import subprocess
+import copy
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -62,10 +65,20 @@ def test_a_missing_cronjob_is_not_a_suspended_one():
     assert code == 1 and "no CronJob" in text
 
 
-def test_the_restore_drills_render_declares_suspend_and_a_running_role_does_not():
+def _suspended(docs):
+    """`docs` with every CronJob set to `suspend: true`, the way a suspending manifest renders."""
+    docs = copy.deepcopy(docs)
+    for doc in docs:
+        if doc.get("kind") == "CronJob":
+            doc["spec"]["suspend"] = True
+    return docs
+
+
+def test_the_restore_drills_render_runs_and_a_suspending_render_names_its_cronjob():
     """Non-vacuity on the real tree: the named member is the drill's own CronJob."""
-    drill = declared_suspended(rendered_docs("longhorn-restore-drill"), "homelab")
-    assert drill == frozenset({NAME})
+    docs = rendered_docs("longhorn-restore-drill")
+    assert declared_suspended(docs, "homelab") == frozenset()
+    assert declared_suspended(_suspended(docs), "homelab") == frozenset({NAME})
     reconcile = declared_suspended(
         rendered_docs("longhorn-reconcile"), "longhorn-system"
     )
@@ -101,9 +114,9 @@ def _run(cronjob):
     )
 
 
-def test_run_health_passes_the_suspended_drill(capsys):
-    assert _run(_cronjob(True)) == 0
-    assert "suspended; nothing to gate" in capsys.readouterr().out
+def test_run_health_fails_the_drill_suspended_live_when_its_render_runs(capsys):
+    assert _run(_cronjob(True)) == 1
+    assert "does not declare `suspend: true`" in capsys.readouterr().out
 
 
 def test_run_health_fails_the_drill_when_it_is_not_suspended_and_has_never_run(capsys):
