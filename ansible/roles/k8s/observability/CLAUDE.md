@@ -155,10 +155,11 @@ because only a check's name says which series should exist, and it fires beside 
 pair's stale arm. It stays shadow until an Alertmanager inhibit keyed on `check` and
 `origin` lets it page alone. The per-check literals and their pin tests stay, for the
 reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
-series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It reads
-the reconcile file's mtime against `node_boot_time_seconds`, because the updater rewrites
-that file only when a package changes, so a stale `homelab_host_reboot_pending 1` survives
-the reboot that cleared it.
+series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
+change from `homelab_host_reboot_pending_since_seconds`, which a later package change never
+moves, and requires that time to follow `node_boot_time_seconds`: the updater rewrites the
+reconcile file only when a package changes, so a stale `homelab_host_reboot_pending 1`
+survives the reboot that cleared it.
 
 **`ScrapeTargetDown` is one rule per owning role, and a new scrape job needs a line in one.**
 `files/rules/scrape-targets.yaml` gives each rule a literal `service`, because a static scrape

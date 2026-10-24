@@ -113,7 +113,9 @@ changes. The grammar and the validations are the docstring of
   action on a unit the manifest marks `manual` or `windowed`, records the unit's `InvocationID`
   in `applied.json`. The record clears when the unit restarts. Reconcile writes both states to
   `homelab_host_reboot_pending{host}` and `homelab_host_activation_pending{host,unit}` in
-  `homelab_host_reconcile.prom`, beside the updater's `homelab_host.prom`.
+  `homelab_host_reconcile.prom`, beside the updater's `homelab_host.prom`. While the flag
+  exists, `homelab_host_reboot_pending_since_seconds{host}` carries its mtime, the time the
+  host first owed the reboot; a later reboot-class change leaves it alone.
 - **Drift is not a failure.** `homelab_host_reconcile_drift{host,arm}` counts items an arm
   left alone on purpose: UFW rules the floor kept, libvirt objects a running guest still
   references, users the floor kept, and legacy services that are still running.

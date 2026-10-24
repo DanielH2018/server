@@ -810,21 +810,22 @@ groups:
             `docker ps -a` on daniel-pi.
       # One rule per inventory host, so `service` stays a literal (#6166). Reconcile writes
       # homelab_host_reboot_pending 1 when a package change needs a reboot, and the weekly
-      # reboot is what applies it. The metric alone cannot say the reboot never came: the
-      # updater runs reconcile only when a package changes, so after a reboot the file keeps
-      # its 1 until the next package. The rule therefore also requires the file to be written
-      # after the last boot and to be more than 8 days (691200s) old: a reboot-class change has
-      # waited through a weekly reboot slot plus a day with no boot since it was recorded.
+      # reboot is what applies it. homelab_host_reboot_pending_since_seconds is when the host
+      # first owed that reboot, the flag's mtime, which a later change never moves. The age is
+      # read from it rather than from the file's mtime, because every later package change
+      # rewrites the file. The `> node_boot_time_seconds` arm drops a 1 left in the file from
+      # before the last boot: the updater runs reconcile only when a package changes, so the
+      # file can outlive the boot that cleared the flag. 691200s is 8 days, a weekly reboot
+      # slot plus a day.
       - alert: HostRebootOverdue
         expr: |
           (
               homelab_host_reboot_pending{origin="daniel-box"} == 1
             and on (origin)
-              node_textfile_mtime_seconds{file=~".*/homelab_host_reconcile[.]prom",origin="daniel-box"}
+              homelab_host_reboot_pending_since_seconds{origin="daniel-box"}
               > on (origin) node_boot_time_seconds{origin="daniel-box"}
             and on (origin)
-              time() - node_textfile_mtime_seconds{file=~".*/homelab_host_reconcile[.]prom",origin="daniel-box"}
-              > 691200
+              time() - homelab_host_reboot_pending_since_seconds{origin="daniel-box"} > 691200
           )
         labels:
           severity: warning
@@ -841,11 +842,10 @@ groups:
           (
               homelab_host_reboot_pending{origin="daniel-server"} == 1
             and on (origin)
-              node_textfile_mtime_seconds{file=~".*/homelab_host_reconcile[.]prom",origin="daniel-server"}
+              homelab_host_reboot_pending_since_seconds{origin="daniel-server"}
               > on (origin) node_boot_time_seconds{origin="daniel-server"}
             and on (origin)
-              time() - node_textfile_mtime_seconds{file=~".*/homelab_host_reconcile[.]prom",origin="daniel-server"}
-              > 691200
+              time() - homelab_host_reboot_pending_since_seconds{origin="daniel-server"} > 691200
           )
         labels:
           severity: warning
@@ -862,11 +862,10 @@ groups:
           (
               homelab_host_reboot_pending{origin="daniel-pi"} == 1
             and on (origin)
-              node_textfile_mtime_seconds{file=~".*/homelab_host_reconcile[.]prom",origin="daniel-pi"}
+              homelab_host_reboot_pending_since_seconds{origin="daniel-pi"}
               > on (origin) node_boot_time_seconds{origin="daniel-pi"}
             and on (origin)
-              time() - node_textfile_mtime_seconds{file=~".*/homelab_host_reconcile[.]prom",origin="daniel-pi"}
-              > 691200
+              time() - homelab_host_reboot_pending_since_seconds{origin="daniel-pi"} > 691200
           )
         labels:
           severity: warning

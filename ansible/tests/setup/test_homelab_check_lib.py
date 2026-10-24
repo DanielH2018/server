@@ -46,6 +46,10 @@ def test_write_check_textfile_writes_the_four_series_and_detail_lines_atomically
     assert 'homelab_check_success{check="demo"} 1' in lines
     assert 'homelab_check_last_run_timestamp_seconds{check="demo"} 1760000000' in lines
     assert 'homelab_check_deadline_seconds{check="demo"} 900' in lines
+    assert any(
+        line.startswith('homelab_check_duration_seconds{check="demo"} ')
+        for line in lines
+    )
     assert 'detail{check="demo"} 7' in lines
 
 
