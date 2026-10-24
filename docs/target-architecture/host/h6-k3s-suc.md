@@ -1042,8 +1042,11 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       general rule in `ansible/.sops.yaml`, with the recipients H4 names. Add
       `homelab-daniel-box` to the named sets of both CI scans (H4).
     - **Operator-only:** run `sudo hosts/bootstrap-host.sh daniel-box`. `homelab-daniel-box`
-      starts with only `reconcile`. Its `package.yml` carries the `windowed` mark for
-      `k3s.service` from this first commit.
+      starts with only `reconcile`.
+    - **Amended 2026-10-24:** the `windowed` mark for `k3s.service` moves from H6.2 to H6.4a,
+      because the renderer refuses a unit policy that no package installs or drops in on.
+      H6.4a adds `units: {k3s.service: {policy: windowed}}` with its first `k3s.service`
+      drop-in.
     - The `secrets` component, daniel-box's SOPS file and its `host_secrets.py check` entry
       arrive in H6.3b with the first daniel-box key. H4's check compares the file's keys
       with the credentials the host uses, and before H6.3b daniel-box uses none.
@@ -1139,6 +1142,8 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - Add the `k3s-server` component with the same-path files, the audit log directory, the
       logging lines of `50-homelab.conf`, `/etc/logrotate.d/k3s` and the `tmpfiles.d` entry.
       Add the legacy entry for the server's `10-log-to-file.conf`.
+    - Add `units: {k3s.service: {policy: windowed}}` to daniel-box's `package.yml` in the
+      same PR, because this PR ships the first `k3s.service` drop-in (H6.2's amendment).
     - Delete these from `server.yml`: the audit directory, audit policy, authentication
       config and `registries.yaml` tasks; the `unit-logging.yml` import; and `Restart k3s so
       the log drop-in takes effect`. Delete the `.skip` task from `coredns.yml`.
