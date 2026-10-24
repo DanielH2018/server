@@ -2,7 +2,7 @@
 
 `_ratchet.py` and `_ratchet_patches.py` hold the pure half — the caps, the allowlist parser,
 the two comparisons and the patch counter. This module is the impure half that reads the working tree: the
-line counts, the monkeypatch counts and the conftest-fixture census. It sits beside the
+code-line counts, the monkeypatch counts and the conftest-fixture census. It sits beside the
 pure module rather than inside the test module so the `--tighten` writer
 (`scripts/dev/tighten_ratchets.py`) imports the SAME census the ratchet asserts on.
 Importing a `test_*.py` from a script would work under pytest and nowhere else.
@@ -16,7 +16,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from _helpers import REPO, is_test_file
-from _ratchet import Ratchet, cap_for
+from _ratchet import Ratchet, cap_for, code_lines
 from _ratchet_patches import (
     count_module_patches,
     first_party_module_names,
@@ -34,7 +34,7 @@ def run_git(*args: str) -> subprocess.CompletedProcess[str]:
 
 LENGTHS = Ratchet(
     path=HERE / "module_length_allowlist.txt",
-    unit="lines",
+    unit="code lines",
     remedy=(
         "Split it where each piece reads alone (docs/python-code-organization.md says "
         "where the pieces go). If every split would leave a piece conjoined with its "
@@ -81,11 +81,31 @@ def tracked_python_files() -> list[str]:
     ]
 
 
-def line_counts() -> dict[str, int]:
-    """Repo-relative path -> line count, counting newlines the way `wc -l` does."""
-    return {
-        rel: (REPO / rel).read_bytes().count(b"\n") for rel in tracked_python_files()
-    }
+def code_line_counts() -> dict[str, int]:
+    """Repo-relative path -> its `code_lines` count, or its line count when that is no more
+    than its cap.
+
+    A file never has more code lines than lines, so a file at or under its cap in lines is
+    under it in code lines too, and the ratchet's verdict on it is the same either way. Only
+    the files over their cap in lines are parsed: they are about one in seven, and parsing
+    every tracked file took 8s, on a census that runs on every commit touching Python.
+
+    Raises:
+        ValueError: naming the file, when one it has to parse does not decode as UTF-8 or
+            does not parse.
+    """
+    counts = {}
+    for rel in tracked_python_files():
+        raw = (REPO / rel).read_bytes()
+        lines = raw.count(b"\n")
+        if lines <= cap_for(rel):
+            counts[rel] = lines
+            continue
+        try:
+            counts[rel] = code_lines(raw.decode())
+        except (SyntaxError, UnicodeDecodeError) as err:
+            raise ValueError(f"{rel}: cannot count its code lines: {err}") from err
+    return counts
 
 
 def module_fixtures_by_dir(tracked: Iterable[str]) -> dict[str, frozenset[str]]:
