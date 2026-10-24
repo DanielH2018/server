@@ -347,7 +347,10 @@ Instead it reads the cluster every 30 seconds:
   soak, which exits once `homelab` leaves R (#5704), and the wait reads that revision's soak
   instead (D7.2).
 - **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
-  line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
+  line names the held SHA and, for a `failed=` hold, the failed names, and says whether any
+  of them is one of this PR's services. The held SHA is the newest commit the promotion
+  carried, which may be another PR's, so a hold naming none of this PR's services was most
+  likely caused by another merge in it, or by a run it superseded (D7, #6199). Clearing the hold is
   the operator's decision, approved through the permission prompt the agent's clear raises. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
   its verification (`docs/flux-deploy-plane.md`, *Verification*).
 - **`nothing-to-deploy`, from land-wait's `suspended`, exit 0.** Every tag Flux applies for
