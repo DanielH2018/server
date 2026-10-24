@@ -9,8 +9,8 @@ host_vars, through `lib.ansible_jinja_env`, so the read fails here first.
 
 `EXPECTED_TEMPLATES` names the templates the live role ships, which makes the census
 non-vacuous. pi-peer-backup's flip, which the plan expected to add the first, moved a static
-wrapper and a public key into `files/` instead. crowdsec's first conversion PR added the first
-two, the edge probe's service and timer units.
+wrapper and a public key into `files/` instead. crowdsec's first conversion PR added the edge
+probe's service and timer units, which H5.14 moved into the Pi package.
 
 Red-proof: a fixture role under `tmp_path`, laid out like the real one, whose template reads
 `artifacts_host_dir`. Only `roles/k8s/artifacts/defaults/main.yml` defines that name, so the
@@ -36,8 +36,6 @@ ROLE = SETUP_ROLES / "k8s_host_files"
 # The templates the live role ships.
 EXPECTED_TEMPLATES: frozenset[str] = frozenset(
     {
-        "crowdsec-edge-probe.service.j2",
-        "crowdsec-edge-probe.timer.j2",
         "ghcr-mirror-gc-job.yaml.j2",
         "registry-gc.sh.j2",
     }

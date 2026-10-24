@@ -1,0 +1,52 @@
+# crowdsec's edge probe timer on daniel-pi (H5.14, docs/target-architecture/host/h5-pi-compose.md).
+# D5's first crowdsec conversion PR (#5650) installed it through setup/k8s_host_files with
+# `delegate_to: daniel-pi`. The package owns it since H5.14, and the PR that added this component
+# deleted those tasks, so one side writes each path.
+#
+# The evidence half of crowdsec's off-cluster verify (D5, *crowdsec's verify from outside the
+# cluster*): the timer probes the edge VIP once a minute and appends `<UTC time> http=<code>` to
+# /var/log/pi-health/crowdsec-edge-probe.status, which the Pi's Alloy counts by status. The
+# `crowdsec-verify` Job bans the Pi and reads that count. Alloy's config pins the status path, so
+# renaming the file is a change to both.
+#
+# The service runs as sys_user, the user the three pi-heartbeats services run as. systemd re-owns
+# a LogsDirectory= tree to the starting unit's user when the owner differs, so a probe running as
+# root every minute would take /var/log/pi-health/ from the heartbeat writers.
+# hosts/lib/tests/test_crowdsec_probe_component.py asserts that every unit declaring
+# LogsDirectory=pi-health declares the same User=. The probe reads no secret.
+#
+# Autonomous-role contract (the timer probes the edge every minute with no human in the loop).
+#
+# - Scope / exclusions: one HTTPS GET to the edge VIP, with jellyfin's hostname in the SNI and the
+#   Host header, and an append to the status file. It changes no cluster, host or firewall state,
+#   and it writes nowhere outside /var/log/pi-health/. The ban it makes visible is the verify
+#   Job's, not this unit's.
+# - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
+#   link from a package version, or reverting this component, stops the timer on the install that
+#   drops it (reconcile's step 1). `systemctl stop homelab-crowdsec-probe.timer` on the Pi stops
+#   it until the next package install. The status file then stops growing and stays bounded.
+# - Authoritative sources: this package at the SHA the Pi installed. `domain` and
+#   `k3s_metallb_ingress_vip` come from group_vars and render into the service at build time, so
+#   a change to either needs a new package version before the Pi's probe follows it.
+# - Abort valves: reconcile's `hold_sha`, and the updater's own hold (docs/host-packages.md).
+# - Required evidence, every cycle: one `http=<code>` line in
+#   /var/log/pi-health/crowdsec-edge-probe.status, with `http=000` when nothing answered, and the
+#   counter `loki_process_custom_crowdsec_edge_probe_total` by status in Prometheus.
+# - Next-run review: a verify Job that fails naming the evidence channel means the probe did not
+#   run or Alloy did not count it. Read the status file's tail and
+#   `systemctl status homelab-crowdsec-probe.timer` on the Pi before changing the Job.
+#
+# ENFORCED: hosts/lib/tests/test_crowdsec_probe_component.py, which renders the package and holds
+# the units, the script path, the status path and the shared User=.
+files:
+  - {src: crowdsec-edge-probe.sh, dst: /usr/lib/homelab/crowdsec-edge-probe, mode: "0755"}
+  - {src: units/homelab-crowdsec-probe.service.j2, dst: /usr/lib/systemd/system/homelab-crowdsec-probe.service}
+  - {src: units/homelab-crowdsec-probe.timer, dst: /usr/lib/systemd/system/homelab-crowdsec-probe.timer}
+enable:
+  homelab-crowdsec-probe.timer: timers.target
+# What D5's conversion installed through k8s_host_files. Reconcile retires each once the timer
+# above has started, so the probe never runs twice or not at all.
+legacy:
+  - {unit: crowdsec-edge-probe.timer}
+  - {unit: crowdsec-edge-probe.service}
+  - {path: /usr/local/bin/crowdsec-edge-probe}
