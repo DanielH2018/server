@@ -741,7 +741,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
-          node-version: "24.21.0"
+          node-version: "24.22.0"
 
       - name: Validate and test the deck mod
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
