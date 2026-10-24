@@ -60,9 +60,12 @@ name: promote
 
 on:
   # zizmor: ignore[dangerous-triggers] -- every job requires a successful push run of CI on master in this repository, `render` refuses a commit not on master, and no job checks out a pull-request ref.
+  # `branches` keeps a pull request's CI run from starting a run that every job's guard then
+  # skips (#6152). The job guards stay the security check.
   workflow_run:
     workflows: [CI]
     types: [completed]
+    branches: [master]
   # The weekly reboot's no-promotion window ends here, at the cron's 07:30 UTC Sunday plus the
   # 5-minute shutdown delay and the mute's 40-minute recovery, all from
   # ansible/inventory/group_vars/all.yml. GitHub reads this literal, so
