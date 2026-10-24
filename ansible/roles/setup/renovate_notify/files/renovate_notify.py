@@ -42,6 +42,7 @@ from notify_logic import (
     find_dashboard_problems,
     fingerprint,
     parse_automerge,
+    read_check_pages,
     problems_fingerprint,
     render_autoclosed,
     render_digest,
@@ -120,7 +121,10 @@ def build_pr(repo: str, pr: dict) -> PR:
         detail.get("mergeable_state") == "dirty" or detail.get("mergeable") is False
     )
     sha = pr["head"]["sha"]
-    runs = get("repos/%s/commits/%s/check-runs" % (repo, sha)).get("check_runs", [])
+    runs = read_check_pages(
+        lambda query: get("repos/%s/commits/%s/check-runs%s" % (repo, sha, query)),
+        "check_runs",
+    )
     statuses = get("repos/%s/commits/%s/status" % (repo, sha)).get("statuses", [])
     return PR(
         number=n,

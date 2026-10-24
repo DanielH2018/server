@@ -2,7 +2,10 @@ import json
 import urllib.parse
 import urllib.request
 
+import notify_logic
+import pytest
 import renovate_notify as rn
+from deployer_lib import deploy_git
 
 
 class _FakeResp:
@@ -154,3 +157,66 @@ def test_a_check_runs_read_short_of_total_count_is_not_read_as_green(monkeypatch
     except ValueError:
         return  # a refused read, the way deploy_git.read_check_pages refuses one
     assert pr.ci != "success"
+
+
+# The notifier cannot import deployer_lib, so notify_logic carries a copy of the page walk.
+# These hold the copy equal to deploy_git's, as the builder's copy is held (#5991).
+
+
+def _listing(runs: int, total: int | None = None):
+    """A `fetch_page` over `runs` filler runs whose body reports `total` (default: `runs`)."""
+    listing = [{"name": "r%d" % i} for i in range(runs)]
+
+    def fetch_page(query: str) -> dict:
+        page = int(query.rsplit("page=", 1)[1])
+        size = notify_logic.CHECK_PAGE_SIZE
+        return {
+            "total_count": runs if total is None else total,
+            "check_runs": listing[(page - 1) * size : page * size],
+        }
+
+    return fetch_page
+
+
+def test_the_page_size_and_cap_match_the_deployers():
+    assert (notify_logic.CHECK_PAGE_SIZE, notify_logic.CHECK_PAGES_MAX) == (
+        deploy_git.CHECK_PAGE_SIZE,
+        deploy_git.CHECK_PAGES_MAX,
+    )
+
+
+@pytest.mark.parametrize(
+    "fetch_page",
+    [
+        _listing(0),
+        _listing(100),
+        _listing(150),
+        _listing(100, total=150),
+        _listing(150, total=120),
+        _listing(2100),
+        lambda query: {"check_runs": []},
+        lambda query: {"total_count": 0},
+        lambda query: [],
+    ],
+    ids=[
+        "empty",
+        "one-full-page",
+        "two-pages",
+        "short-of-total",
+        "past-total",
+        "past-the-cap",
+        "no-total",
+        "no-list",
+        "not-a-dict",
+    ],
+)
+def test_the_page_walk_matches_the_deployers(fetch_page):
+    def outcome(read):
+        try:
+            return read(fetch_page, "check_runs")
+        except ValueError as exc:
+            return "ValueError: %s" % exc
+
+    assert outcome(notify_logic.read_check_pages) == outcome(
+        deploy_git.read_check_pages
+    )
