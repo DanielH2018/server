@@ -18,3 +18,7 @@ Environment=TMPDIR=/tmp
 Environment=PATH={{ claude_code_agent_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 # The script refuses, failing the unit, when the source does not render the agent variant.
 ExecStart=/usr/local/bin/claude-dotfiles-sync.sh {{ claude_code_agent_user_home }}/.local/bin/chezmoi {{ claude_code_agent_user_home }}/.config/chezmoi/seed.toml
+# The textfile that tells a timer which stopped firing from one that runs clean (#6165).
+# timer-textfile.j2 has the shape and the deadline rule.
+{% from 'timer-textfile.j2' import timer_textfile with context %}
+{{ timer_textfile(claude_code_agent_user ~ '-dotfiles-sync', claude_code_agent_dotfiles_sync_interval) }}
