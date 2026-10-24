@@ -39,6 +39,7 @@ from deployer_lib.deploy_k8s import (
 from deployer_lib.deploy_state import DeployerState
 from deployer_lib.deploy_tick_types import TickPlan, TickTarget
 from deployer_lib.deploy_toolbox import DeployTools
+from gitops_markers import DEPLOY_PLAYBOOK
 
 # The two local-time slots a dirty working tree pages in, at ~08:00 and ~20:00 CT. They are
 # constants here rather than settings on `Config`: no config.env key sets them, and
@@ -243,6 +244,7 @@ def handle_broad(
             # `apply_broad_k8s` records what it owes in the ledger, and only then the
             # receipt's `deferred` entry (`record_deferred_receipt` says why the order).
             continue
+        started = time.monotonic()
         try:
             if broad.apply:
                 deploy_io.deploy_broad(
@@ -265,6 +267,12 @@ def handle_broad(
             # role it narrowed from, so that role's whole-role apply clears the hold. The
             # property carries the derivation.
             state.hold_failed_apply(origin, playbook, broad.held)
+            # A deploy-plane apply annotates its services on success (`apply_broad_k8s`), so
+            # its failure annotates them too (#6164). Nothing rolls a broad apply back.
+            if playbook == DEPLOY_PLAYBOOK and broad.apply:
+                tools.emit_deploy_annotation(
+                    set(tags) or {"full"}, origin, "fail", time.monotonic() - started
+                )
             # The range is merged and this arm never resets, so nothing re-derives what it
             # carried: the deferred pages go out now, and the failure post below names the
             # promoted bumps, which no later tick's range will contain.

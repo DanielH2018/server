@@ -239,6 +239,28 @@ def test_a_failed_plane_keeps_an_earlier_plane_held_beside_its_own(
     assert state.hold_plane == "ansible/deploy.yml radarr"
 
 
+def test_a_failed_deploy_plane_is_annotated_as_a_failure(
+    gitops_deploy, tick, settings, state
+):
+    """The plane that annotates radarr on success annotates its failure too (#6164)."""
+    config = plane_applies_radarr(settings, tick)
+    tick.playbook_outcomes = [RuntimeError("radarr's role failed")]
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    assert [e for e in tick.log if e[0] == "annotation"] == [
+        ("annotation", {"radarr"}, "fail")
+    ]
+
+
+def test_a_failed_setup_plane_writes_no_deploy_annotation(
+    gitops_deploy, tick, settings, state
+):
+    """A setup role is no deploy the boards mark, on success or on failure."""
+    config = mixed(settings, tick, APPLYABLE_ROLE)
+    tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    assert not [e for e in tick.log if e[0] == "annotation"]
+
+
 def test_a_failed_bump_still_annotates_the_bump_the_plane_applied(
     gitops_deploy, tick, settings, state
 ):

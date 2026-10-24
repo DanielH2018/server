@@ -23,6 +23,7 @@ from _deploy_sh_fakes import (
 from deploy_tools.deploy_lib import detach_run as deploy_detach
 from deploy_tools.deploy_lib import under_locks as deploy_under_locks
 from lib.exit_codes import DEPLOY_NO_HOSTS
+from lib.git_testing import git_out
 from lib.repo_paths import REPO
 
 UV_STUB = f"""#!/bin/bash
@@ -55,8 +56,8 @@ def test_a_detached_deploy_annotates_its_result(tmp_path, status, marks):
     assert seen == marks
 
 
-def _annotations(tmp_path: Path, playbook_exit: int) -> list[str]:
-    """The `deploy-annotation` lines the real `deploy.sh` hands `logger`."""
+def _annotations(tmp_path: Path, playbook_exit: int) -> tuple[list[str], str]:
+    """The `deploy-annotation` lines the real `deploy.sh` hands `logger`, and the short HEAD."""
     repo = make_snapshot_repo(tmp_path / "repo")
     bin_dir = stub_bin(
         tmp_path, {"flock": FLOCK_STUB, "uv": UV_STUB, "logger": LOGGER_STUB}
@@ -81,15 +82,20 @@ def _annotations(tmp_path: Path, playbook_exit: int) -> list[str]:
     )
     assert result.returncode == (0 if playbook_exit == 0 else 20), result.stderr
     lines = log.read_text().splitlines() if log.exists() else []
-    return [line for line in lines if line.startswith("-t deploy-annotation ")]
+    # The snapshot names itself `--short`, a minimum width, so the test asks git the same way.
+    head = git_out(repo, "rev-parse", "--short", "HEAD")
+    return [line for line in lines if line.startswith("-t deploy-annotation ")], head
 
 
 def test_a_failed_deploy_sh_annotates_a_failure_with_its_duration(tmp_path):
-    [line] = _annotations(tmp_path, 2)
+    [line], _head = _annotations(tmp_path, 2)
     assert " services=sonarr " in line
     assert " result=fail duration_s=" in line
 
 
 def test_a_successful_deploy_sh_annotates_the_unchanged_success_line(tmp_path):
-    [line] = _annotations(tmp_path, 0)
-    assert line.endswith(" result=ok") and "duration_s" not in line
+    """The whole line, as it was before #6164: a dashboard query and its readers parse it."""
+    [line], head = _annotations(tmp_path, 0)
+    assert line == (
+        f"-t deploy-annotation event=deploy services=sonarr sha={head} result=ok"
+    )
