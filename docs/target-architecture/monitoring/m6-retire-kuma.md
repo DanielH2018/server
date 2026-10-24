@@ -23,6 +23,8 @@ C1, C6 and C7, and the operator accepted the amendment on 2026-10-17. It merged 
 settled with `observability`. Every flux tag's `gotk_resource_info` carries `content_digest`, and
 peanut's reference stayed at `2026-10-17T14:00:54Z` while three later commits landed.
 
+PR C-0, the ADR (Proposed, awaiting the operator): [#6091](https://github.com/DanielH2018/server/pull/6091).
+
 Depends on: M2, M3, M4, M5
 
 Related issues: [#4563](https://github.com/DanielH2018/server/issues/4563), the health gap over the old ReplicaSet. `health_rollout.py`
