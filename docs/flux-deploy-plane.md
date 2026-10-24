@@ -1741,8 +1741,11 @@ Every flux-owned role with a `Recreate` Deployment on a large image sets it. Nin
 code-server, n8n, tdarr, home-assistant, valheim, jellyfin, karakeep, uptime-kuma and `crowdsec`
 (#5525, #5546, #5855, #5858). The bundle holds a `<tag>-prepull` Kustomization for each, and
 `scripts/deploy_tools/bundle_census.py:prepull_tags` reads the full list from the tree. Docker
-Hub served a 420 MB layer at 23.5-53.8 MB/s on 2026-10-22, about 100 times GHCR's rate, so a
-Docker Hub role's budget is minutes where a GHCR role's is most of an hour (#5867).
+Hub served a 420 MB layer at 23.5-53.8 MB/s on 2026-10-22 (#5867). GHCR's rate swings by two
+orders of magnitude. It served daniel-box at 0.15-0.45 MB/s from 2026-10-17 to 2026-10-19, and
+at 44-98 MB/s on 2026-10-24, the same as Docker Hub (#5654). A GHCR role's budget is sized for
+the slow case, most of an hour, because a budget sized for the fast case fails every revision
+during a slow week. A Docker Hub role's budget stays minutes.
 
 ### The snapshot Job
 
