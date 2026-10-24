@@ -4,12 +4,14 @@ journald stores notice and above (`MaxLevelStore=notice`,
 `ansible/roles/setup/initial_setup/tasks/system-tuning.yml`). It forwards info to rsyslog, and
 `49-homelab-info-filter.conf` then stops info for every facility except auth, authpriv, kern
 and mail. A unit's stdout and stderr reach journald at its `SyslogLevel=`, which defaults to
-info, so a unit left on the default loses every line it prints (#6160). The row sits in its own
-module because `test_census_rows_text.py`, which imports it into `ROWS`, is near the cap for a
-test module.
+info, so a unit left on the default loses every line it prints (#6160). The row runs on
+`ansible/tests/_row_table.py`'s harness from its own module, because `test_census_rows_text.py`
+is at its module-length allowlist entry.
+
+Run: uv run pytest ansible/tests/repo/test_installed_units_log_level.py
 """
 
-from _row_table import Census, Subject, tracked
+from _row_table import Census, Subject, check, proof_problems, tracked
 
 # Levels journald stores under MaxLevelStore=notice.
 STORED_LEVELS = frozenset({"emerg", "alert", "crit", "err", "warning", "notice"})
@@ -80,3 +82,12 @@ SYSLOG_LEVEL_ROW = Census(
         }
     ),
 )
+
+
+def test_every_installed_unit_logs_at_a_stored_level():
+    problems = check(SYSLOG_LEVEL_ROW)
+    assert not problems, "\n".join(problems)
+
+
+def test_the_row_flags_its_red_subjects_and_passes_its_green_one():
+    assert not proof_problems(SYSLOG_LEVEL_ROW)

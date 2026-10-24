@@ -536,6 +536,7 @@
  "ansible/tests/repo/test_host_package_scans_run_on_every_pr.py": 0.0,
  "ansible/tests/repo/test_host_tool_pins_match_their_twins.py": 0.0,
  "ansible/tests/repo/test_host_write_rows.py": 0.0,
+ "ansible/tests/repo/test_installed_units_log_level.py": 0.0,
  "ansible/tests/repo/test_k8s_render_prebuild.py": 2.6,
  "ansible/tests/repo/test_k8s_render_role_template.py": 0.05,
  "ansible/tests/repo/test_kind_node_image_follows_k3s.py": 0.0,
