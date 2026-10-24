@@ -6,6 +6,8 @@ OnFailure=renovate-notify-alert.service
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 User={{ sys_user }}
 # Sandbox: a narrow notifier — queries open PRs over HTTPS and writes ONLY its state dir — so it
 # can be confined, unlike the gitops-deploy unit which deploys the whole fleet. Limits blast radius

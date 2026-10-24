@@ -3,6 +3,8 @@ Description=Restart the Claude Code Remote Control host to adopt a background au
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 # DECIDED: a separate timer + `systemctl try-restart`, NOT RuntimeMaxSec= on
 # claude-rc.service. RuntimeMaxSec expiry is recorded as a failure (result: timeout), so it
 # would fire OnFailure=claude-rc-alert.service and page Discord once a week on a healthy

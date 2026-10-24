@@ -6,6 +6,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 # As the clone's owner: git refuses a repository another user owns, and a root-run uv sync
 # leaves a root-owned .venv.
 User={{ claude_code_agent_user }}

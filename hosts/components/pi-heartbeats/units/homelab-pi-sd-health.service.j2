@@ -6,6 +6,8 @@ Wants=homelab-secrets.service
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 User={{ sys_user }}
 ExecStart=/usr/lib/homelab/pi-sd-health
 LoadCredential=pi_sd_health_push_token:/run/credstore/pi_sd_health_push_token

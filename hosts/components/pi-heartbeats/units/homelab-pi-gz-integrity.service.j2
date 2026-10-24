@@ -4,6 +4,8 @@ Description=Check every rotated log on the Pi with gzip -t
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 User={{ sys_user }}
 ExecStart=/usr/lib/homelab/pi-gz-integrity
 # The sweep prints its verdict line on every run, and the cron piped it to this tag.

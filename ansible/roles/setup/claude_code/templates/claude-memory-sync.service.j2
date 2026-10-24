@@ -4,6 +4,8 @@ OnFailure=claude-memory-sync-alert.service
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 # As the user that owns the store: the copy authenticates with that user's ssh key, and the
 # files on the far side must stay owned by the same account.
 User={{ sys_user }}

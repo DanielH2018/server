@@ -6,6 +6,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 # As the agent: chezmoi writes into its home, and git refuses a source another user owns.
 User={{ claude_code_agent_user }}
 Environment=HOME={{ claude_code_agent_user_home }}

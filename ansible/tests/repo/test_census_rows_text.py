@@ -25,6 +25,7 @@ from deploy_tools.land_lib import policy
 from lib import yaml_fast
 from renderer.renderer_lib import host as host_mode
 from lib.facts.citations import macro_citations
+from _syslog_level_row import SYSLOG_LEVEL_ROW
 from _row_table import (
     Census,
     Subject,
@@ -455,6 +456,7 @@ ROWS = (
             }
         ),
     ),
+    SYSLOG_LEVEL_ROW,
 )
 
 _IDS = [row.name for row in ROWS]
