@@ -217,7 +217,7 @@ class Cases:
             print(f"[FAIL] {container.name}: {name}: {exc}", file=sys.stderr)
             journal = container.sh(
                 f"journalctl -u {UPDATER}.service -u homelab-reconcile.service"
-                " -n 60 --no-pager -o short-monotonic"
+                " -u homelab-compose.service -n 80 --no-pager -o short-monotonic"
             ).stdout
             print(
                 f"::group::journal after {name}\n{journal}::endgroup::", file=sys.stderr

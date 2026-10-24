@@ -95,6 +95,21 @@ def encrypt(c: Container, values: dict[str, str]) -> str:
     return c.ok(f"cat /tmp/seal/{HOST}.sops.yaml")
 
 
+# A `docker` that accepts every verb and prints nothing: the container holds no engine. The real
+# Pi package enables homelab-compose.service (H5.2b), and reconcile restarts it. compose-run then
+# finds no service to adopt and no image to pull, so a no-output `docker` lets its six steps pass.
+# The package, the unit and the scripts stay the real ones.
+DOCKER_STUB_PATH = "/usr/local/bin/docker"
+DOCKER_STUB = r"#!/bin/sh\nexit 0\n"
+
+
+def stub_docker(c: Container) -> None:
+    """Install a no-op `docker` in `c`, so the real Pi package's compose unit can run."""
+    c.ok(
+        f"printf '{DOCKER_STUB}' > {DOCKER_STUB_PATH} && chmod 0755 {DOCKER_STUB_PATH}"
+    )
+
+
 def seal_pi(cases, c: Container, seal=None, make_deb=None) -> None:
     """Rebuild the real Pi package and its two variants with a ciphertext `c` can decrypt.
 
@@ -117,6 +132,7 @@ def seal_pi(cases, c: Container, seal=None, make_deb=None) -> None:
         f" /srv/debs/{cases.debs[cases.tools[0]].name}"
     )
     c.ok(f"install -d -m 0755 /etc/homelab && age-keygen -o {AGE_KEY}")
+    stub_docker(c)
     credentials = host_mode.render_host(HOST).credentials
     expect(bool(credentials), "the real Pi package lists no credential to seal")
     sealed = seal(c, {key: f"fixture-only-{key}" for key in credentials})
