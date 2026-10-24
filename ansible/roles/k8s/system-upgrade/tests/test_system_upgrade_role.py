@@ -15,6 +15,7 @@ from lib.repo_paths import K8S_ROLES
 ROLE = K8S_ROLES / "system-upgrade"
 DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
 PLANS = ("plan-k3s-server.yaml.j2", "plan-k3s-agent.yaml.j2")
+DRILL = "plan-k3s-redproof.yaml.j2"
 NO_NODE = "no-node-selected"
 GATE_DIR = "/host/usr/lib/homelab/"
 
@@ -289,5 +290,46 @@ def test_the_vendored_namespace_is_the_one_every_template_names():
         if d["kind"] == "Namespace"
     ]
     assert namespace["metadata"]["name"] == "system-upgrade"
-    for template in (*PLANS, "networkpolicy.yaml.j2"):
+    for template in (*PLANS, DRILL, "networkpolicy.yaml.j2"):
         assert _rendered(template)[0]["metadata"]["namespace"] == "system-upgrade"
+
+
+def test_the_drill_plan_selects_only_daniel_box_and_honours_the_pause_label():
+    plan = _plan(DRILL)
+    assert _clause(plan, "kubernetes.io/hostname")["values"] == ["daniel-box"]
+    assert _clause(plan, "homelab/k3s-upgrade-paused")["operator"] == "DoesNotExist"
+    # The real Plans' node list does not reach it: widening them must not widen the drill.
+    widened = _plan(DRILL, ["daniel-server"])
+    assert _clause(widened, "kubernetes.io/hostname")["values"] == ["daniel-box"]
+
+
+def test_the_drill_plan_carries_the_pin_so_the_health_expressions_can_leave_in_progress():
+    plan = _plan(DRILL)
+    assert plan["spec"]["version"] == DEFAULTS["k3s_version"]
+    assert plan["spec"]["concurrency"] == 1
+    assert not {"cordon", "drain"} & set(plan["spec"])
+
+
+def test_the_drill_plan_declares_no_prepare_and_its_upgrade_container_only_exits_1():
+    spec = _plan(DRILL)["spec"]
+    # No host ships k3s_gates.py before H6.3b.
+    assert "prepare" not in spec
+    assert spec["upgrade"]["image"] == DEFAULTS["system_upgrade_gate_image"]
+    # A tag and a digest, so SUC's WithLatestTag leaves the reference alone.
+    assert "@sha256:" in spec["upgrade"]["image"]
+    assert spec["upgrade"]["command"] == ["python3", "-c", "raise SystemExit(1)"]
+    assert "args" not in spec["upgrade"]
+
+
+def test_the_drill_plan_fails_inside_a_deadline_of_minutes():
+    # H6 Open question 16: the vendored controller env sets SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT to
+    # 99, so a failing pod is retried until the Job deadline and JobFailed arrives only then.
+    [env] = [
+        d
+        for d in _upstream("system-upgrade-controller.yaml")
+        if d["kind"] == "ConfigMap"
+    ]
+    assert int(env["data"]["SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT"]) > 3
+    deadline = _plan(DRILL)["spec"]["jobActiveDeadlineSecs"]
+    assert 0 < deadline < 900, "the red must arrive within minutes"
+    assert deadline < DEFAULTS["system_upgrade_server_deadline_secs"]

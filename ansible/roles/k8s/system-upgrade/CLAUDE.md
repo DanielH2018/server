@@ -24,6 +24,13 @@ else upgrades k3s once H6.3c and H6.3d land. The slice plan is
   the list one node at a time, and setting it back to empty is the durable pause.
   `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py` holds that an empty
   list matches no node.
+- **`k3s-redproof` is a drill Plan that H6.1c reverts** (`templates/plan-k3s-redproof.yaml.j2`).
+  It selects daniel-box by hostname, not through `system_upgrade_nodes`. Its `upgrade`
+  container exits 1 and touches nothing, so `flux/system-upgrade` reads `failed` and `promote`
+  sets `DEPLOY_HOLD`. Flux does not prune it, so the revert is followed by the operator's
+  `kubectl -n system-upgrade delete plan k3s-redproof`. The vendored controller env sets
+  `SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT` to 99, so a failing pod retries until the Job deadline
+  (H6 *Open questions* 16). The drill Plan therefore sets its own 300-second deadline.
 - **The k3s pin lives in `defaults/main.yml`.** `k3s_version`, `k3s_install_script_url` and
   `k3s_install_script_sha256` moved here from `setup/k3s`, so a pin change routes to this
   Flux-owned tag and the deployer writes no `manual_plane` line. `setup/k3s` reads the file

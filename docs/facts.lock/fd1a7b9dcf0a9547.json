@@ -1,5 +1,5 @@
 {
-  "checksum": "1b6bdb48c777b5ca214d39816ec15e3b4f9e019856314c284bc80979d418710f",
+  "checksum": "68e7bbb581a09e1f4126187fa830a3d6249659046239a8fd907dae67bc066b83",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/system-upgrade/CLAUDE.md#At a glance",
   "row": {
@@ -11,6 +11,6 @@
       "scripts/renderer/tests/test_renderer_crd_census.py": "7fa9c323c1792f6a53133bd2b9c79da13b3f8314adc5516a32d64e2acd22e5e9"
     },
     "python": "3.14",
-    "verified_sha": "35a19551f"
+    "verified_sha": "37f64931b"
   }
 }

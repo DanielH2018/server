@@ -1,0 +1,40 @@
+# The H6.1c red-path drill Plan. It exists to fail: its `upgrade` container exits 1 and touches
+# nothing, so SUC reports `Complete=False` with reason `JobFailed` and `flux/system-upgrade` reads
+# `failed` through the health expressions. The PR that adds this file is reverted once the drill
+# is read. Flux does not prune it (`flux_prune: false`), so the operator deletes it by hand:
+# `kubectl -n system-upgrade delete plan k3s-redproof`.
+#
+# It selects daniel-box by hostname, and not through `system_upgrade_nodes`, so the real Plans
+# keep selecting no node. It carries `version`, because the health expressions compare
+# `status.latestVersion` with the pin, and a Plan without one never leaves InProgress. It declares
+# no `prepare`: no host ships `k3s_gates.py` before H6.3b. The `upgrade` image is the gate image,
+# which names a tag and a digest, so SUC leaves it alone and does not append the Plan's version.
+#
+# `jobActiveDeadlineSecs` is not in H6 step 4's list. The controller's `default-controller-env`
+# sets SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT to 99 and v0.20.2's job.go reads it (H6 Open question 16),
+# so the failing pod is retried until the Job's deadline and `JobFailed` arrives only then. Without
+# this line the deadline is the controller's 3600 seconds, and the red arrives after the rehearsal
+# gives up at 2400. 300 seconds puts the red within minutes, as step 4 requires.
+apiVersion: upgrade.cattle.io/v1
+kind: Plan
+metadata:
+  name: k3s-redproof
+  namespace: system-upgrade
+spec:
+  concurrency: 1
+  version: "{{ k3s_version }}"
+  jobActiveDeadlineSecs: 300
+  nodeSelector:
+    matchExpressions:
+      - key: kubernetes.io/hostname
+        operator: In
+        values:
+          - daniel-box
+      - key: homelab/k3s-upgrade-paused
+        operator: DoesNotExist
+  upgrade:
+    image: {{ system_upgrade_gate_image }}
+    command:
+      - python3
+      - -c
+      - raise SystemExit(1)
