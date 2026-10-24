@@ -15,6 +15,7 @@ from lib import yaml_fast
 from lib.exit_codes import RENDER_REFUSED
 from renderer import homelab_render
 from renderer.renderer_lib import cluster as cluster_mod
+from renderer.renderer_lib import ordering as ordering_mod
 from renderer.renderer_lib.bundle import (
     CLUSTER_VARS_FILE,
     SHARED_KINDS,
@@ -26,7 +27,6 @@ from renderer.renderer_lib.ordering import (
     Ordering,
     dependency_cycle,
     kustomization_edges,
-    verify_after,
 )
 
 TIMEOUT = "600s"
@@ -308,7 +308,7 @@ def test_a_verify_after_that_is_not_a_list_of_other_tags_is_a_problem(tmp_path, 
     defaults = tmp_path / "crowdsec" / "defaults"
     defaults.mkdir(parents=True)
     (defaults / "main.yml").write_text(yaml.safe_dump({"flux_verify_after": value}))
-    found, problems = verify_after(["crowdsec"], tmp_path)
+    found, problems = ordering_mod.verify_after(["crowdsec"], tmp_path)
     assert found == {}
     assert problems and "flux_verify_after" in problems[0]
 
