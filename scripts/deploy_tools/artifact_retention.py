@@ -13,9 +13,9 @@ THE RULE. A version is deleted only when it is older than RETENTION_DAYS and is 
   - a signature of a digest deleted in the same run or missing from the listing: the untagged
     cosign bundle whose `subject` is that digest, or the index tagged `sha256-<hex>` that
     cosign writes on a registry without the referrers API.
-Everything else stays, however old: the versions tagged `prod`, `last-good`, `held` and
-`verify-drill`, every walk candidate, because each descends from `prod`'s commit, and every
-signature of a surviving digest. When `prod` is absent, or any fact the selection needs
+Everything else stays, however old: the versions tagged `prod`, `last-good`, `held`,
+`superseding` and `verify-drill`, every walk candidate, because each descends from `prod`'s
+commit, and every signature of a surviving digest. When `prod` is absent, or any fact the selection needs
 failed, nothing is deleted. A listing that lacks `prod`'s or `last-good`'s version counts as
 failed, because a short listing would make their signatures look orphaned.
 
@@ -33,6 +33,9 @@ LAST_GOOD_TAG = "last-good"
 # The revision a failed promotion left as `prod` under a hold without a reset (H1.1b). The
 # in-flight wait reads it, so a cleared hold of that kind does not read as a run in flight.
 HELD_TAG = "held"
+# The revision that took over a verification in flight (D7). `decide` never supersedes the
+# digest it names, so one verification is superseded at most once.
+SUPERSEDING_TAG = "superseding"
 
 # How old a version must be before `prune` may delete it. Every deletion, a signature's
 # included, waits this long, so a version pushed while a run lists the package is never one.
