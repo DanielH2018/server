@@ -83,7 +83,7 @@ from validate.validate_lib.host_container import (
     list_problems,
     release_fetched,
 )
-from validate.validate_lib import conffile_case, repos_case, secrets_case
+from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -575,9 +575,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     for run in (cases.upgrade_path, cases.cold_install, cases.by_hand, cases.disarm):
         run()
-    secrets_case.run(cases)
-    conffile_case.run(cases)
-    repos_case.run(cases)
+    for case in (secrets_case, conffile_case, shadow_case, repos_case):
+        case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr
