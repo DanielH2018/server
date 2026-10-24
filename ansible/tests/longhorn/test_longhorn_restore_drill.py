@@ -112,15 +112,15 @@ def test_rotation_selects_by_attempt_not_by_success() -> None:
     loss of coverage. Stamping the attempt before the restore is what bounds a failing volume to
     one slot per cycle.
     """
-    assert 'at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}"' in CODE, (
+    assert 'at=$(stamp_epoch "attempts.${pvc}")' in CODE, (
         "rotation must order candidates by their attempt stamp"
     )
-    attempt_at = CODE.index('touch "${ATTEMPT_DIR}/${PVC}"')
+    attempt_at = CODE.index('"attempts.${PVC}" "$ATTEMPT_AT"')
     assert attempt_at < CODE.index("$KUBECTL apply -f"), (
         "the attempt stamp must be written BEFORE the restore, or a failing volume starves "
         "the rotation"
     )
-    assert CODE.index('>"${SUCCESS_DIR}/${PVC}"') > CODE.index(
+    assert CODE.index('"success.${PVC}" "$PASSED_AT"') > CODE.index(
         '"$BYTES" -ge "$MIN_BYTES"'
     ), "the per-volume success stamp must be written only after the assertions pass"
 
@@ -139,11 +139,8 @@ def test_drill_carries_the_source_block_size() -> None:
 
 def test_drill_publishes_its_candidate_list() -> None:
     """Check 8 has no cluster credential worth the name, and a second definition would drift."""
-    assert 'cut -f1 >"$CANDIDATES"' in CODE, (
+    assert 'stamp_set candidates "$CANDIDATE_LIST"' in CODE, (
         "the drill must publish the eligible set for the heartbeat's coverage check"
-    )
-    assert 'chmod 0644 "$CANDIDATES"' in CODE, (
-        "the heartbeat runs as a different user and must be able to read it"
     )
 
 
@@ -170,10 +167,10 @@ def test_drill_tears_down_on_every_exit_path() -> None:
 
 def test_drill_stamps_only_after_the_assertions_pass() -> None:
     """The stamp IS the proof check 7 reads. Stamping early makes a broken drill read healthy."""
-    assert CODE.count('date +%s >"$STAMP"') == 1, (
+    assert CODE.count('stamp_set last-success "$PASSED_AT"') == 1, (
         "the stamp must be written in exactly one place"
     )
-    stamp_at = CODE.index('date +%s >"$STAMP"')
+    stamp_at = CODE.index('stamp_set last-success "$PASSED_AT"')
     last_assert = max(CODE.index('"$FILES" -gt 0'), CODE.index('"$BYTES" -ge'))
     assert stamp_at > last_assert, (
         "the stamp is written before the data assertions, so a restored-but-empty volume "
@@ -221,20 +218,16 @@ def test_drill_reports_a_failed_probe_pod_distinctly() -> None:
     )
 
 
-def test_stamp_is_readable_by_the_user_that_checks_it() -> None:
-    """Writer and reader are different users, and root's umask here does not accommodate that.
+def test_the_drill_writes_no_host_file_for_the_checker_to_read() -> None:
+    """Writer and reader are different users, and a host file made them disagree once.
 
-    The drill runs as root; the heartbeat runs as sys_user under its own cron. Root's umask on
-    daniel-box is 027, so plain `mkdir -p` produced drwxr-x--- root:root and the stamp was
-    unreadable by the checker. Check 7 fails closed on an unreadable stamp, so the first GREEN
-    drill would have paged "no restore drill has ever succeeded" — permanently, and precisely
-    backwards. Observed 2026-08-19 on the first passing run.
+    The drill runs as root; the heartbeat runs as sys_user. Root's umask on daniel-box is 027,
+    so the old stamp directory was unreadable by the checker, and the first GREEN drill paged
+    "no restore drill has ever succeeded" (2026-08-19). The state is a ConfigMap the checker
+    reads through its own kubeconfig, so no file mode is left to get wrong.
     """
-    assert 'chmod 0755 "$STAMP_DIR"' in CODE, (
-        "the stamp directory mode must be explicit; root's umask makes it unreadable otherwise"
-    )
-    assert 'chmod 0644 "$STAMP"' in CODE, (
-        "the stamp file must be readable by the checker"
+    assert "touch " not in CODE and "mkdir " not in CODE and "chmod " not in CODE, (
+        "the drill is writing a host file again, and the checker's user may not be able to read it"
     )
 
 
@@ -481,10 +474,6 @@ def test_check_eight_graces_each_candidate_from_when_it_joined() -> None:
     assert "pvc-old" in problem[1] and "pvc-new" not in problem[1], (
         "the grace period must be measured per candidate, from when IT joined the rotation — "
         "a rotation-wide start date would page every newly added volume for a full cycle"
-    )
-    assert '! -e "${SEEN_DIR}/${cand}"' in CODE, (
-        "the join marker must be written once and never refreshed, or it decays into a second "
-        "attempt stamp and the grace never expires"
     )
 
 

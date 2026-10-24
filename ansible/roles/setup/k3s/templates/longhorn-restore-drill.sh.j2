@@ -24,7 +24,15 @@
 #
 # Runs as ROOT from cron, and has to: it creates and deletes Volume/PV/PVC objects and runs a
 # pod. The read-only ServiceAccount the heartbeat uses cannot do any of that, so do not try to
-# convert this to that credential.
+# convert this to that credential. Root's `k3s kubectl` reads /etc/rancher/k3s/k3s.yaml, the
+# admin kubeconfig, so it can also patch the stamp ConfigMap below with no Role of its own.
+#
+# State lives in the ConfigMap longhorn-restore-drill-stamps (H2.3c of
+# docs/target-architecture/host/h2-shrink-host-plane.md), not on this host. The run reads it
+# once with `get` and writes each stamp with a merge `patch`. Keys: `last-success`, `candidates`,
+# `excluded_oversize` and `excluded_nopvc` hold the old files' content; `attempts.<pvc>`,
+# `retries.<pvc>` and `seen.<pvc>` hold an epoch; `success.<pvc>` holds the epoch the drill
+# passed at; `imported-at` marks the one-time import of the old stamp directory.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -48,31 +56,31 @@ OPERATOR_PIN=""
 [[ -n "${1:-}${RESTORE_DRILL_PIN:-}" ]] && OPERATOR_PIN="$PIN"
 FALLBACK_NS="{{ k3s_longhorn_restore_drill_namespace }}"
 MAX_BYTES="{{ k3s_longhorn_restore_drill_max_actual_bytes }}"
+STATE_NS="$FALLBACK_NS"
+STATE_CM="longhorn-restore-drill-stamps"
+# The old stamp directory. Only the one-time import below reads it; nothing writes it any more.
 STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
-STAMP="${STAMP_DIR}/last-success"
-# Per-volume bookkeeping, and the two directories do different jobs. ATTEMPT_DIR drives the
-# rotation and is stamped on every run whatever the outcome; SUCCESS_DIR records proof and is
+# Per-volume bookkeeping, and the key families do different jobs. `attempts.<pvc>` drives the
+# rotation and is stamped on every run whatever the outcome; `success.<pvc>` records proof and is
 # written only after the assertions pass. Selecting on attempts rather than successes is what
 # stops one permanently broken volume from starving the other 24 — it would otherwise stay the
-# least-recently-succeeded forever and be picked every single day.
-ATTEMPT_DIR="${STAMP_DIR}/attempts"
-SUCCESS_DIR="${STAMP_DIR}/success"
-SEEN_DIR="${STAMP_DIR}/seen"
-# One marker per volume whose failed attempt has already been re-drilled, which is what bounds
-# the retry below to once per failure.
-RETRY_DIR="${STAMP_DIR}/retries"
-# The eligible set, refreshed every run for the heartbeat's coverage check to read. Check 8 has
-# no cluster credential worth the name, so the drill — which already computes this — publishes it.
-CANDIDATES="${STAMP_DIR}/candidates"
-# The backed-up volumes the actualSize cap keeps OUT of that set, one `<pvc>\t<actualSize>` per
-# line. Check 8 iterates only the candidates, so without this file a volume that grows past the
-# cap leaves the rotation and the coverage check together and nothing reports it (#2667).
-EXCLUDED_OVERSIZE="${STAMP_DIR}/excluded_oversize"
-# The backed-up volumes under the cap that the drill still cannot drill because no PVC is bound to
-# them, one volume name per line. The drill restores into a PVC in the source namespace, so such a
-# volume is not a candidate, and without this file it would leave check 8 silently too (#2706).
-EXCLUDED_NOPVC="${STAMP_DIR}/excluded_nopvc"
-MANIFEST=$(mktemp /tmp/restore-drill.XXXXXX.yaml)
+# least-recently-succeeded forever and be picked every single day. `retries.<pvc>` is the marker
+# for a failed attempt that has already been re-drilled, which bounds the retry below to once per
+# failure. `seen.<pvc>` is when a candidate joined the rotation.
+# `candidates` is the eligible set, refreshed every run for the heartbeat's coverage check to
+# read. Check 8 has no cluster credential worth the name, so the drill — which already computes
+# this — publishes it.
+# `excluded_oversize` holds the backed-up volumes the actualSize cap keeps OUT of that set, one
+# `<pvc>\t<actualSize>` per line. Check 8 iterates only the candidates, so without it a volume
+# that grows past the cap leaves the rotation and the coverage check together and nothing reports
+# it (#2667).
+# `excluded_nopvc` holds the backed-up volumes under the cap that the drill still cannot drill
+# because no PVC is bound to them, one volume name per line. The drill restores into a PVC in the
+# source namespace, so such a volume is not a candidate, and without it it would leave check 8
+# silently too (#2706).
+# No suffix after the X's: BusyBox's mktemp requires the template to end in XXXXXX, and kubectl
+# reads a file named on its command line whatever the file is called.
+MANIFEST=$(mktemp /tmp/restore-drill.XXXXXX)
 DRILL=""
 
 fail() { logger -t longhorn-restore-drill "FAIL: $*"; echo "restore drill FAILED: $*" >&2; exit 1; }
@@ -90,7 +98,70 @@ cleanup() {
   $KUBECTL -n longhorn-system delete volume "$DRILL" --ignore-not-found >/dev/null 2>&1
   rm -f "$MANIFEST"
 }
+# A signal runs `cleanup` through the exit. Bash killed by an unhandled TERM skips the EXIT trap,
+# and as PID 1 in a pod it ignores the signal altogether. Bash runs a trap only after its
+# foreground command returns, so the delay is one poll interval or one kubectl call.
 trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+# The stamp ConfigMap, read once per run. NotFound is its own failure, because `--ignore-not-found`
+# turns it into rc 0 with empty output, while every other failed read keeps a non-zero rc. A run
+# with no ConfigMap would otherwise stamp nothing, so it restores nothing.
+load_stamps() {
+  CM_JSON=$($KUBECTL -n "$STATE_NS" get configmap "$STATE_CM" --ignore-not-found -o json 2>/dev/null) \
+    || fail "cannot read the stamp ConfigMap ${STATE_CM}"
+  [[ -n "$CM_JSON" ]] || fail "stamp ConfigMap absent: ${STATE_NS}/${STATE_CM} is not applied (the longhorn-restore-drill Flux tag creates it)"
+}
+# One key's value, empty when the key is absent.
+stamp_get() { jq -r --arg k "$1" '.data[$k] // empty' <<<"$CM_JSON"; }
+# One key's epoch. A missing or non-numeric key is epoch 0, as a missing file was.
+stamp_epoch() {
+  local v
+  v=$(stamp_get "$1")
+  [[ "$v" =~ ^[0-9]+$ ]] && printf '%s' "$v" || printf 0
+}
+# Writes key/value pairs in one merge patch and mirrors them into CM_JSON, so a later read in
+# this run sees them. A failed patch is the caller's failure to report.
+stamp_set() {
+  local patch
+  patch=$(jq -cn '{data: (reduce range(0; $ARGS.positional | length; 2) as $i
+                          ({}; .[$ARGS.positional[$i]] = $ARGS.positional[$i + 1]))}' --args "$@") || return 1
+  $KUBECTL -n "$STATE_NS" patch configmap "$STATE_CM" --type merge -p "$patch" >/dev/null 2>&1 || return 1
+  CM_JSON=$(jq -c --argjson p "$patch" '.data = ((.data // {}) + $p.data)' <<<"$CM_JSON")
+}
+
+# The one-time import of the old stamp directory (H2.3c). It runs on the first run that finds no
+# `imported-at`, converts each item to its key and writes them with `imported-at` in one patch, so
+# an interrupted import repeats whole rather than half. H2.3d deletes this arm: a pod cannot see
+# the directory.
+import_stamp_dir() {
+  local -a kv=()
+  local name val f
+  for f in last-success candidates excluded_oversize excluded_nopvc; do
+    [[ -f "${STAMP_DIR}/${f}" ]] || continue
+    val=$(cat "${STAMP_DIR}/${f}")
+    kv+=("$f" "$val")
+  done
+  for f in attempts retries seen; do
+    [[ -d "${STAMP_DIR}/${f}" ]] || continue
+    while IFS=$'\t' read -r name val; do
+      [[ -n "$name" ]] && kv+=("${f}.${name}" "$val")
+    done < <(find "${STAMP_DIR}/${f}" -maxdepth 1 -type f -printf '%f\t%Ts\n')
+  done
+  if [[ -d "${STAMP_DIR}/success" ]]; then
+    for f in "${STAMP_DIR}/success"/*; do
+      [[ -f "$f" ]] || continue
+      val=$(cat "$f")
+      [[ "$val" =~ ^[0-9]+$ ]] && kv+=("success.${f##*/}" "$val")
+    done
+  fi
+  set -- "${kv[@]}" imported-at "$(date +%s)"
+  stamp_set "$@" || fail "cannot import the old stamp directory into ${STATE_CM}"
+  logger -t longhorn-restore-drill "IMPORT: moved ${STAMP_DIR} into ${STATE_CM} ($(( $# / 2 )) keys)"
+}
+load_stamps
+[[ -n "$(stamp_get imported-at)" ]] || import_stamp_dir
 
 # Everything below is resolved from the cluster, never hardcoded. The hand-run one-shot this
 # replaces pinned the backup ID, the volume name and the size as literals — all three of which
@@ -170,16 +241,13 @@ NOPVC=$(jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" '
        | .metadata.name]
       | sort[]' <<<"$VOLUMES")
 
-mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
-chmod 0755 "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
-# Both exclusion files are published before the empty-eligible failure below, so a filter that
-# excludes EVERY volume still names them, and before the pin, for the same reason as the candidates file: it describes the
-# rotation, not tonight's run. Rewritten every run, so each empties once its volume is drillable
-# again (shrunk under the cap, the cap raised, a PVC rebound) or moves to no-backup.
-if [[ -n "$OVERSIZE" ]]; then printf '%s\n' "$OVERSIZE"; fi >"$EXCLUDED_OVERSIZE"
-chmod 0644 "$EXCLUDED_OVERSIZE"
-if [[ -n "$NOPVC" ]]; then printf '%s\n' "$NOPVC"; fi >"$EXCLUDED_NOPVC"
-chmod 0644 "$EXCLUDED_NOPVC"
+# Both exclusion lists are published before the empty-eligible failure below, so a filter that
+# excludes EVERY volume still names them, and before the pin, for the same reason as the candidates
+# key: it describes the rotation, not tonight's run. Rewritten every run, so each empties once its
+# volume is drillable again (shrunk under the cap, the cap raised, a PVC rebound) or moves to
+# no-backup.
+stamp_set excluded_oversize "$OVERSIZE" excluded_nopvc "$NOPVC" \
+  || fail "cannot write the exclusion lists to ${STATE_CM}"
 [[ -n "$ELIGIBLE" ]] || fail "no eligible volume has a Completed backup"
 
 # DECIDED: the candidate list is published from the FULL eligible set, and the pin is applied
@@ -187,8 +255,7 @@ chmod 0644 "$EXCLUDED_NOPVC"
 # candidates file on a pinned run, and check 8 sizes its coverage window from that count and
 # iterates only those names: one operator drill shrank the window from ~25 days to ~1 and
 # dropped every other volume out of the coverage check until the next nightly run rewrote it.
-printf '%s\n' "$ELIGIBLE" | cut -f1 >"$CANDIDATES"
-chmod 0644 "$CANDIDATES"
+CANDIDATE_LIST=$(printf '%s\n' "$ELIGIBLE" | cut -f1)
 if [[ -n "$PIN" ]]; then
   ELIGIBLE=$(awk -F'\t' -v pin="$PIN" '$1 == pin' <<<"$ELIGIBLE")
   [[ -n "$ELIGIBLE" ]] || fail "pinned volume ${PIN} is not eligible: no Completed backup, not in a backup group, or over the actualSize cap"
@@ -199,19 +266,21 @@ fi
 # on Tuesday and its turn has not come". Neither other stamp can answer that: the attempt stamp
 # is refreshed every time the volume comes up, so it is never older than one cycle for a volume
 # in steady rotation, and a whole-rotation start date flags a newly joined volume immediately.
+# Written in the same patch as the candidate list, so the two never disagree.
+NOW=$(date +%s)
+SEEN_KV=()
 while IFS= read -r cand; do
-  [[ -n "$cand" && ! -e "${SEEN_DIR}/${cand}" ]] || continue
-  touch "${SEEN_DIR}/${cand}"
-  chmod 0644 "${SEEN_DIR}/${cand}"
-done <"$CANDIDATES"
+  [[ -n "$cand" && -z "$(stamp_get "seen.${cand}")" ]] || continue
+  SEEN_KV+=("seen.${cand}" "$NOW")
+done <<<"$CANDIDATE_LIST"
+stamp_set candidates "$CANDIDATE_LIST" "${SEEN_KV[@]}" || fail "cannot write the candidate list to ${STATE_CM}"
 
 # Least-recently-ATTEMPTED wins, so the rotation self-corrects: a volume that joins the backup
 # set has no attempt stamp, sorts first, and is drilled the next night rather than waiting out a
 # cycle. A missing stamp is epoch 0 for exactly that reason.
 CHOICE=$(while IFS=$'\t' read -r pvc rest; do
   [[ -n "$pvc" ]] || continue
-  at=0
-  [[ -f "${ATTEMPT_DIR}/${pvc}" ]] && at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}" 2>/dev/null || echo 0)
+  at=$(stamp_epoch "attempts.${pvc}")
   printf '%s\t%s\t%s\n' "$at" "$pvc" "$rest"
 done <<<"$ELIGIBLE" | sort -n -k1,1 | head -1 | cut -f2-)
 
@@ -234,15 +303,15 @@ done <<<"$ELIGIBLE" | sort -n -k1,1 | head -1 | cut -f2-)
 RETRY=""
 if [[ -z "$PIN" ]]; then
   RETRY=$(while IFS=$'\t' read -r pvc rest; do
-    [[ -n "$pvc" && -f "${ATTEMPT_DIR}/${pvc}" ]] || continue
-    at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}" 2>/dev/null || echo 0)
-    # SUCCESS_DIR holds the epoch the drill passed at, so a success at or after the attempt is
+    [[ -n "$pvc" ]] || continue
+    # No attempt stamp is epoch 0: the volume has never been tried, so it has nothing to retry.
+    at=$(stamp_epoch "attempts.${pvc}")
+    (( at > 0 )) || continue
+    # `success.<pvc>` holds the epoch the drill passed at, so a success at or after the attempt is
     # that attempt's own success. A volume that has never succeeded reads 0 and qualifies.
-    ok=0
-    [[ -f "${SUCCESS_DIR}/${pvc}" ]] && ok=$(cat "${SUCCESS_DIR}/${pvc}" 2>/dev/null || echo 0)
+    ok=$(stamp_epoch "success.${pvc}")
     (( ok >= at )) && continue
-    rt=0
-    [[ -f "${RETRY_DIR}/${pvc}" ]] && rt=$(stat -c %Y "${RETRY_DIR}/${pvc}" 2>/dev/null || echo 0)
+    rt=$(stamp_epoch "retries.${pvc}")
     (( rt >= at )) && continue
     printf '%s\t%s\t%s\n' "$at" "$pvc" "$rest"
   done <<<"$ELIGIBLE" | sort -rn -k1,1 | head -1 | cut -f2-)
@@ -252,22 +321,25 @@ fi
 IFS=$'\t' read -r PVC PVC_NS VOL SIZE BLOCKSIZE TARGET ACTUAL_SIZE <<<"$CHOICE"
 [[ -n "$PVC" && -n "$VOL" && -n "$SIZE" ]] || fail "could not select a volume to drill"
 PVC_NS="${PVC_NS:-$FALLBACK_NS}"
-DRILL="restore-drill-${PVC}"
 
 # Stamped BEFORE the restore, and that ordering is the whole anti-starvation property. Stamping
 # on success only would make a volume that always fails permanently the oldest, so it would be
-# picked every night and the other 24 would never be drilled again.
-touch "${ATTEMPT_DIR}/${PVC}"
-chmod 0644 "${ATTEMPT_DIR}/${PVC}"
-
-# Stamped AFTER the attempt, so this marker is never older than the attempt it answers for and
-# the retry cannot repeat on the same failure. Written whatever the run goes on to do: a retry
-# that fails is still a retry spent.
+# picked every night and the other 24 would never be drilled again. A failed patch fails the run
+# here, so a run that cannot stamp restores nothing. DRILL is set only afterwards, so that
+# failure leaves `cleanup` nothing to delete.
+#
+# The retry marker goes in the same patch with the same epoch, so it is never older than the
+# attempt it answers for and the retry cannot repeat on the same failure. Written whatever the run
+# goes on to do: a retry that fails is still a retry spent.
+ATTEMPT_AT=$(date +%s)
 if [[ -n "$RETRY" ]]; then
-  touch "${RETRY_DIR}/${PVC}"
-  chmod 0644 "${RETRY_DIR}/${PVC}"
+  stamp_set "attempts.${PVC}" "$ATTEMPT_AT" "retries.${PVC}" "$ATTEMPT_AT" \
+    || fail "cannot stamp the attempt for ${PVC} in ${STATE_CM}"
   logger -t longhorn-restore-drill "RETRY: ${PVC} failed its last attempt — re-drilling ahead of the rotation"
+else
+  stamp_set "attempts.${PVC}" "$ATTEMPT_AT" || fail "cannot stamp the attempt for ${PVC} in ${STATE_CM}"
 fi
+DRILL="restore-drill-${PVC}"
 
 # Newest Completed backup, by snapshot time. `sort_by` over a string is fine here: these are
 # RFC3339 stamps in a fixed zone, so lexical and chronological order agree.
@@ -440,15 +512,16 @@ MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
 # volume someone drilled by hand — the exact failure the drill exists to make visible. The
 # per-volume stamp below is still written: that one answers "does this volume restore", which
 # a hand run proves just as well.
+PASSED_AT=$(date +%s)
 if [[ -z "$OPERATOR_PIN" ]]; then
-  date +%s >"$STAMP"
-  chmod 0644 "$STAMP"
+  stamp_set last-success "$PASSED_AT" "success.${PVC}" "$PASSED_AT" \
+    || fail "cannot record the pass for ${PVC} in ${STATE_CM}"
+else
+  # The per-volume record check 8 reads for coverage. The global stamp answers "is the drill
+  # alive"; this one answers "has THIS volume been proven", which rotation makes a different
+  # question — a green global stamp now means one of 25 volumes restored, not all of them.
+  stamp_set "success.${PVC}" "$PASSED_AT" || fail "cannot record the pass for ${PVC} in ${STATE_CM}"
 fi
-# The per-volume record check 8 reads for coverage. The global stamp above answers "is the drill
-# alive"; this one answers "has THIS volume been proven", which rotation makes a different
-# question — a green global stamp now means one of 25 volumes restored, not all of them.
-date +%s >"${SUCCESS_DIR}/${PVC}"
-chmod 0644 "${SUCCESS_DIR}/${PVC}"
 NOTE=""
 [[ -n "$DECLARED_EMPTY" && "$FILES" == "0" ]] && NOTE=" — declared may-be-empty, content assertions waived"
 logger -t longhorn-restore-drill "PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})${NOTE}"

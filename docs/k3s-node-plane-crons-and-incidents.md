@@ -13,10 +13,9 @@ throwaway pod, checks the data is real, and tears everything down. Three refinem
 
 **An operator pin drills one volume without disturbing the rotation** (#2183). Pass the PVC name:
 `sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>`, or `RESTORE_DRILL_PIN=<pvc>` for a caller
-that cannot pass an argument. A hand run stamps `success/<pvc>` but not `last-success`, so it
+that cannot pass an argument. A hand run stamps the `success.<pvc>` key but not `last-success`, so it
 proves the volume without hiding a dead nightly cron from check 7, and it leaves the published
-candidate list whole so check 8's coverage window keeps its size. Backdating a stamp under
-`attempts/` to steer the rotation is no longer the way in.
+candidate list whole so check 8's coverage window keeps its size. Backdating an `attempts.<pvc>` key to steer the rotation is no longer the way in.
 
 **A volume whose content is legitimately empty is declared, and the declaration is bounded by
 size** (#2393). The name goes in
@@ -35,9 +34,19 @@ restores correctly passes on the ordinary assertions.
 **A failed attempt is re-drilled the next night, once per failure** (#2270). Selection is
 least recently attempted and the attempt stamp is refreshed whatever the outcome, so before this a
 failed volume waited a full 26-night cycle against check 8's 31-day window and paged first. The
-bound is a marker under `retries/`, stamped with the attempt: a volume that fails its retry waits
+bound is the `retries.<pvc>` key, stamped with the attempt: a volume that fails its retry waits
 for its own rotation slot, so a permanently broken volume costs two nights a cycle rather than
 every night.
+
+**The drill's state is the ConfigMap `longhorn-restore-drill-stamps`, not a host directory**
+(H2.3c). The script reads it once per run and writes each stamp with a merge `patch` as root, whose
+`k3s kubectl` uses the admin kubeconfig and needs no Role. The first run with no `imported-at` key
+converts `/var/lib/longhorn-restore-drill` into keys; that arm exists only until the drill moves
+to a CronJob, which cannot see the directory. A ConfigMap that does not exist fails the run with
+`stamp ConfigMap absent`, and a failed patch fails it before the restore starts. The script
+traps TERM and INT to run its cleanup through the exit, and its `mktemp` template ends in
+`XXXXXX` because Busybox's `mktemp` rejects a suffix. The key table is in
+`docs/longhorn-disaster-recovery.md`.
 
 Eligibility is the `recurring-job-group.longhorn.io/*` label, with the `no-backup` group excluded
 by name. The volume is chosen least recently attempted, not least recently succeeded, so one
