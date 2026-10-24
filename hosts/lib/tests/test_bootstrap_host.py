@@ -18,6 +18,7 @@ SCRIPT = REPO / "hosts" / "bootstrap-host.sh"
 KEYRING = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
 INSTALLED_KEYRING = "usr/share/keyrings/homelab-archive-keyring.gpg"
 SOURCES = "etc/apt/sources.list.d/homelab.sources"
+AGE_KEY = "etc/homelab/age.key"
 
 
 class FakeHost:
@@ -143,3 +144,66 @@ def test_a_failed_update_installs_nothing(host):
     assert result.returncode == 1
     assert "apt-get update of the homelab source failed" in result.stderr
     assert len(host.apt_calls()) == 1
+
+
+def _public_line(result: subprocess.CompletedProcess) -> list[str]:
+    return [line for line in result.stdout.splitlines() if "age public key for" in line]
+
+
+def test_a_missing_age_key_is_created_private_and_only_its_public_half_printed(host):
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    key = host.root / AGE_KEY
+    assert key.stat().st_mode & 0o777 == 0o600
+    [line] = _public_line(result)
+    assert line.split(": ")[-1].startswith("age1")
+    secret = next(x for x in key.read_text().splitlines() if x.startswith("AGE-SECRET"))
+    assert secret not in result.stdout + result.stderr
+    assert not (host.root / (AGE_KEY + ".tmp")).exists()
+
+
+def test_an_existing_age_key_is_kept_and_its_mode_repaired(host):
+    first = host.run("daniel-pi")
+    key = host.root / AGE_KEY
+    before = key.read_bytes()
+    key.chmod(0o640)
+
+    second = host.run("daniel-pi")
+
+    assert second.returncode == 0, second.stderr
+    assert key.read_bytes() == before
+    assert key.stat().st_mode & 0o777 == 0o600
+    assert _public_line(second) == _public_line(first)
+
+
+def test_a_host_without_age_keygen_and_without_a_key_is_refused(host):
+    # The scratch PATH holds only the stubs, and gpg and the coreutils the script needs are
+    # linked in, so age-keygen is the one command missing.
+    for tool in (
+        "gpg",
+        "awk",
+        "install",
+        "mkdir",
+        "cat",
+        "chmod",
+        "mv",
+        "rm",
+        "dirname",
+        "mktemp",
+    ):
+        found = shutil.which(tool)
+        assert found
+        (host.bin / tool).symlink_to(found)
+    result = subprocess.run(
+        ["/bin/sh", str(host.dir / SCRIPT.name), "daniel-pi"],
+        env={"PATH": str(host.bin), "HOMELAB_ROOT": str(host.root)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "age-keygen is not installed" in result.stderr
+    assert not (host.root / AGE_KEY).exists()
