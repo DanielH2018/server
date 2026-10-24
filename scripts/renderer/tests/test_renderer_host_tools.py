@@ -18,7 +18,9 @@ from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_tools import ARCHES, BIN_DIR, PINS_FILE
 from lib.repo_paths import REPO
 
-NAMED_MEMBERS = frozenset({f"{BIN_DIR}/sops", f"{BIN_DIR}/chezmoi"})
+NAMED_MEMBERS = frozenset({f"{BIN_DIR}/{t}" for t in ("sops", "chezmoi", "nfpm")})
+# nfpm names its amd64 build x86_64.
+UPSTREAM_ARCH = {"amd64": "x86_64", "arm64": "arm64"}
 DIGEST = "a" * 64
 
 
@@ -49,19 +51,20 @@ def render(hosts, package: dict, where: str = "packages/homelab-tools"):
     return host_mode.render_host(name, root)
 
 
-def test_the_real_package_installs_sops_and_chezmoi_under_the_private_bin_dir():
+def test_the_real_package_installs_its_tools_under_the_private_bin_dir():
     package = host_mode.render_package("homelab-tools")
     assert missing_named_members(package) == []
     assert not any(path.startswith("/usr/local/") for path in package.installed_paths())
 
 
 def test_a_package_that_moves_sops_is_missing_a_named_member(hosts):
-    # The fixture installs chezmoi at its path and sops under another tool name.
+    # The fixture installs chezmoi and nfpm at their paths and sops under another tool name.
     package = render(
         hosts,
         {
             "tools": {
                 "chezmoi": dict.fromkeys(ARCHES, pin()),
+                "nfpm": dict.fromkeys(ARCHES, pin()),
                 "sops-old": dict.fromkeys(ARCHES, pin()),
             }
         },
@@ -79,8 +82,10 @@ def test_a_render_writes_one_tree_per_architecture_with_its_own_pins(tmp_path):
         assert nfpm["arch"] == arch
         assert {c["dst"] for c in nfpm["contents"]} == NAMED_MEMBERS
         pins = json.loads((tree / PINS_FILE).read_text())
-        assert set(pins) == {"sops", "chezmoi"}
-        assert all(f"_{arch}" in p["url"] or arch in p["url"] for p in pins.values())
+        assert set(pins) == {"sops", "chezmoi", "nfpm"}
+        assert all(
+            arch in p["url"] or UPSTREAM_ARCH[arch] in p["url"] for p in pins.values()
+        )
         # The render carries pins and no bytes.
         assert not (tree / "root").exists()
 

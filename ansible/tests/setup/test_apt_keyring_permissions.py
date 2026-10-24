@@ -52,7 +52,9 @@ def _rel(path):
 def test_no_command_dearmors_a_keyring(path):
     # `gpg --dearmor` via command/shell is the exact shape that inherits the umask.
     # apt reads ASCII-armored keys referenced by Signed-By, so fetch the .asc directly
-    # with get_url and an explicit mode instead — see docker_install/tasks/install.yml.
+    # with get_url and an explicit mode instead. The keyrings now ship in
+    # hosts/packages/homelab-repos/, which dpkg installs at 0644 whatever the umask; this guard
+    # stops a role from writing a keyring itself again.
     offenders = []
     for task in walk_tasks(load_tasks(path)):
         for module in COMMAND_MODULES:

@@ -1,0 +1,6 @@
+# Shipped by homelab-repos: GitHub's apt repository for the `gh` CLI.
+Types: deb
+URIs: https://cli.github.com/packages
+Suites: stable
+Components: main
+Signed-By: /etc/apt/keyrings/githubcli-archive-keyring.gpg

@@ -1,7 +1,6 @@
 # `setup/github_cli` — the GitHub CLI and its git credential helper
 
-Installs `gh` from GitHub's APT repository (keyring under `/etc/apt/keyrings`, the deprecated
-one-line source removed) and points git at `!gh auth git-credential`, so the deployer can call
+Installs `gh` from GitHub's APT repository and points git at `!gh auth git-credential`, so the deployer can call
 the GitHub API authenticated. Applied by `initial_setup.yml` (`--tags github_cli`) where
 `has_github_cli` is set, before `chezmoi_setup`.
 
@@ -24,7 +23,9 @@ the GitHub API authenticated. Applied by `initial_setup.yml` (`--tags github_cli
 - **The credential helper is per-user git config**, so it lives with the connecting user and
   the deploy user reads the same token through `gh auth token` — the one identity behind the
   deployer's CI gate, the two GitHub crons in `gitops_deploy`, and `renovate_agent`'s session.
-- **The keyring task sets an explicit mode**, and
-  `ansible/tests/setup/test_apt_keyring_permissions.py` refuses one that does not: a key
-  written under the ambient umask can land unreadable by the unprivileged `_apt` user, and
-  `apt update` then fails with an error that names the repository, not the mode.
+- **The apt source and the keyring belong to the `homelab-repos` package, not this role.**
+  `hosts/packages/homelab-repos/` ships `github-cli.sources` and the keyring under
+  `/etc/apt/keyrings`, and every host package depends on it. dpkg creates the file at mode
+  0644 whatever the umask, so the unreadable-keyring failure that
+  `ansible/tests/setup/test_apt_keyring_permissions.py` guards against cannot occur. The
+  keyring's sha256 is held by `scripts/renderer/tests/test_homelab_repos.py`.

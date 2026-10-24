@@ -20,7 +20,7 @@ answers. This file keeps the rules a session must not break.
 - In `ansible/initial_setup.yml`, after [[sops_setup]] — every host, **unconditionally**.
   `tasks/main.yml` is a dispatcher: `has_docker: true` runs `install.yml` (everything below),
   `has_docker: false` runs `teardown.yml`.
-- **Granular tags:** `docker-repo` (APT repo + GPG + the cache refresh), `docker-engine`
+- **Granular tags:** `docker-repo` (the apt prerequisites and the cache refresh; the source and key come from `homelab-repos`), `docker-engine`
   (install + hold + v1-wrapper removal), `docker-group`, `docker-daemon` (daemon.json +
   conditional restart), `docker-networks`, `docker-go-runtime` (both Go runtime drop-ins;
   `-dockerd` / `-containerd` select one). `docker-engine-upgrade` is `never`-tagged AND gated on
@@ -91,10 +91,11 @@ restarts Docker — see the first bullet under *Notable*.
   inode check and the recreate command. An engine upgrade also replaces the containerd shim
   under every running container. So `tasks/engine-upgrade.yml` stops every Compose project
   before apt runs and recreates each one afterwards; its header comment has the reasoning.
-- **The GPG key stays ASCII-armored at `/etc/apt/keyrings/docker.asc`.** Do **not** reintroduce
-  `gpg --dearmor` via `command`: it writes the file under the `027` umask [[initial_setup]] set
-  earlier in the same play, and apt then reports the repo as unsigned. Guarded by
-  `ansible/tests/setup/test_apt_keyring_permissions.py`.
+- **The Docker apt source and its key belong to the `homelab-repos` package, not this role.**
+  `hosts/packages/homelab-repos/` ships `docker.sources` and the ASCII-armored
+  `/etc/apt/keyrings/docker.asc`, and `homelab-daniel-pi` depends on it. A key task here would be
+  a second writer of that path. `scripts/renderer/tests/test_homelab_repos.py` holds the key's
+  sha256 and fingerprint.
 - **Each daemon runs `GOGC=off` under a `GOMEMLIMIT`** (`tasks/go-runtime.yml`, sized at
   `docker_install_gomemlimit_<daemon>`). Apply a change by hand, one daemon per day.
   `docs/docker-engine-pins-and-runtime.md` has why a child's inherited environment forces the

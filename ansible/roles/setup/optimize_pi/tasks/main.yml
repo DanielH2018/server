@@ -93,56 +93,7 @@
   become: true
 
 # 4. LOG2RAM (Save SD Card)
-- name: Install python3-debian (required by deb822_repository, below)
-  tags: [log2ram]
-  ansible.builtin.apt:
-    name: python3-debian
-    state: present
-    update_cache: true
-  become: true
-
-- name: Add Azlux GPG key for Log2Ram
-  tags: [log2ram]
-  ansible.builtin.get_url:
-    url: https://azlux.fr/repo.gpg
-    dest: /usr/share/keyrings/azlux-archive-keyring.gpg
-    mode: "0644"
-
-- name: Verify the Azlux GPG key fingerprint
-  tags: [log2ram]
-  # Fail the play closed if the fetched key is not Azlux's signing key (fingerprint
-  # 98B824A5 FA7D3A10 FDB225B7 CA548A0A 0312D8E6, uid "Azlux <github@azlux.fr>"). Azlux is a
-  # third-party repo with no prominently-published checksum, so this pins the fingerprint of
-  # the key currently trusted on the Pi — a swapped/MITM'd key on a later fetch then fails the
-  # play before deb822 trusts it. Runs every play (changed_when: false).
-  ansible.builtin.command:
-    cmd: gpg --show-keys --with-colons /usr/share/keyrings/azlux-archive-keyring.gpg
-  register: optimize_pi_azlux_key_fpr
-  changed_when: false
-  failed_when: "'98B824A5FA7D3A10FDB225B7CA548A0A0312D8E6' not in optimize_pi_azlux_key_fpr.stdout"
-
-- name: Add Log2Ram repository
-  tags: [log2ram]
-  # deb822 format (.sources) — the one-line "deb [...] ..." apt_repository form is deprecated.
-  ansible.builtin.deb822_repository:
-    name: azlux
-    types: [deb]
-    uris: http://packages.azlux.fr/debian/
-    suites: bookworm
-    components: [main]
-    signed_by: /usr/share/keyrings/azlux-archive-keyring.gpg
-    state: present
-  become: true
-
-- name: Remove the deprecated one-line Log2Ram APT source
-  tags: [log2ram]
-  # deb822_repository writes azlux.sources; drop any azlux.list left by the old
-  # apt_repository task so apt doesn't see the repo "configured multiple times".
-  ansible.builtin.file:
-    path: /etc/apt/sources.list.d/azlux.list
-    state: absent
-  become: true
-
+# The Azlux apt source and its key come from the homelab-repos package (H7.24a).
 - name: Install Log2Ram
   tags: [log2ram]
   ansible.builtin.apt:

@@ -1755,7 +1755,8 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.21 Activation, drift and the ufw arm | H7.2a, H7.2b | yes; B is measured at H3.2b's merge commit | H3.2b, H4.3b2 |
 | H7.22 The libvirt, users and line arms | H7.2c, H7.2d | yes | H7.21 |
 | H7.23 Shared modules leave the setup tree; the setup census | H7.2e, H7.2f | yes | H3's builder, D1's `promote.py`, D5.1h |
-| H7.24 `homelab-repos`, and `sops_setup` retires | H7.1 | yes | H3, H4, H6.2 |
+| H7.24a `homelab-repos`, and nfpm in `homelab-tools` | H7.1, first half | yes | H3, H4, H6.2 |
+| H7.24b `sops_setup` retires | H7.1, second half | no: it waits for the callers to reach the packaged `sops` (item 4) | H7.24a, H7.42 (old step H7.15a) |
 | H7.25 Pi: `optimize_pi`, `config_files` and the Pi rows of `k8s_host_files` | H7.3, H7.4 | yes; the owner measurement is a read-only call on the live Pi | H7.22, H3.6, D5.1h |
 | H7.26 Pi: `docker_install` | H7.5 | yes, against H5's Compose unit | H7.22, H5.12 |
 | H7.27 Pi: `initial_setup`, part 1 | H7.6a, H7.6d, H7.6g | yes | H7.22 |
@@ -1773,7 +1774,7 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.39 The agent users and daniel-server's `claude_code` | H7.12b, H7.12c's daniel-server PR | yes | H7.38, H7.22, H4, H6.2, the H6 PR that lands the window test |
 | H7.40 daniel-box: `claude_code` | H7.12c's daniel-box PR | yes, with H7.39 | H7.39 live, D5's artifacts row |
 | H7.41 daniel-box: the builder hosts itself | H7.14 | yes | H3, H6.2 |
-| H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24, H6.1b, H6.2 |
+| H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24a, H6.1b, H6.2 |
 | H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H5, all live |
 | H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6 |
 | H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | yes | R4 |
@@ -1783,8 +1784,8 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.49 monitor-bridge's gitops checks go, and land.sh stops running the tick | H7.19a's first and third PRs | yes | H7.41, D6 |
 | H7.50 deploy_ui retires | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
-| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49, H7.51 live, H7.24, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H6 |
-| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24 to H7.41, H7.48, H7.50 |
+| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H6 |
+| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.48, H7.50 |
 | H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43, H7.44, H7.45 |
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
@@ -1811,10 +1812,26 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
    carries H7.2e's four derivation greps, the key grep, the routing test and the empty
    cluster `diff -r`, the moved-CI-key, shared-module-routing and setup-census proofs, the
    `manual_plane` line for `k3s` that the `host_lib.py` move records, and H7.2e's revert note.
-4. **H7.24** stays alone. It is the one PR that writes all three host packages at once, and
-   its body quotes `command -v sops` on each host. It carries the age-key decision in
-   `docs/break-glass.md`. The removal of daniel-server's user-home age key waits for the
-   operator's confirmation that nothing reads it (**operator-only**).
+4. **H7.24 splits in two, ruled on 2026-10-24.** H7.24a moves the apt sources and keys into
+   `homelab-repos` and adds nfpm to `homelab-tools`. H7.24b retires `sops_setup`.
+    - **The old step's premise about `sops` was false.** It reads the packaged `sops` as the
+      binary callers reach through `PATH`. `hosts/packages/homelab-tools/package.yml:2`
+      installs each tool at `/usr/lib/homelab/bin/<tool>`, "never on PATH", and only
+      `hosts/lib/homelab-secrets:68` names that absolute path. `command -v sops` prints
+      `/usr/local/bin/sops` on all three hosts. Retiring that binary now would remove `sops`
+      from the deployer, from `deploy.sh`'s `community.sops` lookups, from the operator's edits
+      and from the rotation cron.
+    - **H7.24a** writes `hosts/packages/homelab-repos/` with the Docker, GitHub CLI and Azlux
+      sources and keys at the paths the roles wrote, so dpkg takes them over. It deletes the
+      moved tasks of `docker_install`, `github_cli` and `optimize_pi`. Each host package
+      depends on `homelab-repos`, and daniel-box also depends on `homelab-tools` for nfpm.
+      daniel-server's package retires the hand-installed `github-cli.list`, which names the
+      repository that `github-cli.sources` now ships. `sops_setup` stays untouched.
+    - **H7.24b** retires `sops_setup` and lists `/usr/local/bin/sops` as a legacy entry in all
+      three host packages. It waits on H7.15a, which is H7.42 in the table. Its body quotes
+      `command -v sops` on each host. It also carries the age-key decision in
+      `docs/break-glass.md`. The removal of daniel-server's user-home age key waits for the
+      operator's confirmation that nothing reads it (**operator-only**).
 5. **H7.25.** Both steps move `optimize_pi`, and H7.4 empties the role that H7.3 starts.
    zram's keys and the Pi's other sysctl keys share one line arm on `/etc/sysctl.conf`. It
    carries H7.3's owner measurement and its divert contingency, H7.4's textfile-directory

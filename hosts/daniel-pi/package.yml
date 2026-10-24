@@ -24,6 +24,7 @@ credentials:
 # so homelab-updater's steps 4 and 5 cover every installed homelab-* package.
 depends:
   - homelab-tools
+  - homelab-repos
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}

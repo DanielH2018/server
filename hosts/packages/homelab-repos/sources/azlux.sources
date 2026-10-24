@@ -1,0 +1,6 @@
+# Shipped by homelab-repos: Azlux's apt repository, for the Pi's log2ram package.
+Types: deb
+URIs: http://packages.azlux.fr/debian/
+Suites: bookworm
+Components: main
+Signed-By: /usr/share/keyrings/azlux-archive-keyring.gpg
