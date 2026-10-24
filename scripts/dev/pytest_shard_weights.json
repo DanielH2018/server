@@ -5,6 +5,7 @@
  ".claude/hooks/tests/test_block_footguns.py": 0.0,
  ".claude/hooks/tests/test_block_footguns_pr_body.py": 0.0,
  ".claude/hooks/tests/test_block_footguns_skip_staleness.py": 0.0,
+ ".claude/hooks/tests/test_block_footguns_stale_probe.py": 0.44,
  ".claude/hooks/tests/test_block_protected_bash.py": 5.03,
  ".claude/hooks/tests/test_block_protected_bash_read_only.py": 0.0,
  ".claude/hooks/tests/test_block_protected_edits.py": 0.0,

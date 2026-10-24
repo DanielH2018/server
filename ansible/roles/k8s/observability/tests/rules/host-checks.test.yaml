@@ -36,7 +36,7 @@ tests:
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
-                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                No disk-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
@@ -69,7 +69,7 @@ tests:
             exp_annotations:
               summary: daniel-box's iSCSI session check has stopped reporting.
               description: >-
-                No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-box's
+                No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the node's iSCSI sessions. Read the
                 log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
           - exp_labels:
@@ -80,7 +80,7 @@ tests:
             exp_annotations:
               summary: daniel-server's iSCSI session check has stopped reporting.
               description: >-
-                No iscsi-sessions verdict newer than 300s reached Prometheus from
+                No iscsi-sessions verdict newer than 5 minutes reached Prometheus from
                 daniel-server's textfile collector, so nothing is watching the node's iSCSI
                 sessions. Read the log of the node-exporter pod's `iscsi-sessions` container
                 on daniel-server.
@@ -145,7 +145,7 @@ tests:
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
-                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                No disk-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
@@ -175,7 +175,7 @@ tests:
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
-                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                No disk-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
@@ -213,7 +213,7 @@ tests:
             exp_annotations:
               summary: daniel-box's longhorn-backup-health check has stopped reporting.
               description: >-
-                No longhorn-backup-health verdict newer than 1500s reached Prometheus from
+                No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from
                 daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
                 Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
                 then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
@@ -232,7 +232,7 @@ tests:
             exp_annotations:
               summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
               description: >-
-                No etcd-snapshot-offbox verdict newer than 90000s reached Prometheus from
+                No etcd-snapshot-offbox verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing is watching the off-box etcd snapshot.
                 Read the `Off-box etcd snapshot` cron and the `etcd-snapshot-offbox` syslog tag,
                 then /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
@@ -249,9 +249,9 @@ tests:
               service: daniel-box
               shadow: "true"
             exp_annotations:
-              summary: daniel-box's manifest-prune-check check has stopped reporting.
+              summary: daniel-box's manifest-prune-check has stopped reporting.
               description: >-
-                No manifest-prune-check verdict newer than 90000s reached Prometheus from
+                No manifest-prune-check verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing is watching deployed-artifact drift.
                 Read the `kuma-check-manifest-prune` timer and the `manifest-prune-check` syslog
                 tag, then /var/lib/node-exporter-textfile/manifest-prune-check.prom on the host.
@@ -268,9 +268,9 @@ tests:
               service: daniel-box
               shadow: "true"
             exp_annotations:
-              summary: daniel-box's release-staleness-check check has stopped reporting.
+              summary: daniel-box's release-staleness-check has stopped reporting.
               description: >-
-                No release-staleness-check verdict newer than 3900s reached Prometheus from
+                No release-staleness-check verdict newer than 65 minutes reached Prometheus from
                 daniel-box's textfile collector, so nothing is watching release staleness. Read the
                 `Release staleness drift check` cron and the `release-staleness-check` syslog tag,
                 then /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
@@ -287,9 +287,9 @@ tests:
               service: daniel-box
               shadow: "true"
             exp_annotations:
-              summary: daniel-box's live-drift-check check has stopped reporting.
+              summary: daniel-box's live-drift-check has stopped reporting.
               description: >-
-                No live-drift-check verdict newer than 90000s reached Prometheus from daniel-box's
+                No live-drift-check verdict newer than 25 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching live-object drift. Read the
                 `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
                 /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
@@ -489,7 +489,7 @@ tests:
             exp_annotations:
               summary: daniel-box's longhorn-backup-health check has stopped reporting.
               description: >-
-                No longhorn-backup-health verdict newer than 1500s reached Prometheus from
+                No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from
                 daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
                 Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
                 then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
@@ -508,9 +508,9 @@ tests:
               service: daniel-box
               shadow: "true"
             exp_annotations:
-              summary: daniel-box's release-staleness-check check has stopped reporting.
+              summary: daniel-box's release-staleness-check has stopped reporting.
               description: >-
-                No release-staleness-check verdict newer than 3900s reached Prometheus from
+                No release-staleness-check verdict newer than 65 minutes reached Prometheus from
                 daniel-box's textfile collector, so nothing is watching release staleness. Read the
                 `Release staleness drift check` cron and the `release-staleness-check` syslog tag,
                 then /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
@@ -665,7 +665,7 @@ tests:
               severity: critical
               service: daniel-pi
             exp_annotations:
-              summary: daniel-pi holds after a failed reconcile.
+              summary: daniel-pi's homelab package reconcile failed, so it installs no newer package.
               description: >-
                 homelab_host_reconcile_ok on daniel-pi has read 0 for 15 minutes, so the host
                 holds and installs no newer homelab package. Read `journalctl -u
@@ -697,7 +697,7 @@ tests:
               severity: critical
               service: daniel-box
             exp_annotations:
-              summary: daniel-box holds after a failed reconcile.
+              summary: daniel-box's homelab package reconcile failed, so it installs no newer package.
               description: >-
                 homelab_host_reconcile_ok on daniel-box has read 0 for 15 minutes, so the host
                 holds and installs no newer homelab package. Read `journalctl -u
@@ -714,7 +714,7 @@ tests:
               severity: critical
               service: daniel-server
             exp_annotations:
-              summary: daniel-server holds after a failed reconcile.
+              summary: daniel-server's homelab package reconcile failed, so it installs no newer package.
               description: >-
                 homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes, so the host
                 holds and installs no newer homelab package. Read `journalctl -u
@@ -747,9 +747,9 @@ tests:
               severity: critical
               service: fixture-host
             exp_annotations:
-              summary: fixture-host has had no successful homelab update for 11400s.
+              summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on fixture-host has succeeded in 11400s, or its exporter is
+                No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is
                 up and serves no success timestamp. A failed fetch, a stopped
                 homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
@@ -784,9 +784,9 @@ tests:
               severity: critical
               service: fixture-host
             exp_annotations:
-              summary: fixture-host has had no successful homelab update for 11400s.
+              summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on fixture-host has succeeded in 11400s, or its exporter is
+                No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is
                 up and serves no success timestamp. A failed fetch, a stopped
                 homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
@@ -827,9 +827,9 @@ tests:
               severity: critical
               service: daniel-pi
             exp_annotations:
-              summary: daniel-pi has had no successful homelab update for 11400s.
+              summary: daniel-pi has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is
+                No homelab-updater run on daniel-pi has succeeded in 3 hours 10 minutes, or its exporter is
                 up and serves no success timestamp. A failed fetch, a stopped
                 homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
@@ -864,9 +864,9 @@ tests:
               severity: critical
               service: daniel-pi
             exp_annotations:
-              summary: daniel-pi has had no successful homelab update for 11400s.
+              summary: daniel-pi has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is
+                No homelab-updater run on daniel-pi has succeeded in 3 hours 10 minutes, or its exporter is
                 up and serves no success timestamp. A failed fetch, a stopped
                 homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
@@ -1083,7 +1083,7 @@ tests:
             exp_annotations:
               summary: daniel-box's iSCSI session check has stopped reporting.
               description: >-
-                No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-box's
+                No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the node's iSCSI sessions. Read the
                 log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
 
@@ -1187,7 +1187,7 @@ tests:
             exp_annotations: &sync_not_reporting
               summary: The peer artifact sync on daniel-box has stopped reporting.
               description: >-
-                No sync-artifacts verdict newer than 900s reached Prometheus from daniel-box's
+                No sync-artifacts verdict newer than 15 minutes reached Prometheus from daniel-box's
                 textfile collector, so the cron stopped, or its flock is held by a hung run. Read the
                 `Sync peer Claude artifacts` cron and `journalctl -t sync-artifacts`, then
                 /var/lib/node-exporter-textfile/sync-artifacts.prom on the host.
@@ -1208,7 +1208,7 @@ tests:
             exp_annotations: &otlp_not_reporting
               summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
               description: >-
-                No claude-otel-health verdict newer than 1500s reached Prometheus from daniel-box's
+                No claude-otel-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
                 telemetry health` cron and `journalctl -t claude-otel-health`, then
                 /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.

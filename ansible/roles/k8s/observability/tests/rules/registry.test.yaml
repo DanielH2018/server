@@ -138,7 +138,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: daniel-box's ghcr.io mirror pull check has stopped reporting.
-              description: "No ghcr-mirror-pull verdict newer than 3000s reached Prometheus from daniel-box's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-box."
+              description: "No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-box's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-box."
 
   # No check file on daniel-server at all: the absent arm fires once 3000s pass with no series.
   - interval: 1m
@@ -158,4 +158,4 @@ tests:
               severity: warning
             exp_annotations:
               summary: daniel-server's ghcr.io mirror pull check has stopped reporting.
-              description: "No ghcr-mirror-pull verdict newer than 3000s reached Prometheus from daniel-server's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-server."
+              description: "No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-server's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-server."

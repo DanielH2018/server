@@ -83,7 +83,7 @@ floor, its named members and its red/green fixtures, and a row whose selector st
 fails with `subject gone: delete this row`. A property needing a second render context, a
 cross-document join or a long exemption list keeps its own file. A predicate with several
 ways to fail is still one row: its extra reject and accept cases go in `more_red` and
-`more_green`. The test file runs every row; once it nears the 500-line test-module cap, a row
+`more_green`. The test file runs every row; once it nears the test-module line cap, a row
 goes in `_config_property_rows.py`, `_workload_property_rows.py`, `_scrape_property_rows.py`
 or `_edge_property_rows.py` beside it.
 

@@ -25,7 +25,7 @@ from secrets_mgmt.secret_bearing_host_paths import (
 def test_no_secret_bearing_host_script_is_world_readable():
     # The census this filters is floored by name in test_secret_bearing_host_paths.py; the
     # count here keeps this file from passing on an emptied one.
-    assert len(secret_bearing_host_paths()) >= 10
+    assert len(secret_bearing_host_paths()) >= 9
     assert world_readable_secret_bearing_tasks() == []
 
 

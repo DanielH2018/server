@@ -2,7 +2,7 @@
 
 `test_census_rows_test_renders.py` runs `inline_inventory_paths` as the
 `tests-take-inventory-paths-from-repo-paths` row over `pytest_only_modules()` (#4002). It sits
-apart from `_render_helper_rules.py`, whose detectors fill that module to its 500-line cap. Like
+apart from `_render_helper_rules.py`, whose detectors filled that module to its line cap. Like
 them, it takes TEXT, so a row's red and green subjects can be one-line snippets; the module's
 location is an optional second argument, read to resolve `Path(__file__)` arithmetic and the
 modules it imports. A third argument maps a module path to its text, so a red subject can carry

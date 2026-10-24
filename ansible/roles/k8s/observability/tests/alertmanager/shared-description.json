@@ -1,0 +1,32 @@
+{
+  "receiver": "discord",
+  "status": "firing",
+  "groupLabels": {"alertname": "HostTemperatureNotReporting", "service": "daniel-box"},
+  "commonLabels": {"alertname": "HostTemperatureNotReporting", "service": "daniel-box", "severity": "warning"},
+  "commonAnnotations": {
+    "description": "node_exporter publishes no temperature series, so nothing watches the host's temperature. Read `ls /sys/class/hwmon` on the host."
+  },
+  "externalURL": "http://alertmanager.observability:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {"alertname": "HostTemperatureNotReporting", "service": "daniel-box", "severity": "warning", "chip": "coretemp"},
+      "annotations": {
+        "summary": "daniel-box publishes no coretemp temperature sensors.",
+        "description": "node_exporter publishes no temperature series, so nothing watches the host's temperature. Read `ls /sys/class/hwmon` on the host."
+      },
+      "startsAt": "2026-10-24T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "status": "firing",
+      "labels": {"alertname": "HostTemperatureNotReporting", "service": "daniel-box", "severity": "warning", "chip": "nvme"},
+      "annotations": {
+        "summary": "daniel-box publishes no nvme temperature sensors.",
+        "description": "node_exporter publishes no temperature series, so nothing watches the host's temperature. Read `ls /sys/class/hwmon` on the host."
+      },
+      "startsAt": "2026-10-24T09:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    }
+  ]
+}

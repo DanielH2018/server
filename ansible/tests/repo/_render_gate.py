@@ -2,7 +2,7 @@
 
 `test_guard_tests_read_renders_not_templates.py` holds the rule — the directories it scans,
 the exempt modules and the tests. This module holds the pure half, so the rule's lists and its
-red proofs stay inside the 500-line test cap while the detector grows.
+red proofs stay inside the test-module line cap while the detector grows.
 
 A read is spelled several ways, and all but the first hide the template path from the read
 site:
