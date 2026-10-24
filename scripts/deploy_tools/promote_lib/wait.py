@@ -223,7 +223,7 @@ def hold_detail(hold: str) -> str:
         detail += f" ({rest})"
     return (
         f"{detail}. That SHA may contain this merge or predate it. Clearing the hold is "
-        f"operator-only: `gh variable set {HOLD_VARIABLE} --body none -R {forge.REPOSITORY}`"
+        f"the operator's decision, and an agent's clear asks them first: `gh variable set {HOLD_VARIABLE} --body none -R {forge.REPOSITORY}`"
     )
 
 

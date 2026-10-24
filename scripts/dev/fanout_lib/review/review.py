@@ -140,6 +140,7 @@ from fanout_lib.launch import (
     SYSTEM_PROMPT_FILE,
     stop_hook_settings,
 )
+from fanout_lib.prompt_tool import prompt_tool_args
 from fanout_lib.status import PR_URL
 from fanout_lib.target import Target
 
@@ -234,8 +235,7 @@ class Pipeline:
         self.review_prompt = PROMPT_FILE.read_text()
         self.headless_prompt = HEADLESS_PROMPT_FILE.read_text()
         self.hooks = read_hooks(SOURCE_ROOT)
-        # Another repo's snapshot carries no `.claude/settings.json`, and its worktree's
-        # settings are that repo's, not these.
+        # Another repo's snapshot has no `.claude/settings.json`; its worktree's are its own.
         self.project_settings = (
             (SOURCE_ROOT / ".claude" / "settings.json").read_text()
             if target.is_server
@@ -322,7 +322,7 @@ class Pipeline:
     ) -> list[str]:
         return [
             *(prefix or self._stop_hook()),
-            "-p", "--model", "opus", "--permission-mode", "auto",
+            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
             "--output-format", "json", "--max-budget-usd", str(BUDGET_USD),
             "--append-system-prompt", self.headless_prompt + prompt, "--effort", "medium",
         ]  # fmt: skip
@@ -330,7 +330,7 @@ class Pipeline:
     def _red_author(self) -> list[str]:
         return [
             *self._stop_hook(),
-            "-p", "--model", "opus", "--permission-mode", "auto",
+            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
             "--json-schema", json.dumps(RED_SCHEMA), "--effort", "medium",
         ]  # fmt: skip
@@ -350,7 +350,7 @@ class Pipeline:
             )
         return [
             *self._held_settings(),
-            "-p", "--model", "opus", "--permission-mode", "auto",
+            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
             "--append-system-prompt", prompt,
             "--disallowedTools", "Edit,Write,NotebookEdit", "--effort", self.record.review_effort,

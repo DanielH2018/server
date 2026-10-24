@@ -46,6 +46,8 @@ spec:
             - --collector.textfile.directory=/textfile
             # The iscsi-sessions sidecar's directory, a second instance of the repeatable flag.
             - --collector.textfile.directory=/iscsi-textfile
+            # The ghcr-mirror-pull sidecar's directory, a third instance.
+            - --collector.textfile.directory=/ghcr-mirror-textfile
           ports:
             - containerPort: 9100
           # Host access here is READ-ONLY and comes from the four hostPath mounts below, not
@@ -138,6 +140,9 @@ spec:
             - name: node-exporter-iscsi-textfile
               mountPath: /iscsi-textfile
               readOnly: true
+            - name: node-exporter-ghcr-mirror-textfile
+              mountPath: /ghcr-mirror-textfile
+              readOnly: true
           # 1 core, not 200m. This exporter renders ~320 metric families per request and was
           # throttled on 42.4% of CFS periods (daniel-box) / 31.7% (daniel-server), measured
           # 2026-08-29. On its own that ratio is close to an artifact — absolute throttled
@@ -173,6 +178,39 @@ spec:
             - name: node-exporter-iscsi-textfile
               mountPath: /iscsi-textfile
 {{ container_resources(cpu_limit='100m', mem_limit='16Mi', cpu_request='5m', mem_request='8Mi') }}
+        # Writes ghcr-mirror-pull.prom, whether this node's ghcr.io mirror endpoint serves nut's
+        # manifest, every 600s (#5542). Here because this pod is hostNetwork on every node: its
+        # GET leaves the host network namespace as containerd's pulls do, so the mirror's fence
+        # judges it by the same node grant. A pod network check would be refused by that fence,
+        # which the registry's isolation Job proves. The endpoint is the one registries.yaml
+        # names on the node (setup/k3s's registries.yaml.j2). It reuses the exporter's image for
+        # busybox's shell and wget. No probes, as for iscsi-sessions above.
+        - name: ghcr-mirror-pull
+          image: {{ node_exporter_k8s_image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              {{ lookup('file', playbook_dir + '/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh') | indent(14) }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: REGISTRY_NODE
+              value: "{{ k8s_registry_node }}"
+            - name: LOCAL_ENDPOINT
+              value: "http://localhost:{{ k8s_registry_ghcr_mirror_port }}"
+            - name: REMOTE_ENDPOINT
+              value: "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_ghcr_mirror_port }}"
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
+          volumeMounts:
+            - name: node-exporter-ghcr-mirror-probe
+              mountPath: /ghcr-mirror-probe
+              readOnly: true
+            - name: node-exporter-ghcr-mirror-textfile
+              mountPath: /ghcr-mirror-textfile
+{{ container_resources(cpu_limit='100m', mem_limit='16Mi', cpu_request='5m', mem_request='8Mi') }}
       volumes:
         - name: node-exporter-proc
           hostPath:
@@ -194,3 +232,15 @@ spec:
         - name: node-exporter-iscsi-textfile
           emptyDir:
             sizeLimit: 1Mi
+        # The ghcr-mirror-pull sidecar writes here and the exporter reads it.
+        - name: node-exporter-ghcr-mirror-textfile
+          emptyDir:
+            sizeLimit: 1Mi
+        # nut's role renders the repository and tag the sidecar GETs. A directory mount, never a
+        # subPath, so the kubelet swaps in a new tag without a roll. Optional, so a missing
+        # ConfigMap leaves the files absent and the check reports down rather than blocking the
+        # pod's start.
+        - name: node-exporter-ghcr-mirror-probe
+          configMap:
+            name: nut-ghcr-mirror-probe
+            optional: true

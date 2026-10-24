@@ -1121,6 +1121,7 @@ jobs:
             scripts/validate/host_package_cases.py
             scripts/validate/host_packages.py
             scripts/validate/validate_lib/host_container.py
+            scripts/validate/validate_lib/conffile_case.py
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/package_roots.py
             scripts/validate/validate_lib/secrets_case.py

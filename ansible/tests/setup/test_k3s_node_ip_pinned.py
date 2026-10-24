@@ -23,8 +23,8 @@ Run: uv run pytest ansible/tests/setup/test_k3s_node_ip_pinned.py
 import re
 
 
-from _helpers import imported_task_files, imported_tasks, load_defaults
-from lib.repo_paths import K3S_ROLE
+from _helpers import imported_task_files, imported_tasks, load_defaults, load_yaml
+from lib.repo_paths import K3S_ROLE, SYSTEM_UPGRADE_DEFAULTS
 
 
 def _task_text() -> str:
@@ -56,7 +56,7 @@ def test_node_ip_is_pinned_to_the_hosts_canonical_address():
 
 def test_k3s_version_is_pinned():
     """A reconfigure re-runs the installer; unpinned, that upgrades the control plane."""
-    version = load_defaults(K3S_ROLE).get("k3s_version", "")
+    version = load_yaml(SYSTEM_UPGRADE_DEFAULTS).get("k3s_version", "")
     assert re.fullmatch(r"v\d+\.\d+\.\d+\+k3s\d+", str(version)), (
         f"k3s_version must be an explicit version, got {version!r}. The install task "
         "re-runs get.k3s.io whenever k3s_server_args changes, and get.k3s.io installs "

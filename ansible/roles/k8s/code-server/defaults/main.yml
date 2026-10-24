@@ -155,8 +155,9 @@ code_server_k8s_rust_sha256: 891c6366d7100feda0bca4c03ce63f3c9ac827cbebbc283e743
 code_server_k8s_rust_src_url: "https://static.rust-lang.org/dist/rust-src-{{ code_server_k8s_rust_version }}.tar.xz"
 code_server_k8s_rust_src_sha256: 3f1f9b7ed48f4596fc87889b7b3c61747336a55c9c22db1ab0c697e0aadb77aa
 
-# The claims k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot of
-# both (k8s_autodeploy_snapshot_pvcs above).
+# The claims the renderer emits for this role. The code-server Kustomization applies them after
+# the code-server-snapshot Job, which snapshots both (k8s_autodeploy_snapshot_pvcs above); after a
+# handback, k8s/manifests applies them ahead of the pre-apply snapshot.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ code_server_k8s_claim }}"
     storage_class: "{{ code_server_k8s_storage_class }}"

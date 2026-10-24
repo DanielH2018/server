@@ -325,7 +325,7 @@ def test_a_secrets_json_reconcile_cannot_read_fails_the_run_and_keeps_the_legacy
     assert node.applied()["retired"] == []
 
 
-# A package without `secrets-unit`: the Pi's shape until H4.5.
+# A package without `secrets-unit`: the shape every host package had before H4.2.
 
 
 def test_a_manifest_without_secrets_unit_runs_no_secrets_step(tmp_path):
@@ -358,7 +358,9 @@ def test_a_manifest_without_secrets_unit_runs_no_secrets_step(tmp_path):
     assert "secrets_inputs_sha256" not in node.applied()
 
 
-def test_the_pis_real_manifest_runs_no_secrets_step_and_touches_no_queue(tmp_path):
+def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_two_credentials(
+    tmp_path,
+):
     package = host_mode.render_host("daniel-pi")
     node = Node(tmp_path)
     for dst, (content, _) in package.files.items():
@@ -372,12 +374,15 @@ def test_the_pis_real_manifest_runs_no_secrets_step_and_touches_no_queue(tmp_pat
             "active": "inactive",
             "enabled": "disabled",
         }
-    assert "secrets_inputs_sha256" not in node.manifest
+    assert "secrets_inputs_sha256" in node.manifest
+    credentials = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])[
+        "credentials"
+    ]
+    assert credentials == ["pi_recovery_push_token", "pi_sd_health_push_token"]
+    for key in credentials:
+        node.credential(key)
 
-    first, second = node.run(), node.run()
+    result = node.run()
 
-    assert first.returncode == second.returncode == 0, second.stderr
-    assert all(SECRETS_UNIT not in call["argv"] for call in node.calls("systemctl"))
-    assert not node.pending_path.exists()
-    assert not (node.root / "run/homelab-secrets/pending.lock").exists()
-    assert "secrets_inputs_sha256" not in node.applied()
+    assert result.returncode == 0, result.stderr
+    assert node.writes().count(["restart", SECRETS_UNIT]) == 1

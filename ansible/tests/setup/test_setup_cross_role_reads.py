@@ -38,9 +38,6 @@ _FILTER_CALLERS_EXEMPT = {
 }
 KNOWN_FILTER_CALLERS = {
     "ansible/filter_plugins/k8s_autodeploy.py": {"gitops_deploy"},
-    "ansible/filter_plugins/longhorn_groups.py": {"k3s"},
-    # Registers no filter, but `longhorn_groups` wraps its filters in it (#4527).
-    "ansible/filter_plugins/filter_errors.py": {"k3s"},
 }
 _COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
 

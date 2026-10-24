@@ -25,8 +25,15 @@ _DEFAULT_NS = "homelab"
 # than a lower bound: a THIRD role gaining a CronJob without a gate include must fail this test
 # with a clear reason, not pass it silently because the assertion below only checked >= 2.
 _KNOWN_CRONJOB_ONLY_ROLES = frozenset(
-    {"configarr", "longhorn-reconcile", "pi-peer-backup"}
+    {"configarr", "longhorn-reconcile", "pi-peer-backup", "longhorn-restore-drill"}
 )
+
+# DECIDED: the restore drill runs no gate Job. The gate copies the CronJob's jobTemplate into a
+# Job that Flux runs once per revision, and a copy of this one creates a real Volume, PV and PVC
+# under the fixed name `restore-drill-<pvc>` that a scheduled run also uses, so an extra run can
+# tear down another run's restore. The plan's *First run* says the same: the bouncer prune and the
+# drill are not gated. The first scheduled run is the evidence instead (H2.3e).
+UNGATED_BY_DESIGN = frozenset({"longhorn-restore-drill"})
 
 
 @cache
@@ -63,6 +70,8 @@ def test_every_cronjob_only_role_is_gated_at_deploy_time():
     `flux_cronjob_gates`, and Flux runs the gate Job in `<tag>-verify`
     (`_autodeploy_batch.flux_gated_names`). A role-local `job/<name>` wait also counts."""
     for role, targets in _cronjob_only_census().items():
+        if role in UNGATED_BY_DESIGN:
+            continue
         gated = _batch_gated_names(_K8S_ROLES / role)
         declared = {name for _, name in targets}
         missing = declared - gated
@@ -71,3 +80,32 @@ def test_every_cronjob_only_role_is_gated_at_deploy_time():
             "(a flux-owned role) and no job/<name> wait in tasks/main.yml; an Ansible-owned "
             "role needs the handback steps in docs/flux-deploy-plane.md"
         )
+
+
+def _stale_exemptions(exempt, census, gated_names) -> list[str]:
+    """Exempt roles that are no longer CronJob-only, or that name a gate after all."""
+    return sorted(
+        role
+        for role in exempt
+        if role not in census or gated_names(role) & {n for _, n in census[role]}
+    )
+
+
+def test_every_ungated_exemption_is_a_cronjob_only_role_with_no_gate():
+    assert (
+        _stale_exemptions(
+            UNGATED_BY_DESIGN,
+            _cronjob_only_census(),
+            lambda role: _batch_gated_names(_K8S_ROLES / role),
+        )
+        == []
+    )
+    # Non-vacuity: the exemption names a role the census finds.
+    assert UNGATED_BY_DESIGN <= set(_cronjob_only_census())
+
+
+def test_an_exemption_for_a_gated_or_missing_role_is_flagged():
+    census = {"a": [("ns", "job-a")]}
+    assert _stale_exemptions({"a"}, census, lambda role: {"job-a"}) == ["a"]
+    assert _stale_exemptions({"b"}, census, lambda role: set()) == ["b"]
+    assert _stale_exemptions({"a"}, census, lambda role: set()) == []

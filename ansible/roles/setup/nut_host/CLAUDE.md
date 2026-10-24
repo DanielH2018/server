@@ -2,14 +2,17 @@
 
 The host-side pieces of the UPS stack: the udev rule that lets the `k8s/nut` pod open the
 APC UPS over USB, and a **secondary `upsmon`** on each armed host that powers the host off
-when the primary declares FSD. The primary `upsd`/`upsmon` is the `k8s/nut` pod, pinned to
+when the primary declares FSD. **The role ends on `ups_host` since H4.3c**, because the
+`homelab-daniel-server` package owns daniel-server's half (see *Where it runs*). The role
+applies to daniel-box alone. The primary `upsd`/`upsmon` is the `k8s/nut` pod, pinned to
 `ups_host`; `ansible/roles/k8s/nut/CLAUDE.md` owns the chain end to end and this file covers
 only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "nut_host"` when `inventory_hostname == ups_host or
-  nut_host_secondary_armed | bool`
+  nut_host_secondary_armed | bool`; ends on hosts where `inventory_hostname == ups_host`
+  (leading `meta: end_role`)
 - **Crons (1):**
   - `UPS secondary watchdog` — `*/10 * * * *`
 <!-- /generated_from -->
@@ -19,11 +22,20 @@ only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
   `deploy.sh --tags nut_host` exits 2 having deployed nothing. Apply it with
   `uv run ansible-playbook ansible/initial_setup.yml --tags nut_host -e target=<host>`, once
   per host.
-- Gate: `when: inventory_hostname == ups_host or nut_host_secondary_armed | bool`. `ups_host`
-  (daniel-server) runs it unconditionally because it owns the USB UPS. Any other host runs
-  only the client half, and only after `nut_host_secondary_armed: true` is set in its
-  `host_vars` — daniel-box since 2026-08-28. A secondary upsmon exists to power its host
-  off, so arm a further host only after the console-attended `upsmon -c fsd` drill.
+- Gate: `when: inventory_hostname == ups_host or nut_host_secondary_armed | bool`. Any host
+  other than `ups_host` runs the client half, and only after `nut_host_secondary_armed: true`
+  is set in its `host_vars` — daniel-box since 2026-08-28.
+- **The role ends on `ups_host`.** Its first task is `meta: end_role` with
+  `when: inventory_hostname == ups_host`, under a `# DECIDED` marker. Since H4.3c the
+  `homelab-daniel-server` package owns daniel-server's half: the udev rule, the `nut-monitor`
+  drop-in and the `homelab-ups-watchdog` timer, all from `hosts/components/nut-secondary/`.
+  The guard lives in the role because an `initial_setup.yml` edit is in
+  `_BROAD_MANUAL_PREFIXES` and parks every session's landing. `setup_gates.role_end_guard`
+  reads it, so the two-writer census, `land_reach` and the *Applied by* line all know the role
+  ends there. Reviving daniel-server's half under Ansible means deleting the guard, and
+  the package's legacy entries then collide with the role in the census.
+- A secondary upsmon exists to power its host off, so arm a further host only after the
+  console-attended `upsmon -c fsd` drill.
 - **It lived at `ansible/roles/nut_host/` until 2026-09-17.** Outside `roles/setup/` it was
   invisible to the deployer's `_BROAD_SETUP_PREFIXES` and to `land.sh`'s plane note, so PR
   #1915 landed on master with its change unapplied and unreported on both hosts (#1916).
@@ -33,7 +45,9 @@ only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
   sibling in that position.
 
 ## What it does (`tasks/main.yml`)
-1. **udev** (`ups_host` only) — the APC USB permissions rule, then reload and trigger.
+1. **udev** — none since H4.3c. The package ships `/usr/lib/udev/rules.d/99-homelab-nut-apc.rules`,
+   and reconcile reloads udev when it changes. `test_nut_host_secondary.py` refuses a task that
+   writes under `/etc/udev/rules.d/` or runs `udevadm`.
 2. **Endpoint resolution** (every other host) — reads the `nut` Service's ClusterIP with
    `kubectl`, sets `nut_host_upsd_host`, and **fails the play** when `upsd` does not answer
    there. A secondary that cannot reach `upsd` would never see FSD, so the failure is loud
@@ -45,7 +59,8 @@ only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
 4. **Watchdog** (`nut_host_watchdog_armed`, default true) — renders
    `/etc/nut/kuma-push.env` (the `ups_secondary_push_token`, root-only) and
    `/usr/local/bin/ups-secondary-health.sh` at `0700`, and schedules it every
-   `nut_host_watchdog_interval_minutes` (10) as a `cron_file`. The script is `0700`, not
+   `nut_host_watchdog_interval_minutes` (10) as a `cron_file`. On daniel-server a package timer
+   runs the same template's packaged branch instead. The script is `0700`, not
    `0755`, because it renders a credential inline;
    `test_secret_bearing_host_scripts_are_not_world_readable.py` enforces that for every path
    `secret_bearing_host_paths()` names.
@@ -72,4 +87,6 @@ host without the push token still writes the verdict.
   the script's own diagnosis (`nut-monitor is inactive`, `upsd unreachable at …`).
 - `ssh <host> systemctl is-active nut-monitor` and `ssh <host> upsc <endpoint> ups.status`
   are the two reads the cron makes; run them by hand when the tile disagrees with the pod.
-- `ssh <host> stat -c '%a %U' /usr/local/bin/ups-secondary-health.sh` reads `700 root`.
+- `ssh daniel-box stat -c '%a %U' /usr/local/bin/ups-secondary-health.sh` reads `700 root`.
+- On daniel-server, `ssh daniel-server systemctl show -p DropInPaths nut-monitor` names
+  `50-homelab.conf`, and `systemctl is-active homelab-ups-watchdog.timer` prints `active`.

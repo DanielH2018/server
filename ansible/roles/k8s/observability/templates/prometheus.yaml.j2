@@ -162,10 +162,13 @@ data:
             regex: kube_service_(annotations|created|deletion_timestamp|info|labels|spec_external_ip|spec_type)
           # Jobs are collected for the gate-Job durations files/rules/gate-jobs.yaml records
           # (#5675): the start and completion times, the succeeded and failed counts, and
-          # status_active for one still running. The other twelve v2.20 families have no reader.
+          # status_active for one still running. kube_job_failed is kept too (H6.1b): its
+          # `condition="true"` series is the Failed condition K3sUpgradeJobFailed in
+          # files/rules/k3s-upgrade.yaml reads, and a family dropped here would leave that rule
+          # inert. The other eleven v2.20 families have no reader.
           - source_labels: [__name__]
             action: drop
-            regex: kube_job_(annotations|complete|created|failed|info|labels|owner|spec_active_deadline_seconds|spec_completions|spec_parallelism|status_ready|status_suspended)
+            regex: kube_job_(annotations|complete|created|info|labels|owner|spec_active_deadline_seconds|spec_completions|spec_parallelism|status_ready|status_suspended)
           # CronJobs are collected for kube_cronjob_status_last_successful_time alone, the run
           # clock files/rules/pod-producers.yaml reads for the two health CronJobs (M6 B6b). The
           # other twelve families have no reader.
@@ -373,10 +376,12 @@ data:
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
       # One tcp_connect target per container the Pi publishes a port for, from the same
       # `published_ports` selection as monitor-bridge's PI_PUBLISHED_PORTS, so a container added
-      # to daniel-pi's containers_list gets a probe with no edit here. `service` is the container
-      # name. A container recreated by a deploy closes its port for a few seconds, which
-      # PiPortDead's `for:` rides out. A container that comes back attached to no Docker network
-      # stays closed until someone recreates it, and that is what this job exists to catch.
+      # to daniel-pi's containers_list or compose_services gets a probe with no edit here. The
+      # targets sort by name, so a service moving between the two keys moves no target.
+      # `service` is the container name. A container recreated by a deploy closes its port for a
+      # few seconds, which PiPortDead's `for:` rides out. A container that comes back attached
+      # to no Docker network stays closed until someone recreates it, and that is what this job
+      # exists to catch.
       - job_name: blackbox-pi-ports
         scrape_interval: 1m
         # A contended Pi can take over the default 10s to accept a connect, which the exporter
@@ -385,7 +390,7 @@ data:
         scrape_timeout: 30s
         metrics_path: /probe
         static_configs:
-{% for published in hostvars['daniel-pi'].containers_list | published_ports %}
+{% for published in (((hostvars['daniel-pi'].containers_list | published_ports) + (hostvars['daniel-pi'].compose_services | published_ports)) | sort) %}
           - targets: ['{{ hostvars['daniel-pi'].server_ip }}:{{ published.split(':')[1] }}']
             labels: {service: {{ published.split(':')[0] }}, module: tcp_connect}
 {% endfor %}
@@ -559,7 +564,7 @@ data:
         scrape_interval: 1m
         scrape_timeout: 30s
         static_configs:
-          - targets: ['{{ k8s_pi_client_ip }}:{{ hostvars['daniel-pi'].containers_list | entry_port('alloy') }}']
+          - targets: ['{{ k8s_pi_client_ip }}:{{ (hostvars['daniel-pi'].containers_list + hostvars['daniel-pi'].compose_services) | entry_port('alloy') }}']
             labels:
               origin: daniel-pi
               instance: daniel-pi

@@ -91,6 +91,12 @@ _NO_READINESS = {
     ): "textfile-writing sidecar, no server to probe; readiness would let it hold the "
     "exporter out of the Kustomization's wait, and IscsiSessionsNotReporting catches a "
     "loop that stops writing",
+    (
+        "node-exporter",
+        "ghcr-mirror-pull",
+    ): "textfile-writing sidecar, no server to probe; readiness would let a broken mirror "
+    "hold the exporter out of the Kustomization's wait, and GhcrMirrorPullNotReporting "
+    "catches a loop that stops writing",
     # ── periodic workers with no server to probe. A stale Kuma push heartbeat catches
     #    'running but not doing its job', which readiness cannot see.
     ("cloudflare-ddns", "cloudflare-ddns"): "Kuma push heartbeat; no server to probe",

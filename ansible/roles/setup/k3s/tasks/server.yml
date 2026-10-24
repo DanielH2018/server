@@ -1,6 +1,15 @@
 ---
 # Install and validate the k3s server (control plane).
 
+- name: Read the k3s pin from the system-upgrade role
+  tags: [k3s_server]
+  # H6.1b moved `k3s_version`, `k3s_install_script_url` and `k3s_install_script_sha256` to the
+  # Flux-owned role that drives the SUC Plans, so a pin change routes to that tag and writes no
+  # `manual_plane` line. This install reads the same file, and only on a fresh host (H6.3c).
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/roles/k8s/system-upgrade/defaults/main.yml"
+  when: has_repo_checkout | bool
+
 - name: Refuse to run on a host that already runs Docker containers
   tags: [k3s_server]
   # The whole risk assessment behind "k3s goes on daniel-box first" is that the host is

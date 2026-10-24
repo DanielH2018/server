@@ -1,0 +1,23 @@
+{#
+  The image node-exporter's `ghcr-mirror-pull` sidecar GETs through each node's ghcr.io mirror
+  endpoint (#5542): nut's own, at the content tag this render pulls. nut is the image the
+  mirror exists for, because it must cold-start during a WAN outage. Only nut's render sees
+  that tag (`k8s_built_image_tags` holds a role's own builds alone), so the tag ships from
+  here and the sidecar mounts this ConfigMap from node-exporter's role.
+
+  No pod of this role names it, so a tag move adds nothing to nut's `checksum/restart`; the
+  tag move rolls nut through its image ref anyway. The sidecar re-reads the mount on every
+  write, so node-exporter does not roll either. The repository and the tag are separate keys,
+  never one `<repo>:<tag>` string, so the renderer's built-image ref scan does not read this
+  file as a ref. The repository is the one promote pushes to, under
+  `scripts/renderer/renderer_lib/images.py:GHCR`.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nut-ghcr-mirror-probe
+  namespace: {{ k8s_namespace }}
+data:
+  repository: danielh2018/nut
+  tag: "{{ nut_k8s_image.rsplit(':', 1)[1] }}"
