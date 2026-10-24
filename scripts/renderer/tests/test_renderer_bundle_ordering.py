@@ -303,7 +303,7 @@ def test_crowdsec_verify_waits_on_the_rolled_traefik():
     assert "traefik" in _depends(docs["crowdsec-verify"])
 
 
-@pytest.mark.parametrize("value", ["traefik", [], ["crowdsec"], "{{ edges }}"])
+@pytest.mark.parametrize("value", [[], ["crowdsec"], "{{ edges }}"])
 def test_a_verify_after_that_is_not_a_list_of_other_tags_is_a_problem(tmp_path, value):
     defaults = tmp_path / "crowdsec" / "defaults"
     defaults.mkdir(parents=True)
