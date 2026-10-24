@@ -14,6 +14,7 @@ from _compose_tree import (
     ALLOY,
     COMPOSE,
     CONFIG_ALLOY,
+    MISSING,
     ComposeTree,
     dependents_problems,
     text,
@@ -219,21 +220,15 @@ def test_a_file_that_reads_the_hash_may_not_install_under_the_compose_directory(
 
 
 @pytest.mark.parametrize(
-    ("change", "match"),
+    ("listing", "match"),
     [
-        ({"defaults": {}}, "compose_services"),
-        (
-            {"defaults": {"compose_services": [{"name": "ghost"}]}},
-            "has no services/ghost",
-        ),
-        (
-            {"defaults": {"compose_services": [{"name": "alloy"}, {"name": "alloy"}]}},
-            "twice",
-        ),
-        ({"defaults": {"compose_services": [{"name": "../x"}]}}, "plain `name`"),
+        (MISSING, "compose_services"),
+        ([{"name": "ghost"}], "has no services/ghost"),
+        ([{"name": "alloy"}, {"name": "alloy"}], "twice"),
+        ([{"name": "../x"}], "plain `name`"),
     ],
 )
-def test_a_service_list_that_breaks_a_rule_is_refused(tree, change, match):
-    tree.write(**change)
+def test_a_service_list_that_breaks_a_rule_is_refused(tree, listing, match):
+    tree.listing = listing
     with pytest.raises(RenderRefused, match=match):
         tree.render()

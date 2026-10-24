@@ -15,13 +15,16 @@ from pathlib import PurePosixPath
 
 import yaml
 
-from lib.repo_paths import REPO
+from lib.estate import Inventory
+from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
 REAL = REPO / "hosts" / "components" / "pi-compose"
 SCRIPT = REPO / "hosts" / "lib" / "homelab-secrets"
 COMPOSE = "/usr/lib/homelab/compose"
 NAMES = ("domain", "monitor_discord_webhook_url", "alloy_pi_http_password")
+# A `ComposeTree.listing` value that omits the Pi's `compose_services` key.
+MISSING = object()
 DIGEST = "@sha256:" + "ab" * 32
 DATA = "/home/ubuntu/server/containers"
 UNIT = (
@@ -96,6 +99,9 @@ class ComposeTree:
         self, tmp_path, services=None, keys=("domain", "monitor_discord_webhook_url")
     ):
         self.root = tmp_path / "hosts"
+        self.scratch = tmp_path
+        # The Pi's `compose_services`: None lists the fixture services, MISSING omits the key.
+        self.listing = None
         self.secrets = tmp_path / "secrets.yml"
         self.sops_dir = tmp_path / "host-sops"
         self.component = self.root / "components" / "pi-compose"
@@ -131,7 +137,6 @@ class ComposeTree:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(text)
         spec = yaml.safe_load((REAL / "component.yml").read_text())
-        spec["defaults"] = {"compose_services": [{"name": n} for n in self.services]}
         spec["compose"] = "services"
         spec["outputs"] = [self.output()]
         spec["files"].append(
@@ -163,9 +168,37 @@ class ComposeTree:
         self.services[service] = {**self.services[service], relative: text}
         return self.write()
 
+    def inventory(self):
+        """The repo's host_vars with the Pi's `compose_services` replaced by `self.listing`.
+
+        Inventory beats a component's `defaults:`, so the list must come from the inventory.
+        """
+        host_vars = self.scratch / "host_vars"
+        shutil.rmtree(host_vars, ignore_errors=True)
+        shutil.copytree(HOST_VARS, host_vars)
+        listing = (
+            [{"name": n} for n in self.services]
+            if self.listing is None
+            else self.listing
+        )
+        path = host_vars / "daniel-pi.yml"
+        lines = [
+            line
+            for line in path.read_text().splitlines()
+            if not line.startswith("compose_services:")
+        ]
+        if listing is not MISSING:
+            lines.append(f"compose_services: {json.dumps(listing)}")
+        path.write_text("\n".join(lines) + "\n")
+        return Inventory(host_vars=host_vars)
+
     def render(self):
         return host_mode.render_host(
-            "daniel-pi", self.root, secrets=self.secrets, sops_dir=self.sops_dir
+            "daniel-pi",
+            self.root,
+            inventory=self.inventory(),
+            secrets=self.secrets,
+            sops_dir=self.sops_dir,
         )
 
 
