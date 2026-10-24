@@ -60,9 +60,12 @@ name: promote
 
 on:
   # zizmor: ignore[dangerous-triggers] -- every job requires a successful push run of CI on master in this repository, `render` refuses a commit not on master, and no job checks out a pull-request ref.
+  # `branches` keeps a pull request's CI run from starting a run that every job's guard then
+  # skips (#6152). The job guards stay the security check.
   workflow_run:
     workflows: [CI]
     types: [completed]
+    branches: [master]
   # The weekly reboot's no-promotion window ends here, at the cron's 07:30 UTC Sunday plus the
   # 5-minute shutdown delay and the mute's 40-minute recovery, all from
   # ansible/inventory/group_vars/all.yml. GitHub reads this literal, so
@@ -526,6 +529,7 @@ jobs:
       clears_hold: ${{ steps.decide.outputs.clears_hold }}
       no_reset: ${{ steps.decide.outputs.no_reset }}
       stateful: ${{ steps.decide.outputs.stateful }}
+      supersedes: ${{ steps.decide.outputs.supersedes }}
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
@@ -640,6 +644,12 @@ jobs:
       # DEPLOY_HOLD is read again just before the move (D7.1). A `settle` can write a hold
       # while this job waits on the group, and a move after it would promote past the hold.
       # Anything but `none`, a failed read included, moves nothing.
+      #
+      # When `decide` promotes T over a verification in flight (D7), it names the run it
+      # supersedes in `supersedes`, and T's digest is tagged `superseding` BEFORE `prod`
+      # moves. `decide` never supersedes the `superseding` digest, so a verification is
+      # superseded at most once. Tagged after the move, a failed tag write would leave a T
+      # that the next run may supersede again.
       - name: Move prod
         id: move
         env:
@@ -647,6 +657,7 @@ jobs:
           DIGEST: ${{ needs.promote.outputs.digest }}
           SEED: ${{ needs.promote.outputs.seed }}
           PRIOR_DIGEST: ${{ needs.promote.outputs.prior_digest }}
+          SUPERSEDES: ${{ needs.promote.outputs.supersedes }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
@@ -697,6 +708,10 @@ jobs:
           # Stamped before the move, so no status Flux posts for this promotion predates it.
           # verify ignores any older status on T, such as one an earlier promotion left.
           moved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [ -n "${SUPERSEDES:-}" ]; then
+            flux tag artifact "oci://$repo:sha-$TARGET" --tag superseding
+            echo "tagged sha-$TARGET superseding: it supersedes the verification of $SUPERSEDES"
+          fi
           flux tag artifact "oci://$repo:sha-$TARGET" --tag prod
           printf 'moved=true\nmoved_at=%s\n' "$moved_at" >> "$GITHUB_OUTPUT"
 

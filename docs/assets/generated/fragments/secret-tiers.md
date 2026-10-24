@@ -2,10 +2,10 @@
 | Tier | Cadence | Registered |
 |---|---|---|
 | `auto` | 180 d | 90 |
-| `assisted` | 365 d | 82 |
+| `assisted` | 365 d | 83 |
 | `external` | 365 d | 15 |
 | `external-90d` | 90 d | 1 |
 | `pinned` | 730 d | 2 |
 | `ignore` | — | 11 |
 
-201 secrets are registered. The weekly `auto` rotation takes anything due within `ROTATE_LEAD_DAYS` = 8 days.
+202 secrets are registered. The weekly `auto` rotation takes anything due within `ROTATE_LEAD_DAYS` = 8 days.

@@ -1,0 +1,356 @@
+#!/usr/bin/env python3
+"""homelab-k3s-restart: restart one k3s unit once per changed config hash, behind the gates.
+
+H6 (docs/target-architecture/host/h6-k3s-suc.md, *`homelab-k3s-restart`*) is the design. Reconcile
+never restarts a `windowed` unit, so this oneshot, started by its timer inside the host's window,
+is the process that applies a k3s configuration change. SUC's upgrade container is the other.
+
+    homelab-k3s-restart --unit k3s.service --host daniel-box --server https://127.0.0.1:6443 \\
+        --ca-file CA [--deploy-lock] [--guard-server-restart]
+    homelab-k3s-restart --stop-post --host daniel-box      (the unit's ExecStopPost=)
+
+Each run, in order:
+
+1. hashes the files the package ships for the unit: every path in the manifest's `activations`
+   whose action is `manual:<unit>`. An empty set is a valid hash. A manifest or file that cannot
+   be read stops the run, because a guess would restart k3s or hide a change;
+2. with no `applied.sha256`, records the hash and exits 0, so a first install never restarts k3s;
+3. renames a leftover `attempt.sha256` to `failed.sha256` (a run restarted k3s and was killed),
+   then exits 0 when the hash equals `applied.sha256`, keeping `failed 1` while a
+   `failed.sha256` stands;
+4. exits 0 with `failed 1` when the hash equals `failed.sha256`: one attempt per hash;
+5. with `--deploy-lock`, holds the deployer's `all` lock and checks its hold (daniel-box, until
+   H7.19a retires the deployer);
+6. runs `k3s_gates.py` host mode, which reads the API with the read-only token;
+7. restarts the unit with `--no-block`, and polls until it is `active` under a new MainPID and
+   the node posts a `Ready=True` heartbeat later than the restart;
+8. records `applied.sha256`, or renames `attempt.sha256` to `failed.sha256` after 300 seconds.
+
+Every run writes `homelab_k3s_restart.prom`, a temporary file renamed into place, with
+`pending`, `failed` and `last_success_timestamp_seconds`. Exit 0: nothing owed, or refused by a
+gate (`pending 1`). Exit 1: the restart failed, or the hash could not be computed.
+"""
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+import k3s_gates
+
+# HOMELAB_ROOT prefixes every host path. Only the tests set it.
+ROOT = Path(os.environ.get("HOMELAB_ROOT", "/"))
+MANIFEST = "usr/lib/homelab/manifest.json"
+STATE_DIR = "var/lib/homelab-k3s-restart"
+TEXTFILE_DIR = "var/lib/node-exporter-textfile"
+PROM = "homelab_k3s_restart.prom"
+TMP = ".homelab_k3s_restart.tmp"
+RESTART_TIMEOUT_S = 300
+POLL_S = 5
+STEP_TIMEOUT_S = 60
+
+# Overridden by the tests, so a run needs neither a real sleep nor the real clock.
+sleep = time.sleep
+clock = time.time
+cluster_client_factory = k3s_gates.Api
+
+
+def utcnow() -> datetime:
+    return datetime.fromtimestamp(clock(), timezone.utc)
+
+
+class Stop(Exception):
+    """The run cannot continue: it writes `pending 1` and exits 1."""
+
+
+def say(message: str) -> None:
+    # stdout, so the unit's SyslogLevel=notice keeps the line through journald's MaxLevelStore.
+    print(f"homelab-k3s-restart: {message}", flush=True)
+
+
+def path(*parts: str) -> Path:
+    return ROOT.joinpath(*parts)
+
+
+def state(name: str) -> Path:
+    return path(STATE_DIR, name)
+
+
+def read_hash(name: str) -> str | None:
+    try:
+        return state(name).read_text().strip() or None
+    except FileNotFoundError:
+        return None
+
+
+def write_atomic(target: Path, text: str) -> None:
+    tmp = target.with_name(f".{target.name}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, target)
+
+
+# ── step 1: the hash ─────────────────────────────────────────────────────────────────────────
+
+
+def config_hash(unit: str) -> str:
+    """sha256 over the sorted `path sha256` lines of the files this package ships for `unit`."""
+    try:
+        manifest = json.loads(path(MANIFEST).read_text())
+        activations = manifest.get("activations", {})
+        if not isinstance(activations, dict):
+            raise ValueError("`activations` is not a map")
+    except (OSError, ValueError) as exc:
+        raise Stop(f"cannot read /{MANIFEST}: {exc}") from exc
+    lines = []
+    for file, action in sorted(activations.items()):
+        if action != f"manual:{unit}":
+            continue
+        try:
+            body = path(file.lstrip("/")).read_bytes()
+        except OSError as exc:
+            raise Stop(f"cannot read {file}: {exc}") from exc
+        lines.append(f"{file} {hashlib.sha256(body).hexdigest()}")
+    return hashlib.sha256("\n".join(lines).encode()).hexdigest()
+
+
+# ── the textfile ─────────────────────────────────────────────────────────────────────────────
+
+
+def write_metrics(host: str, pending: int, failed: int) -> None:
+    directory = path(TEXTFILE_DIR)
+    if not directory.is_dir():
+        say(f"/{TEXTFILE_DIR} is missing; writing no metrics")
+        return
+    try:
+        success = int(state("last_success").read_text().strip())
+    except (OSError, ValueError):
+        success = 0
+    label = f'{{host="{host}"}}'
+    body = (
+        f"homelab_k3s_restart_pending{label} {pending}\n"
+        f"homelab_k3s_restart_failed{label} {failed}\n"
+        f"homelab_k3s_restart_last_success_timestamp_seconds{label} {success}\n"
+    )
+    # A name that does not end in .prom, so the collector never scrapes it half-written.
+    tmp = directory / TMP
+    try:
+        tmp.write_text(body)
+        tmp.chmod(0o644)
+        os.replace(tmp, directory / PROM)
+    except OSError as exc:
+        say(f"cannot write {PROM}: {exc}")
+
+
+def record_success() -> None:
+    write_atomic(state("last_success"), f"{int(clock())}\n")
+
+
+# ── step 5: the deploy lock ──────────────────────────────────────────────────────────────────
+
+
+def take_deploy_lock() -> int:
+    """Hold the deployer's `all` lock without waiting; the descriptor lives until the process exits.
+
+    Raises ValueError, with the reason, when a deploy holds the lock, the file is absent, or the
+    deployer's `hold_sha` is set. The open is `O_RDONLY`, never `O_CREAT` (k3s_gates.py has why).
+    """
+    refusals = k3s_gates.check_deployer_hold(str(ROOT))
+    if refusals:
+        raise ValueError(refusals[0])
+    try:
+        lock = k3s_gates.resolve_under(str(ROOT), k3s_gates.ALL_LOCK)
+        fd = os.open(lock, os.O_RDONLY)
+    except FileNotFoundError:
+        raise ValueError(
+            f"{k3s_gates.ALL_LOCK} is absent: the tmpfiles entry creates it"
+        ) from None
+    except OSError as exc:
+        raise ValueError(f"cannot open {k3s_gates.ALL_LOCK}: {exc}") from exc
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        os.close(fd)
+        raise ValueError(f"a deploy holds the all lock ({exc.strerror})") from exc
+    return fd
+
+
+# ── step 6 and 7: the gates and the restart ──────────────────────────────────────────────────
+
+
+def systemctl(*args: str) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            ["systemctl", *args], capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return subprocess.CompletedProcess(args, 127, "", str(exc))
+
+
+def main_pid(unit: str) -> str:
+    return systemctl("show", unit, "-p", "MainPID", "--value").stdout.strip()
+
+
+def node_restarted(api: k3s_gates.Api, node: str, since: float) -> bool:
+    """True when the node reads Ready=True with a heartbeat at least a second after `since`."""
+    try:
+        doc = api(f"{k3s_gates.NODES_PATH}/{node}")
+        ready = k3s_gates._condition(doc, "Ready") or {}
+        if ready.get("status") != "True":
+            return False
+        beat = k3s_gates._utc(ready.get("lastHeartbeatTime"), "lastHeartbeatTime")
+    except (k3s_gates.ReadError, ValueError, TypeError, AttributeError):
+        return False  # an API read error counts as "not yet"
+    return beat.timestamp() >= since + 1
+
+
+def restart_and_wait(unit: str, host: str, api: k3s_gates.Api, digest: str) -> bool:
+    before = main_pid(unit)
+    t0 = clock()
+    write_atomic(state("attempt.sha256"), digest + "\n")
+    say(f"restarting {unit} for config hash {digest[:12]}")
+    systemctl("--no-block", "restart", unit)
+    while clock() < t0 + RESTART_TIMEOUT_S:
+        sleep(POLL_S)
+        now_pid = main_pid(unit)
+        active = systemctl("is-active", unit).stdout.strip() == "active"
+        if (
+            active
+            and now_pid not in ("", "0", before)
+            and node_restarted(api, host, t0)
+        ):
+            return True
+    return False
+
+
+def fail_attempt() -> None:
+    attempt = state("attempt.sha256")
+    if attempt.exists():
+        os.replace(attempt, state("failed.sha256"))
+
+
+# ── the run ──────────────────────────────────────────────────────────────────────────────────
+
+
+def run(args: argparse.Namespace) -> int:
+    host = args.host
+    state(".").mkdir(parents=True, exist_ok=True)
+    digest = config_hash(args.unit)
+    applied = read_hash("applied.sha256")
+    if applied is None:
+        write_atomic(state("applied.sha256"), digest + "\n")
+        record_success()
+        say(f"first run: recorded config hash {digest[:12]}; restarting nothing")
+        write_metrics(host, 0, 0)
+        return 0
+    fail_attempt()
+    failed = read_hash("failed.sha256")
+    if digest == applied:
+        if failed:
+            say(
+                "config matches the applied hash; failed.sha256 stands, so failed stays 1"
+            )
+        write_metrics(host, 0, 1 if failed else 0)
+        return 0
+    if digest == failed:
+        say(f"config hash {digest[:12]} already failed once: not retrying")
+        write_metrics(host, 1, 1)
+        return 0
+    _lock = None  # the descriptor stays open to the end of the run
+    try:
+        if args.deploy_lock:
+            _lock = take_deploy_lock()
+        notes: list[str] = []
+        api = cluster_client_factory(
+            args.server,
+            args.token_file,
+            args.ca_file,
+            timeout=10.0,
+            deadline=time.monotonic() + STEP_TIMEOUT_S,
+        )
+        checks = k3s_gates.checks_for(
+            "host",
+            api,
+            str(ROOT),
+            None,
+            utcnow,
+            args.guard_server_restart,
+            notes,
+        )
+        if k3s_gates.wait_for_pass(checks, notes, once=True, poll=0, max_wait=None):
+            raise ValueError("a gate refused")
+    except ValueError as exc:
+        say(f"refused, restarting nothing: {exc}")
+        write_metrics(host, 1, 1 if failed else 0)
+        return 0
+    restart_api = cluster_client_factory(
+        args.server, args.token_file, args.ca_file, timeout=5.0
+    )
+    if restart_and_wait(args.unit, host, restart_api, digest):
+        write_atomic(state("applied.sha256"), digest + "\n")
+        state("attempt.sha256").unlink(missing_ok=True)
+        record_success()
+        say(f"restarted {args.unit} and the node is Ready: recorded {digest[:12]}")
+        write_metrics(host, 0, 0)
+        return 0
+    fail_attempt()
+    say(
+        f"{args.unit} was not active, Ready and past its heartbeat in {RESTART_TIMEOUT_S}s"
+    )
+    write_metrics(host, 1, 1)
+    return 1
+
+
+def stop_post(args: argparse.Namespace) -> int:
+    """`ExecStopPost=`: a run that ended without success after it restarted k3s pages at once."""
+    if (
+        os.environ.get("SERVICE_RESULT", "success") != "success"
+        and state("attempt.sha256").exists()
+    ):
+        fail_attempt()
+        say("the run ended without success after a restart: recording failed")
+        write_metrics(args.host, 1, 1)
+        return 0
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument(
+        "--host", required=True, help="the host label and the node name"
+    )
+    parser.add_argument("--unit", default="k3s.service")
+    parser.add_argument("--server", default="https://127.0.0.1:6443")
+    parser.add_argument("--ca-file", default="/var/lib/rancher/k3s/agent/server-ca.crt")
+    parser.add_argument(
+        "--token-file",
+        default=os.path.join(
+            os.environ.get("CREDENTIALS_DIRECTORY", "/run/credentials"),
+            "k3s_readonly_token",
+        ),
+    )
+    parser.add_argument("--deploy-lock", action="store_true")
+    parser.add_argument("--guard-server-restart", action="store_true")
+    parser.add_argument("--stop-post", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.stop_post:
+        return stop_post(args)
+    try:
+        return run(args)
+    except Stop as exc:
+        say(f"stopped: {exc}")
+        write_metrics(args.host, 1, 1 if read_hash("failed.sha256") else 0)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

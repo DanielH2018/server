@@ -1,0 +1,23 @@
+---
+# Gives longhorn-global-manager a memory REQUEST (no limit) and two replicas. Upstream (v1.13.0)
+# ships the Deployment with no `resources`, so its pods are BestEffort, the kernel's first pick
+# under memory pressure; it runs the cluster-wide pod and PV controllers, so the manager
+# DaemonSet's reasoning (longhorn-manager.yaml beside this file) applies to it. Upstream's three
+# replicas elect one leader and stand the rest by, so on two nodes the third replica adds no
+# failover. Both values are keys in defaults/main.yml (k3s_longhorn_global_manager_memory_request,
+# k3s_longhorn_global_manager_replicas); a kustomize patch is copied verbatim and cannot read a
+# variable, so ansible/tests/longhorn/test_longhorn_control_plane_resources.py holds them equal.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: longhorn-global-manager
+  namespace: longhorn-system
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: longhorn-global-manager
+          resources:
+            requests:
+              memory: 64Mi
