@@ -174,6 +174,33 @@ otherwise; none of the values below are secrets themselves, only names and locat
       to refresh the host file's copies.
    Source: `docs/target-architecture/host/h4-secrets-unit.md` ("Which ciphertext each host
    carries") and `hosts/bootstrap-host.sh` (step 3).
+12. **daniel-pi's host age key.** `/etc/homelab/age.key` (root, mode 0600) on the Pi is the
+    key `homelab-secrets.service` decrypts `ansible/vars/hosts/daniel-pi.sops.yaml` with. The
+    Pi generated it at `hosts/bootstrap-host.sh` step 3 on 2026-10-24, so it exists at one
+    path on one machine and nowhere else. The Pi is a recipient of its own file only. Its
+    public half appears in the `vars/hosts/daniel-pi\.sops\.yaml$` creation rule of
+    `ansible/.sops.yaml`, beside daniel-box's key and the recovery key (item 1), and in no
+    other rule. The Pi's file arrives with H4.5. Until then the key decrypts nothing, so a
+    lost key costs nothing yet.
+    - **To restore it** onto a rebuilt Pi, run `sudo hosts/bootstrap-host.sh daniel-pi`. Its
+      step 3 creates a fresh key at the same path and prints the public key. No copy of the
+      old key exists to restore. Replace the Pi's public key in the Pi's creation rule. Then,
+      on daniel-box or any host holding the recovery key (item 1), run
+      `sops updatekeys vars/hosts/daniel-pi.sops.yaml` from `ansible/` and commit the result.
+      The recovery key and daniel-box's key are recipients of the file, so either one
+      decrypts it while the Pi has no working key.
+    - **A lost SD card is a lost host key**, and a lost or exposed key means rotating every
+      value the Pi's key decrypts. A re-key protects future revisions. Git history and every
+      published package keep ciphertext encrypted to the old key. The rotation list is the
+      one item 11 derives: every value in every SOPS file whose creation rule lists the Pi's
+      public key. Take the public key from the rule, or from `age-keygen -y` on a surviving
+      copy, and run item 11's command. For the Pi the only rule is
+      `vars/hosts/daniel-pi.sops.yaml`, so the list is every value in that file, which holds
+      `pi_sd_health_push_token` and `pi_recovery_push_token`. Rotate each through
+      `docs/secret-rotation.md`, then `host_secrets.py sync daniel-pi` (**operator-only**)
+      to refresh the host file's copies.
+   Source: `docs/target-architecture/host/h4-secrets-unit.md` (H4.4, H4.5) and
+   `hosts/bootstrap-host.sh` (step 3).
 
 ## What to do first, by scenario
 
