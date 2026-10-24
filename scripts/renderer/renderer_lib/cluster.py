@@ -86,6 +86,7 @@ from renderer.renderer_lib.ordering import (
     VERIFY_TEMPLATES_DIR,
     Ordering,
     precheck_files,
+    verify_after,
     verify_files,
 )
 from renderer.renderer_lib.suspension import SYNC_SUSPEND_KEY, sync_suspend_refusal
@@ -244,10 +245,13 @@ def bundle_ordering(
     The suspended tags are read over every flux-owned role for the same reason (D5.1b).
 
     Raises:
-        ValueError: A flux-owned role's `flux_suspend`, `flux_prune` or
-            `manifests_rollout_timeout` is not a literal (`role_fields`).
+        ValueError: A flux-owned role's `flux_suspend`, `flux_prune`,
+            `manifests_rollout_timeout` or `flux_verify_after` is not a literal
+            (`role_fields`, `ordering.verify_after`).
     """
     fields, problems = role_fields(owned, roles)
+    after, after_problems = verify_after(owned, roles)
+    problems += after_problems
     if problems:
         raise ValueError("; ".join(problems))
     entries = yaml_fast.safe_load((host_vars / f"{host}.yml").read_text())
@@ -262,6 +266,7 @@ def bundle_ordering(
         flux_owned=frozenset(owned),
         suspended=frozenset(tag for tag, own in fields.items() if own.get("suspend")),
         workload_namespace=str(group["k8s_namespace"]),
+        verify_after=after,
     )
 
 
