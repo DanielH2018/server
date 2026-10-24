@@ -7,6 +7,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_host_manifest.py
 
 import importlib.machinery
 import json
+import sys
 import types
 
 import pytest
@@ -24,6 +25,9 @@ UNITS = "/usr/lib/systemd/system"
 def _reconcile():
     """`hosts/lib/homelab-reconcile` as a module, so its own parser judges the manifest."""
     path = REPO / "hosts" / "lib" / "homelab-reconcile"
+    sys.path.insert(
+        0, str(path.parent)
+    )  # for reconcile_lib, which sits beside the script
     loader = importlib.machinery.SourceFileLoader("homelab_reconcile", str(path))
     module = types.ModuleType(loader.name)
     loader.exec_module(module)
@@ -76,6 +80,8 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
             {"unit": "beat.service"},
         ],
         "reconcilers": [],
+        "activations": {},
+        "ufw": None,
     }
     assert parsed["legacy"] == package.legacy
 
