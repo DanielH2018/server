@@ -28,7 +28,11 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
     active, is stopped with no reboot (H3.8b's recovery disarm).
 
 A last case installs a fixture package that carries `secrets-unit` with a ciphertext encrypted to
-a throwaway age key, and runs `homelab-secrets` (H4.1c; `validate_lib/secrets_case.py`).
+a throwaway age key, and runs `homelab-secrets` (H4.1c; `validate_lib/secrets_case.py`). Another
+installs a package that owns a conffile, then the `conffile` fixture, whose line-arm edit lands in
+that conffile, and upgrades the owner twice under `--force-confold`: once with its conffile
+unchanged and once changed. Each upgrade records whether dpkg kept the local file or held the
+package back, and the line must survive to the next reconcile (#6088; `validate_lib/conffile_case.py`).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
@@ -77,7 +81,7 @@ from validate.validate_lib.host_container import (
     list_problems,
     release_fetched,
 )
-from validate.validate_lib import secrets_case
+from validate.validate_lib import conffile_case, secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -572,6 +576,7 @@ def main(argv: list[str] | None = None) -> int:
     cases.by_hand()
     cases.disarm()
     secrets_case.run(cases)
+    conffile_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

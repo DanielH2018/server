@@ -36,12 +36,13 @@ def _role_env(role_dir, ctx: dict):
     return env
 
 
-def _render_texts(overrides: dict | None = None):
+def _render_texts(overrides: dict | None = None, *, only: frozenset[str] | None = None):
     """(role, template name, rendered TEXT) for every manifest template the validator renders.
 
     `overrides` go on top of each role's context, for a guard that sets a value the inventory
-    does not hold. Raises on a render failure rather than skipping it — a template that
-    stopped rendering would otherwise quietly drop out of every guard built on this.
+    does not hold, and `only` keeps the named roles. Raises on a render failure rather than
+    skipping it — a template that stopped rendering would otherwise quietly drop out of every
+    guard built on this.
     """
     # The context the validator renders with. `render_context` lays the overrides in before
     # anything resolves and on top again after: an inventory value or role default aliasing an
@@ -52,6 +53,8 @@ def _render_texts(overrides: dict | None = None):
     for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
+            continue
+        if only is not None and role not in only:
             continue
         ctx = render_context(
             role_dir,
@@ -146,14 +149,16 @@ def prebuild(read=rendered_docs) -> None:
         read()
 
 
-def render_texts(overrides: dict) -> tuple[tuple[str, str, str], ...]:
+def render_texts(
+    overrides: dict, *, only: frozenset[str] | None = None
+) -> tuple[tuple[str, str, str], ...]:
     """`rendered_texts()` with `overrides` laid over every role's context, uncached.
 
     For a census across the tree at a value the inventory does not hold — a secret set to a
     sentinel, so the census sees every role the secret's VALUE reaches, aliases included,
     where a source scan sees only the roles that spell its name.
     """
-    return tuple(_render_texts(overrides))
+    return tuple(_render_texts(overrides, only=only))
 
 
 def host_context(host: str = "daniel-box") -> dict:

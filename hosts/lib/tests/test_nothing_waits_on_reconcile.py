@@ -6,7 +6,7 @@ ended both. So no unit in any host package carries that ordering, and `homelab-s
 names reconcile in no ordering or requirement directive at all.
 
 The census renders every package under `hosts/` and reads each unit and drop-in it ships. Its
-named members grow with the packages: `homelab-reconcile.service` in every host package now,
+named members grow with the packages: `homelab-reconcile.service` in every host package,
 `homelab-secrets.service` from H4.2, and `nut-monitor`'s drop-in from H4.3c.
 
 Run: uv run pytest hosts/lib/tests/test_nothing_waits_on_reconcile.py
@@ -23,6 +23,7 @@ from validate import host_packages
 RECONCILE = "homelab-reconcile.service"
 SECRETS = "homelab-secrets.service"
 UNIT_DIR = PurePosixPath("/usr/lib/systemd/system")
+NUT_DROPIN = str(UNIT_DIR / "nut-monitor.service.d" / "50-homelab.conf")
 # A directive that orders or requires another unit. Reconcile may start or order itself around
 # the units it restarts, but a unit that reaches back to it closes the loop.
 EDGES = frozenset(
@@ -81,6 +82,9 @@ def census(packages: dict[str, Package]) -> list[str]:
     for name, package in sorted(hosts.items()):
         if str(UNIT_DIR / RECONCILE) not in package.files:
             problems.append(f"{name}: ships no {RECONCILE}, a named member")
+    server = hosts.get("homelab-daniel-server")
+    if server and NUT_DROPIN not in server.files:
+        problems.append(f"homelab-daniel-server: ships no {NUT_DROPIN}, a named member")
     for name, package in sorted(packages.items()):
         for dst, (content, _) in sorted(package.files.items()):
             if unit := unit_of(dst):
@@ -117,6 +121,16 @@ def test_a_host_package_without_reconcile_or_a_census_without_hosts_is_flagged()
     assert len(census(packages)) == 1 and RECONCILE in census(packages)[0]
     shared = _package("homelab-updater", "packages/homelab-updater", {})
     assert "looked at nothing" in census(shared)[0]
+
+
+def test_a_daniel_server_package_without_the_nut_monitor_drop_in_is_flagged():
+    files = {f"{UNIT_DIR}/{RECONCILE}": "[Unit]\n"}
+    packages = _package("homelab-daniel-server", "hosts/daniel-server", files)
+    assert census(packages) == [
+        f"homelab-daniel-server: ships no {NUT_DROPIN}, a named member"
+    ]
+    files[NUT_DROPIN] = f"[Unit]\nWants={SECRETS}\nAfter={SECRETS}\n"
+    assert census(_package("homelab-daniel-server", "hosts/daniel-server", files)) == []
 
 
 def test_the_census_names_daniel_pi_and_the_updater_as_members():

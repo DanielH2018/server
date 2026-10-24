@@ -1,0 +1,85 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  The nightly Longhorn restore drill (H2.3d). It replaced the daniel-box root cron `Longhorn
+  restore drill` and its script /usr/local/bin/longhorn-restore-drill.sh. The script's header is
+  the design, and this role's CLAUDE.md has the contract.
+
+  `suspend: true` until H2.3e. Both runners name their restore `restore-drill-${PVC}`, and
+  `cleanup()` deletes that name on every exit, so a CronJob run beside the host cron could tear
+  down the host run's restore. H2.3e flips it after the operator confirms the host cron file is
+  gone. A suspended CronJob still takes `kubectl create job --from=cronjob/...`, which is how the
+  hand run in this role's CLAUDE.md works.
+
+  `concurrencyPolicy: Forbid` keeps two scheduled runs off each other. The deadline and the grace
+  period come from this role's defaults, and test_longhorn_restore_drill_deadline.py holds the
+  deadline above the restore timeout plus the probe pod's bound. The script traps TERM and INT
+  and runs `cleanup` through the exit, so a Job killed at the deadline removes its Volume, PV,
+  PVC and probe pod.
+
+  The pod spec's shell fields (`enableServiceLinks`, the priority class, the token mount) are
+  written out here because `pod_shell` emits at a Deployment's depth and a CronJob pod spec sits
+  one level further in (workload-shell.yml.j2).
+
+  The container is named `longhorn-restore-drill`, so the pod log is read with
+  `probe.py loki-query '{container="longhorn-restore-drill"}'`. The pod carries no
+  `netpol-baseline` label: it opens no inbound connection and reaches the API server, and the
+  probe pod it creates is a separate pod in the claim's namespace.
+#}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: longhorn-restore-drill
+  namespace: {{ longhorn_drill_namespace }}
+spec:
+  schedule: "{{ k3s_longhorn_restore_drill_cron }}"
+  timeZone: Etc/UTC
+  suspend: true
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ longhorn_restore_drill_starting_deadline_seconds }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        app: longhorn-restore-drill
+    spec:
+      activeDeadlineSeconds: {{ longhorn_restore_drill_deadline_seconds }}
+      # No retry: the script retries a failed volume itself, once, on the next night's slot.
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: longhorn-restore-drill
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          serviceAccountName: longhorn-restore-drill
+          automountServiceAccountToken: true
+          terminationGracePeriodSeconds: {{ longhorn_restore_drill_grace_seconds }}
+          priorityClassName: homelab-best-effort
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ longhorn_restore_drill_uid }}
+            runAsGroup: {{ longhorn_restore_drill_uid }}
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: longhorn-restore-drill
+              image: {{ longhorn_restore_drill_runner_image }}
+              command: ["bash", "/config/longhorn-restore-drill.sh"]
+              env:
+                # kubectl's discovery cache goes under $HOME, and the image has no home for this uid.
+                - name: HOME
+                  value: /tmp
+{{ job_hardened_security_context() }}
+              volumeMounts:
+                - name: longhorn-restore-drill-code
+                  mountPath: /config
+                  readOnly: true
+{{ job_container_resources(cpu_limit=longhorn_restore_drill_cpu_limit, mem_limit=longhorn_restore_drill_mem_limit, cpu_request=longhorn_restore_drill_cpu_request, mem_request=longhorn_restore_drill_mem_request) }}
+          volumes:
+            - name: longhorn-restore-drill-code
+              configMap:
+                name: longhorn-restore-drill

@@ -17,8 +17,8 @@
 # `docker start` on any watched container it finds not running, every 5 minutes, unattended.
 #
 # - Scope / exclusions: exactly the containers this host deploys, which is every
-#   containers_list entry in inventory/host_vars/daniel-pi.yml plus the docker-proxy role's
-#   sub-proxies. One `docker start` per watched container per cycle and nothing else: never a
+#   containers_list and compose_services entry in inventory/host_vars/daniel-pi.yml plus the
+#   docker-proxy role's sub-proxies. One `docker start` per watched container per cycle and nothing else: never a
 #   restart, recreate, `docker rm` or pull, and nothing on the other two hosts.
 #   docs/pi-host-tuning-record.md has why the watch set is the deploy list rather than
 #   `docker ps -a --filter status=exited`.

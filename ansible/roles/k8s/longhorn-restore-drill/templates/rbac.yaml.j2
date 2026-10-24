@@ -1,0 +1,112 @@
+{#
+  The drill's identity (H2.3d). Its rules are the calls longhorn-restore-drill.sh.j2 makes and
+  nothing else; ansible/tests/k8s/test_rbac_against_script.py derives that set from the script and
+  holds these rules to it.
+
+  `list` and `watch` sit beside `delete` on each kind `cleanup()` deletes, because kubectl waits
+  for the object to go with a list and a watch, and skips the wait without an error when either
+  is Forbidden. The probe pod is then gone before the PVC delete, the PVC before the PV, and the
+  PV before the Volume, the order the script's teardown comment relies on.
+
+  Kubernetes RBAC cannot narrow `create` by name, and `resourceNames` match exact names only, so
+  the PV and Volume grants cannot be scoped to the `restore-drill-` prefix. They replace the root
+  admin kubeconfig the host drill used, which held every verb. The `homelab` Role covers every
+  claim the drill can pick. A backed-up claim in another namespace fails its slot as Forbidden,
+  and check 8 reports it unproven after the coverage window.
+
+  The stamp ConfigMap grant is `get` and `patch` on that one name. `create` is absent because the
+  tag renders the ConfigMap and the script fails with `stamp ConfigMap absent` when it is not
+  there.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: longhorn-restore-drill
+  namespace: {{ longhorn_drill_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-restore-drill
+  namespace: {{ longhorn_drill_namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, list, watch, delete]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, create, patch, delete]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [longhorn-restore-drill-stamps]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-restore-drill
+  namespace: {{ longhorn_drill_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: longhorn-restore-drill
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-restore-drill
+    namespace: {{ longhorn_drill_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-restore-drill
+  namespace: longhorn-system
+rules:
+  - apiGroups: [longhorn.io]
+    resources: [backups]
+    verbs: [get, list]
+  - apiGroups: [longhorn.io]
+    resources: [backuptargets]
+    verbs: [get]
+  - apiGroups: [longhorn.io]
+    resources: [volumes]
+    verbs: [get, list, watch, create, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-restore-drill
+  namespace: longhorn-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: longhorn-restore-drill
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-restore-drill
+    namespace: {{ longhorn_drill_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: longhorn-restore-drill
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumes]
+    verbs: [get, list, watch, create, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: longhorn-restore-drill
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: longhorn-restore-drill
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-restore-drill
+    namespace: {{ longhorn_drill_namespace }}

@@ -1,0 +1,12 @@
+# The fixture whose line-arm edit lands in a conffile another package owns (#6088). The owner is
+# `validate_lib/conffile_case.py`'s fixture-conffile-owner, which the case installs first, and
+# its upgrades must leave this line in place.
+description: Fixture host package that edits another package's conffile, for the host_packages container cases
+components: [reconcile]
+maintainer_scripts: [preinst, postinst, prerm]
+files:
+  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/homelab-fixture-kept.service}
+enable:
+  homelab-fixture-kept.service: multi-user.target
+lines:
+  - {path: /etc/fixture-conffile-owner.conf, line: "homelab_fixture_line=kept", regexp: '^homelab_fixture_line='}

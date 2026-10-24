@@ -1,0 +1,11 @@
+# Shipped by homelab-daniel-server. Started by homelab-ups-watchdog.timer, whose enable link ships
+# only while nut_host_watchdog_armed is true. component.yml carries the contract.
+[Unit]
+Description=Check that this host's upsmon reaches upsd and push to the UPS Secondary Kuma monitor
+Wants=homelab-secrets.service
+After=homelab-secrets.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/homelab/ups-secondary-health
+LoadCredential=kuma_push_token:/run/credstore/{{ nut_host_watchdog_token_key }}

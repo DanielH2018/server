@@ -139,7 +139,13 @@ operator split the job in two on 2026-10-18 (#5701):
 ## The `crowdsec-verify` Job proves the edge enforces a ban
 
 `templates/verify/` holds the Job. The renderer emits it into `crowdsec-verify`, which depends on
-the `crowdsec` Kustomization's `wait: true`, so it starts after the new pod is Ready. The
+the `crowdsec` and `traefik` Kustomizations, so a new Job starts after both new pods are Ready.
+The `traefik` edge comes from `flux_verify_after` in `defaults/main.yml` (#5999). Without it the
+Job raced traefik's `Recreate` roll, because traefik also depends on `crowdsec`. It could then
+pass against the old Traefik pod, which still held a key the LAPI accepted. The edge orders a
+run only when the Job is renamed, which is on every revision that rolls the crowdsec pod, a
+bouncer-key rotation included. A revision that rolls Traefik alone keeps the completed Job, so
+nothing re-proves the ban against that roll. The
 operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
 
 - **`files/crowdsec_verify.py` bans daniel-pi through LAPI's machine API**, with no

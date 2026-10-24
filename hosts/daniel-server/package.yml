@@ -3,7 +3,8 @@
 # (docs/target-architecture/host/h4-secrets-unit.md, *Steps, as PRs*, item 7). The timer keeps
 # the shared schedule: daniel-server ships no drop-in on it.
 #
-# The one credential is read by nothing yet; the UPS watchdog's packaged branch reads it from H4.3c.
+# The one credential is the UPS watchdog's Kuma push token, which homelab-ups-watchdog.service loads
+# (hosts/components/nut-secondary, H4.3c).
 # ansible/vars/hosts/daniel-server.sops.yaml carries every key this tree names, and
 # `host_secrets.py sync daniel-server` rewrites it (operator-only).
 description: daniel-server's homelab host package

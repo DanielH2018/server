@@ -25,7 +25,8 @@ pihole_k8s_claim_2: pihole-etc-2
 pihole_k8s_storage_class: longhorn-nobackup
 pihole_k8s_size: 2Gi
 
-# Both instances' claims, which k8s/manifests renders and applies for this role (#3387).
+# Both instances' claims, which the renderer emits for this role and the pihole Kustomization
+# applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ pihole_k8s_claim }}"
     storage_class: "{{ pihole_k8s_storage_class }}"

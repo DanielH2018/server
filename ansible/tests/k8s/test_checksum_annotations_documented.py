@@ -92,6 +92,10 @@ SOURCE_FALLBACK_REASONS = {
     "nested": (
         "a template below `templates/`, which `_render_texts` globs exactly one level deep"
     ),
+    "shell": (
+        "a `*.sh.j2` script, which the shell-template gate renders and a ConfigMap template "
+        "embeds, so it holds no pod annotation"
+    ),
 }
 
 # One template per category the derivation must still find there, so a category whose detection
@@ -100,6 +104,7 @@ SOURCE_FALLBACK_MEMBERS = {
     "image-builder/templates/build-job.yaml.j2": "unrendered-role",
     "code-server/templates/Dockerfile.j2": "build",
     "homepage/templates/config/services.yaml.j2": "nested",
+    "longhorn-restore-drill/templates/longhorn-restore-drill.sh.j2": "shell",
 }
 
 
@@ -120,6 +125,8 @@ def _fallback_category(role: Path, path: Path) -> str | None:
         return None
     if path.name.startswith("Dockerfile"):
         return "build"
+    if path.name.endswith(".sh.j2"):
+        return "shell"
     if path.parent != role / "templates":
         return "nested"
     return None
