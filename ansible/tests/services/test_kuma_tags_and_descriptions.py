@@ -1,6 +1,6 @@
 """The description and tag conventions the notification templates read.
 
-Split from test_kuma_static_monitors.py, which sits at the 500-line module cap. Tag references
+Split from test_kuma_static_monitors.py when it reached its line cap. Tag references
 are the same NameNotFound hazard as the notification reference: a monitor naming a tag the
 Secret does not declare fails to parse and, under ON_DELETE=delete, is deleted.
 """

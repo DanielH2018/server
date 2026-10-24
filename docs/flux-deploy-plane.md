@@ -958,6 +958,11 @@ notification-controller posts on T:
   records those statuses before `prod` moves, and `verify` reads that record rather than
   `prod`'s commit (H1.1i). A dependent is a member of the set only through its `dependsOn`
   chain, so a name whose footprint T changed is never excused.
+- **Superseded.** Each poll reads `prod`'s digest before T's statuses, and once more before
+  a `failed` verdict. When `prod` names another digest, a later run moved it past T, and
+  `verify` prints `superseded` and exits 0. A failed read keeps the wait going and never reads
+  as superseded. No run supersedes another until D7 turns `SUPERSEDE` on
+  (`docs/target-architecture/deploy/d7-superseding-promotions.md`).
 - **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
   run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
   which `decide` pulled, never the render job's `out/`.

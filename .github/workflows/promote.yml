@@ -29,8 +29,9 @@ name: promote
 #            deployer's Discord channel, with the webhook and no token.
 #   tag      packages: write. Checks out nothing. Tags `prod`'s digest `last-good` when that
 #            tag is absent, moves `prod` to T, and records its digest in PROD_DIGEST.
-#   verify   contents: read, statuses: read. Runs `promote.py verify T`, which waits on T's
-#            commit statuses for T's changed set and prints `good` or `failed`.
+#   verify   contents: read, statuses: read, packages: read. Runs `promote.py verify T`,
+#            which waits on T's commit statuses for T's changed set and prints `good` or
+#            `failed`, or `superseded` once a later run has moved `prod` past T.
 #   settle   packages: write, actions: write. Checks out nothing. A good verdict moves
 #            `last-good` to T. When T changes a snapshot role (D5.2b1), anything else writes
 #            DEPLOY_HOLD as `<T> stateful=<names>`, tags T `held` and leaves `prod`. When T
@@ -525,6 +526,7 @@ jobs:
       clears_hold: ${{ steps.decide.outputs.clears_hold }}
       no_reset: ${{ steps.decide.outputs.no_reset }}
       stateful: ${{ steps.decide.outputs.stateful }}
+      supersedes: ${{ steps.decide.outputs.supersedes }}
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
@@ -639,6 +641,12 @@ jobs:
       # DEPLOY_HOLD is read again just before the move (D7.1). A `settle` can write a hold
       # while this job waits on the group, and a move after it would promote past the hold.
       # Anything but `none`, a failed read included, moves nothing.
+      #
+      # When `decide` promotes T over a verification in flight (D7), it names the run it
+      # supersedes in `supersedes`, and T's digest is tagged `superseding` BEFORE `prod`
+      # moves. `decide` never supersedes the `superseding` digest, so a verification is
+      # superseded at most once. Tagged after the move, a failed tag write would leave a T
+      # that the next run may supersede again.
       - name: Move prod
         id: move
         env:
@@ -646,6 +654,7 @@ jobs:
           DIGEST: ${{ needs.promote.outputs.digest }}
           SEED: ${{ needs.promote.outputs.seed }}
           PRIOR_DIGEST: ${{ needs.promote.outputs.prior_digest }}
+          SUPERSEDES: ${{ needs.promote.outputs.supersedes }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
@@ -696,6 +705,10 @@ jobs:
           # Stamped before the move, so no status Flux posts for this promotion predates it.
           # verify ignores any older status on T, such as one an earlier promotion left.
           moved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [ -n "${SUPERSEDES:-}" ]; then
+            flux tag artifact "oci://$repo:sha-$TARGET" --tag superseding
+            echo "tagged sha-$TARGET superseding: it supersedes the verification of $SUPERSEDES"
+          fi
           flux tag artifact "oci://$repo:sha-$TARGET" --tag prod
           printf 'moved=true\nmoved_at=%s\n' "$moved_at" >> "$GITHUB_OUTPUT"
 
@@ -731,9 +744,12 @@ jobs:
     timeout-minutes: 335
     # No concurrency group: a pending job in `promote` can be evicted. `decide` waits while
     # `prod` differs from `last-good` instead (the DECIDED marker in promote_lib/verify_promotion.py).
+    # packages: read is for `prod`'s digest, which ends the wait as `superseded` once a later
+    # run has moved it past T (D7.2, promote_lib/superseded.py).
     permissions:
       contents: read
       statuses: read
+      packages: read
     outputs:
       verdict: ${{ steps.verify.outputs.verdict }}
       failed: ${{ steps.verify.outputs.failed }}
@@ -758,10 +774,12 @@ jobs:
           TARGET: ${{ needs.promote.outputs.target }}
           PRIOR: ${{ needs.promote.outputs.prior }}
           MOVED_AT: ${{ needs.tag.outputs.moved_at }}
+          DIGEST: ${{ needs.promote.outputs.digest }}
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
           uv run --frozen python scripts/deploy_tools/promote.py verify "$TARGET"
           --bundle-dir "$RUNNER_TEMP/verify-input" --prior "$PRIOR" --moved-at "$MOVED_AT"
+          --digest "$DIGEST"
 
   settle:
     needs: [promote, tag, verify]
@@ -866,6 +884,13 @@ jobs:
             echo "prod is at '${live:-absent}', not sha-$TARGET's $DIGEST: a later run moved it, so this run writes nothing and dispatches nothing"
             return 1
           }
+          # `verify` already read `prod` past T, so its verdict is not this run's to apply,
+          # even when the read below would fail.
+          if [ "$VERDICT" = superseded ]; then
+            echo "verify read prod moved past sha-$TARGET, so this run writes nothing and dispatches nothing"
+            echo "owned=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if ! owns_prod; then
             echo "owned=false" >> "$GITHUB_OUTPUT"
             exit 0

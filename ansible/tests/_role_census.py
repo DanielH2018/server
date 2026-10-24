@@ -7,7 +7,7 @@ guard that asks either question sees the same set as every other guard asking it
 Covers all three trees: `roles/k8s/`, `roles/setup/` and the Pi's `roles/containers/`. A
 retired role ghosts the same way in each, so they read through one predicate.
 
-Lives in its own module rather than in `_helpers.py`, which is at its 500-line cap.
+Lives in its own module rather than in `_helpers.py`, which was at its line cap.
 The `role-tree-walks-use-role-dirs` and `role-task-walks-use-task-files` rows of
 `ansible/tests/repo/test_census_rows_suite.py` are the guards that keep the next walk of either
 kind from being written inline.

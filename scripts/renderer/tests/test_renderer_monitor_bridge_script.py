@@ -141,7 +141,7 @@ def test_every_config_map_stays_under_the_annotation_budget_is_clean(rendered):
     files, _ = rendered
     assert _over_budget(_config_maps(files)) == {}, (
         f"these exceed {ANNOTATION_BUDGET} bytes as JSON; split the module, which the "
-        "600-line rule in this role's CLAUDE.md asks for anyway"
+        "module-length rule in this role's CLAUDE.md asks for anyway"
     )
 
 

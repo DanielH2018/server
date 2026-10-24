@@ -12,10 +12,12 @@ and an entry may only fall or disappear. A file that grows past its entry fails,
 one that drops back under the cap while keeping its line — the list is a record of remaining
 work, so finishing the work deletes the line.
 
-The caps are 600 lines for a module and 500 for a test module (`wc -l` semantics: the number
-of newline characters). Test modules get the tighter number because a test file grows by
-repetition rather than by branching, so length there buys much less than in a module the rest
-of the tree calls. The monkeypatch cap is 0: a patch on a first-party module pins that
+The caps are 450 code lines for a module and 400 for a test module. A code line is a line
+that holds a token other than a comment, and that is not part of a docstring (`code_lines`).
+Blank lines, comments and docstrings are free, so the cap never argues for deleting the
+documentation the rest of the tree's rules ask for. Test modules get the tighter number
+because a test file grows by repetition rather than by branching, so length there buys much
+less than in a module the rest of the tree calls. The monkeypatch cap is 0: a patch on a first-party module pins that
 module's name into a test, so a module carrying any has not got a seam yet, and
 `scripts/deploy_tools/land_lib/tools.py` with `scripts/deploy_tools/tests/_land_fakes.py` is
 the shape that replaces one.
@@ -28,18 +30,23 @@ finished — and so does a raised entry, with three exemptions, all passed in as
 the caller that reads git:
 
 - A module-length entry ending `# conjoined: <why>` may be added, and rises only in a diff
-  that rewrites its reason to name the new max. The `# DECIDED:` marker in `module_length_allowlist.txt` says why.
+  that rewrites its reason to name the new max. The `# DECIDED:` marker in
+  `module_length_allowlist.txt` says why. A reason names one line count at most
+  (`reasons_with_history`), so a raise replaces the number rather than appending to a log.
 - A path the merge base does not track may be added. That is a new or renamed file, and a
   rename would otherwise read as a deletion plus a forbidden addition.
-- A changed guard lets any path be added AND lets an entry rise. Widening the heuristic (as
-  the `importlib` fix did) finds patches that were always there, in files that already have an
-  entry as well as in files that do not, so both moves have to be possible in the branch that
-  widens. The trigger is four files and one function: the whole of `_ratchet.py`, the whole
+- A changed guard lets any path be added AND lets an entry rise, but only for a path the
+  branch did not itself edit. Widening the heuristic (as the `importlib` fix did) finds
+  patches that were always there, in files that already have an entry as well as in files
+  that do not, so both moves have to be possible in the branch that widens. A file that was
+  always over has the content it has on the merge base, so an edited one is excluded: without
+  that, a comment edit to a guard file would also wave through growth in any module the same
+  branch touched. The trigger is four files and one function: the whole of `_ratchet.py`, the whole
   of `_ratchet_patches.py`, the whole of `_ratchet_census.py` — a widened census finds files
   that were always over, the same way a widened heuristic does — the whole of the test
-  module, and only the text of `_helpers.is_test_file`. The census module is the loosest, because a comment
-  edit there also exempts every raise; it is in the set because nothing else records what the
-  lists are allowed to contain, and it is 121 lines nobody edits in passing. `_helpers.py` is
+  module, and only the text of `_helpers.is_test_file`. The census module is the loosest,
+  because a comment edit there also exempts every raise in a file the branch did not edit; it
+  is in the set because nothing else records what the lists are allowed to contain. `_helpers.py` is
   the counter-example that fixes the width: 198 modules import it, so comparing all of it
   would wave through a change that has nothing to do with the guard.
 
@@ -66,19 +73,73 @@ for both are in `ansible/tests/repo/test_module_length_ratchet.py`.
 """
 
 import ast
+import io
+import re
+import tokenize
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from _helpers import is_test_file
 
-NON_TEST_CAP = 600
-TEST_CAP = 500
+# DECIDED: count code lines, not `wc -l` lines, with caps of 450 and 400. Under `wc -l`
+# (600 and 500) a docstring-heavy module was listed for its documentation: deploy_state.py
+# was 641 lines, of which 232 were code and 268 docstring. The new caps keep the list about
+# the size it was: 15 files over the old caps on 2026-10-24, 13 over these, with 6 modules
+# and 7 test modules. Any number here is a judgement; to move one, re-run that census.
+NON_TEST_CAP = 450
+TEST_CAP = 400
+
+_NOT_CODE = frozenset(
+    {
+        tokenize.COMMENT,
+        tokenize.NL,
+        tokenize.NEWLINE,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+        tokenize.ENDMARKER,
+        tokenize.ENCODING,
+    }
+)
 
 
 def cap_for(rel: str) -> int:
-    """The line cap a repo-relative path has to meet."""
+    """The code-line cap a repo-relative path has to meet."""
     return TEST_CAP if is_test_file(Path(rel)) else NON_TEST_CAP
+
+
+def _docstring_starts(tree: ast.Module) -> set[tuple[int, int]]:
+    """Where each module, class and function docstring starts, as (line, column)."""
+    return {
+        (node.body[0].lineno, node.body[0].col_offset)
+        for node in ast.walk(tree)
+        if isinstance(
+            node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+        )
+        and ast.get_docstring(node, clean=False) is not None
+    }
+
+
+def code_lines(text: str) -> int:
+    """The number of lines in `text` that hold code.
+
+    A line holds code when a token other than a comment or whitespace starts, ends or runs
+    across it, and that token is not part of a docstring. A string that is not a docstring is
+    code, however many lines it spans.
+
+    Raises:
+        SyntaxError: when `text` does not parse. A file the counter cannot read must fail the
+            ratchet, not count as zero lines.
+    """
+    docstrings = _docstring_starts(ast.parse(text))
+    lines: set[int] = set()
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        if tok.type in _NOT_CODE or (
+            tok.type == tokenize.STRING and tok.start in docstrings
+        ):
+            continue
+        lines.update(range(tok.start[0], tok.end[0] + 1))
+    return len(lines)
 
 
 def parse_allowlist(text: str) -> dict[str, int]:
@@ -120,6 +181,32 @@ def conjoined_reasons(text: str) -> dict[str, str]:
     return found
 
 
+# A number in a reason, unless it is part of an issue reference (`#4508`), a version or a
+# slice name (`D2.1b`).
+_BARE_NUMBER = re.compile(r"(?<![#\w.])\d+(?![\w.])")
+
+
+def reasons_with_history(reasons: Mapping[str, str]) -> list[str]:
+    """Every `conjoined:` reason that names more than one line count, as sentences.
+
+    A number above the path's cap can only be a line count. A reason names the max it
+    approves, which is the one count it needs. A second count is the history of earlier
+    raises, which the commit history already holds, and appending to it is how a raise came
+    to restate nothing. The rule tolerates `tighten`: lowering an entry leaves its reason's
+    one count above the new number, and that is still one count.
+    """
+    found = []
+    for path, reason in sorted(reasons.items()):
+        counts = [n for n in _BARE_NUMBER.findall(reason) if int(n) > cap_for(path)]
+        if len(counts) > 1:
+            found.append(
+                f"{path}: its `{CONJOINED}` reason names {len(counts)} line counts "
+                f"({', '.join(counts)}). State why the module is conjoined and the one max "
+                f"the entry approves; the earlier raises are in the commit history."
+            )
+    return found
+
+
 def raised_entries(
     old: Mapping[str, int],
     new: Mapping[str, int],
@@ -127,6 +214,7 @@ def raised_entries(
     *,
     untracked_on_master: Collection[str] = (),
     guard_changed: bool = False,
+    edited: Collection[str] = (),
     conjoined: Mapping[str, str] | None = None,
     old_conjoined: Mapping[str, str] | None = None,
 ) -> list[str]:
@@ -138,7 +226,9 @@ def raised_entries(
         name: the allowlist's filename, for the message.
         untracked_on_master: paths the merge base does not track, which may be added.
         guard_changed: whether the guard differs from the merge base, which may add any path
-            and may raise any entry.
+            and may raise any entry, except for a path in `edited`.
+        edited: paths whose content differs from the merge base. A changed guard finds files
+            that were always over, so it exempts none of these.
         conjoined: path -> the `conjoined:` reason in `new`, which may add the path, and may
             raise it when the reason differs from `old_conjoined`, the base's reasons, and
             names the new max as a word.
@@ -147,14 +237,16 @@ def raised_entries(
     old_conjoined = old_conjoined or {}
     found = []
     for path, limit in sorted(new.items()):
+        widened = guard_changed and path not in edited
         if path in old:
             # DECIDED: a changed guard may RAISE an entry, not only add one. A widening finds
             # patches that were always there in files that already have a line, which is what
             # the string-target fix hit: test_session_health.py went 33 -> 36 and no exemption
             # covered it. The cost is that `raised_entries` serves both ratchets, so a branch
             # editing _ratchet.py may also raise a module-length entry; the bound is that the
-            # trigger is narrow (this file, its test module, or _helpers.is_test_file) and the
-            # guard diff is in the same PR a reviewer reads.
+            # trigger is narrow (this file, its test module, or _helpers.is_test_file), the
+            # guard diff is in the same PR a reviewer reads, and a file the branch edited gets
+            # no exemption at all.
             # A rewording alone would wave through any growth, so the restated reason has
             # to name the number it approves (#4301 review).
             reason = conjoined.get(path)
@@ -163,20 +255,17 @@ def raised_entries(
                 and reason != old_conjoined.get(path)
                 and str(limit) in reason.replace(",", " ").split()
             )
-            if limit > old[path] and not guard_changed and not restated:
+            if limit > old[path] and not widened and not restated:
                 found.append(
                     f"{path}: {name} says {limit}, up from {old[path]} on the merge base "
                     f"with origin/master. "
                     f"An entry only ever falls: lower the file, not the bar."
                 )
-        elif (
-            not guard_changed
-            and path not in untracked_on_master
-            and path not in conjoined
-        ):
+        elif not widened and path not in untracked_on_master and path not in conjoined:
             found.append(
                 f"{path}: added to {name} at {limit}, though the merge base already tracks "
-                f"the file and the guard is unchanged against it. A file that was "
+                f"the file and either the guard is unchanged against it or this branch "
+                f"edits the file. A file that was "
                 f"already there has to meet the cap — split it, or state why a split would "
                 f"be conjoined: `# {CONJOINED} <why>`."
             )

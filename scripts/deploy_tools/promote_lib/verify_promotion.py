@@ -34,12 +34,16 @@ WHERE THE BUNDLES COME FROM. `decide` pulls both before `prod` moves and writes 
 `--bundle-dir`, with the record of `prod`'s statuses, so a registry error promotes nothing.
 `verify` reads them back and makes no registry call (`verify_handoff.py`).
 
+A SUPERSEDED RUN WRITES NOTHING (D7.2): `prod` naming another digest than T's ends the wait
+as `superseded`, which exits 0 (`superseded.py`).
+
 ONLY STATUSES FROM THIS PROMOTION COUNT. T may carry statuses from an earlier promotion of
 the same commit, such as the `failure` that held it before an operator cleared the hold and
 dispatched `promote` again. `verify` reads T's statuses from `--moved-at`, the time the `tag`
 job moved `prod`, less MOVED_AT_SKEW_S, so an older status reads as no status at all.
 
-THE VERDICT. Every expected status `success` is `good`. Any expected `failure` or `error` is
+THE VERDICT. Every expected status `success` is `good`, and `prod` naming another digest is
+`superseded`. Any expected `failure` or `error` is
 `failed`, naming those. At the timeout it is `failed`, naming every expected name that is not
 `success`. In a Longhorn hop another name's failure is provisional (THE STORAGE ROLLOUT). A
 missing status, or a `pending` one, keeps the wait going and never reads as success. A status
@@ -92,7 +96,7 @@ from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG
 from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
-from deploy_tools.promote_lib import controller_rollout, storage_rollout
+from deploy_tools.promote_lib import controller_rollout, storage_rollout, superseded
 from deploy_tools.promote_lib.verify_handoff import read_handoff, read_recorded
 
 # Re-exported, as `verify.write_handoff`, for `promote.py`'s `hand_off`.
@@ -280,11 +284,14 @@ class StatusReads:
             With a time, it leaves out every status updated before it.
         sleep: waits the given seconds.
         clock: monotonic seconds.
+        prod: `prod`'s digest, None when the tag is absent, raising `forge.ForgeError`.
+            None in place of the callable reads no digest, so no run is ever superseded.
     """
 
     statuses: Callable[[str, datetime | None], dict[str, str]]
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+    prod: Callable[[], str | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -292,7 +299,7 @@ class Verdict:
     """How `verify` ended.
 
     Attributes:
-        verdict: `good` or `failed`.
+        verdict: `good`, `failed` or `superseded`.
         failed: the names `settle` writes into `<T> failed=<names>`, sorted.
         excused: the dependents left out because their recorded status on `prod`'s commit
             read `failure`.
@@ -321,6 +328,7 @@ def verify(
     since: datetime | None = None,
     poll_s: int = POLL_S,
     recorded: Mapping[str, str] | None = None,
+    digest: str = "",
 ) -> Verdict:
     """Wait on T's statuses for the expected names until one fails, all pass or time runs out.
 
@@ -334,6 +342,8 @@ def verify(
         poll_s: the seconds between reads.
         recorded: the statuses `decide` recorded on `prod`'s commit before the move, by
             name. None is no record, which excuses nothing.
+        digest: T's digest, which `prod` must still name for any verdict but
+            `superseded`. Empty reads no digest.
     """
     excused = already_failing(expected.dependents, recorded or {})
     names = sorted(expected.names - excused)
@@ -355,7 +365,15 @@ def verify(
     window = storage_rollout.Window(
         names, expected.storage_grace_s, expected.storage_rollout_s
     )
+
+    def moved_past() -> Verdict | None:
+        if superseded.moved_past(reads.prod, digest) is None:
+            return None
+        return Verdict("superseded", excused=tuple(sorted(excused)))
+
     while True:
+        if moved := moved_past():
+            return moved
         try:
             states = reads.statuses(target, since)
             line = ", ".join(
@@ -367,7 +385,9 @@ def verify(
         rolling = controller.provisional(names, failed, reads.clock())
         final = [n for n in failed if n not in rolling]
         if final and not window.provisional(final, states, reads.clock()):
-            return Verdict("failed", tuple(failed), tuple(sorted(excused)))
+            return moved_past() or Verdict(
+                "failed", tuple(failed), tuple(sorted(excused))
+            )
         if failed:
             line += window.note() if final else controller.note()
         if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
@@ -377,7 +397,9 @@ def verify(
             last = line
         if reads.clock() - started >= expected.timeout_s:
             missing = [n for n in names if states.get(STATUS_PREFIX + n) != "success"]
-            return Verdict("failed", tuple(missing), tuple(sorted(excused)))
+            return moved_past() or Verdict(
+                "failed", tuple(missing), tuple(sorted(excused))
+            )
         reads.sleep(poll_s)
 
 
@@ -385,13 +407,14 @@ def report(target: str, verdict: Verdict, github_output: str | None) -> int:
     """Print the last line, append the step outputs, and return the exit code.
 
     A failed verdict exits 1 so the run reads red, after its outputs are written for `settle`.
+    A superseded one exits 0: the later run's verification owns the outcome.
     """
     failed = ",".join(verdict.failed)
     print(f"target={target} verdict={verdict.verdict} failed={failed}")
     if github_output:
         with open(github_output, "a", encoding="utf-8") as out:
             out.write(f"verdict={verdict.verdict}\nfailed={failed}\n")
-    return OK if verdict.verdict == "good" else FAILED
+    return OK if verdict.verdict in ("good", "superseded") else FAILED
 
 
 def add_parser(commands) -> None:
@@ -411,6 +434,11 @@ def add_parser(commands) -> None:
         "--prior",
         default="",
         help="prod's commit before the move; empty on a first run",
+    )
+    cmd.add_argument(
+        "--digest",
+        default="",
+        help="T's digest; prod naming another one ends the wait as superseded",
     )
     cmd.add_argument(
         "--moved-at",
@@ -443,8 +471,19 @@ def run(f: forge.Forge, args: argparse.Namespace, github_output: str | None) -> 
         error(f"verify: the bundles decide handed on: {err}")
         return FAILED
     since = moved_at - timedelta(seconds=MOVED_AT_SKEW_S)
-    reads = StatusReads(f.github.statuses)
-    verdict = verify(reads, args.target, args.prior, expected, since, recorded=recorded)
+    if args.digest and not re.fullmatch(r"sha256:[0-9a-f]{64}", args.digest):
+        error(f"verify: --digest {args.digest!r} is not sha256:<64 hex>")
+        return USAGE_ERROR
+    reads = StatusReads(f.github.statuses, prod=lambda: f.registry.digest(PROD_TAG))
+    verdict = verify(
+        reads,
+        args.target,
+        args.prior,
+        expected,
+        since,
+        recorded=recorded,
+        digest=args.digest,
+    )
     return report(args.target, verdict, github_output)
 
 

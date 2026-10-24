@@ -100,3 +100,41 @@ def test_an_unreadable_hold_moves_nothing_and_fails(tmp_path, jobs):
     result, calls, output = _move(tmp_path, jobs, FAKE_GH_FAIL="variable get")
     assert result.returncode != 0
     assert (calls, output) == ([], "")
+
+
+def test_a_superseded_verdict_writes_nothing_even_when_prod_cannot_be_read(
+    tmp_path, jobs
+):
+    """`verify` read the move already; an unreadable `prod` here must not apply a verdict."""
+    result, calls = _settle(
+        tmp_path, jobs, VERDICT="superseded", FAILED_NAMES="", FAKE_PROD_STATUS="503"
+    )
+    assert (result.returncode, calls) == (0, [])
+    assert "owned=false" in _outputs(tmp_path)
+
+
+def test_verify_reads_prod_against_ts_digest(jobs):
+    verify = jobs["verify"]
+    step = next(s for s in verify["steps"] if s.get("id") == "verify")
+    assert step["env"]["DIGEST"] == "${{ needs.promote.outputs.digest }}"
+    assert '--digest "$DIGEST"' in step["run"]
+
+
+def test_a_move_that_supersedes_tags_t_superseding_before_prod_is_flagged(
+    tmp_path, jobs
+):
+    result, calls, _ = _move(tmp_path, jobs, SUPERSEDES="b" * 40)
+    assert result.returncode == 0, result.stderr
+    assert calls == [
+        f"flux tag artifact {REPO_URL}:sha-{T} --tag superseding",
+        f"flux tag artifact {REPO_URL}:sha-{T} --tag prod",
+    ]
+
+
+def test_a_failed_superseding_tag_moves_nothing(tmp_path, jobs):
+    result, calls, output = _move(
+        tmp_path, jobs, SUPERSEDES="b" * 40, FAKE_FLUX_FAIL="superseding"
+    )
+    assert result.returncode != 0
+    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag superseding"]
+    assert output == ""
