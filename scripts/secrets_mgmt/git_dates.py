@@ -98,6 +98,8 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_verify_push_token",
         # The Docker prometheus remote-write reader's token.
         "monitor_bridge_remote_write_push_token",
+        # M3's disk-health push token: the textfile rules replaced the Kuma tile.
+        "daniel_box_disk_push_token",
         "crowdsec_bouncer_api_key",
         "crowdsec_bouncer_docker_traefik_key",
         "pihole_api_key",

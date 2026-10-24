@@ -95,9 +95,9 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # the explicit known-manual allowlist. Without this, a token whose consumer_tag falls
     # through to None silently drops out of rotation and only surfaces months later as an
     # OVERDUE page — exactly how arr_autoblock_push_token slipped in when autofix-bridge landed.
-    # Derived from the module's own CROSS_HOST_PUSH_TOKENS (single source — the fifth
-    # cross-host token, daniel_box_disk, is when the hand-list here moved there): each entry
-    # documents its pusher/label host pair beside the name.
+    # Derived from the module's own CROSS_HOST_PUSH_TOKENS (single source — the hand-list
+    # that once lived here moved there): each entry documents its pusher/label host pair
+    # beside the name.
     known_manual = CROSS_HOST_PUSH_TOKENS | PENDING_RETIREMENT
     reg = load_registry()
     auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
