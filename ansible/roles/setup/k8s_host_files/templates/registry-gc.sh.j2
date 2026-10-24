@@ -39,11 +39,19 @@
 # the scale-down until the mirror is serving again. A run killed in between leaves it behind,
 # and the next run starts by restoring that mirror. After registry's flip no deploy restores it.
 #
+# A WARM PHASE AFTER THE RESTORE. Once the mirror serves again, the run GETs every linux/amd64
+# blob of every ghcr.io image the cluster names, through the mirror, so the mirror caches what it
+# missed: images a node pulled before the mirror existed, and pulls that fell back to ghcr.io
+# while a GC held the mirror at zero. A cold blob that takes more than about 8 minutes cannot
+# complete through the mirror (#5654). That happens only while GHCR is slow, so a weekly warm
+# fetches those blobs ahead of need, at GHCR's normal speed (49 MB/s cold through the mirror,
+# measured 2026-10-24).
+#
 # Usage: registry-gc.sh (no arguments)
 # Runs from the registry-gc root cron on daniel-box, weekly at the time set by
 # registry_k8s_gc_cron_weekday, _hour and _minute. It scales deploy/ghcr-mirror to 0, runs
 # /etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml, the prune and
-# garbage-collect, and scales the mirror back. It pushes the result to Kuma when
+# garbage-collect, scales the mirror back and warms it. It pushes the result to Kuma when
 # registry_gc_push_token is set. It reads /etc/rancher/k3s/k3s.yaml and
 # /usr/local/lib/kuma-push-lib.sh, and keeps its state in /var/lib/registry-gc.
 
@@ -85,6 +93,14 @@ STATE_FILE="${STATE_DIR}/state.json"
 # The stamp and the lock the header describes. tasks/main.yml names the lock too.
 MIRROR_STAMP="${STATE_DIR}/ghcr-mirror-down"
 LOCK_FILE={{ registry_k8s_gc_lock_file }}
+# The mirror's loopback hostPort. This cron runs on the registry node, which reaches it there,
+# as that node's registries.yaml entry does.
+MIRROR_URL="http://{{ k8s_registry_host_ip }}:{{ k8s_registry_ghcr_mirror_port }}"
+# Every manifest type a GHCR push can store, as node-exporter's ghcr-mirror-pull check sends.
+ACCEPT=application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json
+WARM_BUDGET_S={{ k8s_host_files_ghcr_mirror_warm_budget_s }}
+# The ghcr.io refs write_mirror_keep_set read, one `<repo>@<digest>` or `<repo>:<tag>` per line.
+WARM_REFS=""
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
@@ -224,6 +240,10 @@ write_mirror_keep_set() {
     MIRROR_NOTE="ghcr-mirror prune skipped, workloads unreadable"
     return 0
   fi
+  # A ref that carries a digest is warmed by it, its tag dropped. A bare repository is no ref.
+  WARM_REFS=$(grep -oE 'ghcr\.io/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?' \
+                <<<"$json" | sed -E 's|^ghcr\.io/||; s|^([^:@]+):[^@]+@|\1@|' \
+                | grep -E '[:@]' | sort -u)
   keep=$(grep -o 'sha256:[0-9a-f]\{64\}' <<<"$json" | sort -u)
   if [[ -z "$keep" ]]; then
     MIRROR_NOTE="ghcr-mirror prune skipped, no digest found in any workload"
@@ -283,6 +303,76 @@ collect_mirror_store() {
   report_mirror_job
 }
 
+# ── Warming the ghcr-mirror ──────────────────────────────────────────────────────────────────
+# Prints manifest $2 (a tag or a digest) of repository $1, read through the mirror.
+mirror_manifest() {
+  curl -fs --max-time 60 -H "Accept: ${ACCEPT}" "${MIRROR_URL}/v2/${1}/manifests/${2}"
+}
+
+# Prints the config and layer digests of image $1 at $2, one per line. An index resolves to its
+# linux/amd64 child, the platform both nodes run. An index with no such child prints nothing.
+mirror_blob_digests() {
+  local manifest child
+  manifest=$(mirror_manifest "$1" "$2") || return 1
+  child=$(jq -r '[.manifests[]? | select(.platform.os == "linux" and .platform.architecture == "amd64")
+                  | .digest][0] // empty' <<<"$manifest") || return 1
+  if [[ -n "$child" ]]; then
+    manifest=$(mirror_manifest "$1" "$child") || return 1
+  fi
+  jq -r 'if .manifests then empty else (.config.digest // empty), (.layers[]?.digest) end' \
+    <<<"$manifest"
+}
+
+# GETs each distinct blob of every ref in WARM_REFS through the mirror, and appends the counts to
+# MIRROR_MSG. A cached blob streams from the mirror's own store, so a warm store costs a local
+# read and no WAN. The whole phase stops starting new blobs after WARM_BUDGET_S, and each GET is
+# bounded by the budget left.
+# DECIDED: a blob that fails to warm is named in the journal and the message but leaves the run
+# up. It costs a cold pull later, never a corrupt store, and the likely cause is a slow GHCR
+# episode that a Kuma page cannot fix. #5654 has the measurements.
+warm_mirror() {
+  local ref repo id blobs blob got left
+  local -A seen=()
+  local warmed=0 failed=0 skipped=0 bytes=0 start=$SECONDS
+  if [[ -z "$WARM_REFS" ]]; then
+    MIRROR_MSG="${MIRROR_MSG}; mirror not warmed, no ghcr.io ref read"
+    return 0
+  fi
+  while read -r ref; do
+    if [[ "$ref" == *@* ]]; then
+      repo=${ref%@*} id=${ref#*@}
+    else
+      repo=${ref%:*} id=${ref##*:}
+    fi
+    if ! blobs=$(mirror_blob_digests "$repo" "$id"); then
+      failed=$((failed + 1))
+      logger -t registry-gc "could not read the manifest of ${repo} ${id} through ghcr-mirror"
+      continue
+    fi
+    for blob in $blobs; do
+      [[ -n "${seen[$blob]:-}" ]] && continue
+      seen[$blob]=1
+      left=$((WARM_BUDGET_S - (SECONDS - start)))
+      if ((left <= 0)); then
+        skipped=$((skipped + 1))
+        continue
+      fi
+      if got=$(curl -fs -o /dev/null --max-time "$left" -w '%{size_download}' \
+                 "${MIRROR_URL}/v2/${repo}/blobs/${blob}"); then
+        warmed=$((warmed + 1))
+        bytes=$((bytes + got))
+      else
+        failed=$((failed + 1))
+        logger -t registry-gc "could not warm ${repo}@${blob} through ghcr-mirror"
+      fi
+    done
+  done <<<"$WARM_REFS"
+  MIRROR_MSG="${MIRROR_MSG}; warmed ${warmed} blob(s), $((bytes / 1000000)) MB in $((SECONDS - start))s"
+  ((failed)) && MIRROR_MSG="${MIRROR_MSG}, ${failed} failed (journalctl -t registry-gc)"
+  ((skipped)) && MIRROR_MSG="${MIRROR_MSG}, ${skipped} skipped past the ${WARM_BUDGET_S}s budget"
+  return 0
+}
+
 # A previous run that died between its scale-down and its restore left the stamp. Its Job may
 # still be pruning, so restore_mirror_store deletes an unfinished one before the pod returns.
 restore_stranded_mirror() {
@@ -305,5 +395,10 @@ fi
 restore_stranded_mirror || exit 1
 MIRROR_STARTED=0
 collect_mirror_store || FAILED=1
-restore_mirror_store || FAILED=1
+# Only a mirror known to serve again is warmed. Against one still at zero every GET would fail.
+if restore_mirror_store; then
+  warm_mirror
+else
+  FAILED=1
+fi
 COMPLETED=1

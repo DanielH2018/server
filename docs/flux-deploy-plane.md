@@ -1035,6 +1035,16 @@ the variable with `prod`'s live digest and pages on a mismatch.
   and moves and verifies nothing. The first run's `settle` then dispatches one more run, so
   the second run's commit does not wait for the next merge (*Publishing and promotion*).
 
+**A verdict counts only while `prod` names its target** (D7.1). `settle` reads `prod`'s
+digest before it writes anything, and again before its reset. When a later run has moved
+`prod` past T, `settle` writes neither `last-good`, the hold, `held` nor the reset, and
+dispatches nothing. A failed read applies the verdict as before. `tag` reads `DEPLOY_HOLD`
+again just before it moves `prod`, and moves nothing under a hold written after `decide`
+read it. No run supersedes another until D7 turns `SUPERSEDE` on
+(`docs/target-architecture/deploy/d7-superseding-promotions.md`), so both reads are inert
+until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
+binaries.
+
 `verify` and `settle` join no concurrency group: GitHub keeps one pending job per group and a
 newer one cancels it, so a pending `settle` could be dropped with its hold unwritten. Without
 the two checks, a second run could move `prod` past a T that `verify` still waits on, Flux
@@ -1741,8 +1751,11 @@ Every flux-owned role with a `Recreate` Deployment on a large image sets it. Nin
 code-server, n8n, tdarr, home-assistant, valheim, jellyfin, karakeep, uptime-kuma and `crowdsec`
 (#5525, #5546, #5855, #5858). The bundle holds a `<tag>-prepull` Kustomization for each, and
 `scripts/deploy_tools/bundle_census.py:prepull_tags` reads the full list from the tree. Docker
-Hub served a 420 MB layer at 23.5-53.8 MB/s on 2026-10-22, about 100 times GHCR's rate, so a
-Docker Hub role's budget is minutes where a GHCR role's is most of an hour (#5867).
+Hub served a 420 MB layer at 23.5-53.8 MB/s on 2026-10-22 (#5867). GHCR's rate swings by two
+orders of magnitude. It served daniel-box at 0.15-0.45 MB/s from 2026-10-17 to 2026-10-19, and
+at 44-98 MB/s on 2026-10-24, the same as Docker Hub (#5654). A GHCR role's budget is sized for
+the slow case, most of an hour, because a budget sized for the fast case fails every revision
+during a slow week. A Docker Hub role's budget stays minutes.
 
 ### The snapshot Job
 

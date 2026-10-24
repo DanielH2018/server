@@ -1,5 +1,5 @@
 {
-  "checksum": "6e8c7f1d87d8af10e11e1e0fb7bfdf6a1a24da1aa248cefd6ef5957e19d90626",
+  "checksum": "ec1ee3ed6ffa72054d37c106d7b420e7bbb444510cbe4bb5a61386a5e3dcc4a5",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/registry/CLAUDE.md#Notable",
   "row": {
@@ -12,12 +12,13 @@
       "ansible/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh": "b4ab60ad821c5dfcca3005fde38fe2a9a82c369602d01ddc1bb9bfed2671cd5d",
       "ansible/roles/setup/k8s_host_files/tasks/registry.yml": "9072729272d46e1723d45ad5d4e2494f06f08f152d925765912d6613bc945a0e",
       "ansible/roles/setup/k8s_host_files/templates/ghcr-mirror-gc-job.yaml.j2": "50e1ce77c544a5a383ec5ecd80f5ea56097cd2c0126428d38ec1b468027790c9",
+      "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2:DECIDED: a blob that fails to warm": "954d375e47b45650c92e0b42b056da4472e5abe88353ec26b0cf9938c6ed4e0e",
       "ansible/tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page": "b8da3ca9190d84525868807c3082996ba4cce8b51b06a35d9fe6fed6688b9408",
       "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "scripts/renderer/renderer_lib/images.py:ghcr_text": "2d355f1d1aa99f59d01f5bf5c6ab179e1efa8f7d41400ae0b043aeb259ff760d"
     },
     "python": "3.14",
-    "verified_sha": "d0aed3197"
+    "verified_sha": "b17385f09"
   }
 }
