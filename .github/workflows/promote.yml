@@ -857,6 +857,7 @@ jobs:
           CLEARS_HOLD: ${{ needs.promote.outputs.clears_hold }}
           NO_RESET: ${{ needs.promote.outputs.no_reset }}
           STATEFUL: ${{ needs.promote.outputs.stateful }}
+          SUPERSEDES: ${{ needs.promote.outputs.supersedes }}
           VERDICT: ${{ needs.verify.outputs.verdict }}
           FAILED_NAMES: ${{ needs.verify.outputs.failed }}
           GH_ACTOR: ${{ github.actor }}
@@ -973,6 +974,8 @@ jobs:
           problems=()
           if gh variable set DEPLOY_HOLD --body "$hold" -R "$GITHUB_REPOSITORY"; then
             echo "DEPLOY_HOLD set to '$hold'"
+            # The hold names T alone; a T that superseded a run carries that run's change too.
+            [ -z "${SUPERSEDES:-}" ] || echo "::warning::sha-$TARGET superseded the verification of $SUPERSEDES, so the failure may be that commit's change"
           else
             problems+=("writing DEPLOY_HOLD='$hold' failed")
           fi

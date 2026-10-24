@@ -215,12 +215,28 @@ class WaitResult:
     suspended: tuple[str, ...] = ()
 
 
-def hold_detail(hold: str) -> str:
-    """What a DEPLOY_HOLD value says: the held SHA and, for a `failed=` hold, its names."""
+def hold_detail(hold: str, services: list[str] | None = None) -> str:
+    """What a DEPLOY_HOLD value says: the held SHA and, for a `failed=` hold, its names.
+
+    With `services`, the landing's own tags, it also says whether any failed name is one of
+    them. The held SHA is the newest commit the promotion carried, which may be another PR's:
+    a promotion carries every merge since `last-good`, and one that superseded a run carries
+    that run's commit too (D7). So a hold naming none of this PR's services was most likely
+    caused by another merge in the same promotion (#6199).
+    """
     held, _, rest = hold.partition(" ")
     detail = f"{HOLD_VARIABLE} holds {held}"
     if rest.startswith("failed="):
-        detail += f", and these failed: {rest.removeprefix('failed=')}"
+        names = rest.removeprefix("failed=").split(",")
+        detail += f", and these failed: {','.join(names)}"
+        if services:
+            own = sorted(n for n in names if split_kind(n)[0] in services)
+            detail += (
+                f". This PR's {', '.join(own)} failed"
+                if own
+                else f". None is this PR's ({', '.join(sorted(services))}), so another "
+                "merge in the same promotion, or a run it superseded, most likely caused it"
+            )
     elif rest:
         detail += f" ({rest})"
     return (
@@ -408,7 +424,10 @@ def land_wait(
             hold, line = "", f"{line}; {HOLD_VARIABLE} could not be read: {err}"
         if hold and hold != "none":
             return WaitResult(
-                "deploy-failed", HOLD_CAUSE, hold_detail(hold), widened=widened
+                "deploy-failed",
+                HOLD_CAUSE,
+                hold_detail(hold, services),
+                widened=widened,
             )
         if all_paused:
             return WaitResult(
