@@ -240,6 +240,51 @@ def test_accept_the_quiet_variant_runs_its_hook_and_stays_silent(tmp_path):
     assert "did not run" not in proc.stderr
 
 
+def _fanout_stop_runner(tmp_path: Path) -> Path:
+    """A runner copy whose `fanout-stop.py` prints the stdin it was handed."""
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    (hooks / "fanout-stop.py").write_text(
+        "import sys\nprint('ran', sys.stdin.read().strip())\n", encoding="utf-8"
+    )
+    return _variant_runner(hooks, str(hooks))
+
+
+def _stop_payload(runner: Path, cwd: Path) -> subprocess.CompletedProcess:
+    base = {k: v for k, v in os.environ.items() if not k.startswith("RUN_HOOK_")}
+    return subprocess.run(
+        ["bash", str(runner), "fanout-stop"],
+        input=json.dumps({"cwd": str(cwd)}),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=base,
+    )
+
+
+def test_reject_fanout_stop_outside_a_fanout_worktree_starts_no_hook(tmp_path):
+    """An ordinary session's Stop is answered in shell, before uv starts (#6154)."""
+    runner = _fanout_stop_runner(tmp_path)
+    work = tmp_path / "plain" / "sub"
+    work.mkdir(parents=True)
+    proc = _stop_payload(runner, work)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == ""
+
+
+def test_accept_fanout_stop_below_a_brief_runs_the_hook_with_its_payload(tmp_path):
+    """The near miss: a `cwd` below `.fanout/brief.md` reaches the hook, stdin intact."""
+    runner = _fanout_stop_runner(tmp_path)
+    root = tmp_path / "batch"
+    (root / ".fanout").mkdir(parents=True)
+    (root / ".fanout" / "brief.md").write_text("brief\n", encoding="utf-8")
+    work = root / "sub"
+    work.mkdir()
+    proc = _stop_payload(runner, work)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == f"ran {json.dumps({'cwd': str(work)})}"
+
+
 def test_accept_the_project_variant_execs_its_hook(tmp_path):
     """`exec` is what keeps the hook's stdin JSON; the hook's own stdout is the evidence."""
     (tmp_path / "probe.py").write_text("print('ran')\n", encoding="utf-8")
