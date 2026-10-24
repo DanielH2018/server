@@ -1035,6 +1035,16 @@ the variable with `prod`'s live digest and pages on a mismatch.
   and moves and verifies nothing. The first run's `settle` then dispatches one more run, so
   the second run's commit does not wait for the next merge (*Publishing and promotion*).
 
+**A verdict counts only while `prod` names its target** (D7.1). `settle` reads `prod`'s
+digest before it writes anything, and again before its reset. When a later run has moved
+`prod` past T, `settle` writes neither `last-good`, the hold, `held` nor the reset, and
+dispatches nothing. A failed read applies the verdict as before. `tag` reads `DEPLOY_HOLD`
+again just before it moves `prod`, and moves nothing under a hold written after `decide`
+read it. No run supersedes another until D7 turns `SUPERSEDE` on
+(`docs/target-architecture/deploy/d7-superseding-promotions.md`), so both reads are inert
+until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
+binaries.
+
 `verify` and `settle` join no concurrency group: GitHub keeps one pending job per group and a
 newer one cancels it, so a pending `settle` could be dropped with its hold unwritten. Without
 the two checks, a second run could move `prod` past a T that `verify` still waits on, Flux
