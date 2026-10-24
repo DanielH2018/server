@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Longhorn restore drill — managed by Ansible (k3s role); edits overwritten.
+# Longhorn restore drill — managed by Ansible (longhorn-restore-drill role); edits overwritten.
 #
 # Usage: longhorn-restore-drill.sh [-h|--help] [PVC]
-# Root cron job "Longhorn restore drill" (cron file longhorn-restore-drill, schedule
+# The CronJob longhorn-restore-drill in the homelab namespace (schedule
 # k3s_longhorn_restore_drill_cron) runs it with no argument. An operator pins the drill to one
-# volume with a PVC name as the first argument, or with the RESTORE_DRILL_PIN environment
-# variable (the argument wins), for example: sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>.
+# volume with RESTORE_DRILL_PIN in the Job's container environment, or with a PVC name as the
+# first argument (the argument wins); the role's CLAUDE.md gives the commands.
 # Without a pin it uses the role's k3s_longhorn_restore_drill_pvc default.
 # Running it creates and deletes a real Volume, PV, PVC and pod.
 #
@@ -22,17 +22,18 @@
 # identical to one that was never scheduled — which is what this script and check 7 of
 # longhorn-backup-health.sh fix between them.
 #
-# Runs as ROOT from cron, and has to: it creates and deletes Volume/PV/PVC objects and runs a
-# pod. The read-only ServiceAccount the heartbeat uses cannot do any of that, so do not try to
-# convert this to that credential. Root's `k3s kubectl` reads /etc/rancher/k3s/k3s.yaml, the
-# admin kubeconfig, so it can also patch the stamp ConfigMap below with no Role of its own.
+# Runs as the longhorn-restore-drill ServiceAccount, and has to: it creates and deletes
+# Volume/PV/PVC objects and runs a pod. The read-only ServiceAccount the heartbeat uses cannot do
+# any of that, so do not try to convert this to that credential. The ServiceAccount's Roles are
+# derived from the calls below, and ansible/tests/k8s/test_rbac_against_script.py holds them to
+# this script, so a new kubectl line needs its grant in the same change.
 #
 # State lives in the ConfigMap longhorn-restore-drill-stamps (H2.3c of
 # docs/target-architecture/host/h2-shrink-host-plane.md), not on this host. The run reads it
 # once with `get` and writes each stamp with a merge `patch`. Keys: `last-success`, `candidates`,
 # `excluded_oversize` and `excluded_nopvc` hold the old files' content; `attempts.<pvc>`,
 # `retries.<pvc>` and `seen.<pvc>` hold an epoch; `success.<pvc>` holds the epoch the drill
-# passed at; `imported-at` marks the one-time import of the old stamp directory.
+# passed at.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -41,9 +42,7 @@ for arg in "$@"; do
   esac
 done
 
-# Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives.
-export PATH="/usr/local/bin:${PATH}"
-KUBECTL="k3s kubectl"
+KUBECTL="kubectl"
 
 # The operator pin path. The rendered value is the deploy-time pin (empty in production, so the
 # rotation picks); an argument or RESTORE_DRILL_PIN on top of it drills ONE volume on demand —
@@ -54,12 +53,10 @@ KUBECTL="k3s kubectl"
 PIN="${1:-${RESTORE_DRILL_PIN:-{{ k3s_longhorn_restore_drill_pvc }}}}"
 OPERATOR_PIN=""
 [[ -n "${1:-}${RESTORE_DRILL_PIN:-}" ]] && OPERATOR_PIN="$PIN"
-FALLBACK_NS="{{ k3s_longhorn_restore_drill_namespace }}"
+FALLBACK_NS="{{ longhorn_drill_namespace }}"
 MAX_BYTES="{{ k3s_longhorn_restore_drill_max_actual_bytes }}"
 STATE_NS="$FALLBACK_NS"
 STATE_CM="longhorn-restore-drill-stamps"
-# The old stamp directory. Only the one-time import below reads it; nothing writes it any more.
-STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
 # Per-volume bookkeeping, and the key families do different jobs. `attempts.<pvc>` drives the
 # rotation and is stamped on every run whatever the outcome; `success.<pvc>` records proof and is
 # written only after the assertions pass. Selecting on attempts rather than successes is what
@@ -83,7 +80,7 @@ STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
 MANIFEST=$(mktemp /tmp/restore-drill.XXXXXX)
 DRILL=""
 
-fail() { logger -t longhorn-restore-drill "FAIL: $*"; echo "restore drill FAILED: $*" >&2; exit 1; }
+fail() { echo "longhorn-restore-drill: FAIL: $*"; echo "restore drill FAILED: $*" >&2; exit 1; }
 
 # Teardown runs on EVERY exit path including the failures above, because a half-restored volume
 # left attached would block the next run and, being a Longhorn volume with a replica, occupies
@@ -131,37 +128,7 @@ stamp_set() {
   CM_JSON=$(jq -c --argjson p "$patch" '.data = ((.data // {}) + $p.data)' <<<"$CM_JSON")
 }
 
-# The one-time import of the old stamp directory (H2.3c). It runs on the first run that finds no
-# `imported-at`, converts each item to its key and writes them with `imported-at` in one patch, so
-# an interrupted import repeats whole rather than half. H2.3d deletes this arm: a pod cannot see
-# the directory.
-import_stamp_dir() {
-  local -a kv=()
-  local name val f
-  for f in last-success candidates excluded_oversize excluded_nopvc; do
-    [[ -f "${STAMP_DIR}/${f}" ]] || continue
-    val=$(cat "${STAMP_DIR}/${f}")
-    kv+=("$f" "$val")
-  done
-  for f in attempts retries seen; do
-    [[ -d "${STAMP_DIR}/${f}" ]] || continue
-    while IFS=$'\t' read -r name val; do
-      [[ -n "$name" ]] && kv+=("${f}.${name}" "$val")
-    done < <(find "${STAMP_DIR}/${f}" -maxdepth 1 -type f -printf '%f\t%Ts\n')
-  done
-  if [[ -d "${STAMP_DIR}/success" ]]; then
-    for f in "${STAMP_DIR}/success"/*; do
-      [[ -f "$f" ]] || continue
-      val=$(cat "$f")
-      [[ "$val" =~ ^[0-9]+$ ]] && kv+=("success.${f##*/}" "$val")
-    done
-  fi
-  set -- "${kv[@]}" imported-at "$(date +%s)"
-  stamp_set "$@" || fail "cannot import the old stamp directory into ${STATE_CM}"
-  logger -t longhorn-restore-drill "IMPORT: moved ${STAMP_DIR} into ${STATE_CM} ($(( $# / 2 )) keys)"
-}
 load_stamps
-[[ -n "$(stamp_get imported-at)" ]] || import_stamp_dir
 
 # Everything below is resolved from the cluster, never hardcoded. The hand-run one-shot this
 # replaces pinned the backup ID, the volume name and the size as literals — all three of which
@@ -335,7 +302,7 @@ ATTEMPT_AT=$(date +%s)
 if [[ -n "$RETRY" ]]; then
   stamp_set "attempts.${PVC}" "$ATTEMPT_AT" "retries.${PVC}" "$ATTEMPT_AT" \
     || fail "cannot stamp the attempt for ${PVC} in ${STATE_CM}"
-  logger -t longhorn-restore-drill "RETRY: ${PVC} failed its last attempt — re-drilling ahead of the rotation"
+  echo "longhorn-restore-drill: RETRY: ${PVC} failed its last attempt — re-drilling ahead of the rotation"
 else
   stamp_set "attempts.${PVC}" "$ATTEMPT_AT" || fail "cannot stamp the attempt for ${PVC} in ${STATE_CM}"
 fi
@@ -501,12 +468,6 @@ MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
 
 # The stamp is written ONLY here, after both assertions pass. Check 7 reads its contents, so
 # stamping earlier — or on any failure path — would report a broken drill as a healthy one.
-# Modes are set EXPLICITLY on every file and directory the drill writes — here and at the
-# candidate query above — because the reader is a different user. This script runs as root, whose
-# umask here is 027, so `mkdir -p` alone produced drwxr-x--- root:root and the heartbeat (which
-# runs as {{ sys_user }} under its own cron) could not read the stamp. Check 7 fails closed on an
-# unreadable stamp, so a PASSING drill would have paged "no restore drill has ever succeeded"
-# forever. Observed 2026-08-19, on the first green run.
 # DECIDED: an operator-pinned run leaves the global stamp alone. Check 7 reads it as "is the
 # NIGHTLY drill still running"; a hand run refreshing it would hide a dead cron behind the one
 # volume someone drilled by hand — the exact failure the drill exists to make visible. The
@@ -524,4 +485,4 @@ else
 fi
 NOTE=""
 [[ -n "$DECLARED_EMPTY" && "$FILES" == "0" ]] && NOTE=" — declared may-be-empty, content assertions waived"
-logger -t longhorn-restore-drill "PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})${NOTE}"
+echo "longhorn-restore-drill: PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})${NOTE}"

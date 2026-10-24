@@ -14,22 +14,21 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiv
 
 from pathlib import Path
 
-from lib.repo_paths import K3S_DEFAULTS
 from _helpers import load_yaml
-from _restore_drill import harness
+from _restore_drill import DRILL_DEFAULTS, harness
 
 # n8n-files' own recorded actualSize, the reading the ceiling was derived from.
 RECORDED_BARE_EXT4_BYTES = 51712000
 
 
 def _ceiling() -> int:
-    return load_yaml(K3S_DEFAULTS)[
+    return load_yaml(DRILL_DEFAULTS)[
         "k3s_longhorn_restore_drill_empty_ok_max_actual_bytes"
     ]
 
 
 def _declared() -> str:
-    declared = load_yaml(K3S_DEFAULTS)["k3s_longhorn_restore_drill_empty_ok_pvcs"]
+    declared = load_yaml(DRILL_DEFAULTS)["k3s_longhorn_restore_drill_empty_ok_pvcs"]
     assert declared, (
         "no volume is declared may-be-empty — this suite has nothing to exercise"
     )

@@ -368,7 +368,9 @@ def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
 # run. format_cronjob_health closes that gap.
 #
 
-_CRONJOB_ONLY_ROLES = frozenset({"configarr", "longhorn-reconcile", "pi-peer-backup"})
+_CRONJOB_ONLY_ROLES = frozenset(
+    {"configarr", "longhorn-reconcile", "pi-peer-backup", "longhorn-restore-drill"}
+)
 
 
 def test_cronjob_only_census_finds_exactly_the_known_roles():
@@ -388,10 +390,10 @@ def test_cronjob_only_census_finds_exactly_the_known_roles():
 
 
 def test_the_no_rollout_checkable_workload_set_still_matches_outside_the_cronjob_roles():
-    """The other roles in `_ROLES_WITH_NO_WORKLOAD` (deploy-ui, longhorn-restore-drill,
+    """The other roles in `_ROLES_WITH_NO_WORKLOAD` (deploy-ui,
     longhorn-ui, media-volume, netpol-baseline) still reach the unchanged skip message
     run_health prints --
-    only configarr, longhorn-reconcile and pi-peer-backup were pulled onto the new CronJob path."""
+    only configarr, longhorn-reconcile, longhorn-restore-drill and pi-peer-backup were pulled onto the new CronJob path."""
     resolved = _resolved()
     no_workload = {role for role in resolved if not resolved[role]}
     assert (
