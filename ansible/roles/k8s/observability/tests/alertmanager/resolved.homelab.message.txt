@@ -1,0 +1,2 @@
+The certificate example.com expires within 14 days.
+Cleared <t:1792829700:R>, after starting <t:1792792800:f>

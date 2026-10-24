@@ -20,7 +20,7 @@ groups:
           service: flux
           shadow: "true"
         annotations:
-          summary: Prometheus cannot scrape a Flux controller.
+          summary: Prometheus cannot scrape the Flux controller {{ $labels.app }}.
           description: >-
             {{ $labels.pod }} has failed its scrape for 5 minutes, so {{ $labels.app }} is down
             or unreachable from Prometheus. Read its pod's events and log in the flux-system
@@ -93,8 +93,8 @@ groups:
           service: flux
         annotations:
           summary: >-
-            {{ if $labels.exported_namespace }}A Flux object has not been Ready for 15
-            minutes.{{ else }}kube-state-metrics has exported no gotk_resource_info for the
+            {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }}
+            {{ $labels.name }} has not been Ready for 15 minutes.{{ else }}kube-state-metrics has exported no gotk_resource_info for the
             root Kustomization for 15 minutes.{{ end }}
           description: >-
             {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }}
@@ -133,7 +133,7 @@ groups:
           severity: warning
           service: flux
         annotations:
-          summary: A Flux Kustomization has been suspended for more than 24 hours.
+          summary: The Kustomization {{ $labels.name }} has been suspended for more than 24 hours.
           description: >-
             The Kustomization {{ $labels.name }} in {{ $labels.exported_namespace }} has been
             suspended for 24 hours, so Flux applies nothing it owns. If its role sets
@@ -166,7 +166,7 @@ groups:
         annotations:
           summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
           description: >-
-            All {{ $value }} of {{ $labels.pod }}'s reconcile workers have been busy for 30
+            All {{ $value | printf "%.0f" }} of {{ $labels.pod }}'s reconcile workers have been busy for 30
             minutes with Kustomizations still queued, so a changed Kustomization waits for a
             free worker. Unhealthy Kustomizations that each hold a worker for their timeout
             are the usual cause. List them with kubectl get kustomizations -A; suspending one
