@@ -36,6 +36,20 @@ it was last staged. The signer's state is `/var/lib/homelab-signer/state.json`, 
 set lands in `/var/lib/homelab-signer/refused/<UTC time>/`. Both services log to the journal:
 `journalctl -u homelab-builder -u homelab-repo-sign`.
 
+## The host packages
+
+Each host installs `homelab-updater` and its own package, which `hosts/<host>/package.yml`
+lists.
+
+- `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats.
+- `homelab-daniel-server` ships reconcile, the secrets unit, the `kuma-push` component and the
+  UPS shutdown chain.
+- `homelab-daniel-box` (H6.2) ships reconcile and nothing else. It carries no credential, so it
+  has no secrets unit and no `ansible/vars/hosts/daniel-box.sops.yaml`. Ansible keeps the builder,
+  the repository and every daniel-box timer until H7, and the deployer keeps k3s's files until
+  H6.4a. To remove the package before H6.4a, run `sudo apt-get remove homelab-daniel-box`. After
+  H6.4a the package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
+
 ## The restart contract
 
 `homelab-reconcile` is the only process that starts or restarts a unit outside the boot path,
