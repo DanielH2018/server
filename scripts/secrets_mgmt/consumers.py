@@ -41,7 +41,6 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "pi_recovery_push_token",  # Pi timer, via optimize_pi's interim file + server label
         "longhorn_backup_push_token",  # daniel-box cron (k3s role) + daniel-server label
         "claude_otel_push_token",  # daniel-box cron (setup/claude_code) + daniel-server label
-        "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label
         "manifest_prune_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "release_staleness_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "live_drift_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
