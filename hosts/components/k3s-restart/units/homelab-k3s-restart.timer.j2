@@ -1,0 +1,13 @@
+# Shipped by homelab-{{ inventory_hostname }}. The window is the host's `k3s_restart_window`.
+# systemd may otherwise start the unit up to a minute late, which would carry an 11:32 start into
+# the 11:40 cron fire (hosts/lib/tests/test_k3s_restart_window.py holds the arithmetic).
+[Unit]
+Description=Open the window in which a changed k3s configuration may restart {{ k3s_restart_unit }}
+
+[Timer]
+OnCalendar={{ k3s_restart_window }}
+AccuracySec=1s
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target

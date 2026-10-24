@@ -139,6 +139,8 @@ crowdsec's retired crons and pi-peer-backup's two daniel-pi writes.
 - **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes a `Registry GC`
   Kuma push and a `registry-gc` healthchecks.io ping, and the `registry-gc` journal
   (`journalctl -t registry-gc`) shows the mirror phase. A conversion apply leaves the cron
-  file and the script's hash unchanged.
+  file and the script's hash unchanged. After the restore the run warms the mirror: it GETs
+  blobs through the mirror's loopback hostPort and writes nothing to the cluster. The push
+  message ends with the warm counts, such as `warmed 354 blob(s), 6207 MB in 133s`.
 - **Next-run review:** before moving a new row in, run `--list-tasks` with
   `--tags k8s_host_files` and read the recap of the last apply.
