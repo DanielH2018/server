@@ -635,6 +635,10 @@ jobs:
       # The first verified run seeds `last-good`: when `decide` read no `last-good`, the step
       # tags `prod`'s digest with it before `prod` moves, so a failed verification has a
       # verified revision to reset to.
+      #
+      # DEPLOY_HOLD is read again just before the move (D7.1). A `settle` can write a hold
+      # while this job waits on the group, and a move after it would promote past the hold.
+      # Anything but `none`, a failed read included, moves nothing.
       - name: Move prod
         id: move
         env:
@@ -644,12 +648,20 @@ jobs:
           PRIOR_DIGEST: ${{ needs.promote.outputs.prior_digest }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
         run: |
           set -euo pipefail
           printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
             || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
+
+          hold="$(gh variable get DEPLOY_HOLD -R "$GITHUB_REPOSITORY")" \
+            || { echo "::error::DEPLOY_HOLD could not be read, so this run moves nothing"; exit 1; }
+          if [ "$hold" != none ]; then
+            echo "::warning::DEPLOY_HOLD reads '$hold', written after decide read it, so this run moves nothing and verifies nothing"
+            exit 0
+          fi
 
           # prod's live digest, from one HEAD. curl reads each credential from stdin.
           name=danielh2018/homelab-manifests
@@ -802,6 +814,7 @@ jobs:
         id: apply
         env:
           TARGET: ${{ needs.promote.outputs.target }}
+          DIGEST: ${{ needs.promote.outputs.digest }}
           RESET_DIGEST: ${{ needs.promote.outputs.reset_digest }}
           CLEARS_HOLD: ${{ needs.promote.outputs.clears_hold }}
           NO_RESET: ${{ needs.promote.outputs.no_reset }}
@@ -817,6 +830,47 @@ jobs:
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           repo=ghcr.io/danielh2018/homelab-manifests
           login() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
+
+          # A verdict on T counts only while `prod` still names T's digest (D7.1). Once a
+          # later run has moved `prod` past T, that run owns the cluster, and this one writes
+          # neither `last-good`, the hold, `held` nor the reset, and dispatches nothing.
+          # `live_prod` is the `tag` job's HEAD of `prod`. It prints the digest, nothing when
+          # the tag is absent, and fails when the read fails.
+          live_prod() {
+            local name=danielh2018/homelab-manifests token heads status
+            token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
+              | curl --retry 3 -fsS -K - \
+                "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
+              | jq -r '.token // empty')" || return 1
+            [ -n "$token" ] || return 1
+            heads="$RUNNER_TEMP/prod-head.txt"
+            status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+              | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
+                -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
+                "https://ghcr.io/v2/$name/manifests/prod")" || return 1
+            case "$status" in
+              200) tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }' ;;
+              404) ;;
+              *) return 1 ;;
+            esac
+          }
+          # A failed read keeps today's behaviour, the safe direction: a hold stops promotion,
+          # and a later run that verifies moves `last-good` again.
+          owns_prod() {
+            local live
+            if ! live="$(live_prod)"; then
+              echo "::warning::prod's digest could not be read, so this run applies its verdict as the owner"
+              return 0
+            fi
+            [ "$live" = "$DIGEST" ] && return 0
+            echo "prod is at '${live:-absent}', not sha-$TARGET's $DIGEST: a later run moved it, so this run writes nothing and dispatches nothing"
+            return 1
+          }
+          if ! owns_prod; then
+            echo "owned=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "owned=true" >> "$GITHUB_OUTPUT"
 
           if [ "$VERDICT" = good ]; then
             if ! { login && flux tag artifact "oci://$repo:sha-$TARGET" --tag last-good; }; then
@@ -879,6 +933,10 @@ jobs:
           fi
           if ! printf '%s' "$RESET_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
             problems+=("decide read no last-good digest to reset to, so prod stays on sha-$TARGET")
+          # Read again: the hold write takes seconds, and a reset after a later run's move
+          # would undo that move.
+          elif ! owns_prod; then
+            :
           elif login && flux tag artifact "oci://$repo@$RESET_DIGEST" --tag prod; then
             echo "prod reset to $RESET_DIGEST"
             gh variable set PROD_DIGEST --body "$RESET_DIGEST" -R "$GITHUB_REPOSITORY" \
@@ -903,6 +961,8 @@ jobs:
       # prefers it to GITHUB_TOKEN. The `sha` input sends the run through render's ancestry and
       # CI re-check, which a bare dispatch of master's tip would skip.
       - name: Dispatch a run for a newer green commit
+        # A run that a later run superseded dispatches nothing; the later run owns the dispatch.
+        if: steps.apply.outputs.owned == 'true'
         env:
           TARGET: ${{ needs.promote.outputs.target }}
           GH_TOKEN: ${{ github.token }}

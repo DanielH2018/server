@@ -39,10 +39,10 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   rotated value is live before code-server reconciles. A rotation reaches the cluster only
   through `cluster_vars.py write`. The renderer stamps a restart checksum on the Deployment, so
   a changed value rolls the pod.
-- **Every image change is a slow pull, and the pre-pull keeps it off the outage.** The pod
-  pulls from GHCR, which served both nodes at 0.2-0.5 MB/s on 2026-10-17. A claude-code CLI
-  bump invalidates about 377 MB of layers, and a base-image bump about 851 MB, so a pull takes
-  roughly 20 to 50 minutes. The Deployment is `Recreate`. The `code-server-prepull`
+- **An image change can be a slow pull, and the pre-pull keeps it off the outage.** The pod
+  pulls from GHCR, which served both nodes at 0.2-0.5 MB/s on 2026-10-17 and at 44-95 MB/s on
+  2026-10-24 (#5654). A claude-code CLI bump invalidates about 377 MB of layers, and a
+  base-image bump about 851 MB, so in a slow week a pull takes roughly 20 to 50 minutes. The Deployment is `Recreate`. The `code-server-prepull`
   Kustomization (below) pulls the image onto the node while the old pod still serves, so the
   Deployment keeps the default rollout budget and the editor is down only for the container
   start.
