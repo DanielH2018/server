@@ -1361,3 +1361,12 @@ nut_host_secondary_armed: true
 # a repo-scoped token with no contents write (renovate_agent_gh_token) and the lander unit
 # alone could merge. Do not arm it again without both in place.
 renovate_agent_enabled: true
+
+# The window in which homelab-k3s-restart may restart k3s (H6.3b, hosts/components/k3s-restart).
+# An OnCalendar value, read by the component's timer: host_vars sit above a component's defaults,
+# so each host's package carries its own slot (H3, *Component variables*). The slot falls between
+# the `*/10` and `*/30` cron fires at 11:30 and the next at 11:40, misses the `*/15` fire at
+# 11:45 and the hourly :23 timer, and skips the 1st of the month, when the hypervisor drill starts
+# at 11:20 on daniel-server. hosts/lib/tests/test_k3s_restart_window.py derives all of that from
+# the schedules, and re-checks any move.
+k3s_restart_window: "Mon..Fri *-*-02..31 11:32:00"
