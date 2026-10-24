@@ -1,12 +1,13 @@
 {
-  "checksum": "0e44e8706b9a96d829ffdfd73d487b3770be5e1c5a9eb72f0e77dd0001bbc357",
+  "checksum": "32f7d86663805a1475303e8fbefb1e989a4f70adef0d5d630036809337203d5b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/renovate_notify/CLAUDE.md#Working on it",
   "row": {
     "atoms": {
-      "docs/renovate-notify-internals.md": "cb30c680666ee631c55c05028f020d1d629ba0c2f9ef028554c000bf2a46eaac"
+      "docs/renovate-notify-internals.md": "cb30c680666ee631c55c05028f020d1d629ba0c2f9ef028554c000bf2a46eaac",
+      "hosts/lib/": "aee97ede131631156330f0120fe4b64226a77c507ef96ddc63bcd3db949e64ac"
     },
     "python": "3.14",
-    "verified_sha": "fd34ae8eb"
+    "verified_sha": "65b1917f5"
   }
 }

@@ -49,13 +49,14 @@
     owner: root
     group: homelab-builder
     mode: "0640"
-  # The deployer's CI gate, walk bound and repo (builder step 4). They are gitops_deploy's
-  # defaults, so deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES carries the row that
-  # re-applies this role when one changes. H7.2e moves the CI keys into inventory and owes that
-  # row's replacement.
+  # The CI gate and walk bound every deploy path grades by (builder step 4) live in
+  # `group_vars/all.yml` since H7.2e. The deployer's repo is still its role default, so
+  # `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` carries its row. A change to the two
+  # group_vars keys is a deploy-plane change, which re-renders no setup role's settings file:
+  # `group_vars/all.yml` beside them says what the operator applies.
   vars:
-    homelab_builder_ci_contexts: "{{ gitops_deploy_ci_contexts }}"
-    homelab_builder_ci_walk_max: "{{ gitops_deploy_ci_ancestor_walk_max }}"
+    homelab_builder_ci_contexts: "{{ ci_required_contexts }}"
+    homelab_builder_ci_walk_max: "{{ ci_ancestor_walk_max }}"
     homelab_builder_github_repo: "{{ gitops_deploy_github_repo }}"
   become: true
   # It renders homelab_builder_github_token. no_log also hides an undefined-variable failure:
@@ -198,9 +199,9 @@
       - live: /opt/homelab-builder/publish-textfile
         src: ansible/roles/setup/homelab_builder/files/publish-textfile.sh
       - live: /opt/homelab-builder/host_lib.py
-        src: ansible/roles/setup/common/files/host_lib.py
+        src: hosts/lib/host_lib.py
       - live: /opt/homelab-builder/kuma_push.py
-        src: ansible/roles/setup/common/files/kuma_push.py
+        src: hosts/lib/kuma_push.py
 
 - name: Install the builder and signer units
   tags: [homelab-builder-install]

@@ -1,12 +1,16 @@
 # Reconcile, which every host package ships (H3, *The reconcile unit*). The script lives in
 # hosts/lib/ beside the updater that starts it, with the reconcile_lib package it imports (H7.2a
-# and H7.2b: the activation step, the ufw arm and the metrics). The package installs beside the
+# to H7.2d: the activation step, the four arms and the metrics). The package installs beside the
 # script, because python3 puts the script's directory first on sys.path. The unit is here.
 files:
   - {lib: homelab-reconcile, dst: /usr/lib/homelab/homelab-reconcile, mode: "0755"}
   - {lib: reconcile_lib/__init__.py, dst: /usr/lib/homelab/reconcile_lib/__init__.py}
   - {lib: reconcile_lib/activate.py, dst: /usr/lib/homelab/reconcile_lib/activate.py}
   - {lib: reconcile_lib/common.py, dst: /usr/lib/homelab/reconcile_lib/common.py}
+  - {lib: reconcile_lib/libvirt.py, dst: /usr/lib/homelab/reconcile_lib/libvirt.py}
+  - {lib: reconcile_lib/lines.py, dst: /usr/lib/homelab/reconcile_lib/lines.py}
   - {lib: reconcile_lib/textfile.py, dst: /usr/lib/homelab/reconcile_lib/textfile.py}
+  - {lib: reconcile_lib/udev.py, dst: /usr/lib/homelab/reconcile_lib/udev.py}
   - {lib: reconcile_lib/ufw.py, dst: /usr/lib/homelab/reconcile_lib/ufw.py}
+  - {lib: reconcile_lib/users.py, dst: /usr/lib/homelab/reconcile_lib/users.py}
   - {src: units/homelab-reconcile.service, dst: /usr/lib/systemd/system/homelab-reconcile.service}

@@ -53,7 +53,7 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
     unsafe_volumes,
 )
 from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, K3S_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -62,7 +62,7 @@ from gitops_markers import STATE_DIR
 
 # The Backup CR reader the backup-health cron ships (#3735); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
-sys.path.insert(0, str(K3S_FILES))
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 
 CLUSTER = "prod"

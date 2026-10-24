@@ -25,6 +25,6 @@ data:
   configarr_status.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/configarr/files/configarr_lib/configarr_status.py') | indent(4, true) }}
   host_lib.py: |
-{{ lookup('file', playbook_dir + '/roles/setup/common/files/host_lib.py') | indent(4, true) }}
+{{ lookup('file', playbook_dir + '/../hosts/lib/host_lib.py') | indent(4, true) }}
   kuma_push.py: |
-{{ lookup('file', playbook_dir + '/roles/setup/common/files/kuma_push.py') | indent(4, true) }}
+{{ lookup('file', playbook_dir + '/../hosts/lib/kuma_push.py') | indent(4, true) }}

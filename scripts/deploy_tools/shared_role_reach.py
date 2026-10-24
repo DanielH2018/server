@@ -50,13 +50,14 @@ from pathlib import Path
 from deploy_tools.land_lib import land_tags
 from lib.git import git
 from lib.narrow_git import CannotNarrow
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 from narrow_setup import changed_keys
 
 # `deploy_logic` lives under the gitops_deploy role, for the reason `deploy_tags.py` records
 # beside its own copy of this insert. The import itself is function-local, in `_comment_only`.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+_sys.path.insert(0, str(HOST_LIB_FILES))
 # The trees a template can live in. `ansible/templates/` is the shared macro directory; under
 # a role, only `templates/` renders. `files/` is shipped verbatim, so a key cannot reach it by
 # name and it needs no grep — the path rule below refuses it outright.

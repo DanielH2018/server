@@ -97,8 +97,8 @@ Longhorn RecurringJobs left at H1.7b, and their contract is the `longhorn-backup
   through `logger`, which is evidence only because checks 9 and 10 of `longhorn-backup-health.sh`
   read it, matching each line AS WRITTEN. `docs/k3s-node-plane-crons-and-incidents.md` names the
   regex and the file to edit together. ENFORCED:
-  `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`,
-  `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone`.
+  `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`,
+  `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone`.
 - **Next-run review:** read the B2 ledger and the drill's `/var/log` records before widening
   scope.
 

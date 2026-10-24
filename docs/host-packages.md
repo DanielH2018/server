@@ -84,7 +84,8 @@ changes. The grammar and the validations are the docstring of
   `homelab_host_reboot_pending{host}` and `homelab_host_activation_pending{host,unit}` in
   `homelab_host_reconcile.prom`, beside the updater's `homelab_host.prom`.
 - **Drift is not a failure.** `homelab_host_reconcile_drift{host,arm}` counts items an arm
-  left alone on purpose: UFW rules the floor kept, and legacy services that are still running.
+  left alone on purpose: UFW rules the floor kept, libvirt objects a running guest still
+  references, users the floor kept, and legacy services that are still running.
   The run succeeds, so a revert still updates the host. The `host_packages` check names a
   non-zero count in its message and does not go down. To retry the items before the host's next
   package version, run `sudo systemctl start homelab-reconcile.service` on the host
@@ -120,6 +121,66 @@ names a spec a declaration shares never deletes it, because that rule is the ado
 Reconcile enables UFW only when `ufw status` reads `Status: inactive`, and only once the keep
 rules `ssh-limit` and `lan-ssh` are declared and present. A rebuilt host is the case it exists
 for. The live hosts are active, so there the step does nothing.
+
+## The users, libvirt and line arms
+
+Three more arms of reconcile keep state that `dpkg` does not hold. Each has the same early exit
+as the UFW arm: a manifest that declares nothing for the arm, and has never declared anything,
+makes the arm run no command at all. The keys a component writes are the docstring of
+`scripts/renderer/renderer_lib/host_arms.py`, and each arm's manifest schema is the docstring of
+its module in `hosts/lib/reconcile_lib/`.
+
+| Arm | A component declares | The arm keeps | A fault holds the host | Drift never holds it |
+|---|---|---|---|---|
+| `users` | `users:` with a fixed uid per user | the users, created by `systemd-sysusers` from `/usr/lib/sysusers.d/homelab.conf` | a declared uid that differs from the live uid, a user still missing after `systemd-sysusers` | a user the floor kept |
+| `libvirt` | `libvirt:` with networks and network filters, each XML pinning its name and UUID | the objects, defined when their XML hash changes or libvirt lost them | a failed define | a removal that libvirt refuses |
+| `lines` | `lines:` with line or block edits and an optional `activate:` | one anchored line or one marker-delimited block per edit | an edit of an owned file that is not a conffile | none |
+
+Reconcile runs the users arm and then the line arm before it starts any unit, so a unit that
+runs as a new user starts, and the activation step reads the file the line arm edited. It runs
+the libvirt arm and then the UFW arm last. The line arm therefore edits `/etc/ufw/sysctl.conf`
+before an enable of UFW applies it.
+
+- **The arms delete nothing they did not record.** The users arm expires a user that leaves the
+  list with `usermod --expiredate 1` and never deletes one. The libvirt arm removes only a name
+  its own record holds, so libvirt's `default` network is never touched. The line arm never
+  removes a line. Removing a user's home, or a line, is an operator step.
+- **An empty declaration is a floor.** A revert to a version that declares no users, or no
+  libvirt object, expires and removes nothing, and counts each recorded item as drift. Without
+  that floor a revert would remove the agent users or the staging network, and a host held
+  after a revert could never clear its hold.
+- **The line arm refuses an owned file unless it is a conffile.** It runs `dpkg -S` and then
+  `dpkg-query -W -f='${Conffiles}'` on each owner. An unowned file, and a conffile, take the
+  edit. Any other owned file is a fault: the package shipped something wrong. The arm
+  rewrites a file in place and keeps its owner and mode, because sshd rejects an
+  `authorized_keys` file with the wrong ones. Its regexp and markers equal the Ansible
+  task's, so the first run adopts the line or block Ansible wrote.
+- **The checks at render time run before the arm's.** A `lines:` entry whose line its own regexp
+  misses would be appended again on every run, and a libvirt XML without a `<uuid>` would make
+  `net-define` collide with the live object. Both fail the render.
+
+The container job does not yet run the line arm's two owning-package upgrade cases: an upgrade
+of the owning package that keeps the local conffile, and one that ships a changed conffile. The
+tests in `hosts/lib/tests/test_reconcile_lines_arm.py` cover the arm's side of both. The
+`dpkg` side is an open follow-up, because it needs the `host_packages` container job.
+
+### Getting a host out of one of these holds
+
+A fault in these arms holds the host like any failed reconcile. The updater stops installing
+until a version reconciles. `hosts/lib/tests/test_reconcile_hold_way_out.py` drives the real
+updater against the real reconcile through a uid mismatch. It proves that `--clear-hold` alone
+keeps the hold while the fault stands, and that installing a version which declares the live uid
+clears it. The commands are the ones in *Clearing a host's hold* (**operator-only**).
+
+## The `udev` arm
+
+Step 5 of reconcile reloads `udev` when a package's rule changes. A package ships a rule as
+`/usr/lib/udev/rules.d/NN-homelab-*.rules`. Reconcile hashes each such file and compares it with
+`udev` in `applied.json`. A rule that is new or whose hash differs runs
+`udevadm control --reload-rules` and then `udevadm trigger --subsystem-match=usb`. A host with no
+such rule, an unchanged rule and a dropped rule make no `udevadm` call. After a drop, a device
+keeps the mode of its last `udev` event until the next event, such as a re-plug, a trigger or a
+reboot. A failed call exits 1 and leaves the old hash, so the next run retries it.
 
 ## Clearing a deployer hold that a failed `homelab_builder` or `gitops_deploy` apply wrote
 
@@ -507,11 +568,15 @@ new version, which costs each host one install.
 ### `reason="no-green"` that persists: a renamed CI job
 
 The builder grades each commit over `CI_CONTEXTS`, which the role renders from
-`gitops_deploy_ci_contexts`. When a CI job is renamed, no commit carries the old context, so no
-commit is ever green. Change `gitops_deploy_ci_contexts` in
-`ansible/roles/setup/gitops_deploy/defaults/main.yml` to the new name, spelled exactly as
-`ci.yml`'s `name:`, and merge that. The tick re-applies both `gitops_deploy` and
-`homelab_builder`, because that defaults file is a cross-role row naming this role.
+`ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
+commit is ever green. Change `ci_required_contexts` in `ansible/inventory/group_vars/all.yml` to
+the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The key is a deploy-plane
+change, so the tick re-renders neither settings file. Re-apply both roles by hand on daniel-box
+(**operator-only**):
+
+```bash
+cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy,homelab_builder
+```
 
 ### `reason="keyring"`
 
@@ -530,14 +595,13 @@ procedure above. The first builder run after the fix builds.
 ### `reason="ci"`
 
 The builder refuses to grade anything, because `CI_CONTEXTS` is empty or
-`CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `gitops_deploy_ci_contexts` or
-`gitops_deploy_ci_ancestor_walk_max` in `ansible/roles/setup/gitops_deploy/defaults/main.yml`
-and merge it. The tick re-applies `homelab_builder`, which renders the builder's settings
-again. If the settings file on the host was edited or lost, re-apply the role by hand instead
+`CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `ci_required_contexts` or
+`ci_ancestor_walk_max` in `ansible/inventory/group_vars/all.yml`, merge it, and re-apply the
+role by hand, because the tick re-renders no settings file for that file
 (**operator-only**):
 
 ```bash
-uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
+cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
 ```
 
 ### `reason="token"` and `reason="build"`

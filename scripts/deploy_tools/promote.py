@@ -115,7 +115,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK
-from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
+from lib.repo_paths import HOST_LIB_FILES, REPO
 
 import bundle_census
 import forge
@@ -141,10 +141,10 @@ from deploy_tools.promote_lib.reads import (
     prod_commit,
 )
 
-# The deployer's own CI reduction, so a promotion and a tick agree on what green means.
-# deploy_git imports nothing, unlike deploy_logic, which re-exports the whole deployer.
-sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from deployer_lib.deploy_git import ci_verdict
+# The CI reduction every deploy path shares, so a promotion and a tick agree on what green
+# means. It moved to `hosts/lib/` in H7.2e so the deployer can retire without it.
+sys.path.insert(0, str(HOST_LIB_FILES))
+from ci_verdict import ci_verdict
 
 # The revert rule's switch (contract C2). Open question 11 of
 # docs/target-architecture/deploy/d2-first-leaf.md asks whether it turns on, and only the
@@ -152,8 +152,8 @@ from deployer_lib.deploy_git import ci_verdict
 REVERT_RULE = False
 
 # How many commits a first run's walk examines, newest first, so a walk with no `prod` stops
-# short of master's root. At about 124 merges a day (gitops_deploy_ci_ancestor_walk_max's
-# comment) 50 is several hours of merges, so the commit that triggered the run is inside it.
+# short of master's root. At about 124 merges a day (see `ci_ancestor_walk_max`) 50 is several
+# hours of merges, so the commit that triggered the run is inside it.
 FIRST_RUN_WALK_MAX = 50
 
 

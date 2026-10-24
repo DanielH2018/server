@@ -486,7 +486,7 @@ jobs:
   # as separate job ids (`pytest-1`, `pytest-2`, …) would instead make changing N a three-file
   # edit: the gate's `needs`, the gate's result comparison, and the guard's `KNOWN_JOBS` and
   # `GATE_READS` would each grow an entry per shard. Nothing outside this file names the bare
-  # `pytest` check-run — `gitops_deploy_ci_contexts` and `gitops_deploy_expected_ruleset_contexts`
+  # `pytest` check-run — `ci_required_contexts` and `gitops_deploy_expected_ruleset_contexts`
   # both name only "prek (lint + validate + tests + secrets)" — so renaming the legs costs nothing.
   #
   # `fail-fast: false` for the reason the `hooks` job states above: one shard's failure must not

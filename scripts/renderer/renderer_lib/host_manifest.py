@@ -8,10 +8,11 @@ A host package installs `/usr/lib/homelab/manifest.json` (H3, *Shared names*), i
 - `enable_links` lists each unit the host package links from a `<target>.wants/`
   directory;
 - `legacy` holds the host package's legacy entries, each value rendered;
-- `reconcilers` lists "ufw" when the package declares rules (H7.2b);
+- `reconcilers` lists each arm the package declares state for (H7.2b to H7.2d);
 - `activations` maps each file with an `activate:` field to its action (H7.2a), and the
   updater's files join the host package's;
-- `ufw` holds the rules and legacy rules of the ufw arm, present only with "ufw" listed;
+- `ufw`, `libvirt`, `users` and `lines` hold the declarations of those arms (`host_arms.py`),
+  each present only with its arm listed;
 - `secrets_inputs_sha256` is present only for a package that ships the `secrets-unit` component.
 
 A package or component may also carry `units`, a policy for each unit reconcile must not
@@ -51,7 +52,7 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from renderer.renderer_lib.cluster import RenderRefused
-from renderer.renderer_lib.host_arms import ufw_section
+from renderer.renderer_lib.host_arms import add_sysusers, arm_sections
 
 
 UNIT_DIR = PurePosixPath("/usr/lib/systemd/system")
@@ -86,6 +87,9 @@ class Package(Protocol):
     activations: dict[str, str]
     ufw_rules: list[dict]
     ufw_legacy: list[dict]
+    libvirt: dict[str, list[dict]]
+    users: list[dict]
+    lines: list[dict]
 
     def units(self) -> list[str]: ...
 
@@ -124,7 +128,7 @@ def manifest(package: Package, updater: Package | None) -> dict:
             f"{package.name}: enable links name {unlisted}, which no package installs "
             "or drops in on"
         )
-    section = ufw_section(package.name, package.ufw_rules, package.ufw_legacy)
+    sections = arm_sections(package)
     activations = {**(updater.activations if updater else {}), **package.activations}
     result = {
         "units": {
@@ -134,12 +138,11 @@ def manifest(package: Package, updater: Package | None) -> dict:
         "enable_links": links,
         "legacy": package.legacy,
         # Reconcile fails a run that lists a reconciler kind it does not have.
-        "reconcilers": ["ufw"] if section else [],
+        "reconcilers": list(sections),
+        **sections,
     }
     if activations:
         result["activations"] = dict(sorted(activations.items()))
-    if section:
-        result["ufw"] = section
     # Only a package that ships the `secrets-unit` component carries the field, so reconcile keys
     # its secrets step on it (H4, *The restart contract*).
     if package.secrets_inputs_sha256:
@@ -151,6 +154,7 @@ def add_manifest(package: Package, updater: Package | None) -> None:
     """Install the manifest in `package`, a host package with `updater` beside it."""
     if MANIFEST in package.files:
         raise RenderRefused(f"{package.name}: {MANIFEST} is the rendered manifest")
+    add_sysusers(package)
     text = json.dumps(manifest(package, updater), indent=1, sort_keys=True) + "\n"
     package.files[MANIFEST] = (text.encode(), 0o644)
 

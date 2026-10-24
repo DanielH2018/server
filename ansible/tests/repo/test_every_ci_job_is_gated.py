@@ -97,7 +97,7 @@ def ungated_jobs(workflow_text: str, required_contexts: set[str]) -> set[str]:
 
 def _ruleset_contexts() -> set[str]:
     """The merge gate, read from the YAML defaults as a literal list -- the same regex shape the
-    sibling guard uses for `gitops_deploy_ci_contexts`."""
+    sibling guard uses for the deployer's role defaults."""
     text = (
         REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
     ).read_text()

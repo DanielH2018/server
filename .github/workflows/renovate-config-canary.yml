@@ -12,7 +12,7 @@ name: renovate-config-canary
 # and a daily run lands in one of those windows minutes-per-day rather than every merge.
 #
 # A red run here is on whatever SHA is master's head at 09:00 UTC; it is not that commit's
-# verdict. The deployer never reads this context (`gitops_deploy_ci_contexts` names only the
+# verdict. The deployer never reads this context (`ci_required_contexts` names only the
 # prek gate), and it is not a required merge context — the PR-scoped job in ci.yml is.
 #
 # It is its own workflow rather than a `schedule:` on ci.yml because a schedule trigger there

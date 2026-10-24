@@ -30,18 +30,16 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill.py
 """
 
 import re
-import sys
 from pathlib import Path
 
 from _helpers import load_yaml
 from _shell_render import rendered_shell_text
-from lib.repo_paths import K3S_DEFAULTS, K3S_FILES, K3S_ROLE
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
 
 DRILL = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
 CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 
-sys.path.insert(0, str(K3S_FILES))
 from longhorn_lib import longhorn_backup_health_logic as logic  # noqa: E402
 
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z

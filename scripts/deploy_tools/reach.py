@@ -20,7 +20,7 @@ THREE READINGS, NOT ONE. The callers ask three different questions of the same p
   reversion that refusal exists to stop.
 
 The first two disagreed on 3 of the last 400 master commits on 2026-10-10. Two were a change
-to `roles/setup/common/files/host_lib.py`, which `changes` mapped to configarr and janitorr
+to `hosts/lib/host_lib.py`, which `changes` mapped to configarr and janitorr
 (they install a copy) and `tags` mapped to nothing. A landing then deployed neither, and their
 copies stayed stale behind a green master, because the tick only defer-and-alerts a k8s role.
 `tags` reads the same table since #4136. The third was monitor-bridge's `check_table.py`,
@@ -45,10 +45,12 @@ from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+
+sys.path.insert(0, str(HOST_LIB_FILES))
 from deployer_lib import deploy_cross_role
 from deployer_lib.deploy_logic import (
     ChangeSet,

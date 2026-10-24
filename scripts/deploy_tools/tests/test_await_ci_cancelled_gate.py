@@ -9,7 +9,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_await_ci_cancelled_gate.py
 
 import await_ci
 from lib.exit_codes import CI_PENDING
-from deployer_lib.deploy_git import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
+from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
 
 REQUIRED = frozenset({CI_GATE_NAME})
 # Suite 7's jobs were cancelled and its gate failed on them, as run 39791122833 attempt 1 did.

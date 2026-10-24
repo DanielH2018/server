@@ -51,7 +51,7 @@ from pathlib import Path as _Path
 import time
 import urllib.request
 
-# host_lib.py is the setup roles' shared host module and stays in ansible/roles/setup/common/files/.
+# host_lib.py is the setup roles' shared host module and stays in hosts/lib/.
 # The entry point puts only its own directory on sys.path, so both inserts are needed: the
 # package's parent for `longhorn_reap_lib`, and scripts/ for `lib`.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/backup/

@@ -30,7 +30,7 @@ CONFIG_MAP_FILE = "script-configmap.yaml"
 MODULES = {
     "autofix.py": ANSIBLE / "roles/k8s/autofix-bridge/files/autofix.py",
     "bridge_common.py": ANSIBLE / "roles/k8s/monitor-bridge/files/bridge/common.py",
-    "kuma_push.py": ANSIBLE / "roles/setup/common/files/kuma_push.py",
+    "kuma_push.py": ANSIBLE.parent / "hosts/lib/kuma_push.py",
     "jobs_metrics.py": ANSIBLE / "roles/k8s/crowdsec/files/jobs_metrics.py",
 }
 ALL = frozenset({"ConfigMap", "Secret"})

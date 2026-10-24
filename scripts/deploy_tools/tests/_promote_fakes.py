@@ -25,7 +25,7 @@ from deploy_tools.promote_lib import reboot_window
 CONTEXT = "prek (lint + validate + tests + secrets)"
 # The wall-clock time `decide` runs at, so a gate status's age is fixed.
 NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
-CONTEXTS_YAML = f"gitops_deploy_ci_contexts:\n  - {CONTEXT}\n"
+CONTEXTS_YAML = f"ci_required_contexts:\n  - {CONTEXT}\n"
 # The weekly reboot as group_vars/all.yml states it: the cron fires Sunday 07:30 UTC, the hosts
 # go down at 07:35 and M2's mute ends at 08:15. NOW is a Friday, outside every window.
 REBOOT_YAML = (
@@ -304,12 +304,11 @@ class World:
         self.repo.mkdir()
         self.tmp_path = tmp_path
         _git(self.repo, "init", "-q", "-b", "master")
-        contexts = self.repo / promote.CI_CONTEXTS_SOURCE
-        contexts.parent.mkdir(parents=True)
-        contexts.write_text(contexts_yaml)
-        reboot = self.repo / reboot_window.SOURCE
-        reboot.parent.mkdir(parents=True)
-        reboot.write_text(REBOOT_YAML)
+        # The contexts and the reboot schedule are both keys of group_vars/all.yml since H7.2e.
+        assert promote.CI_CONTEXTS_SOURCE == str(reboot_window.SOURCE)
+        source = self.repo / promote.CI_CONTEXTS_SOURCE
+        source.parent.mkdir(parents=True)
+        source.write_text(contexts_yaml + REBOOT_YAML)
         _git(self.repo, "add", ".")
         _git(self.repo, "commit", "-q", "-m", "c0")
         for n in range(1, size):

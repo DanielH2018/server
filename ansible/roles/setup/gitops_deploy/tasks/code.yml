@@ -11,6 +11,21 @@
     mode: "0750"
   become: true
 
+# `deploy_git.py` imports the CI gate from `hosts/lib/ci_verdict.py` by bare name (H7.2e), so this
+# lands before the loop below: a `deploy_git.py` that arrives first would fail at import on the
+# next tick. The file is not in this role's files/, so the ship-list test asserts its copy and its
+# stamp pair directly, as it does for host_lib.py.
+- name: Install the CI gate module beside the deployer
+  tags: [gitops-deploy-code]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../hosts/lib/ci_verdict.py"
+    dest: /opt/gitops-deploy/ci_verdict.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+  notify: Run gitops-deploy once
+
 - name: Install deployer Python files
   tags: [gitops-deploy-code]
   # The libraries come before the entry point, which imports them from deployer_lib/. One file
@@ -188,6 +203,8 @@
       - live: /opt/gitops-deploy/deployer_lib/deploy_setup_roles.py
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_setup_roles.py
       - live: /opt/gitops-deploy/host_lib.py
-        src: ansible/roles/setup/common/files/host_lib.py
+        src: hosts/lib/host_lib.py
       - live: /opt/gitops-deploy/kuma_push.py
-        src: ansible/roles/setup/common/files/kuma_push.py
+        src: hosts/lib/kuma_push.py
+      - live: /opt/gitops-deploy/ci_verdict.py
+        src: hosts/lib/ci_verdict.py

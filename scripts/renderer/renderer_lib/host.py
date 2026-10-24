@@ -72,7 +72,7 @@ from renderer.renderer_lib.host_sources import (
     file_mode,
     lib_source,
 )
-from renderer.renderer_lib.host_arms import add_activation, add_ufw
+from renderer.renderer_lib.host_arms import ARM_KEYS, add_activation, add_arms, has_arms
 from renderer.renderer_lib.host_outputs import (
     SECRETS_COMPONENT,
     add_credentials,
@@ -124,8 +124,8 @@ PACKAGE_KEYS = frozenset(
         "maintainer_scripts",
         "outputs",
         "tools",
-        "ufw",
         "units",
+        *ARM_KEYS,
     }
 )
 COMPONENT_KEYS = frozenset(
@@ -137,8 +137,8 @@ COMPONENT_KEYS = frozenset(
         "files",
         "legacy",
         "outputs",
-        "ufw",
         "units",
+        *ARM_KEYS,
     }
 )
 
@@ -208,8 +208,10 @@ def render_package(
         raise RenderRefused(
             f"{name}: a shared package lists no enable link; its host package does"
         )
-    if package.ufw_rules or package.ufw_legacy:
-        raise RenderRefused(f"{name}: a shared package declares no ufw rule")
+    if has_arms(package):
+        raise RenderRefused(
+            f"{name}: a shared package declares no ufw, libvirt, users or lines"
+        )
     return package
 
 
@@ -383,8 +385,8 @@ def _render_unit(
     enable = spec.get("enable") or {}
     legacy = spec.get("legacy") or []
     outputs = spec.get("outputs") or []
-    ufw = spec.get("ufw") or {}
-    if not (files or legacy or enable or outputs or ufw):
+    arms = {key: spec[key] for key in ARM_KEYS if spec.get(key)}
+    if not (files or legacy or enable or outputs or arms):
         return
     ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
     env = renderer_env(directory)
@@ -395,13 +397,13 @@ def _render_unit(
         enable,
         lambda expression: _evaluate(env, expression, ctx, reasons, directory),
     )
-    if ufw:
-        add_ufw(
-            package,
-            directory,
-            ufw,
-            lambda text: _render_string(env, text, ctx, reasons, directory),
-        )
+    add_arms(
+        package,
+        directory,
+        arms,
+        lambda text: _render_string(env, text, ctx, reasons, directory),
+        lambda src: _render_template(env, src, ctx, reasons, directory),
+    )
     for entry in legacy:
         package.legacy.append(
             legacy_entry(

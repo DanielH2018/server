@@ -1,20 +1,20 @@
 {
-  "checksum": "f7495a3de16990b8d4ae3ade553b10059c5e184f43b3383f6727256328d6ae38",
+  "checksum": "537ad20e985f220da63008ac8facaa13012f612a4133606c9f9333f9a7c8f7af",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)",
   "row": {
     "atoms": {
-      "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim": "c17914fa068a16f0200a5cd0e92549ef4829ad93ef9501164f5570740e1541ee",
-      "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone": "dd206de45f2815a17b80c6f1f87c6d44651a8c31ce677ea1969daa5cb7d0fde1",
       "ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_setup_role_schedules_a_reaper": "852f2d6c0e3b2403dcf0d9190f9598efc49245694a70fe4b0249abced8946e6e",
       "ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py::test_an_undeclared_volume_still_fails_with_no_files": "e79abead2a2106c7a72e35790d42f3602e41a2dbb670db50cbd35c2bcc38f0e7",
       "ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py::test_a_filled_declared_volume_fails_and_stamps_nothing": "78f0614543c4881513dd66e55af8a1d1aff20b55321ffa494f807a52d3a99855",
       "ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick": "337fb955a69cfc8948e872fdfc65c709c551521fdb5a386d5ab9799a5f2bcb81",
       "ansible/tests/longhorn/test_longhorn_restore_drill_retry.py::test_a_retry_already_spent_leaves_the_rotation_alone": "68f0b43a183a12ed13ba672b821a4d0f1aebd047df68bf97e660e812f9451139",
       "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d",
-      "scripts/backup/longhorn_reap.py": "2feda27422b057e12c3a9edbf594b40d6786d7fdc9b4cca65c25cb7875911619"
+      "scripts/backup/longhorn_reap.py": "2feda27422b057e12c3a9edbf594b40d6786d7fdc9b4cca65c25cb7875911619",
+      "scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim": "c17914fa068a16f0200a5cd0e92549ef4829ad93ef9501164f5570740e1541ee",
+      "scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone": "dd206de45f2815a17b80c6f1f87c6d44651a8c31ce677ea1969daa5cb7d0fde1"
     },
     "python": "3.14",
-    "verified_sha": "8f78be964"
+    "verified_sha": "752dd7269"
   }
 }

@@ -26,7 +26,7 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
    `commit` can match what the reader compares against. A second fetcher would contend with the
    deployer's for the ref locks.
 2. It picks the newest commit there whose CI is green, with the deployer's own rule:
-   `deploy_toolbox.fetch_ci_verdict` and `deploy_git.ci_walk_candidates`, imported from
+   `deploy_toolbox.fetch_ci_verdict` and `ci_verdict.ci_walk_candidates`, imported from
    `/opt/gitops-deploy` rather than copied. The CI settings come from the deployer's
    `config.env`, and so does the primary checkout's path (`REPO_DIR`).
 3. It moves its own detached, locked worktree (`render_records_checkout_dir`) to that commit.

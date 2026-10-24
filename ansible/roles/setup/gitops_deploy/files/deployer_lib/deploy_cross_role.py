@@ -39,6 +39,8 @@ _HOST_LIB = frozenset(
         "renovate_notify",
     }
 )
+_K3S = frozenset({"k3s"})
+_LH = "scripts/lib/longhorn_lib"
 _STAMPED = _HOST_LIB | {"claude_code", "deploy_ui", "initial_setup"}
 _KUMA_CHECK = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
 _ALERT_UNIT = frozenset(
@@ -55,8 +57,19 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/unit-failure-alert.service.j2": _ALERT_UNIT,
     f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
     f"{_COMMON}/tasks/agent_user.yml": frozenset({"claude_code", "renovate_agent"}),
-    f"{_COMMON}/files/host_lib.py": _HOST_LIB,
-    f"{_COMMON}/files/kuma_push.py": _HOST_LIB,
+    # `hosts/lib/` since H7.2e: the packages ship it, and the Ansible consumers below still copy
+    # it beside their scripts until their own PRs move them. `ci_verdict.py` is the deployer's
+    # alone (`gitops_deploy/tasks/code.yml` copies it), and the longhorn_lib modules are the
+    # k3s role's backup-health reader's (`k3s/tasks/health-crons.yml` copies them).
+    "hosts/lib/host_lib.py": _HOST_LIB,
+    "hosts/lib/kuma_push.py": _HOST_LIB,
+    "hosts/lib/ci_verdict.py": frozenset({"gitops_deploy"}),
+    f"{_LH}/longhorn_backup_health_logic.py": _K3S,
+    f"{_LH}/longhorn_backups.py": _K3S,
+    f"{_LH}/longhorn_cluster_state.py": _K3S,
+    f"{_LH}/longhorn_cron_evidence_logic.py": _K3S,
+    f"{_LH}/longhorn_restore_drill_stamps.py": _K3S,
+    f"{_LH}/longhorn_skipped_volumes_logic.py": _K3S,
     f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
     f"{_COMMON}/tasks/kuma_check_timer.yml": _KUMA_CHECK,
     f"{_COMMON}/templates/kuma-check.service.j2": _KUMA_CHECK,
@@ -119,10 +132,10 @@ SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
 # readers stage host_lib.py and kuma_push.py into their CronJobs' ConfigMaps, so no k8s role
 # imports install_host_lib.yml or stamp_deployed.yml any more.
 K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
-    f"{_COMMON}/files/host_lib.py": frozenset({"configarr", "janitorr"}),
+    "hosts/lib/host_lib.py": frozenset({"configarr", "janitorr"}),
     # autofix-bridge, configarr, crowdsec, janitorr and uptime-kuma stage it into a pod's
     # ConfigMap (#3745); crowdsec's is its crowdsec-jobs sidecar's, since H2.4b.
-    f"{_COMMON}/files/kuma_push.py": frozenset(
+    "hosts/lib/kuma_push.py": frozenset(
         {"autofix-bridge", "configarr", "crowdsec", "janitorr", "uptime-kuma"}
     ),
 }
@@ -285,6 +298,16 @@ def k8s_roles_holding(path: str) -> frozenset[str]:
     return globals()["K8S_ROLES_IMPORTING_SETUP_FILES"].get(
         path, frozenset()
     ) | globals()["K8S_BUILD_CONTEXT_FILES"].get(path, frozenset())
+
+
+def setup_roles_outside_the_tree(path: str) -> set[str]:
+    """The setup roles a file outside `roles/setup/` re-applies.
+
+    They are the filter plugins' callers and the roles that install a shared module from
+    `hosts/lib/` or `scripts/lib/` (H7.2e). Read from this module's globals, like the others.
+    """
+    callers = globals()["SETUP_ROLES_CALLING_FILTER_PLUGINS"].get(path, ())
+    return {*callers, *globals()["SETUP_FILES_SHIPPED_BY_OTHER_ROLES"].get(path, ())}
 
 
 def owner_routed_consumers(owner: str) -> frozenset[str]:

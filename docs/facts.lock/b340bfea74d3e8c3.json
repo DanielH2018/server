@@ -1,0 +1,17 @@
+{
+  "checksum": "ba224caf38937a76faaefbf850307d9601e047f2dd12b5654214296468f7d532",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/common/CLAUDE.md#`setup/common` — task files the other setup roles import",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only": "2122e7f858854cabb3ce4c0423d471ffb5e1ac21efbab355f2abefe3041433cf",
+      "ansible/tests/setup/test_alert_unit.py": "9242c911a99a94490915ad95d4b6f280aeda78a26cdb42eead43acf5272d9fc3",
+      "ansible/tests/setup/test_kuma_check_timer.py": "681c1867a51d5de668b53f4b608b6bc0ce05391b87c4d6157a9661452454d13b",
+      "hosts/lib/host_lib.py": "f825874cb8265053e2398c593b82682ef3d7f72aa09027108eebd2576734f8d2",
+      "hosts/lib/kuma_push.py": "dda25edf6dc616c1880cea3f80920da0e7d7982d0c06bab40e5ddc91fbb7e830",
+      "hosts/lib/tests/": "0d07fe612cd335ee9bdfac0e2a62ea4e263a35c7b0709fbcb0a24b2a6ed8024b"
+    },
+    "python": "3.14",
+    "verified_sha": "65b1917f5"
+  }
+}

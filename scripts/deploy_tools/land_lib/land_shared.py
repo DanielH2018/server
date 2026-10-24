@@ -33,11 +33,13 @@ import json
 
 from deploy_tools.deploy_lib import tags as deploy_tags
 from lib.k8s_roles import role_callers
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_VARS, ROLES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, HOST_VARS, ROLES
 from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_caller
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+
+_sys.path.insert(0, str(HOST_LIB_FILES))
 from deployer_lib.deploy_logic import role_of
 
 # The path-to-role mapper and the test-path rule live in `reach`, the module that answers

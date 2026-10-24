@@ -10,7 +10,8 @@ state.json keys:
     installed: package -> [three-letter dpkg status, version].
     units: unit -> {"load": loaded|masked|not-found, "active": active|inactive|failed,
         "enabled": enabled|disabled|static}. A unit missing here is not loaded.
-    fail: "<verb> <unit>" strings, each a systemctl call that exits 1.
+    fail: "<verb> <unit>" strings, each a systemctl call that exits 1, and "udevadm <subcommand>"
+        strings, each a udevadm call that exits 1.
     owned: paths `dpkg -S` reports a package owns.
     crontabs: user -> crontab text. A user missing here has no crontab.
     effects: "<verb> <unit>" -> {"write": {absolute path: text}, "queue": [unit, ...]}, what a
@@ -27,8 +28,11 @@ state.json keys:
         "reorder_on_enable" reverses the rules when ufw is enabled. `ufw status` prints only
         `Status: inactive` while inactive, which is why the arm reads
         `ufw show added`.
+    users, sysusers, expired, libvirt, conffiles: the users, libvirt and lines arms' state,
+        documented in `_reconcile_arms_stub.py`, which also holds those arms' commands.
 """
 
+import _reconcile_arms_stub as arms
 import fcntl
 import fnmatch
 import json
@@ -68,6 +72,8 @@ def hostname(state: dict, args: list[str]) -> int:
 
 
 def dpkg_query(state: dict, args: list[str]) -> int:
+    if args[2].startswith("${Conffiles}"):
+        return arms.conffiles(state, args[3])
     code = 0
     for package in args[3:]:
         if package in state["installed"]:
@@ -199,6 +205,13 @@ def fail2ban_client(state: dict, args: list[str]) -> int:
     return refusing(state, "fail2ban-client")
 
 
+def udevadm(state: dict, args: list[str]) -> int:
+    if f"udevadm {args[0]}" in state["fail"]:
+        print(f"udevadm {args[0]} failed.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def ufw(state: dict, args: list[str]) -> int:
     model = state["ufw"]
     rules = model["rules"]
@@ -278,6 +291,8 @@ HANDLERS = {
     "sshd": sshd,
     "fail2ban-client": fail2ban_client,
     "ufw": ufw,
+    "udevadm": udevadm,
+    **arms.HANDLERS,
 }
 
 if __name__ == "__main__":
