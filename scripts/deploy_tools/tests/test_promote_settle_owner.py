@@ -172,3 +172,11 @@ def test_a_superseding_move_after_last_good_moved_moves_nothing_is_flagged(
     )
     assert (result.returncode, calls, output) == (0, [], "")
     assert "settled first" in result.stdout
+
+
+def test_a_hold_after_a_supersession_names_the_superseded_commit(tmp_path, jobs):
+    """The hold names T alone, so the log names the run whose change T also carried (#6199)."""
+    result, calls = _settle(tmp_path, jobs, SUPERSEDES="b" * 40)
+    assert result.returncode == 0, result.stderr
+    assert calls[0] == HOLD
+    assert f"superseded the verification of {'b' * 40}" in result.stdout
