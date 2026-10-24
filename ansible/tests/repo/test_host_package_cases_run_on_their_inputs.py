@@ -1,13 +1,14 @@
 """A PR that changes only the container cases' inputs runs those cases, on both legs (#5004).
 
-`host_packages` in ci.yml runs its container cases (H3.3b) when step 2's render diff reports
-`changed=true`, or on a dispatch. The cases' own inputs are not render inputs: the test image's
+`host_packages` in ci.yml runs its container cases (H3.3b) when the render diff in
+`host_packages_build` reports `changed=true`, or on a dispatch. The cases' own inputs are not render inputs: the test image's
 Dockerfile, the fixture specs under `hosts/lib/tests/container/fixture/`, and the scripts that
 drive the cases. A PR touching only those changes no render, so its run skipped the cases and
 merged green without them.
 
-HOW THE JOB IS SIMULATED. Each test builds a PR merge ref in a scratch clone of this repository
-that commits one edit to one input. It then walks the job's steps in order, up to the cases step:
+HOW THE JOBS ARE SIMULATED. Each test builds a PR merge ref in a scratch clone of this repository
+that commits one edit to one input. It then walks the build job's steps in order, resolves that
+job's `outputs:` into the `needs` context, and walks the cases job's steps up to the cases step:
 
 - A step with both an `id:` and a `run:` whose `if:` holds is RUN, as the runner would run it.
   The clone is its working directory and its `$GITHUB_WORKSPACE`. Its own `env:` block is
@@ -21,6 +22,8 @@ that commits one edit to one input. It then walks the job's steps in order, up t
   would. The simulation fails unless the step makes exactly two `render` calls and one `diff`
   call, so a renamed subcommand cannot turn the stub into a silent no-op.
 - Every other step is not run: the nfpm fetch, the builds and the cases themselves.
+- The cases job's steps are only evaluated, against a `steps` context of their own, as on the
+  runner: a cases step that read the build job's `steps.render` would see nothing there.
 
 The render is stubbed as unchanged because no input this module edits is a render input, so the
 real diff reports `changed=false` for each. That is the worst case for the trigger: the cases
@@ -49,6 +52,7 @@ from lib.git_testing import git, git_out, scrubbed_env
 from lib.proc_testing import fake_bin, run
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
+BUILD_JOB = "host_packages_build"
 JOB = "host_packages"
 
 RENDER_ID = "render"
@@ -165,7 +169,7 @@ def _simulate(
         StepFailed: a step exited non-zero.
     """
     workflow = yaml_fast.safe_load(CI_WORKFLOW.read_text())
-    job = workflow["jobs"][JOB]
+    build, job = workflow["jobs"][BUILD_JOB], workflow["jobs"][JOB]
     runner_temp = tmp_path / "runner-temp"
     runner_temp.mkdir(parents=True)
     context: dict = {
@@ -191,25 +195,21 @@ def _simulate(
         },
         "matrix": leg,
         "steps": {},
+        "needs": {},
         "env": {},
         "runner": {"temp": str(runner_temp), "os": "Linux"},
         "secrets": {},
         "vars": {},
         "inputs": {},
     }
-    for scope in (workflow.get("env") or {}, job.get("env") or {}):
+    for scope in (workflow.get("env") or {}, build.get("env") or {}):
         context["env"].update({k: interpolate(v, context) for k, v in scope.items()})
 
     verdicts: dict[str, bool] = {}
-    for index, step in enumerate(job["steps"]):
+    for index, step in enumerate(build["steps"]):
         name = step.get("name", step.get("uses", f"step {index}"))
         holds = condition(step, context)
         verdicts[name] = holds
-        if name == CASES_STEP:
-            context["cases_env"] = {
-                k: interpolate(v, context) for k, v in (step.get("env") or {}).items()
-            }
-            return verdicts, context
         if not (holds and "id" in step and "run" in step):
             continue
         output = runner_temp / f"output-{index}"
@@ -256,6 +256,25 @@ def _simulate(
             "outcome": "success",
             "conclusion": "success",
         }
+
+    outputs = {
+        k: interpolate(v, context) for k, v in (build.get("outputs") or {}).items()
+    }
+    context["needs"][BUILD_JOB] = {"outputs": outputs, "result": "success"}
+    build_steps, context["steps"] = context["steps"], {}
+    context["env"] = {}
+    for scope in (workflow.get("env") or {}, job.get("env") or {}):
+        context["env"].update({k: interpolate(v, context) for k, v in scope.items()})
+    for index, step in enumerate(job["steps"]):
+        name = step.get("name", step.get("uses", f"step {index}"))
+        verdicts[name] = condition(step, context)
+        if name == CASES_STEP:
+            context["cases_env"] = {
+                k: interpolate(v, context) for k, v in (step.get("env") or {}).items()
+            }
+            # The callers read the render step's outputs, which only the build job holds.
+            context["steps"] = build_steps
+            return verdicts, context
     raise AssertionError(f"job {JOB} has no step named {CASES_STEP!r}")
 
 
@@ -367,6 +386,55 @@ def test_a_pr_editing_only_the_cases_step_runs_the_cases(
         assert verdicts[CASES_STEP], (
             f"a PR editing only the cases step skips it on leg {leg} "
             f"(render outputs {context['steps']['render']['outputs']})"
+        )
+
+
+HANDOFF_INVOCATION = "render debs bin/nfpm"
+
+
+def test_a_pr_editing_only_the_build_job_runs_the_cases(
+    clone: Path, tmp_path: Path
+) -> None:
+    """The build job makes what the cases read, so editing its hand-off alone runs them (#6151)."""
+    workflow = ".github/workflows/ci.yml"
+    git(clone, "checkout", "-q", "--detach", "master")
+    git(clone, "checkout", "-q", "-B", "pr-build-step")
+    target = clone / workflow
+    text = target.read_text()
+    assert text.count(HANDOFF_INVOCATION) == 1, (
+        f"{workflow} lost {HANDOFF_INVOCATION!r}"
+    )
+    target.write_text(text.replace(HANDOFF_INVOCATION, "render debs ./bin/nfpm"))
+    git(clone, "commit", "-q", "-am", "edit the build job")
+    git(clone, "checkout", "-q", "--detach", "master")
+    git(clone, "merge", "-q", "--no-ff", "--no-edit", "pr-build-step")
+    for number, leg in enumerate(_legs()):
+        verdicts, context = _simulate(clone, tmp_path / f"leg-{number}", leg)
+        assert verdicts[CASES_STEP], (
+            f"a PR editing only {BUILD_JOB} skips the cases on leg {leg} "
+            f"(render outputs {context['steps']['render']['outputs']})"
+        )
+
+
+def _artifacts(job: dict, action: str) -> set[str]:
+    """The artifact names a job's `actions/<action>-artifact` steps name."""
+    return {
+        step["with"]["name"]
+        for step in job["steps"]
+        if str(step.get("uses", "")).startswith(f"actions/{action}-artifact@")
+    }
+
+
+def test_the_arm64_job_and_the_cases_legs_wait_for_the_build_alone() -> None:
+    """#6151: neither consumer waits for the other, and each reads what the build uploads."""
+    jobs = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]
+    built = _artifacts(jobs[BUILD_JOB], "upload")
+    for consumer in (JOB, "host_tools_arm64"):
+        assert jobs[consumer]["needs"] == ["prove", BUILD_JOB], consumer
+        downloads = _artifacts(jobs[consumer], "download")
+        assert downloads, f"{consumer} downloads nothing from {BUILD_JOB}"
+        assert downloads <= built, (
+            f"{consumer} downloads {downloads - built}, never uploaded"
         )
 
 

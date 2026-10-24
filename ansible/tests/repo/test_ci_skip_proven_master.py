@@ -34,22 +34,26 @@ PROOF_CONDITION = (
 )
 DEPENDENTS = (
     "hooks",
+    "pr_gates",
     "pytest",
     "ansible_lint",
     "deck_mod",
     "flux_roundtrip",
     "sops_manifest_type_proof",
+    "host_packages_build",
     "host_packages",
     "host_tools_arm64",
 )
 # The env names the gate's script reads, one per dependency, in the order of DEPENDENTS.
 GATE_ENV = (
     "HOOKS",
+    "PR_GATES",
     "PYTEST",
     "ANSIBLE_LINT",
     "DECK_MOD",
     "FLUX_ROUNDTRIP",
     "SOPS_TYPE_PROOF",
+    "HOST_PACKAGES_BUILD",
     "HOST_PACKAGES",
     "HOST_TOOLS_ARM64",
 )
@@ -98,7 +102,8 @@ def test_the_prove_job_runs_on_a_push_only_and_reads_the_tested_tree_script():
 def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
     jobs = _jobs()
     for job in DEPENDENTS:
-        # `host_tools_arm64` also waits for `host_packages`, whose build it installs (H3.11).
+        # `host_tools_arm64` and `host_packages` also wait for `host_packages_build`, whose
+        # build they read (H3.11, #6151).
         needs = (
             [jobs[job]["needs"]]
             if isinstance(jobs[job]["needs"], str)

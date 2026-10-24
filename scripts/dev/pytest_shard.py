@@ -10,12 +10,14 @@ one xdist worker so a module-scoped fixture is built once. Splitting a module ac
 would rebuild those fixtures per shard and give the saving straight back.
 
 WHY WEIGHTS, AND NOT A HASH. A stable hash of the module path is the obvious split and it
-balances badly here: the suite's cost is concentrated, not flat. Measured against a
-serial `--durations=0` run of the whole suite (103.6s over 505 files), projected pole shard at
-N=4 was 42.7s for a sha256 split and 39.8s for a greedy split weighted by the number of `def
-test_` in each file, against 24.9s for a greedy split weighted by measured per-file seconds —
-an even split being 25.9s. File byte size fared no better than the hash (36.2s). So the split
-is longest-processing-time bin packing over recorded per-file durations.
+balances badly here: the suite's cost is concentrated, not flat. Measured against a serial
+`--durations=0` run of the whole suite (103.6s over 505 files), projected pole shard at N=4 was
+42.7s for a sha256 split and 39.8s for a greedy split weighted by the number of `def test_` in
+each file, against 24.9s for a greedy split weighted by measured per-file seconds — an even
+split being 25.9s. File byte size fared no better than the hash (36.2s). So the split is
+longest-processing-time bin packing over per-file durations. It packs the runner seconds in
+`pytest_shard_runner_weights.json` where that table has the module, and scales the recorded
+weight otherwise; `shard_weight_gate.RUNNER_WEIGHTS_PATH` says why there are two tables.
 
 STALENESS IS GRACEFUL, WHICH IS WHY THE RECORDED FILE IS SAFE TO COMMIT. A path with no
 recorded weight is given the median of the recorded ones, and a recorded path that no longer
@@ -25,8 +27,7 @@ in exactly one shard, so a stale table makes CI slower, never wrong.
 THE MEDIAN IS A BAD GUESS FOR A HEAVY FILE, AND THE TABLE CANNOT KNOW WHICH FILES ARE HEAVY.
 The suite's median is 0.0s, so an unweighted file is packed as the lightest thing in the
 suite and placed last, into whichever shard happened to be least loaded. One unrecorded 30s
-module landing that way skews the four CI shards to 65/99/99/68s against
-a 43s projection for every one.
+module landing that way skews the four CI shards to 65/99/99/68s against a 43s projection.
 
 ONE GATE GUARDS THE TABLE, AND IT IS A CI STEP: `--check-durations`. It reads the durations
 report CI's own test step already wrote, so it measures each module by running it. That is what
@@ -106,9 +107,12 @@ from lib.repo_paths import REPO
 from shard_weight_gate import (
     RUNNER_HEAVY_FAIL_SECONDS,
     RUNNER_HEAVY_SECONDS,
+    RUNNER_WEIGHTS_PATH,
     STALE_WEIGHT_RATIO,
     gate_complaints,
+    packing_table,
     parse_durations,
+    write_runner_weights,
 )
 
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
@@ -218,7 +222,7 @@ def shard_files(shard: int, shards: int, files=None, weights=None) -> list[str]:
     if not 1 <= shard <= shards:
         raise ValueError(f"shard {shard} is outside 1..{shards}")
     files = census() if files is None else files
-    weights = load_weights() if weights is None else weights
+    weights = packing_table(load_weights()) if weights is None else weights
     placed = assign(files, shards, weights)
     return sorted(f for f, i in placed.items() if i == shard - 1)
 
@@ -401,14 +405,14 @@ def refresh_drifted_weights(
 
 
 def _summary(shards: int) -> str:
-    files, weights = census(), load_weights()
+    files, weights = census(), packing_table(load_weights())
     placed = assign(files, shards, weights)
     lines = []
     for i in range(shards):
         members = [f for f, s in placed.items() if s == i]
         cost = sum(weights.get(f, 0.0) + _PER_FILE_SECONDS for f in members)
         lines.append(
-            f"  shard {i + 1}: {len(members):>4} files, {cost:6.1f}s projected"
+            f"  shard {i + 1}: {len(members):>4} files, {cost:6.1f} runner seconds projected"
         )
     unknown = sum(1 for f in files if f not in weights)
     lines.append(f"  {len(files)} files, {unknown} with no recorded weight")
@@ -447,6 +451,13 @@ def main(argv=None) -> int:
             "re-measure one of SLICES hash slices of the recorded weights, chosen by the "
             "12-hour period, and rewrite the entries that drifted past DRIFT_RATIO"
         ),
+    )
+    parser.add_argument(
+        "--record-runner",
+        nargs="+",
+        type=Path,
+        metavar="LOG",
+        help="rewrite the runner table from CI shard logs, each module at its median",
     )
     parser.add_argument(
         "--check-durations",
@@ -556,13 +567,18 @@ def main(argv=None) -> int:
             f"weight(s){': ' + ', '.join(moved) if moved else ''} in {WEIGHTS_PATH}"
         )
         return 0
+    if args.record_runner:
+        reports = [log.read_text(errors="replace") for log in args.record_runner]
+        written = write_runner_weights(reports, census())
+        print(f"recorded {len(written)} runner weights to {RUNNER_WEIGHTS_PATH}")
+        return 0
     if args.summary:
         print(_summary(args.of))
         return 0
     if args.shard is None:
         parser.error(
             "one of --shard, --summary, --record, --record-missing, --record-files, "
-            "--refresh-drifted or --check-durations is required"
+            "--refresh-drifted, --record-runner or --check-durations is required"
         )
 
     files = shard_files(args.shard, args.of)

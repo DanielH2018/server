@@ -50,7 +50,7 @@ def nfpm_pins(
 
 def test_the_nfpm_manager_reads_the_jobs_version_and_digest_in_one_match() -> None:
     text = (_REPO / CI_WORKFLOW).read_text()
-    env = yaml_fast.safe_load(text)["jobs"]["host_packages"]["env"]
+    env = yaml_fast.safe_load(text)["jobs"]["host_packages_build"]["env"]
     assert nfpm_pins(_CONFIG_MANAGERS, text) == [
         ("github-release-attachments", env["NFPM_VERSION"], env["NFPM_SHA256"])
     ]
