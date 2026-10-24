@@ -506,6 +506,12 @@ def run_health(
         print(f"{container}: {refusal}", file=_sys.stderr)
         return PROBE_UNREADABLE
 
+    # Before the resolver: a role this checkout holds an old definition of is no verdict (#5912).
+    stale = health_checkout.stale_checkout_reason(container, roles_dir, on_origin)
+    if stale:
+        print(f"{container}: {stale}", file=_sys.stderr)
+        return PROBE_UNREADABLE
+
     ns = core.k8s_namespace()
     read = functools.partial(_read, cluster, tools=tools)
     try:
@@ -518,10 +524,6 @@ def run_health(
         return 1
 
     if targets is None:
-        stale = health_checkout.stale_checkout_reason(container, roles_dir, on_origin)
-        if stale:
-            print(f"{container}: {stale}", file=_sys.stderr)
-            return PROBE_UNREADABLE
         # Not a k8s role, so the tag is the only name available. A miss here means "this tag
         # is not a k8s workload name", which is exactly what lets --docker take over.
         workload, pods = _fetch_workload(container, ns, cluster, tools)

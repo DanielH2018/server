@@ -11,6 +11,11 @@ The probe observed nothing about the workload in that case, so it is a read that
 happen (`PROBE_UNREADABLE`), not a verdict. `origin/master` is read from the local ref and
 needs no network, so it is only as fresh as the last fetch, which is enough to see a role
 that has already merged.
+
+A role that exists here can still be stale (#5912). When `origin/master` changed the role's
+files after this checkout's HEAD, the gate would judge the live workload against the old
+definition, in either direction. That case is unreadable too, and the fix is the same: run the
+probe from a checkout at or after the merge.
 """
 
 import subprocess
@@ -45,15 +50,49 @@ def role_on_origin(role, roles_dir=K8S_ROLES, repo=REPO):
     return res.returncode == 0 and res.stdout.strip() == "tree"
 
 
+def role_changed_on_origin(role, roles_dir=K8S_ROLES):
+    """The newest `origin/master` commit touching `roles_dir/role` that HEAD lacks, or None.
+
+    The repository is the one holding `roles_dir`, so a fixture tree answers for itself. A
+    checkout at the merge, or past it with commits of its own, has none. None on any failure,
+    for the same reason `role_on_origin` returns False: the check only adds a refusal.
+    """
+    try:
+        res = git(
+            "log",
+            "-1",
+            "--format=%h",
+            "HEAD..origin/master",
+            "--",
+            role,
+            cwd=roles_dir,
+            check=False,
+            timeout=10,
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return None
+    return (res.stdout.strip() or None) if res.returncode == 0 else None
+
+
 def stale_checkout_reason(role, roles_dir=K8S_ROLES, on_origin=role_on_origin):
     """Why this checkout cannot judge `role`, or None when it can.
 
-    None when the role directory exists here, or when `origin/master` has no such role either:
-    a Pi tag such as `glances` must still reach the guess-the-name path and `--docker`.
+    None when the role directory exists here and `origin/master` has not changed it since this
+    checkout's HEAD, or when `origin/master` has no such role either: a Pi tag such as
+    `glances` must still reach the guess-the-name path and `--docker`.
     The text carries none of `detach_notify.NOT_APPLICABLE_MARKERS`, so the deploy notifier
     reports the tag as unread rather than as skipped.
     """
-    if (_Path(roles_dir) / role).is_dir() or not on_origin(role):
+    if (_Path(roles_dir) / role).is_dir():
+        newer = role_changed_on_origin(role, roles_dir)
+        if newer is None:
+            return None
+        return (
+            f"origin/master changed the k8s role {role!r} at {newer}, after this checkout's "
+            f"HEAD ({_Path(roles_dir)}), so this checkout holds an old definition of it — no "
+            "verdict was formed; re-run probe.py from a checkout at or after that commit"
+        )
+    if not on_origin(role):
         return None
     return (
         f"the k8s role {role!r} exists on origin/master but not in this checkout ({REPO}), "
