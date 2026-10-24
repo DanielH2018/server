@@ -576,10 +576,10 @@ one exception being a primary that already contains the commit.
 
 A gate run by hand has the same exposure. An orchestrator worktree locked hours behind master
 holds old role templates, owners and alert tables, and a `probe.py health` run from it grades
-the live workload against them (#5912). The `block-footguns` hook denies `probe.py health` from
-a linked worktree that holds an older copy of an `ansible/` or `scripts/` file `origin/master`
-has changed. The denial names the same command run from the primary checkout. Rebasing the
-worktree onto `origin/master` also clears it. `land.sh` runs the probe as a subprocess, so the
+the live workload against them (#5912). The `block-footguns` hook denies `probe.py health` and
+`probe.py takeover` from a linked worktree that holds an older copy of an `ansible/` or
+`scripts/` file `origin/master` has changed. The denial names the same command run from the
+primary checkout. Rebasing the worktree onto `origin/master` also clears it. `land.sh` runs the probe as a subprocess, so the
 hook never sees the gate above.
 
 A gate that could not read is not a failed gate. `probe.py health` exits 75

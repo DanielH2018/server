@@ -57,7 +57,7 @@ a gate the repo requires, so nothing downstream notices either way.
   8. An OCI tag move is denied, and a write that clears `DEPLOY_HOLD` or writes `PROD_DIGEST`
      asks the operator. Setting a hold passes; `_deploy_plane_rule.py` has the rule.
 
-  9. `probe.py health` from a worktree behind `origin/master` (#5912): `_stale_probe_rule.py`.
+  9. A `probe.py` gate from a worktree behind `origin/master` (#5912); `_stale_probe_rule.py`.
 
 Rules that key on a host tool or on GitHub rather than on this repo live in
 `claude_guard.footguns`, which every repo's PreToolUse hook runs.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: imported by block-footguns.py for its ninth rule
-"""The `block-footguns` rule that keeps a post-merge health gate off a stale worktree.
+"""The `block-footguns` rule that keeps a post-merge probe gate off a stale worktree.
 
 `probe.py health <tag>` reads every repo-derived input from the checkout its own file sits
 in: the role's rendered manifests, the k8s host_vars `owner`, and the alert-gate tables. An
@@ -10,12 +10,13 @@ a role merged after the lock was graded against the old definition or not found 
 (#5909, #5912). `health_checkout.stale_checkout_reason` refuses two of those inputs inside the
 probe; this rule refuses the run itself, before any input is read (#6110).
 
-The rule denies `probe.py health` when the probe's checkout is a linked worktree and HEAD
+The rule denies `probe.py health` and `probe.py takeover` when the probe's checkout is a linked worktree and HEAD
 differs from `origin/master` in a file that `origin/master` changed since the merge base,
 under `ansible/` or `scripts/`. Three cases stay clean:
 
-- The primary checkout. The GitOps deployer applies its HEAD, so its tree is the one the
-  cluster runs even while it lags `origin/master`.
+- The primary checkout, the remedy #5912 names. The GitOps tick fast-forwards it, so it lags
+  `origin/master` by at most one tick, and inside that window `stale_checkout_reason` still
+  refuses a stale role or owner.
 - A worktree whose branch already holds master's change. After a squash merge the branch
   lacks the squash commit but carries the same files, so a commit count alone would refuse it.
 - Any failure to read git. The rule only adds a refusal, the way the probe's own check does.
@@ -34,9 +35,10 @@ from pathlib import Path
 
 from _hook_common import primary_checkout
 
-# The probe subcommands that grade a deploy from the tree. `health` is the post-merge gate,
-# and `land.sh` and the deploy notifier run the same subcommand.
-GATE_SUBCOMMANDS = frozenset({"health"})
+# The probe subcommands that grade the cluster against a render of this tree. `health` is the
+# post-merge gate `land.sh` and the deploy notifier also run; `takeover` is the D5 flip gate,
+# which renders a tag to compare with what Flux would strip.
+GATE_SUBCOMMANDS = frozenset({"health", "takeover"})
 # The directories whose files the probe reads to form a verdict: role templates, inventory and
 # host_vars under ansible/, and the probe and its tables under scripts/.
 _READ_PATHS = ("ansible", "scripts")
@@ -120,7 +122,7 @@ def stale_probe_problem(words: Sequence[str], cwd: Path) -> str | None:
     shown = ", ".join(stale[:_SHOWN]) + (" and more" if len(stale) > _SHOWN else "")
     primary = primary_checkout(str(tree)) or "the primary checkout"
     return (
-        f"`probe.py health` would run from {tree}, a worktree that holds an older copy of "
+        f"This `probe.py` gate would run from {tree}, a worktree that holds an older copy of "
         f"{len(stale)} file(s) origin/master has changed since it branched ({shown}). The "
         "probe renders roles, reads owners and reads alert tables from its own tree, so a "
         "verdict here can be wrong in either direction (#6110). Run it from the primary "

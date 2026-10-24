@@ -1,4 +1,4 @@
-"""Rule 9 of the block-footguns guard: `probe.py health` from a worktree behind origin/master.
+"""The block-footguns stale-probe rule: a probe gate run from a worktree behind origin/master.
 
 The fixture is a real repo: a primary checkout, a linked worktree made from it, and an
 `origin/master` ref moved past the worktree's HEAD. The rule reads git, so a fake of it would
@@ -48,15 +48,14 @@ def _move_origin(primary: Path, path: str, text: str) -> str:
     return sha
 
 
-def test_a_gate_from_a_worktree_behind_a_role_change_is_flagged(repo):
+@pytest.mark.parametrize("subcommand", ["health", "takeover"])
+def test_a_gate_from_a_worktree_behind_a_role_change_is_flagged(repo, subcommand):
     primary, worktree = repo
     _move_origin(primary, _ROLE_FILE, "replicas: 2\n")
-    reason = _rule.stale_probe_problem(_GATE.split(), worktree)
+    gate = f"uv run python scripts/diagnostics/probe.py {subcommand} metallb"
+    reason = _rule.stale_probe_problem(gate.split(), worktree)
     assert reason and _ROLE_FILE in reason
-    assert (
-        f"cd {primary} && uv run python scripts/diagnostics/probe.py health metallb"
-        in reason
-    )
+    assert f"cd {primary} && {gate}" in reason
 
 
 def test_a_gate_from_a_current_worktree_is_clean(repo):
