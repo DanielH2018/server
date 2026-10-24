@@ -30,7 +30,7 @@ import yaml
 from _k8s_render import render_texts
 from lib import yaml_fast
 from lib.render_context import REPO_INVENTORY
-from lib.repo_paths import HOST_VARS, K8S_ROLES
+from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO
 from renderer import homelab_render
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib import host as host_mode
@@ -119,8 +119,22 @@ def c1_render(pi: dict, roles=K8S_ROLES, tags=READERS, extra=None) -> dict:
     return rendered
 
 
-def recovery_script(inventory=REPO_INVENTORY) -> bytes:
-    return host_mode.render_host(HOST, inventory=inventory).files[RECOVERY_SCRIPT][0]
+def recovery_script(tmp_path, inventory=REPO_INVENTORY) -> bytes:
+    """The recovery heartbeat's rendered script, from a copy of `hosts/` without `pi-compose`.
+
+    A moved entry has no service tree in the real component, so the whole package would refuse
+    to render. The script reads only the two lists, and `pi-compose` contributes nothing to it.
+    """
+    root = tmp_path / "hosts"
+    shutil.copytree(REPO / "hosts", root, dirs_exist_ok=True)
+    # Shared files resolve against the repo root that holds `hosts/`.
+    (tmp_path / "ansible").symlink_to(REPO / "ansible")
+    package = root / HOST / "package.yml"
+    spec = yaml_fast.safe_load(package.read_text())
+    spec["components"] = [c for c in spec["components"] if c != "pi-compose"]
+    package.write_text(yaml.safe_dump(spec))
+    rendered = host_mode.render_host(HOST, root, inventory=inventory)
+    return rendered.files[RECOVERY_SCRIPT][0]
 
 
 def published_ports(texts) -> str:
@@ -186,13 +200,13 @@ def test_the_census_reads_both_keys_and_finds_the_named_members():
 
 
 @pytest.fixture(scope="module")
-def unmoved() -> dict:
+def unmoved(tmp_path_factory) -> dict:
     """The three renders of the inventory as it is, built once for every move below."""
     doc = host_doc(HOST)
     return {
         "ansible": ansible_render(doc),
         "c1": c1_render(doc),
-        "recovery": recovery_script(),
+        "recovery": recovery_script(tmp_path_factory.mktemp("unmoved")),
     }
 
 
@@ -202,7 +216,8 @@ def test_a_move_changes_no_render(name, unmoved, tmp_path):
     assert name in {e["name"] for e in pi["compose_services"]}
     assert ansible_render(pi) == unmoved["ansible"]
     assert c1_render(pi) == unmoved["c1"]
-    assert recovery_script(moved_inventory(tmp_path, pi)) == unmoved["recovery"]
+    after = recovery_script(tmp_path, moved_inventory(tmp_path, pi))
+    assert after == unmoved["recovery"]
 
 
 def test_a_reader_of_containers_list_alone_is_flagged(tmp_path):

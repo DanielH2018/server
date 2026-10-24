@@ -77,6 +77,20 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
         for name in names:
             owners[name] = role.name
 
+    # A Pi service in the package (H5, `compose_services`) owns its `container_name`s the same
+    # way, so a moved container such as `docker-proxy-lifecycle` keeps its owner. The service's
+    # directory is its owner, as the role directory is for the trees above.
+    services = repo_root / "hosts" / "components" / "pi-compose" / "services"
+    for service in sorted(p for p in services.glob("*") if p.is_dir()):
+        compose = service / "compose.yaml.j2"
+        if not compose.is_file():
+            continue
+        names = _CONTAINER_NAME.findall(compose.read_text())
+        if not names:
+            batch.add(service.name)
+        for name in names:
+            owners[name] = service.name
+
     # A k8s role that declares no long-running workload has nothing to find
     # between deploys, so "not running" is correct for it, not a fault. That is
     # a role with no templates directory (the seed and snapshot roles), one whose

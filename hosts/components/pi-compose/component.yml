@@ -1,16 +1,19 @@
 # The Pi's Compose project (H5, docs/target-architecture/host/h5-pi-compose.md). H5.2a1 ships the
 # renderer's inputs: the Compose env template and the tmpfiles file. H5.2a3 ships the unit and its
-# two scripts. No package lists this component yet, so nothing installs from it.
+# two scripts. H5.2b lists this component in hosts/daniel-pi/package.yml, ships the unit's enable
+# link and adds the first service, `pi-canary`: the first PR that runs anything through the package.
 #
 # Autonomous-role contract (compose-adopt removes containers unattended).
 # - Scope / exclusions: compose-adopt removes a container only when its name is a service the
 #   merged project declares and its com.docker.compose.project label is not `homelab`. It touches
 #   no other container, image, volume or network. compose-run's `up --remove-orphans` removes a
 #   `homelab` container that the project no longer declares, and nothing from another project.
-# - Mode (explicit and reversible): the unit ships without an enable link until H5.2b. Without the
-#   link, reconcile's step 2 never starts it and H4's restart set skips it. Removing the link
-#   from the package in a later version stops the boot start, and `sudo systemctl mask
-#   homelab-compose.service` stops every other start until it is unmasked.
+# - Mode (explicit and reversible): the enable link below arms the unit, since H5.2b. Reconcile's
+#   step 2 starts an enabled unit that is not active, and H4's restart set restarts only an
+#   enabled or active one. Dropping the link from a later package version stops the boot start,
+#   and `sudo systemctl mask homelab-compose.service` stops every other start until it is
+#   unmasked. Neither stops a container, because the unit has no ExecStop=. A revert of H5.2b
+#   therefore leaves `pi-canary` running until `docker rm -f pi-canary` removes it.
 # - Authoritative sources: `docker compose config --services` for the names, and `docker ps -a`
 #   for each container's project label, read before any removal.
 # - Required evidence, every run: one `logger -t compose-adopt` line for each removal, naming the
@@ -22,24 +25,28 @@
 # ENFORCED: hosts/lib/tests/test_pi_compose_scripts.py (the stub-docker cases for compose-run and
 # compose-adopt), hosts/lib/tests/test_pi_compose_unit.py (the unit's timeout and restart contract).
 #
-# The renderer reads two more keys that this file does not carry yet, because
-# `scripts/validate/unit_templates.py` renders a component no host lists through a shared package,
-# and a shared package refuses `outputs:`:
+# `compose:` names the directory of per-service trees (host_compose.py), and the services come from
+# `compose_services` in the Pi's host_vars.
 #
-#   compose: services             # the directory of per-service trees (host_compose.py)
+# The component declares no `outputs:` entry yet. The canary reads no secret (operator ruling
+# 2026-10-24, h5-pi-compose.md *Open questions* 7), so no compose file references `${key}`, the
+# includes carry no `env_file:`, and no compose.env is rendered. The first move that carries a
+# real secret (H5.7, autoheal's webhook) adds this entry, with `keys:` listing exactly the secrets
+# the compose files read:
+#
 #   outputs:
-#     - src: compose.env.j2       # one line per key in `keys`
+#     - src: compose.env.j2
 #       path: /usr/lib/homelab/compose/compose.env
 #       owner: root
 #       group: root
 #       mode: "0600"
-#       keys: [domain]            # exactly the secrets the compose files read
+#       keys: [monitor_discord_webhook_url]
 #       dependents: [homelab-compose.service]
-#       format: dotenv            # homelab-secrets refuses a `'` or a newline in a value
-#
-# H5.2b adds them with the canary and lists the component in hosts/daniel-pi/package.yml, in the
-# PR that ships the enable link. `hosts/lib/tests/test_pi_compose_renderer.py` renders this
-# component's files with those keys added, against fixture services, until then.
+#       format: dotenv   # homelab-secrets refuses a `'` or a newline in a value
+compose: services
+# The boot path, reconcile's step 2 and H4's restart set all need this link.
+enable:
+  homelab-compose.service: multi-user.target
 defaults:
   # The unit's wait timeout reads the Pi's healthcheck variables (inventory/host_vars/daniel-pi.yml),
   # which beat these. A shared-package render, which has no host, uses the values below, the

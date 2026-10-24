@@ -33,7 +33,12 @@ WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 # Alert prefix -> the script, and the `check` label, whose textfile its rules read.
 PRODUCERS = {"PiSdHealth": "pi-sd-health", "PiRecovery": "pi-recovery-health"}
 # Every container the recovery heartbeat watches, so a run with all of them up is a clean cycle.
-ALL = [c["name"] for c in PI_HOST_VARS["containers_list"]] + ["docker-proxy-lifecycle"]
+# Both of the Pi's lists, since the recovery heartbeat watches the union (H5.1), plus the
+# sub-proxy the docker-proxy compose file declares.
+ALL = [
+    c["name"]
+    for c in PI_HOST_VARS["containers_list"] + PI_HOST_VARS["compose_services"]
+] + ["docker-proxy-lifecycle"]
 
 
 def _textfile_came_first(tmp_path) -> bool:
