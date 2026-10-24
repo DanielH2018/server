@@ -1,5 +1,6 @@
 {% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 {% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'service.yml.j2' import service with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
@@ -138,6 +139,10 @@ spec:
       # Tier 4; `DECIDED: observability tiers` in this role's CLAUDE.md names the tier-1
       # exceptions.
 {{ pod_shell('homelab-best-effort', run_as_user=472, run_as_group=472, fs_group=472) }}
+      # Prefers daniel-box, where the role's other pods run, so the observability-prepull Job
+      # (flux_prepull_workloads in defaults/main.yml) has a node to pull onto. A preference,
+      # not a pin, so Grafana still schedules with daniel-box cordoned, at a cold pull.
+{{ node_affinity_preference(k8s_primary_node) }}
       initContainers:
         # Writes the SOPS admin password into Grafana's database before the server starts.
         # GF_SECURITY_ADMIN_PASSWORD below is read only when Grafana initialises a NEW

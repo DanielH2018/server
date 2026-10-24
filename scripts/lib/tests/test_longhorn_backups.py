@@ -57,7 +57,9 @@ def test_completed_keeps_only_completed_backups():
 
 def test_the_restore_drill_selects_on_the_group_names():
     """The drill's jq spells the label prefix and the opt-out group; a rename must fail here."""
-    drill = rendered_shell_text("setup", "k3s", "longhorn-restore-drill.sh.j2")
+    drill = rendered_shell_text(
+        "k8s", "longhorn-restore-drill", "longhorn-restore-drill.sh.j2"
+    )
     assert f'select(startswith("{backups.GROUP_LABEL_PREFIX}"))' in drill
     assert f'select(. != "{backups.NO_BACKUP_GROUP}")' in drill
 

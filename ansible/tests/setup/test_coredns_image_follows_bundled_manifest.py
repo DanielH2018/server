@@ -17,7 +17,7 @@ import re
 
 from _k8s_render import render_role_template
 from lib import yaml_fast
-from lib.repo_paths import K3S_DEFAULTS, K8S_ROLES
+from lib.repo_paths import K8S_ROLES, SYSTEM_UPGRADE_DEFAULTS
 
 _COREDNS_DEFAULTS = K8S_ROLES / "coredns" / "defaults" / "main.yml"
 
@@ -61,7 +61,9 @@ def problems(
 
 
 def _live_inputs() -> tuple[str, str, str]:
-    k3s_version = yaml_fast.safe_load(K3S_DEFAULTS.read_text())["k3s_version"]
+    k3s_version = yaml_fast.safe_load(SYSTEM_UPGRADE_DEFAULTS.read_text())[
+        "k3s_version"
+    ]
     pin = yaml_fast.safe_load(_COREDNS_DEFAULTS.read_text())["coredns_image"]
     deployment = yaml_fast.safe_load(
         render_role_template("coredns", "deployment.yaml.j2")

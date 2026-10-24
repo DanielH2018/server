@@ -1,0 +1,90 @@
+# The gates' identity (H6, *The gate's ServiceAccount*). Both Plans name `k3s-plan` in
+# `serviceAccountName`, and SUC's own `system-upgrade` account cannot read Longhorn. The grants
+# are what the `prepare` gates read and nothing more. SUC hashes `serviceAccountName` into the
+# Plan's `latestHash`, so this account lands while no node is selected: a later change would
+# re-run the Jobs on every selected node. The Role's name and rules are not hashed.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k3s-plan
+  namespace: system-upgrade
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k3s-plan-gate
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - longhorn.io
+    resources:
+      - volumes
+      - backups
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - upgrade.cattle.io
+    resources:
+      - plans
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k3s-plan-gate
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k3s-plan-gate
+subjects:
+  - kind: ServiceAccount
+    name: k3s-plan
+    namespace: system-upgrade
+---
+# The CoreDNS rollout read and the server-restart signal: the `kube-controller-manager` Lease
+# changes holder when the server restarts (H6, *Gates at apply time*).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k3s-plan-kube-system
+  namespace: kube-system
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    resourceNames:
+      - coredns
+    verbs:
+      - get
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    resourceNames:
+      - kube-controller-manager
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: k3s-plan-kube-system
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: k3s-plan-kube-system
+subjects:
+  - kind: ServiceAccount
+    name: k3s-plan
+    namespace: system-upgrade

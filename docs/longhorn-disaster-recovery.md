@@ -350,8 +350,11 @@ data, and the cap surfaced as `cannot find volume.cfg in backupstore` (step 3). 
 against the volume's default target.
 
 **Scheduled since 2026-08-19; nightly and rotating since 2026-08-20.**
-`/usr/local/bin/longhorn-restore-drill.sh` (k3s role, `longhorn-restore-drill.sh.j2`) runs as root
-at 04:10 every night. Each run restores the newest backup of ONE volume into a throwaway volume,
+The CronJob `longhorn-restore-drill` in `homelab` (`ansible/roles/k8s/longhorn-restore-drill/`,
+script `longhorn-restore-drill.sh.j2`) is scheduled for 04:10 UTC every night, suspended until
+H2.3e, in place of the root cron and `/usr/local/bin/longhorn-restore-drill.sh` that ran it until
+H2.3d. Each run restores the
+newest backup of ONE volume into a throwaway volume,
 checks the restored filesystem has files and clears a byte floor, then tears everything down. It
 resolves the backup, volume and size from the cluster — the hand-run version pinned all three, and
 a pinned backup ID dies the day retention deletes it.
@@ -412,11 +415,11 @@ PVC is bound to the volume again, the volume is deleted, or it moves to `no-back
 ConfigMap `longhorn-restore-drill-stamps` in `k3s_longhorn_restore_drill_namespace` (`homelab`).
 The drill reads it once per run with `get` and writes each stamp with a merge `patch`. A missing
 key is epoch 0. A failed patch fails the run, so a run that cannot stamp restores nothing, and a
-ConfigMap that does not exist fails the run with `stamp ConfigMap absent`. The first run that finds
-no `imported-at` key converts the old host directory into keys in one patch, and later runs import
-nothing. Each ConfigMap key replaces one file of that directory:
+ConfigMap that does not exist fails the run with `stamp ConfigMap absent`. The H2.3c run that found
+no `imported-at` key converted the old host directory into keys in one patch, and the CronJob
+carries no import arm. Each ConfigMap key replaced one file of that directory:
 
-| ConfigMap key | File under `/var/lib/longhorn-restore-drill/` (read by the import only) | Value |
+| ConfigMap key | File under `/var/lib/longhorn-restore-drill/` (read by the fallback only) | Value |
 |---|---|---|
 | `last-success` | `last-success` | the file's content, an epoch |
 | `candidates` | `candidates` | the file's content, one PVC per line |

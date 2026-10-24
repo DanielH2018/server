@@ -11,6 +11,8 @@ Run: uv run pytest scripts/validate/tests/test_k8s_schema.py
 
 import json
 
+import pytest
+
 from typing import Any
 
 from validate.validate_lib.k8s_net_rules import https_route_without_tls
@@ -25,7 +27,7 @@ from validate.validate_lib.k8s_schema import (
     schema_error,
     strict_schema,
 )
-from lib.repo_paths import K3S_DEFAULTS, REPO
+from lib.repo_paths import REPO, SYSTEM_UPGRADE_DEFAULTS
 
 
 # ── schema validation ────────────────────────────────────────────────────────────────────
@@ -216,12 +218,22 @@ def test_vendored_core_schemas_match_the_cluster():
     # reads as fine. Silent in both directions, hence this test. It compares the FULL tag, so a
     # patch bump refreshes the schemas too and the vendored files always name the release the
     # cluster runs.
-    k3s_defaults = K3S_DEFAULTS.read_text()
+    k3s_defaults = SYSTEM_UPGRADE_DEFAULTS.read_text()
     assert schema_tag_problem(k3s_defaults, _vendored_tag(), K8S_SCHEMA_VERSION) is None
 
 
 def test_matching_pins_and_schemas_are_clean():
     assert schema_tag_problem("k3s_version: v1.36.4+k3s1\n", "v1.36.4", "1.36") is None
+
+
+def test_a_trailing_noqa_comment_after_the_pin_is_read():
+    pinned = "k3s_version: v1.36.4+k3s1  # noqa var-naming[no-role-prefix]\n"
+    assert schema_tag_problem(pinned, "v1.36.4", "1.36") is None
+
+
+def test_a_pin_the_regex_cannot_read_raises():
+    with pytest.raises(ValueError, match="k3s_version not found"):
+        schema_tag_problem("k3s_version: latest\n", "v1.36.4", "1.36")
 
 
 def test_a_patch_bump_without_a_refresh_is_flagged():

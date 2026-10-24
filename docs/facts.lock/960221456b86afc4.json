@@ -1,0 +1,12 @@
+{
+  "checksum": "facb725ff641cec40e203381f17e17c81d430b633b270f2d60dbb4f61baedbfa",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/system-upgrade/CLAUDE.md#Autonomous-role contract",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/observability/files/rules/k3s-upgrade.yaml": "f32e6bee247ff27e12d015c1248c0fa313fa819a488365e2d6820835bd068570"
+    },
+    "python": "3.14",
+    "verified_sha": "35a19551f"
+  }
+}

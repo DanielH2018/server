@@ -8,14 +8,19 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from lib.ansible_inventory import (
     GITOPS_HOST,
     K8S_HOST,
     PI_HOST,
+    PI_HOST_VARS,
     containers_entries_in,
     host_names,
     inventory_hosts,
+    pi_entries_in,
 )
+from lib import yaml_fast
 from lib.proc_testing import run
 from lib.repo_paths import HOST_VARS, HOSTS_INI, SCRIPTS
 
@@ -139,6 +144,31 @@ def test_containers_entries_keep_named_mappings_only():
     assert [e["name"] for e in containers_entries_in(data)] == ["a", "b"]
     assert containers_entries_in(None) == []
     assert containers_entries_in({"containers_list": None}) == []
+
+
+def test_pi_entries_in_reads_both_service_keys_in_order():
+    data = {
+        "containers_list": [{"name": "a"}, {"name": ""}, "not-a-mapping"],
+        "compose_services": [{"name": "b"}, {"port": 1}],
+    }
+    assert [e["name"] for e in pi_entries_in(data)] == ["a", "b"]
+    assert pi_entries_in({"containers_list": None, "compose_services": None}) == []
+
+
+@pytest.mark.parametrize("missing", ["containers_list", "compose_services"])
+def test_pi_entries_in_raises_when_either_key_is_missing(missing):
+    data = {"containers_list": [], "compose_services": []}
+    del data[missing]
+    with pytest.raises(ValueError, match=missing):
+        pi_entries_in(data)
+
+
+def test_the_live_pi_host_vars_carry_both_service_keys():
+    """Named members: the helper finds alloy and docker-proxy in the real inventory."""
+    names = {
+        e["name"] for e in pi_entries_in(yaml_fast.safe_load(PI_HOST_VARS.read_text()))
+    }
+    assert {"alloy", "docker-proxy"} <= names
 
 
 def test_importing_it_loads_neither_yaml_nor_jinja2():

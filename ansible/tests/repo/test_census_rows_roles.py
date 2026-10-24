@@ -13,6 +13,7 @@ import re
 import pytest
 from _helpers import walk_tasks
 from _deploy_mechanics_row import DEPLOY_MECHANICS
+from _drill_keys_row import DRILL_KEYS
 from _flux_born_keys_row import FLUX_BORN_KEYS
 from _flux_ownership_row import FLUX_OWNERSHIP
 from _host_script_row import HOST_SCRIPT_WRITES
@@ -131,14 +132,12 @@ _JOB_RESOURCES_LITERAL = re.compile(
 _JOB_RESOURCES_CALL = "{{ job_container_resources("
 
 # ── A pod-template container takes its resources from container_resources() ──────────────
-
 # The `limits:`/`requests:` line is what separates a container's block from authelia's
 # access-control `resources:` list, which sits at the same 10 spaces.
 _POD_RESOURCES_LITERAL = re.compile(
     r"^ {10}resources:\n {12}(limits|requests):", re.MULTILINE
 )
 _POD_RESOURCES_CALL = "{{ container_resources("
-
 
 ROWS = (
     Census(
@@ -483,6 +482,7 @@ ROWS = (
     K3S_WRITE_VERBS,
     FLUX_OWNERSHIP,
     FLUX_BORN_KEYS,
+    DRILL_KEYS,
     RETIRED_CRON_ARMS,
 )
 
