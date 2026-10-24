@@ -43,26 +43,25 @@ def _ordered(text: str, *parts: str) -> None:
     assert at == sorted(at), f"{parts} out of order in {text}"
 
 
-def test_a_template_both_halves_render_prints_server_then_agent_then_clear():
-    """`registries.yaml.j2`: `--tags k3s_server`, one join per agent host, then the clear.
+def test_the_agents_registries_template_prints_the_join_then_the_clear():
+    """`registries.yaml.j2`: one join per agent host, then the clear, and no server command.
 
-    `readers_of` is what `narrow_setup.path_tags` asks of a changed template. The server
-    command drops `k3s_agent`, which selects nothing on the server play, and the clear keeps
-    the whole row. `broad_remediation` is what `deploy.sh` and `land.sh` print from the change
-    set itself, with no row, so it keeps the whole-role tag and the join.
+    #5551 changed this template while both `server.yml` and `agent.yml` rendered it, and the
+    printed `--tags k3s` left daniel-server's `registries.yaml` without the `ghcr.io` mirror
+    (#5606). Since H6.4a daniel-box's package ships the server's copy, so only `agent.yml`
+    renders this template and the row is `k3s_agent` alone. `readers_of` is what
+    `narrow_setup.path_tags` asks of a changed template. `broad_remediation` is what
+    `deploy.sh` and `land.sh` print from the change set itself, with no row, so it keeps the
+    whole-role tag and the join.
     """
     cs = services_from_changed_paths([f"{K3S}/templates/registries.yaml.j2"])
     assert cs.setup_roles == {"k3s"}
     row = _index().readers_of("registries.yaml.j2")
-    assert row == {"k3s_server", "k3s_agent"}
+    assert row == {"k3s_agent"}
     joins = [f"-e join_agent={host} --tags k3s_agent`" for host in _agent_hosts()]
     ledger = manual_plane_remediation(cs.setup_roles, {"k3s": row})
-    _ordered(
-        ledger,
-        "k3s-bringup.yml --tags k3s_server`",
-        *joins,
-        "clear-owed manual_plane k3s --applied k3s_agent,k3s_server`",
-    )
+    _ordered(ledger, *joins, "clear-owed manual_plane k3s --applied k3s_agent`")
+    assert "k3s-bringup.yml --tags k3s_server`" not in ledger
     broad = broad_remediation(
         cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks
     )

@@ -21,7 +21,10 @@ See `hosts/components/k3s-server/component.yml` and `templates/authentication-co
 for why each value is what it is.
 """
 
+import functools
 import re
+import tempfile
+from pathlib import Path
 
 import jinja2
 from lib import yaml_fast
@@ -29,20 +32,17 @@ from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE, load_defaults
 from lib.repo_paths import ALL_VARS, K3S_ROLE, REPO
+from renderer.renderer_lib import host as host_mode
 from _k8s_render import rendered_docs
 
 HEADLAMP = ANSIBLE / "roles" / "k8s" / "headlamp"
+DOMAIN = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
 
 # The two hostnames Authelia answers on, and the two `iss` values they mint. Measured
 # against `/.well-known/openid-configuration` on each name. Named rather than
 # counted: a count of 2 passes while one of them has been swapped for something else, and the
 # whole point of the file is that BOTH are trusted.
-REQUIRED_ISSUER_HOSTS = frozenset(
-    {
-        "auth.local.example.test",
-        "auth.example.test",
-    }
-)
+REQUIRED_ISSUER_HOSTS = frozenset({f"auth.local.{DOMAIN}", f"auth.{DOMAIN}"})
 
 # The flags the config file replaced. kube-apiserver refuses to start when a JWT-configuring
 # `--authentication-config` is passed alongside any of these, and on this Type=notify unit a
@@ -68,13 +68,6 @@ def _all_vars() -> dict:
 
 def _env() -> jinja2.Environment:
     return make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-
-
-# Only the issuer URLs in authentication-config.yaml.j2 interpolate `domain`. Every assertion
-# here is about a URL's shape rather than the estate's real hostname, so that render gets a
-# stand-in instead of group_vars' value, and REQUIRED_ISSUER_HOSTS above names the hosts it
-# produces.
-DOMAIN = "example.test"
 
 
 def _context() -> dict:
@@ -107,6 +100,7 @@ def _rendered_server_args(context: dict | None = None) -> str:
 
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-server"
+AUTH_CONFIG = "/var/lib/rancher/k3s/server/authentication-config.yaml"
 
 
 def _component_defaults() -> dict:
@@ -114,16 +108,23 @@ def _component_defaults() -> dict:
     return yaml_fast.safe_load((COMPONENT / "component.yml").read_text())["defaults"]
 
 
+@functools.cache
+def _shipped_auth_config() -> str:
+    """The authentication config daniel-box's package ships, as host mode renders it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "secrets.yml").write_text("k3s_readonly_token: x\n")
+        (root / "sops").mkdir()
+        (root / "sops/daniel-box.sops.yaml").write_text("k3s_readonly_token: x\n")
+        package = host_mode.render_host(
+            "daniel-box", secrets=root / "secrets.yml", sops_dir=root / "sops"
+        )
+    return package.files[AUTH_CONFIG][0].decode()
+
+
 def _rendered_auth_config() -> dict:
-    """`authentication-config.yaml.j2` as the apiserver parses it, with `domain` a stand-in."""
-    env = _env()
-    context = {"domain": DOMAIN, **_component_defaults()}
-    context["k3s_oidc_issuer_urls"] = [
-        env.from_string(url).render(domain=DOMAIN)
-        for url in context["k3s_oidc_issuer_urls"]
-    ]
-    template = (COMPONENT / "templates" / "authentication-config.yaml.j2").read_text()
-    return yaml_fast.safe_load(env.from_string(template).render(**context))
+    """The shipped `authentication-config.yaml` as the apiserver parses it."""
+    return yaml_fast.safe_load(_shipped_auth_config())
 
 
 def _apiserver_args(args: str) -> dict[str, str]:
@@ -214,7 +215,7 @@ def test_the_issuer_check_rejects_a_config_that_trusts_only_the_lan_name():
     config["jwt"] = [
         entry for entry in config["jwt"] if "auth.local." in entry["issuer"]["url"]
     ]
-    assert _missing_issuers(config) == ["auth.example.test"]
+    assert _missing_issuers(config) == [f"auth.{DOMAIN}"]
 
 
 def test_every_issuer_url_is_exact_and_distinct():
@@ -265,7 +266,7 @@ def test_the_username_prefix_check_rejects_the_flag_paths_old_sentinel():
     produces usernames literally prefixed with a hyphen. The check must flag it, and must
     equally flag an ordinary prefix, or it is only testing that `""` equals itself.
     """
-    for prefix in ("-", "oidc:", "https://auth.example.test#"):
+    for prefix in ("-", "oidc:", f"https://auth.{DOMAIN}#"):
         config = _rendered_auth_config()
         for entry in config["jwt"]:
             entry["claimMappings"]["username"]["prefix"] = prefix

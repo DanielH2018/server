@@ -174,7 +174,7 @@ def test_a_template_naming_an_undefined_key_fails_the_host_render(tmp_path):
     (tmp_path / "ok").mkdir()
     _stage(tmp_path / "ok", hosts)  # the accept half: the copy renders as it stands
     broken = hosts / "components/k3s-server/templates/50-homelab.conf.j2"
-    broken.write_text(broken.read_text() + "Environment=X={{ k3s_no_such_key }}\n")
+    broken.write_text("[Service]\nEnvironment=X={{ k3s_no_such_key }}\n")
     (tmp_path / "bad").mkdir()
     with pytest.raises(RenderError, match="k3s_no_such_key"):
         _stage(tmp_path / "bad", hosts)
