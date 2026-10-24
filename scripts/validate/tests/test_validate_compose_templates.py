@@ -149,6 +149,41 @@ def test_verbose_lists_each_clean_template(capsys):
     assert "  [ok]   wg-easy\n" in capsys.readouterr().out
 
 
+# The Pi package's services (H5.2b): the same checks run over hosts/components/pi-compose/services.
+# `pi-canary` is the named member, so a scan that stopped reading the component fails here.
+
+
+def test_verbose_lists_the_packaged_canary(capsys):
+    assert vct.main(["-v"]) == 0
+    assert "  [ok]   pi-canary\n" in capsys.readouterr().out
+
+
+def _service(tmp_path, image):
+    tree = tmp_path / "svc"
+    tree.mkdir()
+    (tree / "compose.yaml.j2").write_text(
+        "services:\n  svc:\n    container_name: svc\n"
+        f"    image: {image}\n    cap_drop: [ALL]\n"
+        "    security_opt: [no-new-privileges:true]\n"
+    )
+
+
+def test_a_packaged_service_with_a_digest_is_clean(tmp_path):
+    _service(tmp_path, "busybox:stable@sha256:" + "ab" * 32)
+    assert vct.check_component_service("daniel-pi", {"name": "svc"}, tmp_path) is None
+
+
+def test_a_packaged_service_without_a_digest_is_flagged(tmp_path):
+    _service(tmp_path, "busybox:stable")
+    err = vct.check_component_service("daniel-pi", {"name": "svc"}, tmp_path)
+    assert err and "no '@sha256:' digest" in err
+
+
+def test_a_packaged_service_with_no_template_is_flagged(tmp_path):
+    err = vct.check_component_service("daniel-pi", {"name": "gone"}, tmp_path)
+    assert err and "no hosts/components/pi-compose/services/gone/" in err
+
+
 # Every service should drop ALL capabilities (defense in depth), adding back only what it
 # proves it needs. New services kept silently drifting out of this (n8n-runners/nut/unbound
 # post-dated the hardening sprints), so enforce it; documented exceptions go in CAP_DROP_EXEMPT.

@@ -132,6 +132,21 @@ def test_planes_are_grouped_by_path_prefix(tmp_path):
     assert rows["README.md"] == "other"
 
 
+def test_a_packaged_pi_service_shares_the_roles_containers_plane(tmp_path):
+    """A service that moved into the Pi package (H5) keeps the plane its marker came from, and
+    the page renders that plane once."""
+    role = "ansible/roles/containers/autoheal/templates/docker-compose.yml.j2"
+    packaged = "hosts/components/pi-compose/services/alloy/compose.yaml.j2"
+    _write(tmp_path, role, "# DECIDED: stays in the role.\n")
+    _write(tmp_path, packaged, "# DECIDED: moved into the package.\n")
+    rows = _rows(tmp_path)
+    assert {r["path"]: r["plane"] for r in rows} == {
+        role: "roles/containers",
+        packaged: "roles/containers",
+    }
+    assert g.render_markdown(rows, tmp_path).count("## roles/containers\n") == 1
+
+
 def test_the_generators_own_source_and_test_file_are_excluded(tmp_path):
     """The generator's own docstring and this test's fixture strings both contain the
     literal marker text -- scanning them would render garbled rows and make the page
@@ -261,6 +276,17 @@ def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
         and "origin[:8]" in r["text"]
     ]
     assert matches, "expected the origin[:8] marker in deploy_handlers.py"
+
+
+def test_live_tree_includes_the_autoheal_marker_in_the_roles_containers_plane():
+    """A named member for the Pi's compose templates (H5.2b). The marker sits in the role's
+    template until H5.7 moves it into the package component, and the plane follows it."""
+    matches = [
+        r
+        for r in _live_rows()
+        if r["text"].startswith("autoheal runs with NO healthcheck")
+    ]
+    assert [r["plane"] for r in matches] == ["roles/containers"]
 
 
 def test_live_tree_excludes_its_own_generator_and_test_file():

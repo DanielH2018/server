@@ -221,6 +221,47 @@ def project_problems(project):
     return problems
 
 
+# Docker refuses a memory limit or reservation below 6 MiB ("Minimum memory reservation allowed is
+# 6MB"), so `up` fails at the daemon on a value that the Compose model and `config -q` accept.
+MIN_MEMORY = 6 * 1024 * 1024
+_SIZE = re.compile(r"(\d+(?:\.\d+)?)\s*([kmgt]?)b?", re.IGNORECASE)
+_UNITS = {"": 1, "k": 1024, "m": 1024**2, "g": 1024**3, "t": 1024**4}
+
+
+def memory_bytes(value):
+    """A Compose memory value (`16M`, `1g`, `512k`, or a byte count) in bytes, or None."""
+    match = _SIZE.fullmatch(str(value).strip())
+    if not match:
+        return None
+    return int(float(match.group(1)) * _UNITS[match.group(2).lower()])
+
+
+def memory_problems(project):
+    """Why a service's memory limit or reservation is below the 6 MiB the Docker daemon accepts.
+
+    Reads `deploy.resources.{limits,reservations}.memory`, `mem_limit` and `mem_reservation`.
+    A value the parser cannot read is a problem too, so it cannot pass as large.
+    """
+    problems = []
+    for name, service in project["services"].items():
+        resources = (service.get("deploy") or {}).get("resources") or {}
+        values = {
+            "limits.memory": (resources.get("limits") or {}).get("memory"),
+            "reservations.memory": (resources.get("reservations") or {}).get("memory"),
+            "mem_limit": service.get("mem_limit"),
+            "mem_reservation": service.get("mem_reservation"),
+        }
+        for field, value in values.items():
+            if value is None:
+                continue
+            size = memory_bytes(value)
+            if size is None:
+                problems.append(f"{name} {field} {value!r} is not a size")
+            elif size < MIN_MEMORY:
+                problems.append(f"{name} {field} {value!r} is below 6 MiB")
+    return problems
+
+
 def tmpfiles_dirs(tmpfiles_text):
     """The directories the tmpfiles file lists with a `d` line."""
     return {

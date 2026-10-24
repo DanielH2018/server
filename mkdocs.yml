@@ -291,6 +291,7 @@ nav:
           - D4 Ordering: target-architecture/deploy/d4-ordering.md
           - D5 Bulk move: target-architecture/deploy/d5-bulk-move.md
           - D6 Delete the old path: target-architecture/deploy/d6-delete-old-path.md
+          - D7 Superseding promotions: target-architecture/deploy/d7-superseding-promotions.md
       - Monitoring:
           - M1 Alertmanager: target-architecture/monitoring/m1-alertmanager.md
           - M2 First bridge family: target-architecture/monitoring/m2-first-bridge-family.md

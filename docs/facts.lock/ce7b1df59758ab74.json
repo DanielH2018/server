@@ -1,12 +1,13 @@
 {
-  "checksum": "476b9804076d07e9118ed4754b6e0753cafd91f6d8e12c8b5efd3fb6c887a790",
+  "checksum": "a2a2b2aacfbe3bad2bee09a5dcc3cadc05a49de4c7289d1383ff25f0986dbc3a",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#The builder's run",
   "row": {
     "atoms": {
-      "ansible/roles/setup/homelab_builder/files/host_package_builder.py:DECIDED: the anchor is a commit": "43f8ef90c8623b78ca1e9f908b203d564df57b1b410d9e92aa8623a69be3eb3e"
+      "ansible/roles/setup/homelab_builder/files/host_package_builder.py:DECIDED: the anchor is a commit": "43f8ef90c8623b78ca1e9f908b203d564df57b1b410d9e92aa8623a69be3eb3e",
+      "ansible/roles/setup/homelab_builder/tests/test_builder_units.py::test_each_units_output_logs_at_a_level_journald_stores": "f0ab3dd53ac0ceabc52bd440f2f79ebed29b3999c8e7b67448b3f9a9133e3b26"
     },
     "python": "3.14",
-    "verified_sha": "efd7fda5a"
+    "verified_sha": "9cbc132e0"
   }
 }

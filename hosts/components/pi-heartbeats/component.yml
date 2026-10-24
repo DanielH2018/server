@@ -22,6 +22,13 @@
 #   restart, recreate, `docker rm` or pull, and nothing on the other two hosts.
 #   docs/pi-host-tuning-record.md has why the watch set is the deploy list rather than
 #   `docker ps -a --filter status=exited`.
+# - Compose read (H5.2b, interim): one read of homelab_compose.prom in node_exporter's textfile
+#   directory, the file homelab-compose.service's compose-run writes. A result of 0 makes the
+#   cycle push `down`, naming `homelab-compose` and the result's SHA. The read acts on nothing, so
+#   it adds no action to this contract. An absent file adds nothing, because it is absent by
+#   design until the first run. A file that exists but cannot be read, or holds no result line,
+#   pushes `down` and is never treated as absent. M1's rule on homelab_compose_up_result
+#   replaces the read (docs/target-architecture/host/h5-pi-compose.md, *Open questions* 5).
 # - Why it acts at all: `restart: unless-stopped` covers a process exit, not a failed create
 #   at the OCI runtime, which is what this 512 MB board actually produces.
 # - Mode (explicit and reversible): optimize_pi_recovery_restart_enabled arms the timer and

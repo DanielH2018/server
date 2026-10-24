@@ -31,6 +31,7 @@ merged.
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
 | D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. littlelink's flux PR also M6's B-1e. monitor-bridge's flip also M6's A6-7a, live. No flip waits on M6's C-1: the operator ruled on 2026-10-21 that uptime-kuma flips with janitorr and jellyfin, and M6's Phase C works on flux-owned roles (#5821) |
 | D6 | Delete the old deploy path; ADR superseding 0010 | D5, and M6's C-2b, live. D6.11 needs only D5.1a2 and D5's flux PR; #5425 dropped D6.10 |
+| D7 | Superseding promotions | D5, through #5704's soak fix |
 | M1 | Alertmanager and its watcher | — |
 | M2 | One bridge family to rules | M1 |
 | M3 | One host timer to the textfile collector | M1. The cutover also M2's PR 3 |
@@ -780,6 +781,13 @@ No request on the slice index is open.
       `timeout-minutes` with the derived timeout. Otherwise D2.5's 25-minute
       `timeout-minutes` stops a longer `verify` first, and `settle` writes a false
       `<T> unverified` hold (D4 *The cap*).
+
+- **Superseding promotions** (D7 *Requested amendment*). *Verification* takes the changed
+  set against the base, `last-good` unless `prod` names `held`. *On failure* applies a
+  verdict only while `prod` names T's digest, and `verify` gains the verdict `superseded`.
+  *A verification in flight blocks the next promotion* gains the exception that D7's
+  `supersedable` defines. Gate: before D7.5 merges. It overlaps the request above: if
+  `verify` changes shape first, the `superseded` read moves with it.
 
 ### Requests on C3
 
