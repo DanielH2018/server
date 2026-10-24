@@ -567,16 +567,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--work", type=Path, required=True, help="a scratch directory for the cases"
     )
-    args = parser.parse_args(argv)
     try:
-        cases = Cases(args)
+        cases = Cases(parser.parse_args(argv))
     except CaseFailed as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
     for run in (cases.upgrade_path, cases.cold_install, cases.by_hand, cases.disarm):
         run()
-    for case in (secrets_case, conffile_case, shadow_case, repos_case):
-        case.run(cases)
+    secrets_case.run(cases)
+    conffile_case.run(cases)
+    shadow_case.run(cases)
+    repos_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

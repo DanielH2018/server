@@ -184,7 +184,7 @@
         "/(^|/)hosts/packages/homelab-tools/package\\.yml$/"
       ],
       "matchStrings": [
-        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=(?<depName>[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)[ \\t]*\\n[ \\t]+version:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+sha256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
+        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=(?<depName>[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)[ \\t]*\\n[ \\t]+version:[ \\t]*(?<currentValue>v?\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+sha256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
       ],
       "datasourceTemplate": "github-release-attachments"
     },
