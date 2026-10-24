@@ -1,8 +1,9 @@
 # The Pi's three heartbeats (H3.8b, docs/target-architecture/host/h3-pi-pilot.md). Until H3.8b
 # the optimize_pi role installed them as three crons. Each script runs as a oneshot service on a
 # timer, as sys_user, which reaches `docker` and the journal through its supplementary groups.
-# The two push tokens arrive through `LoadCredential=` from the interim files optimize_pi stages
-# under /etc/homelab/interim/; H4 replaces that source with /run/credstore/.
+# The two push tokens arrive through `LoadCredential=` from /run/credstore/, which
+# homelab-secrets.service fills from the Pi's SOPS file (H4.5). The interim files optimize_pi
+# stages under /etc/homelab/interim/ stay on disk, read by nothing, until H4.6 retires them.
 #
 # - homelab-pi-sd-health, every 5 minutes: the root filesystem's ext4 errors_count, the
 #   rotated-log integrity verdict and the log2ram mount, pushed to "Daniel Pi SD Health" and

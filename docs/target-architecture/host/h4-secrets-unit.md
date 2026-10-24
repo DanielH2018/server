@@ -16,6 +16,7 @@ PR H4.2, daniel-server's age key, SOPS file and bring-up: [#6069](https://github
 PR H4.3a, daniel-server's `upsmon.conf`, rendered and read by nothing: [#6082](https://github.com/DanielH2018/server/pull/6082). The operator's `host_secrets.py sync` added `nut_monitor_password`. It added the `nut-secondary` component and a `role:` key in component.yml, which names a `host_sources.ROLE_SOURCES` role whose defaults sit beneath the component's and whose template a `role:<name>.j2` `src` renders in place. `HOST_INPUTS` gained that role's defaults and the one template.
 PR H4.3b1, the `kuma-push` component and reconcile's udev arm: [#6089](https://github.com/DanielH2018/server/pull/6089). It republishes `homelab-daniel-pi` and `homelab-daniel-server`. The arm hashes `/usr/lib/udev/rules.d/NN-homelab-*.rules` from disk instead of reading a manifest field, so no renderer change was needed, and it lives in `reconcile_lib/udev.py`. The Pi's `kuma-push-lib.sh` kept its sha256, path and package.
 PR H4.4, the Pi's SOPS creation rule: [#6092](https://github.com/DanielH2018/server/pull/6092). It carries only the rule and `docs/break-glass.md` item 12. The Pi's file, `credentials:`, `LIVE_HOST_FILES` entry and `check` member moved to H4.5, because `host_outputs.py:finish` refuses a credential without a `secrets-unit`. The Pi's bootstrap step 3 ran on 2026-10-24.
+PR H4.5, the Pi switches to `/run/credstore`: PR_URL. It adds the `secrets-unit` component, the two `credentials:` and the `LIVE_HOST_FILES` entry to the Pi, and repoints both token heartbeats at `/run/credstore`. The Pi's file arrives by the operator's `host_secrets.py sync daniel-pi` commit on the PR's branch, so the PR stays a draft until then. It keeps the interim files, which H4.6 retires.
 
 This slice adds `homelab-secrets.service`, which decrypts a per-host SOPS file on the host
 with the host's own age key. It proves the unit on the UPS shutdown chain of daniel-server,
@@ -1312,7 +1313,12 @@ and before the slice closes.
 - **H4.4:** revert. The Pi's creation rule goes, and no Pi file exists yet. The Pi keeps its
   interim files, because H4.6 has not run.
 - **H4.5:** revert. The heartbeats point back at `/etc/homelab/interim/`, which still holds
-  both files.
+  both files. The revert also drops the Pi's `secrets-unit` component and `credentials:`
+  entry, and it removes the Pi's SOPS file from the tree. The Pi's next package no longer
+  ships `homelab-secrets.service`, so nothing deletes `/run/credstore` or
+  `/var/lib/homelab-secrets` there. The credential files vanish at the next reboot, and the
+  state directory stays until deleted by hand (**operator-only**). The Pi's creation rule
+  and its age key stay, which lets a re-landed H4.5 reuse them.
 - **H4.6:** revert, then the operator re-applies H3.8a's tags on the Pi to recreate the
   interim files, and clears the `manual_plane` line the revert records with
   `--applied` naming those tags (**operator-only**).

@@ -63,7 +63,7 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   When it differs from `applied.json`, or `homelab-secrets.service` is not active, reconcile runs
   a blocking `systemctl restart homelab-secrets.service` before step 2. Legacy entries retire only
   once that unit is active and every credential and output in `secrets.json` exists. A package
-  without the field makes no call that names `homelab-secrets`, as the Pi's does until H4.5.
+  without the field makes no call that names `homelab-secrets`, as the Pi's did until H4.5.
 
 ## Activation, pending state and drift
 
