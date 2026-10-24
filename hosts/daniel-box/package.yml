@@ -6,9 +6,8 @@
 # The package carries no credential, so it has no `secrets-unit` and no
 # ansible/vars/hosts/daniel-box.sops.yaml. H6.3b adds both with the first daniel-box key.
 description: daniel-box's homelab host package
-components: [reconcile]
+components: [reconcile, apt-github-cli]
 maintainer_scripts: [preinst, postinst, prerm]
-# H7.24a: the third-party apt sources, and nfpm for the builder this host runs.
+# H7.24a: nfpm, for the builder this host runs.
 depends:
-  - homelab-repos
   - homelab-tools

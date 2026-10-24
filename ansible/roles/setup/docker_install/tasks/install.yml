@@ -1,6 +1,6 @@
 ---
-# The Docker apt source and its key come from the homelab-repos package (H7.24a), which
-# homelab-daniel-pi depends on. This role only refreshes the cache and installs from it.
+# The Docker apt source and its key come from the apt-docker component of homelab-daniel-pi
+# (H7.24a). This role only refreshes the cache and installs from it.
 - name: Add packages
   tags: [docker-repo]
   ansible.builtin.apt:

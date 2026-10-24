@@ -1,14 +1,14 @@
 {
-  "checksum": "1b988ca01021f813e028537b973d359739453e96df05a67dcebb2a3b6a620a15",
+  "checksum": "bca6374b9a4dec28b1fe016f82f27377d5226b8f0f9692d6fb4f63ada12cc3cc",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/github_cli/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/tests/setup/test_apt_keyring_permissions.py": "a18249dc3a864f8c10d73f7bbcedcd2408955710e8a8893f8a76b5763b45ce6f",
-      "hosts/packages/homelab-repos/": "2f732695af2f18df8999f2352d9403cdb33e0227f8ff0397377bfc3ee9431a02",
-      "scripts/renderer/tests/test_homelab_repos.py": "d22aa026d698b24902e1ad3534b507e9ded10a006a11edd76616962615968d7f"
+      "hosts/components/apt-github-cli/": "550a1676736f0666700dea7da6df16168eabe0fef9501b2fe193d489927f0cfd",
+      "scripts/renderer/tests/test_apt_source_components.py": "5eb45033d1ca34dd3482743c457e6dc849df4846e1fa70846789ebb6ab1d1b3a"
     },
     "python": "3.14",
-    "verified_sha": "8b985af0c"
+    "verified_sha": "7c7e6b9ed"
   }
 }

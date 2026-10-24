@@ -1531,9 +1531,9 @@ upstream, revert its downstreams before it.
       operator declines, exit observation 2 becomes a hand-written digest bump through the
       same pipeline.
     - Either way, wg-easy's pin sits in a manual group, and the two alloy pins move together.
-2. **When does C5's dependency rule reach Docker?** C5 says third-party sources such as
-   Docker's ship in `homelab-repos`. H5 keeps the engine under `docker_install`, so H5 adds
-   no `Depends: docker-ce`. Resolution: H7 moves the engine and creates `homelab-repos`.
+2. **When does C5's dependency rule reach Docker?** C5 said third-party sources such as
+   Docker's ship in `homelab-repos`; the 2026-10-24 ruling puts each in the component of the host that uses it. H5 keeps the engine under `docker_install`, so H5 adds
+   no `Depends: docker-ce`. Resolution: H7 moves the engine, and Docker's source goes to the `apt-docker` component of `homelab-daniel-pi`.
 3. **Who owns pi-peer-backup's two writes on the Pi?** R4's open question 4 expects H5's
    package to list them. They are an authorized key and a forced-command wrapper, not Compose
    services, so H5 does not move them. D5 moves the two tasks into `k8s_host_files` with

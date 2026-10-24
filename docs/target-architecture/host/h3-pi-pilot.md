@@ -314,7 +314,7 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
       its legacy entries (below) and the secret keys its units load at run time, and carries a
       `defaults:` map for its own variables.
     - `hosts/packages/<name>/` holds a shared package: `homelab-updater` (H3) and
-      `homelab-repos` (H7).
+      `homelab-tools` (H3). H7's apt sources are components, not a shared package.
     - `hosts/lib/` holds the scripts several packages ship, with tests in `hosts/lib/tests/`.
     - `hosts/bootstrap-host.sh` is the bring-up script.
     - `hosts/keys/` holds the public keys hosts trust. PR H3.4c commits the first,
@@ -324,8 +324,8 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
       without its suffix, the way a `lib:` entry names `hosts/lib/<name>`. Both are copied
       byte for byte, and they are the only sources outside a component's own directory.
 - **Packages and the slice that creates each.** `homelab-updater`, `homelab-daniel-pi` and
-  `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6, and
-  `homelab-repos` in H7. `homelab-tools` is the one architecture-specific package (C5,
+  `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6. H7's
+  apt sources are components of the host packages, with no `homelab-repos`. `homelab-tools` is the one architecture-specific package (C5,
   *`homelab-tools`* below).
 - **Installed paths.**
     - Scripts go in `/usr/lib/homelab/`.
@@ -1556,8 +1556,8 @@ says otherwise.
           pin that differs fails it.
         - Step 5 runs `apt-get update --error-on=any` restricted to the homelab source,
           then `apt-get install homelab-updater homelab-<hostname>`.
-      Steps 3, 4 and 6 are H7's. H7 also adds `homelab-repos` to step 2, because H7.1
-      creates it, and `chezmoi` from `homelab-tools` to step 5. H3.11 builds
+      Steps 3, 4 and 6 are H7's. H7 no longer adds `homelab-repos` to step 2: the 2026-10-24 ruling
+      ships each apt source in its host's package. It adds `chezmoi` from `homelab-tools` to step 5. H3.11 builds
       `homelab-tools`.
     - The script types the repository URL (*Shared names*, Repository). Add `hosts` to
       `test_lan_facts_have_one_source.py:SCAN_ROOTS` and `.sh` to its `SCAN_SUFFIXES`, with
@@ -2873,7 +2873,7 @@ reason is given.
 - **H3-R10-15 (medium) H3.6's bootstrap steps depended on H7's packages.** Fixed. H3.6 now
   spells out its three steps under H7's numbers: the hostname check; the keyring checked
   against the pinned fingerprint and `homelab.sources`; and the install of `homelab-updater`
-  and `homelab-<hostname>`. H7 adds `homelab-repos` and `homelab-tools`. The C5 name for
+  and `homelab-<hostname>`. H7 adds `homelab-tools`. The C5 name for
   `homelab-tools` is a cross-slice note.
 - **H3-R10-16 (medium) Several PRs exceeded the 100 to 200 line guide.** Fixed. H3.2 is
   H3.2a (updater), H3.2b (reconcile) and H3.2c (censuses and the unit validator). H3.3 is

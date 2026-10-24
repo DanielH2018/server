@@ -1,6 +1,0 @@
-# Shipped by homelab-repos: Docker's apt repository, for the Pi's engine packages.
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: noble
-Components: stable
-Signed-By: /etc/apt/keyrings/docker.asc

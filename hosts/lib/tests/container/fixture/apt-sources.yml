@@ -1,0 +1,6 @@
+# The fixture that carries all three apt-source components (H7.24a). The real packages list them
+# per host: daniel-pi has two and the other hosts one. `validate_lib/repos_case.py` installs this
+# one over seeded copies of the files the roles wrote, to prove dpkg takes each path over.
+description: Fixture host package that ships every apt-source component, for the host_packages container cases
+components: [reconcile, apt-docker, apt-azlux, apt-github-cli]
+maintainer_scripts: [preinst, postinst, prerm]

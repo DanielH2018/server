@@ -93,7 +93,7 @@
   become: true
 
 # 4. LOG2RAM (Save SD Card)
-# The Azlux apt source and its key come from the homelab-repos package (H7.24a).
+# The Azlux apt source and its key come from the apt-azlux component of homelab-daniel-pi (H7.24a).
 - name: Install Log2Ram
   tags: [log2ram]
   ansible.builtin.apt:

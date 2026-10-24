@@ -1,4 +1,4 @@
-# Shipped by homelab-repos: Azlux's apt repository, for the Pi's log2ram package.
+# Shipped by the apt-azlux component: Azlux's apt repository, for the Pi's log2ram package.
 Types: deb
 URIs: http://packages.azlux.fr/debian/
 Suites: bookworm

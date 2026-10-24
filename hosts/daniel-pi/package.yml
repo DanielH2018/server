@@ -15,7 +15,7 @@
 # the first service, `pi-canary`. The canary reads no secret, so `credentials:` is unchanged and
 # the Pi's SOPS file needs no new key.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, apt-docker, apt-azlux]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token
@@ -24,7 +24,6 @@ credentials:
 # so homelab-updater's steps 4 and 5 cover every installed homelab-* package.
 depends:
   - homelab-tools
-  - homelab-repos
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}

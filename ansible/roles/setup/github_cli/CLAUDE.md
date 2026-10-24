@@ -23,9 +23,9 @@ the GitHub API authenticated. Applied by `initial_setup.yml` (`--tags github_cli
 - **The credential helper is per-user git config**, so it lives with the connecting user and
   the deploy user reads the same token through `gh auth token` — the one identity behind the
   deployer's CI gate, the two GitHub crons in `gitops_deploy`, and `renovate_agent`'s session.
-- **The apt source and the keyring belong to the `homelab-repos` package, not this role.**
-  `hosts/packages/homelab-repos/` ships `github-cli.sources` and the keyring under
-  `/etc/apt/keyrings`, and every host package depends on it. dpkg creates the file at mode
+- **The apt source and the keyring belong to the host packages, not this role.**
+  `hosts/components/apt-github-cli/` ships `github-cli.sources` and the keyring under
+  `/etc/apt/keyrings`, and the packages of daniel-box and daniel-server list it. dpkg creates the file at mode
   0644 whatever the umask, so the unreadable-keyring failure that
   `ansible/tests/setup/test_apt_keyring_permissions.py` guards against cannot occur. The
-  keyring's sha256 is held by `scripts/renderer/tests/test_homelab_repos.py`.
+  keyring's sha256 is held by `scripts/renderer/tests/test_apt_source_components.py`.

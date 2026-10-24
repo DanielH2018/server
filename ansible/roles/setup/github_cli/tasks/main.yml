@@ -7,7 +7,7 @@
 # chezmoi_setup is NOT one of the readers. DanielH2018/dotfiles is public and clones
 # anonymously, so the dotfiles land whether or not this host has logged in.
 
-# The GitHub CLI apt source and its key come from the homelab-repos package (H7.24a).
+# The GitHub CLI apt source and its key come from the apt-github-cli component of the host package (H7.24a).
 - name: Install the GitHub CLI
   tags: [github_cli]
   ansible.builtin.apt:
