@@ -1,0 +1,23 @@
+# daniel-server's secondary upsmon, the client half of the UPS shutdown chain (H4,
+# docs/target-architecture/host/h4-secrets-unit.md, *NUT on daniel-server*). H4.3a ships only the
+# declared output below. No unit, drop-in or symlink reads it: /etc/nut/upsmon.conf stays the file
+# nut-monitor reads, and H4.3c points nut-monitor at the rendered one.
+#
+# `role: nut_host` renders the role's own template, because the role keeps owning it until H7.8
+# moves daniel-box. The role's defaults sit beneath this map, so `nut_host_upsd_host` resolves to
+# 127.0.0.1 here (inventory_hostname == ups_host).
+#
+# The output persists, against C5's default, because nut-monitor must start at boot even when the
+# decrypt cannot run (*Persisted outputs*). It installs to
+# /var/lib/homelab-secrets/etc/nut/upsmon.conf, root:nut 0640, and ships no symlink at `path`,
+# which is the nut-client conffile. Its dependent, nut-monitor.service, joins in H4.3c.
+role: nut_host
+outputs:
+  - src: "role:host-upsmon.conf.j2"
+    path: /etc/nut/upsmon.conf
+    owner: root
+    group: nut
+    mode: "0640"
+    keys: [nut_monitor_password]
+    persist: true
+    link: false

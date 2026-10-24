@@ -9,6 +9,7 @@ A package lists its components, and may carry files and defaults of its own, lai
 component's are. A component directory under `hosts/components/` holds a `component.yml`::
 
     defaults: {name: value}         # beneath group_vars/all.yml (H3, *Component variables*)
+    role: nut_host                  # its defaults sit below `defaults`; `role:<t>.j2` is its template
     files:
       - {src: templates/x.sh.j2, dst: /usr/lib/homelab/x, mode: "0755"}
       - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
@@ -54,7 +55,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import json
 import re
 from pathlib import Path, PurePosixPath
-from typing import cast
 
 import jinja2
 
@@ -64,13 +64,15 @@ from lib.render_context import UnresolvedVarsError, render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
 from lib.repo_paths import ANSIBLE, REPO
 from renderer.renderer_lib.cluster import RenderRefused
-from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
+from renderer.renderer_lib.environment import RenderError, render_file
 from renderer.renderer_lib.host_sources import (
     SHARED_FILES,
-    ConfinedLoader,
     confined,
+    confined_env,
     file_mode,
     lib_source,
+    role_sources,
+    template_source,
 )
 from renderer.renderer_lib.host_arms import ARM_KEYS, add_activation, add_arms, has_arms
 from renderer.renderer_lib.host_outputs import (
@@ -137,6 +139,7 @@ COMPONENT_KEYS = frozenset(
         "files",
         "legacy",
         "outputs",
+        "role",
         "units",
         *ARM_KEYS,
     }
@@ -339,8 +342,7 @@ def _render_maintainer_scripts(
         confined(directory, src)
         ctx, reasons = host_context(host, {}, inventory, withheld)
         ctx["package_units"] = package.units()
-        env = renderer_env(directory)
-        env.loader = ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+        env = confined_env(directory)
         package.scripts[name] = _render_template(
             env, src, ctx, reasons, directory
         ).encode()
@@ -386,11 +388,11 @@ def _render_unit(
     legacy = spec.get("legacy") or []
     outputs = spec.get("outputs") or []
     arms = {key: spec[key] for key in ARM_KEYS if spec.get(key)}
+    role, defaults = role_sources(spec, directory)
     if not (files or legacy or enable or outputs or arms):
         return
-    ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
-    env = renderer_env(directory)
-    env.loader = ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+    ctx, reasons = host_context(host, defaults, inventory, withheld)
+    env = confined_env(directory)
     add_enable_links(
         package,
         directory,
@@ -415,13 +417,12 @@ def _render_unit(
 
     def secret_text(src: str, keys: frozenset[str]) -> str:
         """`src` with the secrets in `keys` read as sentinels, for `host_outputs.py`."""
-        source = confined(directory, src)
-        if not src.endswith(".j2"):
+        base, name = template_source(role, src, directory)
+        source = confined(base, name)
+        if not name.endswith(".j2"):
             return source.read_text()
-        secret_ctx, secret_reasons = host_context(
-            host, spec.get("defaults") or {}, inventory, withheld, keys
-        )
-        return _render_template(env, src, secret_ctx, secret_reasons, directory)
+        context = host_context(host, defaults, inventory, withheld, keys)
+        return _render_template(confined_env(base), name, *context, base)
 
     if not isinstance(outputs, list):
         raise RenderRefused(f"{directory}: outputs {outputs!r} is not a list")
