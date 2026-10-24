@@ -27,12 +27,6 @@ NAMES = ("domain", "monitor_discord_webhook_url", "alloy_pi_http_password")
 MISSING = object()
 DIGEST = "@sha256:" + "ab" * 32
 DATA = "/home/ubuntu/server/containers"
-UNIT = (
-    "[Unit]\nDescription=fixture\n[Service]\nType=oneshot\n"
-    "Environment=HOMELAB_COMPOSE_INPUTS_SHA256={{ compose_inputs_sha256 }}\n"
-    "ExecStart=/bin/true\n"
-)
-
 AUTOHEAL = f"""services:
   autoheal:
     container_name: autoheal
@@ -118,8 +112,6 @@ class ComposeTree:
             )
         )
         shutil.copytree(REAL, self.component)
-        (self.component / "units").mkdir()
-        (self.component / "units" / "homelab-compose.service.j2").write_text(UNIT)
         self.services = dict(SERVICES if services is None else services)
         self.keys = list(keys)
         (self.root / "daniel-pi").mkdir()
@@ -139,13 +131,6 @@ class ComposeTree:
         spec = yaml.safe_load((REAL / "component.yml").read_text())
         spec["compose"] = "services"
         spec["outputs"] = [self.output()]
-        spec["files"].append(
-            {
-                "src": "units/homelab-compose.service.j2",
-                "dst": "/usr/lib/systemd/system/homelab-compose.service",
-                "inputs_sha256": True,
-            }
-        )
         spec.update(overrides)
         (self.component / "component.yml").write_text(yaml.safe_dump(spec))
         return self

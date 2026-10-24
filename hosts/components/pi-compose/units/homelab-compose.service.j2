@@ -1,0 +1,45 @@
+{#- The Pi's Compose project (H5, docs/target-architecture/host/h5-pi-compose.md,
+    *homelab-compose.service*). The package ships this unit without an enable link until H5.2b.
+
+    Compose's `--wait` returns once a container reports healthy and declares it failed only after
+    `retries` consecutive failed checks. The worst case before a verdict is therefore the largest
+    start_period plus retries x (interval + timeout). The wait adds 120 s of slack. TimeoutStartSec
+    adds 600 s for the image pulls and 60 s for the key check and compose-adopt. At the Pi's values
+    that is 10 + 5 x (60 + 60) + 120 = 730 s, and 1390 s. Reconcile's own limit is 30 minutes. -#}
+{%- macro seconds(value) -%}
+{%- set text = value | string -%}
+{%- set number = text[:-1] | int(-1) -%}
+{%- if text.endswith('s') and number >= 0 -%}{{ number }}
+{%- elif text.endswith('m') and number >= 0 -%}{{ number * 60 }}
+{%- else -%}{{ container_healthcheck_value_must_be_whole_seconds_or_minutes }}
+{%- endif -%}
+{%- endmacro -%}
+{%- set wait = (seconds(compose_start_period) | int)
+    + (container_healthcheck_retries | int)
+    * ((seconds(container_healthcheck_interval) | int) + (seconds(container_healthcheck_timeout) | int))
+    + 120 -%}
+# Shipped by homelab-daniel-pi. Only homelab-reconcile starts or restarts it (H4, *The restart
+# contract*). It has no ExecStop=, so stopping it never stops a container. component.yml carries
+# the contract.
+[Unit]
+Description=Bring up the Pi's homelab Compose project
+# Wants= and After=, never Requires=: systemd propagates an explicit stop or restart of a required
+# unit, so a restart of docker.service would start a compose run outside reconcile.
+Wants=docker.service homelab-secrets.service
+After=docker.service homelab-secrets.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=COMPOSE_PARALLEL_LIMIT=1
+MemoryAccounting=yes
+Environment=HOMELAB_COMPOSE_WAIT_TIMEOUT={{ wait }}
+# Reconcile restarts a unit only when its file changes. This hash over the project's files changes
+# the file whenever any of them changes, so a Renovate digest bump restarts the unit.
+Environment=HOMELAB_COMPOSE_INPUTS_SHA256={{ compose_inputs_sha256 }}
+TimeoutStartSec={{ wait + 660 }}
+ExecStartPre=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-compose.conf
+ExecStart=/usr/lib/homelab/compose-run
+
+[Install]
+WantedBy=multi-user.target
