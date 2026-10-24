@@ -8,6 +8,7 @@ Values are placeholders: the census reads paths only.
 
 import argparse
 import copy
+from collections import Counter
 import json
 import os
 import sys
@@ -351,11 +352,12 @@ def _kustomized_objects(out, tag):
     """The objects each rendered kustomization lists under `resources`, never `patches`.
 
     The kustomization is the renderer's own output and names what Flux applies, so it is the
-    oracle for what the census must compare. A patch is not an object of its own.
+    oracle for what the census must compare. A patch is not an object of its own, and it
+    names the object it patches, so the count of each identity is what keeps it out.
     """
     from lib import yaml_fast
 
-    found = set()
+    found = Counter()
     for directory in (out / "cluster" / tag, out / "cluster" / f"{tag}-deferred"):
         kustomization = directory / "kustomization.yaml"
         if not kustomization.is_file():
@@ -363,7 +365,7 @@ def _kustomized_objects(out, tag):
         for resource in yaml_fast.safe_load(kustomization.read_text())["resources"]:
             for doc in yaml_fast.safe_load_all((directory / resource).read_text()):
                 if doc:
-                    found.add(_identity(doc))
+                    found[_identity(doc)] += 1
     return found
 
 
@@ -372,7 +374,7 @@ def test_render_tag_returns_every_object_the_kustomization_applies(tag, tmp_path
     docs = tk.render_tag(tag, tmp_path)
     expected = _kustomized_objects(tmp_path, tag)
     assert VENDORED_TAGS[tag] in expected, f"{tag}'s render lost its upstream file"
-    assert {_identity(d) for d in docs} == expected
+    assert Counter(_identity(d) for d in docs) == expected
 
 
 def _upstream_crd_names():
