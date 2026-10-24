@@ -328,7 +328,7 @@ claude_code_agent_operator_config_src: /home/{{ sys_user }}/.claude
 # Whether the agent user takes the operator's dotfiles through chezmoi, with the dotfiles
 # repo's `agent` flag on, in place of the subset above (tasks/agent_dotfiles.yml). The operator
 # chose it on 2026-10-10 (#4193-#4195): the agent then runs the operator's guard hooks, agents,
-# commands and CLIs. True only in daniel-box's host_vars. It needs the operator's chezmoi
+# commands and CLIs. True in daniel-box's and daniel-server's host_vars. It needs the operator's chezmoi
 # (has_chezmoi) and a dotfiles source with the flag; a source without it is refused, and the
 # agent keeps what it had. False stops the sync and puts the subset back.
 claude_code_agent_dotfiles: false

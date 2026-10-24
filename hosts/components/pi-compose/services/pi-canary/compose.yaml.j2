@@ -1,0 +1,39 @@
+{#- The canary (H5.2b, docs/target-architecture/host/h5-pi-compose.md). It is the first service the
+    Pi's `homelab` project runs and moves nothing: no Ansible role ever deployed it. It proves
+    three things before any real service moves (H5.6 to H5.9):
+      1. compose-run brings a one-service project up through homelab-compose.service;
+      2. a plain inventory variable renders into the compose file at package build time
+         (HOMELAB_DOMAIN below). `domain` is not a SOPS key since #5087, so it never goes
+         through compose.env. The canary reads no secret and has no `env_file:` (operator ruling
+         2026-10-24, h5-pi-compose.md *Open questions* 7), so the proof that an included file
+         receives a value from compose.env waits for the first move that carries a real secret;
+      3. removing a service removes its container (`up --remove-orphans`, H5.10).
+    `sleep infinity` costs about 1 MB. There is no healthcheck: a probe forks runc every interval
+    on a 512 MB board, and "the container runs" is the whole claim, which `--wait` waits for and
+    the recovery heartbeat watches by name. H5.4 bumps the digest to measure an unattended pull,
+    and H5.10 removes this file. -#}
+services:
+  pi-canary:
+    container_name: pi-canary
+    image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    command: ["sleep", "infinity"]
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - HOMELAB_DOMAIN={{ domain }}
+    # The daemon refuses a memory limit or reservation under 6 MiB ("Minimum memory reservation
+    # allowed is 6MB"), though the Compose model and `config -q` accept it: the canary's first
+    # run failed on a 2M reservation. hosts/lib/tests/_compose_tree.py:memory_problems refuses
+    # any packaged compose file below that floor. The CPU values sit above the daemon's 0.001.
+    deploy:
+      resources:
+        limits:
+          cpus: '0.05'
+          memory: 16M
+        reservations:
+          cpus: '0.01'
+          memory: 6M

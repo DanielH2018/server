@@ -16,12 +16,17 @@ A spec lists each secret-bearing file under `outputs:`::
         dependents: [homelab-compose.service] # units reconcile restarts when it changes
         persist: false                        # true puts it under /var/lib/homelab-secrets
         link: true                            # false ships no symlink at `path` (a drop-in)
+        format: dotenv                        # a Compose env file: only it may sit under COMPOSE_ROOT
         destination: usr/lib/homelab/compose/compose.env    # default: `path` without its `/`
 
 The renderer reads each declared secret as a placeholder, and C1's escape applies: a literal `$`
 followed by `$`, by `{` or by a placeholder renders as `$$` (`placeholders.Sentinels.resolve`).
 The result installs at `/usr/lib/homelab/secret-templates/<path>`, and `homelab-secrets` renders
 it. A `link` output also gets a symlink at `path` that points at the rendered file.
+
+A `format: dotenv` output is a Compose env file. Its row in `secrets.json` carries the format,
+which `homelab-secrets` checks (H5.2a2), and its `path` may sit under `/usr/lib/homelab/compose/`.
+The template reads `secret_placeholders`, each declared key mapped to its placeholder.
 
 A `files:` entry with `compose: true` is the other kind. It installs at its own `dst`, which sits
 under `/usr/lib/homelab/compose/`, because Compose does that file's substitution. It is escaped
@@ -67,7 +72,10 @@ STATE_NAMES = frozenset({".digests", ".hmac-key", "pending.json", "pending.lock"
 SOPS_SUFFIX = ".sops.yaml"
 
 REQUIRED = frozenset({"src", "path", "owner", "group", "mode", "keys"})
-OPTIONAL = frozenset({"destination", "persist", "dependents", "link"})
+OPTIONAL = frozenset({"destination", "persist", "dependents", "link", "format"})
+# The formats an output may declare. A dotenv file is read by Compose, whose parser the script
+# guards (H5, *Secrets*).
+FORMATS = frozenset({"dotenv"})
 # The script's `NAME` and `KEY`: a placeholder name, and a credential's file name.
 PLACEHOLDER_NAME = re.compile(r"[A-Za-z0-9_]+")
 CREDENTIAL_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
@@ -121,11 +129,16 @@ def add_output(
         )
     path = PurePosixPath(str(entry["path"]))
     where = f"{directory}: output {path}"
+    fmt = entry.get("format")
+    if fmt is not None and fmt not in FORMATS:
+        raise RenderRefused(f"{where}: format {fmt!r} is not one of {sorted(FORMATS)}")
+    # Only a Compose env file sits beside the compose files it feeds.
+    refused = (TEMPLATE_ROOT,) if fmt == "dotenv" else (TEMPLATE_ROOT, COMPOSE_ROOT)
     if (
         not path.is_absolute()
         or ".." in path.parts
         or len(path.parts) < 2
-        or any(path.is_relative_to(root) for root in (TEMPLATE_ROOT, COMPOSE_ROOT))
+        or any(path.is_relative_to(root) for root in refused)
         or any(
             path.is_relative_to(root)
             for root in map(PurePosixPath, OUTPUT_ROOTS.values())
@@ -193,18 +206,18 @@ def add_output(
         if str(path) in package.links:
             raise RenderRefused(f"{package.name}: two specs install {path}")
         package.links[str(path)] = f"{OUTPUT_ROOTS[persist]}/{destination}"
-    package.outputs.append(
-        {
-            "template": template,
-            "destination": destination,
-            "owner": owner,
-            "group": group,
-            "mode": format(mode, "04o"),
-            "persist": persist,
-            "dependents": sorted(set(dependents)),
-            "keys": sorted(keys),
-        }
-    )
+    row = {
+        "template": template,
+        "destination": destination,
+        "owner": owner,
+        "group": group,
+        "mode": format(mode, "04o"),
+        "persist": persist,
+        "dependents": sorted(set(dependents)),
+        "keys": sorted(keys),
+    }
+    # Absent unless declared, so a package without a dotenv output keeps its `secrets.json` bytes.
+    package.outputs.append({**row, "format": fmt} if fmt else row)
 
 
 def compose_file(

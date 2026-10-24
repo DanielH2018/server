@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Probe the edge VIP from daniel-pi once and append the HTTP status to the probe's status file.
-# Managed by Ansible (setup/k8s_host_files, tasks/crowdsec.yml); edits are overwritten.
+# Shipped by homelab-daniel-pi (hosts/components/crowdsec-probe); edits are overwritten.
 #
 # The evidence half of crowdsec's off-cluster verify (D5, *crowdsec's verify from outside the
 # cluster*, and its Open question 9, confirmed by the operator on 2026-10-18). A ban is enforced
@@ -25,7 +25,7 @@
 # which Alloy follows from its start. At ~40 B a line, 256 KiB is about four and a half days.
 #
 # Usage: crowdsec-edge-probe <hostname> <vip>
-# Runs as crowdsec-edge-probe.service, fired by crowdsec-edge-probe.timer every minute. It
+# Runs as homelab-crowdsec-probe.service, fired by homelab-crowdsec-probe.timer every minute. It
 # appends `<UTC time> http=<code>` to /var/log/pi-health/crowdsec-edge-probe.status, with
 # `http=000` when no answer came back. It exits 0 whatever the edge answered.
 set -uo pipefail

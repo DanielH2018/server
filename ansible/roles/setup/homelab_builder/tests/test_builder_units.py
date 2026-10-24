@@ -12,7 +12,14 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _helpers import SETUP_ROLES, load_defaults, load_tasks, render_expr, task_named
+from _helpers import (
+    SETUP_ROLES,
+    load_defaults,
+    load_tasks,
+    render_expr,
+    task_named,
+    walk_tasks,
+)
 from _setup_render import render_setup_text
 
 from lib import yaml_fast
@@ -148,6 +155,52 @@ def test_publish_textfile_runs_as_root_outside_the_sandbox_from_root_owned_code(
     # The root line runs nothing the builder could rewrite.
     assert not DEFAULTS["homelab_builder_code_dir"].startswith(
         DEFAULTS["homelab_builder_state_dir"]
+    )
+
+
+# syslog priorities, most severe first. journald stores a line whose priority is at or above
+# MaxLevelStore, and a unit's plain stdout and stderr carry its SyslogLevel, info by default.
+_PRIORITIES = ["emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"]
+JOURNALD_CONF = "/etc/systemd/journald.conf.d/50-homelab.conf"
+
+
+def journald_max_level_store() -> str:
+    """The MaxLevelStore initial_setup writes into this host's journald drop-in."""
+    tuning = load_tasks(SETUP_ROLES / "initial_setup" / "tasks" / "system-tuning.yml")
+    [content] = [
+        task["ansible.builtin.copy"]["content"]
+        for task in walk_tasks(tuning)
+        if (task.get("ansible.builtin.copy") or {}).get("dest") == JOURNALD_CONF
+    ]
+    [level] = [
+        line.partition("=")[2].strip()
+        for line in content.splitlines()
+        if line.startswith("MaxLevelStore=")
+    ]
+    return level
+
+
+def syslog_level_problem(text: str, store: str) -> str | None:
+    """None when the unit's output logs at a priority journald stores."""
+    [level] = directives(text).get("SyslogLevel", ["info"])
+    if _PRIORITIES.index(level) <= _PRIORITIES.index(store):
+        return None
+    return f"SyslogLevel={level}, and journald stores {store} and above"
+
+
+@pytest.mark.parametrize("template", sorted(SANDBOX))
+def test_each_units_output_logs_at_a_level_journald_stores(template):
+    """A failed build's exception text is the unit's stderr; dropped, the failure has no cause."""
+    # fact: ansible/roles/setup/homelab_builder/CLAUDE.md#The builder's run
+    store = journald_max_level_store()
+    assert store == "notice"
+    assert syslog_level_problem(render(template), store) is None
+
+
+def test_a_unit_left_at_the_default_level_is_flagged():
+    text = render("homelab-builder.service.j2").replace("SyslogLevel=notice\n", "")
+    assert syslog_level_problem(text, "notice") == (
+        "SyslogLevel=info, and journald stores notice and above"
     )
 
 

@@ -279,7 +279,12 @@ def get_args(doc):
 
 
 def render_tag(tag, out):
-    """The tag's placeholder-render documents, from its directory and its deferred one."""
+    """The tag's placeholder-render documents, from its directory and its deferred one.
+
+    Each directory's `kustomization.yaml` lists the files Flux applies under `resources:`,
+    including a role's vendored `upstream/` files, which a top-level glob missed (#5721). Its
+    `patches:` stay out: a patch names the object it modifies and is no object of its own.
+    """
     proc = subprocess.run(
         [_sys.executable, str(RENDERER), "cluster", "--out", str(out), "--role", tag],
         capture_output=True,
@@ -292,9 +297,12 @@ def render_tag(tag, out):
         )
     docs = []
     for directory in (out / "cluster" / tag, out / "cluster" / f"{tag}-deferred"):
-        for path in sorted(directory.glob("*.yaml")) if directory.is_dir() else ():
-            if path.name == "kustomization.yaml":
-                continue
+        kustomization = directory / "kustomization.yaml"
+        if not kustomization.is_file():
+            continue
+        kustomized = yaml_fast.safe_load(kustomization.read_text()) or {}
+        for resource in kustomized.get("resources") or ():
+            path = directory / resource
             docs += [d for d in yaml_fast.safe_load_all(path.read_text()) if d]
     return docs
 

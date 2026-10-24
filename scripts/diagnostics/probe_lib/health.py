@@ -452,13 +452,14 @@ def run_health(
     roles_dir=K8S_ROLES,
     prom=health_alerts.DEFAULT_PROM,
     on_origin=health_checkout.role_on_origin,
+    stale_reason=health_checkout.stale_checkout_reason,
 ):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
     k8s first because that is where ~50 of the ~55 services live. `tools` is the kubectl
     boundary of the k8s reads, injectable so a test can fail them without patching.
     `roles_dir` is where the k8s roles live, injectable so a test can resolve a fixture role;
-    `on_origin` is the git read behind the stale-checkout refusal (`health_checkout`).
+    `stale_reason` is the stale-checkout refusal (`health_checkout`) and `on_origin` its git read.
     `prom` is the alert plane's Prometheus boundary, read for a role-resolved tag only: the
     Pi's `--docker` path and a guessed workload name stay on the rollout verdict alone.
     """
@@ -502,6 +503,11 @@ def run_health(
         print(f"{container}: {refusal}", file=_sys.stderr)
         return PROBE_UNREADABLE
 
+    # Before the resolver: an old definition of the role yields no verdict (#5912).
+    if stale := stale_reason(container, roles_dir, on_origin):
+        print(f"{container}: {stale}", file=_sys.stderr)
+        return PROBE_UNREADABLE
+
     ns = core.k8s_namespace()
     read = functools.partial(_read, cluster, tools=tools)
     try:
@@ -514,10 +520,6 @@ def run_health(
         return 1
 
     if targets is None:
-        stale = health_checkout.stale_checkout_reason(container, roles_dir, on_origin)
-        if stale:
-            print(f"{container}: {stale}", file=_sys.stderr)
-            return PROBE_UNREADABLE
         # Not a k8s role, so the tag is the only name available. A miss here means "this tag
         # is not a k8s workload name", which is exactly what lets --docker take over.
         workload, pods = _fetch_workload(container, ns, cluster, tools)

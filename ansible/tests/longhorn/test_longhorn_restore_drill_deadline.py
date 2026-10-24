@@ -56,10 +56,10 @@ def test_the_grace_period_covers_one_poll_and_the_four_cleanup_deletes() -> None
     assert pod["terminationGracePeriodSeconds"] == 300
 
 
-def test_the_cronjob_ships_suspended_and_never_overlaps() -> None:
+def test_the_cronjob_is_unsuspended_and_never_overlaps() -> None:
     spec = _cronjob()["spec"]
-    assert spec["suspend"] is True, (
-        "H2.3e unsuspends it, after the host cron file is gone"
+    assert spec["suspend"] is False, (
+        "H2.3e unsuspended it, after the host cron file was gone"
     )
     assert spec["concurrencyPolicy"] == "Forbid"
     assert spec["timeZone"] == "Etc/UTC"

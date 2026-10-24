@@ -1,8 +1,8 @@
 """The `host_packages` job's two scans over the named package roots (H4.1c).
 
 `gitleaks dir` and the placeholder check read the head render's `homelab-updater`,
-`homelab-daniel-pi` and `homelab-daniel-server` roots. The gitleaks binary exists only inside the job, so these cases drive
-the scan with a stub that honours the contract the job relies on, and the job's `prove-scan`
+`homelab-daniel-pi`, `homelab-daniel-server` and `homelab-daniel-box` roots. The gitleaks binary
+exists only inside the job, so these cases drive the scan with a stub that honours the contract the job relies on, and the job's `prove-scan`
 step proves the real binary honours it too.
 
 Run: uv run pytest scripts/validate/tests/test_package_roots.py
@@ -51,6 +51,9 @@ def _render(tmp_path: Path) -> dict[str, Path]:
         "homelab-daniel-pi": _package(tmp_path, "homelab-daniel-pi", "hosts/daniel-pi"),
         "homelab-daniel-server": _package(
             tmp_path, "homelab-daniel-server", "hosts/daniel-server"
+        ),
+        "homelab-daniel-box": _package(
+            tmp_path, "homelab-daniel-box", "hosts/daniel-box"
         ),
     }
 

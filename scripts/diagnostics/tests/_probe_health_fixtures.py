@@ -5,7 +5,8 @@
 document carrying container restart counts. They live here rather than in a conftest because
 `scripts/conftest.py` is this tree's conftest and covers every suite under `scripts/`, while
 these three names are wanted by exactly three modules — the same split
-`scripts/deploy_tools/tests/_land_fakes.py` makes.
+`scripts/deploy_tools/tests/_land_fakes.py` makes. `current_checkout` serves every module
+whose `run_health` cases read the repo's own roles.
 
 Import by bare name: pytest puts a test's own directory on `sys.path`, so
 `from _probe_health_fixtures import NOW, pods` resolves from any module in this directory.
@@ -46,3 +47,13 @@ def pods(*containers):
             }
         ]
     }
+
+
+def current_checkout(role, roles_dir, on_origin):
+    """A `stale_reason` for `run_health` that judges every checkout current (#5912).
+
+    For a case that reads the repo's own roles. CI tests a PR's head, which sits behind
+    origin/master whenever master moved, so the real refusal would read 75 for any role master
+    touched since, and the case would test the branch's age instead of the gate.
+    """
+    return None

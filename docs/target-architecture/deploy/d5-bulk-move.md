@@ -2423,6 +2423,10 @@ sizes its batch of roles against that projection.
   tag, and prints object names, field paths and exit codes only. The operator no longer runs
   a script per flip batch. The wrapper's limits are in the `setup/claude_code` role's
   `CLAUDE.md`, *The takeover check*.
+- **To pipe or redirect the output, run `takeover-check` with the same flags.** claude-guard
+  allows the sudo line only alone on its line, so `… 2>&1 | tail` or a `$PWD/<dir>` argument
+  is refused. The dotfiles shim `takeover-check` (dotfiles #1007) runs exactly that line, takes
+  relative paths, and merges stderr into stdout.
 - Both quote object names and field paths only, never values or diff hunks, because R2's
   baseline finds credentials in ConfigMaps too, and the repository is public.
 - For an own-window role (*Waves and windows*), the window it lands in.

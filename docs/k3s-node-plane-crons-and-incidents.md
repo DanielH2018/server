@@ -13,9 +13,9 @@ throwaway pod, checks the data is real, and tears everything down. Three refinem
 
 **An operator pin drills one volume without disturbing the rotation** (#2183). The drill is the
 CronJob `longhorn-restore-drill` in `homelab` since H2.3d (`ansible/roles/k8s/longhorn-restore-drill/`),
-and it ships suspended until H2.3e. A hand run is **operator-only**, because the agent's kubeconfig
-cannot create a Job, and it runs outside the 04:10 UTC slot. A plain run creates a Job from the
-CronJob, which works on a suspended CronJob:
+and it runs on its schedule since H2.3e. A hand run is **operator-only**, because the agent's
+kubeconfig cannot create a Job, and it runs outside the 04:10 UTC slot. A plain run creates a Job
+from the CronJob:
 
 ```bash
 kubectl -n homelab create job --from=cronjob/longhorn-restore-drill longhorn-restore-drill-manual-1

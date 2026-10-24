@@ -30,6 +30,8 @@ the stop on a real systemd; the render tests here prove the link follows the fla
 Run: uv run pytest ansible/tests/setup/test_pi_recovery_restarts_and_reports.py
 """
 
+import os
+
 import pytest
 from _pi_health import COMPONENT_DEFAULTS, PI_HOST_VARS, journalctl_calls, run
 from lib.ansible_inventory import pi_entries_in
@@ -90,7 +92,10 @@ def test_a_container_moved_to_compose_services_is_still_watched(tmp_path):
     """
     kept = [c for c in PI_HOST_VARS["containers_list"] if c["name"] != "autoheal"]
     moved = [c for c in PI_HOST_VARS["containers_list"] if c["name"] == "autoheal"]
-    jinja_vars = {"containers_list": kept, "compose_services": moved}
+    jinja_vars = {
+        "containers_list": kept,
+        "compose_services": [*PI_HOST_VARS["compose_services"], *moved],
+    }
 
     assert "autoheal" not in {c["name"] for c in kept}
     assert _watch_set(tmp_path, jinja_vars) == EXPECTED_WATCH_SET
@@ -108,7 +113,10 @@ def test_the_watch_set_is_independent_of_which_key_holds_an_entry(tmp_path):
         SCRIPT,
         split,
         running=ALL,
-        jinja_vars={"containers_list": pi[:2], "compose_services": pi[2:]},
+        jinja_vars={
+            "containers_list": pi[:2],
+            "compose_services": [*pi[2:], *PI_HOST_VARS["compose_services"]],
+        },
     )
     # The harness repoints two absolute paths into the run's own directory; the rest is the render.
     rendered = [
@@ -329,6 +337,91 @@ def test_a_dead_daemon_with_an_empty_journal_still_reports(tmp_path):
     assert status == "down"
     assert "dockerd:" not in msg, msg
     assert len(lines) == 1, lines
+
+
+def _compose_prom(tmp_path, body):
+    """Seed homelab_compose.prom in the textfile directory the harness gives the script."""
+    textfiles = tmp_path / "textfile"
+    textfiles.mkdir(exist_ok=True)
+    (textfiles / "homelab_compose.prom").write_text(body)
+    return textfiles / "homelab_compose.prom"
+
+
+def _result(value, sha="0123456789ab"):
+    return f'homelab_compose_up_result{{host="daniel-pi",sha="{sha}"}} {value}\n'
+
+
+def test_a_compose_result_of_zero_pushes_down_naming_the_unit_and_the_sha(tmp_path):
+    """REJECT (H5.2b): every container runs, yet the package's last run failed.
+
+    The container loop alone reads all-clear here, because a failed run leaves containers as
+    they were. A script without the compose arm pushes `up` and fails this case.
+    """
+    _compose_prom(tmp_path, _result(0))
+    status, msg, _, lines = run(SCRIPT, tmp_path, running=ALL)
+
+    assert status == "down"
+    assert "homelab-compose" in msg and "0123456789ab" in msg, msg
+    assert "not running" not in msg, msg
+    assert lines and "homelab-compose" in lines[0], lines
+
+
+def test_a_compose_result_of_one_adds_nothing(tmp_path):
+    """ACCEPT: 1 is success. No file is the other ACCEPT, which the healthy-cycle case covers."""
+    _compose_prom(tmp_path, _result(1))
+    status, msg, _, _ = run(SCRIPT, tmp_path, running=ALL)
+
+    assert (status, msg) == ("up", f"all {len(ALL)} containers running")
+
+
+def test_a_compose_failure_and_a_dead_container_are_both_reported(tmp_path):
+    _compose_prom(tmp_path, _result(0))
+    status, msg, _, _ = run(
+        SCRIPT, tmp_path, running=[c for c in ALL if c != "autoheal"]
+    )
+
+    assert status == "down"
+    assert "restarted: autoheal" in msg and "homelab-compose" in msg, msg
+
+
+def _unreadable_by_mode(path):
+    path.chmod(0)
+
+
+def _unreadable_by_kind(path):
+    path.unlink()
+    path.mkdir()
+
+
+@pytest.mark.parametrize(
+    "unreadable",
+    [
+        pytest.param(
+            _unreadable_by_mode,
+            id="mode-0",
+            marks=pytest.mark.skipif(
+                os.geteuid() == 0,
+                reason="root reads a mode-0 file; the directory case covers root",
+            ),
+        ),
+        pytest.param(_unreadable_by_kind, id="directory"),
+    ],
+)
+def test_a_compose_file_that_cannot_be_read_is_down_never_absent(tmp_path, unreadable):
+    """REJECT: treating an unreadable file as absent would turn a broken signal into all-clear."""
+    unreadable(_compose_prom(tmp_path, _result(1)))
+    status, msg, _, _ = run(SCRIPT, tmp_path, running=ALL)
+
+    assert status == "down"
+    assert "homelab_compose.prom exists and cannot be read" in msg, msg
+
+
+def test_a_compose_file_with_no_result_line_is_down(tmp_path):
+    _compose_prom(tmp_path, "# a truncated write\n")
+    status, msg, _, _ = run(SCRIPT, tmp_path, running=ALL)
+
+    assert status == "down"
+    assert "holds no homelab_compose_up_result" in msg, msg
 
 
 def _renders(tmp_path) -> tuple[host_mode.Package, host_mode.Package]:

@@ -7,8 +7,15 @@
 # /run/credstore, and the two token heartbeats load them from there. The interim files under
 # /etc/homelab/interim/ stay until H4.6. ansible/vars/hosts/daniel-pi.sops.yaml carries every key
 # this tree names, and `host_secrets.py sync daniel-pi` rewrites it (operator-only).
+#
+# Since H5.14 it ships crowdsec's edge probe timer. D5's first crowdsec conversion installed that
+# timer through setup/k8s_host_files. The probe reads no secret, so `credentials:` is unchanged.
+#
+# Since H5.2b it ships the Pi's Compose project (the pi-compose component) with its enable link and
+# the first service, `pi-canary`. The canary reads no secret, so `credentials:` is unchanged and
+# the Pi's SOPS file needs no new key.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token
