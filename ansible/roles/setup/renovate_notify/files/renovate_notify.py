@@ -125,7 +125,11 @@ def build_pr(repo: str, pr: dict) -> PR:
         lambda query: get("repos/%s/commits/%s/check-runs%s" % (repo, sha, query)),
         "check_runs",
     )
-    statuses = get("repos/%s/commits/%s/status" % (repo, sha)).get("statuses", [])
+    # The combined status pages its `statuses` the same way, at a default of 30 contexts.
+    statuses = read_check_pages(
+        lambda query: get("repos/%s/commits/%s/status%s" % (repo, sha, query)),
+        "statuses",
+    )
     return PR(
         number=n,
         title=pr.get("title", "").strip(),

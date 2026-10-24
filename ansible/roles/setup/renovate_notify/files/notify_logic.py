@@ -213,10 +213,11 @@ CHECK_PAGE_SIZE, CHECK_PAGES_MAX = 100, 20
 
 
 def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:
-    """Every entry of `key` across a check-runs listing, walked as `deploy_git.read_check_pages`.
+    """Every entry of `key` across a paged GitHub listing, walked as `deploy_git.read_check_pages`.
 
-    GitHub answers an unparameterised check-runs GET with one page of 30, so a failing run past
-    it read as green and the digest dropped a PR whose CI was failing (#6002). The notifier
+    GitHub answers a check-runs or combined-status GET with no `per_page` with one page of 30,
+    so a failing entry past it read as green and the digest dropped a PR whose CI was failing
+    (#6002). Both bodies carry `total_count` beside their list. The notifier
     cannot import `deployer_lib`, so this is a copy, held equal by
     `tests/test_renovate_notify.py`. `fetch_page(query)` returns the parsed body for the
     `?per_page=&page=` string this walk builds. A read short of `total_count` raises rather
