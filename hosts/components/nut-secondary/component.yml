@@ -1,17 +1,35 @@
 # daniel-server's secondary upsmon, the client half of the UPS shutdown chain (H4,
-# docs/target-architecture/host/h4-secrets-unit.md, *NUT on daniel-server*). H4.3a ships only the
-# declared output below. No unit, drop-in or symlink reads it: /etc/nut/upsmon.conf stays the file
-# nut-monitor reads, and H4.3c points nut-monitor at the rendered one.
+# docs/target-architecture/host/h4-secrets-unit.md, *NUT on daniel-server*). From H4.3c the package
+# owns the host half: nut-monitor reads the rendered upsmon.conf through a drop-in, a timer runs the
+# UPS watchdog, and the APC udev rule installs from the package. daniel-box keeps the Ansible-owned
+# nut_host role until H7.8, so both hosts render the role's templates.
 #
-# `role: nut_host` renders the role's own template, because the role keeps owning it until H7.8
+# `role: nut_host` renders the role's own templates, because the role keeps owning them until H7.8
 # moves daniel-box. The role's defaults sit beneath this map, so `nut_host_upsd_host` resolves to
-# 127.0.0.1 here (inventory_hostname == ups_host).
+# 127.0.0.1 here (inventory_hostname == ups_host). The `defaults:` map below sets the one flag that
+# switches ups-secondary-health.sh.j2 to its packaged branch (H4.3b3).
 #
 # The output persists, against C5's default, because nut-monitor must start at boot even when the
 # decrypt cannot run (*Persisted outputs*). It installs to
 # /var/lib/homelab-secrets/etc/nut/upsmon.conf, root:nut 0640, and ships no symlink at `path`,
-# which is the nut-client conffile. Its dependent, nut-monitor.service, joins in H4.3c.
+# which is the nut-client conffile. /etc/nut/nut.conf and /etc/nut/upsmon.conf stay in place as
+# conffiles and are not legacy entries: they are the rollback path, read again by the vendor unit
+# when the drop-in goes.
+#
+# The watchdog changes no state: it only reads and reports; it restarts, writes and deletes
+# nothing, so the nut_host role stays in test_setup_cron_roles_have_a_contract.py's EXEMPT list.
+# The actor that changes state is upsmon, which the nut pod's CLAUDE.md documents.
+#
+# - Mode (explicit and reversible): nut_host_watchdog_armed arms the timer and ships true. Setting
+#   it false in inventory drops the timer's enable link from the next package version, and
+#   reconcile stops the timer on the install that drops it. daniel-server's "UPS Secondary" tile
+#   then goes DOWN at its 1200 s deadline, which is the intended signal.
+# - The unit loads one credential, the token key nut_host_watchdog_token_key names for this host.
 role: nut_host
+defaults:
+  nut_host_watchdog_packaged: true
+depends:
+  - nut-client
 outputs:
   - src: "role:host-upsmon.conf.j2"
     path: /etc/nut/upsmon.conf
@@ -21,3 +39,25 @@ outputs:
     keys: [nut_monitor_password]
     persist: true
     link: false
+    dependents: [nut-monitor.service]
+files:
+  # The drop-in that points upsmon at the rendered file. Its name must stay 50-homelab.conf: the
+  # manifest lists nut-monitor.service only for a drop-in of that name.
+  - {src: units/50-homelab.conf, dst: /usr/lib/systemd/system/nut-monitor.service.d/50-homelab.conf}
+  # A packaged rule, found by reconcile's udev arm. The Ansible rule it replaces is a legacy entry.
+  - {src: rules/99-homelab-nut-apc.rules, dst: /usr/lib/udev/rules.d/99-homelab-nut-apc.rules}
+  # A plain file, not a declared output: the script holds many shell `${...}` expansions and
+  # reads no secret in its packaged branch.
+  - {src: "role:ups-secondary-health.sh.j2", dst: /usr/lib/homelab/ups-secondary-health, mode: "0755"}
+  - {src: units/homelab-ups-watchdog.service.j2, dst: /usr/lib/systemd/system/homelab-ups-watchdog.service}
+  - {src: units/homelab-ups-watchdog.timer.j2, dst: /usr/lib/systemd/system/homelab-ups-watchdog.timer}
+enable:
+  homelab-ups-watchdog.timer: {target: timers.target, when: nut_host_watchdog_armed}
+# What the nut_host role installed on daniel-server before H4.3c. Reconcile retires each once the
+# package's units have started.
+legacy:
+  - {cron_file: ups-secondary-health}
+  - {path: /usr/local/bin/ups-secondary-health.sh}
+  - {path: /etc/nut/kuma-push.env}
+  - {path: /etc/udev/rules.d/99-nut-apc.rules}
+  - {path: /var/lib/homelab/setup-render-manifest.d/nut-host}

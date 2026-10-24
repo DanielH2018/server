@@ -4,25 +4,15 @@
 #
 # Runs from initial_setup.yml, gated to ups_host (group_vars/all.yml).
 
-# ── USB half: only the host the UPS is physically attached to ───────────────────
-- name: Install udev rule for APC UPS USB permissions
-  ansible.builtin.copy:
-    dest: /etc/udev/rules.d/99-nut-apc.rules
-    content: 'SUBSYSTEM=="usb", ATTR{idVendor}=="051d", ATTR{idProduct}=="0002", MODE="0666"'
-    mode: "0644"
-  become: true
-  when: inventory_hostname == ups_host
-
-- name: Reload udev rules
-  ansible.builtin.command: udevadm control --reload-rules
-  become: true
-  changed_when: false
-  when: inventory_hostname == ups_host
-
-- name: Trigger udev for USB subsystem
-  ansible.builtin.command: udevadm trigger --subsystem-match=usb
-  become: true
-  changed_when: false
+# DECIDED: the role ends on ups_host here, not with a `when:` on its initial_setup.yml entry.
+# The ups_host half is package-owned since H4.3c (hosts/components/nut-secondary): the udev rule,
+# the secondary upsmon's drop-in and the watchdog timer ship in homelab-daniel-server. An
+# initial_setup.yml edit is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's
+# landing, so the exclusion lives in the role. setup_gates.role_end_guard reads this task, which
+# keeps the two-writer census, land_reach and the glance block honest about where the role runs.
+# Long form: docs/target-architecture/host/h4-secrets-unit.md, *The role guard after this slice*.
+- name: End the role on the UPS host, whose half the homelab-daniel-server package owns
+  ansible.builtin.meta: end_role
   when: inventory_hostname == ups_host
 
 # ── Endpoint resolution, for a host the UPS is not attached to ──────────────────
