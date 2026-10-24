@@ -1,0 +1,53 @@
+# The windowed k3s restart (H6.3b, docs/target-architecture/host/h6-k3s-suc.md,
+# *`homelab-k3s-restart`*). Reconcile never restarts a `windowed` unit, so this oneshot, started by
+# its timer inside the host's `k3s_restart_window`, applies a k3s configuration change with one
+# gated restart. SUC's upgrade container is the other process that restarts the unit (H4, *The
+# restart contract*). The two exclude each other on a node: `prepare` refuses while
+# /run/homelab-k3s-restart/ exists, and this unit refuses while a Plan is applying or a SUC Job runs.
+#
+# Autonomous-role contract (restarts the cluster's control plane unattended).
+# - Scope / exclusions: one unit, `k3s_restart_unit`, once per changed hash of the files the
+#   package ships for it (manifest `activations` entries whose action is `manual:<unit>`). No file
+#   is packaged for it until H6.4a, so the first runs hash an empty set and restart nothing. A path
+#   Ansible still writes is outside the hash, so an Ansible change never causes a restart. It
+#   never drains or cordons.
+# - Mode (explicit and reversible): the timer's enable link arms it. `sudo systemctl mask --now
+#   homelab-k3s-restart.timer` pauses it, and `unmask` then `start` resumes it (H6, *Pause and
+#   resume*). `sudo systemctl start homelab-k3s-restart.service` runs it now, behind the same gates.
+# - Abort valves: `k3s_gates.py host` (storage, nodes, CoreDNS, no SUC run, no Flux promotion in
+#   flight, and on an agent host the server-restart guard), the deployer's `all` lock and hold
+#   while the deployer exists, `TimeoutStartSec=7min`, and one attempt per hash, a killed attempt
+#   included.
+# - Authoritative sources: the manifest, the API read with the read-only ServiceAccount's token
+#   (never an event, which would read an absent restart as clean), and the node's own heartbeat.
+# - Required evidence: notice lines in the journal, and homelab_k3s_restart.prom with `pending`,
+#   `failed` and `last_success_timestamp_seconds` on every run. K3sConfigRestartFailed pages a
+#   failed attempt and K3sConfigRestartPending a refusal that outlasts 72 hours.
+# - Next-run review: read `journalctl -u homelab-k3s-restart -p notice` for the last windows
+#   before widening the hash set (H6.4a) or narrowing the window.
+#
+# A host that lists this component sets `k3s_restart_window` (an OnCalendar value) in its
+# `host_vars`, and the component has no default for it, so a host without one fails the render. It
+# must also list `secrets-unit` and declare `k3s_readonly_token` under
+# `credentials:`, because the unit loads that credential through `LoadCredential=`.
+#
+# ENFORCED: hosts/lib/tests/test_k3s_restart.py, test_k3s_restart_component.py and
+# test_k3s_restart_window.py.
+defaults:
+  # The unit this host restarts, and the API it asks. daniel-box hosts the only API server.
+  k3s_restart_unit: k3s.service
+  k3s_restart_server: https://127.0.0.1:6443
+  # The k3s server CA. The directory is root-only, so H6.3b's pre-merge step lists it with
+  # `sudo ls -l` on each node and corrects this value to what it shows.
+  k3s_restart_ca_file: /var/lib/rancher/k3s/agent/server-ca.crt
+  # Hold the deployer's `all` lock and check its hold. True on the deploy host until H7.19a.
+  k3s_restart_deploy_lock: true
+  # An agent host's restart also runs the server-restart guard. Its package sets this true.
+  k3s_restart_guard_server_restart: false
+files:
+  - {lib: homelab-k3s-restart, dst: /usr/lib/homelab/homelab-k3s-restart, mode: "0755"}
+  - {lib: k3s_gates.py, dst: /usr/lib/homelab/k3s_gates.py, mode: "0755"}
+  - {src: units/homelab-k3s-restart.service.j2, dst: /usr/lib/systemd/system/homelab-k3s-restart.service}
+  - {src: units/homelab-k3s-restart.timer.j2, dst: /usr/lib/systemd/system/homelab-k3s-restart.timer}
+enable:
+  homelab-k3s-restart.timer: timers.target

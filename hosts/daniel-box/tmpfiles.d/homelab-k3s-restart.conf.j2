@@ -1,0 +1,6 @@
+# The deployer's `all` deploy lock, created at boot and owned by the user the deployer runs as, so
+# neither side ever creates it as root. homelab-k3s-restart opens it O_RDONLY, never O_CREAT, and
+# refuses when it is absent (H6, *`homelab-k3s-restart`*, step 5). /var/lock is a link to /run/lock.
+# H7.19a's tick-stopping PR removes this entry with the deployer (H6 Open question 10).
+#Type Path                              Mode User         Group        Age
+f /run/lock/server-deploy-all.lock 0644 {{ sys_user }} {{ sys_user }} -

@@ -130,3 +130,64 @@ tests:
       - eval_time: 10m
         alertname: K3sUpgradeJobFailed
         exp_alerts: []
+
+  # K3sConfigRestartFailed fires at once on a failed series and stays quiet on a clean host. The
+  # daniel-server series reads 1 and fires nothing, because no rule names that host yet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_k3s_restart_failed{host="daniel-box"}'
+        values: '0 0 1 1 1'
+      - series: 'homelab_k3s_restart_failed{host="daniel-server"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: K3sConfigRestartFailed
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: K3sConfigRestartFailed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: daniel-box
+              host: daniel-box
+            exp_annotations:
+              summary: homelab-k3s-restart failed to restart k3s on daniel-box.
+              description: >-
+                The last windowed restart of k3s.service on daniel-box did not end with the unit
+                active, under a new MainPID, and the node Ready past its restart, or a run was
+                killed after it restarted k3s. The unit makes one attempt per config hash. Read
+                `journalctl -u homelab-k3s-restart -p notice` on daniel-box, recover the node by
+                hand if it is down, then `sudo rm /var/lib/homelab-k3s-restart/failed.sha256`.
+
+  # K3sConfigRestartPending fires only after 72 hours of `pending 1`. An absent series fires
+  # nothing here: K3sConfigRestartMetricsAbsent owns that case from H6.4a.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_k3s_restart_pending{host="daniel-box"}'
+        values: '1x4400'
+    alert_rule_test:
+      - eval_time: 71h
+        alertname: K3sConfigRestartPending
+        exp_alerts: []
+      - eval_time: 72h
+        alertname: K3sConfigRestartPending
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: daniel-box
+              host: daniel-box
+            exp_annotations:
+              summary: A k3s config change on daniel-box has waited 72 hours for a restart.
+              description: >-
+                homelab-k3s-restart has refused to restart k3s.service on daniel-box at every
+                window for 72 hours. Read `journalctl -u homelab-k3s-restart -p notice` for the
+                refusing gate, which is a Longhorn volume, a node, CoreDNS, a SUC run, a Flux
+                promotion, the deployer's lock or hold, or an unreadable API.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_k3s_restart_pending{host="daniel-box"}'
+        values: '1x2400 0x2400'
+    alert_rule_test:
+      - eval_time: 80h
+        alertname: K3sConfigRestartPending
+        exp_alerts: []

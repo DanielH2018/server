@@ -34,9 +34,11 @@ HOST_FILE = f"ansible/vars/hosts/{HOST}.sops.yaml"
 SECRETS = "ansible/vars/secrets.yml"
 PACKAGE = f"hosts/{HOST}/package.yml"
 
-# The live host files. H4.2 added daniel-server's and H4.5 the Pi's; the equality below then
+# The live host files. H4.2 added daniel-server's, H4.5 the Pi's and H6.3b daniel-box's; the equality below then
 # fails until the new member is named, so the live check can never pass over an empty set.
-LIVE_HOST_FILES: frozenset[str] = frozenset({"daniel-server", "daniel-pi"})
+LIVE_HOST_FILES: frozenset[str] = frozenset(
+    {"daniel-server", "daniel-pi", "daniel-box"}
+)
 
 
 def enc(tag: str) -> str:

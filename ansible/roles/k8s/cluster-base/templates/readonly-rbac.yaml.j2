@@ -82,3 +82,32 @@ subjects:
   - kind: ServiceAccount
     name: {{ cluster_base_readonly_sa_name }}
     namespace: {{ cluster_base_readonly_sa_namespace }}
+---
+# One Lease read, for H6's server-restart guard (docs/target-architecture/host/h6-k3s-suc.md,
+# *Gates at apply time*). `k3s_gates.py` reads `kube-controller-manager`'s `acquireTime` to
+# learn that the k3s server restarted less than 15 minutes ago, and `view` grants no Lease.
+# `resourceNames` pins the grant to that one object, so a list of Leases stays Forbidden.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: homelab-readonly-kcm-lease
+  namespace: kube-system
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    resourceNames: ["kube-controller-manager"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: homelab-readonly-kcm-lease
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: homelab-readonly-kcm-lease
+subjects:
+  - kind: ServiceAccount
+    name: {{ cluster_base_readonly_sa_name }}
+    namespace: {{ cluster_base_readonly_sa_namespace }}

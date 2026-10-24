@@ -118,6 +118,47 @@ def test_readonly_bindings_never_reference_a_writing_clusterrole():
         assert name in allowed, f"{binding['metadata']['name']} binds to '{name}'"
 
 
+def _lease_grant_docs() -> dict[str, dict]:
+    return {
+        d["kind"]: d
+        for d in _readonly_rbac_docs()
+        if d["metadata"].get("name") == "homelab-readonly-kcm-lease"
+    }
+
+
+def test_the_lease_role_grants_one_named_lease_to_the_readonly_account():
+    """H6.3b: the server-restart guard reads `kube-controller-manager`, and nothing else."""
+    docs = _lease_grant_docs()
+    assert sorted(docs) == ["Role", "RoleBinding"]
+    role, binding = docs["Role"], docs["RoleBinding"]
+    assert role["metadata"]["namespace"] == binding["metadata"]["namespace"]
+    assert role["metadata"]["namespace"] == "kube-system"
+    [rule] = role["rules"]
+    assert rule["apiGroups"] == ["coordination.k8s.io"]
+    assert rule["resources"] == ["leases"]
+    assert rule["resourceNames"] == ["kube-controller-manager"]
+    assert rule["verbs"] == ["get"]
+    assert binding["roleRef"]["name"] == role["metadata"]["name"]
+    [subject] = binding["subjects"]
+    assert subject["name"] == CLUSTER_BASE_DEFAULTS["cluster_base_readonly_sa_name"]
+    assert (
+        subject["namespace"]
+        == CLUSTER_BASE_DEFAULTS["cluster_base_readonly_sa_namespace"]
+    )
+
+
+def test_the_lease_role_stays_read_only_and_a_wider_one_is_flagged():
+    [rule] = _lease_grant_docs()["Role"]["rules"]
+    assert _grant_violations([rule]) == []
+    assert _grant_violations([{**rule, "verbs": ["get", "update"]}])
+
+
+def test_the_clusterrole_reads_the_upgrade_plans():
+    groups = {g for rule in _readonly_rules() for g in rule.get("apiGroups", [])}
+    # Exact match, not `in`: see ansible/tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
+    assert any(g == "upgrade.cattle.io" for g in groups)
+
+
 def _headlamp_rbac_docs() -> list[dict]:
     """Both of headlamp's RBAC files: the cluster identity and the observability proxy grant."""
     docs = []

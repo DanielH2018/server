@@ -1082,6 +1082,20 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       Add the `secrets` component to daniel-box's package, and daniel-box to the hosts
       `host_secrets.py check` must find. Declare `k3s_readonly_token` as a credential in
       both `package.yml` files.
+    - **Amended 2026-10-24:** `k3s_readonly_token` was absent from SOPS when H6.3b was written,
+      so H6.3b ships daniel-box only. daniel-box's package gains `secrets-unit`, the credential
+      and `k3s-restart`, and `host_secrets.py check` finds daniel-box through its `package.yml`.
+      daniel-server's package stays as it is, so its k3s-agent restart stays a hand step until
+      a follow-up adds `k3s-restart`, the credential and its sync (*Open questions* 7). The
+      `windowed` mark for `k3s-agent.service` joins that follow-up or H6.5a, whichever ships the
+      first `k3s-agent.service` drop-in, for the reason H6.2's amendment gives. H6.4a's gate on
+      `probe.py metric` therefore lists daniel-box alone until the follow-up lands.
+    - **Amended 2026-10-24:** a component's `lib:` entry may name a top-level module such as
+      `k3s_gates.py`, which `homelab-k3s-restart` imports from its own directory. A host sets
+      `k3s_restart_window` in its `host_vars`, because a package-level `defaults:` map reaches
+      only the package's own files. The unit hashes the manifest `activations` entries whose
+      action is `manual:<unit>`, so H6.4a's files declare that action, and an empty set is a
+      valid hash.
     - **Operator-only**, before merging: `sudo ls -l` the server CA file on both nodes
       (`/var/lib/rancher/k3s/agent/server-ca.crt` is the expected path) and fix the
       component's CA path to what it shows.
@@ -1105,7 +1119,18 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       file's `tmpfiles.d` entry. Each `package.yml` sets its own `k3s_restart_window`. Add
       the `windowed` mark for `k3s-agent.service` to daniel-server's `package.yml`.
     - Add the other three alert rules and their promtool tests.
+    - **Amended 2026-10-24:** H6.3b adds `K3sConfigRestartFailed` and `K3sConfigRestartPending`,
+      each with a literal `service: daniel-box` and its promtool test. `K3sConfigRestartMetricsAbsent`
+      stays in H6.4a (its own step), and `K3sNodeVersionSkew` already landed in H6.1b.
     - Add the window-derivation test.
+    - **Amended 2026-10-24:** the window's span is `AccuracySec` plus `TimeoutStartSec`, 7
+      minutes and 1 second, so no start time avoids a `*/5` schedule. Two exist on daniel-box:
+      the `Sync peer Claude artifacts` cron and the `crowdsec-home-ips` CronJob. The derivation
+      test lists both in `EXEMPT`, with the reason that a missed run is not made up and that
+      neither reads cluster state the restart disturbs. It also lists `homelab-builder.timer`,
+      `claude-triage-poll.timer` and `claude-fanout-server-lander.timer`, the monotonic timers
+      this list did not name. The operator confirms or narrows these in H6.3b's review
+      (*Open questions* 3).
     - The first run on each host records the hash, writes the three series and restarts
       nothing. It runs at the next window, or sooner when the operator runs `sudo
       systemctl start homelab-k3s-restart.service`, which on a first run only records.
