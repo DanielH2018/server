@@ -151,8 +151,8 @@ operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
 - **`files/crowdsec_verify.py` bans daniel-pi through LAPI's machine API**, with no
   `pods/exec`. It sends the same `POST /v1/alerts` that `cscli decisions add` sends, reads it
   back, and lifts it in a `finally`.
-- **The edge's answer comes from Prometheus.** The `crowdsec-edge-probe` timer on daniel-pi
-  (`ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml`) probes the VIP every minute. The
+- **The edge's answer comes from Prometheus.** The `homelab-crowdsec-probe` timer on daniel-pi
+  (`hosts/components/crowdsec-probe/`) probes the VIP every minute. The
   Pi's Alloy counts each answer as `loki_process_custom_crowdsec_edge_probe_total` by
   `status`, and Prometheus scrapes it as `alloy-pi`, a path that never crosses Traefik.
 - **The gate's hop 2, the bouncer's pull, has no Job form.** LAPI v1.8.1 serves no bouncer

@@ -1,5 +1,4 @@
-# Managed by Ansible (setup/k8s_host_files, tasks/crowdsec.yml). Started by
-# crowdsec-edge-probe.timer.
+# Shipped by homelab-daniel-pi. Started by homelab-crowdsec-probe.timer.
 [Unit]
 Description=Probe the edge VIP from daniel-pi for crowdsec's off-cluster verify
 
@@ -7,9 +6,10 @@ Description=Probe the edge VIP from daniel-pi for crowdsec's off-cluster verify
 Type=oneshot
 User={{ sys_user }}
 # jellyfin's hostname matches a real router from any client address (the script's header).
-ExecStart=/usr/local/bin/crowdsec-edge-probe jellyfin.local.{{ domain }} {{ k3s_metallb_ingress_vip }}
+ExecStart=/usr/lib/homelab/crowdsec-edge-probe jellyfin.local.{{ domain }} {{ k3s_metallb_ingress_vip }}
 # /var/log/pi-health is the pi-heartbeats component's directory, owned by User=. systemd
-# creates it with that owner if this unit starts first.
+# re-owns it to the starting unit's user when the owners differ, so this unit and the three
+# heartbeat services must name the same User= (test_crowdsec_probe_component.py holds that).
 LogsDirectory=pi-health
 NoNewPrivileges=yes
 ProtectSystem=strict

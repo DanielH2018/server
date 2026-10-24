@@ -27,7 +27,7 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
   `status`, which Prometheus reads through the `alloy-pi` scrape, and a drop stage discards
   every line. The verify's ban makes Traefik refuse this container's Loki pushes, so the
   count must not depend on them. The timer that writes the file is
-  `ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml`, and the same label test pins the
+  `hosts/components/crowdsec-probe/`, and the same label test pins the
   stage. The label values render
   from `loki_streams` in `group_vars/all.yml`, which the cluster's Alloy and monitor-bridge's
   selectors also read; `ansible/tests/services/test_loki_stream_labels.py` holds the consumers

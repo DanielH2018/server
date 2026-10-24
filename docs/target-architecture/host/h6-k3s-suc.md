@@ -179,8 +179,14 @@ The exit criterion is three observations, in order:
   client-go's `LeaderElector.tryAcquireOrRenew` writes a new `acquireTime` whenever a
   different holder takes the Lease. The `kube-system/kube-controller-manager` Lease's
   `acquireTime` should therefore move on every k3s server start.
-- That last step is unmeasured. The read-only account cannot read Leases (above), and an
-  agent cannot use `sudo`. H6.3a's pre-merge step reads it (*Steps*).
+- The operator measured that last step on daniel-box on 2026-10-24, with `sudo k3s kubectl`,
+  because the read-only account cannot read Leases (above) and an agent cannot use `sudo`.
+  The Lease read `daniel-box_adffef0e-d846-4ae6-b892-f68861a63f49`, `acquireTime`
+  `2026-10-18T14:21:11.955974Z`, `renewTime` `2026-10-24T16:12:56.623907Z` and
+  `leaseDurationSeconds` 15. `systemctl show k3s` read `ExecMainStartTimestamp=Sun
+  2026-10-18 14:20:47 UTC`. The `acquireTime` is 25 seconds after the k3s start, so the
+  Lease does not predate the restart and tracks it. The 25-second gap is far below the
+  guard's 15-minute bound, so the guard refuses for the full 15 minutes after a restart.
 - Events would show a kubelet `Starting` event per start, but k3s keeps events for an hour
   and none were listed. An absent event would also read as "no restart", which is failure
   class 3. This plan does not use events.

@@ -18,6 +18,7 @@ from deploy_tools.deploy_lib import detach_notify
 from diagnostics.probe_lib import core, health, health_alerts
 from lib import kubectl
 from lib.exit_codes import PROBE_UNREADABLE
+from _probe_health_fixtures import current_checkout
 
 TAG = "littlelink"
 APPLIED = 1_000_000.0
@@ -324,25 +325,24 @@ def test_an_entry_without_a_hostname_or_with_kuma_off_has_no_ingress_route():
 # --- Folded into run_health --------------------------------------------------------------
 
 
-def test_a_failing_alert_plane_on_a_no_workload_role_is_flagged_not_skipped(
-    capsys,
-):
+def _netpol_baseline(fake):
+    kw = {"served": "prod", "stale_reason": current_checkout}  # this repo's own role
+    return health.run_health("netpol-baseline", prom=fake.tools(), **kw)
+
+
+def test_a_failing_alert_plane_on_a_no_workload_role_is_flagged_not_skipped(capsys):
     """netpol-baseline's pass line carries a skip marker; a failure must lead with its own."""
     # Active after any applied_at this host can hold, so it gates whatever the record says.
     fake = FakeProm(alert(4e9, service="netpol-baseline") + START)
-    code = health.run_health("netpol-baseline", served="prod", prom=fake.tools())
+    code = _netpol_baseline(fake)
     first = capsys.readouterr().out.splitlines()[0]
     assert code == 1
     assert "alert plane FAILED" in first
     assert not [m for m in detach_notify.NOT_APPLICABLE_MARKERS if m in first]
 
 
-def test_a_quiet_alert_plane_on_a_no_workload_role_keeps_its_skip_line(
-    capsys,
-):
-    code = health.run_health(
-        "netpol-baseline", served="prod", prom=FakeProm(START).tools()
-    )
+def test_a_quiet_alert_plane_on_a_no_workload_role_keeps_its_skip_line(capsys):
+    code = _netpol_baseline(FakeProm(START))
     first = capsys.readouterr().out.splitlines()[0]
     assert code == 0
     assert any(m in first for m in detach_notify.NOT_APPLICABLE_MARKERS)
