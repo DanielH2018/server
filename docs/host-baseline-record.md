@@ -71,6 +71,16 @@ the name:
   `AllowTcpForwarding` alone, so `local` refuses every remote forward before
   `AllowStreamLocalForwarding` is read. The comment above the block in `tasks/access.yml`
   carries the derivation and the log line that tells the two refusals apart.
+- **On daniel-pi, sshd reads the package's two drop-ins instead of the tasks (H7.27).**
+  `10-homelab.conf` holds the 17 settings and `90-homelab-match.conf` holds the `Match` block.
+  sshd keeps the first value it reads, and `10-` sorts before cloud-init's `50-cloud-init.conf`,
+  where the Ansible tasks wrote the same lines (`ssh_config_path` on the Pi). Those lines stay
+  there as harmless duplicates. The `Match` file sorts last so its block cannot reach another
+  drop-in. `reload:ssh.service` runs `sshd -t` first, and
+  `hosts/lib/tests/test_pi_initial_setup_part1.py` runs `sshd -T` over both drop-ins for the
+  operator account and for another user. rkhunter still reads only the main `sshd_config`, so the Pi's
+  `PermitRootLogin` read is unchanged by the move. `initial_setup_packaged_hosts['sshd']` names
+  the hosts whose package owns the subject.
 - **The UFW LAN allow must sort above the SSH limit rule**, which is why its task declares
   `insert: 0` / `insert_relative_to: first-ipv4`: UFW takes the first matching rule, so an
   allow appended below the limiter is inert (#508).

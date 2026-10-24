@@ -14,8 +14,12 @@
 # Since H5.2b it ships the Pi's Compose project (the pi-compose component) with its enable link and
 # the first service, `pi-canary`. The canary reads no secret, so `credentials:` is unchanged and
 # the Pi's SOPS file needs no new key.
+#
+# Since H7.27 it ships the first three subjects of initial_setup: apt's unattended upgrades, the
+# sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup skips each on
+# this host through `initial_setup_packaged_hosts`. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token

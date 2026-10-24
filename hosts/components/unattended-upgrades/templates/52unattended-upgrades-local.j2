@@ -1,0 +1,6 @@
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+{% for pattern in unattended_upgrades_origins_patterns %}
+Unattended-Upgrade::Origins-Pattern:: "{{ pattern }}";
+{% endfor %}
