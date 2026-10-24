@@ -451,7 +451,7 @@
  "ansible/tests/longhorn/test_longhorn_backup_job_failure_check.py": 0.0,
  "ansible/tests/longhorn/test_longhorn_backup_render.py": 0.61,
  "ansible/tests/longhorn/test_longhorn_control_plane_resources.py": 0.0,
- "ansible/tests/longhorn/test_longhorn_csi_secret_grant.py": 0.07,
+ "ansible/tests/longhorn/test_longhorn_csi_secret_grant.py": 0.11,
  "ansible/tests/longhorn/test_longhorn_manager_ready_rule.py": 0.0,
  "ansible/tests/longhorn/test_longhorn_reap_guard.py": 0.0,
  "ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py": 0.08,
