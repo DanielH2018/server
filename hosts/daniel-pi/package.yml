@@ -19,7 +19,7 @@
 # sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup skips each on
 # this host through `initial_setup_packaged_hosts`. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token

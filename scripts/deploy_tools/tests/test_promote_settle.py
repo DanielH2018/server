@@ -67,6 +67,9 @@ case "$url" in
     touch "$RUNNER_TEMP/prod-read"
     printf 'HTTP/2 %s\r\nDocker-Content-Digest: %s\r\n\r\n' "$status" "$digest" > "$out"
     printf '%s' "$status" ;;
+  *"/manifests/last-good")
+    printf 'HTTP/2 200\r\nDocker-Content-Digest: %s\r\n\r\n' "${FAKE_LAST_GOOD_DIGEST-$RESET_DIGEST}" > "$out"
+    printf 200 ;;
   *) echo "fake curl: unexpected $url" >&2; exit 2 ;;
 esac
 """
@@ -417,6 +420,7 @@ def _move(tmp_path, jobs, **env: str):
         "DIGEST": DIGEST,
         "SEED": "false",
         "PRIOR_DIGEST": RESET,
+        "RESET_DIGEST": RESET,
         "FAKE_PROD_DIGEST": RESET,
     }
     result, calls = _run(tmp_path, script, **{**defaults, **env})

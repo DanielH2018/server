@@ -5,6 +5,7 @@ After=homelab-secrets.service
 Wants=homelab-secrets.service
 
 [Service]
+SyslogLevel=notice
 Type=oneshot
 User={{ sys_user }}
 # The `+` runs this one command as root; the service runs as {{ sys_user }}. It creates the state

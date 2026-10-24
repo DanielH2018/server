@@ -33,6 +33,8 @@ installs a package that owns a conffile, then the `conffile` fixture, whose line
 that conffile, and upgrades the owner twice under `--force-confold`: once with its conffile
 unchanged and once changed. Each upgrade records whether dpkg kept the local file or held the
 package back, and the line must survive to the next reconcile (#6088; `validate_lib/conffile_case.py`).
+The last case installs the three apt-source components over seeded copies of the files the roles
+wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
@@ -81,7 +83,7 @@ from validate.validate_lib.host_container import (
     list_problems,
     release_fetched,
 )
-from validate.validate_lib import conffile_case, secrets_case
+from validate.validate_lib import conffile_case, repos_case, secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -105,7 +107,7 @@ from validate.validate_lib.host_fixtures import (
 )
 
 TOOLS_BIN = "/usr/lib/homelab/bin"
-TOOLS = ("sops", "chezmoi")
+TOOLS = ("sops", "chezmoi", "nfpm")
 LOCK_HELD = "/run/test-lock.held"
 PKGCACHE = "/var/cache/apt/pkgcache.bin"
 RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
@@ -571,12 +573,11 @@ def main(argv: list[str] | None = None) -> int:
     except CaseFailed as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
-    cases.upgrade_path()
-    cases.cold_install()
-    cases.by_hand()
-    cases.disarm()
+    for run in (cases.upgrade_path, cases.cold_install, cases.by_hand, cases.disarm):
+        run()
     secrets_case.run(cases)
     conffile_case.run(cases)
+    repos_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

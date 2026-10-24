@@ -12,6 +12,7 @@ Description=Loki read-route witness (boot rerun while red)
 ConditionPathExists=/var/lib/kuma-check/loki-route-witness.down
 
 [Service]
+SyslogLevel=notice
 Type=oneshot
 ExecStart=/usr/bin/systemctl start --no-block homelab-loki-route-witness.service
 

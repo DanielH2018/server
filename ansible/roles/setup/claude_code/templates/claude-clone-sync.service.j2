@@ -6,6 +6,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 # As the clone's owner: git refuses a repository another user owns, and a root-run uv sync
 # leaves a root-owned .venv.
 User={{ claude_code_agent_user }}
@@ -14,3 +16,7 @@ Environment=TMPDIR=/tmp
 # The script skips, exiting 0, when the clone is off master or dirty, so the agent's work in
 # progress never pages. A failed pull, sync or collection install fails the unit.
 ExecStart=/usr/local/bin/claude-clone-sync.sh {{ claude_code_agent_user_clone_dir }}
+# The textfile that tells a timer which stopped firing from one that runs clean (#6165).
+# timer-textfile.j2 has the shape and the deadline rule.
+{% from 'timer-textfile.j2' import timer_textfile with context %}
+{{ timer_textfile(claude_code_agent_user ~ '-clone-sync', claude_code_agent_clone_sync_interval) }}

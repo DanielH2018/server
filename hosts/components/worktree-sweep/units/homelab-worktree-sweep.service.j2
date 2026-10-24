@@ -3,6 +3,7 @@
 Description=Remove merged worktrees, repair the git object store and ping Healthchecks.io with the exit code
 
 [Service]
+SyslogLevel=notice
 Type=oneshot
 User={{ sys_user }}
 ExecStart=/usr/lib/homelab/worktree-sweep

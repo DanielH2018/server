@@ -28,9 +28,9 @@ ROLE_DIR = K8S_ROLES / "observability"
 TEMPLATE_SOURCE = ROLE_DIR / "files" / "alertmanager" / "homelab.tmpl"
 RENDER_CASES = ROLE_DIR / "tests" / "alertmanager"
 RENDER_DEFINES = ("homelab.title", "homelab.message", "homelab.email")
-# The three shapes the template branches on: a group with firing and resolved alerts, a group
-# whose alerts share one description, and a resolved group.
-RENDER_FLOOR = frozenset({"mixed", "shared-description", "resolved"})
+# The four shapes the template branches on: one firing alert, a group with firing and resolved
+# alerts, a group whose firing alerts share one description, and a resolved group.
+RENDER_FLOOR = frozenset({"single", "mixed", "shared-description", "resolved"})
 
 # A tool run: the argv after `alert_tools.sh`, returning (exit code, combined output).
 Runner = Callable[[list[str]], tuple[int, str]]

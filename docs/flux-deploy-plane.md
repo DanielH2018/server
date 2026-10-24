@@ -1052,8 +1052,9 @@ changes too, and `tag` tags T `superseding` so it is not superseded in turn. `de
 digest before it writes anything, and again before its reset. When a later run has moved
 `prod` past T, `settle` writes neither `last-good`, the hold, `held` nor the reset, and
 dispatches nothing. A failed read applies the verdict as before. `tag` reads `DEPLOY_HOLD`
-again just before it moves `prod`, and moves nothing under a hold written after `decide`
-read it. No run supersedes another until D7 turns `SUPERSEDE` on
+again just before it moves `prod`, and moves nothing unless it still reads the value `decide`
+read: `none`, or the `failed=` hold the revert rule passed. A superseding `tag` also moves
+nothing once `last-good` has moved since `decide` read it (D7.7). No run supersedes another until D7 turns `SUPERSEDE` on
 (`docs/target-architecture/deploy/d7-superseding-promotions.md`), so both reads are inert
 until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
 binaries.

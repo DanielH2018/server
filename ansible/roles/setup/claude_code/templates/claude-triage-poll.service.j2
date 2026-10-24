@@ -22,3 +22,8 @@ PrivateTmp=yes
 # so a steered session cannot change what the poller sees.
 ExecStart={{ claude_code_triage_agent_home }}/.local/bin/uv run --no-project --no-python-downloads \
   --python {{ host_python_version }} /opt/claude-triage/claude_triage_poll.py
+# The textfile that tells a timer which stopped firing from one that runs clean (#6165).
+# timer-textfile.j2 has the shape and the deadline rule.
+# 120 is TimeoutStartSec above, the longest a healthy run may take.
+{% from 'timer-textfile.j2' import timer_textfile with context %}
+{{ timer_textfile('claude-triage-poll', claude_code_triage_poll_interval, 120) }}

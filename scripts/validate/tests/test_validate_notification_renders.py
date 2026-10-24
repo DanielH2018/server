@@ -16,8 +16,8 @@ def _tools_pass(argv: list[str]) -> tuple[int, str]:
 
 
 def test_notification_renders_that_match_their_expected_text_are_clean():
-    # Non-vacuity: the floor names the three shapes, and each has every define's render.
-    assert len(notification_renders.render_checks()) == 3 * len(
+    # Non-vacuity: the floor names the four shapes, and each has every define's render.
+    assert len(notification_renders.render_checks()) == 4 * len(
         notification_renders.RENDER_DEFINES
     )
     assert notification_renders.render_problems(run=_tools_pass) == []
@@ -38,4 +38,16 @@ def test_a_notification_render_that_differs_from_its_expected_text_is_flagged():
 def test_a_render_case_directory_missing_a_floor_group_is_flagged(tmp_path):
     (tmp_path / "mixed.json").write_text("{}")
     problems = notification_renders.render_problems(run=_tools_pass, cases=tmp_path)
-    assert any("'resolved', 'shared-description'" in p for p in problems), problems
+    assert any("'resolved', 'shared-description', 'single'" in p for p in problems), (
+        problems
+    )
+
+
+def test_a_single_firing_alert_keeps_its_description_under_its_summary():
+    """A one-alert group's CommonAnnotations are its own, which must not trigger the dedupe."""
+    rendered = (
+        notification_renders.RENDER_CASES / "single.homelab.message.txt"
+    ).read_text()
+    summary, description = rendered.splitlines()[:2]
+    assert summary.startswith("**CRITICAL** "), rendered
+    assert description.startswith("homelab_host_reconcile_ok"), rendered

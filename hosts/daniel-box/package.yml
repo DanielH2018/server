@@ -30,10 +30,14 @@ components:
   - worktree-sweep
   - secret-rotation
   - loki-route-witness
+  - apt-github-cli
 credentials:
   - k3s_readonly_token
   - ups_secondary_push_token
 maintainer_scripts: [preinst, postinst, prerm]
+# H7.24a: nfpm, for the builder this host runs.
+depends:
+  - homelab-tools
 files:
   # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).
   - {src: tmpfiles.d/homelab-k3s-restart.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-restart.conf}

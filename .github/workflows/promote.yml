@@ -530,6 +530,7 @@ jobs:
       no_reset: ${{ steps.decide.outputs.no_reset }}
       stateful: ${{ steps.decide.outputs.stateful }}
       supersedes: ${{ steps.decide.outputs.supersedes }}
+      hold_read: ${{ steps.decide.outputs.hold_read }}
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
@@ -658,6 +659,8 @@ jobs:
           SEED: ${{ needs.promote.outputs.seed }}
           PRIOR_DIGEST: ${{ needs.promote.outputs.prior_digest }}
           SUPERSEDES: ${{ needs.promote.outputs.supersedes }}
+          HOLD_READ: ${{ needs.promote.outputs.hold_read }}
+          RESET_DIGEST: ${{ needs.promote.outputs.reset_digest }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
@@ -670,8 +673,9 @@ jobs:
 
           hold="$(gh variable get DEPLOY_HOLD -R "$GITHUB_REPOSITORY")" \
             || { echo "::error::DEPLOY_HOLD could not be read, so this run moves nothing"; exit 1; }
-          if [ "$hold" != none ]; then
-            echo "::warning::DEPLOY_HOLD reads '$hold', written after decide read it, so this run moves nothing and verifies nothing"
+          # The value decide read: `none`, or the `failed=` hold the revert rule passed.
+          if [ "$hold" != "${HOLD_READ:-none}" ]; then
+            echo "::warning::DEPLOY_HOLD reads '$hold', not the '${HOLD_READ:-none}' decide read, so this run moves nothing and verifies nothing"
             exit 0
           fi
 
@@ -709,6 +713,19 @@ jobs:
           # verify ignores any older status on T, such as one an earlier promotion left.
           moved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           if [ -n "${SUPERSEDES:-}" ]; then
+            # T's base and reset digest are last-good's as decide read it. A settle of the
+            # superseded run that moved last-good since then would leave T resetting past a
+            # verified revision, so T moves nothing and that settle's dispatch promotes again.
+            lg_status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+              | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
+                -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
+                "https://ghcr.io/v2/$name/manifests/last-good")"
+            [ "$lg_status" = 200 ] || { echo "::error::HEAD last-good answered HTTP $lg_status"; exit 1; }
+            lg="$(tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')"
+            if [ "$lg" != "$RESET_DIGEST" ]; then
+              echo "::warning::last-good is at '$lg', not the '$RESET_DIGEST' decide read: the run $SUPERSEDES settled first, so this run moves nothing"
+              exit 0
+            fi
             flux tag artifact "oci://$repo:sha-$TARGET" --tag superseding
             echo "tagged sha-$TARGET superseding: it supersedes the verification of $SUPERSEDES"
           fi

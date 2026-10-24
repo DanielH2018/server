@@ -3,6 +3,7 @@
 Description=Regenerate the homelab infrastructure map
 
 [Service]
+SyslogLevel=notice
 Type=oneshot
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server

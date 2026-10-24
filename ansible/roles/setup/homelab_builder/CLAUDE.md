@@ -156,7 +156,7 @@ only the digests the render pins. `out/` and `published/` never hold the binarie
 publish-on-change compares the pins.
 
 The code is `ansible/roles/setup/homelab_builder/files/homelab_tool_fetch.py:install_tools`.
-CI's `host_packages` job calls the same function through `host_packages.py fetch-tools`.
+CI's `host_packages_build` job calls the same function through `host_packages.py fetch-tools`.
 `ansible/roles/setup/homelab_builder/tests/test_host_package_builder_tools.py::test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools`
 holds the refusal.
 

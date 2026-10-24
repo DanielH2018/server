@@ -270,7 +270,7 @@ def test_the_settings_write_hides_the_token():
 def test_the_nfpm_pin_is_ci_s():
     # fact: ansible/roles/setup/homelab_builder/CLAUDE.md#What the builder half writes (H3.5a)
     ci = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
-    env = ci["jobs"]["host_packages"]["env"]
+    env = ci["jobs"]["host_packages_build"]["env"]
     assert DEFAULTS["homelab_builder_nfpm_version"] == env["NFPM_VERSION"]
     assert DEFAULTS["homelab_builder_nfpm_sha256"] == env["NFPM_SHA256"]
 
