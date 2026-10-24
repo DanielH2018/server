@@ -51,6 +51,7 @@ CI_PROVE_JOB = "prove the pushed tree was tested"
 CI_GATE_NEEDS_JOBS = frozenset(
     {
         "hooks (lint + validate + secrets + docs)",
+        "PR gates (cross-plane order + cluster pins)",
         "pytest (shard 1 of 6)",
         "pytest (shard 2 of 6)",
         "pytest (shard 3 of 6)",

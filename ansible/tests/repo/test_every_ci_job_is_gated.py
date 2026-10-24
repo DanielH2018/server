@@ -39,6 +39,7 @@ GATE_JOB = "prek"
 KNOWN_JOBS = frozenset(
     {
         "hooks",
+        "pr_gates",
         "pytest",
         "ansible_lint",
         "deck_mod",
@@ -58,6 +59,7 @@ KNOWN_JOBS = frozenset(
 GATE_READS = frozenset(
     {
         "hooks",
+        "pr_gates",
         "pytest",
         "ansible_lint",
         "deck_mod",

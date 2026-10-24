@@ -34,6 +34,7 @@ PROOF_CONDITION = (
 )
 DEPENDENTS = (
     "hooks",
+    "pr_gates",
     "pytest",
     "ansible_lint",
     "deck_mod",
@@ -45,6 +46,7 @@ DEPENDENTS = (
 # The env names the gate's script reads, one per dependency, in the order of DEPENDENTS.
 GATE_ENV = (
     "HOOKS",
+    "PR_GATES",
     "PYTEST",
     "ANSIBLE_LINT",
     "DECK_MOD",

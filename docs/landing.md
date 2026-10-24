@@ -434,7 +434,7 @@ and the deploy the exit-4 fallback runs.
 Until slice D5 ends, nothing orders an edge between a flux-owned role and an Ansible-owned one.
 `land.sh` applies the Ansible half after the merge, and `promote` applies the Flux half after
 CI. A PR that changes both halves lands them in whichever order the two pipelines finish.
-CI's **Cross-plane order gate** step, in the `hooks` job on pull requests only, refuses such a
+CI's **Cross-plane order gate** step, in the `pr_gates` job on pull requests only, refuses such a
 PR. It runs `scripts/validate/cross_plane_order.py --base HEAD^1`, which renders the cluster
 at the base and at the merge commit with `homelab-render cluster`. Each side renders with its
 own tree's renderer. The gate refuses two shapes:
@@ -502,7 +502,7 @@ fails without a verdict. Slice D6 deletes the gate once every role is flux-owned
 ### A cluster pin moves forward, one step, alone in its PR
 
 Merging `k3s_longhorn_version` or `k3s_metallb_version` is the upgrade, and neither upgrade
-runs backwards. CI's **Cluster pin checks** step, in the `hooks` job on pull requests only,
+runs backwards. CI's **Cluster pin checks** step, in the `pr_gates` job on pull requests only,
 runs `scripts/validate/cluster_pins.py --base HEAD^1`. It reads each pin from whichever role
 YAML file holds the key at the base and at the merge commit, and refuses five shapes:
 

@@ -176,6 +176,11 @@ jobs:
   # roughly 95s. Projected from those step times, not yet measured on master.
   #
   # `mkdocs build --strict` was the other candidate and is NOT worth a job: 4s on that same run.
+  # The `mkdocs-strict` hook in the full sweep is this job's only docs build (#6150).
+  #
+  # By PR run 40125170130 (2026-10-24) the picture had moved: `hooks` took 4m58s and set the
+  # wall, ahead of pytest's slowest shard at 4m29s. 77s of that was the cross-plane order gate,
+  # which now runs in the `pr_gates` job beside this one (#6149).
   #
   # Two things that make the split behave, both learned the hard way and both enforced below:
   # ansible-lint must never be handed an empty --files list (it walks all 954 files and reports
@@ -388,6 +393,54 @@ jobs:
           path: ${{ runner.temp }}/notice.err
           if-no-files-found: warn
 
+      # The full sweep, on every event: a PR run, a dispatch and a push that the `prove` job did not
+      # skip. There is no scoped arm, so a hook's `files` regex no longer decides what a PR run
+      # leaves unchecked.
+      #
+      # The sweep builds the docs site through the `mkdocs-strict` hook, and that is this job's
+      # only build (#6150). A standalone `mkdocs build --strict` step once ran after the sweep,
+      # from before the hook existed, and built the site a second time on every run (16s on run
+      # 40125170130). The build matters here because the twice-daily docs-refresh cron is the only
+      # other place it runs, and a broken internal link found there leaves the PREVIOUS site
+      # serving with nothing saying why.
+      - name: Run hooks (full sweep)
+        # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
+        # --skip static-ratchet-tests*: the `pytest` job runs those twenty-three test files already.
+        # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
+        # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
+        # `real_tree`), so the hook here was a second render of every k8s role (#6150).
+        run: prek run --all-files --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --color always
+
+  # The two PR-only refusals, the cross-plane order gate and the cluster pin checks, in a job of
+  # their own (#6149). They ran serially inside `hooks`, ahead of its sweep, and on PR run
+  # 40125170130 the cross-plane gate's 77s made `hooks` the slowest job at 4m58s. Here they run
+  # beside the sweep, and the run wall is the slower of the two jobs instead of their sum.
+  #
+  # The job-level `if:` is the same prove condition every gated job carries, and the PR-only
+  # test sits on each step instead. A job-level `pull_request` condition would make the job
+  # `skipped` on a push or a dispatch, and the `prek` gate and `ci_verdict.jobs_verdict` both
+  # read a skipped job as a failure there unless the pushed tree was proven
+  # (test_ci_jobs_verdict_matches_gate.py pins the condition). Off a pull request every step
+  # skips, so the job costs a runner and no checkout.
+  pr_gates:
+    needs: prove
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    name: PR gates (cross-plane order + cluster pins)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15  # the two steps' own timeouts sum to 10, plus setup
+    steps:
+      # The gates read HEAD^1 and the PR's commits, so the checkout keeps history.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          persist-credentials: false  # nothing here pushes or fetches
+
+      # Python and uv only. Neither gate runs prek or reads a Galaxy collection; both ran in
+      # `hooks` before this job existed, where neither cache was restored for them.
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+        if: github.event_name == 'pull_request'
+
       # The cross-plane gate (D4.4). It refuses a PR that changes a flux-owned role and an
       # Ansible-owned role on one dependency path, because `promote` and `land.sh` would apply
       # the two halves in whichever order they finish. It also refuses an edge added beside a
@@ -395,8 +448,9 @@ jobs:
       # no bypass. Its removal arms (D5.1f) refuse an object a flux-owned tag drops without a
       # `Removes-Object:` line in the PR's commits, and a flux-owned name added to
       # k8s_retired_services (docs/flux-deploy-plane.md). It runs on a pull request only,
-      # because a push or a dispatch has no diff to judge and no PR commits to read. The checkout is the merge commit, so its first parent is the base it merges
-      # onto, and each side renders with its own tree's renderer, about 15s each.
+      # because a push or a dispatch has no diff to judge and no PR commits to read. The
+      # checkout is the merge commit, so its first parent is the base it merges onto, and each
+      # side renders with its own tree's renderer, about 15s each.
       - name: Cross-plane order gate
         if: github.event_name == 'pull_request'
         timeout-minutes: 8
@@ -411,27 +465,6 @@ jobs:
         if: github.event_name == 'pull_request'
         timeout-minutes: 2
         run: uv run python scripts/validate/cluster_pins.py --base HEAD^1
-
-      # The full sweep, on every event: a PR run, a dispatch and a push that the `prove` job did not
-      # skip. There is no scoped arm, so a hook's `files` regex no longer decides what a PR run
-      # leaves unchecked.
-      - name: Run hooks (full sweep)
-        # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
-        # --skip static-ratchet-tests*: the `pytest` job runs those twenty-three test files already.
-        run: prek run --all-files --skip ansible-lint --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --color always
-
-      # `mkdocs build --strict` also runs in the twice-daily docs-refresh cron, but a broken
-      # internal link that reaches master is discovered only there — build_site() bails
-      # out and leaves the PREVIOUS site serving, which means the docs silently stop updating
-      # and nothing says why until someone reads the journal.
-      #
-      # This step predates the `mkdocs-strict` prek hook (#806), which runs the same build. The
-      # hook fires only when a file in its `files` regex changes, and every full sweep matches
-      # one, so a full sweep builds the site twice at about 4s each. On a scoped PR whose diff
-      # misses that regex, this step is the only build. How the hook coexists with the
-      # docs-refresh cron, which commits with hooks running, is in its comment in prek.toml.
-      - name: Build the docs site (mkdocs --strict)
-        run: uv run mkdocs build --strict --site-dir "$RUNNER_TEMP/docs-site"
 
   # ansible-lint alone. It is the biggest single piece of the hook sweep — 106s against 26s for
   # all twenty other hooks together, measured on daniel-server — so it gets the job
@@ -1392,7 +1425,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages, host_tools_arm64]
+    needs: [prove, hooks, pr_gates, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -1414,11 +1447,12 @@ jobs:
       # job succeeded with `proven=true`: that is the proven path, where the pushed tree is one a
       # green PR run swept. A skip on any other path is a failure, because a skipped job otherwise
       # reads as a pass to GitHub.
-      - name: Require all eight halves to have succeeded
+      - name: Require every half to have succeeded
         env:
           PROVE: ${{ needs.prove.result }}
           PROVEN: ${{ needs.prove.outputs.proven }}
           HOOKS: ${{ needs.hooks.result }}
+          PR_GATES: ${{ needs.pr_gates.result }}
           PYTEST: ${{ needs.pytest.result }}
           ANSIBLE_LINT: ${{ needs.ansible_lint.result }}
           DECK_MOD: ${{ needs.deck_mod.result }}
@@ -1427,7 +1461,8 @@ jobs:
           HOST_PACKAGES: ${{ needs.host_packages.result }}
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
-          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT" \
+          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
+            "ansible-lint=$ANSIBLE_LINT" \
             "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages=$HOST_PACKAGES host-tools-arm64=$HOST_TOOLS_ARM64"
           # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
@@ -1437,7 +1472,7 @@ jobs:
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
-          ok "$HOOKS" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
+          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
             && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES" \
             && ok "$HOST_TOOLS_ARM64"
 
