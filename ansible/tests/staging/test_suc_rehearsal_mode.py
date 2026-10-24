@@ -346,7 +346,8 @@ def test_without_the_flag_the_orchestrator_is_the_drill_and_with_it_both_tiles_a
 GUEST_STUBS = {
     "id": "#!/bin/bash\necho 0\n",
     "curl": '#!/bin/bash\nwhile [[ $# -gt 1 ]]; do [[ $1 == -o ]] && echo "#!/bin/sh" >"$2"; shift; done\n',
-    "sha256sum": "#!/bin/bash\nexit 0\n",
+    # Reads its stdin: `echo | sha256sum` under pipefail fails on SIGPIPE if the stub exits first.
+    "sha256sum": "#!/bin/bash\ncat >/dev/null\n",
     "sh": "#!/bin/bash\nexit 0\n",
     "k3s": """\
 #!/bin/bash
