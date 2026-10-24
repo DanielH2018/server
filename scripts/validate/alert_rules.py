@@ -18,6 +18,9 @@ the render `probe.py health` uses, with secrets stubbed. It extracts each render
   which amtool does not open.
 - `promtool check rules` on every rule file in the role's `files/rules/`.
 - `promtool test rules` on every test file in the role's `tests/rules/`.
+- `amtool template render` of each notification define in `homelab.tmpl` against each group
+  under the role's `tests/alertmanager/`, compared with its expected text
+  (`scripts/validate/notification_renders.py`).
 - `pint --offline lint` on the role's `files/rules/`, with `scripts/validate/pint/offline.hcl`.
   pint checks what promtool does not, such as a required label's value. `--offline` skips every
   check that queries a Prometheus, because CI cannot reach the cluster;
@@ -118,6 +121,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 from lib.repo_paths import K8S_ROLES, REPO
+from validate.notification_renders import RENDER_CASES, render_problems
 from validate.alert_conventions import (
     RULE_TESTS_DIR,
     RULES_CONFIGMAP,
@@ -463,6 +467,7 @@ def check_tree(
     tests_dir: Path = RULE_TESTS_DIR,
     render_loki_rules: Callable[[], tuple[list[str], set[str]]] | None = None,
     loki_rules_dir: Path = LOKI_RULES_DIR,
+    render_cases: Path = RENDER_CASES,
 ) -> list[str]:
     """Render the role, apply the floors and the rule conventions, and run every tool check.
 
@@ -476,6 +481,7 @@ def check_tree(
         render_loki_rules: Returns the Loki rule groups and the rendered Loki rule keys;
             `rendered_loki_rule_keys` unless a test passes another.
         loki_rules_dir: The Loki ruler's rule files.
+        render_cases: The alert groups and expected text of the notification renders.
     """
     try:
         found = (render or rendered_files)()
@@ -507,6 +513,7 @@ def check_tree(
             code, output = run(argv)
             if code != 0:
                 problems.append(f"`{' '.join(argv)}` exited {code}:\n{output.rstrip()}")
+    problems += render_problems(run, cases=render_cases)
     return problems
 
 
@@ -539,8 +546,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="run each tool against its good and bad fixture instead of the tree",
     )
+    parser.add_argument(
+        "--write-renders",
+        action="store_true",
+        help="rewrite the expected notification renders from homelab.tmpl instead of checking",
+    )
     args = parser.parse_args(argv)
-    problems = prove_red() if args.prove_red else check_tree()
+    if args.write_renders:
+        problems = render_problems(run_tool, write=True)
+    elif args.prove_red:
+        problems = prove_red()
+    else:
+        problems = check_tree()
     for problem in problems:
         print(f"[FAIL] {problem}", file=sys.stderr)
     return 1 if problems else 0

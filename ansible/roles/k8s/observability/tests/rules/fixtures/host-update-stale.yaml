@@ -28,9 +28,9 @@ groups:
           severity: critical
           service: fixture-host
         annotations:
-          summary: fixture-host has had no successful homelab update for 11400s.
+          summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
           description: >-
-            No homelab-updater run on fixture-host has succeeded in 11400s, or its exporter is up
+            No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is up
             and serves no success timestamp. A failed fetch, a stopped homelab-apt-repo.service,
             a firewall rule, a keyring mismatch and a stopped timer each leave it stale. Read
             `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
