@@ -134,7 +134,9 @@ copies it into the textfile directory. The `reason` label of
 nfpm failure at the chosen commit, a value the plan's list does not name. `tools` is a
 `homelab-tools` pin that could not be fetched or whose sha256 differs from the pin (below). A worktree cleanup
 that fails after a refusal is logged, and the run keeps the refusal's reason. A failing run exits 1 once per reason and tip,
-then 0 on a repeat, so `OnFailure=` pages once for each condition. A failed fetch exits 0 and
+then 0 on a repeat, so `OnFailure=` pages once for each condition. A refusal that came from an
+exception writes one stderr line, which systemd puts in the journal: the reason, the exception's type
+and message, its cause and the call chain that raised it (#6074). A failed fetch exits 0 and
 writes nothing: the fetch timestamp then ages, which H3.5c's fetch-age arm pages on.
 
 ## The `homelab-tools` step (H3.11)

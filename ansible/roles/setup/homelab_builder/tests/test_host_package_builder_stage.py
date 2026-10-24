@@ -149,3 +149,34 @@ def test_a_deferred_package_leaves_published_so_it_builds_when_the_gate_closes(l
     assert go(lab) == 0
     # The server is the canary of the gate this run opens, and the box waits behind it.
     assert debs(state) == ["homelab-daniel-server"]
+
+
+class FailsAtStage(LinkedBuilder):
+    """A run whose stage step raises, as the dangling-link copytree did on 2026-10-23."""
+
+    def stage(self, chosen, out, debs, ver) -> None:
+        raise OSError("dangling symlink in the render")
+
+
+def test_a_failing_stage_step_reaches_stderr_with_its_type_and_step(lab, capsys):
+    # #6074: the journal held only systemd's lines, so the cause had to be reproduced by hand.
+    origin, state, _, _ = lab
+    edit(origin, "daniel-pi", "pi 1")
+    assert go(lab, cls=FailsAtStage) == 1
+    err = capsys.readouterr().err
+    assert "build: OSError: dangling symlink in the render" in err
+    assert "[step after_fetch>build>stage]" in err
+    assert metric(state)[0] == "build", "the refusal reason is unchanged"
+
+
+def test_a_successful_run_writes_nothing_to_stderr(lab, capsys):
+    origin, state, _, _ = lab
+    edit(origin, "daniel-pi", "pi 1")
+    assert go(lab) == 0
+    assert capsys.readouterr().err == ""
+    assert metric(state)[0] == "ok"
+
+
+def test_the_token_is_masked_in_a_logged_failure():
+    exc = RuntimeError("git fetch https://x:ghp_secret@github.com failed")
+    assert "ghp_secret" not in hb.describe(exc, "ghp_secret")
