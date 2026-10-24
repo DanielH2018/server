@@ -53,7 +53,7 @@ groups:
         annotations:
           summary: daniel-pi's SD-card health heartbeat has stopped reporting.
           description: >-
-            No pi-sd-health verdict newer than 900s reached Prometheus from daniel-pi's textfile
+            No pi-sd-health verdict newer than 15 minutes reached Prometheus from daniel-pi's textfile
             collector, so nothing confirms the SD card is being watched. Read
             `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then
             /var/lib/node-exporter-textfile/pi-sd-health.prom.
@@ -86,7 +86,7 @@ groups:
         annotations:
           summary: daniel-pi's container-recovery heartbeat has stopped reporting.
           description: >-
-            No pi-recovery-health verdict newer than 900s reached Prometheus from daniel-pi's
+            No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
             textfile collector, so nothing confirms the Pi's containers are being watched. Read
             `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
             /var/lib/node-exporter-textfile/pi-recovery-health.prom. A host that sets

@@ -76,7 +76,7 @@ groups:
         annotations:
           summary: daniel-box's ghcr.io mirror pull check has stopped reporting.
           description: >-
-            No ghcr-mirror-pull verdict newer than 3000s reached Prometheus from daniel-box's
+            No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-box's
             textfile collector, so nothing is watching whether the node's ghcr.io mirror
             endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull`
             container on daniel-box.
@@ -94,7 +94,7 @@ groups:
         annotations:
           summary: daniel-server's ghcr.io mirror pull check has stopped reporting.
           description: >-
-            No ghcr-mirror-pull verdict newer than 3000s reached Prometheus from daniel-server's
+            No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-server's
             textfile collector, so nothing is watching whether the node's ghcr.io mirror
             endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull`
             container on daniel-server.

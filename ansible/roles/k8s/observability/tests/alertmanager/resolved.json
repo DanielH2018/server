@@ -1,0 +1,23 @@
+{
+  "receiver": "discord",
+  "status": "resolved",
+  "groupLabels": {"alertname": "CertExpiringSoon", "service": "traefik"},
+  "commonLabels": {"alertname": "CertExpiringSoon", "service": "traefik", "severity": "critical", "cn": "example.com"},
+  "commonAnnotations": {
+    "summary": "The certificate example.com expires within 14 days.",
+    "description": "Traefik serves a certificate for example.com that expires in 13 days. Read Traefik's ACME log for a failed renewal."
+  },
+  "externalURL": "http://alertmanager.observability:9093",
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {"alertname": "CertExpiringSoon", "service": "traefik", "severity": "critical", "cn": "example.com"},
+      "annotations": {
+        "summary": "The certificate example.com expires within 14 days.",
+        "description": "Traefik serves a certificate for example.com that expires in 13 days. Read Traefik's ACME log for a failed renewal."
+      },
+      "startsAt": "2026-10-23T22:00:00Z",
+      "endsAt": "2026-10-24T08:15:00Z"
+    }
+  ]
+}

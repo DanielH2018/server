@@ -107,7 +107,7 @@ groups:
         annotations:
           summary: The homelab Loki ruler cannot deliver its alerts to Alertmanager.
           description: >-
-            {{ $value }} sends from the homelab Loki ruler to {{ $labels.alertmanager }} failed
+            {{ $value | printf "%.0f" }} sends from the homelab Loki ruler to {{ $labels.alertmanager }} failed
             in the last 15 minutes, so every firing log rule reaches no one. Read the
             loki-homelab pod's log for "Error sending alerts", and the alertmanager-callers
             NetworkPolicy in the observability namespace.

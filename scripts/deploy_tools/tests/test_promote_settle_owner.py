@@ -118,3 +118,23 @@ def test_verify_reads_prod_against_ts_digest(jobs):
     step = next(s for s in verify["steps"] if s.get("id") == "verify")
     assert step["env"]["DIGEST"] == "${{ needs.promote.outputs.digest }}"
     assert '--digest "$DIGEST"' in step["run"]
+
+
+def test_a_move_that_supersedes_tags_t_superseding_before_prod_is_flagged(
+    tmp_path, jobs
+):
+    result, calls, _ = _move(tmp_path, jobs, SUPERSEDES="b" * 40)
+    assert result.returncode == 0, result.stderr
+    assert calls == [
+        f"flux tag artifact {REPO_URL}:sha-{T} --tag superseding",
+        f"flux tag artifact {REPO_URL}:sha-{T} --tag prod",
+    ]
+
+
+def test_a_failed_superseding_tag_moves_nothing(tmp_path, jobs):
+    result, calls, output = _move(
+        tmp_path, jobs, SUPERSEDES="b" * 40, FAKE_FLUX_FAIL="superseding"
+    )
+    assert result.returncode != 0
+    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag superseding"]
+    assert output == ""

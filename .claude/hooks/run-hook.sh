@@ -151,6 +151,24 @@ if [[ ! -f "$script" ]]; then
     exit 0
 fi
 
+# `fanout-stop` acts only at or above a `.fanout/brief.md` (`fanout_root` in fanout-stop.py),
+# and every session's Stop runs it, so the same walk runs here first and an ordinary session's
+# Stop starts no interpreter (#6154). A payload whose `cwd` this cannot read falls through to
+# the hook, which decides as before. The here-string hands the payload on as the hook's stdin.
+if [[ "$name" == fanout-stop ]]; then
+    payload=$(cat)
+    cwd_re='"cwd"[[:space:]]*:[[:space:]]*"([^"\]*)"'
+    if [[ "$payload" =~ $cwd_re ]]; then
+        dir=${BASH_REMATCH[1]}
+        [[ "$dir" == /* ]] || dir=$PWD/$dir
+        while [[ ! -f "$dir/.fanout/brief.md" ]]; do
+            [[ -n "$dir" ]] || exit 0
+            dir=${dir%/*}
+        done
+    fi
+    exec <<<"$payload"
+fi
+
 if [[ -n "$project" ]]; then
     exec "$uv" run --no-sync --quiet python "$script"
 fi
