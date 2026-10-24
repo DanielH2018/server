@@ -41,6 +41,10 @@ Stdout is injected as session context by Claude Code (same mechanism the remembe
 
 # DECIDED: return [] on any error, so a broken health read never blocks a session start;
 # SESSION_HEALTH_VERBOSE=1 forces output.
+# DECIDED: the gen-hooks block above carries no `matcher`, so the hook also fires on `compact`.
+# A compaction is not a no-op here: `main` rows `MEMORY.md` under `compact` before it returns,
+# because Claude Code reloads the file with no InstructionsLoaded event (#4668). A
+# `startup|resume|clear` matcher would drop that row (#6153).
 
 import os
 import subprocess
@@ -72,6 +76,7 @@ except ImportError, SyntaxError:
 
 try:
     from hooklib import service_lines
+    from hooklib.sections import run_sections
     from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
 
     HOOKLIB_IMPORT_ERROR = ""
@@ -84,6 +89,17 @@ except (ImportError, SyntaxError) as exc:
 
     def _stale_worktree_lines(*_args, **_kwargs):
         return []
+
+    # One after another, with no deadline: the banner is what this file must keep, and a
+    # serial run that the harness may kill still prints whatever finished first.
+    def run_sections(probes, deadline):
+        out = []
+        for _name, probe in probes:
+            try:
+                out.append(probe())
+            except Exception:
+                out.append([])
+        return out
 
 
 # The park decision lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4 asks
@@ -483,6 +499,11 @@ def unlabelled_worktree_lines(cwd, *, run=None):
 # header). prune_worktrees.py --brief takes 1.3s warm.
 WORKTREE_TIMEOUT_S = 5
 
+# How long every probe together may take, from when they start. The 15s hook budget less
+# the `uv run` interpreter start that comes before `main`, with room left to print. No probe's
+# own cap (`probe.py targets` 6s, every git read 5s) reaches it alone.
+TOTAL_DEADLINE_S = 10
+
 
 def stale_worktree_lines(run=None):
     """Shim: `hooklib.worktree_lines` can't import `_run` back from this module."""
@@ -522,6 +543,7 @@ def main(
     unlabelled_worktree_lines=unlabelled_worktree_lines,
     stale_worktree_lines=stale_worktree_lines,
     remote_fanout_lines=remote_fanout_lines,
+    deadline=TOTAL_DEADLINE_S,
 ):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
@@ -535,6 +557,7 @@ def main(
     monkeypatch ratchet (ansible/tests/_ratchet.py) caps a test module at zero patches on a
     first-party module, and each probe reads live state (stdin, this checkout's git, the
     machine's worktrees, `.claude/fanout`) that would make an assertion depend on the host.
+    `deadline` is the seconds all of them together may take; a test passes a short one.
     """
     payload = read_payload() or {}
     compact = payload.get("source") == "compact"
@@ -550,11 +573,31 @@ def main(
     if compact:
         return 0
 
-    targets = target_problems()
-    master_moved = master_moved_problems()
+    # Every probe at once, under one deadline (#6153): run in turn, their caps summed to more
+    # than the hook's budget, and the harness's kill took the whole banner with it.
+    cwd = os.getcwd()
+    (
+        targets,
+        master_moved,
+        parked,
+        sessions,
+        unlabelled,
+        worktrees,
+        fanout,
+    ) = run_sections(
+        [
+            ("the scrape-target and stale-release check", target_problems),
+            ("the behind-master check", master_moved_problems),
+            ("the parked-deployer check", parked_deployer_problems),
+            ("the other-session scan", lambda: other_live_sessions(cwd)),
+            ("the worktree-label check", lambda: unlabelled_worktree_lines(cwd)),
+            ("the removable-worktree survey", stale_worktree_lines),
+            ("the remote fan-out read", remote_fanout_lines),
+        ],
+        deadline,
+    )
     # master_moved last deliberately: "this branch is behind origin/master" is the SYMPTOM of a
     # parked deployer, so the cause reads first.
-    parked = parked_deployer_problems()
     problems = targets + parked + master_moved
 
     banner = format_banner(problems, landing=bool(parked))
@@ -565,27 +608,17 @@ def main(
 
     # Printed independently of health: another session's open work is information this
     # session needs even when everything is green.
-    try:
-        sessions = other_live_sessions(os.getcwd())
-    except Exception:
-        sessions = []
     if sessions:
         print("Other Claude sessions in this repo:")
         for line in sessions:
             print(line)
-    try:
-        unlabelled = unlabelled_worktree_lines(os.getcwd())
-    except Exception:
-        unlabelled = []
     for line in unlabelled:
         print(line)
 
-    # A kill at the hook's timeout discards what Python still buffers, so everything above
-    # reaches the pipe before the slow, GitHub-bound worktree read starts.
+    # Flushed before the worktree lines, which come from the slowest probe, so a failure
+    # printing them cannot cost the lines above.
     sys.stdout.flush()
-    for line in stale_worktree_lines():
-        print(line)
-    for line in remote_fanout_lines():
+    for line in worktrees + fanout:
         print(line)
     return 0
 
