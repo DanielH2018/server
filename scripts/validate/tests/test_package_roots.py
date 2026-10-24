@@ -1,7 +1,7 @@
 """The `host_packages` job's two scans over the named package roots (H4.1c).
 
-`gitleaks dir` and the placeholder check read the head render's `homelab-updater` and
-`homelab-daniel-pi` roots. The gitleaks binary exists only inside the job, so these cases drive
+`gitleaks dir` and the placeholder check read the head render's `homelab-updater`,
+`homelab-daniel-pi` and `homelab-daniel-server` roots. The gitleaks binary exists only inside the job, so these cases drive
 the scan with a stub that honours the contract the job relies on, and the job's `prove-scan`
 step proves the real binary honours it too.
 
@@ -45,10 +45,13 @@ def _package(render: Path, name: str, directory: str) -> Path:
 
 
 def _render(tmp_path: Path) -> dict[str, Path]:
-    """A render holding both named packages, with empty roots."""
+    """A render holding every named package, with empty roots."""
     return {
         "homelab-updater": _package(tmp_path, "homelab-updater", "packages/u"),
         "homelab-daniel-pi": _package(tmp_path, "homelab-daniel-pi", "hosts/daniel-pi"),
+        "homelab-daniel-server": _package(
+            tmp_path, "homelab-daniel-server", "hosts/daniel-server"
+        ),
     }
 
 
@@ -64,7 +67,7 @@ def _stub(tmp_path: Path) -> Path:
     return stub
 
 
-def test_the_real_render_has_both_named_roots_and_no_bad_placeholder(tmp_path):
+def test_the_real_render_has_every_named_root_and_no_bad_placeholder(tmp_path):
     assert host_packages.render(REPO, tmp_path) == 0
     roots, problems = package_roots.package_roots(tmp_path)
     # Named members: a lookup that stopped finding a package would scan less and pass.

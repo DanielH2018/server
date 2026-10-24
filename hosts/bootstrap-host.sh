@@ -1,7 +1,11 @@
 #!/bin/sh
 # bootstrap-host.sh: put a host on the homelab apt repository and install its packages. The
 # design is H3's *Steps, as PRs*, item 8 (docs/target-architecture/host/h3-pi-pilot.md). The
-# step numbers are H7's, so H7 adds steps 3, 4 and 6 in place.
+# step numbers are H7's, so H4.2 added step 3 and H7 adds steps 4 and 6 in place.
+#
+# Step 3 (H4.2) gives the host an age key for homelab-secrets: it creates /etc/homelab/age.key
+# when the file is missing, never replaces one, and prints the public key. An operator who
+# restores a key first (docs/break-glass.md) therefore keeps it.
 #
 # Usage, as root, with homelab-archive-keyring.gpg beside this script:
 #   ./bootstrap-host.sh <hostname>
@@ -29,6 +33,7 @@ done
 
 REPO_URL=http://10.0.0.215:8791
 ARCHIVE_FINGERPRINT=83B57416B342DDE1CBA0752D435D139ADFD6F016
+AGE_KEY=/etc/homelab/age.key
 
 ROOT=${HOMELAB_ROOT:-}
 KEYRING=/usr/share/keyrings/homelab-archive-keyring.gpg
@@ -80,6 +85,23 @@ Signed-By: $KEYRING
 EOF
 chmod 0644 "$ROOT$SOURCES.tmp"
 mv "$ROOT$SOURCES.tmp" "$ROOT$SOURCES"
+
+# Step 3: create the age key if missing, then print its public half. The key is written to a
+# temporary name under umask 077 and renamed, so a failed age-keygen leaves no partial key that
+# the next run would take for a real one. The private half is never printed.
+if [ ! -s "$ROOT$AGE_KEY" ]; then
+    command -v age-keygen > /dev/null || die "age-keygen is not installed, so cannot create $AGE_KEY"
+    install -d -m 0755 "$(dirname "$ROOT$AGE_KEY")"
+    rm -f "$ROOT$AGE_KEY.tmp"
+    (
+        umask 077
+        age-keygen -o "$ROOT$AGE_KEY.tmp" > /dev/null 2>&1
+    ) || die "age-keygen failed to create $AGE_KEY"
+    mv "$ROOT$AGE_KEY.tmp" "$ROOT$AGE_KEY"
+fi
+chmod 0600 "$ROOT$AGE_KEY"
+public=$(age-keygen -y "$ROOT$AGE_KEY") || die "cannot read a public key from $AGE_KEY"
+echo "bootstrap-host: age public key for $host: $public"
 
 # Step 5: fetch the homelab source, failing on any fetch error, then install the two packages.
 # $HOMELAB_APT is unquoted so that each option is its own argument.

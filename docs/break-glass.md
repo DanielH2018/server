@@ -146,6 +146,35 @@ otherwise; none of the values below are secrets themselves, only names and locat
    Source: `docs/target-architecture/deploy/d3-secrets.md` ("Where the values come from")
    and `docs/adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md`.
 
+11. **daniel-server's host age key.** `/etc/homelab/age.key` (root, mode 0600) is the key
+    `homelab-secrets.service` decrypts `ansible/vars/hosts/daniel-server.sops.yaml` with. It
+    is the same keypair as daniel-server's key in `~ubuntu/.config/sops/age/keys.txt`, copied
+    rather than generated (H4.2), so one key lives at two paths on one host. Its public half
+    is the first recipient of the generic rule in `ansible/.sops.yaml`. The recovery key
+    (item 1) is a recipient of every file this key decrypts, so it is the way back when the
+    host loses the key.
+    - **To restore it** onto a rebuilt daniel-server, place the recovery key (item 1) at
+      `~ubuntu/.config/sops/age/keys.txt`, as item 7 describes, and copy that file to
+      `/etc/homelab/age.key` (root, mode 0600). Or let `sudo hosts/bootstrap-host.sh
+      daniel-server` create a fresh key at the second path (its step 3) and print the public
+      key. A fresh key then needs the recipient steps in the header of `ansible/.sops.yaml`,
+      applied to every file that rotation list names, before the host decrypts anything.
+    - **A lost or exposed key means rotating every value the host held**, not only re-keying
+      the host. A re-key protects future revisions. Git history and every published
+      package keep ciphertext encrypted to the old key. The rotation list is derived, not
+      remembered: every value in every SOPS file whose creation rule in `ansible/.sops.yaml`
+      lists the host's public key. To print the rules, take the public key from
+      `age-keygen -y` on the surviving copy of the key, or from the first recipient of the
+      generic rule, and run, from the repo root:
+      `uv run python -c 'import sys, yaml; [print(r["path_regex"]) for r in yaml.safe_load(open("ansible/.sops.yaml"))["creation_rules"] if sys.argv[1] in r["age"]]' <public key>`.
+      For daniel-server the rules are the cluster file, the cluster manifests,
+      `vars/hosts/daniel-server.sops.yaml` and the generic rule, so the list is every value in
+      `secrets.yml`, in the cluster file and manifests, and in its host file. Rotate through
+      `docs/secret-rotation.md`, then `host_secrets.py sync daniel-server` (**operator-only**)
+      to refresh the host file's copies.
+   Source: `docs/target-architecture/host/h4-secrets-unit.md` ("Which ciphertext each host
+   carries") and `hosts/bootstrap-host.sh` (step 3).
+
 ## What to do first, by scenario
 
 ### Scenario: daniel-box is dead, daniel-server survives

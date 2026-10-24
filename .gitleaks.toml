@@ -99,3 +99,19 @@ targetRules = ["generic-api-key"]
 paths = ['''^out/cluster/[^/]+/[^/]+\.yaml$''']
 regexTarget = "line"
 regexes = ['''^\s*-?\s*key: [a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*$''']
+
+# A host package's manifest.json records `secrets_inputs_sha256`, the SHA-256 of the package's
+# secrets inputs, so reconcile can tell when they changed. `generic-api-key` reads `secrets` in
+# that key beside a 64-hex value as a credential, and failed the `host_packages` job's scan of
+# homelab-daniel-server's root on the first package that ships `secrets-unit` (H4.2). The value
+# is a digest of the package's ciphertext and templates, written by the renderer. The line regex
+# admits only that key with a 64-hex value, so any other high-entropy line in the file, and every
+# other rule on this line, still trips. It needs both the path and the line (`condition = "AND"`).
+# ENFORCED: ansible/tests/repo/test_gitleaks_manifest_digest_allowlist.py.
+[[allowlists]]
+description = "A host package manifest's secrets_inputs_sha256 is a content digest, never a credential"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^usr/lib/homelab/manifest\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"secrets_inputs_sha256": "[0-9a-f]{64}",?\s*$''']
