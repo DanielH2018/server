@@ -42,9 +42,7 @@ Then one more step sets the trim label (H2.2a, the H2 plan's *Native trim*):
    label and sits in the daily tier also gets `recurring-job-group.longhorn.io/default`
    explicitly, because a volume with "a job of its own" no longer gets `default` from Longhorn.
    The step writes no other group key, and never a `recurring-job-group.longhorn.io/trim` one.
-   `tiers.json`'s optional `trim_claims` list bounds the step: only a listed claim keeps the
-   label, an empty list admits none, and an absent key admits every volume the rule admits.
-   Every run also prints `trim would-admit: <claims>`, the claims the UNBOUNDED rule admits.
+   Every run also prints `trim would-admit: <claims>`, the claims the rule admits.
 
 The run writes ONE merge patch per changed volume: the net of the steps, labels and target
 together. A converged cluster writes nothing.
@@ -54,7 +52,7 @@ It does not touch the CSI sidecar Deployments. Their memory request is the `long
 which clears any request another writer sets (#5958).
 
 Inputs: `/config/tiers.json` (the ConfigMap's `{"r2": [...], "weekly": {claim: shard}, "nobackup":
-[...]}` and an optional `"trim_claims": [...]`, claims as `namespace/pvcName`) and the environment: `RECONCILE_NAMESPACE`, and
+[...]}`, claims as `namespace/pvcName`) and the environment: `RECONCILE_NAMESPACE`, and
 optionally `RECONCILE_TIERS_FILE`.
 
 It talks to the API server with the pod's ServiceAccount token, and the API server's CA reaches
@@ -190,9 +188,8 @@ def load_tiers(path: str | Path) -> dict:
     """The tier document the ConfigMap carries, validated.
 
     Raises:
-        Failed: The file is unreadable or is not `{"r2": list, "weekly": {claim: 0-6}, "nobackup": list}`
-            with an optional `"trim_claims": list`, or one claim sits on both the weekly and the
-            no-backup list.
+        Failed: The file is unreadable or is not `{"r2": list, "weekly": {claim: 0-6}, "nobackup": list}`,
+            or one claim sits on both the weekly and the no-backup list.
     """
     try:
         doc = json.loads(Path(path).read_text())
@@ -215,17 +212,10 @@ def load_tiers(path: str | Path) -> dict:
         # picking one here would hide a wrong `containers_list` entry. The run stops before it
         # writes anything, so the next hourly run retries once the entry is fixed.
         raise Failed(f"claim(s) on both the weekly and the no-backup list: {both}")
-    trim_claims = doc.get("trim_claims")
-    if trim_claims is not None and not (
-        isinstance(trim_claims, list) and all(isinstance(c, str) for c in trim_claims)
-    ):
-        raise Failed("tier file: `trim_claims` must be a list of claims")
     return {
         "r2": set(r2),
         "weekly": weekly,
         "nobackup": set(nobackup),
-        # None means no bound. An empty set means no volume. They are never the same.
-        "trim_claims": None if trim_claims is None else set(trim_claims),
     }
 
 
@@ -317,12 +307,6 @@ def trim_rule(volume: dict) -> bool:
     )
 
 
-def wants_trim(volume: dict, claim: str, tiers: Mapping) -> bool:
-    """Whether the volume joins the trim job: the unbounded rule, then the canary bound."""
-    bound = tiers["trim_claims"]
-    return trim_rule(volume) and (bound is None or claim in bound)
-
-
 def target_of(volume: dict) -> str:
     """The `spec.backupTargetName` a Volume CR holds, or an empty string when it names none."""
     return str((volume.get("spec") or {}).get("backupTargetName") or "")
@@ -364,9 +348,7 @@ def plan(volumes: list[dict], class_claims: set[str], tiers: Mapping) -> list[di
     for volume in sorted(volumes, key=lambda v: v["metadata"]["name"]):
         before = volume["metadata"].get("labels") or {}
         claim = claim_of(volume)
-        after = desired_labels(
-            before, claim, tiers, class_claims, wants_trim(volume, claim, tiers)
-        )
+        after = desired_labels(before, claim, tiers, class_claims, trim_rule(volume))
         delta = {}
         for key in sorted(keys):
             if after.get(key) != before.get(key):
@@ -396,10 +378,10 @@ def describe(change: dict) -> str:
 
 
 def would_admit(volumes: list[dict]) -> str:
-    """The `trim would-admit:` line: the claims the UNBOUNDED rule admits, sorted.
+    """The `trim would-admit:` line: the claims the trim rule admits, sorted.
 
-    The canary bound keeps the trim label off every other volume, so the bound cannot test the
-    rule. This line shows what H2.2b would admit, and it prints whatever the bound is.
+    The arm labels exactly this set, so the line records which volumes joined the trim job on
+    this pass.
     """
     claims = sorted({claim_of(v) for v in volumes if trim_rule(v)})
     return "trim would-admit: " + (", ".join(claims) if claims else "none")
