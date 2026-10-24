@@ -14,11 +14,15 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import re
 from pathlib import Path
+from typing import cast
 
 import jinja2
 
 from lib.ansible_jinja_env import SHARED_TPL
+from lib.estate import role_defaults
+from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib.cluster import RenderRefused
+from renderer.renderer_lib.environment import renderer_env
 
 # Each file a `shared` entry may name, by its repo path. The file stays single at its Ansible
 # path, because a role still installs it there: initial_setup installs kuma-push-lib.sh and
@@ -29,6 +33,57 @@ SHARED_FILES = {
     "kuma-push-lib.sh": "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
     "homelab-check-lib.sh": "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
 }
+
+# The setup roles whose defaults and templates a component may render with `role:` (H4, *NUT on
+# daniel-server*). The role keeps owning the file until H7.8 moves daniel-box, so a package
+# renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
+# SHARED_FILES, so a component cannot read any other role.
+ROLE_SOURCES = frozenset({"nut_host"})
+# A `src` with this prefix names a template of the component's `role:`, not of the component.
+ROLE_SRC = "role:"
+
+
+def role_sources(spec: dict, directory: Path) -> tuple[Path | None, dict]:
+    """The role directory a component's `role:` names, and its `defaults:` over that role's.
+
+    The component's own `defaults:` sit above the role's and below inventory, so a `host_vars`
+    value still wins (H3's *Component variables*).
+
+    Raises:
+        RenderRefused: The role is not one of `ROLE_SOURCES`.
+    """
+    defaults = spec.get("defaults") or {}
+    role = spec.get("role")
+    if role is None:
+        return None, defaults
+    if role not in ROLE_SOURCES:
+        raise RenderRefused(
+            f"{directory}: role {role!r} is not one of {sorted(ROLE_SOURCES)}"
+        )
+    role_dir = ANSIBLE / "roles" / "setup" / str(role)
+    return role_dir, {**role_defaults(role_dir), **defaults}
+
+
+def template_source(
+    role_dir: Path | None, src: str, directory: Path
+) -> tuple[Path, str]:
+    """The directory and template name `src` loads from: the component, or its role's templates.
+
+    Raises:
+        RenderRefused: `src` names a role template and the component lists no `role:`.
+    """
+    if not src.startswith(ROLE_SRC):
+        return directory, src
+    if role_dir is None:
+        raise RenderRefused(f"{directory}: src {src!r} names a role, and it lists none")
+    return role_dir / "templates", src[len(ROLE_SRC) :]
+
+
+def confined_env(directory: Path) -> jinja2.Environment:
+    """The renderer's strict environment over `directory`, with its loader confined to it."""
+    env = renderer_env(directory)
+    env.loader = ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+    return env
 
 
 def confined(directory: Path, src: str) -> Path:
