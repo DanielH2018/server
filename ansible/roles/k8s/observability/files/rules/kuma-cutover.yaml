@@ -25,6 +25,8 @@
 # Read the interval from the tile's declaration. Every monitor-bridge tile shares
 # uptime_kuma_k8s_bridge_push_interval (1200s), so its range is [2h].
 # A tile whose interval is 90000s (a daily timer plus an hour) uses [50h10m], as B3's two do.
+# B7's WG Pi Peer Backup has a 216000s interval (2.5 days), so its range is [120h10m]. B7's other
+# three tiles (360s and 600s) use [2h].
 # B4's two etcd drill tiles have no term: a monthly push tile's range would be 70d10m, which
 # exceeds Prometheus's 30d retention. A Kuma restart drops the series until the next monthly
 # push, and after 30d no earlier sample remains to keep the term quiet, so it would page falsely.
@@ -199,6 +201,14 @@ groups:
               absent_over_time(monitor_status{monitor_name="etcd Restore Drill"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Home Assistant Automations"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Arr Auto-Block"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Cloudflare DDNS Direct"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Cloudflare DDNS Proxied"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="WG Pi Peer Backup"}[120h10m])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:

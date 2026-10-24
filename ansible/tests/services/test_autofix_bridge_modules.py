@@ -79,8 +79,14 @@ def test_autofix_py_cross_role_imports_are_shipped():
         node.module
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module
+    } | {
+        # A plain `import jobs_metrics` names its module too.
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
     }
-    known_cross_role = {"bridge.common", "kuma_push"}
+    known_cross_role = {"bridge.common", "kuma_push", "jobs_metrics"}
     missing = (imported & known_cross_role) - shipped
     assert not missing, (
         f"autofix.py imports {sorted(missing)}, absent from autofix_bridge_modules"

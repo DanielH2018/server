@@ -123,6 +123,23 @@ groups:
             minutes, so its exporter is down or unreachable from Prometheus and its series have
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
+      # autofix-bridge's check exporter (M6 batch B7). It gets its own rule rather than the
+      # catch-all's `unmapped` service. AutofixBridgeDown reads the same series with an `absent()`
+      # arm and a critical severity; this rule keeps A3's one-rule-per-job census whole.
+      - alert: ScrapeTargetDown
+        expr: up{job="autofix-bridge"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: autofix-bridge
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
       - alert: ScrapeTargetDown
         expr: up{job="flux"} == 0
         for: 10m
@@ -320,7 +337,7 @@ groups:
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
       - alert: ScrapeTargetDown
-        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
+        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
         for: 10m
         labels:
           severity: warning

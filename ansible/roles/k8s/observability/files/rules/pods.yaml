@@ -1,0 +1,178 @@
+# The B7 pod producers: autofix-bridge, the two cloudflare-ddns Deployments and the pi-peer-backup
+# CronJob. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The
+# design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch B7, on the operator's
+# ruling of 2026-10-23 that a pod exports its verdict through a metrics endpoint rather than a
+# textfile or a Pushgateway. pod-producers.yaml holds B6b's, which this file's CronJob half copies.
+#
+# SHADOW UNTIL B7's CUTOVER-1b. Each rule runs beside the Kuma tile of the producer it ports, so
+# each carries `shadow: "true"` and pages nobody. Cutover-1b drops the label.
+#
+# THREE SOURCES.
+# - autofix-bridge serves `homelab_check_*` on the `autofix-bridge` scrape job, the series shape
+#   of monitor-bridge's check exporter (bridge-exporter.yaml) and of the crowdsec sidecar's. Its
+#   one `check` is `arr-autoblock`.
+# - favonia's cloudflare-ddns image serves no metrics, so the Deployments' availability is the
+#   Prometheus half. The update-line half is a LogQL rule in loki-homelab's homelab-logs.yaml,
+#   which never reaches `ALERTS` (M5 open question 1), so nothing here can see it.
+# - pi-peer-backup's script patches `homelab/check-verdict` onto a ConfigMap its role renders, and
+#   kube-state-metrics exports the annotation as the label `annotation_homelab_check_verdict` of
+#   `kube_configmap_annotations`. Freshness comes from `kube_cronjob_status_last_successful_time`,
+#   which only moves when a run exits 0. B6b added both collectors, so B7 changes no
+#   kube-state-metrics argument.
+#
+# THE LITERALS. The pi-peer-backup age limit is three periods of the CronJob's daily schedule.
+# ansible/tests/services/test_pod_producer_rule_literals.py pins it and the ConfigMap name to the
+# role's defaults (M1 convention 1), and the autofix-bridge `check` literal to autofix.py.
+#
+# `service` NAMES THE THING CHECKED (operator, 2026-10-23; the DECIDED block in
+# bridge-exporter.yaml). The autofix-bridge rules report on the remediation loop itself, so they
+# carry `autofix-bridge`, the deploy tag `probe.py health` gates on.
+#
+# NO `for:` ON A VERDICT RULE. Kuma's tiles have max_retries 0, so one down push pages today, and
+# a run that fails is a verdict, not a sample. The down, stale and absent rules hold 10m or 5m,
+# because a restart or a rolled kube-state-metrics leaves a gap that is not a fault.
+groups:
+  - name: pods
+    rules:
+      # AUTOFIX-BRIDGE. The cycle's verdict: the *arr auto-block loop reports down when an *arr
+      # was unreachable, a mutation failed, or more than MAX_ACTIONS_PER_CYCLE items were
+      # eligible at once so it acted on none. autofix.py records the verdict before its Kuma
+      # push, and a cycle that raises records 0. A missing series stays quiet here:
+      # AutofixBridgeStale owns a loop that stopped recording.
+      - alert: ArrAutoBlockFailing
+        expr: homelab_check_success{job="autofix-bridge", check="arr-autoblock"} == 0
+        labels:
+          severity: warning
+          service: autofix-bridge
+          shadow: "true"
+        annotations:
+          summary: autofix-bridge's last cycle failed.
+          description: >-
+            The *arr auto-block loop reported down: Sonarr or Radarr was unreachable, a blocklist
+            or search call failed, or more than the per-cycle cap of queue items were eligible
+            at once, so it acted on none. Read the autofix-bridge pod's log in the homelab
+            namespace.
+      # A failed scrape (up 0) or a scrape job missing from prometheus.yml. A restart reads up 0
+      # for a scrape or two, and the pod has no readinessProbe, so the 10m hold rides it out.
+      # SHADOW UNTIL B7's CUTOVER-1b, with the rule below, which also adds the inhibit on
+      # ScrapeTargetDown{job="autofix-bridge"} (Cutover-1b is after A3's Cutover-a).
+      - alert: AutofixBridgeDown
+        expr: up{job="autofix-bridge"} == 0 or absent(up{job="autofix-bridge"})
+        for: 10m
+        labels:
+          severity: critical
+          service: autofix-bridge
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape autofix-bridge's check exporter.
+          description: >-
+            up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either the
+            autofix-bridge pod is down or the autofix-bridge scrape job is gone from
+            prometheus.yml. Read the pod's events and log in the homelab namespace.
+      # The class-3 guard of docs/failure-classes.md for this pod: a loop that hangs behind a live
+      # HTTP thread keeps `up` at 1 and serves stale gauges. The first arm finds a timestamp older
+      # than its own deadline, which is three cycles. The timestamp starts at the exporter's
+      # start, so a loop that never finishes a cycle ages out too. The second arm finds no
+      # success series while the exporter is up, the case of one row that is missing. A dead
+      # exporter has neither (a failed scrape drops the series and reads up 0), and
+      # AutofixBridgeDown owns that case. `for: 10m` covers the first cycle after a restart,
+      # which has set the timestamp and not yet the success gauge.
+      - alert: AutofixBridgeStale
+        expr: |
+          (
+            time() - homelab_check_last_run_timestamp_seconds{job="autofix-bridge"}
+            > homelab_check_deadline_seconds{job="autofix-bridge"}
+          )
+          or
+          (
+            absent(homelab_check_success{job="autofix-bridge"})
+            and on() (up{job="autofix-bridge"} == 1)
+          )
+        for: 10m
+        labels:
+          severity: critical
+          service: autofix-bridge
+          shadow: "true"
+        annotations:
+          summary: autofix-bridge's loop has stopped recording its cycle verdict.
+          description: >-
+            For 10 minutes either the cycle's homelab_check_last_run_timestamp_seconds has aged
+            past its homelab_check_deadline_seconds, or the exporter is up and serves no
+            homelab_check_success. The scrape works, so the loop is hung or never completes a
+            cycle. Read the autofix-bridge pod's log in the homelab namespace.
+      # CLOUDFLARE-DDNS. favonia's image serves no metrics and has no readiness probe, so the
+      # Deployment's availability is the Prometheus evidence that the updater runs at all. The
+      # update loop's success is the LogQL rules' (homelab-logs.yaml). `verify: "true"` makes the
+      # rule gate `probe.py health cloudflare-ddns` once it drops `shadow`, which a warning
+      # alone would not: the gate reads critical alerts and `verify` ones. It overlaps
+      # K8sDeploymentZeroAvailable, a warning keyed by the workload join, and the two page
+      # separately until Cutover-1b. The absent arms cover a Deployment that is gone, and
+      # `unless` leaves a dead kube-state-metrics to ScrapeTargetDown.
+      - alert: CloudflareDdnsUnavailable
+        expr: |
+          (
+              kube_deployment_status_replicas_available{namespace="homelab", deployment=~"cloudflare-ddns-(direct|proxied)"} == 0
+            or
+              absent(kube_deployment_status_replicas_available{namespace="homelab", deployment="cloudflare-ddns-direct"})
+            or
+              absent(kube_deployment_status_replicas_available{namespace="homelab", deployment="cloudflare-ddns-proxied"})
+          )
+          unless on () (up{job="kube-state-metrics"} == 0)
+        for: 10m
+        labels:
+          severity: warning
+          service: cloudflare-ddns
+          verify: "true"
+          shadow: "true"
+        annotations:
+          summary: A cloudflare-ddns Deployment has no available replica.
+          description: >-
+            A cloudflare-ddns Deployment (direct or proxied) has had no available replica for 10
+            minutes, or kube-state-metrics reports none, so its Cloudflare A records are not
+            being kept current. The `deployment` label says which. Read that Deployment's pod
+            events and log in the homelab namespace.
+      # PI-PEER-BACKUP. The script patches `homelab/check-verdict` to `up` or `down` after each
+      # scheduled run and skips the patch on a deploy-gate run. The series is absent until the
+      # first run and keeps its last value after, which is why the NotReporting rule measures the
+      # run clock. A down verdict stays until the next night's run, as the Kuma tile does.
+      - alert: PiPeerBackupFailed
+        expr: >-
+          kube_configmap_annotations{namespace="homelab", configmap="pi-peer-backup-verdict", annotation_homelab_check_verdict="down"} == 1
+        labels:
+          severity: warning
+          service: pi-peer-backup
+          shadow: "true"
+        annotations:
+          summary: The nightly daniel-pi peer-key backup failed.
+          description: >-
+            The pi-peer-backup script reported down: rsync from daniel-pi failed, daniel-pi's
+            host key no longer matches the committed pin, or fewer than two files came back. The
+            WireGuard peer keys are un-rebuildable, so the last good copy is the only one. Read
+            the annotation `homelab/check-message` on the pi-peer-backup-verdict ConfigMap, then
+            `kubectl -n homelab logs` on the newest pi-peer-backup Job.
+      # A script that stopped running or stopped exiting 0 (it exits 1 on any down verdict and
+      # when its export fails). 259200s is three periods of the daily schedule, so two missed
+      # nights are slow and the third is the first that is not noise. The Kuma tile waits 60
+      # hours, so this rule is the slower of the two, by 12 hours. The second arm is a CronJob
+      # that never succeeded, or one gone. `unless` leaves a dead kube-state-metrics to
+      # ScrapeTargetDown.
+      - alert: PiPeerBackupNotReporting
+        expr: |
+          (
+              time() - kube_cronjob_status_last_successful_time{namespace="homelab", cronjob="pi-peer-backup"} > 259200
+            or
+              absent_over_time(kube_cronjob_status_last_successful_time{namespace="homelab", cronjob="pi-peer-backup"}[72h])
+          )
+          unless on () (up{job="kube-state-metrics"} == 0)
+        for: 5m
+        labels:
+          severity: warning
+          service: pi-peer-backup
+          shadow: "true"
+        annotations:
+          summary: The pi-peer-backup CronJob has not succeeded in three nights.
+          description: >-
+            The pi-peer-backup CronJob has no successful run newer than 72 hours, so the
+            WireGuard peer keys have not been copied off daniel-pi for three nights. Read
+            `kubectl -n homelab get jobs` for its newest Job and that Job's logs. A failed
+            export of the verdict ends the run with exit 1.

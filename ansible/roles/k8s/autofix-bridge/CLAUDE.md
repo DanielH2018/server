@@ -87,6 +87,14 @@ here must satisfy this summary.
 ## Notable
 - **Two Kuma monitors, on purpose:** a liveness tile as the fast dead-man for a hard crash,
   a push monitor as the per-cycle heartbeat on a 600s backstop.
+- **The cycle's verdict is also exported** (M6 batch B7). `files/autofix.py` serves
+  `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and
+  `homelab_check_deadline_seconds`, labelled `check="arr-autoblock"`, on
+  `CHECK_EXPORTER_PORT` through crowdsec's `jobs_metrics.py`. The `autofix-bridge` item on this
+  role's `containers_list` entry renders the scrape job, the Service in
+  `templates/service.yaml.j2` and the container port. Each cycle records its verdict before the
+  Kuma push, and a cycle that raises records 0. The `pods` rule group (`ArrAutoBlockFailing`,
+  `AutofixBridgeDown`, `AutofixBridgeStale`) reads it in shadow beside the push.
 - **RENAME GOTCHA — don't "fix" it:** the **push monitor id, token and env are deliberately
   kept** `arr-autoblock` / `arr_autoblock_push_token` / `KUMA_PUSH_ARR_AUTOBLOCK`, because a
   monitor names the *check* rather than the container and renaming loses its history. A grep
@@ -99,11 +107,12 @@ here must satisfy this summary.
 
 ## Editing & testing
 - Sidecar: `files/autofix.py`, mounted from a ConfigMap along with monitor-bridge's
-  `bridge/common.py` and setup/common's `kuma_push.py`, the Kuma push every host pusher shares
-  (`defaults/main.yml`'s `autofix_bridge_modules` names all three). **Never fork a second copy
-  of either here** — edit the owning role's. `templates/script-configmap.yaml.j2` embeds
+  `bridge/common.py`, setup/common's `kuma_push.py`, the Kuma push every host pusher shares,
+  and crowdsec's `jobs_metrics.py`, the check exporter (`defaults/main.yml`'s
+  `autofix_bridge_modules` names all four). **Never fork a second copy of any of them here** —
+  edit the owning role's. `templates/script-configmap.yaml.j2` embeds
   every module into the rendered ConfigMap `autofix-bridge-script`, so an edit to any of the
-  three changes this role's render. Under Ansible the shared role's rollout restart then rolls
+  four changes this role's render, and an edit to `jobs_metrics.py` rolls the crowdsec pod too. Under Ansible the shared role's rollout restart then rolls
   the pod. Under Flux the renderer's restart annotation (`RESTART_ANNOTATION` in
   `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/test_renderer_autofix_bridge_script.py` holds both the
   embed and the checksum.

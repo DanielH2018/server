@@ -216,6 +216,8 @@ def test_the_consumer_census_finds_its_named_members():
         "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
         "homelab-logs.yaml WorkloadLogErrors",
+        "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent",
+        "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent",
     ):
         assert name in consumers, f"{name} is no longer found, so it is unchecked"
     boards = {name.split(" #")[0] for name in _dashboard_queries()}
@@ -326,7 +328,12 @@ def test_a_loki_rule_on_an_unknown_machine_is_flagged():
 
 # Each `container` value a Loki rule selects on, and the role template whose pod declares a
 # container by that name. A value with no entry here fails, so a new rule adds its mapping.
-_RULE_CONTAINERS = {"uptime-kuma": ("uptime-kuma", "deployment.yaml.j2")}
+_RULE_CONTAINERS = {
+    "uptime-kuma": ("uptime-kuma", "deployment.yaml.j2"),
+    # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
+    # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
+    "cloudflare-ddns": ("cloudflare-ddns", "deployment-direct.yaml.j2"),
+}
 
 
 def _declared_containers(role: str, template: str) -> set[str]:
@@ -380,6 +387,23 @@ _SILENCE_RULES = {
     "homelab-logs.yaml LokiHostLogsSilent": {"host_syslog", "host_authlog"},
     "homelab-logs.yaml LokiPodLogsSilent": {"cluster_pods"},
     "homelab-logs.yaml LokiPiLogsSilent": {"pi_containers"},
+    # M6 batch B7: one per cloudflare-ddns Deployment, each on the cluster pod stream.
+    "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent": {"cluster_pods"},
+    "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent": {"cluster_pods"},
+}
+
+# A silence rule that selects on a `container` or `pod` the generic stub stream lacks. The stub
+# for `cluster_pods` is an authelia stream with no `pod`, so these rules would read as missing
+# their own stream. Each override adds what a live stream of the named workload carries.
+_SILENCE_STREAM_EXTRA = {
+    "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent": {
+        "container": "cloudflare-ddns",
+        "pod": "cloudflare-ddns-direct-5c9d7b6f4-x7k2q",
+    },
+    "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent": {
+        "container": "cloudflare-ddns",
+        "pod": "cloudflare-ddns-proxied-6d8c5f7b9-m4n8p",
+    },
 }
 
 
@@ -401,7 +425,10 @@ def _pi_boundary_problems(
             continue
         on_pi = own <= set(_PI_STREAMS)
         for role in OWNER:
-            matches = _selector_matches(selectors[0], _stream_labels(role))
+            labels = _stream_labels(role)
+            if role == "cluster_pods":
+                labels = {**labels, **_SILENCE_STREAM_EXTRA.get(name, {})}
+            matches = _selector_matches(selectors[0], labels)
             if role in own and not matches:
                 problems.append(f"{name}: misses its own {role} stream")
             elif matches and (role in _PI_STREAMS) != on_pi:

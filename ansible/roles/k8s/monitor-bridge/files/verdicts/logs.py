@@ -249,6 +249,10 @@ KUMA_RETIRING_TAGS = frozenset(
         "loki-read-route-health",
         "longhorn-backup-health",
         "manifest-prune-check",
+        # B7: the pi-peer-backup CronJob logs under this name from `report()` in its script, and
+        # swallowed_verdicts reads the pod through `{container="pi-peer-backup"}`. autofix-bridge
+        # and cloudflare-ddns log to no stream the selector reads, so they list nothing.
+        "pi-peer-backup",
         # B5: the Pi package's two token heartbeats. They are also HC_ROUTED_TAGS while they
         # read KUMA_PUSH_OK, and listing them here keeps their refused pushes quiet once
         # Cutover-2 drops that routing.

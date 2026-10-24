@@ -102,3 +102,48 @@ groups:
             {{ $labels.container }} logged {{ $value }} lines matching panic, fatal, traceback
             or out of memory in the last hour, so it may be failing at its job while its pod
             reads Ready. Read that container's log in loki-homelab to see the lines.
+      # The update line of each cloudflare-ddns Deployment, ported by M6's batch B7. favonia's
+      # image serves no metrics, so the log is the only evidence an update cycle succeeded. Every
+      # 5m cycle logs, per domain, either "are already up to date" (a cached or a checked no-op)
+      # or, on a real change, "Updated an outdated" or "Added a new". A failed cycle logs "Could
+      # not confirm update" or "No valid IPv4 addresses were detected" and none of the three, so
+      # 15m (three cycles) without one is a dead or failing updater. The filter deliberately
+      # leaves out the "Successfully sent a ping to Uptime Kuma" line, which stops with the Kuma
+      # push at Cutover-2, and the "Checking the IP addresses in about" line, which prints
+      # whether or not the update worked. The Kuma tiles wait 6 minutes and page on one missed
+      # beat, so these rules are slower by design: a single failed cycle is a retry, not a page.
+      # The two Deployments share the `cloudflare-ddns` container name, so the pod name separates
+      # them; the `pod` regex is the Deployment name plus the ReplicaSet and pod suffixes.
+      #
+      # Three costs the rules carry (docs/target-architecture/monitoring/m6-retire-kuma.md, B7).
+      # Their alerts never reach Prometheus `ALERTS`, so `probe.py health cloudflare-ddns` cannot
+      # see them; CloudflareDdnsUnavailable in observability's `pods` group covers a dead pod
+      # instead. LogQL has no promtool test, so the red proof is a lokitool parse, the census
+      # entries in ansible/tests/services/test_loki_stream_labels.py and a live evaluation. Every
+      # edit of this file restarts Loki.
+      #
+      # Shadow beside the Kuma tiles until B7's Cutover-1b drops the label.
+      - alert: CloudflareDdnsDirectUpdateSilent
+        expr: absent_over_time({job="k8s", container="cloudflare-ddns", pod=~"cloudflare-ddns-direct-.*"} |~ `are already up to date|Updated an outdated|Added a new` [15m])
+        labels:
+          severity: warning
+          service: cloudflare-ddns
+          shadow: "true"
+        annotations:
+          summary: cloudflare-ddns-direct has logged no successful update in 15 minutes.
+          description: >-
+            The cloudflare-ddns-direct pod logged neither "already up to date" nor a record
+            change for 15 minutes, so the unproxied terraria and valheim records are not being
+            kept current. Read the cloudflare-ddns-direct pod's log in the homelab namespace.
+      - alert: CloudflareDdnsProxiedUpdateSilent
+        expr: absent_over_time({job="k8s", container="cloudflare-ddns", pod=~"cloudflare-ddns-proxied-.*"} |~ `are already up to date|Updated an outdated|Added a new` [15m])
+        labels:
+          severity: warning
+          service: cloudflare-ddns
+          shadow: "true"
+        annotations:
+          summary: cloudflare-ddns-proxied has logged no successful update in 15 minutes.
+          description: >-
+            The cloudflare-ddns-proxied pod logged neither "already up to date" nor a record
+            change for 15 minutes, so the proxied apex record is not being kept current. Read the
+            cloudflare-ddns-proxied pod's log in the homelab namespace.

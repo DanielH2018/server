@@ -36,6 +36,8 @@ SHIPPED_BESIDE = (
     REPO / "ansible/roles/setup/common/files",
     REPO / "ansible/roles/setup/gitops_deploy/files",
     REPO / "ansible/roles/k8s/monitor-bridge/files",
+    # `jobs_metrics.py`, the check exporter autofix-bridge's ConfigMap carries beside autofix.py.
+    REPO / "ansible/roles/k8s/crowdsec/files",
     REPO / "ansible/roles/k8s/manifests/files",
     REPO / "scripts/deploy_tools",
 )
