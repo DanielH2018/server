@@ -151,11 +151,15 @@ def disarmed_inventory(directory: Path) -> Inventory:
     return dataclasses.replace(REPO_INVENTORY, host_vars=host_vars)
 
 
-def pi_disarmed_variant(out: Path) -> Path:
-    """Render the real homelab-daniel-pi with its recovery timer disarmed under `out`; return it."""
+def pi_disarmed_variant(out: Path, sops_dir: Path | None = None) -> Path:
+    """Render the real homelab-daniel-pi with its recovery timer disarmed under `out`; return it.
+
+    `sops_dir` holds the ciphertext the package carries; None keeps the repo's own.
+    """
+    given = {} if sops_dir is None else {"sops_dir": sops_dir}
     with tempfile.TemporaryDirectory() as scratch:
         package = host_mode.render_host(
-            HOST, inventory=disarmed_inventory(Path(scratch))
+            HOST, inventory=disarmed_inventory(Path(scratch)), **given
         )
     host_mode.write_packages([package], out)
     return out / package.directory
