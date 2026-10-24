@@ -16,9 +16,8 @@ The census joins two sides per host:
   the role's context for that host (`lib.render_context`), its loop items included when the
   loop is a literal list or one variable. A value that still does not render is skipped: one
   reading a registered result, a `common` task file's caller `vars:` (`alert_unit.yml`,
-  `kuma_check_timer.yml`), or a loop over a registered list. On 2026-10-13 that skipped 147
-  of 1353 `dest:` and `path:` fields across the three hosts; most name a home directory or
-  `/etc/systemd/system/`, where no package installs.
+  `kuma_check_timer.yml`), or a loop over a registered list. Most skipped fields name a home
+  directory or `/etc/systemd/system/`, where no package installs.
 - **Packages.** Every host package under `hosts/<host>/` joins that host, and every shared
   package under `hosts/packages/` joins every host. Each contributes the paths it installs,
   and a host package also contributes its legacy entries, rendered as its manifest lists them.
@@ -28,7 +27,8 @@ The census joins two sides per host:
   `homelab-reconcile:retire_unit` removes, and a `cron` as its `(user, name)`.
 
 A role reaches the hosts `land_reach.setup_role_hosts` names, less those its leading
-`meta: end_role` guard ends it on. A task, its block or its import guarded by
+`meta: end_role` guard ends it on. A task, or its nearest enclosing block, naming a
+`delegate_to:` host writes on that host, not on the host its playbook entry runs on (H5.14). A task, its block or its import guarded by
 `<role>_packaged_hosts` writes nothing on a host the map lists
 (`setup_gates.packaged_guard_hosts`; `test_host_package_ufw_two_writers.py` holds the proof). A role that function cannot place, such as `common`,
 whose task files other roles import, reaches every host.
@@ -47,7 +47,7 @@ import jinja2
 import pytest
 from _helpers import load_tasks, walk_tasks
 from _role_census import task_files_by_role
-from _task_guards import guarded_tasks
+from _task_guards import delegated_tasks
 from deploy_tools.land_lib.land_reach import setup_role_hosts
 from deploy_tools.setup_lib.setup_gates import HOSTS, packaged_guard_hosts
 from lib import yaml_fast
@@ -181,14 +181,16 @@ def ansible_writes(
     by_host: dict[str, dict[Key, set[str]]] = defaultdict(lambda: defaultdict(set))
     for role, task_file in roles:
         reach = reach_of(role.name) or frozenset(hosts)
-        tasks = list(guarded_tasks(role, task_file))
+        tasks = list(delegated_tasks(role, task_file))
         for host in sorted(reach & set(hosts)):
             ctx = _role_context(role, host)
-            for task, whens in tasks:
+            for task, whens, delegate in tasks:
                 if packaged_guard_hosts(whens, [host], role):
                     continue  # a `<role>_packaged_hosts` guard skips the task on this host
-                for key in task_writes(task, ctx):
-                    by_host[host][key].add(os.path.relpath(task_file, ANSIBLE.parent))
+                target = _render(delegate, ctx) if delegate else host
+                target = target if target in hosts else host  # localhost stays put
+                for key in task_writes(task, _role_context(role, target)):
+                    by_host[target][key].add(os.path.relpath(task_file, ANSIBLE.parent))
     return by_host
 
 
