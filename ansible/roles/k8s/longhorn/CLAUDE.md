@@ -41,7 +41,9 @@ host probes stay green.
       patches (#5969). They drop upstream's ClusterRoleBinding and ClusterRole that give
       `longhorn-csi-service-account` cluster-wide `get` on every Secret. Upstream needs that
       grant only for a StorageClass with a `csi.storage.k8s.io/*-secret-*` parameter, and no
-      class here has one. A class that adds one needs both patches removed first.
+      class here has one. A class that adds one needs both patches removed first, and
+      `ansible/tests/longhorn/test_longhorn_csi_secret_grant.py::test_no_longhorn_class_needs_the_dropped_grant`
+      fails until they are.
       `ansible/tests/longhorn/test_longhorn_csi_secret_grant.py::test_the_patched_render_is_clean`
       fails a render in which the account still reads Secrets cluster-wide. Under
       `prune: false` the live objects stay until the operator deletes them (**operator-only**).

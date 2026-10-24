@@ -20,11 +20,15 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_csi_secret_grant.py
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
 
+from _k8s_render import rendered_docs
+
 LONGHORN_FILES = K8S_ROLES / "longhorn" / "files"
 UPSTREAM = LONGHORN_FILES / "upstream" / "longhorn.yaml"
 PATCHES = LONGHORN_FILES / "patches"
 CSI_ACCOUNT = ("longhorn-system", "longhorn-csi-service-account")
 NAMED = "longhorn-csi-secret-bind"
+CLASS_PATCH = PATCHES / "longhorn-storageclass.yaml"
+NAMED_CLASSES = {"longhorn", "longhorn-nobackup"}
 DELETED = {
     ("ClusterRoleBinding", "longhorn-csi-secret-bind"),
     ("ClusterRole", "longhorn-csi-secret-role"),
@@ -84,6 +88,53 @@ def _secret_grants(upstream: list[dict], patches: list[dict]) -> list[str]:
     )
 
 
+def _longhorn_classes() -> list[dict]:
+    """Every Longhorn StorageClass the tree declares, rendered or carried in the patched ConfigMap."""
+    configmap = yaml_fast.safe_load(CLASS_PATCH.read_text())
+    classes = [yaml_fast.safe_load(configmap["data"]["storageclass.yaml"])]
+    classes += [
+        doc for _role, _tpl, doc in rendered_docs() if doc.get("kind") == "StorageClass"
+    ]
+    return [c for c in classes if c.get("provisioner") == "driver.longhorn.io"]
+
+
+def _secret_parameters(classes: list[dict]) -> list[str]:
+    """`<class>: <parameter>` for each class parameter that names a Secret for a CSI sidecar."""
+    return sorted(
+        f"{c['metadata']['name']}: {key}"
+        for c in classes
+        for key in c.get("parameters") or {}
+        if key.startswith("csi.storage.k8s.io/") and "secret" in key
+    )
+
+
+def _class(name: str, **parameters: str) -> dict:
+    return {
+        "kind": "StorageClass",
+        "metadata": {"name": name},
+        "provisioner": "driver.longhorn.io",
+        "parameters": {"numberOfReplicas": "1", **parameters},
+    }
+
+
+def test_a_class_naming_a_csi_secret_is_flagged():
+    secret = "csi.storage.k8s.io/node-publish-secret-name"
+    assert _secret_parameters([_class("enc", **{secret: "key"})]) == [f"enc: {secret}"]
+
+
+def test_a_class_naming_no_csi_secret_is_clean():
+    assert _secret_parameters([_class("plain", fsType="ext4")]) == []
+
+
+def test_no_longhorn_class_needs_the_dropped_grant():
+    # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
+    # The delete patches are safe only while no class asks a CSI sidecar to read a Secret:
+    # without the grant, that sidecar fails Forbidden at provision, attach or expand time.
+    classes = _longhorn_classes()
+    assert NAMED_CLASSES <= {c["metadata"]["name"] for c in classes}
+    assert _secret_parameters(classes) == []
+
+
 def test_upstreams_secret_grant_is_flagged():
     assert NAMED in _secret_grants(_docs(UPSTREAM.read_text()), [])
 
@@ -98,7 +149,8 @@ def test_the_render_drops_both_upstream_objects():
 
 
 def test_each_delete_patch_names_an_upstream_object():
-    # kustomize refuses a build whose patch matches nothing, so a release that renames or
+    # A guard, not coverage of the deletions: with no delete patches the set is empty and this
+    # passes. kustomize refuses a build whose patch matches nothing, so a release that renames or
     # drops a deleted object would fail the whole `longhorn` apply rather than this test.
     upstream = {(d["kind"], d["metadata"]["name"]) for d in _docs(UPSTREAM.read_text())}
     assert _deleted(_patch_docs()) - upstream == set()
