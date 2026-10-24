@@ -364,6 +364,7 @@
  "ansible/tests/deploy/test_tree_lock_single_definition.py": 0.0,
  "ansible/tests/deploy/test_volume_revert_playbook_applies_nothing_from_a_tick.py": 0.0,
  "ansible/tests/k8s/test_aggregated_clusterroles.py": 0.0,
+ "ansible/tests/k8s/test_alloy_labels_host_program.py": 0.0,
  "ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py": 0.0,
  "ansible/tests/k8s/test_arr_deployments_share_one_macro.py": 0.0,
  "ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py": 0.36,
