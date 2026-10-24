@@ -7,6 +7,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 ExecStart=/usr/lib/homelab/homelab-updater
 Nice=10
 IOSchedulingClass=idle

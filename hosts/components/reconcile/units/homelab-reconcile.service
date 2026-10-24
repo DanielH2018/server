@@ -5,6 +5,8 @@ Description=Reconcile this host's units and legacy entries with its homelab pack
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 ExecStart=/usr/lib/homelab/homelab-reconcile
 # homelab-updater.service's TimeoutStartSec budgets this limit;
 # hosts/lib/tests/test_updater_package.py holds the inequality.

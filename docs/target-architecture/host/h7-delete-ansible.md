@@ -1772,7 +1772,7 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.38 Per-user tooling in `DanielH2018/dotfiles` | H7.12a | yes | none |
 | H7.39 The agent users and daniel-server's `claude_code` | H7.12b, H7.12c's daniel-server PR | yes | H7.38, H7.22, H4, H6.2, the H6 PR that lands the window test |
 | H7.40 daniel-box: `claude_code` | H7.12c's daniel-box PR | yes, with H7.39 | H7.39 live, D5's artifacts row |
-| H7.41 daniel-box: the builder hosts itself | H7.14 | yes | H3, H6.2 |
+| H7.41 daniel-box: the builder hosts itself | H7.14 | yes | H3, H6.2, H7.24a |
 | H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24a, H6.1b, H6.2 |
 | H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H5, all live |
 | H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6 |
@@ -1887,8 +1887,13 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
     H7.40 each land in a window the operator picks (**operator-only**).
 16. **H7.40** stays alone as the second canary host. It carries the artifacts directories'
     `tmpfiles.d` lines and empties `claude_code`.
-17. **H7.41** stays alone. It carries the fingerprint-file proof and the break-glass procedure
-    for a broken builder.
+17. **H7.41** stays alone. It carries the fingerprint-file proof, the break-glass procedure
+    for a broken builder, and the builder's three tools and its alert unit, which H7.14
+    names (nfpm, uv, the interpreter and `homelab-alert@.service`). It waits on H7.24a
+    because nfpm arrives in `homelab-tools` with H7.24a. A builder that rebuilds its own
+    package can publish a broken `homelab-daniel-box`, so the PR body states the recovery:
+    `apt-get install homelab-daniel-box=<previous>`, or the by-hand build of one package
+    (*Rollback*).
 18. **H7.42** stays alone. It carries the bootstrap, offline and bootstrap-pins proofs.
 19. **H7.43** stays alone, because the operator's rebuild is exit observation 2. The operator
     rebuilds at the Pi's console and keeps the old SD card as the rollback
@@ -2195,6 +2200,58 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `/var/lib/homelab-builder/`, which the package's unit keeps as its state
           directory, so an upgrade does not reset it and `OnFailure=` still posts once per
           condition.
+    - **The builder's three tools come from packages.** The role fetches nfpm with `get_url`,
+      copies the operator's `~/.local/bin/uv` and runs `uv python install` as the builder
+      (`homelab_builder/tasks/builder.yml`). The package replaces all three. Ruled
+      2026-10-24:
+        - **nfpm** comes from `homelab-tools`, which H7.24a (#6138) extends. The unit's
+          `HOMELAB_NFPM` names its path under `/usr/lib/homelab/bin/`.
+        - **uv** joins `homelab-tools`, pinned by version and sha256 as sops and chezmoi are
+          (`hosts/packages/homelab-tools/package.yml`, one Renovate annotation per
+          architecture block). The unit's `HOMELAB_UV` and `ExecStart=` name its fixed path
+          under `/usr/lib/homelab/bin/`. The builder stops copying the operator's uv, so the
+          role's assert against `initial_setup_uv_version` goes with the copy.
+        - **The pinned interpreter** is installed by the builder unit itself. An
+          `ExecStartPre=` runs the packaged uv's `uv python install --no-bin <version>` into
+          a directory under the unit's `StateDirectory=`, which `UV_PYTHON_INSTALL_DIR`
+          names. The version pin lives in the package, so rebuilding the host needs no
+          Ansible apply. The run keeps `UV_PYTHON_DOWNLOADS=never` and `--no-python-downloads`,
+          so only the `ExecStartPre=` downloads, and it does nothing once the version is
+          present.
+    - **The failure alerts become one packaged template unit.** The role renders
+      `homelab-builder-alert.service` and `homelab-repo-sign-alert.service` through
+      `roles/setup/common/tasks/alert_unit.yml`, with an `alert-webhook.env` in
+      `/etc/homelab-builder`. A new shared component, `failure-alert`, ships
+      `homelab-alert@.service` instead. Ruled 2026-10-24:
+        - The builder and repo-sign units name it with `OnFailure=homelab-alert@%n.service`.
+          The page opens with the instance name, which replaces the per-service message that
+          `alert_unit.yml` renders. That file's instanced form (`alert_unit_instanced`) is
+          the model. The component keeps the retry-until-delivered behaviour and the
+          once-per-failure `Failed at <UTC time>` record.
+        - The webhook arrives through `LoadCredential=discord_webhook:/run/credstore/discord_webhook`,
+          the form `k3s-restart` and checkout-sync use. The credential is the SOPS key
+          `gitops_deploy_discord_webhook`, the key `alert_unit.yml` renders today.
+          daniel-box's `package.yml` lists it under `credentials:`, and the operator runs
+          `host_secrets.py sync daniel-box` to copy it into the host's SOPS file
+          (**operator-only**). The role's teardown stops owning the env file.
+        - Other roles' alert units can reuse `homelab-alert@.service` later. H7.41 leaves
+          them out.
+        - This reverses #3694's choice of per-service alert units over one `alert@.service`.
+          The reasons in `alert_unit.yml`'s header (four renamed units, and a shared env
+          file with no owner) do not apply once a package owns the credential. The PR moves
+          the two builder entries out of `ansible/tests/setup/test_alert_unit.py`'s
+          `KNOWN_ALERTS` and into the component's own test.
+    - **The `users:` arm declares the live ids.** Measured with `id` on daniel-box on
+      2026-10-24: `homelab-builder` uid 995 gid 983, and `homelab-signer` uid 994 gid 982.
+      The package declares exactly these ids, so the install adopts the existing accounts
+      and the files they own keep their owners.
+    - The packaged builder unit keeps `SyslogLevel=notice`, which this host's journald needs
+      (`MaxLevelStore=notice`) for a failed run's traceback to reach the journal, and the
+      sandboxing directives that `homelab_builder/tests/test_builder_units.py` holds.
+    - **Self-rebuild failure.** The builder builds the package that installs the builder, so
+      a broken `homelab-daniel-box` breaks the repair path. The repository keeps the
+      previous version, so `apt-get install homelab-daniel-box=<previous>` restores it.
+      Otherwise the break-glass procedure below builds one package by hand.
     - Write a break-glass procedure for a broken builder: render, build and sign one
       package by hand as `homelab-builder`, then run `apt install ./pkg.deb`.
 15. **H7.15 Bootstrap and the rebuild proofs.**
