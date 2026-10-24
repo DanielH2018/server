@@ -8,7 +8,7 @@ the rsyslog tag (#6163). The stage has two ways to be wrong:
   which parse the raw rsyslog shape, stop matching.
 
 The expression is READ OUT of the rendered config rather than restated here. Alloy compiles it
-as RE2; Python's `re` stands in, which is equivalent for an anchored pattern with `\\S`, `\\s`, a
+as RE2 after decoding the River string; Python's `re` stands in, which is equivalent for an anchored pattern with `\\S`, `\\s`, a
 negated class and one named group.
 """
 
@@ -48,9 +48,12 @@ def host_block(alloy_config: str) -> str:
 
 
 def test_the_stage_extracts_the_rsyslog_tag(host_block: str) -> None:
-    m = re.search(r"stage\.regex\s*\{\s*expression\s*=\s*`([^`]+)`", host_block)
-    assert m, "no backtick stage.regex expression in the host block"
-    pattern = re.compile(m.group(1))
+    m = re.search(
+        r'stage\.regex\s*\{\s*expression\s*=\s*"((?:[^"\\]|\\.)+)"', host_block
+    )
+    assert m, "no stage.regex expression in the host block"
+    # River string literals use Go escapes; `\\` is the only one this expression needs.
+    pattern = re.compile(m.group(1).replace("\\\\", "\\"))
     extracted = {}
     for line in LINES:
         match = pattern.match(line)

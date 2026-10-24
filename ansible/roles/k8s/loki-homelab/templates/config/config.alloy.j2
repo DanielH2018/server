@@ -170,7 +170,7 @@ loki.process "host" {
   forward_to = [loki.write.homelab.receiver]
 
   stage.regex {
-    expression = `^\S+ \S+ (?P<program>[^\[:\s]+)`
+    expression = "^\\S+ \\S+ (?P<program>[^\\[:\\s]+)"
   }
 
   stage.labels {

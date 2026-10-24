@@ -120,12 +120,14 @@ groups:
       # `program` and the `machine` matcher keeps it out.
       #
       # Not shadow: the label exists for a rule that runs beside a Kuma tile, and no Kuma tile
-      # covers host syslog.
+      # covers host syslog. `service` is a literal, as on every rule here, because
+      # test_alertmanager_routing.py routes each rule by its own labels; the alert's `machine`
+      # label names the host.
       - alert: HostLogErrors
         expr: sum by (machine, program) (count_over_time({job="syslog", machine!="daniel-pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [1h])) > 3
         labels:
           severity: warning
-          service: '{{ $labels.machine }}'
+          service: host-syslog
         annotations:
           summary: '{{ $labels.program }} on {{ $labels.machine }} logged more than 3 fatal-pattern lines in an hour.'
           description: >-
