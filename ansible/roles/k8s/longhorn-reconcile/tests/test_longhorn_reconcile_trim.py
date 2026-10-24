@@ -1,7 +1,7 @@
 """The trim arm of the longhorn-reconcile script (H2.2a), against the fixture API server.
 
 The arm puts the per-job label `recurring-job.longhorn.io/trim` on a volume that is attached and
-has a Running ReplicaSet or StatefulSet workload, bounded by `trim_claims`, and sets the `default`
+has a Running ReplicaSet or StatefulSet workload, for every such volume, and sets the `default`
 group explicitly on a daily-tier volume that gains the label. The label strings are typed out
 here, as in test_longhorn_reconcile.py: an expectation built from the script's constants would
 follow a rename and pass.
@@ -146,35 +146,21 @@ def _two_eligible():
     )
 
 
-def test_a_bound_keeps_the_trim_label_off_every_unlisted_claim(tmp_path):
+def test_every_volume_the_rule_admits_gets_the_trim_label(tmp_path):
     # fact: ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#What it writes, and how often (the autonomous-role contract)
     world = _two_eligible()
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
-    assert lr.main([], env, world) == 0
-    assert _trimmed(world) == ["pvc-b"]
-
-
-def test_an_empty_bound_admits_no_volume(tmp_path):
-    world = _two_eligible()
-    assert lr.main([], _env(tmp_path, {**TIERS, "trim_claims": []}), world) == 0
-    assert _trimmed(world) == []
-
-
-def test_an_absent_bound_admits_every_volume_the_rule_admits(tmp_path):
-    world = _two_eligible()
-    assert "trim_claims" not in TIERS
     assert lr.main([], _env(tmp_path, TIERS), world) == 0
     assert _trimmed(world) == ["pvc-a", "pvc-b"]
 
 
-def test_the_label_leaves_a_volume_the_bound_or_the_rule_no_longer_admits(tmp_path):
-    outside = _volume(
+def test_the_label_leaves_a_volume_the_rule_no_longer_admits(tmp_path):
+    scaled_down = _volume(
         "pvc-a",
         "homelab/traefik-acme",
         "default",
         extra={TRIM: "enabled"},
         state="attached",
-        workloads=RUNNING_RS,
+        workloads=(),
     )
     detached = _volume(
         "pvc-b",
@@ -184,9 +170,8 @@ def test_the_label_leaves_a_volume_the_bound_or_the_rule_no_longer_admits(tmp_pa
         state="detached",
         workloads=RUNNING_RS,
     )
-    world = _world(outside, detached)
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
-    assert lr.main([], env, world) == 0
+    world = _world(scaled_down, detached)
+    assert lr.main([], _env(tmp_path, TIERS), world) == 0
     assert _trimmed(world) == []
     # The group label stays: only the trim label moves.
     assert _groups(world, "pvc-a") == {"default"}
@@ -195,18 +180,16 @@ def test_the_label_leaves_a_volume_the_bound_or_the_rule_no_longer_admits(tmp_pa
 def test_a_second_run_with_the_trim_arm_changes_nothing(tmp_path, capsys):
     world = _two_eligible()
     world.volumes["pvc-b"]["metadata"]["labels"].clear()
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
+    env = _env(tmp_path, TIERS)
     assert lr.main([], env, world) == 0
-    assert len(world.writes()) == 1
+    assert len(world.writes()) == 2
     first = len(world.calls)
     assert lr.main([], env, world) == 0
     assert [c for c in world.calls[first:] if c[0] == "PATCH"] == []
     assert _groups(world, "pvc-b") == {"default"}
 
 
-def test_the_would_admit_line_names_the_unbounded_set_whatever_the_bound(
-    tmp_path, capsys
-):
+def test_the_would_admit_line_names_the_set_the_rule_admits(tmp_path, capsys):
     detached = _volume(
         "pvc-c",
         "homelab/sonarr-config",
@@ -223,8 +206,7 @@ def test_the_would_admit_line_names_the_unbounded_set_whatever_the_bound(
     )
     world = _two_eligible()
     world.volumes.update({"pvc-c": detached, "pvc-d": job_only})
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
-    assert lr.main([], env, world) == 0
+    assert lr.main([], _env(tmp_path, TIERS), world) == 0
     out = capsys.readouterr().out
     assert (
         "longhorn-reconcile: trim would-admit: "
@@ -252,14 +234,6 @@ def test_report_only_names_the_trim_change_and_writes_nothing(tmp_path, capsys):
     assert "would patch volume pvc-1" in out
     assert f"{TRIM}=enabled" in out
     assert world.writes() == []
-
-
-@pytest.mark.parametrize("bad", ["homelab/a", [1], {"homelab/a": 1}])
-def test_a_malformed_bound_is_refused(bad, tmp_path):
-    path = tmp_path / "tiers.json"
-    path.write_text(json.dumps({**TIERS, "trim_claims": bad}))
-    with pytest.raises(lr.Failed, match="trim_claims"):
-        lr.load_tiers(path)
 
 
 # The reconcile Role and ClusterRole grants against a run that exercises the trim arm. The
@@ -298,8 +272,7 @@ def _needs(calls) -> set[tuple[str, str]]:
 def _trim_run_calls(tmp_path):
     world = _two_eligible()
     world.volumes["pvc-b"]["metadata"]["labels"].clear()
-    env = _env(tmp_path, {**TIERS, "trim_claims": ["homelab/authelia-config"]})
-    assert lr.main([], env, world) == 0
+    assert lr.main([], _env(tmp_path, TIERS), world) == 0
     return world.calls
 
 
@@ -319,17 +292,15 @@ def test_a_grant_without_patch_is_flagged_for_the_trim_arm(tmp_path):
     assert needs - (_granted() - {("volumes", "patch")}) == {("volumes", "patch")}
 
 
-def test_the_configmap_renders_the_canary_bound_and_an_empty_bound_stays_empty():
-    canary = load_defaults(K8S_ROLES / "longhorn-reconcile")[
-        "longhorn_reconcile_trim_claims"
+def test_the_configmap_carries_the_three_tier_lists_and_no_trim_bound():
+    assert "longhorn_reconcile_trim_claims" not in load_defaults(
+        K8S_ROLES / "longhorn-reconcile"
+    )
+    (doc,) = yaml_fast.safe_load_all(
+        render_role_template("longhorn-reconcile", "configmap.yaml.j2")
+    )
+    assert sorted(json.loads(doc["data"]["tiers.json"])) == [
+        "nobackup",
+        "r2",
+        "weekly",
     ]
-    assert canary == ["homelab/authelia-config"]
-
-    def tiers(overrides):
-        (doc,) = yaml_fast.safe_load_all(
-            render_role_template("longhorn-reconcile", "configmap.yaml.j2", overrides)
-        )
-        return json.loads(doc["data"]["tiers.json"])
-
-    assert tiers({})["trim_claims"] == canary
-    assert tiers({"longhorn_reconcile_trim_claims": []})["trim_claims"] == []

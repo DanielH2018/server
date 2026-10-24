@@ -5,7 +5,7 @@ The design is H3's *The reconcile unit* (docs/target-architecture/host/h3-pi-pil
 step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
 host's /usr/bin/python3, which is 3.12 on Ubuntu 24.04. It uses the standard library only, and
 hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The activation step,
-the ufw arm and the metrics file live in the reconcile_lib package beside it, which the same
+the four arms and the metrics file live in the reconcile_lib package beside it, which the same
 component ships; the reconcile-size census counts both against one line ceiling.
 
 Usage: homelab-reconcile        (no arguments; exit 0 when every step succeeded, 1 otherwise)
@@ -20,16 +20,19 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
      "enable_links": ["<unit>", ...],
      "legacy": [{"path": "/abs/path"}, {"cron": "<name>", "user": "<user>"},
                 {"cron_file": "<name under /etc/cron.d>"}, {"unit": "<Ansible-era unit>"}],
-     "reconcilers": [] | ["ufw"],
+     "reconcilers": [] | ["libvirt", "lines", "ufw", "users"],
      "activations": {"<packaged path>": "<action>"},
-     "ufw": {"rules": [...], "legacy": [...]},
+     "ufw": {"rules": [...], "legacy": [...]}, "libvirt": {...}, "users": {...},
+     "lines": {...},
      "secrets_inputs_sha256": "<hex>"}
 
 `units` names every unit reconcile manages, another homelab package's and another package's
 drop-in target included. `enable_links` names each unit whose enable link the manifest's
-packages ship. `reconcilers` lists the arms the manifest carries state for. Only "ufw" exists,
-and its section's schema is the docstring of reconcile_lib/ufw.py; H4 adds the udev reload and
-H7 adds libvirt, so a manifest listing another kind fails the run here. `activations` maps a
+packages ship. `reconcilers` lists the arms the manifest carries state for. The four arms are in
+ARMS, and each section's schema is the docstring of its reconcile_lib module, so a manifest
+listing another kind fails the run here. The udev arm (H4.3b1) is not one of them: it hashes the
+package's /usr/lib/udev/rules.d/NN-homelab-*.rules files, as reconcile_lib/udev.py says.
+`activations` maps a
 packaged file to the action step 3b runs when its hash changes (reconcile_lib/activate.py).
 `secrets_inputs_sha256` is present only when the package ships the `secrets-unit` component, and
 every secrets rule below keys on it.
@@ -56,14 +59,17 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "pending": {"<unit>": "<InvocationID>"},      (units owed a restart: the manual: actions)
      "drift": {"<arm>": <items the arm left alone>},
      "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
+     "users": {"names": [...]}, "libvirt": {"networks": {...}, "nwfilters": {...}},  (likewise)
+     "udev": {"<rule path>": "<sha256>", ...},     (only while a rule is shipped)
      "secrets_inputs_sha256": "<hex>"}   (only after a run in which homelab-secrets succeeded)
 
 homelab-updater reads only `result` and `last_ok`. Each per-entry item advances only when its
 step succeeded on it, or when the step's rule left it alone, so the next run retries exactly
 the actions that failed. A `null` hash reads as changed.
 
-Drift is an item an arm or a rule left alone on purpose: a ufw rule the floor kept, or a legacy
-service that is still running. It is counted in `drift`, never fails the run, and is retried by
+Drift is an item an arm or a rule left alone on purpose: a ufw rule the floor kept, a libvirt
+object a running guest still references, a user the floor kept, or a legacy service that is still
+running. It is counted in `drift`, never fails the run, and is retried by
 the next run. A fault fails the run, which holds the host. The run also writes
 homelab_host_reconcile.prom (reconcile_lib/textfile.py).
 
@@ -80,7 +86,7 @@ import sys
 import time
 from pathlib import Path
 
-from reconcile_lib import activate, textfile, ufw
+from reconcile_lib import activate, libvirt, lines, textfile, udev, ufw, users
 from reconcile_lib.common import ROOT, run, say, systemctl, under_root
 
 LOCK = ROOT / "var/lib/dpkg/lock-frontend"
@@ -104,6 +110,11 @@ ALWAYS_MANUAL = frozenset({"homelab-updater.service", "homelab-reconcile.service
 UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 POLICIES = frozenset({"manual", "windowed"})
+# Each arm module has valid(section) and reconcile(section, prev) -> (ok, record | None, drift).
+# Users and lines run before the units start, lines before the activations read the files it
+# edits, and libvirt then ufw last, so that ufw's enable applies the sysctl edit already made.
+ARMS = {"users": users, "lines": lines, "libvirt": libvirt, "ufw": ufw}
+EARLY = ("users", "lines")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 # systemctl's exit for a unit that is not loaded: there is nothing to stop.
 NOT_LOADED = 5
@@ -174,18 +185,21 @@ def parse_manifest(text: str) -> dict:
     activations = manifest.get("activations", {})
     if not activate.valid_activations(activations):
         raise ManifestError(f"{MANIFEST}: activations {activations!r} is malformed")
-    section = manifest.get("ufw")
-    if ("ufw" in reconcilers or section is not None) and not (
-        ufw.valid(section) and "ufw" in reconcilers
-    ):
-        raise ManifestError(f"{MANIFEST}: the ufw section is malformed or unlisted")
+    for name, arm in ARMS.items():
+        section = manifest.get(name)
+        if (name in reconcilers or section is not None) and not (
+            arm.valid(section) and name in reconcilers
+        ):
+            raise ManifestError(
+                f"{MANIFEST}: the {name} section is malformed or unlisted"
+            )
     parsed = {
         "units": units,
         "enable_links": links,
         "legacy": legacy,
-        "reconcilers": [name for name in reconcilers if name != "ufw"],
+        "reconcilers": [name for name in reconcilers if name not in ARMS],
         "activations": activations,
-        "ufw": section,
+        "arms": {name: manifest.get(name) for name in ARMS},
     }
     digest = manifest.get("secrets_inputs_sha256")
     if digest is not None:
@@ -555,6 +569,11 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             say(f"restart {SECRETS_UNIT}")
         secrets_state = digest if secrets_ran else prev.get("secrets_inputs_sha256")
 
+    # Step 1c: the users and lines arms, so a unit that runs as a new user starts, and step 3b
+    # activates the files the lines arm edited.
+    drift, arms = {"legacy": 0}, {}
+    ok = run_arms(EARLY, manifest, prev, arms, drift) and ok
+
     # The restart set, built before step 2: the units whose file or drop-in changed, and the
     # units in pending.json, each only when it is enabled or active. A foreign unit the manifest
     # dropped is walked once more, because its drop-in has gone.
@@ -613,7 +632,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     # Step 4: retire the legacy entries not yet retired. A package that ships `secrets-unit`
     # retires none until every credential and output exists and homelab-secrets is active.
     prev_retired = set(prev.get("retired") or [])
-    retired, drift = [], {"legacy": 0}
+    retired = []
     waiting = None
     for entry in manifest["legacy"]:
         key = legacy_key(entry)
@@ -634,11 +653,11 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     for name in manifest["reconcilers"]:
         say(f"the manifest lists reconciler {name!r}, which this version does not have")
         ok = False
-    prev_ufw = prev.get("ufw")
-    arm_ok, arm_state, drift["ufw"] = ufw.reconcile(
-        manifest["ufw"], prev_ufw if isinstance(prev_ufw, dict) else None
-    )
-    ok = ok and arm_ok
+    ok = run_arms([name for name in ARMS if name not in EARLY], manifest, prev, arms, drift) and ok
+    udev_ok, udev_state = udev.reconcile(prev.get("udev"))
+    ok = ok and udev_ok
+    if udev_state:
+        arms["udev"] = udev_state
 
     state = {
         "units": units_state,
@@ -647,14 +666,25 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         "files": files_state,
         "pending": pending,
         "drift": drift,
+        **arms,
     }
-    if arm_state is not None:
-        state["ufw"] = arm_state
-    else:
-        del drift["ufw"]
     if secrets_state:
         state["secrets_inputs_sha256"] = secrets_state
     return ok, state
+
+
+def run_arms(names: list, manifest: dict, prev: dict, arms: dict, drift: dict) -> bool:
+    """Run the named arms. Each record goes in `arms`, and each drift count in `drift`."""
+    ok = True
+    for name in names:
+        before = prev.get(name)
+        arm_ok, record, count = ARMS[name].reconcile(
+            manifest["arms"][name], before if isinstance(before, dict) else None
+        )
+        ok = ok and arm_ok
+        if record is not None:
+            arms[name], drift[name] = record, count
+    return ok
 
 
 def running_service(entry: dict) -> bool:
@@ -703,7 +733,10 @@ def main() -> int:
         "files",
         "pending",
         "drift",
+        "libvirt",
+        "udev",
         "ufw",
+        "users",
     )
     state = {k: prev[k] for k in kept if k in prev}
     broken = [name for name, (status, _) in installed.items() if status != "ii "]

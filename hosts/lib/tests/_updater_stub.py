@@ -16,6 +16,8 @@ state.json keys:
     install_output: what a failed `apt-get install` prints.
     audit, configure_exit, configure_output: `dpkg --audit` and `dpkg --configure -a`.
     reconcile: "ok" or "fail", the run `systemctl start homelab-reconcile.service` records.
+    reconcile_run: {"argv", "env", "record"}, optional. The start then runs the real reconcile
+        with that argv and environment and copies the record it wrote at `record`.
     verify: what `dpkg --verify` prints.
     hour, today, now: what `date +%H`, `+%F` and `+%s` print.
 
@@ -116,6 +118,13 @@ def apt_helper(state: dict, args: list[str]) -> int:
 def systemctl(state: dict, args: list[str]) -> int:
     if args != ["start", "homelab-reconcile.service"]:
         raise SystemExit(f"stub systemctl: unexpected {args}")
+    if state.get("reconcile_run"):
+        # The real reconcile runs and writes its own record, which the updater then reads.
+        job = state["reconcile_run"]
+        subprocess.run(job["argv"], env=job["env"], capture_output=True, check=False)
+        RECORD.parent.mkdir(parents=True, exist_ok=True)
+        RECORD.write_text(Path(job["record"]).read_text())
+        return 0 if json.loads(RECORD.read_text())["result"]["ok"] else 1
     record = json.loads(RECORD.read_text()) if RECORD.exists() else {}
     run = {
         "versions": {pkg: version for pkg, (_, version) in state["installed"].items()},

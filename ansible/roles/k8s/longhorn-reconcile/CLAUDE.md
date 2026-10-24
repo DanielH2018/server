@@ -69,14 +69,11 @@ authority is written here to keep a later edit from widening it.
   `recurring-job-group.longhorn.io/default`, because Longhorn adds `default` only to a volume
   with no job of its own. It never sets `default` on a `no-backup` or weekly-shard volume.
   The rule lags by up to an hour, because the job runs hourly.
-- **`longhorn_reconcile_trim_claims` bounds the trim arm.** The ConfigMap renders it as
-  `tiers.json`'s `trim_claims`. Only a listed claim keeps the label, an empty list admits none,
-  and an absent key admits every volume the rule admits. H2.2a lists one canary claim and H2.2b
-  deletes the key. Every run prints `trim would-admit: <claims>`, the claims the unbounded rule
-  admits, whatever the bound is. The arm calls only `list` and `patch` on volumes, so the
-  grants below are unchanged.
-  `tests/test_longhorn_reconcile_trim.py::test_a_bound_keeps_the_trim_label_off_every_unlisted_claim`
-  holds the bound.
+- **The trim arm covers every volume the rule admits** (H2.2b). No list bounds it. Every run
+  prints `trim would-admit: <claims>`, the claims the rule admits, which are the claims the arm
+  labels. The arm calls only `list` and `patch` on volumes, so the grants below are unchanged.
+  `tests/test_longhorn_reconcile_trim.py::test_every_volume_the_rule_admits_gets_the_trim_label`
+  holds the unbounded set.
 - **A converged cluster gets no write.** The run reads the Volume list and the PVC list, plans,
   and patches only what differs. `tests/test_longhorn_reconcile.py::test_a_second_run_changes_nothing`
   proves it, and the gate Job's `homelab/rerun-safe` names that test.

@@ -153,7 +153,9 @@ def test_ufw_rules_render_with_the_host_context_and_reconcile_accepts_the_sectio
     ]
     reconcile = _reconcile()
     assert reconcile.ufw.valid(manifest["ufw"])
-    assert reconcile.parse_manifest(json.dumps(manifest))["ufw"] == manifest["ufw"]
+    assert (
+        reconcile.parse_manifest(json.dumps(manifest))["arms"]["ufw"] == manifest["ufw"]
+    )
 
 
 def _with(**changes) -> dict:
