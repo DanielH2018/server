@@ -45,7 +45,8 @@ PINS_FILE = "tools.json"
 _NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 _VERSION = re.compile(r"v?\d+\.\d+\.\d+")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-_MEMBER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+# One optional directory segment: uv ships `uv-x86_64-unknown-linux-gnu/uv`.
+_MEMBER = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9._-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*")
 _ENTRY_KEYS = frozenset({"version", "url", "sha256", "member"})
 
 

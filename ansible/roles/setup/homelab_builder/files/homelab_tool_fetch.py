@@ -41,7 +41,8 @@ TOOL_MAX_BYTES = 256 * 1024 * 1024
 TOOL_TIMEOUT_S = 120
 _TOOL_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-_MEMBER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+# One optional directory segment: uv ships `uv-x86_64-unknown-linux-gnu/uv`.
+_MEMBER = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9._-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
 def file_sha256(path: Path) -> str:
