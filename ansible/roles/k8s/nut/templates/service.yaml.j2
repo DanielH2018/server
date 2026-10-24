@@ -1,7 +1,24 @@
-{% from 'service.yml.j2' import service with context %}
 ---
 # In-cluster upsd endpoint — successor to the Docker-era {{ '{{ server_ip }}' }}:3493 LAN
 # publish and the DOCKER-USER nut-lan-firewall that scoped it, both retired with the
-# port. Consumers: the peanut web UI and Home Assistant's NUT integration, both pods.
+# port. Consumers: the peanut web UI and Home Assistant's NUT integration, both pods, and
+# daniel-box's host secondary upsmon (hosts/components/nut-secondary, H7.33).
 # upsd's own auth (upsd.users) still applies on top of network reachability.
-{{ service('nut', 3493) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: nut
+  namespace: {{ k8s_namespace }}
+spec:
+  # DECIDED: the ClusterIP is pinned, because daniel-box's host package renders it literally
+  # into upsmon.conf (H7.33). An auto-assigned address would change on a Service recreate and
+  # strand the shutdown chain on a value nothing re-resolves. The pin equals the address the
+  # Service already held, so applying it changes nothing live. The package's copy is
+  # `nut_host_upsd_clusterip` in hosts/components/nut-secondary/component.yml, and
+  # ansible/tests/setup/test_nut_host_secondary.py pins the two together.
+  clusterIP: {{ nut_k8s_cluster_ip }}
+  selector:
+    app: nut
+  ports:
+    - port: 3493
+      targetPort: 3493
