@@ -34,7 +34,7 @@ from lib import yaml_fast
 
 # The drill restores into the claim's own namespace, and every claim it can pick is in
 # `homelab` (the plan's *The drill: state into a ConfigMap first, then the move*).
-DRILL_NAMESPACES = {"$PVC_NS": "homelab"}
+DRILL_NAMESPACES = {"$PVC_NS": "homelab", "$STATE_NS": "homelab"}
 
 
 def _role(rules: list[dict], namespace: str | None = "homelab") -> list[dict]:

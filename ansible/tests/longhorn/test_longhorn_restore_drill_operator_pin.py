@@ -10,7 +10,6 @@ These tests RUN the rendered script rather than grep it, through the shared harn
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py
 """
 
-import os
 from pathlib import Path
 
 import pytest
@@ -26,20 +25,15 @@ UNBACKED = "c-config"  # in a backup group but with no Completed backup
 @pytest.fixture
 def drill(tmp_path: Path):
     run = harness(tmp_path, [OLDEST, PINNED, UNBACKED], backed=[OLDEST, PINNED])
-    attempts = run.stamp_dir / "attempts"
-    success = run.stamp_dir / "success"
-    success.mkdir(parents=True)
     # Both attempts SUCCEEDED, so neither is owed the retry that would otherwise outrank the
     # rotation's pick and make every assertion below about the wrong volume.
     for pvc, when in ((OLDEST, 1_700_000_000), (PINNED, 1_750_000_000)):
-        (attempts / pvc).touch()
-        os.utime(attempts / pvc, (when, when))
-        (success / pvc).write_text(f"{when}\n")
+        run.seed({f"attempts.{pvc}": when, f"success.{pvc}": when})
     return run
 
 
-def _attempted(run, pvc: str) -> float:
-    return (run.stamp_dir / "attempts" / pvc).stat().st_mtime
+def _attempted(run, pvc: str) -> int:
+    return run.epoch(f"attempts.{pvc}")
 
 
 def test_nightly_run_drills_the_rotations_own_pick(drill) -> None:
@@ -67,7 +61,7 @@ def test_argv_beats_env(drill) -> None:
 def test_pin_leaves_the_published_candidate_list_whole(drill) -> None:
     """Check 8 sizes its coverage window from this file; a one-line list would shrink it."""
     drill([PINNED])
-    assert (drill.stamp_dir / "candidates").read_text().split() == [OLDEST, PINNED]
+    assert drill.cm["candidates"].split() == [OLDEST, PINNED]
 
 
 def test_pin_naming_an_ineligible_volume_fails_naming_it(drill) -> None:
@@ -75,23 +69,23 @@ def test_pin_naming_an_ineligible_volume_fails_naming_it(drill) -> None:
     proc = drill([UNBACKED])
     assert proc.returncode == 1
     assert f"pinned volume {UNBACKED} is not eligible" in proc.stderr, proc.stderr
-    assert not (drill.stamp_dir / "attempts" / UNBACKED).exists()
+    assert f"attempts.{UNBACKED}" not in drill.cm
 
 
 def test_operator_pin_writes_the_volume_stamp_but_not_the_liveness_stamp(drill) -> None:
-    """The issue's verify-by: `success/<pvc>` is written.
+    """The issue's verify-by: `success.<pvc>` is written.
 
     `last-success` is check 7's "is the nightly drill alive", and a hand run must not refresh
     it over a dead cron.
     """
     proc = drill([PINNED], restore="pass")
     assert proc.returncode == 0, proc.stderr
-    assert (drill.stamp_dir / "success" / PINNED).exists()
-    assert not (drill.stamp_dir / "last-success").exists()
+    assert f"success.{PINNED}" in drill.cm
+    assert "last-success" not in drill.cm
 
 
 def test_nightly_run_writes_both_stamps(drill) -> None:
     proc = drill(restore="pass")
     assert proc.returncode == 0, proc.stderr
-    assert (drill.stamp_dir / "success" / OLDEST).exists()
-    assert (drill.stamp_dir / "last-success").exists()
+    assert f"success.{OLDEST}" in drill.cm
+    assert "last-success" in drill.cm

@@ -11,7 +11,6 @@ every night, which is the property the attempt-stamp selection was built for in 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_retry.py
 """
 
-import os
 from pathlib import Path
 
 import pytest
@@ -26,19 +25,17 @@ _OLD_AT = 1_700_000_000
 _FAILED_AT = 1_750_000_000
 
 
-def _stamp(path: Path, when: int, content: str | None = None) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content if content is not None else "")
-    os.utime(path, (when, when))
-
-
 @pytest.fixture
 def drill(tmp_path: Path):
     """OLDEST succeeded long ago; FAILED was attempted since and never succeeded."""
     run = harness(tmp_path, [OLDEST, FAILED])
-    _stamp(run.stamp_dir / "attempts" / OLDEST, _OLD_AT)
-    _stamp(run.stamp_dir / "success" / OLDEST, _OLD_AT, f"{_OLD_AT}\n")
-    _stamp(run.stamp_dir / "attempts" / FAILED, _FAILED_AT)
+    run.seed(
+        {
+            f"attempts.{OLDEST}": _OLD_AT,
+            f"success.{OLDEST}": _OLD_AT,
+            f"attempts.{FAILED}": _FAILED_AT,
+        }
+    )
     return run
 
 
@@ -51,36 +48,30 @@ def test_a_failed_attempt_is_redrilled_ahead_of_the_rotation(drill) -> None:
 def test_a_retry_already_spent_leaves_the_rotation_alone(drill) -> None:
     """The bound: one retry per failed attempt, so a broken volume cannot take every night."""
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
-    _stamp(drill.stamp_dir / "retries" / FAILED, _FAILED_AT + 1)
+    drill.seed({f"retries.{FAILED}": _FAILED_AT + 1})
     assert selected(drill, drill()) == OLDEST
 
 
 def test_the_retry_marker_is_written_when_the_retry_runs(drill) -> None:
     """What spends the budget. Written on the attempt, so a failed retry is still spent."""
     drill()
-    marker = drill.stamp_dir / "retries" / FAILED
-    assert marker.exists()
-    assert (
-        marker.stat().st_mtime
-        >= (drill.stamp_dir / "attempts" / FAILED).stat().st_mtime
-    )
+    assert drill.epoch(f"retries.{FAILED}") >= drill.epoch(f"attempts.{FAILED}")
+    assert drill.epoch(f"attempts.{FAILED}") > _FAILED_AT
 
 
 def test_a_volume_that_succeeded_is_not_owed_a_retry(drill) -> None:
     """A success at or after the attempt is that attempt's own success."""
-    _stamp(drill.stamp_dir / "success" / FAILED, _FAILED_AT, f"{_FAILED_AT}\n")
+    drill.seed({f"success.{FAILED}": _FAILED_AT})
     assert selected(drill, drill()) == OLDEST
 
 
 def test_a_stale_success_does_not_cover_a_later_failed_attempt(drill) -> None:
-    """The comparison is success-content vs attempt-mtime, not merely "a success exists"."""
-    _stamp(drill.stamp_dir / "success" / FAILED, _OLD_AT, f"{_OLD_AT}\n")
+    """The comparison is success epoch vs attempt epoch, not merely "a success exists"."""
+    drill.seed({f"success.{FAILED}": _OLD_AT})
     assert selected(drill, drill()) == FAILED
 
 
 def test_a_pinned_run_does_not_spend_the_retry(drill) -> None:
     """A pin filters the eligible set to one name, so the scan would always name the pin."""
     assert selected(drill, drill([OLDEST])) == OLDEST
-    assert not (drill.stamp_dir / "retries").exists() or not list(
-        (drill.stamp_dir / "retries").iterdir()
-    )
+    assert not [key for key in drill.cm if key.startswith("retries.")]
