@@ -338,6 +338,7 @@ def handle_k8s(
     cs, origin = plan.cs, target.origin
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     log_pi_changes(cs)
+    started = time.monotonic()
     try:
         deploy_io.deploy_k8s(
             config.repo, cs.k8s_deploy, config.k8s_deploy_timeout_s, run=tools.run
@@ -347,7 +348,7 @@ def handle_k8s(
         # over a cluster this tick never touched.
         return deploy_defer.for_contention(tools, state, config, target, exc)
     except Exception as exc:
-        return _rollback_k8s(tools, state, config, target, plan, exc)
+        return _rollback_k8s(tools, state, config, target, plan, exc, started)
     # One of the two places a service hold clears (the broad arm's bump path is the other).
     # Without it the first rollback would leave GitOps Deploy — Status red until a manual rm.
     state.clear_service_hold(cs.k8s_deploy)
@@ -373,8 +374,13 @@ def _rollback_k8s(
     target: TickTarget,
     plan: TickPlan,
     exc: Exception,
+    started: float,
 ) -> int:
-    """Undo a failed k8s deploy: hold, reset, redeploy the prior pin, revert claimed volumes."""
+    """Undo a failed k8s deploy: hold, reset, redeploy the prior pin, revert claimed volumes.
+
+    `started` is the `time.monotonic()` the failed deploy began at, for the annotation's
+    `duration_s`, which covers the deploy and its rollback.
+    """
     cs, local, origin = plan.cs, target.local, target.origin
     # Hold BEFORE the reset: a hung rollback redeploy would otherwise
     # be SIGTERMed before the marker is written, stranding the bad commit into a per-tick
@@ -412,6 +418,14 @@ def _rollback_k8s(
             f"k8s-deploy: rollback redeploy of the prior version also failed: {exc2}",
             level=ERR,
         )
+    # The failure goes on the dashboards as well as Discord (#6164): `rollback` when the prior
+    # pin went back out, `fail` when that redeploy failed too and nothing is known to be live.
+    tools.emit_deploy_annotation(
+        cs.k8s_deploy,
+        origin,
+        "fail" if rollback_failed else "rollback",
+        time.monotonic() - started,
+    )
     # Read from the tree AFTER the reset above, matching what roles/k8s/manifests itself reads
     # for the claim list — the failed commit may have added or renamed a claim, and that version
     # is exactly what must NOT decide this note.

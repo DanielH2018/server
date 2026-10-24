@@ -69,6 +69,7 @@ from host_lib import (
     discord_post,
     github_get,
     github_token,
+    log,
     parse_env_file,
 )
 
@@ -87,10 +88,6 @@ DASHBOARD_STALE_MSG = (
 
 def cfg() -> dict[str, str]:
     return parse_env_file(CONFIG)
-
-
-def log(msg: str) -> None:
-    print(msg, flush=True)
 
 
 def get(path: str):

@@ -250,6 +250,15 @@ def test_a_failed_bump_still_annotates_the_bump_the_plane_applied(
     assert ("annotation", {"radarr"}) in tick.log
 
 
+def test_a_failed_bump_is_annotated_as_a_failure(gitops_deploy, tick, settings, state):
+    """Nothing rolls a broad tick's bump back, so its marker reads `fail` (#6164)."""
+    config = plane_applies_radarr(settings, tick)
+    tick.playbook_outcomes = [None, RuntimeError("image manifest unknown")]
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    assert ("annotation", {"sonarr"}, "fail") in tick.log
+    assert ("annotation", {"sonarr"}) not in tick.log
+
+
 def test_a_contended_bump_annotates_nothing_the_next_tick_will_annotate_again(
     gitops_deploy, tick, settings, state
 ):

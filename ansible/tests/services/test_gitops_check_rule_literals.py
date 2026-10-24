@@ -110,3 +110,51 @@ def test_every_producer_names_the_check_label_its_rule_reads(prefix):
     assert re.search(rf"write_check_textfile {re.escape(check)} ", body), (
         f"{template[-1]} does not write the {check} textfile its rules read"
     )
+
+
+# GitOpsTickStale reads the deployer's own textfile, which no DEADLINE_S renders. Its deadline must
+# outlast the longest healthy gap between two ticks' writes: one whole tick, which systemd caps at
+# the unit's TimeoutStartSec, then one timer interval before the next starts (#6164).
+GITOPS_ROLE = K8S_ROLES.parent / "setup" / "gitops_deploy"
+SPAN = re.compile(r"(\d+)(min|s)")
+
+
+def span_seconds(span: str) -> int:
+    """A `<N>min` or `<N>s` systemd span in seconds, the two forms this role writes."""
+    [(n, unit)] = SPAN.findall(span)
+    return int(n) * (60 if unit == "min" else 1)
+
+
+def tick_stale_problems(expr: str, longest_gap: int) -> list[str]:
+    """Why GitOpsTickStale's two literals disagree or undercut `longest_gap`, or nothing."""
+    found = STALE_ARM.findall(expr) + WINDOW.findall(expr)
+    if len(found) != 2 or found[0] != found[1]:
+        return [f"GitOpsTickStale's two deadline literals read {found}"]
+    if int(found[0]) <= longest_gap:
+        return [f"GitOpsTickStale's {found[0]}s does not outlast a {longest_gap}s gap"]
+    return []
+
+
+def shipped_longest_gap() -> int:
+    unit = (GITOPS_ROLE / "templates" / "gitops-deploy.service.j2").read_text()
+    [timeout] = re.findall(r"^TimeoutStartSec=(\S+)$", unit, re.M)
+    defaults = yaml_fast.safe_load((GITOPS_ROLE / "defaults" / "main.yml").read_text())
+    return span_seconds(timeout) + span_seconds(defaults["gitops_deploy_tick_interval"])
+
+
+def tick_stale_expr(text: str) -> str:
+    [group] = yaml_fast.safe_load(text)["groups"]
+    [expr] = [r["expr"] for r in group["rules"] if r["alert"] == "GitOpsTickStale"]
+    return expr
+
+
+def test_the_tick_staleness_deadline_outlasts_the_longest_tick_gap():
+    assert shipped_longest_gap() == 4800  # 70min + 10min: non-vacuity for both reads
+    assert tick_stale_problems(tick_stale_expr(RULES.read_text()), 4800) == []
+
+
+def test_a_tick_staleness_deadline_under_the_gap_is_flagged():
+    expr = tick_stale_expr(RULES.read_text().replace("5400", "4500"))
+    assert tick_stale_problems(expr, shipped_longest_gap()) == [
+        "GitOpsTickStale's 4500s does not outlast a 4800s gap"
+    ]

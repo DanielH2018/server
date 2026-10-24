@@ -359,6 +359,30 @@ def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_b
     assert "k8s deploy failed" in post and "still live on master" in post
 
 
+def test_a_rolled_back_deploy_is_annotated_as_a_rollback(gitops_deploy, tick, state):
+    """The failure reaches the dashboards as well as Discord, and never as a success (#6164)."""
+    _image_bump(tick)
+    tick.playbook_outcomes = [RuntimeError("rollout gate failed")]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert [e for e in tick.log if e[0] == "annotation"] == [
+        ("annotation", {"sonarr"}, "rollback")
+    ]
+
+
+def test_a_rollback_that_also_fails_is_annotated_as_a_failure(
+    gitops_deploy, tick, state
+):
+    _image_bump(tick)
+    tick.playbook_outcomes = [
+        RuntimeError("rollout gate failed"),
+        RuntimeError("again"),
+    ]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert [e for e in tick.log if e[0] == "annotation"] == [
+        ("annotation", {"sonarr"}, "fail")
+    ]
+
+
 def test_a_secrets_change_bundled_with_an_image_bump_is_still_flagged(
     gitops_deploy, tick, state_dir, state
 ):

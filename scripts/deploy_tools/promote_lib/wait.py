@@ -71,6 +71,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `forge`, `changed_set` and `flux_host` import bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
+from lib.repo_paths import HOST_LIB_FILES
+
+_sys.path.insert(0, str(HOST_LIB_FILES))
+from host_lib import deploy_event
 
 import forge
 from chained_timeout import OCI_INTERVAL_S, seconds
@@ -541,12 +545,11 @@ def annotate_promotion(
     """Record a settled promotion as the deploy annotation `deploy.sh` writes for an apply.
 
     `promote` runs on a GitHub runner, and the line reaches Grafana only through the host's
-    syslog, so `land-wait` writes it on the host. `deploy-failed` and `gave-up` write none.
+    syslog, so `land-wait` writes it on the host. `deploy-failed` and `gave-up` write none: a
+    failed soak is annotated by the soak Job itself (`flux_soak.py`, `result=fail`), and a hold
+    or a timeout is not a deploy that ran.
     """
-    annotate(
-        f"event=deploy services={','.join(services)} sha={revision[:8]} "
-        "result=ok source=promote"
-    )
+    annotate(deploy_event(",".join(services), revision[:8], source="promote"))
 
 
 def report_wait(merge: str, result: WaitResult) -> int:

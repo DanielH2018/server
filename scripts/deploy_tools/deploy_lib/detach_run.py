@@ -39,6 +39,7 @@ import pwd
 import re
 import subprocess
 import sys
+import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -50,7 +51,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.deploy_lib import under_locks as locked
 from deploy_tools.deploy_lib.messages import PROG, say_error
-from deploy_tools.deploy_lib.playbook import annotate, discharge_owed_k8s, run_playbook
+from deploy_tools.deploy_lib.playbook import (
+    annotate,
+    annotate_failure,
+    discharge_owed_k8s,
+    run_playbook,
+)
 from lib.detach_fork import (
     close_inherited,
     fork_detached,
@@ -61,6 +67,7 @@ from lib.detach_fork import (
 from lib.exit_codes import (
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_UNAVAILABLE,
+    DEPLOY_NO_HOSTS,
 )
 
 # One directory per user, suffixed with the user's name, as land_lib/detach.py's fallback is: the
@@ -152,10 +159,11 @@ def notify(run: locked.Run, status: int, log: Path, notifier: str) -> int:
 
 @dataclass(frozen=True)
 class ChildSteps:
-    """The four steps `deploy_and_gate` runs, so a test replaces a field, not a module."""
+    """The five steps `deploy_and_gate` runs, so a test replaces a field, not a module."""
 
     run_playbook: Callable[[locked.Run], int] = run_playbook
     annotate: Callable[[locked.Run], None] = annotate
+    annotate_failure: Callable[[locked.Run, float], None] = annotate_failure
     discharge: Callable[[Path], None] = discharge_owed_k8s
     notify: Callable[[locked.Run, int, Path, str], int] = notify
 
@@ -180,11 +188,15 @@ def deploy_and_gate(
     deploy instead (`land_rerolls.later_deploys`).
     """
     steps = steps or ChildSteps()
+    started = time.monotonic()
     status = steps.run_playbook(run)
-    # Annotated here, where the run finished: the parent returned long before.
+    # Annotated here, where the run finished: the parent returned long before. A run that
+    # matched no host deployed nothing, so it draws no marker either way.
     if status == 0:
         steps.annotate(run)
         steps.discharge(run.repo_root)
+    elif status != DEPLOY_NO_HOSTS:
+        steps.annotate_failure(run, time.monotonic() - started)
     # The snapshot outlives the playbook by exactly this call: the notifier's health gate
     # renders the deployed role's manifests from it to enumerate what to check.
     return steps.notify(run, status, log, notifier)
