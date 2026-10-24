@@ -25,6 +25,10 @@ COMMANDS = (
     "sshd",
     "fail2ban-client",
     "ufw",
+    "getent",
+    "usermod",
+    "systemd-sysusers",
+    "virsh",
 )
 # The verbs that change a unit, as opposed to the reads reconcile asks before acting.
 ACTIONS = frozenset({"start", "stop", "restart", "try-restart", "disable"})
@@ -138,6 +142,10 @@ class Node:
         result = run([sys.executable, str(self.script)], env=self._prepare())
         self.state = json.loads((self.stub / "state.json").read_text())
         return result
+
+    def command(self) -> tuple[list[str], dict[str, str]]:
+        """The argv and environment that run reconcile on the current state, for a caller that starts it."""
+        return [sys.executable, str(self.script)], self._prepare()
 
     def start(self) -> subprocess.Popen:
         """Start reconcile without waiting for it; `finish` collects it."""

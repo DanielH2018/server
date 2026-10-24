@@ -20,7 +20,17 @@ LIBRARY = REPO / "hosts" / "lib" / "reconcile_lib"
 SCRIPT = "/usr/lib/homelab/homelab-reconcile"
 MODULES = "/usr/lib/homelab/reconcile_lib"
 # Modules the package must hold, so a glob that stopped finding them cannot pass the tests below.
-LIBRARY_MEMBERS = frozenset({"activate.py", "common.py", "textfile.py", "ufw.py"})
+LIBRARY_MEMBERS = frozenset(
+    {
+        "activate.py",
+        "common.py",
+        "libvirt.py",
+        "lines.py",
+        "textfile.py",
+        "ufw.py",
+        "users.py",
+    }
+)
 SERVICE = "/usr/lib/systemd/system/homelab-reconcile.service"
 
 
