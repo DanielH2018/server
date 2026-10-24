@@ -176,6 +176,7 @@ nav:
       - "ADR-0022 The cluster decrypts its own file with its own key": adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md
       - "ADR-0023 Fact support is a diff notice": adr/0023-fact-support-is-a-diff-notice.md
       - "ADR-0024 Code scanning is off": adr/0024-code-scanning-is-off.md
+      - "ADR-0026 One alert plane on Prometheus and Alertmanager; Uptime Kuma retired": adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
