@@ -17,6 +17,7 @@ from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import cluster_refusal
 
 from diagnostics.probe_lib import health, health_alerts
+from _probe_health_fixtures import current_checkout
 
 # A Prometheus with no series at all, so these cases read the rollout verdict alone and
 # never reach the network. The alert plane's own cases are in test_probe_health_alerts.py.
@@ -45,7 +46,13 @@ def test_run_health_still_gates_when_the_cluster_matches(capsys):
     starts reaching for a cluster CI does not have. Pick another workload-free role then.
     """
     assert (
-        health.run_health("media-volume", cluster="prod", served="prod", prom=_QUIET)
+        health.run_health(
+            "media-volume",
+            cluster="prod",
+            served="prod",
+            prom=_QUIET,
+            stale_reason=current_checkout,
+        )
         == 0
     )
     assert "no rollout-checkable workload" in capsys.readouterr().out
@@ -58,7 +65,13 @@ def test_a_role_with_no_workload_passes_the_gate(capsys):
     message keeps the marker, so the deploy notifier still reports the tag as `skipped`.
     """
     assert (
-        health.run_health("netpol-baseline", cluster="prod", served="prod", prom=_QUIET)
+        health.run_health(
+            "netpol-baseline",
+            cluster="prod",
+            served="prod",
+            prom=_QUIET,
+            stale_reason=current_checkout,
+        )
         == 0
     )
     assert "no rollout-checkable workload" in capsys.readouterr().out

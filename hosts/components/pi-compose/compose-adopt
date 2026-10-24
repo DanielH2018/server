@@ -1,0 +1,26 @@
+#!/bin/sh
+# Remove an Ansible-era container that a service of the `homelab` project is about to replace
+# (H5, docs/target-architecture/host/h5-pi-compose.md, *compose-adopt*). Usage: compose-adopt PROJECT_FILE
+#
+# Every container_name equals its service key, so each name `config --services` prints is also a
+# container name. A container of that name whose com.docker.compose.project label is not `homelab`
+# was started by the Ansible-era project, and `up` would fail on the name clash. This script
+# removes it and `up` recreates it under `homelab`.
+#
+# DECIDED: `config` runs here only as `--services`, which prints names. A bare `config` prints the
+# interpolated model, which holds every secret value in compose.env.
+set -eu
+
+project_file=${1:?usage: compose-adopt PROJECT_FILE}
+
+names=$(docker compose -f "$project_file" config --services)
+for name in $names; do
+  # One line when a container has exactly this name, none otherwise: the filter is a regular
+  # expression, so it is anchored. The line is the name, a tab, then the project label.
+  line=$(docker ps -a --filter "name=^/$name\$" --format '{{.Names}}	{{.Label "com.docker.compose.project"}}')
+  [ -n "$line" ] || continue
+  owner=${line#*	}
+  [ "$owner" = homelab ] && continue
+  logger -t compose-adopt "removing $name, started by project ${owner:-none}"
+  docker rm -f "$name" >/dev/null
+done

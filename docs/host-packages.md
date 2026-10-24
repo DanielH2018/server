@@ -36,6 +36,20 @@ it was last staged. The signer's state is `/var/lib/homelab-signer/state.json`, 
 set lands in `/var/lib/homelab-signer/refused/<UTC time>/`. Both services log to the journal:
 `journalctl -u homelab-builder -u homelab-repo-sign`.
 
+## The host packages
+
+Each host installs `homelab-updater` and its own package, which `hosts/<host>/package.yml`
+lists.
+
+- `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats.
+- `homelab-daniel-server` ships reconcile, the secrets unit, the `kuma-push` component and the
+  UPS shutdown chain.
+- `homelab-daniel-box` (H6.2) ships reconcile and nothing else. It carries no credential, so it
+  has no secrets unit and no `ansible/vars/hosts/daniel-box.sops.yaml`. Ansible keeps the builder,
+  the repository and every daniel-box timer until H7, and the deployer keeps k3s's files until
+  H6.4a. To remove the package before H6.4a, run `sudo apt-get remove homelab-daniel-box`. After
+  H6.4a the package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
+
 ## The restart contract
 
 `homelab-reconcile` is the only process that starts or restarts a unit outside the boot path,
@@ -291,6 +305,26 @@ LAN session:
 
     A failure writes the hold again. With nothing newer published, this acts as
     `--clear-hold`.
+
+## The timers the Pi package ships
+
+`homelab-daniel-pi` links these timers in `timers.target`:
+
+- `homelab-updater.timer` installs the newest packages and runs reconcile;
+- `homelab-pi-sd-health.timer`, `homelab-pi-gz-integrity.timer` and `homelab-pi-recovery.timer`
+  run the three heartbeats of `hosts/components/pi-heartbeats/`;
+- `homelab-crowdsec-probe.timer` (H5.14, `hosts/components/crowdsec-probe/`) runs CrowdSec's edge
+  probe once a minute, as the same user as the heartbeats.
+
+To confirm the package owns the probe and its last run succeeded, run this read-only call:
+
+```bash
+ssh daniel-pi 'dpkg -S /usr/lib/systemd/system/homelab-crowdsec-probe.timer; systemctl show homelab-crowdsec-probe.service -p ExecMainExitTimestamp -p ExecMainStatus -p Result -p User; stat -c "%U %n" /var/log/pi-health'
+```
+
+To stop the probe for a while, run `sudo systemctl stop homelab-crowdsec-probe.timer` on the Pi.
+The next package install starts it again. To stop it for good, drop the timer's `enable:` line
+from the component in a package version. Reconcile stops the timer on the install that drops it.
 
 ## Stopping updates on one host
 

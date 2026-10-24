@@ -447,34 +447,6 @@ steps below on production.
    check, render from a surviving host checkout that holds that commit.
 1. Render with `homelab-render cluster` in placeholder mode, as the `render` job in
    `.github/workflows/promote.yml` does.
-1. Let source-controller reach the registry. The registry's NetworkPolicy admits only
-   image-builder Jobs, its own self-test Jobs and the node gateways, so apply this by hand
-   (the kind drill cannot test it, because kind enforces no NetworkPolicy):
-
-   ```yaml
-   apiVersion: networking.k8s.io/v1
-   kind: NetworkPolicy
-   metadata:
-     name: registry-break-glass-source
-     namespace: homelab
-   spec:
-     podSelector:
-       matchLabels:
-         app: registry
-     policyTypes: [Ingress]
-     ingress:
-       - from:
-           - namespaceSelector:
-               matchLabels:
-                 kubernetes.io/metadata.name: flux-system
-             podSelector:
-               matchLabels:
-                 app: source-controller
-         ports:
-           - protocol: TCP
-             port: 5000
-   ```
-
 1. On daniel-box, push the rendered bundle to the registry's loopback port with the pinned
    `flux` CLI, then sign the digest it prints with the kit's private half. Sigstore is
    unreachable by assumption, so the signature skips the transparency log:
@@ -511,7 +483,11 @@ emergency change, and silently reverts it. So order the steps:
 1. Apply `prod`'s OCIRepository by hand, as the flux role renders it with the lever off.
 1. Confirm every Kustomization is Ready at `prod`'s origin revision and that
    `ProdMovedOutsidePromote` has cleared.
-1. Delete the hand-applied NetworkPolicy `registry-break-glass-source`.
+
+The registry's NetworkPolicy admits source-controller on the push port at all times, so
+neither direction applies or deletes a policy by hand.
+`ansible/roles/k8s/registry/templates/networkpolicy.yaml.j2` has the trade-off, in its
+`DECIDED:` marker for that rule.
 
 ## Documented vs drilled
 
@@ -524,7 +500,7 @@ what each source records — not what "should" have happened.
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
 | GitOps bootstrap (`bootstrap.yml` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/roles/setup/sops_setup/CLAUDE.md`, `ansible/bootstrap.yml` header |
-| Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Not drilled: the runbook on production, the registry NetworkPolicy step, and the fresh-cluster steps. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass` and `break-glass-red` |
+| Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), and the fresh-cluster steps. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass` and `break-glass-red` |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
 ## Annual drill (recommended — do not run this now)

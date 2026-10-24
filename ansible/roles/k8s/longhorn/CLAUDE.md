@@ -25,7 +25,7 @@ host probes stay green.
 - **Merging a bump of `k3s_longhorn_version` is the upgrade** (H1 Open question 6). `land.sh`
   runs the `longhorn-upgrade` gates before it merges, Longhorn supports no downgrade and one
   minor per hop, so read `docs/longhorn-upgrade.md` before you bump the pin.
-- **Two patches change upstream objects**, both under `files/patches/`. The renderer lists them
+- **Four patches change upstream objects**, all under `files/patches/`. The renderer lists them
   as the Kustomization's `patches:`, and each names its target by kind, name and namespace.
     - `longhorn-manager.yaml` adds a memory request and no limit to the manager container.
       A kustomize patch is copied verbatim and cannot read a variable, so
@@ -37,6 +37,16 @@ host probes stay green.
       setting. `ansible/tests/longhorn/test_longhorn_storageclass.py::test_the_class_differs_from_upstreams_only_by_the_replica_count`
       holds the class equal to upstream's minus that one parameter, so a release that adds a
       parameter fails until the patch carries it.
+    - `longhorn-csi-secret-bind.yaml` and `longhorn-csi-secret-role.yaml` are `$patch: delete`
+      patches (#5969). They drop upstream's ClusterRoleBinding and ClusterRole that give
+      `longhorn-csi-service-account` cluster-wide `get` on every Secret. Upstream needs that
+      grant only for a StorageClass with a `csi.storage.k8s.io/*-secret-*` parameter, and no
+      class here has one. A class that adds one needs both patches removed first, and
+      `ansible/tests/longhorn/test_longhorn_csi_secret_grant.py::test_no_longhorn_class_needs_the_dropped_grant`
+      fails until they are.
+      `ansible/tests/longhorn/test_longhorn_csi_secret_grant.py::test_the_patched_render_is_clean`
+      fails a render in which the account still reads Secrets cluster-wide. Under
+      `prune: false` the live objects stay until the operator deletes them (**operator-only**).
 - **Three templates hold the objects `setup/k3s` used to write** (H1.5b).
     - `templates/settings.yaml.j2` renders the eight `Setting` objects, each from one
       `k3s_longhorn_*` key in `defaults/main.yml`. Flux owns each Setting's `value`. longhorn-manager keeps its own

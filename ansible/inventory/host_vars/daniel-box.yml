@@ -84,11 +84,12 @@ autofix_fake_remux_policy:
 # keys is backed up daily to B2 by the `default` group.
 containers_list:
   # crowdsec must precede traefik: the traefik pod carries a crowdsec agent sidecar that logs
-  # into this engine's LAPI, and a post-deploy task in this role registers the machine
-  # credential — so the engine must exist before a traefik rollout starts the sidecar. Not
-  # derivable from a template, so it is declared as traefik's `depends_on:` below rather than
-  # hand-positioned; see K8S_CRD_EDGE_EXEMPT in toposort.py for why the reverse (CRD) edge is
-  # exempted here instead of cycling against it.
+  # into this engine's LAPI, and the LAPI pod's `lapi-register` initContainer registers the
+  # machine credential before the LAPI serves — so the engine and its registrations must exist
+  # before a traefik rollout starts the sidecar. Not derivable from a template, so it is
+  # declared as traefik's `depends_on:` below rather than hand-positioned; see
+  # K8S_CRD_EDGE_EXEMPT in toposort.py for why the reverse (CRD) edge is exempted here instead
+  # of cycling against it.
   #
   # The cost accepted for that: this role renders an IngressRoute (the LAPI's LAN face)
   # ahead of traefik installing the CRDs. Harmless on the running cluster; on a rebuild it
