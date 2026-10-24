@@ -69,7 +69,9 @@ has its own test under `scripts/diagnostics/tests/`.
 - **`takeover <tag>`** lists the field paths Flux's first apply of a tag strips: a field a
   manager `kustomize-controller` cleans owns, such as `kubectl-rollout`'s `restartedAt`, that no
   other manager owns and the render omits (`probe_lib/takeover.py`). It renders the tag and
-  reads each live object with `--show-managed-fields`, and prints paths only. A tag with no
+  reads each live object with `--show-managed-fields`, and prints paths only. The objects it
+compares are the files each rendered `kustomization.yaml` lists under `resources:`, so a role's
+vendored `files/upstream/` objects are compared and its `patches/` are not (#5721). A tag with no
   rendered object live exits 75. `docs/flux-deploy-plane.md` (*What a takeover strips*) has the
   rules and the operator's `flux diff kustomization` command.
 
@@ -243,6 +245,13 @@ the cluster kubectl serves. The `longhorn` check fails when the live `longhorn` 
 parameters differ from the class in ConfigMap `longhorn-system/longhorn-storageclass`. The fix
 for that is an **operator-only** delete of the class, which longhorn-manager recreates. Each
 check runs only once its tag resolves to a k8s role.
+
+The gate reads the role's workloads from the role's files in the checkout it runs from. It
+exits 75 rather than judge from an old definition: when `origin/master` holds the role and this
+checkout does not, and when `origin/master` changed the role after this checkout's HEAD
+(`scripts/diagnostics/probe_lib/health_checkout.py`, #5909 and #5912). It also exits 75 when `origin/master` changed the tag's `owner` in host_vars since this checkout, because `owner` picks the gate path. The read uses the local
+`origin/master` ref, so it is as fresh as the last fetch. To gate a merged change, run the probe
+from a checkout at or after the merge commit.
 
 `--docker` inspects the Pi's container over ssh instead.
 

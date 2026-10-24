@@ -22,6 +22,7 @@ from diagnostics.probe_lib.health_backup_targets import (
 )
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import Tools
+from _probe_health_fixtures import current_checkout
 
 URL = "s3://bucket@us-east-005/longhorn"
 
@@ -101,7 +102,12 @@ def _tools(stdout: str, returncode: int = 0, stderr: str = "") -> Tools:
 
 def _run_health(tools: Tools) -> int:
     return health.run_health(
-        "longhorn-backup", cluster="prod", served="prod", tools=tools, prom=_QUIET
+        "longhorn-backup",
+        cluster="prod",
+        served="prod",
+        tools=tools,
+        prom=_QUIET,
+        stale_reason=current_checkout,
     )
 
 
