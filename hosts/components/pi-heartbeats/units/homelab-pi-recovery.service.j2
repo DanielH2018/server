@@ -2,10 +2,12 @@
 # only while optimize_pi_recovery_restart_enabled is true. component.yml carries the contract.
 [Unit]
 Description=Start any stopped Pi container and push to the Daniel Pi Recovery Kuma monitor
+After=homelab-secrets.service
+Wants=homelab-secrets.service
 
 [Service]
 Type=oneshot
 User={{ sys_user }}
 ExecStart=/usr/lib/homelab/pi-recovery-health
-LoadCredential=pi_recovery_push_token:/etc/homelab/interim/pi_recovery_push_token
+LoadCredential=pi_recovery_push_token:/run/credstore/pi_recovery_push_token
 LogsDirectory=pi-health

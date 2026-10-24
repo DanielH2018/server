@@ -21,6 +21,9 @@ HOST_INPUTS = (
     "uv.lock",
     # Host mode removes its key names (`host.secret_names`).
     "ansible/vars/secrets.yml",
+    # The ciphertext a host package carries (`host_outputs.finish`): a change to a host's file
+    # changes that host's package (H4.2, H4.5).
+    "ansible/vars/hosts/",
     # Two of `host_sources.SHARED_FILES`, which H3.8b and M6 B5 copy into the Pi's package.
     "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
     "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
