@@ -1,0 +1,12 @@
+{
+  "checksum": "d2766b1f973a07ea0847b9174a388f90198ae787f19244d5273612d361cf8267",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/registry/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/registry/templates/networkpolicy.yaml.j2:DECIDED: a standing grant for source-controller": "897413f9bc92aa1752294bd54102d75d772a2456e6262d43addf4ab871cdfacc"
+    },
+    "python": "3.14",
+    "verified_sha": "0832bf150"
+  }
+}
