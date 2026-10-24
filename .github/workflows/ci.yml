@@ -1168,6 +1168,7 @@ jobs:
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/package_roots.py
             scripts/validate/validate_lib/secrets_case.py
+            scripts/validate/validate_lib/pi_host_seed.py
         run: |
           set -euo pipefail
           if [ "$EVENT" = workflow_dispatch ]; then

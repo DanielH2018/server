@@ -1,0 +1,50 @@
+# Kernel and login hardening that initial_setup applied with in-place edits (H7.6g,
+# docs/target-architecture/host/h7-delete-ansible.md, *In-place edits*).
+#
+# - Every `ansible.posix.sysctl` key of initial_setup stays in /etc/sysctl.conf, one line-arm edit
+#   per key, with `activate: sysctl`. The regexp is `^\s*<key>\s*=`, which matches the
+#   `<key>=<value>` line the module wrote, so the first reconcile adopts that line. No homelab
+#   sysctl.d file may declare one of these keys, because /etc/sysctl.conf is read last and would
+#   override it. The Pi's vm.swappiness and vm.page-cluster are optimize_pi's and move with H7.3.
+# - /etc/ufw/sysctl.conf is ufw's conffile. Ubuntu ships `log_martians=0` uncommented there, and
+#   ufw re-applies the file on every enable and reload, so both log_martians lines must read 1 in
+#   both files (#2977). Reconcile runs the line arm before the ufw arm for the same reason.
+# - /etc/login.defs is the `login` package's conffile. The six edits keep the regexps of the
+#   lineinfile tasks they replace.
+# - journald's cap lands in a drop-in. The Pi's optimize_pi adds 60-homelab-pi.conf beside it, and
+#   that file wins where the two disagree. The rsyslog info filter that pairs with MaxLevelSyslog
+#   stays an Ansible task gated on has_rsyslog, which the Pi does not have.
+# - `* hard core 0` moves to limits.d. The line the Ansible task wrote stays in limits.conf as a
+#   harmless duplicate, and the PR body names it for removal by hand.
+files:
+  - {src: templates/50-homelab-journald.conf, dst: /etc/systemd/journald.conf.d/50-homelab.conf, activate: "try-restart:systemd-journald.service"}
+  - {src: templates/50-homelab-limits.conf, dst: /etc/security/limits.d/50-homelab.conf}
+lines:
+  - {path: /etc/ufw/sysctl.conf, line: "net/ipv4/conf/all/log_martians=1", regexp: '^#?net/ipv4/conf/all/log_martians='}
+  - {path: /etc/ufw/sysctl.conf, line: "net/ipv4/conf/default/log_martians=1", regexp: '^#?net/ipv4/conf/default/log_martians='}
+  - {path: /etc/login.defs, line: "UMASK\t\t027", regexp: '^UMASK\s'}
+  - {path: /etc/login.defs, line: "SHA_CRYPT_MIN_ROUNDS\t65536", regexp: '^#?\s*SHA_CRYPT_MIN_ROUNDS\s'}
+  - {path: /etc/login.defs, line: "SHA_CRYPT_MAX_ROUNDS\t65536", regexp: '^#?\s*SHA_CRYPT_MAX_ROUNDS\s'}
+  - {path: /etc/login.defs, line: "PASS_MIN_DAYS\t1", regexp: '^PASS_MIN_DAYS\s'}
+  - {path: /etc/login.defs, line: "PASS_MAX_DAYS\t365", regexp: '^PASS_MAX_DAYS\s'}
+  - {path: /etc/login.defs, line: "PASS_WARN_AGE\t14", regexp: '^PASS_WARN_AGE\s'}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.ip_forward=1", regexp: '^\s*net\.ipv4\.ip_forward\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.all.rp_filter=2", regexp: '^\s*net\.ipv4\.conf\.all\.rp_filter\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.all.accept_redirects=0", regexp: '^\s*net\.ipv4\.conf\.all\.accept_redirects\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.default.accept_redirects=0", regexp: '^\s*net\.ipv4\.conf\.default\.accept_redirects\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.all.send_redirects=0", regexp: '^\s*net\.ipv4\.conf\.all\.send_redirects\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.default.send_redirects=0", regexp: '^\s*net\.ipv4\.conf\.default\.send_redirects\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.all.accept_source_route=0", regexp: '^\s*net\.ipv4\.conf\.all\.accept_source_route\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.default.accept_source_route=0", regexp: '^\s*net\.ipv4\.conf\.default\.accept_source_route\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv6.conf.all.accept_source_route=0", regexp: '^\s*net\.ipv6\.conf\.all\.accept_source_route\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv6.conf.default.accept_source_route=0", regexp: '^\s*net\.ipv6\.conf\.default\.accept_source_route\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.icmp_echo_ignore_broadcasts=1", regexp: '^\s*net\.ipv4\.icmp_echo_ignore_broadcasts\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.all.log_martians=1", regexp: '^\s*net\.ipv4\.conf\.all\.log_martians\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.ipv4.conf.default.log_martians=1", regexp: '^\s*net\.ipv4\.conf\.default\.log_martians\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "kernel.sysrq=0", regexp: '^\s*kernel\.sysrq\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "kernel.dmesg_restrict=1", regexp: '^\s*kernel\.dmesg_restrict\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "kernel.kptr_restrict=2", regexp: '^\s*kernel\.kptr_restrict\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "net.core.bpf_jit_harden=2", regexp: '^\s*net\.core\.bpf_jit_harden\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "fs.suid_dumpable=0", regexp: '^\s*fs\.suid_dumpable\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "fs.protected_fifos=2", regexp: '^\s*fs\.protected_fifos\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "dev.tty.ldisc_autoload=0", regexp: '^\s*dev\.tty\.ldisc_autoload\s*=', activate: sysctl}
