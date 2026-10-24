@@ -573,10 +573,8 @@ def main(argv: list[str] | None = None) -> int:
     except CaseFailed as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
-    cases.upgrade_path()
-    cases.cold_install()
-    cases.by_hand()
-    cases.disarm()
+    for run in (cases.upgrade_path, cases.cold_install, cases.by_hand, cases.disarm):
+        run()
     secrets_case.run(cases)
     conffile_case.run(cases)
     repos_case.run(cases)
