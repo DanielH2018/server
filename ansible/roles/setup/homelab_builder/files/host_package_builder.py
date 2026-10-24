@@ -125,17 +125,22 @@ def keyring_fingerprints(keyring: Path, run=subprocess.run) -> list[str]:
 
 
 def tree_files(directory: Path) -> dict[str, tuple[bytes, int]]:
-    """Each file under `directory`, as its bytes and mode, keyed by its relative path."""
+    """Each file and symlink under `directory`, keyed by its relative path.
+
+    A file is its bytes and mode. A symlink is its target text and mode 0, dangling or not:
+    a link into a sibling package (daniel-pi's `timers.target.wants/homelab-updater.timer`)
+    dangles inside its own render, and a comparison that skipped it never saw it change.
+    """
     if not directory.is_dir():
         return {}
-    return {
-        str(path.relative_to(directory)): (
-            path.read_bytes(),
-            path.stat().st_mode & 0o7777,
-        )
-        for path in sorted(directory.rglob("*"))
-        if path.is_file()
-    }
+    files: dict[str, tuple[bytes, int]] = {}
+    for path in sorted(directory.rglob("*")):
+        key = str(path.relative_to(directory))
+        if path.is_symlink():
+            files[key] = (os.fsencode(os.readlink(path)), 0)
+        elif path.is_file():
+            files[key] = (path.read_bytes(), path.stat().st_mode & 0o7777)
+    return files
 
 
 @dataclass
@@ -443,6 +448,20 @@ class Builder(RolloutGate):
         tools.fetch_all([out / p for p in changed], self.state_dir, out, self.opener)
         for package in changed:
             self.package(out / package, debs, ver)
+        # DECIDED: `state["staged"]` is saved before staged/ or published/ changes. The signer
+        # takes a set only after a run that exits 0, so a run that fails after the published/
+        # copy leaves a deb in staged/ that nothing has signed. The next run finds that deb
+        # through `staged`. When `staged` was assigned after the copy, it still named the
+        # previous set, the next run deleted the deb, and homelab-daniel-pi never reached the
+        # repository (2026-10-23: copytree raised on a dangling symlink). Saved first, a run
+        # that raises or gets SIGTERM leaves `staged` naming every package whose deb may be
+        # unsigned. The role's CLAUDE.md, *The builder's run*, has the full reasoning.
+        for package in unconsumed & set(deferred):
+            # The gate defers a package whose deb the next lines delete. Its published/ copy
+            # must go too, or nothing would ever rebuild it.
+            shutil.rmtree(self.published / package, ignore_errors=True)
+        self.state["staged"] = changed
+        self._save("state.json", self.state)
         for entry in self.staged.iterdir():
             entry.unlink()
         # A copy, never a move: a file created in the setgid staged/ takes its homelab-signer
@@ -453,8 +472,9 @@ class Builder(RolloutGate):
         atomic_write(str(self.staged / "chosen"), chosen[:12] + "\n")
         for package in changed:
             shutil.rmtree(self.published / package, ignore_errors=True)
-            shutil.copytree(out / package, self.published / package)
-        self.state["staged"] = changed
+            # symlinks=True keeps a link as a link. Followed, a link that dangles inside its
+            # own render raises after the rest is copied, and tree_files then compares equal.
+            shutil.copytree(out / package, self.published / package, symlinks=True)
         self.note_rollout(deferred, gate)
         log(f"staged {', '.join(changed)} at {ver}")
 
