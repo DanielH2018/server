@@ -1,11 +1,12 @@
-"""The `.skip` marker appears only after k3s has created CoreDNS (H1.4).
+"""`tasks/coredns.yml` is a read and writes no `.skip` marker (H1.4, H6.4a).
 
-`tasks/coredns.yml` keeps two tasks: a bounded read of Deployment `coredns`, then the task that
-writes the marker. On a new cluster Flux resolves GHCR through cluster DNS, so a marker written
-before k3s first applies its bundled CoreDNS would leave no CoreDNS at all. Each case runs the
-real task file in a real `ansible-playbook` against a stub `k3s`, with the marker's path
-(`k3s_coredns_skip_marker`) pointed at a temporary directory. The plan is
-docs/target-architecture/host/h1-cluster-config-to-flux.md, *Verification*, *CoreDNS*.
+The task file keeps one task: a bounded read of Deployment `coredns`. The marker belongs to the
+homelab-daniel-box package since H6.4a (hosts/components/k3s-server), and
+ansible/tests/setup/test_k3s_server_component.py holds it. Before H6.4a this file also held the
+task that wrote the marker, after the read: on a new cluster Flux resolves GHCR through cluster
+DNS, so a marker written before k3s first applies its bundled CoreDNS would leave no CoreDNS at
+all. Each case runs the real task file in a real `ansible-playbook` against a stub `k3s`, with
+`k3s_coredns_skip_marker` pointed at a temporary directory so a stray write would show.
 
 The file module's `owner: root` and `group: root` are stripped from the copy that runs, because
 the stand-in for `become` runs as the current user and a chown to root would fail for a reason
@@ -111,25 +112,24 @@ def _run(
     return result.returncode, marker, result.stdout + result.stderr
 
 
-def test_a_cluster_with_no_coredns_fails_before_the_marker_exists(tmp_path):
+def test_a_cluster_with_no_coredns_fails_the_read(tmp_path):
     code, marker, output = _run(tmp_path, deployment=False)
     assert code != 0, output
-    assert not marker.exists(), "the marker was written before k3s created CoreDNS"
+    assert not marker.exists()
 
 
-def test_a_cluster_with_coredns_gets_the_marker(tmp_path):
+def test_a_cluster_with_coredns_passes_the_read_and_writes_no_marker(tmp_path):
     code, marker, output = _run(tmp_path, deployment=True)
     assert code == 0, output
-    assert marker.exists()
+    assert not marker.exists(), (
+        "the package ships the marker; this play must not write it"
+    )
 
 
-def test_the_read_precedes_the_marker_and_survives_check_mode():
+def test_the_read_is_the_only_task_and_survives_check_mode():
     tasks = list(leaf_tasks(load_tasks(_TASKS)))
     names = [t.get("name") for t in tasks]
-    assert names == [
-        "Wait for k3s to create its CoreDNS Deployment",
-        "Stop k3s reconciling its bundled CoreDNS addon",
-    ]
+    assert names == ["Wait for k3s to create its CoreDNS Deployment"]
     read = tasks[0]
     assert read["check_mode"] is False
     assert "retries" in read and "until" in read

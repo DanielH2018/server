@@ -1,0 +1,9 @@
+# The k3s log file and the apiserver's audit log directory, created at boot on a fresh host. A
+# running host keeps what Ansible created. The package never ships the log file itself, because
+# dpkg would replace it. systemd opens the file with `append:` at exec, so a missing one is
+# created root-owned anyway; this entry gives it syslog's group.
+#Type Path                 Mode User Group Age
+f {{ k3s_log_file }} 0640 root adm -
+{% if k3s_audit_log_enabled %}
+d {{ k3s_audit_log_dir }} 0700 root root -
+{% endif %}

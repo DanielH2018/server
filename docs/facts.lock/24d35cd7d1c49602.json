@@ -1,12 +1,13 @@
 {
-  "checksum": "6c79105b85d80b471de7121f415da0ceda4bb128901f7c365f13fc35ee9c6189",
+  "checksum": "dd2c1125f380fc772ebe8f39987fd1818735fa1596ec02935ccd8df39097ac08",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/headlamp/CLAUDE.md#Two identities, one grant",
   "row": {
     "atoms": {
-      "ansible/tests/k8s/test_k8s_manifests_rbac.py": "7ccdcbbd6ffc59c49fc0b7186c93d22f297aba579abf1f0f7dbee830d3463f47"
+      "ansible/tests/k8s/test_k8s_manifests_rbac.py": "7ccdcbbd6ffc59c49fc0b7186c93d22f297aba579abf1f0f7dbee830d3463f47",
+      "hosts/components/k3s-server/": "c2bef8911f98481c1e7bc3c77e27fbd2b8e2404700aa15b4cf9cb71f0da3b18d"
     },
     "python": "3.14",
-    "verified_sha": "55862020d"
+    "verified_sha": "74b43f52e"
   }
 }

@@ -1,8 +1,8 @@
 """The API server's OIDC trust in Authelia, and the names it has to keep in step.
 
 Headlamp does not authorise anything under OIDC: it forwards the browser's `id_token` and the
-API SERVER accepts or rejects it. So the trust lives in `roles/setup/k3s`, one role away from
-the workload that needs it, and its values are only correct relative to something outside this
+API SERVER accepts or rejects it. So the trust lives in `hosts/components/k3s-server` (the
+homelab-daniel-box package since H6.4a), one tree away from the workload that needs it, and its values are only correct relative to something outside this
 role — the Authelia issuer hosts, the Authelia client id, and the group name
 `roles/k8s/headlamp` binds. Each of those drifts silently: the login succeeds and the dashboard
 renders an empty cluster, with nothing in any log.
@@ -12,13 +12,13 @@ flags, because Authelia mints a different `iss` per hostname and the flag takes 
 That is why this file checks a rendered YAML document rather than an argument string, and
 why two of the checks below are about the flags NOT being there.
 
-The document comes from `_setup_render`, the harness `validate/setup_templates.py` renders the
-setup plane with, so the layering under it cannot drift from what that gate renders. It used to
-come from a context assembled here — the role's defaults, group_vars, and two keys re-rendered
-by hand because they are themselves templates over `domain` (#3202).
+The document is the component's own template rendered with the component's own defaults, the
+inputs host mode gives it. Before H6.4a it came from `_setup_render`, the harness
+`validate/setup_templates.py` renders the setup plane with, and the keys lived in
+`roles/setup/k3s/defaults/main.yml` (#3202).
 
-See `roles/setup/k3s/defaults/main.yml` and `templates/authentication-config.yaml.j2` for why
-each value is what it is.
+See `hosts/components/k3s-server/component.yml` and `templates/authentication-config.yaml.j2`
+for why each value is what it is.
 """
 
 import re
@@ -28,9 +28,8 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE, load_defaults
-from lib.repo_paths import ALL_VARS, K3S_ROLE
+from lib.repo_paths import ALL_VARS, K3S_ROLE, REPO
 from _k8s_render import rendered_docs
-from _setup_render import render_setup_text
 
 HEADLAMP = ANSIBLE / "roles" / "k8s" / "headlamp"
 
@@ -107,11 +106,24 @@ def _rendered_server_args(context: dict | None = None) -> str:
     )
 
 
+COMPONENT = REPO / "hosts" / "components" / "k3s-server"
+
+
+def _component_defaults() -> dict:
+    """The component's `defaults:` map, which host mode layers beneath group_vars."""
+    return yaml_fast.safe_load((COMPONENT / "component.yml").read_text())["defaults"]
+
+
 def _rendered_auth_config() -> dict:
-    """`authentication-config.yaml.j2` as the apiserver parses it."""
-    return yaml_fast.safe_load(
-        render_setup_text("k3s", "authentication-config.yaml.j2", {"domain": DOMAIN})
-    )
+    """`authentication-config.yaml.j2` as the apiserver parses it, with `domain` a stand-in."""
+    env = _env()
+    context = {"domain": DOMAIN, **_component_defaults()}
+    context["k3s_oidc_issuer_urls"] = [
+        env.from_string(url).render(domain=DOMAIN)
+        for url in context["k3s_oidc_issuer_urls"]
+    ]
+    template = (COMPONENT / "templates" / "authentication-config.yaml.j2").read_text()
+    return yaml_fast.safe_load(env.from_string(template).render(**context))
 
 
 def _apiserver_args(args: str) -> dict[str, str]:
@@ -220,7 +232,7 @@ def test_every_issuer_url_is_exact_and_distinct():
 def test_every_issuer_names_the_client_id_as_its_audience():
     """Authelia's default `id_token_audience_mode: specification` puts only the client id in
     `aud`, and `audiences` is required and must be non-empty."""
-    client_id = load_defaults(K3S_ROLE)["k3s_oidc_client_id"]
+    client_id = _component_defaults()["k3s_oidc_client_id"]
     for entry in _rendered_auth_config()["jwt"]:
         assert entry["issuer"]["audiences"] == [client_id], entry["issuer"]["url"]
 
@@ -238,7 +250,7 @@ def test_username_prefixing_is_disabled_with_an_empty_string_not_a_hyphen():
     config = _rendered_auth_config()
     for entry in config["jwt"]:
         username = entry["claimMappings"]["username"]
-        assert username["claim"] == load_defaults(K3S_ROLE)["k3s_oidc_username_claim"]
+        assert username["claim"] == _component_defaults()["k3s_oidc_username_claim"]
         assert "prefix" in username, (
             "prefix is required when claim is set; the apiserver rejects the file without it"
         )
@@ -272,7 +284,7 @@ def test_groups_prefix_matches_the_group_headlamp_binds():
     group = headlamp["headlamp_k8s_oidc_group"]
     for entry in _rendered_auth_config()["jwt"]:
         groups = entry["claimMappings"]["groups"]
-        assert groups["claim"] == load_defaults(K3S_ROLE)["k3s_oidc_groups_claim"]
+        assert groups["claim"] == _component_defaults()["k3s_oidc_groups_claim"]
         prefix = groups["prefix"]
         assert group.startswith(prefix), (
             f"{group!r} does not carry the prefix {prefix!r}"

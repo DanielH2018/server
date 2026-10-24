@@ -1,0 +1,15 @@
+# Shipped by the homelab-daniel-box package (hosts/components/k3s-server) -- edits here are overwritten.
+# `copytruncate`, NOT `create`: systemd holds the fd from `append:` and reopens it only on the
+# unit's next exec, so a renamed file keeps receiving every line until then. A crash loop restarts
+# k3s thousands of times in hours, so `maxsize` bounds the file per logrotate run and `rotate 4`
+# bounds the history.
+{{ k3s_log_file }} {
+  daily
+  maxsize 50M
+  rotate 4
+  compress
+  delaycompress
+  missingok
+  notifempty
+  copytruncate
+}

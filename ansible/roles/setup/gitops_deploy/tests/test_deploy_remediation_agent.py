@@ -104,7 +104,7 @@ def test_an_agent_only_change_narrows_to_the_join_alone():
     """The issue's Verify-by: `tasks/agent.yml` alone prints the join and no server command.
 
     The server play under `--tags k3s_agent` selects nothing and exits 0, and under `--tags
-    k3s` arms the three gated control-plane tasks for work the server does not need.
+    k3s` arms the two gated control-plane tasks for work the server does not need.
     """
     path = f"{K3S}/tasks/agent.yml"
     cs = services_from_changed_paths([path])

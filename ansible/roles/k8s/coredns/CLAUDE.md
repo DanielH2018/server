@@ -16,7 +16,8 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
 - **Flux applies it, not Ansible** (H1.4). Its `containers_list` entry carries `owner: flux`
   from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
   runs it. The host half stays in `roles/setup/k3s/tasks/coredns.yml`: a bounded read of
-  Deployment `coredns`, then the `.skip` marker task that stops k3s reconciling its addon.
+  Deployment `coredns`. The `.skip` marker that stops k3s reconciling its addon is the
+  `homelab-daniel-box` package's since H6.4a (`hosts/components/k3s-server/`).
 - **The templates are derived, not vendored.** They come from k3s's `manifests/coredns.yaml`
   at `k3s_version`, with each `%{...}%` placeholder written as the value k3s substitutes here.
   That file is not YAML until k3s substitutes it, so no byte-for-byte copy can render and no

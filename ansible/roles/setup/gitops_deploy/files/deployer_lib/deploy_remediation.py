@@ -269,11 +269,10 @@ _K3S_NARROWER_TAGS = (
 _K3S_CONTROL_PLANE_GATES = ("k3s_server_args", "k3s_version", "reencrypt_finished")
 
 _K3S_GATED_TASKS = (
-    "three gated control-plane tasks: the "
+    "two gated control-plane tasks: the "
     f"k3s installer, which restarts k3s when `{_K3S_CONTROL_PLANE_GATES[0]}` gained an "
-    f"argument or `{_K3S_CONTROL_PLANE_GATES[1]}` moved; a systemd restart when the log "
-    "drop-in changed; and `k3s secrets-encrypt rotate-keys`, which re-encrypts every "
-    "Secret in etcd unless the cluster already reached "
+    f"argument or `{_K3S_CONTROL_PLANE_GATES[1]}` moved; and `k3s secrets-encrypt "
+    "rotate-keys`, which re-encrypts every Secret in etcd unless the cluster already reached "
     f"`{_K3S_CONTROL_PLANE_GATES[2]}`"
 )
 

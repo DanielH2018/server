@@ -4,16 +4,19 @@
 # homelab-k3s-restart loads it to read the API. ansible/vars/hosts/daniel-box.sops.yaml carries
 # every key this tree names, and `host_secrets.py sync daniel-box` rewrites it (operator-only).
 #
-# The builder, the repository and every daniel-box timer stay with Ansible until H7. The
-# `windowed` mark for k3s.service arrives in H6.4a with the first k3s.service drop-in, because the
-# renderer refuses a unit policy that no package installs or drops in on (item 5, Amended
-# 2026-10-24).
+# The builder, the repository and every daniel-box timer stay with Ansible until H7. H6.4a adds the
+# k3s-server component, whose first k3s.service drop-in lets the package mark k3s.service
+# `windowed` (the renderer refuses a unit policy that no package installs or drops in on, item 5,
+# Amended 2026-10-24). Reconcile therefore never restarts k3s, and homelab-k3s-restart does it once
+# per changed hash of the files the component marks `manual:k3s.service`. H6.4a is forward-only.
 #
 # The restart window is `k3s_restart_window` in ansible/inventory/host_vars/daniel-box.yml, which
 # sits above the component's defaults (H3, *Component variables*). A package-level `defaults:` map
 # reaches only the package's own files, never a component's.
 description: daniel-box's homelab host package
-components: [reconcile, secrets-unit, k3s-restart]
+components: [reconcile, secrets-unit, k3s-restart, k3s-server]
+units:
+  k3s.service: {policy: windowed}
 credentials:
   - k3s_readonly_token
 maintainer_scripts: [preinst, postinst, prerm]
