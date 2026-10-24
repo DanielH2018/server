@@ -21,13 +21,11 @@ import re
 import subprocess
 from pathlib import Path
 
-from _helpers import ANSIBLE
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
-SCRIPT = rendered_shell_text("setup", "initial_setup", "eval-run.sh.j2")
-DOCS_REFRESH = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
-CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
+SCRIPT = rendered_shell_text("components", "eval-sweep", "eval-run.sh.j2")
+DOCS_REFRESH = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
 
 # The functions this module sources. Named rather than globbed: a rename would otherwise leave
 # every test below sourcing an empty string and passing on nothing at all.
@@ -329,7 +327,7 @@ def test_secret_rotate_keeps_its_plain_tail_only_while_it_skips_hooks():
     filter above would never match (#3358). The plain tail is right while that flag stays.
     Without it, a hook rejection would end `...Passed` here exactly as it did in the other two.
     """
-    text = rendered_shell_text("setup", "initial_setup", "secret-rotate.sh.j2")
+    text = rendered_shell_text("components", "secret-rotation", "secret-rotate.sh.j2")
     assert re.search(r"^say_failure\(\) \{ alert \"\$1: \$\(tr", text, re.M), (
         "secret-rotate.sh.j2's say_failure changed shape; if it now filters for prek tokens, "
         "retire this test and add the script to the loop above"
@@ -363,15 +361,11 @@ def test_neither_cron_reads_the_exit_code_through_a_negation():
 
 
 def test_the_state_directory_is_created_outside_the_checkout():
-    """The stamp directory is a cron-owned path under /var/lib/homelab, never inside $REPO.
+    """The stamp directory is a unit-owned path under /var/lib/homelab, never inside $REPO.
 
     A file recording a failure that itself parks the deployer would be the bug wearing the fix's
     clothes.
     """
-    assert "/var/lib/homelab/eval-run.d" in CRONS, (
-        "crons.yml no longer creates eval-run's state directory; the cron runs without become "
-        "and cannot create it itself"
-    )
     assert 'STAMP_DIR="/var/lib/homelab/eval-run.d"' in SCRIPT
 
 

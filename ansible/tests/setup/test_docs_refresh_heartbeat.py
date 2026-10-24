@@ -20,12 +20,16 @@ from itertools import pairwise
 from _helpers import ANSIBLE
 from _kuma_monitors import entity, tile_is_gated_on
 from _shell_render import render_shell_script, rendered_shell_text
+from lib.repo_paths import REPO
 
 SENTINEL = "docs-refresh-render-sentinel"
 TILE = "docs-refresh.json"
 TOKEN_VAR = "docs_refresh_push_token"
-SCRIPT = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
-CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
+CREDENTIAL_DIR = "${CREDENTIALS_DIRECTORY:-/nonexistent}"
+SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
+TIMER = (
+    REPO / "hosts/components/docs-refresh/units/homelab-docs-refresh.timer"
+).read_text()
 ROTATION = (ANSIBLE / "secret_rotation.yml").read_text()
 
 
@@ -40,19 +44,14 @@ def _monitor_entity() -> dict:
 
 
 def _cron_period_seconds() -> int:
-    """Seconds between two docs-refresh runs, read from its `hour:` field in crons.yml.
+    """Seconds between two docs-refresh runs, read from the timer's `OnCalendar=`.
 
-    Raises on any form other than the comma-separated list this cron uses, so a future cadence
-    cannot quietly resolve to a period that makes the assertions below vacuous.
+    Raises on any form other than the `*-*-* HH,HH:MM:SS` list this timer uses, so a future
+    cadence cannot quietly resolve to a period that makes the assertions below vacuous.
     """
-    block = CRONS[CRONS.index('name: "Refresh generated docs"') :]
-    m = re.search(r'hour: "([^"]+)"', block)
-    assert m, "docs-refresh cron has no hour: field"
-    spec = m.group(1)
-    assert re.fullmatch(r"\d+(,\d+)*", spec), (
-        f"unhandled cron hour spec {spec!r} — teach this helper the form"
-    )
-    hours = sorted(int(h) for h in spec.split(","))
+    m = re.search(r"^OnCalendar=\*-\*-\* ([\d,]+):\d\d:\d\d$", TIMER, re.M)
+    assert m, "docs-refresh timer has no OnCalendar= hour list"
+    hours = sorted(int(h) for h in m.group(1).split(","))
     assert len(hours) >= 2, "a single daily run needs a different period derivation"
     gaps = [b - a for a, b in pairwise(hours)]
     gaps.append(24 - hours[-1] + hours[0])
@@ -103,12 +102,15 @@ def test_the_script_skips_its_push_until_the_token_exists():
     # secret renders as the same empty string a wrong variable name would, so a render at
     # inventory values cannot tell them apart — a render at a value only this variable holds
     # can (#3202).
-    armed = render_shell_script(
-        "setup", "initial_setup", "docs-refresh.sh.j2", overrides={TOKEN_VAR: SENTINEL}
-    )
-    assert SENTINEL in armed, (
-        f"DOCS_REFRESH_PUSH_TOKEN does not render from {TOKEN_VAR}; the script would push "
-        "with an empty token or with somebody else's"
+    assert SENTINEL not in render_shell_script(
+        "components",
+        "docs-refresh",
+        "docs-refresh.sh.j2",
+        overrides={TOKEN_VAR: SENTINEL},
+    ), "the token is a unit credential now: a render must never carry it"
+    assert f"{CREDENTIAL_DIR}/{TOKEN_VAR}" in SCRIPT, (
+        f"DOCS_REFRESH_PUSH_TOKEN does not read the {TOKEN_VAR} credential; the script "
+        "would push with an empty token or with somebody else's"
     )
     assert '[ -n "$DOCS_REFRESH_PUSH_TOKEN" ] || return 0' in SCRIPT, (
         "the script must skip the push when the token is empty, or a host without the secret "

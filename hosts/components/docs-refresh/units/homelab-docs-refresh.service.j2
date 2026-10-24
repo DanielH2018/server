@@ -1,0 +1,19 @@
+# Shipped by homelab-daniel-box. Started by homelab-docs-refresh.timer.
+[Unit]
+Description=Regenerate the docs, rebuild the site and publish the diff through a PR
+After=homelab-secrets.service
+Wants=homelab-secrets.service
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+# The `+` runs this one command as root; the service runs as {{ sys_user }}. It creates the docs
+# site directory and the stamp directory (tmpfiles.d/homelab-docs-site.conf.j2).
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-docs-site.conf
+ExecStart=/usr/lib/homelab/docs-refresh
+LoadCredential=docs_refresh_push_token:/run/credstore/docs_refresh_push_token
+# The cron's PATH and KUBECONFIG. Without them gen_infra_map renders the topology declared-only.
+# The journal replaces the cron's `| logger -t docs-refresh`.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
+SyslogIdentifier=docs-refresh

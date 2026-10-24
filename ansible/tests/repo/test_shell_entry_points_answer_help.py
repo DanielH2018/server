@@ -42,7 +42,7 @@ MUST_FIND = frozenset(
         ".claude/hooks/run-hook.sh",
         "setup/k3s/longhorn-backup-health.sh.j2",
         "setup/k8s_host_files/registry-gc.sh.j2",
-        "setup/initial_setup/docs-refresh.sh.j2",
+        "components/docs-refresh/docs-refresh.sh.j2",
     }
 )
 

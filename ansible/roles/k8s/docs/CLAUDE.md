@@ -21,7 +21,7 @@ runbooks, design documents and generated reference pages are readable in a brows
   `templates/ingressroute.yaml.j2` carries the reasoning for the flip. Everything under
   `docs/` is served, so what is excluded from the build is a publishing decision — see
   `mkdocs.yml`'s `exclude_docs`.
-- **Built by:** `scripts/docs/build_docs.py`, run by the `docs-refresh` cron. **Not by this role** —
+- **Built by:** `scripts/docs/build_docs.py`, run by `homelab-docs-refresh.service`. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
@@ -34,7 +34,7 @@ runbooks, design documents and generated reference pages are readable in a brows
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
   and no Flux path runs it. It stays for the handback. The Kustomization's `wait` replaces the
   rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so
-  an nginx config edit still rolls the pod. The site directory is the setup plane's (below).
+  an nginx config edit still rolls the pod. The site directory is the host package's (below).
 
 ## The build runs on the host, never in the pod
 
@@ -71,10 +71,13 @@ than as a scheduling mistake, which is the expensive kind of wrong.
 
 The `hostPath` volume is `type: Directory`, not `DirectoryOrCreate`. kubelet would create a
 missing path as root, and the build script runs as the unprivileged user, so it could then never
-write into it. `ansible/roles/setup/k8s_host_files/tasks/docs.yml` creates the directory with
-the right ownership first, through the setup plane: D5 moved it out of this role, because a
-Flux-owned role runs no task. Its copy of `docs_host_site_dir`, in that task's `vars:`, must
-equal this role's, which `ansible/tests/setup/test_k8s_host_files_pairs.py` holds.
+write into it. `hosts/components/docs-refresh/tmpfiles.d/homelab-docs-site.conf.j2` creates the directory
+with the right ownership first, through the daniel-box host package: D5 moved it out of this
+role, because a Flux-owned role runs no task, and H7.10a moved it from the setup plane into
+that component. The docs-refresh service runs `systemd-tmpfiles --create` on the file in
+`ExecStartPre=`, and `systemd-tmpfiles-setup.service` applies it at boot. The file's path must
+equal this role's `docs_host_site_dir`, which
+`hosts/lib/tests/test_docs_refresh_component.py` holds.
 
 ## `/healthz` is answered by nginx, not from the mounted tree
 

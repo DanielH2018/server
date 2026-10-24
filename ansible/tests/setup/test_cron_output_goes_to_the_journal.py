@@ -35,11 +35,7 @@ from _role_census import task_files
 # subject by pattern reads empty the day a file moves, and every job then passes by default.
 # A rename fails `test_every_named_cron_still_exists` below rather than going quiet.
 JOURNAL_ROUTED = {
-    "Weekly secret rotation (auto tier)": "secret-rotate",
-    "Refresh generated docs": "docs-refresh",
     "Longhorn filesystem trim": "longhorn-trim-cron",
-    # The branch sweep's `--gc` job prints a line per removed worktree and deleted branch.
-    "Weekly git object-store repair": "worktree-sweep",
 }
 
 
@@ -83,17 +79,6 @@ def test_a_stdout_only_redirect_does_not_satisfy_the_check():
     )
 
 
-def test_the_braced_chain_pipes_the_whole_worktree_sweep_job():
-    """`|` binds tighter than `&&`, so an unbraced chain would pipe only its last stage.
-
-    The worktree-sweep job is a chain rather than one command, and it is where getting this
-    wrong reads as fixed while the `cd` stage keeps mailing.
-    """
-    job = _cron_jobs()["Weekly git object-store repair"]
-    assert job.startswith("{ cd "), job
-    assert "; } 2>&1 | logger -t worktree-sweep" in job, job
-
-
 # ── every cron ───────────────────────────────────────────────────────────────
 
 _KUMA = "prints nothing on a healthy run; its verdict is a Kuma push"
@@ -115,16 +100,6 @@ MAILS_ONLY_ON_FAILURE = {
     "daniel-box disk health": _KUMA + ", plus a Healthchecks /fail ping",
     "Release staleness drift check": _KUMA,
     "Off-box etcd snapshot": _KUMA + ", plus a Healthchecks /fail ping",
-    "Homelab eval sweep": (
-        "writes its output to log files; the EXIT trap reports to logger and Kuma"
-    ),
-    "Refresh homelab infrastructure map": (
-        "stdout (`Wrote ...`) is discarded and stderr carries only a failure, for which the "
-        "mail is the only alert (the job pings no Healthchecks check)"
-    ),
-    "Clear ansible log file": (
-        "truncate prints nothing unless it fails, and then the mail is the only alert"
-    ),
 }
 
 # Named members from both planes and from the files the census reads, so a glob that
@@ -132,12 +107,12 @@ MAILS_ONLY_ON_FAILURE = {
 KNOWN_CRONS = frozenset(
     {
         "Sync peer Claude artifacts",  # roles/k8s
-        "Refresh generated docs",  # setup/initial_setup/tasks/crons.yml
         "Longhorn filesystem trim",  # setup/k3s/tasks/health-crons.yml
         "Weekly AIDE file integrity check",  # setup/initial_setup/tasks/integrity.yml
     }
 )
-_CENSUS_FLOOR = 29
+# 23 after H7.36 moved the checkout crons into host components (it was 29).
+_CENSUS_FLOOR = 23
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 

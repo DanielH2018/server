@@ -116,7 +116,7 @@ def test_an_unreachable_wan_turns_the_failure_into_a_named_skip(tmp_path):
 WIRED_CRONS = {
     "roles/setup/k3s/templates/release-staleness-check.sh.j2": "reachout_verdict",
     "roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2": "reachout_verdict",
-    "roles/setup/initial_setup/templates/docs-refresh.sh.j2": "reachout_verdict",
+    "../hosts/components/docs-refresh/templates/docs-refresh.sh.j2": "reachout_verdict",
 }
 
 

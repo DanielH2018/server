@@ -1,0 +1,26 @@
+# Shipped by homelab-daniel-box. Started by homelab-loki-route-witness.timer.
+#
+# THE CONTRACT IS THE EXIT CODE (the kuma-check form M6 left, roles/setup/common/tasks/
+# kuma_check_timer.yml). The check pushes its verdict to a Kuma push monitor and then exits 1
+# after `down`, 0 after `up`. Restart=on-failure reruns it every RestartSec until it exits 0, so
+# a tile that went red clears as soon as the route answers rather than at the next scheduled slot.
+[Unit]
+Description=Loki read-route witness (Kuma push)
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+# No OnFailure= alert unit, deliberately. A down verdict is a unit failure by this contract, and
+# the *-alert.service units page Discord on a unit that BROKE. The tile carries the verdict.
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+ExecStart=/usr/lib/homelab/loki-read-route-health
+LoadCredential=loki_route_witness_push_token:/run/credstore/loki_route_witness_push_token
+# Only Restart=always and Restart=on-success are refused for Type=oneshot (systemd 255).
+Restart=on-failure
+RestartSec=15min
+# The restart loop lives in memory, so a reboot ends it. This marker survives the reboot and
+# gates homelab-loki-route-witness-boot.service, which reruns the check once at boot while the
+# last verdict was not up (#4495). `+` runs it as root whatever User= is, and `$$` hands the
+# variable to the shell rather than to systemd's own substitution.
+ExecStopPost=+/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ]; then rm -f /var/lib/kuma-check/loki-route-witness.down; else mkdir -p /var/lib/kuma-check && touch /var/lib/kuma-check/loki-route-witness.down; fi'

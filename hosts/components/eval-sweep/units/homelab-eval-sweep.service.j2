@@ -1,0 +1,25 @@
+# Shipped by homelab-daniel-box. Started by homelab-eval-sweep.timer.
+[Unit]
+Description=Grade every homelab eval case, trend the result and publish it through a PR
+After=homelab-secrets.service
+Wants=homelab-secrets.service
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+# The `+` runs this one command as root; the service runs as {{ sys_user }}. It creates the state
+# directory (tmpfiles.d/homelab-eval-sweep.conf.j2).
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-eval-sweep.conf
+ExecStart=/usr/lib/homelab/eval-run
+# The script reads both from $CREDENTIALS_DIRECTORY. An empty anthropic_api_key is the disarmed
+# no-op that reports UP.
+LoadCredential=anthropic_api_key:/run/credstore/anthropic_api_key
+LoadCredential=homelab_eval_push_token:/run/credstore/homelab_eval_push_token
+# The cron's PATH and HOME: node (through fnm), uv, git and gh resolve without a login shell.
+# eval-run narrows PATH further once it starts.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/{{ sys_user }}
+# The journal replaces the cron's mail. The script logs through `logger -t eval-run` as well.
+SyslogIdentifier=eval-run
+# A multi-agent sweep runs for minutes to an hour. The cron had no limit; the unit bounds it.
+TimeoutStartSec=6h

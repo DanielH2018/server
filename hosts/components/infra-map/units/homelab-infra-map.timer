@@ -1,0 +1,10 @@
+# Shipped by homelab-daniel-box with its enable link. Every 15 minutes, the cron's cadence.
+[Unit]
+Description=Regenerate the homelab infrastructure map every 15 minutes
+
+[Timer]
+OnCalendar=*-*-* *:00,15,30,45:00
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
