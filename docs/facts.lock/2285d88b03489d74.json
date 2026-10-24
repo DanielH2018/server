@@ -1,0 +1,13 @@
+{
+  "checksum": "2ac2482c31ec61ee6a5bd93a6083a30c75bd0975b580dea9380d2c1ca58772fb",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/nut_host/CLAUDE.md#nut_host — emptied; the host packages own the UPS shutdown chain's host half",
+  "row": {
+    "atoms": {
+      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439",
+      "ansible/roles/setup/nut_host/tasks/main.yml": "14bd779d423e1fd30c48788b3114260c9bdd7d59e589367ac09f679faff2d132"
+    },
+    "python": "3.14",
+    "verified_sha": "eab40596f"
+  }
+}
