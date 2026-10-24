@@ -96,13 +96,13 @@ within ~15 s (HOSTSYNC).
 snapshot — the role asserts upsd is reachable when it runs, and nothing re-checks that address
 afterwards — but `roles/setup/nut_host/templates/ups-secondary-health.sh.j2` now re-proves the link
 itself every `nut_host_watchdog_interval_minutes` (10 min), from the deployed
-`/etc/nut/upsmon.conf`, on **every** armed host (daniel-box and `ups_host`/daniel-server both,
-since 2026-09). Each host pushes its own Kuma tile —
+`/etc/nut/upsmon.conf` (daniel-server: the persisted `/var/lib/homelab-secrets/etc/nut/upsmon.conf`
+since H4.3c), on **every** armed host (daniel-box and `ups_host`/daniel-server both, since 2026-09). Each host pushes its own Kuma tile —
 `roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`'s `ups-secondary.json` (daniel-box,
 `ups_secondary_push_token`) and `ups-secondary-daniel-server.json` (daniel-server,
 `ups_secondary_daniel_server_push_token`) — deliberately never the same token: two hosts
 sharing one push token would let either host's `up` satisfy Kuma's deadline and mask the
-other's `down` (issue #952). `kuma-push.env.j2` picks the right token by `inventory_hostname`.
+other's `down` (issue #952). daniel-box's `kuma-push.env.j2` and daniel-server's unit credential pick the right token by `inventory_hostname`.
 
 **Ordering matters when arming the watchdog on a new host.** The Kuma tile has to exist
 *before* `nut_host`'s cron starts pushing to it — deploy `uptime-kuma` first, then run
@@ -112,10 +112,11 @@ because each host's token and tile are provisioned together, one leg at a time.
 
 ## Editing
 - Manifests/config: `templates/*.j2` (config-secret.yaml.j2 holds all six NUT files)
-- Host half (udev rule, secondary upsmon): `ansible/roles/setup/nut_host/`, via
-  `initial_setup.yml --tags nut_host` on **both** daniel-server and daniel-box. The role's
-  own `when:` (`initial_setup.yml`) is `inventory_hostname == ups_host or
-  nut_host_secondary_armed`, so daniel-box is in scope from the moment its secondary was
-  armed — running this on daniel-server alone re-arms the primary and silently skips the
-  secondary. This line said "on daniel-server" until 2026-08-29, three lines below the
-  section that already said both nodes are armed.
+- Host half, two owners. **daniel-server's is the `homelab-daniel-server` package**
+  (`hosts/components/nut-secondary/`): the APC udev rule, the `nut-monitor` drop-in that points
+  upsmon at the rendered `/var/lib/homelab-secrets/etc/nut/upsmon.conf`, and the
+  `homelab-ups-watchdog` timer. Edit the component, and the host picks the change up through
+  `homelab-updater`; no `initial_setup.yml` run applies it. **daniel-box's is the
+  `ansible/roles/setup/nut_host/` role**, applied by `initial_setup.yml --tags nut_host` on
+  daniel-box alone, because the role ends on `ups_host`. Both render the role's templates until
+  H7.8 moves daniel-box.

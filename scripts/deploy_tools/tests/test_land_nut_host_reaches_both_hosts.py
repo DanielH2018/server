@@ -8,6 +8,11 @@ hand run. `ansible/tests/setup/test_initial_setup_roles_are_visible_to_the_deplo
 refuses a role outside `roles/setup/`. This file pins what the landing says for `nut_host`'s
 paths.
 
+The role reached daniel-box and daniel-server until H4.3c. It now ends on the UPS host with a
+leading `meta: end_role` guard, because the homelab-daniel-server package owns that host's half,
+so a `nut_host` landing owes daniel-server no hand apply. The file name keeps its old wording
+because the shard weights record it by path.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py
 """
 
@@ -17,8 +22,10 @@ from deploy_tools.land_lib import land_tags
 PR_1915_ROLE_FILE = "ansible/roles/setup/nut_host/tasks/main.yml"
 
 
-def test_nut_host_reaches_daniel_box_and_daniel_server():
-    assert land_reach.setup_role_hosts("nut_host") == {"daniel-box", "daniel-server"}
+def test_nut_host_reaches_daniel_box_only():
+    # The role's leading `end_role` guard drops daniel-server, whose half the
+    # homelab-daniel-server package owns (H4.3c).
+    assert land_reach.setup_role_hosts("nut_host") == {"daniel-box"}
 
 
 def test_the_tick_self_applies_nut_host_on_its_own_host():
@@ -29,8 +36,7 @@ def test_the_tick_self_applies_nut_host_on_its_own_host():
     assert land_tags.plane_note(files) == ""
 
 
-def test_the_landing_owes_daniel_server_the_same_run():
+def test_the_landing_owes_daniel_server_no_run():
     note = land_reach.remaining_setup_hosts_note([PR_1915_ROLE_FILE], "daniel-box")
-    assert "nut_host" in note
-    assert "daniel-server" in note
+    assert "daniel-server" not in note
     assert "daniel-pi" not in note
