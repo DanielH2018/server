@@ -1,0 +1,21 @@
+# The shared package that ships the third-party apt sources and their keys (H7.24a,
+# docs/target-architecture/host/h7-delete-ansible.md, old step H7.1). Each file lands at the path
+# the docker_install, github_cli and optimize_pi roles wrote before it, so dpkg takes the file
+# over. None is a conffile, so an existing copy is overwritten without a prompt.
+#
+# Every host depends on this package, so each gets all three sources. A source names no
+# architecture, because the package renders once with no host and apt reads only the native one.
+# Docker's source names the `noble` suite; a host that leaves 24.04 needs a new suite here.
+#
+# Each key holds the bytes the role's pin checked. docker.asc has sha256 1500c1f5...a570 and
+# fingerprint 9DC85822 9FC7DD38 854AE2D8 8D81803C 0EBFCD88. The GitHub CLI keyring has sha256
+# 6084d5d7...811b. Azlux's key has fingerprint 98B824A5 FA7D3A10 FDB225B7 CA548A0A 0312D8E6.
+# scripts/renderer/tests/test_homelab_repos.py holds all three.
+description: Third-party apt sources and keys the homelab hosts install from
+files:
+  - {src: sources/docker.sources, dst: /etc/apt/sources.list.d/docker.sources}
+  - {src: keys/docker.asc, dst: /etc/apt/keyrings/docker.asc}
+  - {src: sources/github-cli.sources, dst: /etc/apt/sources.list.d/github-cli.sources}
+  - {src: keys/gh-cli-archive-keyring.gpg, dst: /etc/apt/keyrings/githubcli-archive-keyring.gpg}
+  - {src: sources/azlux.sources, dst: /etc/apt/sources.list.d/azlux.sources}
+  - {src: keys/azlux-archive-keyring.gpg, dst: /usr/share/keyrings/azlux-archive-keyring.gpg}

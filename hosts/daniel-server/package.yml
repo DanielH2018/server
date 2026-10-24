@@ -14,3 +14,9 @@ credentials:
 maintainer_scripts: [preinst, postinst, prerm]
 enable:
   homelab-updater.timer: timers.target
+# H7.24a: the third-party apt sources (github-cli.sources among them). The hand-installed
+# github-cli.list names the same repository, so reconcile retires it.
+depends:
+  - homelab-repos
+legacy:
+  - {path: /etc/apt/sources.list.d/github-cli.list}

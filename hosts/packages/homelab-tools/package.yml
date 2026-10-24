@@ -39,3 +39,19 @@ tools:
       sha256: e60275b27f505ae2086bfb87b144eacf7377a89803120f6bd933d1852a93b0c6
       url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_arm64.tar.gz
       member: chezmoi
+  # H7.24a: daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
+  # Both digests come from the release's checksums.txt:
+  # https://github.com/goreleaser/nfpm/releases/download/v2.48.0/checksums.txt
+  nfpm:
+    amd64:
+      # renovate: datasource=github-release-attachments depName=goreleaser/nfpm
+      version: v2.48.0
+      sha256: 6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750
+      url: https://github.com/goreleaser/nfpm/releases/download/{version}/nfpm_{bare}_Linux_x86_64.tar.gz
+      member: nfpm
+    arm64:
+      # renovate: datasource=github-release-attachments depName=goreleaser/nfpm
+      version: v2.48.0
+      sha256: a9a75213763783b7669719e505474c748c5ad7dc66591a195619deb50f85c2f4
+      url: https://github.com/goreleaser/nfpm/releases/download/{version}/nfpm_{bare}_Linux_arm64.tar.gz
+      member: nfpm

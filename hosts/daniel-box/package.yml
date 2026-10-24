@@ -8,3 +8,7 @@
 description: daniel-box's homelab host package
 components: [reconcile]
 maintainer_scripts: [preinst, postinst, prerm]
+# H7.24a: the third-party apt sources, and nfpm for the builder this host runs.
+depends:
+  - homelab-repos
+  - homelab-tools

@@ -1,15 +1,16 @@
 {
-  "checksum": "724a04d0f18b60a8c384dc6befe497836c9ffe98b9031d72f0d525be960392ef",
+  "checksum": "941de5062d51c2655a00ae7a156e2a9d54bb9d613a2202e6ce962d085edbe914",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/docker_install/CLAUDE.md#Notable",
   "row": {
     "atoms": {
       "ansible/roles/containers/docker-proxy/CLAUDE.md": "64c79a69b9b658ced25acfdc9916196b04a065ae742cedb5c32e4f3464dc16b1",
-      "ansible/tests/setup/test_apt_keyring_permissions.py": "a18249dc3a864f8c10d73f7bbcedcd2408955710e8a8893f8a76b5763b45ce6f",
       "ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py": "66dd3110d47078184f064543aa12cefd51b4016e137cc945bfe8f1f21cdbd52f",
-      "docs/docker-engine-pins-and-runtime.md": "c8c8a4425f4c79194324d061592d90bc2545310874955c8e3aa6b75a937c1e0f"
+      "docs/docker-engine-pins-and-runtime.md": "c8c8a4425f4c79194324d061592d90bc2545310874955c8e3aa6b75a937c1e0f",
+      "hosts/packages/homelab-repos/": "2f732695af2f18df8999f2352d9403cdb33e0227f8ff0397377bfc3ee9431a02",
+      "scripts/renderer/tests/test_homelab_repos.py": "d22aa026d698b24902e1ad3534b507e9ded10a006a11edd76616962615968d7f"
     },
     "python": "3.14",
-    "verified_sha": "77be6f7f1"
+    "verified_sha": "8b985af0c"
   }
 }
