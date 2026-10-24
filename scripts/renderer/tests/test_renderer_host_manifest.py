@@ -76,6 +76,8 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
             {"unit": "beat.service"},
         ],
         "reconcilers": [],
+        "activations": {},
+        "arms": dict.fromkeys(("libvirt", "lines", "ufw", "users")),
     }
     assert parsed["legacy"] == package.legacy
 

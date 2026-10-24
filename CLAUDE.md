@@ -135,7 +135,7 @@ its arm is a no-op and it goes on to deploy. Arm it only on a PR you were asked 
 
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
 `docs/landing.md` owns the rule, and
-`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS` is the full
+`hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS` is the full
 list of conclusions it covers (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 

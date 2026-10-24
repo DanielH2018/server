@@ -113,7 +113,7 @@ filterwarnings = [
 markers = [
   "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (ansible/tests/repo/test_uptime_robot_keywords.py)",
 ]
-# filter_plugins: lets test_toposort import toposort. setup/common/files: host_lib is a cross-role
+# filter_plugins: lets test_toposort import toposort. hosts/lib: host_lib is a cross-role
 # shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
 # import-tested renovate_notify.py + test_host_lib.py resolve it in CI. scripts: the k8s manifest
 # tests import the render guards from there — _k8s_render.py did it with a sys.path insert, which
@@ -131,11 +131,15 @@ pythonpath = [
   # `_k8s_render.py` at its root: pytest prepends only a test's OWN directory.
   "ansible/tests",
   "ansible/filter_plugins",
-  "ansible/roles/setup/common/files",
+  "hosts/lib",
   "ansible/roles/k8s/game-stats/files",
   "ansible/roles/setup/gitops_deploy/files",
   "ansible/roles/setup/deploy_ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
+  # crowdsec/files: jobs_metrics.py is the same cross-role pattern, staged into autofix-bridge's
+  # ConfigMap rather than duplicated (M6 batch B7). Without this, `from jobs_metrics import ...`
+  # in autofix.py resolves only when a crowdsec test collected first.
+  "ansible/roles/k8s/crowdsec/files",
   # flux_job_connect.py is the one transport of every Job script Flux runs, and
   # arr-notification's seed imports it from here on the controller path too.
   "ansible/roles/k8s/manifests/files",
@@ -185,7 +189,7 @@ extend-exclude = [
 # hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar. The
 # repository signer runs under daniel-box's /usr/bin/python3 for the same reason, and
 # ansible/roles/setup/homelab_builder/tests/test_repo_signer.py holds it to the same grammar.
-per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312", "ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py" = "py312" }
+per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -308,7 +312,7 @@ extra-paths = [
   "ansible/tests",
   "ansible/filter_plugins",
   "ansible/roles/setup/initial_setup/files",
-  "ansible/roles/setup/common/files",
+  "hosts/lib",
   "ansible/roles/setup/gitops_deploy/files",
   "ansible/roles/setup/deploy_ui/files",
   "ansible/roles/k8s/monitor-bridge/files",

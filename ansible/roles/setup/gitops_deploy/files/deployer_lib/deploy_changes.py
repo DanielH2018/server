@@ -527,20 +527,21 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.setup_roles |= setup_roles_for(p)  # filter-plugin callers (#3874)
             cs.broad_setup |= bool(cs.setup_roles)
             continue
+        if shipped := setup_roles_for(p):  # a shared module setup roles install (H7.2e)
+            cs.broad = cs.broad_setup = True
+            cs.setup_roles |= shipped
+            continue
         at = role_of(p)
         if at is None:
             continue
         if at.plane == "k8s":
             # A k8s role change the deployer applies only as a promoted image-pin bump
             # (`split_k8s_auto_deploy`, `cs.k8s_deploy`); every other one defer-and-alerts.
-            # The WHOLE role dir, not split by subdirectory the way containers/ is below,
-            # because the alert only needs to name the role.
+            # The whole role dir, because the alert only needs to name the role.
             cs.k8s.add(at.role)
         elif at.plane != "containers":
             # A setup-plane path, which `_BROAD_SETUP_PREFIXES` consumes before this loop
-            # reaches here. Named rather than left to fall through, because the branches
-            # below are about a CONTAINER role and `role_of` can hand them a setup path —
-            # the `containers/`-anchored regexes it replaced could not.
+            # reaches here. Named so the branches below only see a CONTAINER role's path.
             continue
         elif at.subdir in ("templates", "files"):
             # A bind-mounted file under a container role: the docker-compose.yml.j2 OR any
@@ -562,7 +563,7 @@ def setup_roles_for(path: str) -> set[str]:
     """Every setup role a change to `path` re-applies: owner, shippers, or filter callers."""
     at = role_of(path)
     if at is None or at.plane != "setup":
-        return set(deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS.get(path, ()))
+        return deploy_cross_role.setup_roles_outside_the_tree(path)
     shippers = deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(
         path, frozenset()
     )

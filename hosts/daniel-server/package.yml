@@ -7,7 +7,7 @@
 # ansible/vars/hosts/daniel-server.sops.yaml carries every key this tree names, and
 # `host_secrets.py sync daniel-server` rewrites it (operator-only).
 description: daniel-server's homelab host package
-components: [reconcile, secrets-unit, nut-secondary]
+components: [reconcile, secrets-unit, kuma-push, nut-secondary]
 credentials:
   - ups_secondary_daniel_server_push_token
 maintainer_scripts: [preinst, postinst, prerm]

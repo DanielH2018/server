@@ -30,6 +30,9 @@ spec:
         - name: autofix-bridge
           image: {{ autofix_bridge_k8s_image }}
           command: ["python", "/app/autofix.py"]
+          ports:
+            - name: checks
+              containerPort: {{ containers_list | metrics_port('autofix-bridge') }}
 {{ hardened_security_context(read_only=true) }}
           # The settings, as plain values; the credentials come from env-secret.yaml.j2. A
           # quoted number belongs here, never in the Secret: Flux's typed patch reads a
@@ -44,6 +47,11 @@ spec:
               value: "1"
             - name: INTERVAL
               value: "300"
+            # The port the check exporter serves /metrics on (jobs_metrics.py, through
+            # autofix.py): the `autofix-bridge` item on this role's containers_list entry, which
+            # also renders the scrape job and the Service port (M6 batch B7).
+            - name: CHECK_EXPORTER_PORT
+              value: "{{ containers_list | metrics_port('autofix-bridge') }}"
             # In-cluster Service names replace the -k8s LAN routes (same move as the
             # monitor-bridge twin): no VIP, no Traefik, no monitoring IngressRoute in the path.
             - name: KUMA_URL

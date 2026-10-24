@@ -1,0 +1,45 @@
+{#
+  The pi-peer-backup CronJob's identity (M6 batch B7). It exists for one call, the verdict export
+  in files/pull-pi-peers.sh:export_verdict: a merge PATCH of the annotations on the one ConfigMap
+  this role renders for it.
+
+    PATCH /api/v1/namespaces/<ns>/configmaps/<verdict ConfigMap>    patch on that name
+
+  `patch` alone, because the script sends a bare PATCH. `kubectl patch` would GET the object
+  first and need `get` too (#6051), but the image carries no kubectl and the script sends no
+  GET. The grant names the object, so the token reaches no other ConfigMap. The pod mounts the
+  token only because of this export: the backup itself never calls the API.
+
+  ansible/tests/services/test_pi_peer_backup_verdict_export.py holds this Role to the call.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pi-peer-backup
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pi-peer-backup
+  namespace: {{ k8s_namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [patch]
+    resourceNames: [{{ pi_peer_backup_k8s_verdict_configmap }}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pi-peer-backup
+  namespace: {{ k8s_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pi-peer-backup
+subjects:
+  - kind: ServiceAccount
+    name: pi-peer-backup
+    namespace: {{ k8s_namespace }}

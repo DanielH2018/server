@@ -60,11 +60,11 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
     unreachable_targets,
 )
 from lib.kubectl import DEFAULT_TOOLS, Tools
-from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
+from lib.repo_paths import HOST_LIB_FILES
 
 # The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
-sys.path.insert(0, str(K3S_FILES))
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 
 CLUSTER = "prod"

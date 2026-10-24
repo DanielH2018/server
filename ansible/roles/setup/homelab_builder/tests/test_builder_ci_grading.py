@@ -1,7 +1,7 @@
 """The builder's CI grading and its metric reasons, held to the deployer's and the plan's.
 
 The builder cannot import `deploy_git`, so `builder_ci_grade.py` carries its own copy of `ci_verdict`, the
-two conclusion sets and `read_check_pages`. These tests hold the copy equal to the deployer's.
+two conclusion sets and `read_check_pages`. These tests hold the copy equal to `hosts/lib/ci_verdict.py` and the deployer's page reader.
 
 Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_builder_ci_grading.py
 """
@@ -9,6 +9,7 @@ Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_builder_ci_gra
 import builder_ci_grade as cg
 import host_package_builder as hb
 import pytest
+import ci_verdict as shared_gate
 from deployer_lib import deploy_git
 
 GREEN = [{"name": "prek", "status": "completed", "conclusion": "success"}]
@@ -45,14 +46,14 @@ def test_every_reason_is_a_plan_value_and_none_is_trust():
     ],
 )
 def test_the_grading_matches_the_deployers(runs):
-    assert cg.ci_verdict(runs, frozenset({"prek"})) == deploy_git.ci_verdict(
+    assert cg.ci_verdict(runs, frozenset({"prek"})) == shared_gate.ci_verdict(
         runs, frozenset({"prek"})
     )
 
 
 def test_the_conclusion_sets_match_the_deployers():
-    assert cg._CI_PASS_CONCLUSIONS == deploy_git._CI_PASS_CONCLUSIONS
-    assert cg._CI_NO_VERDICT_CONCLUSIONS == deploy_git._CI_NO_VERDICT_CONCLUSIONS
+    assert cg._CI_PASS_CONCLUSIONS == shared_gate._CI_PASS_CONCLUSIONS
+    assert cg._CI_NO_VERDICT_CONCLUSIONS == shared_gate._CI_NO_VERDICT_CONCLUSIONS
 
 
 def test_the_page_size_and_cap_match_the_deployers():

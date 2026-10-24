@@ -26,12 +26,8 @@ instead of a text match.
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_job_failure_check.py
 """
 
-import sys
-
 from _shell_render import rendered_shell_text
-from lib.repo_paths import K3S_FILES
 
-sys.path.insert(0, str(K3S_FILES))
 from longhorn_lib import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0

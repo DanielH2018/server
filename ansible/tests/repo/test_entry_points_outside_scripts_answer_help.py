@@ -33,9 +33,11 @@ from _helpers import REPO
 # beside `flux_soak.py`. `k8s/manifests/files` holds `flux_job_connect.py`, which a verify
 # Job's ConfigMap carries beside its role's script, such as sonarr's `sonarr_verify.py`.
 SHIPPED_BESIDE = (
-    REPO / "ansible/roles/setup/common/files",
+    REPO / "hosts/lib",
     REPO / "ansible/roles/setup/gitops_deploy/files",
     REPO / "ansible/roles/k8s/monitor-bridge/files",
+    # `jobs_metrics.py`, the check exporter autofix-bridge's ConfigMap carries beside autofix.py.
+    REPO / "ansible/roles/k8s/crowdsec/files",
     REPO / "ansible/roles/k8s/manifests/files",
     REPO / "scripts/deploy_tools",
 )

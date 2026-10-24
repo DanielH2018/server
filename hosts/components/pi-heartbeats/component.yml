@@ -81,11 +81,13 @@ files:
   - {src: templates/pi-sd-health.sh.j2, dst: /usr/lib/homelab/pi-sd-health, mode: "0755"}
   - {src: templates/pi-gz-integrity.sh.j2, dst: /usr/lib/homelab/pi-gz-integrity, mode: "0755"}
   - {src: templates/pi-recovery-health.sh.j2, dst: /usr/lib/homelab/pi-recovery-health, mode: "0755"}
-  # A package-owned copy of initial_setup's helper, which stays the single source. The scripts
-  # source this copy, so the package carries everything its units run.
-  - {shared: kuma-push-lib.sh, dst: /usr/lib/homelab/kuma-push-lib.sh}
-  # The same arrangement for the textfile writer (M6 B5): the two token scripts call its
-  # write_check_textfile before their push, so Prometheus reads each cycle's verdict.
+  # The push helper the scripts source, /usr/lib/homelab/kuma-push-lib.sh, is the `kuma-push`
+  # component's since H4.3b1. daniel-pi's package lists both components, so it still carries the
+  # file the scripts source.
+  #
+  # A package-owned copy of initial_setup's textfile writer (M6 B5), which stays the single
+  # source: the two token scripts call its write_check_textfile before their push, so Prometheus
+  # reads each cycle's verdict.
   - {shared: homelab-check-lib.sh, dst: /usr/lib/homelab/homelab-check-lib.sh}
   # A plain file at the path optimize_pi wrote, so dpkg takes it over on unpack.
   - {src: templates/pi-health.logrotate.j2, dst: /etc/logrotate.d/pi-health}

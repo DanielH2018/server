@@ -80,6 +80,16 @@ replaced the retired Kopia scope for the Pi.
   Job, because a configarr gate run genuinely performs the reconcile, where this role's gate
   run is a dead-man push about a specific 23:00 firing. See
   `ansible/roles/k8s/configarr/CLAUDE.md`.
+- **The verdict is also exported** (M6 batch B7). After each scheduled run the script sends one
+  merge PATCH, with curl and the pod's ServiceAccount token, that sets `homelab/check-verdict`,
+  `homelab/check-last-run` and `homelab/check-message` on the ConfigMap `pi-peer-backup-verdict`
+  (`templates/verdict-configmap.yaml.j2`, rendered with no annotations so the script is their
+  only writer). kube-state-metrics exports the verdict, and the `pods` rule group's
+  `PiPeerBackupFailed` and `PiPeerBackupNotReporting` read it in shadow. `templates/rbac.yaml.j2`
+  grants `patch` on that one name. The CronJob mounts the token for that call alone, so the
+  backup pod holds an API token it did not hold before. The message is stripped of IPv4
+  addresses and JSON-hostile characters. A failed export makes the run exit 1, so the CronJob's
+  last successful time stops moving. The gate run skips the export, like the pushes.
 - **The gate Job, in `pi-peer-backup-verify`.** `defaults/main.yml` names the CronJob in
   `flux_cronjob_gates` as a verify gate, so the renderer copies it into the Job
   `pi-peer-backup-deploy-gate-<spec digest8>` (`scripts/renderer/renderer_lib/cronjob_gate.py`).

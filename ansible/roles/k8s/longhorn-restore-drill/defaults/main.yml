@@ -1,0 +1,16 @@
+---
+# The restore drill's own Flux tag (H2.3b). It renders the stamp ConfigMap and nothing else yet;
+# H2.3d adds the CronJob, its script and its RBAC. The drill's objects live in `homelab`, so they
+# cannot go in the `longhorn` tag, which H1's DR order waits on before anything creates `homelab`
+# (docs/target-architecture/host/h2-shrink-host-plane.md, *The drill's own tag*).
+
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; the stance decides whether
+# Renovate automerges a bump of an image this role pins. It pins none.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "deploys no workload of its own — the tag renders the drill's stamp ConfigMap, which holds state no render restores, and carries no image for Renovate to bump"  # noqa var-naming[no-role-prefix]
+
+# The namespace the stamp ConfigMap lives in. It mirrors `k3s_longhorn_restore_drill_namespace`,
+# which the host drill and the backup-health reader read until H2.3f.
+# ansible/tests/k8s/test_restore_drill_stamps.py holds the pair equal, so a rename changes both
+# sides in one PR.
+longhorn_drill_namespace: homelab

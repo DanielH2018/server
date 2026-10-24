@@ -34,6 +34,16 @@ backup target:
    A volume whose target is blank, or any other name, and whose claim is not listed is left
    alone, as the Ansible routing tasks left it.
 
+Then one more step sets the trim label (H2.2a, the H2 plan's *Native trim*):
+
+7. A volume that is `attached` and has a Running ReplicaSet or StatefulSet workload gets the
+   per-job label `recurring-job.longhorn.io/trim: enabled`, which puts it in Longhorn's `trim`
+   RecurringJob. It loses the label when either condition stops holding. A volume that gains the
+   label and sits in the daily tier also gets `recurring-job-group.longhorn.io/default`
+   explicitly, because a volume with "a job of its own" no longer gets `default` from Longhorn.
+   The step writes no other group key, and never a `recurring-job-group.longhorn.io/trim` one.
+   Every run also prints `trim would-admit: <claims>`, the claims the rule admits.
+
 The run writes ONE merge patch per changed volume: the net of the steps, labels and target
 together. A converged cluster writes nothing.
 
@@ -85,6 +95,14 @@ NO_BACKUP = "no-backup"
 LEGACY_WEEKLY = "weekly-backup"
 SHARDS = range(7)
 ENABLED = "enabled"
+
+# The per-job label that puts a volume in the `trim` RecurringJob. It is a per-JOB label, never a
+# `recurring-job-group.longhorn.io/trim` group label: four readers treat every key under
+# LABEL_PREFIX as a backup tier. tests/test_longhorn_reconcile_trim.py types the literal out.
+TRIM_LABEL = "recurring-job.longhorn.io/trim"
+# The workload kinds whose volume the trim may join: a CronJob's Job leaves its volume detached
+# between runs, and the trim must not attach it.
+TRIM_WORKLOAD_TYPES = ("ReplicaSet", "StatefulSet")
 
 # The BackupTarget names a Volume CR's `spec.backupTargetName` takes: `default` is the B2 target
 # and `r2` the Cloudflare one. They are a contract with the cluster, held equal to
@@ -194,7 +212,11 @@ def load_tiers(path: str | Path) -> dict:
         # picking one here would hide a wrong `containers_list` entry. The run stops before it
         # writes anything, so the next hourly run retries once the entry is fixed.
         raise Failed(f"claim(s) on both the weekly and the no-backup list: {both}")
-    return {"r2": set(r2), "weekly": weekly, "nobackup": set(nobackup)}
+    return {
+        "r2": set(r2),
+        "weekly": weekly,
+        "nobackup": set(nobackup),
+    }
 
 
 def claim_of(volume: dict) -> str:
@@ -204,11 +226,16 @@ def claim_of(volume: dict) -> str:
 
 
 def desired_labels(
-    labels: Mapping[str, str], claim: str, tiers: Mapping, class_claims: set[str]
+    labels: Mapping[str, str],
+    claim: str,
+    tiers: Mapping,
+    class_claims: set[str],
+    trim: bool = False,
 ) -> dict[str, str]:
     """`labels` after the reconcile steps (module docstring) for the volume serving `claim`.
 
-    Only the group labels move. Every other label is returned as it was.
+    `trim` says whether the volume belongs in the trim job. Only the group labels and the trim
+    label move. Every other label is returned as it was.
     """
     weekly, nobackup = tiers["weekly"], tiers["nobackup"]
     state = dict(labels)
@@ -247,7 +274,37 @@ def desired_labels(
             move(DEFAULT, shard_group(shard))
         elif weekly[claim] != shard:
             move(shard_group(weekly[claim]), shard_group(shard))
+    # 7. The trim label. A volume that gains it and sits in the daily tier is also put in
+    #    `default` explicitly, so it keeps exactly one group label.
+    if not trim:
+        state.pop(TRIM_LABEL, None)
+        return state
+    state[TRIM_LABEL] = ENABLED
+    other_groups = [NO_BACKUP, LEGACY_WEEKLY, *(shard_group(s) for s in SHARDS)]
+    if (
+        claim not in weekly
+        and claim not in nobackup
+        and not any(has(group) for group in other_groups)
+    ):
+        state[label(DEFAULT)] = ENABLED
     return state
+
+
+def trim_rule(volume: dict) -> bool:
+    """The unbounded rule: the volume is attached and has a Running ReplicaSet or StatefulSet.
+
+    A CronJob's Job, a Failed or Succeeded pod and a scaled-to-zero workload do not qualify, so
+    the trim never attaches a volume that Longhorn keeps detached.
+    """
+    status = volume.get("status") or {}
+    if status.get("state") != "attached":
+        return False
+    return any(
+        workload.get("podStatus") == "Running"
+        and workload.get("workloadType") in TRIM_WORKLOAD_TYPES
+        for workload in (status.get("kubernetesStatus") or {}).get("workloadsStatus")
+        or []
+    )
 
 
 def target_of(volume: dict) -> str:
@@ -274,6 +331,11 @@ def group_keys() -> set[str]:
     return {label(group) for group in groups}
 
 
+def label_keys() -> set[str]:
+    """Every label key this job writes or removes: the group keys and the trim label."""
+    return group_keys() | {TRIM_LABEL}
+
+
 def plan(volumes: list[dict], class_claims: set[str], tiers: Mapping) -> list[dict]:
     """One merge patch per volume whose group labels or backup target must change, by name.
 
@@ -281,12 +343,12 @@ def plan(volumes: list[dict], class_claims: set[str], tiers: Mapping) -> list[di
     its new value, or to None to remove it, and is empty when only the target moves. `target`
     is the new `spec.backupTargetName`, or None when the volume keeps its own.
     """
-    keys = group_keys()
+    keys = label_keys()
     out = []
     for volume in sorted(volumes, key=lambda v: v["metadata"]["name"]):
         before = volume["metadata"].get("labels") or {}
         claim = claim_of(volume)
-        after = desired_labels(before, claim, tiers, class_claims)
+        after = desired_labels(before, claim, tiers, class_claims, trim_rule(volume))
         delta = {}
         for key in sorted(keys):
             if after.get(key) != before.get(key):
@@ -313,6 +375,16 @@ def describe(change: dict) -> str:
     if change["target"]:
         parts.append(f"backupTargetName={change['target']}")
     return f"volume {change['name']} ({change['claim']}): {' '.join(parts)}"
+
+
+def would_admit(volumes: list[dict]) -> str:
+    """The `trim would-admit:` line: the claims the trim rule admits, sorted.
+
+    The arm labels exactly this set, so the line records which volumes joined the trim job on
+    this pass.
+    """
+    claims = sorted({claim_of(v) for v in volumes if trim_rule(v)})
+    return "trim would-admit: " + (", ".join(claims) if claims else "none")
 
 
 def class_claims_of(pvcs: list[dict]) -> set[str]:
@@ -353,6 +425,7 @@ def reconcile_labels(
             )
             _ok(status, answer, f"patching volume {change['name']}")
         lines.append(("would patch " if report_only else "patched ") + describe(change))
+    lines.append(would_admit(volumes))
     lines.append(
         f"{len(volumes)} volume(s) read, {len(changes)} volume change(s)"
         f"{' planned' if report_only else ''}"

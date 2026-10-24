@@ -25,6 +25,7 @@ from scrape_jobs import FilterModule, entry_port, metrics_port, scrape_jobs
 _DERIVED = {
     "crowdsec",
     "crowdsec-jobs",
+    "autofix-bridge",
     "traefik-k8s",
     "speedtest",
     "pihole",

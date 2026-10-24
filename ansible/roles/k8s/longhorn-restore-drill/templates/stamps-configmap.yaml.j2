@@ -1,0 +1,23 @@
+{#
+  The restore drill's state: the rotation, retry and seen stamps, one key each (H2.3c writes
+  them). Rendered empty here. The two annotations below are the reason it is a template of its
+  own.
+
+  ssa: IfNotPresent makes Flux create the object once and never revert the drill's writes to its
+  data. Without it, every reconcile would empty the keys.
+
+  prune: disabled keeps the object when a render drops it. The tag prunes like any per-tag
+  Kustomization, and a revert or a render bug that dropped this ConfigMap would delete state no
+  render can restore. Contract C3 exempts it by name (*Prune exemptions*).
+
+  The namespace is `longhorn_drill_namespace`. No Namespace object renders here, because a second
+  writer of `homelab` beside ansible/deploy.yml is what C4 forbids.
+#}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: longhorn-restore-drill-stamps
+  namespace: {{ longhorn_drill_namespace }}
+  annotations:
+    kustomize.toolkit.fluxcd.io/ssa: IfNotPresent
+    kustomize.toolkit.fluxcd.io/prune: disabled

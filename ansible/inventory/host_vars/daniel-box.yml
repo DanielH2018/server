@@ -168,6 +168,14 @@ containers_list:
     platform: k8s
     owner: flux
     depends_on: [longhorn]
+  # The restore drill's stamp ConfigMap (H2.3b), and from H2.3d its CronJob. Its objects live in
+  # `homelab`, which `longhorn` cannot reach on a fresh cluster before step 8 of H1's DR order, so
+  # it is a tag of its own. It depends on `longhorn` for the Longhorn CRDs the CronJob will name.
+  # It prunes, except the stamp ConfigMap, and it is untiered, so `NEVER_SHED` omits it.
+  - name: longhorn-restore-drill
+    platform: k8s
+    owner: flux
+    depends_on: [longhorn]
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
   # the shed set.
@@ -1094,6 +1102,16 @@ containers_list:
     # homelab-cluster-vars (D5.19). The handback is two PRs, `owner: released` then removing
     # `owner`: docs/flux-deploy-plane.md.
     owner: flux
+    # The check exporter's listener (autofix.py, through jobs_metrics.py), which serves the
+    # *arr remediation loop's verdict as homelab_check_* gauges beside the Kuma push (M6 batch
+    # B7). The entry has no `port` of its own, so the item names it. The `metrics` item renders
+    # the `autofix-bridge` scrape job and the Service port, and deployment.yaml.j2 hands the
+    # same number to the process, so the two cannot drift apart. The process binds whatever
+    # CHECK_EXPORTER_PORT holds, so this port moves the listener too.
+    metrics:
+      - job: autofix-bridge
+        port: 9183
+        interval: 1m
   # The NUT primary (upsd + usbhid-ups + upsmon). The pod is pinned to daniel-server, the
   # UPS's USB host — a physical pin that never unwinds. The host's secondary upsmon, the
   # thing that actually powers daniel-server off on FSD, is the nut_host role and keeps its

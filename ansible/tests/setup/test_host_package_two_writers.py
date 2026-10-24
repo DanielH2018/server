@@ -28,7 +28,9 @@ The census joins two sides per host:
   `homelab-reconcile:retire_unit` removes, and a `cron` as its `(user, name)`.
 
 A role reaches the hosts `land_reach.setup_role_hosts` names, less those its leading
-`meta: end_role` guard ends it on. A role that function cannot place, such as `common`,
+`meta: end_role` guard ends it on. A task, its block or its import guarded by
+`<role>_packaged_hosts` writes nothing on a host the map lists
+(`setup_gates.packaged_guard_hosts`; `test_host_package_ufw_two_writers.py` holds the proof). A role that function cannot place, such as `common`,
 whose task files other roles import, reaches every host.
 
 Run: uv run pytest ansible/tests/setup/test_host_package_two_writers.py
@@ -45,8 +47,9 @@ import jinja2
 import pytest
 from _helpers import load_tasks, walk_tasks
 from _role_census import task_files_by_role
+from _task_guards import guarded_tasks
 from deploy_tools.land_lib.land_reach import setup_role_hosts
-from deploy_tools.setup_lib.setup_gates import HOSTS
+from deploy_tools.setup_lib.setup_gates import HOSTS, packaged_guard_hosts
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 from lib.render_context import render_context
@@ -178,10 +181,12 @@ def ansible_writes(
     by_host: dict[str, dict[Key, set[str]]] = defaultdict(lambda: defaultdict(set))
     for role, task_file in roles:
         reach = reach_of(role.name) or frozenset(hosts)
-        tasks = list(walk_tasks(load_tasks(task_file)))
+        tasks = list(guarded_tasks(role, task_file))
         for host in sorted(reach & set(hosts)):
             ctx = _role_context(role, host)
-            for task in tasks:
+            for task, whens in tasks:
+                if packaged_guard_hosts(whens, [host], role):
+                    continue  # a `<role>_packaged_hosts` guard skips the task on this host
                 for key in task_writes(task, ctx):
                     by_host[host][key].add(os.path.relpath(task_file, ANSIBLE.parent))
     return by_host

@@ -86,6 +86,24 @@ def confined_env(directory: Path) -> jinja2.Environment:
     return env
 
 
+# A `lib` entry names a script in hosts/lib/, or a module of a package there such as
+# `reconcile_lib/ufw.py`. A package module is lowercase with underscores and ends `.py`.
+_LIB_NAME = re.compile(r"[a-z0-9][a-z0-9-]*|[a-z][a-z0-9_]*/[a-z_][a-z0-9_]*\.py")
+
+
+def lib_source(lib: Path, name: object) -> Path:
+    """The file a `lib` entry names, confined to `lib`.
+
+    Raises:
+        RenderRefused: `name` is not a script name or a `<package>/<module>.py` path.
+    """
+    if not isinstance(name, str) or not _LIB_NAME.fullmatch(name):
+        raise RenderRefused(
+            f"lib script name {name!r} is not a plain name or a <package>/<module>.py path"
+        )
+    return confined(lib, name)
+
+
 def confined(directory: Path, src: str) -> Path:
     """`src` resolved through any symlink, which must be a file inside `directory`.
 

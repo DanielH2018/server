@@ -52,9 +52,9 @@ CI_REPO = "DanielH2018/server"
 # .github/workflows/ci.yml exactly, since a name matching nothing silently drops a required
 # check.
 #
-# This must equal the deployer's gate, which is `gitops_deploy_ci_contexts` in
-# roles/setup/gitops_deploy/defaults/main.yml (rendered to CI_CONTEXTS in config.env, a
-# root-owned file on daniel-box that a worktree session cannot read). Equal in BOTH
+# This must equal the gate every deploy path grades by, which is `ci_required_contexts` in
+# ansible/inventory/group_vars/all.yml (the deployer renders it to CI_CONTEXTS in its settings
+# file, root-owned on daniel-box, which a worktree session cannot read). Equal in BOTH
 # directions: a name here the deployer does not require blocks a landing the deployer would
 # have deployed. `renovate config validator` is the live instance -- it runs on master and
 # can go red, and the deployer deliberately excludes it because a red renovate.json changes

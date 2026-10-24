@@ -282,7 +282,7 @@ agrees. Each fact comes from a reader that already exists:
 - A deploy-ui older than the `manual_plane_owed` key leaves the manual planes `null`. A `null`
   field means the source was not readable, not that nothing is owed. It adds no blocker.
 - Master CI is the newest `ci.yml` run on master. A run in progress is pending, and a
-  conclusion in `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict. Neither counts as red.
+  conclusion in `ci_verdict._CI_NO_VERDICT_CONCLUSIONS` is no verdict. Neither counts as red.
 - deploy-ui's `/api/inflight` lists the runs in flight. A run's `VERDICT:` line is read with
   `land_lib.detach.verdict_in` where its log is readable on this host. Elsewhere it comes from
   deploy-ui's `/api/log`, which serves only the logs of runs deploy-ui started. So off

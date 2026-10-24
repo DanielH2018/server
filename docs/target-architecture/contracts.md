@@ -438,7 +438,9 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 - **Ordering.** `dependsOn` is generated, and no slice hand-writes it. Its edges come from
   `ansible/filter_plugins/toposort.py`, or from a renderer rule that the adding slice names,
   such as D3's `cluster-vars` edge and D4's `-deferred` edges.
-- **Prune exemptions.** PVCs and Namespaces carry `kustomize.toolkit.fluxcd.io/prune: disabled`.
+- **Prune exemptions.** PVCs and Namespaces carry `kustomize.toolkit.fluxcd.io/prune: disabled`,
+  and so does a ConfigMap that holds state no render restores, named by its slice. H2's
+  `longhorn-restore-drill-stamps` is the first member (H2 Open question 12).
 - **Secrets.** CI never holds an age key, and an agent never decrypts. A cluster secret takes
   one of two paths:
   - One Secret, `homelab-cluster-vars`, holds every value the cluster manifests reference as a
@@ -799,14 +801,10 @@ No request on the slice index is open.
   role that passes `manifests_deferred_files` gets `<tag>-deferred` once it is flux-owned",
   because D1 adds the flux role as a fourth caller, and *Reserved names* says that D4.2
   reserves the suffix. No gate is named.
-- **Wider prune exemptions.**
-    - PersistentVolumes and StorageClasses join PVCs and Namespaces (D6 Open question 12).
-      Gate: before D6.19 merges. Without the amendment, D6.19 refuses to remove a tag whose
-      render at `prod` holds a PersistentVolume, and the rename procedure excludes
-      media-volume.
-    - "and a ConfigMap that holds state no render restores, named by its slice", with H2's
-      restore-drill stamp ConfigMap as its member (H2 Open question 12). Gate: before H2.3b
-      merges.
+- **Wider prune exemptions.** PersistentVolumes and StorageClasses join PVCs and Namespaces
+  (D6 Open question 12). Gate: before D6.19 merges. Without the amendment, D6.19 refuses to
+  remove a tag whose render at `prod` holds a PersistentVolume, and the rename procedure
+  excludes media-volume.
 - **The deletion policy's kept set** (D6 Open question 7). If D6.20 merges, it switches every
   `<tag>` except `flux`. `flux`, every `<tag>-deferred` and every shared kind keep `Orphan`.
   Gate: before D6.20 merges.
@@ -1292,3 +1290,11 @@ Applied to this page:
 - **`service="unmapped"`** (M2 Open question 5). C7 *Rule labels* records `unmapped` as a
   value outside the deploy-tag rule and names `WorkloadServiceUnmapped`, which pages with
   `service="observability"` alongside it. This clears the gate before M2's PR 4b merges.
+
+### Applied requests (2026-10-24)
+
+- **A prune exemption for a ConfigMap that holds state no render restores** (H2 Open
+  question 12). C3 *Prune exemptions* gains "and a ConfigMap that holds state no render
+  restores, named by its slice", with H2's `longhorn-restore-drill-stamps` as its first
+  member. The row left *Wider prune exemptions*, which keeps the PersistentVolume and
+  StorageClass request. This clears the gate before H2.3b merges.

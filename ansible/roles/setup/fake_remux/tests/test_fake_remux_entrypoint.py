@@ -38,7 +38,7 @@ from lib.repo_paths import ALL_VARS, REPO
 ROLE = REPO / "ansible" / "roles" / "setup" / "fake_remux"
 FILES = ROLE / "files"
 LIB = FILES / "fake_remux_lib"
-COMMON = REPO / "ansible" / "roles" / "setup" / "common"
+HOST_LIB = REPO / "hosts" / "lib"
 ENTRYPOINT = "fake_remux.py"
 OLD_ENTRY_MODULES = {"fake_remux_scan", "fake_remux_replace"}
 OLD_LIB_MODULES = {"fake_remux_logic", "fake_remux_replace_logic"}
@@ -462,11 +462,11 @@ def test_drift_check_records_the_entrypoint_and_each_library_module():
     "argv", [[], ["scan"], ["replace"]], ids=["top", "scan", "replace"]
 )
 def test_entrypoint_help_runs_from_the_repo_checkout(where, argv, tmp_path):
-    # On the host host_lib.py sits beside the script; from the checkout it comes from common/.
+    # On the host host_lib.py sits beside the script; from the checkout it comes from hosts/lib/.
     entry = FILES / ENTRYPOINT
     assert entry.is_file(), f"{entry.relative_to(REPO)} does not exist"
     env = _isolated_env(tmp_path)
-    env["PYTHONPATH"] = str(COMMON / "files")
+    env["PYTHONPATH"] = str(HOST_LIB)
     cwd = REPO if where == "repo_root" else tmp_path
     proc = _run([str(entry), *argv, "--help"], cwd, env)
     assert proc.returncode == 0, proc.stderr[-2000:]

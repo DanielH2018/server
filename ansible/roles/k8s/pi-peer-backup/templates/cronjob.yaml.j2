@@ -24,7 +24,10 @@ spec:
         spec:
           restartPolicy: Never
           enableServiceLinks: false
-          automountServiceAccountToken: false
+          # The token is for one call: the script's verdict export PATCHes the verdict ConfigMap
+          # (rbac.yaml.j2 grants `patch` on that one name). The backup itself never calls the API.
+          serviceAccountName: pi-peer-backup
+          automountServiceAccountToken: true
           securityContext:
             runAsUser: {{ puid }}
             runAsGroup: {{ pgid }}
@@ -52,6 +55,10 @@ spec:
                     secretKeyRef:
                       name: pi-peer-backup-ssh
                       key: hc_ping_url
+                # The ConfigMap the verdict is also written to (verdict-configmap.yaml.j2). The
+                # script skips the export on the gate run.
+                - name: VERDICT_CONFIGMAP
+                  value: "{{ pi_peer_backup_k8s_verdict_configmap }}"
                 # ssh insists on resolving HOME even with every path given explicitly.
                 - name: HOME
                   value: /tmp

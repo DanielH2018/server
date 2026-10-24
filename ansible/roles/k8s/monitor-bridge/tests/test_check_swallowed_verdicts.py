@@ -294,9 +294,31 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
 
 
+# B7's pod producer, the pi-peer-backup script. The other B7 pods log to no stream these
+# selectors read. The tag is derived from `report()`: `${HOSTNAME:-<pod>} <tag>: $1`.
+_B7_TAGS = {"pi-peer-backup"}
+
+
+def _b7_producer_tags():
+    script = (_K8S / "pi-peer-backup" / "files" / "pull-pi-peers.sh").read_text()
+    return set(re.findall(r"\$\{HOSTNAME:-[a-z-]+\} ([a-z-]+): \$1", script))
+
+
+def test_the_b7_pod_producer_is_listed_quiet_when_refused_and_paging_when_lost():
+    producers = _b7_producer_tags()
+    assert producers == _B7_TAGS <= KUMA_RETIRING_TAGS
+    # The red proof: a misspelt tag is not one the script logs.
+    assert "pi-peer-bakcup" not in producers
+    refused = _REJECTED_UP.replace("release-staleness-check", "pi-peer-backup")
+    assert swallowed_verdicts([(1, refused)], "3h", truncated=False)[0]
+    lost = _SWALLOWED_DOWN.replace("release-staleness-check", "pi-peer-backup")
+    ok, msg = swallowed_verdicts([(1, lost), (2, _SIBLING_RUN)], "3h", truncated=False)
+    assert not ok and "pi-peer-backup" in msg
+
+
 def _producer_tags():
-    """Every syslog tag a rendered host script, a k3s Python producer or a B6b pod producer logs under."""
-    tags = _pod_producer_tags()
+    """Every syslog tag a rendered host script, a k3s Python producer or a pod producer logs under."""
+    tags = _pod_producer_tags() | _b7_producer_tags()
     for _plane, _role, _name, text in rendered_shell_texts():
         tags.update(re.findall(r"logger -t ([A-Za-z0-9_.-]+)", text))
     for source in K3S_FILES.glob("*.py"):
@@ -349,7 +371,10 @@ def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
 # Its script echoes the syslog shape, host = the pod name, so the reader sees it.
 _POD_H = "2026-09-10T13:05:00Z pi-peer-backup-29312345-x7k2q pi-peer-backup: "
 _POD_RUN_UP = _POD_H + "status=up pulled 2 peer file(s) from daniel-pi"
-_POD_REJECTED = _POD_H + (
+# The refused push comes from a tag outside KUMA_RETIRING_TAGS: pi-peer-backup joined it in B7,
+# so a refused push from it is clean and would no longer prove that the pod stream still pages.
+_POD_UNLISTED_H = "2026-09-10T13:05:00Z other-pod-x7k2q some-other-pod-job: "
+_POD_REJECTED = _POD_UNLISTED_H + (
     "push failed (http=404 rc=0 by=kuma) (status=up: pulled 2 peer file(s) from daniel-pi)"
 )
 # The CronJob's earlier shape, which the reader must still not match: a line
@@ -438,10 +463,7 @@ def test_a_rejected_push_from_the_pod_stream_is_flagged(cfg):
     src = _src(_streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP), (3, _POD_REJECTED)]))
     ok, msg = checks.logs.check_swallowed_verdicts(cfg, src, uptime_s=_unread_clock)
     assert not ok
-    assert (
-        "Kuma rejected the push for pi-peer-backup on pi-peer-backup-29312345-x7k2q"
-        in msg
-    )
+    assert "Kuma rejected the push for some-other-pod-job on other-pod-x7k2q" in msg
 
 
 def test_the_pre_1943_pod_line_is_not_read_as_anything(cfg):
