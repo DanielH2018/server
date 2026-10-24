@@ -486,8 +486,15 @@ def snapshot(
 
 
 def extract(sha: str, dest: Path, paths: Iterable[str] = (), repo: Path = REPO) -> None:
-    """Unpack `git archive` of `sha` in `repo`, narrowed to `paths` when given, under `dest`."""
+    """Unpack `git archive` of `sha` in `repo`, narrowed to `paths` when given, under `dest`.
+
+    A path `sha` does not hold is skipped, so a caller can name `hosts` for a commit before it.
+    """
     dest.mkdir(parents=True, exist_ok=True)
+    if paths := list(paths):
+        held = git_stdout("ls-tree", "--name-only", sha, "--", *paths, cwd=repo).split()
+        if not (paths := [p for p in paths if p in held]):
+            return
     with tempfile.TemporaryDirectory(prefix="cross-plane-tar-") as tmp:
         tar_path = Path(tmp) / "tree.tar"
         git("archive", "--format=tar", "-o", str(tar_path), sha, "--", *paths, cwd=repo)
@@ -516,7 +523,7 @@ def changes(
 
 def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:
     """`sha`'s tree unpacked under `dest` and rendered with its own renderer."""
-    extract(sha, dest, ("ansible", "scripts"), repo=repo)
+    extract(sha, dest, ("ansible", "scripts", "hosts"), repo=repo)
     return snapshot(dest)
 
 

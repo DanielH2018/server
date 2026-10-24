@@ -182,7 +182,7 @@ SHELL_EDIT = (
 @pytest.fixture(scope="module")
 def head_tree(tmp_path_factory) -> Path:
     tree = tmp_path_factory.mktemp("head")
-    gate.extract("HEAD", tree, ("ansible", "scripts"))
+    gate.extract("HEAD", tree, ("ansible", "scripts", "hosts"))
     return hand_back_authelia(tree)
 
 

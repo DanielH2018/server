@@ -122,7 +122,7 @@ def prepare_tree(
     Returns:
         The paths whose reverse patch no longer applies to HEAD; empty for a transplant.
     """
-    extract(sha if own else "HEAD", tree, ("ansible", "scripts"), repo)
+    extract(sha if own else "HEAD", tree, ("ansible", "scripts", "hosts"), repo)
     if own:
         return []
     if not undo:
