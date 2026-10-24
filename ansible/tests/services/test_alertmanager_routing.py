@@ -145,9 +145,8 @@ def loki_sets(shadow: bool) -> dict[str, dict[str, str]]:
     """The labels each M5 rule reaches Alertmanager with, keyed by alert name.
 
     The log rules live in loki-homelab's `homelab-logs.yaml` and the ruler-watching alerts in
-    observability's `loki-homelab.yaml`. Every rule carries a literal `service`, so the rule's
-    own labels are the whole set, and a rule that gains or drops `shadow`, or changes
-    `severity`, moves to another route and fails its expected outcome.
+    observability's `loki-homelab.yaml`. Every rule carries a literal `service`, so its own
+    labels are the whole set, and a changed `shadow` or `severity` moves it to another route.
 
     Args:
         shadow: Whether to return the rules that carry `shadow`, or those that do not.
@@ -401,9 +400,10 @@ def test_host_sets_names_every_host_check_rule():
 
 
 def test_loki_sets_name_every_m5_rule():
-    """Non-vacuity for `loki_sets`: the eight M5 alerts that page from PR 4b, the one
-    that stays shadow until M6's batch A3, and A7's shadow WorkloadLogErrors."""
+    """Non-vacuity for `loki_sets`: each paging Loki rule, and two that must stay shadow."""
     assert set(loki_sets(shadow=False)) == {
+        "HostLogErrors",
+        "HostOutOfMemoryKill",
         "LokiHostLogsSilent",
         "LokiPodLogsSilent",
         "LokiPiLogsSilent",
