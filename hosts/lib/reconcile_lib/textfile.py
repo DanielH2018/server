@@ -6,6 +6,7 @@ creates the textfile directory, so a host whose exporter is not set up writes no
 the updater, which does fail on that, reports it.
 
     homelab_host_reboot_pending{host}             1 while /run/homelab/reboot-pending exists
+    homelab_host_reboot_pending_since_seconds{host}  that flag's mtime, only while it exists
     homelab_host_activation_pending{host,unit}    1 per unit still owed a restart
     homelab_host_reconcile_drift{host,arm}        items an arm left alone this run
 
@@ -32,6 +33,11 @@ def render(host: str, state: dict) -> str:
     lines = [
         f'homelab_host_reboot_pending{{host="{label(host)}"}} {int(REBOOT_PENDING.exists())}'
     ]
+    if REBOOT_PENDING.exists():
+        since = int(REBOOT_PENDING.stat().st_mtime)
+        lines.append(
+            f'homelab_host_reboot_pending_since_seconds{{host="{label(host)}"}} {since}'
+        )
     lines += [
         f'homelab_host_activation_pending{{host="{label(host)}",unit="{label(unit)}"}} 1'
         for unit in sorted(state.get("pending") or {})

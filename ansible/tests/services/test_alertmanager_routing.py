@@ -368,35 +368,34 @@ def test_every_deploy_pipeline_rule_has_an_expected_outcome():
 
 
 def test_host_sets_names_every_host_check_rule():
-    """Non-vacuity for `host_sets`: M3's two shadow collector rules, #5672's fan-out idle rule,
-    M6's B1 pairs for the five k3s crons with `KumaDown`, and the paging host-plane rules, M3's
-    two disk-health rules among them since its PR 5."""
-    assert set(host_sets(shadow=True)) == {
-        "TextfileCollectorError/daniel-box",
-        "TextfileCollectorError/daniel-server",
-        "FanoutSlotsIdleWithFreeWork/daniel-box",
-        "ArtifactsSyncFailed/daniel-box",
-        "ArtifactsSyncNotReporting/daniel-box",
-        "OtlpDoorClosed/daniel-box",
-        "OtlpDoorNotReporting/daniel-box",
-        "KumaDown/uptime-kuma",
-        "LonghornBackupHealthFailed/daniel-box",
-        "LonghornBackupHealthNotReporting/daniel-box",
-        "EtcdSnapshotOffboxFailed/daniel-box",
-        "EtcdSnapshotOffboxNotReporting/daniel-box",
-        "ManifestPruneCheckFailed/daniel-box",
-        "ManifestPruneCheckNotReporting/daniel-box",
-        "ReleaseStalenessCheckFailed/daniel-box",
-        "ReleaseStalenessCheckNotReporting/daniel-box",
-        "LiveDriftCheckFailed/daniel-box",
-        "LiveDriftCheckNotReporting/daniel-box",
-    }
+    """Non-vacuity for `host_sets`: every shadow rule of the group, per host for the rules each
+    host carries (#6166, #6168), and the paging host-plane rules, M3's two disk-health rules
+    among them since its PR 5."""
+    hosts = ("daniel-box", "daniel-server", "daniel-pi")
+    every_host = (
+        "TextfileCollectorError AideCheckFailed AideCheckNotReporting RkhunterScanFailed "
+        "RkhunterScanNotReporting HostCheckOverdue"
+    ).split()
+    box_only = (
+        "FanoutSlotsIdleWithFreeWork ArtifactsSyncFailed ArtifactsSyncNotReporting "
+        "OtlpDoorClosed OtlpDoorNotReporting LonghornBackupHealthFailed "
+        "LonghornBackupHealthNotReporting EtcdSnapshotOffboxFailed "
+        "EtcdSnapshotOffboxNotReporting ManifestPruneCheckFailed "
+        "ManifestPruneCheckNotReporting ReleaseStalenessCheckFailed "
+        "ReleaseStalenessCheckNotReporting LiveDriftCheckFailed LiveDriftCheckNotReporting"
+    ).split()
+    assert set(host_sets(shadow=True)) == (
+        {f"{alert}/{host}" for alert in every_host for host in hosts}
+        | {f"{alert}/daniel-box" for alert in box_only}
+        | {"ComposeUpFailed/daniel-pi", "KumaDown/uptime-kuma"}
+    )
     assert set(host_sets(shadow=False)) >= {
         "DiskHealthFailed/daniel-box",
         "DiskHealthNotReporting/daniel-box",
-        "HostReconcileFailed/daniel-box",
-        "HostReconcileFailed/daniel-server",
-        "HostReconcileFailed/daniel-pi",
+    } | {
+        f"{alert}/{host}"
+        for alert in ("HostReconcileFailed", "HostRebootOverdue")
+        for host in hosts
     }
 
 

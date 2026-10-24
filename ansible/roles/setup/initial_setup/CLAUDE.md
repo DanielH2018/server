@@ -120,5 +120,7 @@ Each calls `write_check_textfile` from `ansible/roles/setup/initial_setup/files/
 with a `DEADLINE_S` that equals its Kuma tile's interval, and the rules in
 `ansible/roles/k8s/observability/files/rules/initial-setup-checks.yaml` read the files in shadow.
 ENFORCED: `ansible/tests/services/test_initial_setup_check_rule_literals.py` pins each rule's
-deadline literals to the rendered `DEADLINE_S`. The witness gets its textfile directory from a
-task tagged `loki_route_witness`, which gives the deploy user write access on daniel-server.
+deadline literals to the rendered `DEADLINE_S`. The weekly AIDE and rkhunter scans write a
+textfile the same way on every host (#6168), and the `host-checks` rule group reads it.
+ENFORCED: `ansible/tests/setup/test_integrity_scan_rule_literals.py`. The witness gets its
+textfile directory from a task tagged `loki_route_witness`, which gives the deploy user write access on daniel-server.
