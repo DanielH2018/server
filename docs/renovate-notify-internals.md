@@ -118,8 +118,8 @@ nothing goes the other way, so the pair cannot cycle. The fetch/persist/post she
 `notify_logic` also carries a copy of the deployer's check-runs page walk, because the notifier
 cannot import `deployer_lib`. GitHub serves a check-runs read with no `per_page` as one page
 of 30 runs, so a failing run past that page once read as green (#6002). The copy walks every
-page, and
-a read short of `total_count` fails the run instead of posting a digest that omits the PR.
+page, and a read short of `total_count` fails the run instead of posting a digest that omits
+the PR.
 `tests/test_renovate_notify.py` holds the copy equal to the deployer's.
 
 ## What a dry run does not prove
