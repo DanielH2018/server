@@ -342,7 +342,10 @@ Instead it reads the cluster every 30 seconds:
   prints the read-only command that names the services the soak failed:
   `kubectl -n flux-system get pods -l app=soak -o jsonpath='{.items[*].status.containerStatuses[0].state.terminated.message}'`.
   `verify` holds the same revision, and for a revision with no snapshot role resets `prod`
-  (`docs/volume-snapshot-drills.md`, *Choosing the branch*).
+  (`docs/volume-snapshot-drills.md`, *Choosing the branch*). A failure read once `homelab`
+  has moved to a descendant of R does not end the wait: a later revision superseded R's
+  soak, which exits once `homelab` leaves R (#5704), and the wait reads that revision's soak
+  instead (D7.2).
 - **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
   line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
   the operator's decision, approved through the permission prompt the agent's clear raises. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
@@ -573,6 +576,14 @@ in, so gating a brand-new role from a primary that has not pulled it yet enumera
 reads `skipped` — green, on the landing that most needs a gate. That worktree takes no lock. If
 it cannot be made at all, the landing reports `unhealthy` rather than gating the primary — the
 one exception being a primary that already contains the commit.
+
+A gate run by hand has the same exposure. An orchestrator worktree locked hours behind master
+holds old role templates, owners and alert tables, and a `probe.py health` run from it grades
+the live workload against them (#5912). The `block-footguns` hook denies `probe.py health` and
+`probe.py takeover` from a linked worktree that holds an older copy of an `ansible/` or
+`scripts/` file `origin/master` has changed. The denial names the same command run from the
+primary checkout. Rebasing the worktree onto `origin/master` also clears it. `land.sh` runs the probe as a subprocess, so the
+hook never sees the gate above.
 
 A gate that could not read is not a failed gate. `probe.py health` exits 75
 (`PROBE_UNREADABLE`) when it cannot reach the store it reads, such as Traefik answering `no

@@ -139,7 +139,8 @@ through Flux (H1.8b). `k3s_longhorn_version` records where it stands. Four lesso
   refs, so every node re-pulls and shows a transient `ImagePullBackOff`. v1.11 requires
   Kubernetes ≥ v1.34, and v1.13 keeps that floor for its CSI external-provisioner v6.3.0.
   v1.13 also adds the `longhorn-global-manager` Deployment, three replicas with a preferred
-  (not required) anti-affinity, so all three schedule on a two-node cluster.
+  (not required) anti-affinity. The role's `longhorn-global-manager.yaml` patch cuts it to two,
+  one per node, and gives it a memory request (#5968).
 
 ### Expected-red node conditions
 

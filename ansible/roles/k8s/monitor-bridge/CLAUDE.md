@@ -120,7 +120,7 @@ module per domain of `check_*` bodies, mirroring its test file) and `verdicts/` 
 taking its inputs as arguments). `check_table.py` imports only `bridge.types` and the
 `checks.*` bodies; `registry.py` and `gates.py` import it, never each other. A row's fields
 but `fn` are literals: `ansible/filter_plugins/py_table.py` parses the table without running
-it. Modules split at 600 lines; the internals page has the per-module table.
+it. Modules split at the module-length cap; the internals page has the per-module table.
 
 **Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`.
 `templates/script-configmap.yaml.j2` renders each entry as its own ConfigMap, and the

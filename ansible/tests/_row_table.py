@@ -11,7 +11,7 @@ Two tables use it:
   ends in `verdict` below.
 - `Census` below selects from the tracked tree: `git ls-files` or `role_dirs()`. Its rows live
   in `ansible/tests/repo/test_census_rows_*.py`, one file per domain, because
-  `TEST_CAP = 500` in `_ratchet.py` caps any one module.
+  `TEST_CAP` in `_ratchet.py` caps any one module.
 
 What a row buys over a file:
 

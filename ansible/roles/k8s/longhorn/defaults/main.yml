@@ -32,6 +32,21 @@ longhorn_vendored_manifests:
 # that real pressure elsewhere goes unschedulable.
 k3s_longhorn_manager_memory_request: 256Mi  # noqa var-naming[no-role-prefix]
 
+# Memory REQUEST only (no limit) for longhorn-global-manager, the Deployment v1.13 added to run the
+# cluster-wide pod and PV controllers. Upstream ships it with no `resources` (BestEffort), so it
+# needs the request for the manager's reasons above. Applied by files/patches/
+# longhorn-global-manager.yaml, which a test holds equal to this key. Measured 2026-10-24, 31h
+# after the v1.13.0 bump: the leader held a 37Mi working set and the two standbys 33-34Mi. 64Mi
+# is about 1.7x the leader, rounded to a power of two.
+k3s_longhorn_global_manager_memory_request: 64Mi  # noqa var-naming[no-role-prefix]
+
+# Replicas of longhorn-global-manager. Upstream ships 3; the replicas elect one leader through
+# the `longhorn-global-manager` lease and the rest stand by. Its anti-affinity is only
+# preferred, so on this two-node cluster the third replica lands beside another and adds no
+# failover a second one lacks. Two puts one standby on each node. Applied by the same patch,
+# which a test holds equal to this key.
+k3s_longhorn_global_manager_replicas: 2  # noqa var-naming[no-role-prefix]
+
 # Memory REQUEST only (no limit) for the four csi-* sidecar Deployments (csi-attacher,
 # csi-provisioner, csi-resizer, csi-snapshotter), applied through the
 # `system-managed-csi-components-resource-limits` Setting (templates/settings.yaml.j2).
