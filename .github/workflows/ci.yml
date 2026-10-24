@@ -536,7 +536,8 @@ jobs:
   # This job is the suite's only automated run before a merge. The prek `pytest` hook that
   # re-ran it at `git push` was removed on 2026-10-02: it took 89s on daniel-box at load 0.9
   # (2026-10-02) and 235s on daniel-server at load 15, on every push, to repeat what this job
-  # checks in ~61s, and `land.sh` already waits on this job through the `prek` gate.
+  # checks, and `land.sh` already waits on this job through the `prek` gate. The job took ~61s
+  # then. By PR run 40125170130 (2026-10-24) its legs took 2m49s to 4m29s.
   pytest:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
@@ -552,7 +553,10 @@ jobs:
       # The trade is close to even and rests on a projection, so it is reversible on
       # evidence. `pytest_shard.py --of N --summary` projected 59.5s per shard at four and
       # 39.7s at six (local serial seconds, which are NOT the runner's
-      # step time — the runner runs each shard under xdist). Against that, two more legs pay
+      # step time — the runner runs each shard under xdist). The split packs on the runner's
+      # own seconds since #6149, and `--summary` prints those: about 467 per shard at six,
+      # which the test step runs in about 1.5 x 467 / 4, near 180s, on its four xdist workers
+      # (the factor is fitted to run 40125170130). Against that, two more legs pay
       # ~20s of setup each in runner minutes. Keep six only if a master run's per-shard step
       # times say the run wall dropped by more than the extra setup costs; the `--durations`
       # report on every leg is what to read that off.

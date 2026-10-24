@@ -2,6 +2,7 @@
 
 The census and the measurement are passed in, so these run no pytest subprocess and read no
 committed table. The real measurement is `measure_weights`, which `--record-files` already uses.
+The runner-seconds table that `--record-runner` writes and the split packs on is tested last.
 
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_refresh.py
 """
@@ -10,6 +11,7 @@ import json
 
 import pytest
 import pytest_shard
+import shard_weight_gate
 
 FILES = [f"scripts/x/tests/test_{name}.py" for name in "abcdefgh"]
 
@@ -119,3 +121,51 @@ def test_every_ci_only_pin_names_a_module_the_shards_run():
     # CI reads only the table, so a pin the table does not carry has no effect there.
     table = pytest_shard.load_weights()
     assert {p: table.get(p) for p in pins} == pins
+
+
+# Two shard logs as `gh api .../jobs/<id>/logs` returns them: a timestamp on every line and
+# pytest's colours. Module `a` runs in both, so it takes the median of 3.0 and 5.0.
+_LOGS = [
+    "2026-10-24T19:27:39.79Z \x1b[32m3.00s call     scripts/x/tests/test_a.py::t\x1b[0m\n"
+    "2026-10-24T19:27:39.80Z 1.00s setup    scripts/x/tests/test_b.py::t\n",
+    "2026-10-24T19:28:01.11Z 5.00s call     scripts/x/tests/test_a.py::t\n",
+]
+
+
+def test_runner_weights_take_each_modules_median_out_of_raw_job_logs():
+    assert shard_weight_gate.runner_weights(_LOGS) == {
+        "scripts/x/tests/test_a.py": 4.0,
+        "scripts/x/tests/test_b.py": 1.0,
+    }
+
+
+def test_the_runner_table_keeps_only_the_census_and_refuses_an_empty_record(tmp_path):
+    table = tmp_path / "runner.json"
+    keep = ["scripts/x/tests/test_a.py"]
+    assert shard_weight_gate.write_runner_weights(_LOGS, keep, table) == {keep[0]: 4.0}
+    assert json.loads(table.read_text()) == {keep[0]: 4.0}
+    with pytest.raises(ValueError, match="nothing to record"):
+        shard_weight_gate.write_runner_weights(["no durations here"], keep, table)
+
+
+def test_the_split_packs_runner_seconds_and_scales_the_unmeasured_rest():
+    """The recorded weights pack the runner-heavy pair a, b into one shard of two; the runner
+    seconds split them, and a module the runner table lacks scales by the median ratio."""
+    a, b, c, d, e = FILES[:5]
+    recorded = {a: 1.0, b: 1.0, c: 1.5, d: 0.5, e: 2.0}
+    runner = {a: 9.0, b: 9.0, c: 1.0, d: 1.0}
+    assert (
+        len(set(pytest_shard.assign([a, b, c, d], 2, recorded)[f] for f in (a, b))) == 1
+    )
+    weights = shard_weight_gate.packing_weights(recorded, runner)
+    # The ratios are 9, 9, 0.67 and 2, so their median is 5.5.
+    assert weights == runner | {e: 11.0}
+    assert (
+        len(set(pytest_shard.assign([a, b, c, d], 2, weights)[f] for f in (a, b))) == 2
+    )
+
+
+def test_the_committed_runner_table_names_the_known_pole_and_only_the_census():
+    table = shard_weight_gate.load_runner_weights()
+    assert table.get("scripts/deploy_tools/tests/test_chained_timeout.py", 0.0) > 30.0
+    assert sorted(set(table) - set(pytest_shard.census())) == []
