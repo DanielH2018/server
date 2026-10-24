@@ -223,3 +223,25 @@ def test_health_from_a_checkout_behind_the_roles_merge_is_unreadable(
     assert code == PROBE_UNREADABLE, captured.out
     assert "origin/master" in captured.err
     assert not [m for m in detach_notify.NOT_APPLICABLE_MARKERS if m in captured.err]
+
+
+def test_a_squash_merged_branch_holding_origins_role_is_not_stale(
+    tmp_path, monkeypatch
+):
+    """A session's branch after its PR squash-merged lacks the squash commit, not the role.
+
+    `origin/master` carries the role change as a commit the branch never had, yet the role's
+    files match. Refusing it would fail the post-merge gate for exactly the roles the PR changed.
+    """
+    scrub_process_git_env(monkeypatch)
+    repo, roles_dir, a, _b = _behind_origin(tmp_path)
+    upstream = {"ansible/roles/k8s/metallb/files/upstream/app.yaml": _deployment("x")}
+    git(repo, "checkout", "-q", "--detach", a)
+    squash = commit(repo, "squash of the branch", **upstream)
+    git(repo, "update-ref", "refs/remotes/origin/master", squash)
+    git(repo, "checkout", "-q", "--detach", a)
+    commit(repo, "branch commit", **upstream)
+    assert (
+        health_checkout.stale_checkout_reason("metallb", roles_dir, lambda _r: True)
+        is None
+    )

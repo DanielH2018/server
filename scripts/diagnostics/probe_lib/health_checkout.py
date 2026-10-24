@@ -54,8 +54,10 @@ def role_changed_on_origin(role, roles_dir=K8S_ROLES):
     """The newest `origin/master` commit touching `roles_dir/role` that HEAD lacks, or None.
 
     The repository is the one holding `roles_dir`, so a fixture tree answers for itself. A
-    checkout at the merge, or past it with commits of its own, has none. None on any failure,
-    for the same reason `role_on_origin` returns False: the check only adds a refusal.
+    checkout at the merge, or past it with commits of its own, has none. A checkout whose role
+    files already match `origin/master` has none either: after a squash merge, the session's
+    branch lacks the squash commit but holds the same role. None on any failure, for the same
+    reason `role_on_origin` returns False: the check only adds a refusal.
     """
     try:
         res = git(
@@ -69,9 +71,23 @@ def role_changed_on_origin(role, roles_dir=K8S_ROLES):
             check=False,
             timeout=10,
         )
+        newer = res.stdout.strip() if res.returncode == 0 else ""
+        if not newer:
+            return None
+        same = git(
+            "diff",
+            "--quiet",
+            "HEAD",
+            "origin/master",
+            "--",
+            role,
+            cwd=roles_dir,
+            check=False,
+            timeout=10,
+        )
     except OSError, subprocess.TimeoutExpired:
         return None
-    return (res.stdout.strip() or None) if res.returncode == 0 else None
+    return newer if same.returncode == 1 else None
 
 
 def stale_checkout_reason(role, roles_dir=K8S_ROLES, on_origin=role_on_origin):
