@@ -32,6 +32,7 @@ way: `deploy_narrow.digest_covers` runs `scripts/deploy_tools/digest_covers.py`,
 Reach `deploy_alerts` qualified, never by from-import.
 """
 
+import dataclasses
 import json
 import time
 
@@ -183,7 +184,8 @@ def alert_and_record_deferred(
     this tick records a change that is already live. `reconcile` ran before the record and
     cannot see it, and the next tick is ten minutes away. Only the own-record check runs here:
     the shared-role and render-digest proofs each start a subprocess, and the next tick's
-    `reconcile` still applies them.
+    `reconcile` still applies them. The deferral alert below leaves a dropped service out too,
+    because it is already live.
     """
     now = time.time()
     by_commit: dict[str, set[str]] = {}
@@ -204,8 +206,11 @@ def alert_and_record_deferred(
             f"k8s_unapplied: not kept for {', '.join(carried)}: its release record already "
             f"carries the change"
         )
+    # A carried service is live already, so the one-shot k8s alert must not name it (#6147).
+    # When every service is carried, `cs.k8s` empties and the alert skips the k8s channel.
+    alert_cs = dataclasses.replace(cs, k8s=cs.k8s - set(carried)) if carried else cs
     deploy_alerts.alert_deferred(
-        tools, state, config, origin, deployed, cs, declared_k8s
+        tools, state, config, origin, deployed, alert_cs, declared_k8s
     )
 
 
