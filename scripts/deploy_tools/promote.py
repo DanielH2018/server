@@ -122,7 +122,7 @@ from changed_set import suspended_changed
 import object_loss
 from deploy_tools.promote_lib import forward_only, reset, stateful
 from deploy_tools.promote_lib import verify_promotion as verify, wait, wait_reads
-from deploy_tools.promote_lib.promotion import (
+from deploy_tools.promote_lib.decision import (
     Decision as Decision,
     _promotion,
     _pull,
