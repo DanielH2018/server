@@ -26,14 +26,23 @@ def _volume(
     *groups: str,
     extra: Mapping | None = None,
     target: str | None = None,
+    state: str | None = None,
+    workloads: tuple[tuple[str, str], ...] = (),
 ) -> dict:
+    """A Volume CR. `workloads` are `(workloadType, podStatus)` pairs; `state` is `status.state`."""
     namespace, pvc = claim.split("/")
     labels = {f"{P}{group}": "enabled" for group in groups}
     labels.update(extra or {})
-    volume = {
-        "metadata": {"name": name, "labels": labels},
-        "status": {"kubernetesStatus": {"namespace": namespace, "pvcName": pvc}},
-    }
+    kubernetes: dict = {"namespace": namespace, "pvcName": pvc}
+    if workloads:
+        kubernetes["workloadsStatus"] = [
+            {"workloadName": f"w{i}", "workloadType": kind, "podStatus": pod}
+            for i, (kind, pod) in enumerate(workloads)
+        ]
+    status: dict = {"kubernetesStatus": kubernetes}
+    if state is not None:
+        status["state"] = state
+    volume: dict = {"metadata": {"name": name, "labels": labels}, "status": status}
     if target is not None:
         volume["spec"] = {"backupTargetName": target}
     return volume

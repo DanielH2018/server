@@ -90,6 +90,18 @@ k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_na
 # each claim carries the reason it is excluded (filter_plugins/longhorn_groups.py, #4207).
 k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8s_namespace) }}"  # noqa var-naming[no-role-prefix]
 
+# The canary bound on the trim label (H2.2a), as `namespace/pvcName` claims. Only a listed claim
+# may carry `recurring-job.longhorn.io/trim`, so the `trim` RecurringJob (the `longhorn-backup`
+# role) reaches one volume. An EMPTY list trims nothing; it is never read as "every volume".
+# H2.2b deletes this key, and the arm then covers every volume its rule admits.
+#
+# The canary is the smallest default-tier claim whose owner is a Deployment with one replica:
+# traefik-acme, 128 MiB (25 MB used), Deployment `traefik` at 1/1 replicas, `Recreate`. The blast
+# radius is that one volume. A trim discards only blocks ext4 has already freed, and the worst
+# backup outcome is one missed daily backup of it, which backup health's age check reports.
+longhorn_reconcile_trim_claims:
+  - homelab/traefik-acme
+
 # The CronJob's one-off run per role revision, `longhorn-reconcile-deploy-gate-<spec digest8>` in
 # `longhorn-reconcile-verify`. It is a post-apply mutation: the run holds the tier labels and
 # backup targets the revision declares, and a second run finds them held and writes nothing, which
