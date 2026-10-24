@@ -13,6 +13,9 @@ daniel-box, and nothing tied the two together — `k8s_registry_node` is a nodeS
 daniel-server would leave daniel-box's own pulls arriving as `10.42.0.0` and denied, with the
 selftest job the only thing to say so.
 
+The module also holds the policy's two other grants that a mistake would open or close
+silently: the ghcr.io mirror port, and source-controller's standing grant for break-glass.
+
 Run: uv run pytest ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py
 """
 
@@ -169,3 +172,46 @@ def test_the_ghcr_mirror_port_is_admitted_only_from_the_node_grants():
         DEFAULTS["registry_k8s_netpol_cni_gateway"],
         DEFAULTS["registry_k8s_netpol_agent_flannel"],
     }, peers
+
+
+def _vendored_source_controller_pod_labels() -> dict[str, str]:
+    components = (K8S / "flux" / "files" / "gotk-components.yaml").read_text()
+    (deployment,) = [
+        d
+        for d in yaml_fast.safe_load_all(components)
+        if d
+        and d["kind"] == "Deployment"
+        and d["metadata"]["name"] == "source-controller"
+    ]
+    return deployment["spec"]["template"]["metadata"]["labels"]
+
+
+def test_source_controller_reaches_the_push_port_and_nothing_else_does():
+    """Break-glass points Flux's OCIRepository at this registry (#6046).
+
+    source-controller fetches the artifact before Flux applies anything in it, so the grant has
+    to stand rather than arrive with the break-glass render. The peer must AND the namespace and
+    the pod label in ONE item: as two items it would admit every flux-system pod, and any pod
+    labelled `app: source-controller` in the registry's own namespace. The labels are read from
+    the vendored install, so a Flux regeneration that renames either breaks this test, not the
+    break-glass fetch.
+    """
+    flux_namespace = _role_context("flux")["flux_namespace"]
+    pod_labels = _vendored_source_controller_pod_labels()
+    flux_peers = [
+        (rule, peer)
+        for rule in _policies()["registry"]["spec"]["ingress"]
+        for peer in rule["from"]
+        if "namespaceSelector" in peer
+    ]
+    assert len(flux_peers) == 1, flux_peers
+    rule, peer = flux_peers[0]
+    assert peer["namespaceSelector"] == {
+        "matchLabels": {"kubernetes.io/metadata.name": flux_namespace}
+    }, peer
+    selector = peer.get("podSelector", {}).get("matchLabels")
+    assert selector, (
+        f"the flux-system peer selects no pod, so it admits the namespace: {peer}"
+    )
+    assert selector.items() <= pod_labels.items(), (selector, pod_labels)
+    assert [p["port"] for p in rule["ports"]] == [DEFAULTS["k8s_registry_port"]], rule

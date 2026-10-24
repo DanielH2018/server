@@ -18,9 +18,12 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 <!-- /generated_from -->
 
 - **No `REGISTRY_AUTH`.** Network reachability to `k8s_registry_port` IS the access
-  control: `templates/networkpolicy.yaml.j2` admits only two ingress rules, keyed off
-  the node's own `cni0`/`flannel.1` gateway address (containerd's pulls arrive SNAT'd
-  to it, so a podSelector can't admit them — only an `ipBlock` can).
+  control. `templates/networkpolicy.yaml.j2` admits three sources. image-builder's Jobs and
+  this role's self-test Jobs push. Each node's `cni0`/`flannel.1` gateway address carries
+  containerd's pulls, which arrive SNAT'd to it, so only an `ipBlock` can admit them.
+  `flux-system`'s source-controller fetches the break-glass artifact (#6046).
+  `ansible/roles/k8s/registry/templates/networkpolicy.yaml.j2:DECIDED: a standing grant for source-controller`
+  has why that grant stands rather than being applied by hand at break-glass time.
 - **`registry-data` is `longhorn-nobackup`**, 10Gi. Every stored image rebuilds from a
   Dockerfile in this repo, so backing it up would spend B2 transactions on bytes a rebuild
   regenerates.

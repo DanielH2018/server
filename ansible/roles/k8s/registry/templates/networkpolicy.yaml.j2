@@ -9,7 +9,7 @@
 # repeats the same choice prowlarr's flaresolverr policy and n8n's broker policy already made,
 # and the `isolation` check in templates/verify/ checks it on every roll rather than assuming.
 #
-# TWO ADMIT RULES, for two different kinds of traffic:
+# THREE ADMIT RULES, for three different kinds of traffic:
 #
 #   1. POD-NETWORK PUSHERS — image-builder's build Jobs (any image_builder_name, admitted via
 #      the shared `netpol-role: image-builder` label added in
@@ -20,6 +20,9 @@
 #      hostPort in deployment.yaml.j2) and is a HOST process, not a pod. That traffic never
 #      carries a pod identity a podSelector could match, so it needs an ipBlock. See the ipBlock
 #      comment below for what is and is not proven about it.
+#
+#   3. SOURCE-CONTROLLER — Flux's fetch of the break-glass artifact (docs/break-glass.md,
+#      *GitHub, GHCR or Sigstore is unreachable*). See the DECIDED: marker on that rule.
 #
 # WHAT DOES NOT NEED A RULE: the readinessProbe/livenessProbe on this same port. n8n's broker
 # policy left its probed port (5678) open to ALL sources specifically because kube-router's
@@ -97,6 +100,28 @@ spec:
         - ipBlock:
             cidr: {{ registry_k8s_netpol_agent_flannel }}
       # The ghcr.io mirror's pod has its own policy, beside its Deployment in ghcr-mirror.yaml.j2.
+      ports:
+        - protocol: TCP
+          port: {{ k8s_registry_port }}
+    # DECIDED: a standing grant for source-controller, not a hand-applied policy at break-glass
+    # time (#6046). Break-glass points the OCIRepository `homelab` at this registry, so
+    # source-controller must reach this port before it can fetch the artifact. A rule rendered
+    # only under `flux_break_glass` would sit inside that artifact, so the operator would still
+    # apply it by hand on the way in. The cost: the registry has no auth, so source-controller
+    # can also push and delete here, including the `flux_job_image` copy the verify pull Jobs
+    # run. That gives a compromised source-controller nothing it lacks already. It runs the
+    # cosign check on every artifact itself, so it can already hand kustomize-controller an
+    # unsigned bundle to apply cluster-wide.
+    # namespaceSelector and podSelector are sibling keys in ONE peer, so they AND: the
+    # source-controller pods in flux-system only. As two items they would OR, admitting every
+    # flux-system pod and any `app: source-controller` pod in {{ k8s_namespace }}.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: flux-system
+          podSelector:
+            matchLabels:
+              app: source-controller
       ports:
         - protocol: TCP
           port: {{ k8s_registry_port }}
