@@ -38,7 +38,22 @@ cmd_k3s() {
   # Single node, no add-ons: the Plan and the Flux apply are the subject, not the workloads.
   INSTALL_K3S_VERSION="$1" sh /tmp/k3s-install.sh --disable traefik --disable servicelb \
     --disable metrics-server --disable local-storage || die "k3s $1 did not install"
-  "${KUBECTL[@]}" wait --for=condition=Ready node --all --timeout=240s || die "the node never read Ready"
+  wait_for_node_ready
+}
+
+# `kubectl wait --all` exits at once with "no matching resources found" while no Node object
+# exists, and the installer returns before the kubelet registers one. Poll for the Node first,
+# then spend the rest of the one budget on Ready. SUC_NODE_WAIT_S and SUC_POLL_S exist for tests.
+wait_for_node_ready() {
+  local budget="${SUC_NODE_WAIT_S:-240}" deadline left
+  deadline=$((SECONDS + budget))
+  until [[ -n "$("${KUBECTL[@]}" get nodes -o name 2>/dev/null)" ]]; do
+    ((SECONDS < deadline)) || die "no node registered within ${budget}s"
+    sleep "${SUC_POLL_S:-2}"
+  done
+  left=$((deadline - SECONDS))
+  ((left > 0)) || left=1
+  "${KUBECTL[@]}" wait --for=condition=Ready node --all --timeout="${left}s" || die "the node never read Ready"
 }
 
 cmd_flux_cli() {

@@ -38,7 +38,7 @@ from _suc_bundle import (
     snapshot,
     write_rendered,
 )
-from lib.proc_testing import fake_bin
+from lib.proc_testing import fake_bin, path_with
 
 FILES = HYPERVISOR / "files"
 FULL_TOKEN = "e" * 32
@@ -337,3 +337,78 @@ def test_without_the_flag_the_orchestrator_is_the_drill_and_with_it_both_tiles_a
         rehearsal.stderr
     )
     assert "unknown argument" in sourced(r, "--bogus").stderr
+
+
+# The k3s installer returns before the kubelet registers the Node, and `kubectl wait --all` exits
+# at once with "no matching resources found" while there is none (both 2026-10-24 rehearsals).
+# This `k3s` stub reports no node for the first NODE_AFTER `get nodes` calls, then one, and its
+# `wait` fails at once while there is none.
+GUEST_STUBS = {
+    "id": "#!/bin/bash\necho 0\n",
+    "curl": '#!/bin/bash\nwhile [[ $# -gt 1 ]]; do [[ $1 == -o ]] && echo "#!/bin/sh" >"$2"; shift; done\n',
+    "sha256sum": "#!/bin/bash\nexit 0\n",
+    "sh": "#!/bin/bash\nexit 0\n",
+    "k3s": """\
+#!/bin/bash
+echo "k3s $*" >>"$T/calls"
+case "$2" in
+  get)
+    n=$(( $(cat "$T/gets" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$T/gets"
+    (( n > NODE_AFTER )) && echo node/guest ;;
+  wait)  # as the real one: no Node yet is an immediate error, not a wait
+    if (( $(cat "$T/gets" 2>/dev/null || echo 0) <= NODE_AFTER )); then
+      echo "error: no matching resources found" >&2; exit 1
+    fi
+    [[ -n "$READY_FAILS" ]] && exit 1 ;;
+esac
+exit 0
+""",
+}
+
+
+def guest_k3s(tmp_path, node_after, budget="30", ready_fails=""):
+    env = {
+        "T": str(tmp_path),
+        "NODE_AFTER": str(node_after),
+        "READY_FAILS": ready_fails,
+        "SUC_NODE_WAIT_S": budget,
+        "SUC_POLL_S": "0.05",
+    }
+    env["PATH"] = path_with(fake_bin(tmp_path / "bin", **GUEST_STUBS))
+    return subprocess.run(
+        [
+            "bash",
+            str(FILES / "suc-rehearsal-guest-run.sh"),
+            "k3s",
+            "v1.0.0+k3s1",
+            "file:///installer",
+            "0" * 64,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env,
+    )
+
+
+def test_the_node_wait_polls_until_the_node_registers_then_waits_for_ready(tmp_path):
+    done = guest_k3s(tmp_path, node_after=3)
+    assert done.returncode == 0, done.stderr
+    calls = (tmp_path / "calls").read_text().splitlines()
+    assert [c.split()[2] for c in calls] == ["get"] * 4 + ["wait"]
+
+
+def test_a_node_that_never_registers_fails_with_its_own_message_and_never_waits(
+    tmp_path,
+):
+    done = guest_k3s(tmp_path, node_after=10**9, budget="1")
+    assert done.returncode == 1
+    assert "no node registered within 1s" in done.stderr
+    assert "never read Ready" not in done.stderr
+    assert "wait" not in (tmp_path / "calls").read_text()
+
+
+def test_a_registered_node_that_never_reads_ready_keeps_the_ready_message(tmp_path):
+    done = guest_k3s(tmp_path, node_after=0, ready_fails="1")
+    assert done.returncode == 1
+    assert "the node never read Ready" in done.stderr
