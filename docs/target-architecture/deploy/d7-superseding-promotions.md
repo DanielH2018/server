@@ -1,8 +1,8 @@
 # D7 — Superseding promotions
 
 Status: PLANNED. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in #6145, D7.4 in
-#6156, the refactor D7.5 needed in #6159, and D7.5 itself. `SUPERSEDE` stays `False` until
-the operator rules on D7.6.
+#6156, the refactor D7.5 needed in #6159, D7.5 in #6193, and D7.7. `SUPERSEDE` stays
+`False` until the operator rules on D7.6.
 
 Depends on: D5, through #5704's soak fix (the soak Job exits once `homelab` no longer
 holds its revision). D2.5's in-flight guard and D5.2b1's hold without a reset are the
@@ -225,6 +225,12 @@ for any P with a failure in flight. What each interleaving leaves:
   `prod` moved and prints `superseded`, and T's `settle` writes nothing. The cluster
   ends at `last-good` with P's hold set, which is the state C2 wants after P fails. T
   promotes again after the operator clears the hold.
+- **P settled good between T's `decide` and T's `tag`.** `prod` still names P, so `tag`'s
+  `prod` check passes, but T's base and reset digest are the `last-good` from before P. A
+  failed T would then reset past a verified P and leave `prod` and `last-good` apart for
+  good. So a superseding `tag` also reads `last-good` and moves nothing when it differs
+  from the digest `decide` read (D7.7). P's `settle` dispatches the next run, which
+  promotes T against the new `last-good`.
 
 ### Call tree
 
@@ -291,8 +297,12 @@ supersedes another.
    3), so no operator step creates state. About 60 lines.
 1. **D7.5 — `supersedable` behind `SUPERSEDE = False`, and the base.** The eight
    conditions and the case table's pairs. `expected_set` and `prior_statuses` take the
-   base, which is `prod` unless T supersedes. `decide` prints the superseded commit as `superseded=<P>`, and
-   the `post` job's hold message names it beside T. About 200 lines.
+   base, which is `prod` unless T supersedes. `decide` prints the superseded commit as
+   `supersedes=<P>`. The `post` job's hold message does not name P yet (#6199).
+1. **D7.7 — `tag` compares what `decide` read.** `decide` outputs the DEPLOY_HOLD value
+   it read, and `tag` moves `prod` only while DEPLOY_HOLD still reads it. D7.1's re-read
+   accepted only `none`, which would refuse every revert-rule promotion. A superseding
+   `tag` also moves nothing once `last-good` has moved since `decide` read it.
 1. **D7.6 — turn it on.** **Operator-only ruling**, in a one-line PR of its own, as
    for `REVERT_RULE`.
 
@@ -329,7 +339,8 @@ supersedes another.
   failure, and condition 5 refuses an overlap. A failure P causes after T's move still
   holds as `<T> failed=<names>`. The hold names P's service, and the reset returns to
   the `last-good` from before P, so the cluster state is right and only the SHA in the
-  hold is the later one. The hold post names both commits.
+  hold is the later one. `decide`'s log names P as `supersedes=<P>`; the hold post does
+  not yet (#6199).
 - **`verify` reads the wrong `prod`.** A failed registry read keeps the wait going and
   never reads as superseded, the same rule as a failed status read. Class 3, *empty is
   read as clean*: an empty read must not turn into a verdict.

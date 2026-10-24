@@ -987,10 +987,13 @@ publishes a second host package.
 
 ### CI (builds, never signs)
 
-The host-package checks are one job, `host_packages`, in `.github/workflows/ci.yml`, not a
-workflow of their own. The `prek` gate lists it in `needs` and reads `needs.host_packages.result`
-in its step, so the required context covers it. The job inherits `ci.yml`'s SHA-keyed
-concurrency group on push. It needs no secrets, and it does these steps:
+The host-package checks are two jobs in `.github/workflows/ci.yml`, not a workflow of their
+own. `host_packages_build` does steps 1 to 3 and step 6. It hands the render, the debs and nfpm
+to the `host_packages` matrix, which does steps 4 and 5 on each release. The split lets the
+`host_tools_arm64` job start once the build is done, instead of after the cases (#6151). The
+`prek` gate lists both jobs in `needs` and reads each `needs.<job>.result` in its step, so the
+required context covers them. The jobs inherit `ci.yml`'s SHA-keyed concurrency group on push.
+They need no secrets, and they do these steps:
 
 1. It renders every package at the PR head and at its merge base, on every run. A path filter
    would miss a `group_vars` change that alters a render, such as a `containers_list` edit that
@@ -1000,9 +1003,9 @@ concurrency group on push. It needs no secrets, and it does these steps:
    `hosts/lib/tests/container/`, which holds the fixture specs, and the cases' own scripts.
    `CASE_INPUTS` on the render step lists them, and
    `ansible/tests/repo/test_host_package_case_inputs_census.py` holds that list to
-   every `validate` module the cases script imports (#5004). An edit to the
-   `host_packages` job itself counts too, because its steps invoke the cases.
-   `host_packages.py job-changed` compares the job as parsed YAML, so an edit to a comment
+   every `validate` module the cases script imports (#5004). An edit to either job counts
+   too, because one builds what the cases read and the other invokes them.
+   `host_packages.py job-changed` compares each job as parsed YAML, so an edit to a comment
    alone does not count. A renderer change that alters only the cases' fixture counts too,
    because the fixture exercises renderer paths no real package does until H3.6.
    `host_packages.py fixture-changed` renders the fixture in each tree with that tree's own
@@ -1081,11 +1084,12 @@ concurrency group on push. It needs no secrets, and it does these steps:
     - run the common path and assert that `/var/cache/apt/pkgcache.bin` is unchanged.
 6. It writes the file-level package diff to the job summary.
 
-The job has no `name:` key. GitHub names each matrix leg after the job id and the leg's
-values, such as `host_packages (24.04, 3.12)`. The gate census in
+The `host_packages` job has no `name:` key. GitHub names each matrix leg after the job id and
+the leg's values, such as `host_packages (24.04, 3.12)`. The gate census in
 `ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
-`needs.host_packages.result` fails when either leg fails. Later host slices extend this job
-and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
+`needs.host_packages.result` fails when either leg fails. The build job's `name:` does not
+start with `host_packages`, so the prefix filter below still selects the two legs alone. Later
+host slices extend these jobs and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
 filtered by the job name's prefix:
 
 ```bash

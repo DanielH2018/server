@@ -52,6 +52,8 @@ class Decision:
             commit when T supersedes.
         supersedes: P, `prod`'s commit, when T is promoted over P's verification in flight
             (D7.5); `tag` then tags T `superseding` before it moves `prod`. Else empty.
+        hold_read: the DEPLOY_HOLD value `decide` read: `none`, or the `failed=` hold the
+            revert rule passed. `tag` moves `prod` only while DEPLOY_HOLD still reads it.
     """
 
     verdict: str
@@ -70,6 +72,7 @@ class Decision:
     bundles: dict[str, dict[str, bytes] | None] = field(default_factory=dict)
     recorded: dict[str, str] = field(default_factory=dict)
     supersedes: str = ""
+    hold_read: str = "none"
 
 
 def _promotion(
@@ -85,6 +88,7 @@ def _promotion(
     prod_bundle: dict[str, bytes] | None,
     last_good_bundle: dict[str, bytes] | None = None,
     supersedes: str = "",
+    hold_read: str = "none",
 ) -> Decision:
     """The `promote` decision for T, with the two bundle pulls `verify` reuses.
 
@@ -164,6 +168,7 @@ def _promotion(
         bundles={"prod": against, "target": target_bundle},
         recorded=recorded,
         supersedes=supersedes,
+        hold_read=hold_read,
     )
 
 

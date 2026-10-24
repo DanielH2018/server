@@ -1,4 +1,4 @@
-"""The `host_packages` job's two package-root scans run on every PR (H4.1c).
+"""The `host_packages_build` job's two package-root scans run on every PR (H4.1c).
 
 The job's later steps stand down when no rendered tree differs. The gitleaks scan and the
 placeholder check read the head render's package roots, and a PR that changes only
@@ -21,7 +21,7 @@ GATE = "steps.render.outputs.changed"
 
 def _job_steps() -> list[dict]:
     workflow = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
-    return workflow["jobs"]["host_packages"]["steps"]
+    return workflow["jobs"]["host_packages_build"]["steps"]
 
 
 def scan_problems(steps: list[dict]) -> list[str]:
