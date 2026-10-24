@@ -805,7 +805,9 @@ self-matching `pgrep -f` and a partial `security_and_analysis` PATCH.
 ### `session-health` (SessionStart)
 
 On opening a session here, it prints a health banner. It is silent when all-green, read-only
-and timeout-bounded. The banner's problem lines come in three groups, in this order:
+and timeout-bounded. Its probes run at the same time, in `hooklib/sections.py`, under one
+`TOTAL_DEADLINE_S` inside the hook's 15s budget. A probe still running at that deadline
+prints a `⚠ … did not finish` line rather than nothing. The banner's problem lines come in three groups, in this order:
 
 - **Service lines** (`.claude/hooks/hooklib/service_lines.py`): a down Prometheus scrape target, and
   services whose running release is behind origin/master's manifests.

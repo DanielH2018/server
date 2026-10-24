@@ -133,10 +133,17 @@ def test_no_ansible_edit_touches_a_line_a_host_package_declares():
     assert not found, "\n".join(found)
 
 
-@pytest.mark.parametrize("host", HOSTS)
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
 def test_the_ansible_side_finds_the_hardening_key_initial_setup_sets(host):
+    # daniel-pi is absent: since H7.27 its package owns the key and the task's guard skips it.
     ansible, _ = _tree()
     assert ("sysctl", "net.core.bpf_jit_harden") in ansible[host]
+
+
+def test_the_ansible_side_skips_the_hardening_key_on_a_host_whose_package_owns_it():
+    ansible, packages = _tree()
+    assert ("sysctl", "net.core.bpf_jit_harden") not in ansible["daniel-pi"]
+    assert ("sysctl", "net.core.bpf_jit_harden") in packages["daniel-pi"]
 
 
 def test_the_ansible_side_finds_a_lineinfile_task_by_its_path():

@@ -46,12 +46,20 @@ initial_setup_worktree_sweep_cron_weekday: 0  # Sunday
 # is exact and would strip a membership granted anywhere else.
 initial_setup_worktree_holders_group: worktree-holders
 
-# The hosts whose package owns a subject this role still writes on the others (H7, *Moving one
-# host at a time*). A task of the subject carries `when: inventory_hostname not in
-# initial_setup_packaged_hosts['<subject>']`. It lives in role defaults, never in `host_vars`,
+# The hosts whose package owns a subject (docs/target-architecture/host/h7-delete-ansible.md,
+# *Moving one host at a time*). Each task of a listed subject carries
+# `when: inventory_hostname not in initial_setup_packaged_hosts['<subject>']`, so the role writes
+# the subject only on the hosts the map does not list. The map sits here, never in `host_vars`,
 # because an `inventory/` edit is a deploy-plane change. The last host's PR deletes the subject's
-# tasks and this entry.
+# tasks and its entry.
+#   apt     unattended-upgrades: hosts/components/unattended-upgrades
+#   sshd    the sshd settings and the Match block: hosts/components/sshd
+#   sysctl  /etc/sysctl.conf keys, ufw's sysctl file, login.defs, the journald cap and limits.d:
+#           hosts/components/host-tuning
 #   loki_route_witness: daniel-box's witness is the loki-route-witness component since H7.36;
-#                       daniel-server keeps the Ansible-era timer until its package moves it.
+#           daniel-server keeps the Ansible-era timer until its package moves it.
 initial_setup_packaged_hosts:
+  apt: [daniel-pi]
+  sshd: [daniel-pi]
+  sysctl: [daniel-pi]
   loki_route_witness: [daniel-box]

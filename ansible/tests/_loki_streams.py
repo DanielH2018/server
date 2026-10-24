@@ -35,7 +35,7 @@ _LOKI_STREAM_LABELS_OBSERVED = frozenset(
 
 
 def _alloy_relabel_targets():
-    """`target_label = "…"` values from the Alloy config — the labels it actually sets.
+    """The labels the Alloy config sets: `target_label` values and `stage.labels` keys.
 
     Derived rather than transcribed because the transcription cannot follow a rename: renaming a
     relabel target leaves the frozenset above listing a label nothing emits, so a selector using
@@ -46,6 +46,8 @@ def _alloy_relabel_targets():
         REPO / "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2"
     ).read_text()
     found = set(re.findall(r'target_label\s*=\s*"([^"]+)"', cfg))
+    for values in re.findall(r"stage\.labels\s*\{\s*values\s*=\s*\{([^}]*)\}", cfg):
+        found |= set(re.findall(r"(\w+)\s*=", values))
     return {label for label in found if not label.startswith("__")}
 
 

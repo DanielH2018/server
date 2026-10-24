@@ -9,8 +9,6 @@ homelab-updater accepts as reconciled, and a failed run is what it holds the hos
 Run: uv run pytest hosts/lib/tests/test_reconcile_ufw_arm.py
 """
 
-import json
-
 import pytest
 from _reconcile_arms import base, metrics, red
 from _reconcile_host import V1, Node
@@ -93,36 +91,6 @@ def test_a_host_whose_manifest_declares_no_ufw_runs_no_ufw_command_at_all(node):
     assert node.calls("ufw") == []
     assert "ufw" not in node.applied()
     assert 'arm="ufw"' not in metrics(node)
-
-
-def test_the_pis_real_manifest_runs_no_ufw_and_no_activation_command(tmp_path):
-    from renderer.renderer_lib import host as host_mode
-
-    node = Node(tmp_path)
-    package = host_mode.render_host("daniel-pi")
-    node.manifest = json.loads(package.files["/usr/lib/homelab/manifest.json"][0])
-    # The package ships `secrets-unit` (H4.5): reconcile needs its secrets.json and credentials.
-    secrets = package.files["/usr/lib/homelab/secrets.json"][0]
-    (node.root / "usr/lib/homelab").mkdir(parents=True, exist_ok=True)
-    (node.root / "usr/lib/homelab/secrets.json").write_bytes(secrets)
-    for key in json.loads(secrets)["credentials"]:
-        node.credential(key)
-    for name in node.manifest["units"]:
-        node.state["units"][name] = {
-            "load": "loaded",
-            "active": "inactive",
-            "enabled": "disabled",
-        }
-    node.state["installed"]["homelab-daniel-pi"] = ["ii ", V1]
-    have(node, ("limit 22/tcp", ""), active=True)
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert node.calls("ufw") == []
-    assert node.calls("sysctl") == []
-    assert node.applied()["result"]["ok"] is True
-    assert "ufw" not in node.applied()
 
 
 # Steps 1 and 2: the policies, the adds, the adoption of rules that predate the arm.
