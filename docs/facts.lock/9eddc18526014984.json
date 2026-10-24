@@ -1,5 +1,5 @@
 {
-  "checksum": "36d3ff85dac1e5bd21e58dfdc1916ce64250350b4dc691b1b84a4e8b182c6356",
+  "checksum": "fe955bba12e9eff94c16ee41e754c10ed0f84f5022f543a39819a470210e53c4",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn/CLAUDE.md#At a glance",
   "row": {
@@ -8,6 +8,7 @@
       "ansible/roles/k8s/longhorn/defaults/main.yml:k3s_longhorn_csi_sidecar_memory_request": "79a5efd73f044c2e2a70ccbaa24e663ec5a9ad69119a84866f115416fe608950",
       "ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune": "b5aa7a0b15e57ef1aaaef7b8e886e31e7c8813709d26cf6ee0eca3d0c0c20d0e",
       "ansible/tests/longhorn/test_engine_upgrade_limit_is_positive.py::test_a_zero_limit_is_flagged": "727bbb54f3f97b794da86048d36a72350c2a77b8ca76db533dbecc29be77b726",
+      "ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_global_manager_patch_requests_the_defaults_value_and_no_limit": "5079c681115f2150e87ec4878a6a9371df205ddb87e64c21030c7a0b0869106f",
       "ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_manager_patch_holds_the_value_of_the_defaults_key": "6698ba708d72f37c6f8094ad0ac5c9e64ebf4ce7144d96bd2171e71c002c49e3",
       "ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_the_csi_setting_requests_the_defaults_value_for_the_four_sidecars_only": "3005b64a3e0cc13a167ec1d07f266cc0b4ca47163b591d691886b119f95790b5",
       "ansible/tests/longhorn/test_longhorn_csi_secret_grant.py::test_no_longhorn_class_needs_the_dropped_grant": "8b60543e7b763771d43f0db4aecfef2a64e7b126e1b161a24c4e4df15790f81b",
@@ -19,6 +20,6 @@
       "scripts/dev/vendor_manifest.py": "f0c0c9df684a1ed3d858ec17f02c8e7c279dbb7595180eb00d70a50e42a9d7ef"
     },
     "python": "3.14",
-    "verified_sha": "d2abe5f69"
+    "verified_sha": "eab40596f"
   }
 }
