@@ -33,6 +33,22 @@ from deployer_lib.deploy_config import WARNING, log
 K8S_RELEASE_DIR = "/var/lib/homelab/k8s-releases.d"
 
 
+def _read_json(path: pathlib.Path) -> object | None:
+    """`path` parsed as JSON, or None when it is absent, unreadable or unparseable.
+
+    Absent is the ordinary state of a service never deployed, so it is silent. Unreadable and
+    unparseable records still read as None, the "no evidence" every caller handles, but a
+    WARNING line says so (#6161): a None from a corrupt record used to look like a fresh host.
+    """
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as exc:
+        log(f"release: record {path} unreadable, read as absent: {exc}", level=WARNING)
+        return None
+
+
 def release_commit(service: str, release_dir: str = K8S_RELEASE_DIR) -> str | None:
     """The commit that produced `service`'s applied manifests, or None.
 
@@ -41,10 +57,7 @@ def release_commit(service: str, release_dir: str = K8S_RELEASE_DIR) -> str | No
     reads it. None for a record that is absent, unreadable, unparseable or missing the field;
     that docstring says why every caller treats None as "no evidence of a deploy".
     """
-    try:
-        record = json.loads(pathlib.Path(release_dir, f"{service}.json").read_text())
-    except OSError, ValueError:
-        return None
+    record = _read_json(pathlib.Path(release_dir, f"{service}.json"))
     commit = record.get("commit") if isinstance(record, dict) else None
     return commit or None
 
@@ -62,13 +75,7 @@ UNKNOWN = "unknown"
 
 def _record(service: str, directory: str) -> dict | None:
     """`<directory>/<service>.json` as a dict, or None for anything unreadable."""
-    try:
-        record = json.loads(pathlib.Path(directory, f"{service}.json").read_text())
-    # Split clauses for the reason `release_commit` gives.
-    except OSError:
-        return None
-    except ValueError:
-        return None
+    record = _read_json(pathlib.Path(directory, f"{service}.json"))
     return record if isinstance(record, dict) else None
 
 

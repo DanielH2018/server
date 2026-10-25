@@ -303,8 +303,18 @@ class ScriptedTick:
             raise self.secret_k8s_error
         return self.secret_k8s
 
-    def emit_deploy_annotation(self, services: set[str], _sha: str) -> None:
-        self.log.append(("annotation", set(services)))
+    def emit_deploy_annotation(
+        self,
+        services: set[str],
+        _sha: str,
+        result: str = "ok",
+        _duration_s: float | None = None,
+    ) -> None:
+        # A success keeps the two-tuple every older assertion reads; a failure names its result.
+        if result == "ok":
+            self.log.append(("annotation", set(services)))
+        else:
+            self.log.append(("annotation", set(services), result))
 
     def now(self, tz=None) -> datetime:
         return CLOCK if tz is None else CLOCK.astimezone(tz)

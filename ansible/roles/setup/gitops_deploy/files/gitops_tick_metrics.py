@@ -26,8 +26,8 @@ reached Python, because `flock` gave up on the git-tree lock and exited 75, is r
 unit's second `ExecStopPost=`, which runs this file as a script with `skipped-lock`. That
 write keeps the previous duration, since no tick ran.
 
-Stdlib only plus `gitops_markers`, because the `ExecStopPost=` invocation runs it outside the
-deployer's import of `deployer_lib`.
+Stdlib only plus `gitops_markers` and `host_lib`, the two siblings the role ships beside it,
+because the `ExecStopPost=` invocation runs it outside the deployer's import of `deployer_lib`.
 
 Typical usage example:
 
@@ -38,10 +38,10 @@ import argparse
 import os
 import re
 import sys
-import tempfile
 import time
 
 from gitops_markers import MARKERS, STATE_DIR, parse_behind
+from host_lib import write_textfile
 
 # The node-exporter textfile collector reads every `*.prom` file here.
 TEXTFILE = "/var/lib/node-exporter-textfile/gitops_tick.prom"
@@ -173,18 +173,7 @@ def record(
         behind_seconds(behind_marker, now),
         now,
     )
-    # The temp name does not end in `.prom`, so the collector never reads a half-written file.
-    fd, tmp = tempfile.mkstemp(
-        dir=os.path.dirname(path), prefix=".gitops_tick.", suffix=".tmp"
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(body)
-        os.chmod(tmp, 0o644)
-        os.replace(tmp, path)
-    except BaseException:
-        os.unlink(tmp)
-        raise
+    write_textfile(path, body)
 
 
 def main(argv: list[str] | None = None) -> int:

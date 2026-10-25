@@ -73,6 +73,7 @@ from deployer_lib.deploy_config import (
 )
 from deployer_lib.deploy_toolbox import DeployTools, default_tools
 import gitops_tick_metrics
+import host_lib
 
 # The transient-fetch failure `deploy_phases.assess` raises and `entrypoint()` below catches.
 # The class is DEFINED in deploy_tick_types.py because `assess` moved there and a leaf may not
@@ -469,6 +470,9 @@ def _record_tick(
 
 
 if __name__ == "__main__":
+    # The crash arm in `entrypoint` re-raises; without the hook the unit's `SyslogLevel=notice`
+    # files that traceback at notice, below `journalctl -p err` (#6161).
+    host_lib.install_excepthook()
     sys.exit(
         entrypoint(
             default_tools(CONFIG),
