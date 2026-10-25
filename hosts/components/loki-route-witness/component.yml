@@ -1,0 +1,63 @@
+# daniel-box's Loki read-route witness as a packaged timer (H7.10c, docs/target-architecture/host/
+# h7-delete-ansible.md). Until H7.36 the initial_setup role installed it as the Ansible-era
+# `kuma-check-loki-read-route` timer on both cluster nodes. The package owns daniel-box's copy
+# since H7.36. daniel-server keeps the Ansible-era timer until its own package moves it, and the
+# role's tasks skip daniel-box through `initial_setup_packaged_hosts['loki_route_witness']`, so
+# one side writes each path.
+#
+# The unit pushes "Loki Read Route (daniel-box)" and exits 1 after a `down` push, so
+# Restart=on-failure reruns it every 15 minutes until the route answers (the kuma-check form M6
+# left). homelab-loki-route-witness-boot.service reruns it once at boot while the last verdict
+# was not up (#4495). The push token arrives through LoadCredential= from /run/credstore/, which
+# homelab-secrets.service fills from daniel-box's SOPS file. daniel-server's token is a separate
+# key, `loki_route_witness_daniel_server_push_token`, and stays the role's.
+#
+# Autonomous-role contract (the witness pushes a verdict every hour with no human in the loop).
+# It changes no state: it reads the route and reports.
+#
+# - Scope / exclusions: one `probe.py loki-labels` request through the Loki read route, run from
+#   the primary checkout as sys_user, and one push to this host's own Kuma monitor. It writes
+#   loki-read-route-health.prom in node_exporter's textfile directory and a syslog line. It
+#   changes no cluster or host state, and it never runs against daniel-server's route.
+# - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping
+#   the link from a package version, or reverting this component, stops the timer on the install
+#   that drops it. `systemctl stop homelab-loki-route-witness.timer` stops it until the next
+#   package install. An unset credential skips the push and nothing else.
+# - Authoritative sources: `probe.py loki-labels`'s body, judged by loki_route_health.py. The
+#   exit code is not the verdict, because probe.py's curl carries no `-f` and a 404 exits 0.
+# - Abort valves: the boot grace (`loki_route_witness_boot_grace_s`), which exits 1 without a
+#   verdict, and reconcile's `hold_sha`.
+# - Required evidence, every run: a `status=<up|down>` line tagged loki-read-route-health in
+#   syslog, loki-read-route-health.prom in the textfile directory, and a Kuma push to the
+#   host's monitor.
+# - Next-run review: a down verdict for the route means a broken ClientIP grant or a dead
+#   loki-homelab route. Read the syslog line's message before changing the route. Both nodes
+#   must witness it, because which source address a host arrives as depends on where traefik
+#   runs (#1712).
+#
+# ENFORCED: ansible/tests/setup/test_loki_route_witness.py (the script's behaviour against
+# stubs) and hosts/lib/tests/test_loki_route_witness_component.py (the units and legacy entries).
+credentials:
+  - loki_route_witness_push_token
+files:
+  - {src: templates/loki-read-route-health.sh.j2, dst: /usr/lib/homelab/loki-read-route-health, mode: "0755"}
+  - {src: loki_route_health.py, dst: /usr/lib/homelab/loki_route_health.py, mode: "0755"}
+  - {src: units/homelab-loki-route-witness.service.j2, dst: /usr/lib/systemd/system/homelab-loki-route-witness.service}
+  - {src: units/homelab-loki-route-witness.timer, dst: /usr/lib/systemd/system/homelab-loki-route-witness.timer}
+  - {src: units/homelab-loki-route-witness-boot.service, dst: /usr/lib/systemd/system/homelab-loki-route-witness-boot.service}
+enable:
+  homelab-loki-route-witness.timer: timers.target
+  homelab-loki-route-witness-boot.service: multi-user.target
+# What initial_setup installed on daniel-box before H7.36. Reconcile retires each once the timer
+# above has started, so the witness never runs twice or not at all.
+legacy:
+  - {unit: kuma-check-loki-read-route.timer}
+  - {unit: kuma-check-loki-read-route.service}
+  - {unit: kuma-check-loki-read-route-boot.service}
+  - {cron: "Loki read-route witness", user: "{{ sys_user }}"}
+  - {path: /usr/local/bin/loki-read-route-health.sh}
+  - {path: /etc/homelab/loki-route-kuma-push.env}
+  - {path: /opt/loki-route-health/loki_route_health.py}
+  - {path: /var/lib/kuma-check/loki-read-route.down}
+  - {path: /var/lib/homelab/setup-render-manifest.d/loki-route-witness}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/loki-route-witness}

@@ -17,11 +17,8 @@ expression. A whole-body match would flag a script that only names a secret in a
 (`_helpers.registry_secret_names`) is shared with the release_bin guard so the two cannot
 disagree about what counts as a secret.
 
-LIMIT: a script rendering a name the registry does not carry is invisible here.
-`eval-run.sh.j2` renders `homelab_eval_push_token`, which does not exist in SOPS yet, so its
-task carries `no_log` by hand and joins KNOWN_SECRET_SCRIPTS only when the token is minted and
-registered. Its `anthropic_api_key` goes to `eval-run.env.j2` instead, whose `no_log` is
-pinned by `ansible/tests/setup/test_eval_sweep_cron.py`.
+LIMIT: a script rendering a name the registry does not carry is invisible here. The eval sweep
+reads both its secrets from systemd credentials, so no task of the role renders them.
 
 WHY THIS IS NOT A CENSUS ROW (#3430). A row judges one subject from its own text, but this
 predicate reads a second file: the template a task's `src` names. A red fixture would have to be
@@ -46,7 +43,6 @@ PLANES = ("k8s", "setup")
 KNOWN_SECRET_SCRIPTS = frozenset(
     {
         ("setup", "k8s_host_files", "registry-gc.sh.j2"),
-        ("setup", "initial_setup", "docs-refresh.sh.j2"),
         ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2"),
         ("setup", "gitops_deploy", "github-interaction-limit.sh.j2"),
     }

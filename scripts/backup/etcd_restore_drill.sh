@@ -345,7 +345,7 @@ while [[ $# -gt 0 ]]; do
     --clean)    CLEAN_ONLY=1; shift ;;
     # Prints the comment header, however long it grows — a hardcoded line range silently
     # truncates the moment anything is added above.
-    -h|--help)  awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+    -h|--help)  awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *)          die "unknown argument: $1" ;;
   esac
 done

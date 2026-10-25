@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Witness for the Loki read route — shipped by the homelab-daniel-box package (loki-route-witness).
+#
+# Usage: loki-read-route-health [-h|--help]
+# Takes no arguments. systemd timer homelab-loki-route-witness.timer runs it as the deploy user at
+# minute 23 of every hour, and again every 15 minutes while the last run failed. daniel-server's
+# witness stays an Ansible-era timer until that host moves. It reads the push token from the
+# credential `loki_route_witness_push_token` (loaded by the unit into $CREDENTIALS_DIRECTORY)
+# and pushes to this host's own Kuma monitor. Each run
+# writes its verdict to $TEXTFILE_DIR/loki-read-route-health.prom for node_exporter's textfile
+# collector first (default /var/lib/node-exporter-textfile; a test points it elsewhere). An unset
+# token skips the push and nothing else.
+#
+# WHAT THIS WATCHES (issue #1712). loki-homelab's IngressRoute has exactly one caller —
+# `probe.py loki-query` / `loki-labels`, running as a host process — and nothing watched it. It
+# was dead from daniel-server for as long as traefik sat on daniel-box (#1693) and nothing
+# noticed; the operator saw `404 page not found`, which does not distinguish a broken route from
+# a broken query.
+#
+# WHY A POD CANNOT BE THE WITNESS. The route's guard is a ClientIP set of node-owned addresses
+# (roles/k8s/loki-homelab/templates/ingressroute.yaml.j2), so monitor-bridge's request would
+# arrive with a pod IP and fail for a reason unrelated to the operator's path. What broke was a
+# HOST-sourced grant, and only a host process can witness it.
+#
+# WHY THIS RUNS ON BOTH NODES. Which address a host process arrives as depends on where the
+# traefik pod is: same node, the packet carries that node's cni0 gateway; other node, it crosses
+# the VXLAN overlay and carries the sending node's flannel.1 address. #1693 was invisible from
+# daniel-box and fatal from daniel-server, so one witness would have reported green throughout.
+# Each host pushes its OWN monitor — two hosts on one token would let either host's `up` satisfy
+# Kuma's push deadline, the same trap the UPS secondary watchdog records (issue #952).
+#
+# THE VERDICT IS THE BODY, NOT THE EXIT CODE. probe.py's curl carries no `-f`, so `404 page not
+# found` comes back with exit 0. loki_route_health.py is what decides, and its tests hold that
+# 404 as a DOWN case.
+set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
+# shellcheck source=/dev/null
+source /usr/lib/homelab/kuma-push-lib.sh || {
+  logger -t loki-read-route-health "kuma-push-lib.sh missing — the homelab-daniel-box package ships it"
+  exit 1
+}
+# shellcheck source=/dev/null
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t loki-read-route-health "homelab-check-lib.sh missing — the homelab-daniel-box package ships it"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
+# push must not depend on DNS.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+
+# Read from the unit's credential, never inlined: this script lands 0755, so an inlined token
+# would be readable by every local account, and the renderer withholds every secret anyway.
+# homelab-secrets writes the credential to /run/credstore from daniel-box's SOPS file.
+LOKI_ROUTE_WITNESS_PUSH_TOKEN=""
+if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/loki_route_witness_push_token" ]]; then
+  LOKI_ROUTE_WITNESS_PUSH_TOKEN="$(< "${CREDENTIALS_DIRECTORY}/loki_route_witness_push_token")"
+fi
+if [[ -z "$LOKI_ROUTE_WITNESS_PUSH_TOKEN" ]]; then
+  # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
+  # matches registry names against raw template text and cannot tell a log line from a render.
+  # The run goes on: the textfile verdict is what Prometheus reads, and only the push needs the token.
+  logger -t loki-read-route-health "LOKI_ROUTE_WITNESS_PUSH_TOKEN not set — skipping the Kuma push (see /add-secret)"
+fi
+PUSH_URL="https://${KUMA_HOST}/api/push/${LOKI_ROUTE_WITNESS_PUSH_TOKEN}"
+
+# A boot that lands on the slot reports the route down while k3s is still starting. Exit 1
+# without a verdict instead: the timer's Restart=on-failure reruns this in RestartSec, which is
+# what carries the real verdict. The lib's log line still names the dead-man grace, which also
+# covers the gap.
+if boot_grace_active {{ loki_route_witness_boot_grace_s }} loki-read-route-health; then
+  exit 1
+fi
+
+# The longest legitimate gap between two textfile writes: the timer fires at minute 23 of every
+# hour (3600s), and a run skipped by the boot grace may take one slot, so 7200s, which is also
+# the interval Kuma's tile keeps.
+# ansible/tests/services/test_initial_setup_check_rule_literals.py pins the rules' literals to it.
+DEADLINE_S=7200
+
+REPO_DIR=/home/{{ sys_user }}/server
+# UV absolute-pathed: cron's PATH lacks ~/.local/bin. --frozen: never rewrite uv.lock on this
+# host — a rewrite would dirty the tree and wedge the GitOps deployer's dirty-skip, the same
+# reason release-staleness-check.sh uses it.
+UV=/home/{{ sys_user }}/.local/bin/uv
+BODY="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py loki-labels 2>&1)"
+RC=$?
+
+# `--no-project`, so the reader runs on the pinned interpreter without resolving whatever project
+# the working directory sits in — a broken lockfile in the checkout above must not read as a broken
+# route. Same shape as the Longhorn backup-health reader in the k3s role.
+if MSG="$(printf '%s' "$BODY" | /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/loki_route_health.py "$RC")"; then
+  STATUS=up
+else
+  STATUS=down
+fi
+
+# Unconditional and before the push, for the same reason as setup-drift-check.sh: a successfully
+# pushed DOWN would otherwise leave no durable record and `probe.py alerts` could never
+# reconstruct this monitor. NOTICE rather than INFO — journald caps MaxLevelStore=notice here.
+logger -p daemon.notice -t loki-read-route-health "status=${STATUS} ${MSG}"
+
+# The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and the
+# file must not wait on Kuma. A failed write logs and the run goes on to its push.
+write_check_textfile loki-read-route-health "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t loki-read-route-health "textfile write failed (status=${STATUS})"
+
+[[ -z "$LOKI_ROUTE_WITNESS_PUSH_TOKEN" ]] \
+  || kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" loki-read-route-health
+
+# The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
+# a down push so Restart=on-failure reruns the check until the route answers, 0 after up. It
+# comes after the push and reads STATUS, not the push outcome the lib exports: a dropped push
+# of an up verdict is not a reason to rerun the check.
+[[ "$STATUS" == up ]] || exit 1

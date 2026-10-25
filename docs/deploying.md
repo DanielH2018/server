@@ -61,7 +61,7 @@ prints when it could not take the lock, and
 `scripts/docs/tests/test_fragments_deploy.py` fails when that message omits a holder in the table.
 
 The three crons take the lock through one Jinja macro,
-`ansible/roles/setup/initial_setup/templates/git-tree-lock.j2`, which owns the wait and the
+`ansible/templates/git-tree-lock.j2`, which owns the wait and the
 alert a skip raises.
 
 ## Exit codes are resume points

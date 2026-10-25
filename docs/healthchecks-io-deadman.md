@@ -22,7 +22,7 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
 | `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
-| `daniel-box-worktree-sweep` | the `Weekly git object-store repair` cron in the same file, on `ops_cron_host` | `prune_worktrees.py --prune` exits non-zero: it pings the exit-status endpoint `/<rc>`, so a failed removal or branch deletion fails the check |
+| `daniel-box-worktree-sweep` | `homelab-worktree-sweep.timer` (the `worktree-sweep` component of `homelab-daniel-box`), on daniel-box | `prune_worktrees.py --prune` exits non-zero: it pings the exit-status endpoint `/<rc>`, so a failed removal or branch deletion fails the check |
 
 The cron behind each slug, read from the variables that set it:
 

@@ -24,7 +24,7 @@ CLUSTER = [
 
 def _function() -> str:
     return rendered_shell_function(
-        "setup", "initial_setup", "secret-rotate.sh.j2", "track_cluster_files"
+        "components", "secret-rotation", "secret-rotate.sh.j2", "track_cluster_files"
     )
 
 
@@ -69,7 +69,7 @@ def test_the_call_runs_after_the_pull_and_before_rotate():
     Before the pull, the first run after the file lands would miss it. After `rotate`,
     `revert()` would not cover what `write` changed.
     """
-    text = rendered_shell_text("setup", "initial_setup", "secret-rotate.sh.j2")
+    text = rendered_shell_text("components", "secret-rotation", "secret-rotate.sh.j2")
     call = text.index("\ntrack_cluster_files\n")
     pull = text.index("\ngit pull --rebase")
     rotate = text.index("python scripts/secrets_mgmt/secret_rotation.py rotate")

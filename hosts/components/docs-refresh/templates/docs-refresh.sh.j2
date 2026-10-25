@@ -2,9 +2,9 @@
 # Regenerate docs/reference/, rebuild the MkDocs site, commit and push any change.
 #
 # Usage: docs-refresh.sh [-h|--help]
-# Takes no arguments. Cron job "Refresh generated docs" runs it as the deploy user on the
-# ops_cron_host at 06:17 and 18:17 with PATH, KUBECONFIG=~/.kube/config and output piped to
-# logger -t docs-refresh. Running it by hand takes the git-tree lock and publishes a PR for real.
+# Takes no arguments. homelab-docs-refresh.timer starts the service that runs it as the deploy
+# user on daniel-box at 06:17 and 18:17, with the cron-era PATH and KUBECONFIG and the push
+# token as a credential. Output goes to the journal under the tag docs-refresh. Running it by hand takes the git-tree lock and publishes a PR for real.
 # It reads the checkout under the deploy user's home and writes the site to docs_host_site_dir.
 # It pushes its verdict to the Docs Refresh Kuma monitor. Exit 1 means the test suite was red.
 #
@@ -79,16 +79,15 @@ done
 
 REPO="/home/{{ sys_user }}/server"
 UV="/home/{{ sys_user }}/.local/bin/uv"
-# A copy of roles/k8s/docs' docs_host_site_dir, which no setup play loads.
-# ansible/tests/setup/test_k8s_host_files_pairs.py holds it equal to that role's default.
+# A copy of roles/k8s/docs' docs_host_site_dir, which the renderer does not load.
+# hosts/lib/tests/test_docs_refresh_component.py holds it equal to that role's default.
 SITE_DIR="/home/{{ sys_user }}/docs-site"
 PR_BRANCH_PREFIX="docs-refresh/"
 
 # State this script keeps ACROSS runs, and it lives OUTSIDE $REPO deliberately: an untracked file
 # inside the checkout parks gitops-deploy exactly as a modified one does, so a stamp whose job is
 # to record dirt must never be dirt itself. /var/lib/homelab is the setup plane's state directory
-# (root-owned, 0755); crons.yml creates this subdirectory owned by the cron user, because the cron
-# runs without become.
+# (root-owned, 0755); tmpfiles.d/homelab-docs-site.conf.j2 creates this subdirectory owned by the service user.
 STAMP_DIR="/var/lib/homelab/docs-refresh.d"
 COMMIT_FAILED_STAMP="$STAMP_DIR/commit-failed"
 # ONE LOG PER FAILING RUN, named by the run's start time. A single overwritten file lost the
@@ -98,11 +97,11 @@ COMMIT_FAILED_STAMP="$STAMP_DIR/commit-failed"
 FAILURE_LOG="$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log"
 FAILURE_LOGS_KEPT=5
 
-# The token is interpolated here rather than sourced from /etc/rancher/k3s/kuma-push.env,
-# matching secret-rotate.sh -- the sibling pusher in this same role. `| default('')` gates it:
-# the push is skipped until the secret exists, and the monitor in static-monitors.yaml.j2 is
-# gated on the same variable, so neither half sits red waiting for the other.
-DOCS_REFRESH_PUSH_TOKEN="{{ docs_refresh_push_token | default('') }}"
+# The push token arrives through the unit's LoadCredential= (credential docs_refresh_push_token,
+# from homelab-secrets.service), and never sits in this script. An empty or missing credential
+# skips the push until the secret exists, and the monitor in static-monitors.yaml.j2 is gated on
+# the same variable, so neither half sits red waiting for the other.
+DOCS_REFRESH_PUSH_TOKEN="$(cat "${CREDENTIALS_DIRECTORY:-/nonexistent}/docs_refresh_push_token" 2>/dev/null || true)"
 PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/${DOCS_REFRESH_PUSH_TOKEN}"
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
@@ -114,8 +113,8 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # on a host whose monitoring wiring is broken, and the trap below re-checks that kuma_push
 # actually exists before calling it.
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh 2>/dev/null \
-  || logger -t docs-refresh "kuma-push-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/kuma-push-lib.sh 2>/dev/null \
+  || logger -t docs-refresh "kuma-push-lib.sh missing — install homelab-daniel-box on this host"
 
 # DEFAULTS TO down. Every exit path that is genuinely fine says so explicitly; anything else --
 # a crash, a `set -u` abort, or a path added later that forgets to -- reports down. Failing
@@ -160,8 +159,8 @@ trap on_exit EXIT
 # initial_setup (M6 batch B2). on_exit's write then fails with a log line, because the function is
 # undefined.
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t docs-refresh "homelab-check-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t docs-refresh "homelab-check-lib.sh missing — install homelab-daniel-box on this host"
   exit 1
 }
 

@@ -80,7 +80,6 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "crowdsec.yml: Remove the retired crowdsec cron scripts from the host",
         "crowdsec.yml: Remove the retired home allowlist cron",
         "crowdsec.yml: Remove the retired remote-allowlist cron",
-        "docs.yml: Ensure the built docs site directory exists",
         "janitorr.yml: Remove the retired janitorr error heartbeat cron",
         "janitorr.yml: Remove the retired janitorr health reader from the host",
         "media-volume.yml: Create the media volume directories on the node",
@@ -98,24 +97,6 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "traefik.yml: Remove the Cloudflare IP drift cron",
         "traefik.yml: Remove the Cloudflare IP drift script",
         "uptime-kuma.yml: Remove the k8s/volume-claim staging directory autokuma-data left behind",
-    ]
-
-
-def test_a_row_writing_another_path_is_flagged(tmp_path):
-    role_dir = _fixture_role(tmp_path)
-    docs = role_dir / "tasks" / "docs.yml"
-    docs.write_text(docs.read_text().replace("docs_host_site_dir", "docs_other_dir"))
-    assert missing_rows(role_dir) == [
-        "docs.yml: Ensure the built docs site directory exists"
-    ]
-
-
-def test_a_row_that_drops_its_owner_is_flagged(tmp_path):
-    role_dir = _fixture_role(tmp_path)
-    docs = role_dir / "tasks" / "docs.yml"
-    docs.write_text(docs.read_text().replace('    owner: "{{ sys_user }}"\n', ""))
-    assert missing_rows(role_dir) == [
-        "docs.yml: Ensure the built docs site directory exists"
     ]
 
 

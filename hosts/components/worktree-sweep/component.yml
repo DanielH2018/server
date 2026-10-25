@@ -1,0 +1,43 @@
+# The weekly worktree sweep and git object-store repair on daniel-box (H7.10b,
+# docs/target-architecture/host/h7-delete-ansible.md). Until H7.36 initial_setup installed it as the
+# "Weekly git object-store repair" cron (`/etc/cron.d/git-object-store-repair`). Now
+# homelab-worktree-sweep.timer starts homelab-worktree-sweep.service on Sunday at 04:20, as
+# sys_user, in the primary checkout.
+#
+# The sweep needs no credential in daniel-box's SOPS file. The script sources the Healthchecks.io
+# ping key from /etc/healthchecks/ping.env, which initial_setup still writes on every host.
+# The worktree holder scan's socket (`worktree-holders.socket`) is not part of this component:
+# it moves with `claude_code` (H7.12).
+#
+# Several Claude sessions branch, commit and retire worktrees in the primary checkout every day,
+# and each removal leaves that branch's objects unreachable. A worktree-isolated session's git
+# commands are refused against the primary checkout, so the warning `git fetch` prints reaches
+# only the agents structurally unable to act on it. This timer is the arm that removes; the
+# SessionStart banner only reports.
+#
+# - Scope / exclusions: merged worktrees under `.claude/worktrees/`, orphan `worktree-*` branches
+#   whose content is on origin/master, unregistered worktree directories whose every file a ref
+#   already reaches, and unreachable objects older than a day. Nothing else.
+# - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
+#   link from a package version, or reverting this component, stops the timer on the install that
+#   drops it. `systemctl stop homelab-worktree-sweep.timer` stops it until the next install.
+# - Authoritative sources: `git worktree list` and origin/master as `prune_worktrees.py` reads
+#   them.
+# - Abort valves: `prune_worktrees.py` refuses a worktree it cannot prove merged.
+# - Required evidence, every run: a ping to the `<host>-worktree-sweep` Healthchecks.io check with
+#   the exit code, and the script's `--brief` lines in the journal under `worktree-sweep`.
+# - Next-run review: a non-zero exit pages through Healthchecks.io. Read
+#   `journalctl -t worktree-sweep` for the removal or branch deletion that failed.
+#
+# ENFORCED: hosts/lib/tests/test_worktree_sweep_component.py, and
+# ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py, which runs the rendered script.
+files:
+  - {src: templates/worktree-sweep.sh.j2, dst: /usr/lib/homelab/worktree-sweep, mode: "0755"}
+  - {src: units/homelab-worktree-sweep.service.j2, dst: /usr/lib/systemd/system/homelab-worktree-sweep.service}
+  - {src: units/homelab-worktree-sweep.timer, dst: /usr/lib/systemd/system/homelab-worktree-sweep.timer}
+enable:
+  homelab-worktree-sweep.timer: timers.target
+# What initial_setup installed before H7.36. Reconcile retires each once the timer above has
+# started, so the sweep never runs twice or not at all.
+legacy:
+  - {cron_file: git-object-store-repair}
