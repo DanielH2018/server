@@ -159,13 +159,15 @@ def test_a_udp_only_container_does_not_join_the_set():
 def test_a_publisher_moved_to_compose_services_is_still_watched():
     """The H5 move leaves the set unchanged: the second key is read, and the order is by name."""
     pi = load_yaml(HOST_VARS / "daniel-pi.yml")
+    wg_easy = [e for e in pi["containers_list"] if e["name"] == "wg-easy"]
+    assert wg_easy, (
+        "wg-easy left containers_list, so this test no longer moves a listed entry"
+    )
     moved = {
         **pi,
-        "containers_list": [e for e in pi["containers_list"] if e["name"] != "alloy"],
+        "containers_list": [e for e in pi["containers_list"] if e["name"] != "wg-easy"],
+        "compose_services": [*pi["compose_services"], *wg_easy],
     }
-    moved["compose_services"] = [
-        e for e in pi["containers_list"] if e["name"] == "alloy"
-    ]
     found = {host: load_yaml(HOST_VARS / f"{host}.yml") for host in HOSTS}
     found["daniel-pi"] = moved
     raw = render_pod_env(ROLE, {"hostvars": found})[ENV_VAR]

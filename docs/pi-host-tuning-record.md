@@ -294,7 +294,7 @@ read `inspect failed` — the reason is the daemon's, so the line carries
 (#1922).
 Not `journalctl -p warning`: dockerd's stderr lands at journal priority 6 whatever its
 `level=` says, so a priority filter returns nothing. This is the only path a daemon-level
-failure reaches Loki by — the Pi ships no journal, and `roles/containers/alloy/CLAUDE.md`
+failure reaches Loki by — the Pi ships no journal, and `hosts/components/pi-compose/services/alloy/compose.yaml.j2`
 records the RSS measurement behind that.
 
 ### Why the watch set is the deploy list

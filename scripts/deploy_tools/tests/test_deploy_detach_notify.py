@@ -225,15 +225,24 @@ def test_check_one_tag_on_both_platforms_needs_the_pi_healthy():
     assert "exited" in detail
 
 
-def test_check_one_reads_platforms_from_the_inventory_when_not_given():
-    """alloy is declared on daniel-pi alone, so the real inventory routes it to --docker."""
+def test_check_one_reads_platforms_from_the_inventory_when_not_given(tmp_path):
+    """A tag only daniel-pi's containers_list declares routes to --docker.
+
+    The inventory is a fixture tree passed as `cwd`: since H5.8 the real inventory declares no
+    Docker-only tag (alloy moved into the Pi's package and wg-easy has a k8s counterpart).
+    """
+    host_vars = tmp_path / notify_mod.HOST_VARS_REL
+    host_vars.mkdir(parents=True)
+    (host_vars / "daniel-pi.yml").write_text("containers_list:\n  - name: alloy\n")
     calls = []
 
     def run(argv, **kwargs):
         calls.append(argv)
         return _result(0, "alloy: running (no healthcheck), restarts=0")
 
-    state, _ = notify_mod.check_one("alloy", tools=notify_mod.NotifyTools(run=run))
+    state, _ = notify_mod.check_one(
+        "alloy", tools=notify_mod.NotifyTools(run=run), cwd=tmp_path
+    )
     assert state == "ok"
     assert calls and all("--docker" in argv for argv in calls)
 
