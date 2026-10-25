@@ -1,0 +1,13 @@
+{
+  "checksum": "a42119b6099420299de72b15d2a1512e8a0ada04af6829dbfb9f7e25489471d9",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#homelab_builder — emptied; daniel-box's package owns the builder, the signer and the apt repository",
+  "row": {
+    "atoms": {
+      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439",
+      "ansible/roles/setup/homelab_builder/tasks/main.yml": "8faaa0f8aa71d0785ea15ccebcfe4c0a9ae12481305ec57b09ed5738a6c61be0"
+    },
+    "python": "3.14",
+    "verified_sha": "a41b8b1bd"
+  }
+}

@@ -2297,7 +2297,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       existing accounts and the files they own keep their owners.
     - The packaged builder unit keeps `SyslogLevel=notice`, which this host's journald needs
       (`MaxLevelStore=notice`) for a failed run's traceback to reach the journal, and the
-      sandboxing directives that `homelab_builder/tests/test_builder_units.py` holds.
+      sandboxing directives that `hosts/lib/tests/test_builder_component.py` holds.
     - **Self-rebuild failure.** The builder builds the package that installs the builder, so
       a broken `homelab-daniel-box` breaks the repair path. The repository keeps the
       previous version, so `apt-get install homelab-daniel-box=<previous>` restores it.

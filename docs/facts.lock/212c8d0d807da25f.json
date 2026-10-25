@@ -1,0 +1,14 @@
+{
+  "checksum": "9e1e32a9f5619504923c52f90f4e3cc23e172c4a7a1a68b8962d3ad631d79059",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/builder/CLAUDE.md#The signer and the publish (H3.5b)",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/homelab_builder/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar": "980c630eccccc3928fcb2f6ffdded4975a7aaccaddfa2ec801eb946af40a16a4",
+      "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86",
+      "hosts/lib/homelab_repo_sign.py": "32eb767e01a8c17aab7aa85d83a6c314cb688277d67fa20805353f2460ad406a"
+    },
+    "python": "3.14",
+    "verified_sha": "a41b8b1bd"
+  }
+}

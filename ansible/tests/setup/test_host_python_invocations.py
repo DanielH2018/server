@@ -102,7 +102,11 @@ def test_root_uv_task_without_the_install_dir_is_flagged():
     assert _root_uv_task_missing_install_dir(task)
 
 
-_SEARCH_ROOTS = [_REPO / "ansible/roles", _REPO / ".claude/hooks"]
+_SEARCH_ROOTS = [
+    _REPO / "ansible/roles",
+    _REPO / "hosts/components",
+    _REPO / ".claude/hooks",
+]
 _SUFFIXES = {".j2", ".yml", ".sh"}
 
 # A container's own interpreter, not the host's.

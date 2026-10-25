@@ -1,0 +1,13 @@
+{
+  "checksum": "8850c9722e6418eabf2752827c1c5b826a71be3ddef04a511e9ee2708a38a1f5",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/builder/CLAUDE.md#The builder's run",
+  "row": {
+    "atoms": {
+      "hosts/lib/host_package_builder.py:DECIDED: the anchor is a commit": "43f8ef90c8623b78ca1e9f908b203d564df57b1b410d9e92aa8623a69be3eb3e",
+      "hosts/lib/tests/test_builder_component.py::test_both_units_keep_a_state_directory_at_0711_and_log_at_notice": "1fee20bce5180932fbbfd626b76a25ce2d74ab1ec6f5f0a7166db1e40ebb34d1"
+    },
+    "python": "3.14",
+    "verified_sha": "a41b8b1bd"
+  }
+}
