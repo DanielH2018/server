@@ -71,7 +71,12 @@ def ufw_calls(node: Node) -> list[list[str]]:
 
 
 def writes(node: Node) -> list[list[str]]:
-    reads = (["show", "added"], ["status"], ["status", "numbered"])
+    reads = (
+        ["show", "added"],
+        ["status"],
+        ["status", "numbered"],
+        ["status", "verbose"],
+    )
     return [argv for argv in ufw_calls(node) if argv not in reads]
 
 
@@ -141,17 +146,40 @@ def test_a_rule_that_predates_the_arm_is_adopted_in_place_by_appending_it_again(
     assert not [argv for argv in ufw_calls(node) if argv[:1] == ["insert"]]
 
 
-def test_a_second_run_changes_nothing(node):
+def second_run_writes_nothing(node: Node) -> None:
+    # `ufw default` on an active firewall stops and starts every chain even when the policy is
+    # unchanged, which is the window a kube-router sync wiped the before chains in on 2026-10-25.
     have(node)
     declare(node, *RULES)
     node.run()
 
     node.run()
 
-    assert writes(node) == [
-        ["default", "deny", "incoming"],
-        ["default", "allow", "outgoing"],
-    ]
+    assert writes(node) == []
+
+
+def test_a_second_run_changes_nothing(node):
+    second_run_writes_nothing(node)
+
+
+def test_red_an_arm_that_sets_the_defaults_every_run_is_caught(tmp_path):
+    red(
+        tmp_path,
+        second_run_writes_nothing,
+        ARM,
+        "        if live.get(direction) != policy:",
+        "        if True:",
+    )
+
+
+def test_an_inactive_host_gets_both_defaults_because_it_prints_none(node):
+    have(node, active=False)
+    node.state["ufw"]["policy"] = {"incoming": "deny", "outgoing": "allow"}
+    declare(node, *RULES)
+
+    node.run()
+
+    assert node.state["ufw"]["defaults"] == ["deny incoming", "allow outgoing"]
 
 
 # Step 3: the order check.
@@ -373,8 +401,8 @@ def test_red_an_arm_that_enables_before_adding_the_ssh_rules_is_caught(tmp_path)
         tmp_path,
         enabled_after_the_ssh_rules,
         ARM,
-        '    if rules:\n        ok = ufw("default"',
-        '    if rules:\n        ufw("--force", "enable")\n        ok = ufw("default"',
+        "    if rules:\n        ok = set_defaults()",
+        '    if rules:\n        ufw("--force", "enable")\n        ok = set_defaults()',
     )
 
 
@@ -466,3 +494,40 @@ def test_the_metrics_file_names_the_ufw_arm_even_at_zero(node):
     node.run()
 
     assert f"{drift(node)} 0" in metrics(node)
+
+
+# Step 7: the loaded before chain still holds what before.rules loads.
+
+
+def before_chain_wiped(node: Node) -> None:
+    # The 2026-10-25 shape: a restore of a snapshot taken mid-reload left only the user jump.
+    have(node, *LABELS.items())
+    declare(node, *RULES)
+    node.state["ufw"]["before_input"] = [
+        "-N ufw-before-input",
+        "-A ufw-before-input -j ufw-user-input",
+    ]
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert "ufw-before-input lacks the loopback accept" in result.stderr
+    assert node.applied()["result"]["ok"] is False
+    assert writes(node) == [
+        ["default", "deny", "incoming"],
+        ["default", "allow", "outgoing"],
+    ]
+
+
+def test_a_before_chain_without_the_loopback_accept_holds_the_host(node):
+    before_chain_wiped(node)
+
+
+def test_red_an_arm_that_skips_the_before_chain_check_is_caught(tmp_path):
+    red(
+        tmp_path,
+        before_chain_wiped,
+        ARM,
+        "    if LOOPBACK in chain.stdout.splitlines():",
+        "    if True:",
+    )

@@ -25,6 +25,7 @@ COMMANDS = (
     "sshd",
     "fail2ban-client",
     "ufw",
+    "iptables",
     "getent",
     "usermod",
     "systemd-sysusers",

@@ -1,16 +1,16 @@
 {
-  "checksum": "3c5c2c2d621f5f79e4614b0dc85e1c28e10da09cd6274147325ab2d1ae86370d",
+  "checksum": "40981ff008b4539cc24998783bf971b800d26f97a59835029a34e5ce5fb43b2c",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/docker_install/CLAUDE.md#Notable",
   "row": {
     "atoms": {
-      "ansible/roles/containers/docker-proxy/CLAUDE.md": "64c79a69b9b658ced25acfdc9916196b04a065ae742cedb5c32e4f3464dc16b1",
       "ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py": "66dd3110d47078184f064543aa12cefd51b4016e137cc945bfe8f1f21cdbd52f",
       "docs/docker-engine-pins-and-runtime.md": "c8c8a4425f4c79194324d061592d90bc2545310874955c8e3aa6b75a937c1e0f",
       "hosts/components/apt-docker/": "1b3b5846cd9b4de0c0589fac7a793e06894739ead34db42b019523caa0cb835b",
+      "hosts/components/pi-compose/services/docker-proxy/compose.yaml.j2": "e1391080403760ee6a2d7cb3a85823af3a74136c24039fb7e139b97cb8ae02aa",
       "scripts/renderer/tests/test_apt_source_components.py": "5eb45033d1ca34dd3482743c457e6dc849df4846e1fa70846789ebb6ab1d1b3a"
     },
     "python": "3.14",
-    "verified_sha": "7c7e6b9ed"
+    "verified_sha": "a73b798b1"
   }
 }

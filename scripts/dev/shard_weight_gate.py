@@ -372,48 +372,50 @@ OUTSIDE_DIFF_NOTE = (
 )
 
 
-# The files that decide every module's verdict at once: the weight table and the gate's code.
-# A diff touching one can repair any module, so the gate runs unscoped on it, with one
-# exception that `retires_rows_only` decides.
+# The weight table, whose rows a pull request owns one at a time, and the gate's code, whose
+# bounds decide every module's verdict at once. A diff touching the code runs the gate unscoped.
 WEIGHTS_TABLE = "scripts/dev/pytest_shard_weights.json"
-GATE_INPUTS = frozenset(
+GATE_CODE = frozenset(
     {
-        WEIGHTS_TABLE,
         "scripts/dev/pytest_shard.py",
         "scripts/dev/shard_weight_gate.py",
     }
 )
-_REPO = Path(__file__).resolve().parents[2]
 
 
-def retires_rows_only(
-    weights: dict[str, float], base: dict[str, float] | None, root: Path = _REPO
-) -> bool:
-    """Whether the table differs from `base` only by rows whose module is gone from `root`.
+def rows_written(weights: dict[str, float], base: dict[str, float]) -> set[str]:
+    """The modules whose table row differs from `base`: added, changed or dropped.
 
-    Retiring a test module has to drop its row, so a PR that deletes modules always edits the
-    table. That edit wrote no row the gate reads, so it leaves the diff scoping on (#5989). An
-    added or changed row, a dropped row whose module still exists, or no `base` at all, keeps
-    the unscoped run.
+    A pull request that edits the table owns exactly these rows. Until #6266 an edit to any
+    row made every module's complaint its author's. A PR that re-recorded one row then failed
+    on a heavy module another PR had merged without a weight, which its author neither wrote
+    nor could see in the diff. That shape was 6 of the 7 gate failures outside a PR's diff
+    between 2026-10-18 and 2026-10-25. A full `--record` writes every row, so it still owns
+    every module. A dropped row for a deleted module (#5989) names a file no shard runs, so it
+    widens nothing.
     """
-    if base is None:
-        return False
-    if any(base.get(module) != seconds for module, seconds in weights.items()):
-        return False
-    return not any((root / module).exists() for module in base.keys() - weights.keys())
+    changed = {m for m, s in weights.items() if base.get(m) != s}
+    return changed | (base.keys() - weights.keys())
 
 
-def widens_scope(
-    changed: set[str],
+def diff_scope(
+    changed: set[str] | None,
     weights: dict[str, float],
     base: dict[str, float] | None,
-    root: Path = _REPO,
-) -> bool:
-    """Whether a diff touching `changed` makes every module's complaint its author's."""
-    inputs = changed & GATE_INPUTS
-    if inputs == {WEIGHTS_TABLE}:
-        return not retires_rows_only(weights, base, root)
-    return bool(inputs)
+) -> set[str] | None:
+    """The modules whose complaints fail a run with diff `changed`, or None for every module.
+
+    None when there is no diff (a push), when the diff touches the gate's code, or when it
+    edits the table with no `base` to compare against. Otherwise the diff's own paths, plus
+    the rows it wrote when it edits the table.
+    """
+    if changed is None or changed & GATE_CODE:
+        return None
+    if WEIGHTS_TABLE not in changed:
+        return changed
+    if base is None:
+        return None
+    return changed | rows_written(weights, base)
 
 
 def split_by_diff(text: str, changed: set[str]) -> tuple[str, str]:
@@ -438,34 +440,28 @@ def gate_complaints(
     ratio: float = STALE_WEIGHT_RATIO,
     fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
     base_weights: dict[str, float] | None = None,
-    root: Path = _REPO,
 ) -> tuple[list[str], list[str]]:
     """`(problems, warnings)` for a durations report: what fails the run, and what annotates it.
 
     `changed` is the set of paths a pull request's diff adds or modifies, or None for a run
     with no diff to scope to. With None, every module's complaint counts, as on a push. With a
-    set, only a module in it can fail the run. Every other module's complaint becomes a
-    warning, because its author is not the one reading this run: 4 of the 16 gate failures
+    set, only a module in `diff_scope` can fail the run. Every other module's complaint becomes
+    a warning, because its author is not the one reading this run: 4 of the 16 gate failures
     between 2026-10-15 and 2026-10-17 named a module outside the failing PR's diff (#5480).
 
-    A set that holds one of `GATE_INPUTS` counts as None. A PR that re-records the table or
-    moves a bound wrote every row the gate then reads, so every complaint is its author's. The
-    exception is a table edit that only drops the rows of deleted modules, which `base_weights`,
-    the table at the PR's merge base, lets `retires_rows_only` recognise.
+    `base_weights` is the table at the PR's merge base. A diff that edits the table also owns
+    the rows it wrote, which `rows_written` reads from the two tables.
 
     The empty-report complaint reads the WHOLE report. Most PRs change no test module a given
     shard ran, so a scoped half is usually empty, and that is not a format change.
     """
-    if (
-        changed is None
-        or widens_scope(changed, weights, base_weights, root)
-        or not parse_durations(text)
-    ):
+    scope = diff_scope(changed, weights, base_weights)
+    if scope is None or not parse_durations(text):
         return (
             durations_problems(text, weights, threshold, ratio, fail_above),
             durations_warnings(text, weights, threshold, fail_above, ratio=ratio),
         )
-    inside, outside = split_by_diff(text, changed)
+    inside, outside = split_by_diff(text, scope)
     problems, warnings = [], []
     if inside:
         problems = durations_problems(inside, weights, threshold, ratio, fail_above)

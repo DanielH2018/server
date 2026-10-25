@@ -1,0 +1,56 @@
+[Unit]
+Description=Restart the background Claude sessions a shutdown killed, for {{ claude_code_bg_resume_user }}
+Documentation=file://{{ claude_code_bg_resume_dir }}/bg_session_resume.py
+# A respawned session connects to claude.ai at once, and DNS is not up at the first moment of
+# network-online.target on this host. The script also waits for the API name to resolve.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+User={{ claude_code_bg_resume_user }}
+Group={{ claude_code_bg_resume_user }}
+WorkingDirectory={{ claude_code_bg_resume_home }}
+
+# DECIDED: RemainAfterExit=yes with KillMode=process. The first `claude respawn` starts the
+# background supervisor as a child of this unit, so the supervisor and every session it hosts
+# live in this unit's cgroup. A oneshot that goes inactive, or a stop under the default
+# KillMode=control-group, would kill all of them. With these two lines the unit stays
+# `active (exited)` after the script returns, and stopping or disabling it leaves the sessions
+# running. claude-fanout-server-lander.service makes the same trade for its detached landings.
+RemainAfterExit=yes
+KillMode=process
+
+{% if claude_code_fleet_caps_enabled %}
+# The supervisor this unit starts hosts every background session dispatched afterwards, until
+# it idles out, so it sits under the same fleet bound as claude-rc.service. claude-rc.service.j2
+# has why user.slice is the only slice that can parent both Claude planes.
+Slice={{ claude_code_fleet_slice }}
+{% endif %}
+MemoryHigh={{ claude_code_rc_memory_high }}
+MemorySwapMax={{ claude_code_rc_memory_swap_max }}
+
+# A session's worker takes these from the supervisor. A session dispatched later from a
+# terminal gets that terminal's PATH instead, so these matter for the respawned sessions most.
+# PATH carries /usr/local/bin for kubectl and uv, the claude-rc.service trap, and fnm's default
+# Node, which the operator's MCP servers run on.
+Environment=HOME={{ claude_code_bg_resume_home }}
+Environment=PATH={{ claude_code_bg_resume_home }}/.local/share/fnm/aliases/default/bin:{{ claude_code_bg_resume_home }}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+Environment=KUBECONFIG={{ claude_code_bg_resume_home }}/.kube/config
+Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
+{% if claude_code_rc_disable_bg_shell_pressure_reap %}
+# claude-rc.service.j2 has why the reaper is off: a reaped land.sh leaves a merged PR undeployed.
+Environment=CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
+{% endif %}
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# The DNS wait is up to 5 minutes and each respawn up to 3.
+TimeoutStartSec=30min
+ExecStart={{ claude_code_bg_resume_home }}/.local/bin/uv run --no-project --no-python-downloads \
+  --python {{ host_python_version }} {{ claude_code_bg_resume_dir }}/bg_session_resume.py \
+  --claude {{ claude_code_bg_resume_home }}/.local/bin/claude
+
+[Install]
+WantedBy=multi-user.target

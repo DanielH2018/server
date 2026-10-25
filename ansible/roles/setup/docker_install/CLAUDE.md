@@ -95,7 +95,8 @@ restarts Docker — see the first bullet under *Notable*.
   working.** Any `daemon.json` edit restarts dockerd, and the restart gives
   `/var/run/docker.sock` a new inode. A container that bind-mounts the file keeps the old
   inode, so docker-proxy stays up and answers 503 until it is recreated, and `autoheal` cannot
-  see the fault. The Traps section of `ansible/roles/containers/docker-proxy/CLAUDE.md` has the
+  see the fault. The header comment of
+  `hosts/components/pi-compose/services/docker-proxy/compose.yaml.j2` has the
   inode check and the recreate command. An engine upgrade also replaces the containerd shim
   under every running container. So `tasks/engine-upgrade.yml` stops every Compose project
   before apt runs and recreates each one afterwards; its header comment has the reasoning.

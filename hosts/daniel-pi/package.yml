@@ -15,6 +15,9 @@
 # the first service, `pi-canary`. The canary reads no secret, so `credentials:` is unchanged and
 # the Pi's SOPS file needs no new key.
 #
+# Since H5.6 the project also runs docker-proxy and its docker-proxy-lifecycle sub-proxy, which
+# read no secret.
+#
 # Since H7.27 it ships the first three subjects of initial_setup: apt's unattended upgrades, the
 # sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup skips each on
 # this host through `initial_setup_packaged_hosts`. No file here needs a credential.
