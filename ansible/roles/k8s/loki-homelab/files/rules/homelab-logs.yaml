@@ -59,9 +59,11 @@ groups:
       # Kuma logs one "Cannot send notification to <name>" line per dropped notification. Its
       # reason lines carry no drop, so the filter keeps only the drop half of the pattern
       # the deleted bridge check read. `sum` makes one alert of the streams
-      # the window holds, which a pod restart inside 3h would otherwise split.
+      # the window holds, which a pod restart inside 3h would otherwise split. The
+      # discord-relay sidecar in the same pod logs the same text for a message it gives up on
+      # (#5657), so the selector reads both containers.
       - alert: KumaNotificationDropped
-        expr: sum(count_over_time({container="uptime-kuma"} |= "Cannot send notification" [3h])) > 0
+        expr: sum(count_over_time({container=~"uptime-kuma|discord-relay"} |= "Cannot send notification" [3h])) > 0
         labels:
           severity: critical
           service: uptime-kuma
@@ -69,8 +71,8 @@ groups:
           summary: Uptime Kuma dropped a notification in the last 3 hours.
           description: >-
             Uptime Kuma logged {{ $value }} "Cannot send notification" lines in the last 3
-            hours, so a page it raised reached no one. Read the uptime-kuma pod's log in the
-            homelab namespace for the reason line beside each drop.
+            hours, so a page it raised reached no one. Read the uptime-kuma pod's uptime-kuma
+            and discord-relay logs in the homelab namespace for the reason beside each drop.
       # The log-pattern arm of the bridge's Workload Log Errors row, ported by M6's batch A7. It
       # counts, per container, the lines that match `LOG_ERROR_PATTERN` over `LOG_ERROR_WINDOW` in
       # the cluster pod and daniel-pi container streams, and fires when one container exceeds
