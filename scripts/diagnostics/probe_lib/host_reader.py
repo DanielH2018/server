@@ -145,7 +145,11 @@ def rootq_stat(path, err):
         meta = dict(w.split("=", 1) for w in said.split() if "=" in w)
         return {"status": "ok", "via": "rootq", "sha256": None,
                 **{k: meta.get(k) for k in ("mode", "owner", "group")}}
-    row ={"status": "unreadable", "error": "%s; rootq stat: %s" % (err, said)}
+    # rootq resolves the path as root before any check but the deny list, so this refusal is
+    # root's ENOENT: an absent arm's path under a directory this user cannot read.
+    if rc == 2 and said.endswith(" does not exist"):
+        return {"status": "absent", "via": "rootq"}
+    row = {"status": "unreadable", "error": "%s; rootq stat: %s" % (err, said)}
     return {**row, "refused": said} if rc == 2 else row
 
 def rootq_match(path, sha, row):
@@ -176,7 +180,7 @@ def stat(path):
     except OSError as exc:
         row["content"] = str(exc)
         if asks.get(path):
-            row = rootq_match(path, asks[path], {**row, "via": "rootq"})
+            row = rootq_match(path, asks[path], row)
     return row
 
 def show(unit, props):

@@ -416,10 +416,17 @@ one row per path:
 - `ok` means present with the declared mode, owner and group, and with the render's content
   hash.
 - `ok-meta` means the same, except that the content was not compared. The row names why: a
-  render holding a secret leaves a `STUB`, and a root-only file is unreadable as this user.
+  render holding a secret leaves a `STUB`, or `rootq` refuses to hash a credential file. `rootq`
+  refuses even `stat` on a `*.env` path, so such a row carries no mode or owner.
 - `DRIFT` means missing, present where an absent arm removes it, or different.
-- `unread` means this user cannot stat the path. Everything under daniel-box's 0700
-  `/etc/cron.d` reads this way.
+- `unread` means this user cannot stat the path and `rootq` did not answer for it: the path is
+  not on `rootq`'s `PATHS`, or the host has no `rootq`.
+
+A path this user cannot stat or open is asked of `rootq` on its host, in the same host read
+(#6357). It asks `rootq stat` for mode and owner, and `rootq matches PATH HEX` with the
+render's hash. Those two tier 1 verbs print no file content, and `applied` calls no other. A
+row whose metadata came from `rootq` says `(rootq)`, such as anything under daniel-box's 0700
+`/etc/cron.d`.
 
 `probe_lib/applied_tasks.py` names the modules it reads (`template`, `copy`, `file`, `cron`
 with a `cron_file`). It follows every task import, including the shared

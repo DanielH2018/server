@@ -154,5 +154,25 @@ def test_a_file_this_user_stats_but_cannot_open_is_hashed_by_rootq(
     finally:
         script.chmod(0o600)
     row = row["stat"][str(script)]
-    assert (row["mode"], row["via"], row["match"]) == ("0000", "rootq", True)
+    assert (row["mode"], row["match"], "via" in row) == ("0000", True, False)
     assert log.read_text().splitlines() == [f"matches {script} {digest}"]
+
+
+def test_a_path_rootq_finds_missing_is_absent_not_unreadable(tmp_path, monkeypatch):
+    """An absent arm's file under a directory this user cannot traverse (#6357)."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    refusal = 'echo "refused: $2 does not exist" >&2\nexit 2\n'
+    write_exec(bin_dir / "rootq", "#!/bin/sh\n" + refusal)
+    monkeypatch.setenv("PATH", path_with(bin_dir))
+    locked = tmp_path / "rules.d"
+    locked.mkdir()
+    locked.chmod(0)
+    gone = str(locked / "50-claude-land.rules")
+    try:
+        if os.access(locked, os.X_OK):
+            pytest.skip("running as root, which traverses a 0000 directory")
+        row = _local({"stat": [gone], "rootq": {gone: None}})["stat"][gone]
+    finally:
+        locked.chmod(0o700)
+    assert row == {"status": "absent", "via": "rootq"}
