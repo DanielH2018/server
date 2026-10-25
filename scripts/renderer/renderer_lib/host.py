@@ -266,6 +266,7 @@ def _render_maintainer_scripts(
     """Render each listed maintainer script from `hosts/lib/maintainer-scripts/`.
 
     Each template sees the host's context plus `package_units`, the list of units `prerm` stops.
+    A template unit such as `homelab-alert@.service` is no unit to stop, so the list omits it.
     """
     directory = lib / "maintainer-scripts"
     for name in names:
@@ -282,7 +283,9 @@ def _render_maintainer_scripts(
         src = f"{name}.j2"
         confined(directory, src)
         ctx, reasons = host_context(host, {}, inventory, withheld)
-        ctx["package_units"] = package.units()
+        ctx["package_units"] = [
+            unit for unit in package.units() if not unit.endswith("@.service")
+        ]
         env = confined_env(directory)
         package.scripts[name] = _render_template(
             env, src, ctx, reasons, directory

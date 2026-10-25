@@ -251,7 +251,7 @@ jobs:
       - name: Install Vale
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/vale.tar.gz \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSL -o /tmp/vale.tar.gz \
             https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_Linux_64-bit.tar.gz
           tar xzf /tmp/vale.tar.gz -C /usr/local/bin vale
           vale --version
@@ -604,7 +604,7 @@ jobs:
           sops_sha256=$(awk '/^sops_setup_binary_amd64_sha256:/ {print $2}' "$defaults")
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
           mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/sops" \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/sops" \
             "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
           echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict || {
             echo "::error::sops $sops_version does not match sops_setup_binary_amd64_sha256. Run: uv run python scripts/validate/asset_pins.py --refresh getsops/sops"
@@ -961,10 +961,10 @@ jobs:
           sops_sha256=$(awk '/^sops_setup_binary_amd64_sha256:/ {print $2}' "$defaults")
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
           mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/sops" \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/sops" \
             "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
           echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict
-          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/kind" \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/kind" \
             "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
           echo "$KIND_SHA256  $RUNNER_TEMP/bin/kind" | sha256sum -c --strict
           chmod +x "$RUNNER_TEMP/bin/sops" "$RUNNER_TEMP/bin/kind"
@@ -1143,7 +1143,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 3 -fsSLo "$RUNNER_TEMP/nfpm.tar.gz" \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/nfpm.tar.gz" \
             "https://github.com/goreleaser/nfpm/releases/download/$NFPM_VERSION/nfpm_${NFPM_VERSION#v}_Linux_x86_64.tar.gz"
           echo "$NFPM_SHA256  $RUNNER_TEMP/nfpm.tar.gz" | sha256sum -c --strict
           tar -xzf "$RUNNER_TEMP/nfpm.tar.gz" -C "$RUNNER_TEMP/bin" nfpm
@@ -1253,8 +1253,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/leaks"
           cd "$RUNNER_TEMP/leaks"
           base="https://github.com/gitleaks/gitleaks/releases/download/v$version"
-          curl --retry 3 -fsSLO "$base/gitleaks_${version}_linux_x64.tar.gz"
-          curl --retry 3 -fsSLo checksums.txt "$base/gitleaks_${version}_checksums.txt"
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLO "$base/gitleaks_${version}_linux_x64.tar.gz"
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo checksums.txt "$base/gitleaks_${version}_checksums.txt"
           # --ignore-missing skips the other platforms' lines; a run that verifies no file fails.
           sha256sum -c --ignore-missing --strict checksums.txt
           tar -xzf "gitleaks_${version}_linux_x64.tar.gz" gitleaks

@@ -36,6 +36,8 @@ _KEYS = (
     "loki_route_witness_push_token: x\n"
     "ups_secondary_push_token: x\n"
     "nut_monitor_password: x\n"
+    "homelab_builder_github_token: x\n"
+    "gitops_deploy_discord_webhook: x\n"
 )
 
 DEFAULT_ACCURACY_S = 60  # systemd's AccuracySec when a timer sets none
@@ -289,7 +291,8 @@ def test_every_exemption_names_a_schedule_that_exists():
         for r in glance_facts.setup_role_dirs()
         for u, _ in glance_facts.timer_units(r)
     }
-    timers |= {"homelab-updater.timer"}
+    # The packaged timers: the updater's, and the builder's since H7.41b.
+    timers |= {"homelab-updater.timer", "homelab-builder.timer"}
     missing = sorted(set(EXEMPT) - crons - timers)
     assert missing == [], f"EXEMPT names that no schedule carries: {missing}"
 

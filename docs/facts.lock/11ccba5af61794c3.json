@@ -1,0 +1,17 @@
+{
+  "checksum": "d37546d71934a427c3dc0efbb8c5d2b9332936ef4a2297b78641ed10f59cb596",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/builder/CLAUDE.md#What the component installs",
+  "row": {
+    "atoms": {
+      "ansible/inventory/group_vars/all.yml": "a9e26f83a4a9763bd4261ca4b7d94354ff85fb63301d701c683420cdfded7c0b",
+      "docs/break-glass.md": "2823d12d9954147d9b7ad124362e31f2b81927d3aa6c036577400846c35a627c",
+      "hosts/lib/": "aee97ede131631156330f0120fe4b64226a77c507ef96ddc63bcd3db949e64ac",
+      "hosts/lib/tests/test_builder_component.py::test_the_nfpm_pin_is_ci_s_and_uv_matches_initial_setup": "f56cb7c3b3e991a9e02a539f39a6332d5f82fd7c5a4c0635e77f60872841699c",
+      "hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_two_prometheus_urls": "0a14176322c20ac86d13874d46c445a07de425884a644f33bbe8e91407e5fe20",
+      "hosts/packages/homelab-tools/": "c3756b455ae17c65b6586f168471570887823e8701ae91400c1ab51bfdce4b21"
+    },
+    "python": "3.14",
+    "verified_sha": "a41b8b1bd"
+  }
+}

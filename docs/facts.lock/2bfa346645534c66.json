@@ -1,12 +1,12 @@
 {
-  "checksum": "9ad8c68c2a060aacb129d1bc5a2f5780eef6e945ea01dbdf522ab5366e61cba0",
+  "checksum": "9622879ff5e9a6f8cedf9f68cc478f4e0567fd04be0947ec122f28ebe0255558",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
-  "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#`setup/homelab_builder` — the host-package builder and its apt repository (daniel-box)",
+  "key": "hosts/components/builder/CLAUDE.md#`hosts/components/builder` — the host-package builder and its apt repository (daniel-box)",
   "row": {
     "atoms": {
       "docs/target-architecture/host/h3-pi-pilot.md": "3d87c601ba6a1281391a0449705d0b73a13264dda7bf83d1664758342eb192f2"
     },
     "python": "3.14",
-    "verified_sha": "afe25f493"
+    "verified_sha": "a41b8b1bd"
   }
 }
