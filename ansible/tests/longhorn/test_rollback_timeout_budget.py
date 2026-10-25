@@ -166,6 +166,59 @@ def _promoted_claim_roles(
     return out
 
 
+def _batch_terms() -> tuple[int, int, int, int]:
+    """(per-claim snapshot and revert cost, stabilise soak, rollback budget, claim cap)."""
+    revert_defaults = yaml_fast.safe_load(_VOLUME_REVERT_DEFAULTS.read_text())
+    snapshot_defaults = yaml_fast.safe_load(
+        (_K8S_ROLES / "volume-snapshot/defaults/main.yml").read_text()
+    )
+    gitops_defaults = yaml_fast.safe_load(_GITOPS_DEPLOY_DEFAULTS.read_text())
+    all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
+    per_claim = int(snapshot_defaults["volume_snapshot_timeout"]) + 3 * (
+        int(revert_defaults["volume_revert_state_timeout"])
+        + int(revert_defaults["volume_revert_api_timeout"])
+    )
+    return (
+        per_claim,
+        int(all_vars["k8s_rollout_stabilise_seconds"]),
+        int(gitops_defaults["gitops_deploy_k8s_rollback_timeout_s"]),
+        int(
+            gitops_defaults["gitops_deploy_k8s_autodeploy_max_claim_services_per_tick"]
+        ),
+    )
+
+
+def _worst_batch(
+    promoted, cap, per_claim, stabilise, in_role_s=None, rollout_s=None
+) -> tuple[list[str], int]:
+    """The worst batch the cap still permits, as (its roles, its rollback cost in seconds).
+
+    The batch is the `cap` most expensive services in `promoted`, a list of (role, claims).
+    `in_role_s` and `rollout_s` price one role, and default to the readers of the real role
+    tree. An empty `promoted` costs 0.
+    """
+    in_role_s, rollout_s = in_role_s or in_role_wait_s, rollout_s or _rollout_timeout_s
+
+    # The cost key is the whole per-service cost, not the claim count alone. Every promoted
+    # claim-declaring role declares exactly one claim, so a claims-only key leaves every
+    # candidate tied and `sorted` picks the alphabetically first — bazarr, at the shared
+    # rollout default — while prowlarr costs 180s more.
+    def cost(role: str, claims: int) -> int:
+        return claims * per_claim + in_role_s(role) + rollout_s(role)
+
+    by_cost = sorted(promoted, key=lambda rc: cost(*rc), reverse=True)[:cap]
+    if not by_cost:
+        return [], 0
+    batch_revert = sum(claims * per_claim for _, claims in by_cost)
+    # Each role waits for its own Jobs and addresses before the drain runs, so sum() here.
+    batch_in_role = sum(in_role_s(role) for role, _ in by_cost)
+    # Deduped across the batch by k8s/manifests/tasks/drain.yml, so max() not sum().
+    batch_rollout = max(rollout_s(role) for role, _ in by_cost)
+    return [
+        r for r, _ in by_cost
+    ], batch_revert + batch_in_role + batch_rollout + stabilise
+
+
 def test_batch_of_claim_services_fits_the_rollback_budget():
     """The multi-service axis the per-claim test above structurally cannot see.
 
@@ -175,66 +228,62 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
     `max()` on that term and `sum()` on the rest.
 
     Removing `gitops_deploy_k8s_autodeploy_max_claim_services_per_tick` (it reads as 0) fails
-    this test outright. Raising it to 3 fails it once two claim-declaring roles are Ansible-owned
-    again: two co-batched single-claim services come to ~1680s against the 1620s budget. While
-    the live batch is empty, the size check holds at zero.
+    this test outright. While the live batch is empty, the size check holds at zero, and
+    `test_two_claim_services_overrun_the_rollback_budget` is what shows that a raised cap
+    would overrun the budget once two claim-declaring roles are Ansible-owned again.
     """
-    revert_defaults = yaml_fast.safe_load(_VOLUME_REVERT_DEFAULTS.read_text())
-    snapshot_defaults = yaml_fast.safe_load(
-        (_K8S_ROLES / "volume-snapshot/defaults/main.yml").read_text()
-    )
-    gitops_defaults = yaml_fast.safe_load(_GITOPS_DEPLOY_DEFAULTS.read_text())
-    all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
-
-    state_timeout = int(revert_defaults["volume_revert_state_timeout"])
-    api_timeout = int(revert_defaults["volume_revert_api_timeout"])
-    snapshot_timeout = int(snapshot_defaults["volume_snapshot_timeout"])
-    stabilise = int(all_vars["k8s_rollout_stabilise_seconds"])
-    rollback_timeout = int(gitops_defaults["gitops_deploy_k8s_rollback_timeout_s"])
-
-    cap = int(
-        gitops_defaults["gitops_deploy_k8s_autodeploy_max_claim_services_per_tick"]
-    )
+    per_claim, stabilise, rollback_timeout, cap = _batch_terms()
     assert cap > 0, (
         "gitops_deploy_k8s_autodeploy_max_claim_services_per_tick must be a positive cap — 0 "
         "disables it, which restores the unbounded batch this test exists to prevent"
     )
 
     # Empty since the D5 flips; the must-find test below keeps that from being a broken reader.
-    promoted = _promoted_claim_roles(tag_owners())
-
-    # The worst batch the cap still permits: the `cap` most expensive claim-declaring services.
-    #
-    # The cost key is the whole per-service cost, not the claim count alone. Every promoted
-    # claim-declaring role declares exactly one claim, so a claims-only key leaves every
-    # candidate tied and `sorted` picks the alphabetically first — bazarr, at the shared
-    # rollout default — while prowlarr costs 180s more.
-    per_claim = snapshot_timeout + 3 * (state_timeout + api_timeout)
-
-    def cost(role: str, claims: int) -> int:
-        return claims * per_claim + in_role_wait_s(role) + _rollout_timeout_s(role)
-
-    by_cost = sorted(promoted, key=lambda rc: cost(*rc), reverse=True)[:cap]
-    batch_revert = sum(claims * per_claim for _, claims in by_cost)
-    # Each role waits for its own Jobs and addresses before the drain runs, so sum() here.
-    batch_in_role = sum(in_role_wait_s(role) for role, _ in by_cost)
-    # Deduped across the batch by k8s/manifests/tasks/drain.yml, so max() not sum().
-    batch_rollout = max((_rollout_timeout_s(role) for role, _ in by_cost), default=0)
-    worst_batch = (
-        batch_revert + batch_in_role + batch_rollout + (stabilise if by_cost else 0)
+    batch, worst = _worst_batch(
+        _promoted_claim_roles(tag_owners()), cap, per_claim, stabilise
     )
-
-    assert worst_batch <= rollback_timeout, (
-        f"the worst batch the cap permits ({cap} claim-declaring service(s): "
-        f"{[r for r, _ in by_cost]}) costs {worst_batch}s "
-        f"(revert {batch_revert}s + in-role waits {batch_in_role}s + rollout {batch_rollout}s "
-        f"+ stabilise {stabilise}s), over "
-        f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s). Past that budget run()'s "
-        f"killpg fires MID-REVERT — after volume-revert scaled the workload to zero replicas "
-        f"and attached its volume with disableFrontend: true. Lower "
+    assert worst <= rollback_timeout, (
+        f"the worst batch the cap permits ({cap} claim-declaring service(s): {batch}) costs "
+        f"{worst}s, over gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s). Past that "
+        f"budget run()'s killpg fires MID-REVERT — after volume-revert scaled the workload to "
+        f"zero replicas and attached its volume with disableFrontend: true. Lower "
         f"gitops_deploy_k8s_autodeploy_max_claim_services_per_tick, or raise the budget within "
         f"the unit's TimeoutStartSec."
     )
+
+
+# Two single-claim services at radarr's and sonarr's shape: a 660s rollout and no in-role waits.
+_TWO_CLAIM_SERVICES = [("radarr", 1), ("sonarr", 1)]
+
+
+def _price_two_claim_services(cap: int) -> int:
+    per_claim, stabilise, _, _ = _batch_terms()
+    _, worst = _worst_batch(
+        _TWO_CLAIM_SERVICES, cap, per_claim, stabilise, lambda _: 0, lambda _: 660
+    )
+    return worst
+
+
+def test_one_claim_service_per_tick_fits_the_rollback_budget():
+    *_, rollback_timeout, cap = _batch_terms()
+    assert cap == 1
+    assert _price_two_claim_services(cap) <= rollback_timeout
+
+
+def test_two_claim_services_overrun_the_rollback_budget():
+    # 2 x (120 + 360) + 660 + 60 = 1680s against 1620s: why the cap is 1.
+    _, _, rollback_timeout, _ = _batch_terms()
+    assert _price_two_claim_services(2) > rollback_timeout
+
+
+def test_the_batch_sums_reverts_and_in_role_waits_and_takes_the_longest_rollout():
+    in_role = {"slow-rollout": 0, "waits": 100}
+    rollout = {"slow-rollout": 780, "waits": 300}
+    batch, worst = _worst_batch(
+        [("slow-rollout", 1), ("waits", 2)], 2, 480, 60, in_role.get, rollout.get
+    )
+    assert sorted(batch) == ["slow-rollout", "waits"]
+    assert worst == 3 * 480 + 100 + 780 + 60
 
 
 def test_the_batch_reader_finds_the_must_find_role_once_its_owner_is_dropped():
