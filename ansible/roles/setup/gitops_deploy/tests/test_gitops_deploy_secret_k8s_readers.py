@@ -11,10 +11,12 @@ keys no k8s role reads.
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_secret_k8s_readers.py
 """
 
+import dataclasses
 import subprocess
 
 from deployer_lib import deploy_broad_k8s
 from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_narrow import BroadPlan
 from deployer_lib.deploy_tick_types import TickPlan, TickTarget
 from _deploy_fakes import LOCAL, receipt_applied
 from gitops_ledger import OWED_K8S_UNAPPLIED
@@ -179,3 +181,30 @@ def test_a_promoted_bump_beside_a_rotation_stays_off_the_broad_arm(tick):
     assert routed.secret_plans == ()
     assert routed.cs.broad is False
     assert not any(entry[0] == "secret_k8s" for entry in tick.log)
+
+
+def _route_rotation(tick, denylist: frozenset[str]):
+    """Route a secrets-only range whose key homepage and peanut read, under `denylist`."""
+    tick.config = dataclasses.replace(tick.config, k8s_autodeploy_denylist=denylist)
+    tick.secret_k8s = (0, "homepage,peanut")
+    plan = TickPlan(cs=ChangeSet(secrets=True), paths=[SECRETS], k8s_services=set())
+    target = TickTarget(
+        local=LOCAL, origin=ORIGIN, hold=None, dirty=False, status="", action="deploy"
+    )
+    return deploy_broad_k8s.route_secret_k8s_readers(
+        tick.tools, tick.config, target, plan
+    )
+
+
+def test_a_denylisted_reader_is_applied_and_named(tick, capsys):
+    """#5634: the denylist gates promotion, not this broad plan (the #1962 DECIDED).
+
+    A filter here would leave a denied reader on the old value with no marker naming it.
+    """
+    routed = _route_rotation(tick, frozenset({"peanut"}))
+    assert routed.secret_plans == (
+        BroadPlan("ansible/deploy.yml", ["homepage", "peanut"], True),
+    )
+    out = capsys.readouterr().out
+    assert "secret-readers: peanut are denylisted for k8s auto-deploy" in out
+    assert "homepage are denylisted" not in out

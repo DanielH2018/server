@@ -1,13 +1,14 @@
 """Every gate on a k3s topic import must default to running it.
 
-`roles/setup/k3s/tasks/main.yml` imports eight topic files. Two of them are gated so a
-staging cluster can decline work that only makes sense against prod — `longhorn-backup.yml`
-holds the B2/R2 credentials, `health-crons.yml` pushes into prod's Kuma and Healthchecks.io.
+`roles/setup/k3s/tasks/main.yml` imports its topic files. One of them is gated so a staging
+cluster can decline work that only makes sense against prod — `health-crons.yml` pushes into
+prod's Kuma and Healthchecks.io. `longhorn-backup.yml`, the other gated file until H1.7b, held the
+B2/R2 credentials and left with `k3s_manage_backup_targets`.
 
 The hazard is direction. A gate whose default is false silently stops doing prod's work,
 and nothing else in the repo would notice: ansible-lint parses the file without evaluating
 the conditional, `--list-tasks` lists tasks statically, and `--check` skips the apply. The
-first evidence would be a backup target that quietly stopped being reconciled.
+first evidence would be a heartbeat cron that quietly stopped being installed.
 
 So the invariant is that prod's behaviour is the role's behaviour with nothing overridden.
 A staging host turns things off in its own host_vars; the defaults never do.
@@ -26,7 +27,7 @@ from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 MAIN = K3S_ROLE / "tasks" / "main.yml"
 DEFAULTS = K3S_DEFAULTS
 
-# `k3s_manage_backup_targets | bool` -> k3s_manage_backup_targets. Anchored at the start so a
+# `k3s_manage_health_crons | bool` -> k3s_manage_health_crons. Anchored at the start so a
 # compound condition yields nothing and trips the "must be a bare flag" assertion below
 # rather than being silently half-checked.
 BARE_FLAG = re.compile(r"^(\w+)(\s*\|\s*bool)?$")
@@ -85,20 +86,4 @@ def test_the_gate_defaults_to_running_the_import(target, expr):
         f"with the role's own defaults. Prod runs the role unoverridden — a gate that "
         f"defaults off stops doing prod's work and every repo-side check stays green. "
         f"Default it true and turn it off in the staging host's host_vars."
-    )
-
-
-def test_the_coredns_probe_name_defaults_to_a_real_name():
-    """The CoreDNS probe is gated by emptiness rather than a boolean, so check it too.
-
-    `tasks/coredns.yml` skips its behaviour probe when `k3s_coredns_probe_name` is empty.
-    That is the same hazard in a different shape: an empty default would drop the only check
-    that the Corefile patch actually took effect.
-    """
-    defaults = load_yaml(DEFAULTS)
-    name = defaults.get("k3s_coredns_probe_name")
-    assert name, (
-        f"k3s_coredns_probe_name is {name!r} in {DEFAULTS}. Empty skips the probe that "
-        f"proves cluster DNS forwards where the Corefile says — the one check in "
-        f"tasks/coredns.yml that reads behaviour rather than the ConfigMap it just wrote."
     )

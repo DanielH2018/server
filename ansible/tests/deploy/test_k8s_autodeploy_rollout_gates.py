@@ -435,10 +435,9 @@ def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
     assert not offenders, (
         "Auto-deployable role(s) with no rollout gate at all. For a role rendering a "
         "Deployment, that means restoring the rollout wait. For a batch-only role, gate every "
-        "rendered Job with a role-local `wait --for=condition=complete job/<name>`, or every "
-        "rendered CronJob with `include_role: k8s/cronjob-gate` "
-        "(`cronjob_gate_name: <the CronJob's metadata.name>`) — see "
-        "roles/k8s/cronjob-gate/CLAUDE.md. Or set k8s_autodeploy: false with a "
+        "rendered Job with a role-local `wait --for=condition=complete job/<name>`. A rendered "
+        "CronJob is gated only once the role is flux-owned and names it in "
+        "`flux_cronjob_gates` (docs/flux-deploy-plane.md). Or set k8s_autodeploy: false with a "
         "k8s_autodeploy_reason in the role's own defaults/main.yml (the denylist is derived "
         "from that declaration):\n" + "\n".join(offenders)
     )

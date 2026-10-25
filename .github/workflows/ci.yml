@@ -176,6 +176,11 @@ jobs:
   # roughly 95s. Projected from those step times, not yet measured on master.
   #
   # `mkdocs build --strict` was the other candidate and is NOT worth a job: 4s on that same run.
+  # The `mkdocs-strict` hook in the full sweep is this job's only docs build (#6150).
+  #
+  # By PR run 40125170130 (2026-10-24) the picture had moved: `hooks` took 4m58s and set the
+  # wall, ahead of pytest's slowest shard at 4m29s. 77s of that was the cross-plane order gate,
+  # which now runs in the `pr_gates` job beside this one (#6149).
   #
   # Two things that make the split behave, both learned the hard way and both enforced below:
   # ansible-lint must never be handed an empty --files list (it walks all 954 files and reports
@@ -388,6 +393,54 @@ jobs:
           path: ${{ runner.temp }}/notice.err
           if-no-files-found: warn
 
+      # The full sweep, on every event: a PR run, a dispatch and a push that the `prove` job did not
+      # skip. There is no scoped arm, so a hook's `files` regex no longer decides what a PR run
+      # leaves unchecked.
+      #
+      # The sweep builds the docs site through the `mkdocs-strict` hook, and that is this job's
+      # only build (#6150). A standalone `mkdocs build --strict` step once ran after the sweep,
+      # from before the hook existed, and built the site a second time on every run (16s on run
+      # 40125170130). The build matters here because the twice-daily docs-refresh cron is the only
+      # other place it runs, and a broken internal link found there leaves the PREVIOUS site
+      # serving with nothing saying why.
+      - name: Run hooks (full sweep)
+        # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
+        # --skip static-ratchet-tests*: the `pytest` job runs those twenty-three test files already.
+        # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
+        # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
+        # `real_tree`), so the hook here was a second render of every k8s role (#6150).
+        run: prek run --all-files --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --color always
+
+  # The two PR-only refusals, the cross-plane order gate and the cluster pin checks, in a job of
+  # their own (#6149). They ran serially inside `hooks`, ahead of its sweep, and on PR run
+  # 40125170130 the cross-plane gate's 77s made `hooks` the slowest job at 4m58s. Here they run
+  # beside the sweep, and the run wall is the slower of the two jobs instead of their sum.
+  #
+  # The job-level `if:` is the same prove condition every gated job carries, and the PR-only
+  # test sits on each step instead. A job-level `pull_request` condition would make the job
+  # `skipped` on a push or a dispatch, and the `prek` gate and `ci_verdict.jobs_verdict` both
+  # read a skipped job as a failure there unless the pushed tree was proven
+  # (test_ci_jobs_verdict_matches_gate.py pins the condition). Off a pull request every step
+  # skips, so the job costs a runner and no checkout.
+  pr_gates:
+    needs: prove
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    name: PR gates (cross-plane order + cluster pins)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15  # the two steps' own timeouts sum to 10, plus setup
+    steps:
+      # The gates read HEAD^1 and the PR's commits, so the checkout keeps history.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          persist-credentials: false  # nothing here pushes or fetches
+
+      # Python and uv only. Neither gate runs prek or reads a Galaxy collection; both ran in
+      # `hooks` before this job existed, where neither cache was restored for them.
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+        if: github.event_name == 'pull_request'
+
       # The cross-plane gate (D4.4). It refuses a PR that changes a flux-owned role and an
       # Ansible-owned role on one dependency path, because `promote` and `land.sh` would apply
       # the two halves in whichever order they finish. It also refuses an edge added beside a
@@ -395,8 +448,9 @@ jobs:
       # no bypass. Its removal arms (D5.1f) refuse an object a flux-owned tag drops without a
       # `Removes-Object:` line in the PR's commits, and a flux-owned name added to
       # k8s_retired_services (docs/flux-deploy-plane.md). It runs on a pull request only,
-      # because a push or a dispatch has no diff to judge and no PR commits to read. The checkout is the merge commit, so its first parent is the base it merges
-      # onto, and each side renders with its own tree's renderer, about 15s each.
+      # because a push or a dispatch has no diff to judge and no PR commits to read. The
+      # checkout is the merge commit, so its first parent is the base it merges onto, and each
+      # side renders with its own tree's renderer, about 15s each.
       - name: Cross-plane order gate
         if: github.event_name == 'pull_request'
         timeout-minutes: 8
@@ -411,27 +465,6 @@ jobs:
         if: github.event_name == 'pull_request'
         timeout-minutes: 2
         run: uv run python scripts/validate/cluster_pins.py --base HEAD^1
-
-      # The full sweep, on every event: a PR run, a dispatch and a push that the `prove` job did not
-      # skip. There is no scoped arm, so a hook's `files` regex no longer decides what a PR run
-      # leaves unchecked.
-      - name: Run hooks (full sweep)
-        # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
-        # --skip static-ratchet-tests*: the `pytest` job runs those twenty-three test files already.
-        run: prek run --all-files --skip ansible-lint --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --color always
-
-      # `mkdocs build --strict` also runs in the twice-daily docs-refresh cron, but a broken
-      # internal link that reaches master is discovered only there — build_site() bails
-      # out and leaves the PREVIOUS site serving, which means the docs silently stop updating
-      # and nothing says why until someone reads the journal.
-      #
-      # This step predates the `mkdocs-strict` prek hook (#806), which runs the same build. The
-      # hook fires only when a file in its `files` regex changes, and every full sweep matches
-      # one, so a full sweep builds the site twice at about 4s each. On a scoped PR whose diff
-      # misses that regex, this step is the only build. How the hook coexists with the
-      # docs-refresh cron, which commits with hooks running, is in its comment in prek.toml.
-      - name: Build the docs site (mkdocs --strict)
-        run: uv run mkdocs build --strict --site-dir "$RUNNER_TEMP/docs-site"
 
   # ansible-lint alone. It is the biggest single piece of the hook sweep — 106s against 26s for
   # all twenty other hooks together, measured on daniel-server — so it gets the job
@@ -486,7 +519,7 @@ jobs:
   # as separate job ids (`pytest-1`, `pytest-2`, …) would instead make changing N a three-file
   # edit: the gate's `needs`, the gate's result comparison, and the guard's `KNOWN_JOBS` and
   # `GATE_READS` would each grow an entry per shard. Nothing outside this file names the bare
-  # `pytest` check-run — `gitops_deploy_ci_contexts` and `gitops_deploy_expected_ruleset_contexts`
+  # `pytest` check-run — `ci_required_contexts` and `gitops_deploy_expected_ruleset_contexts`
   # both name only "prek (lint + validate + tests + secrets)" — so renaming the legs costs nothing.
   #
   # `fail-fast: false` for the reason the `hooks` job states above: one shard's failure must not
@@ -503,7 +536,8 @@ jobs:
   # This job is the suite's only automated run before a merge. The prek `pytest` hook that
   # re-ran it at `git push` was removed on 2026-10-02: it took 89s on daniel-box at load 0.9
   # (2026-10-02) and 235s on daniel-server at load 15, on every push, to repeat what this job
-  # checks in ~61s, and `land.sh` already waits on this job through the `prek` gate.
+  # checks, and `land.sh` already waits on this job through the `prek` gate. The job took ~61s
+  # then. By PR run 40125170130 (2026-10-24) its legs took 2m49s to 4m29s.
   pytest:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
@@ -519,7 +553,10 @@ jobs:
       # The trade is close to even and rests on a projection, so it is reversible on
       # evidence. `pytest_shard.py --of N --summary` projected 59.5s per shard at four and
       # 39.7s at six (local serial seconds, which are NOT the runner's
-      # step time — the runner runs each shard under xdist). Against that, two more legs pay
+      # step time — the runner runs each shard under xdist). The split packs on the runner's
+      # own seconds since #6149, and `--summary` prints those: about 467 per shard at six,
+      # which the test step runs in about 1.5 x 467 / 4, near 180s, on its four xdist workers
+      # (the factor is fitted to run 40125170130). Against that, two more legs pay
       # ~20s of setup each in runner minutes. Keep six only if a master run's per-shard step
       # times say the run wall dropped by more than the extra setup costs; the `--durations`
       # report on every leg is what to read that off.
@@ -532,7 +569,7 @@ jobs:
     # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
     # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
-      DOTFILES_SHA: aa34a4e2dbd0b23b307da789356426ca14c66e00
+      DOTFILES_SHA: 506f7956c39aa70065d815d3f5a81a27ff71f840
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -741,7 +778,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
-          node-version: "24.21.0"
+          node-version: "24.22.0"
 
       - name: Validate and test the deck mod
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -1036,12 +1073,22 @@ jobs:
           kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true
 
   # Target slice H3's host packages (docs/target-architecture/host/h3-pi-pilot.md, *CI (builds,
-  # never signs)*). It renders every package at the head and at the merge base on every run,
-  # with no path filter, because a group_vars edit can change a render. When no rendered tree
-  # differs, the build, lint and container steps skip and the job ends green. Otherwise each
-  # matrix leg builds the test image for its Ubuntu release and runs the updater cases in it
-  # (steps 4 and 5). The job has no `name:`, so GitHub shows each leg as `host_packages
-  # (<release>, <python>)`, and later host slices filter `gh run view` on that prefix.
+  # never signs)*), in two jobs. `host_packages_build` renders every package at the head and at
+  # the merge base on every run, with no path filter, because a group_vars edit can change a
+  # render. When no rendered tree differs, its build and lint steps skip and it ends green.
+  # Otherwise it builds both renders with the pinned nfpm, lints them, and hands the build on:
+  # the arm64 homelab-tools .deb to `host_tools_arm64`, and the render, the debs and nfpm to
+  # `host_packages`. Each `host_packages` matrix leg builds the test image for its Ubuntu release
+  # and runs the updater cases in it (steps 4 and 5).
+  #
+  # The build is a job of its own so that `host_tools_arm64` waits for the build alone (#6151).
+  # As one job, the arm64 job started only after both legs' 36s image build and 243s of cases,
+  # although the build was done about 80s in (run 40125170130). The cases legs now pay one more
+  # job's setup and the hand-off's transfer before their image build.
+  #
+  # `host_packages` has no `name:`, so GitHub shows each leg as `host_packages (<release>,
+  # <python>)`, and later host slices filter `gh run view` on that prefix. The build job's
+  # `name:` therefore does not start with `host_packages`.
   #
   # The merge base is HEAD's first parent on every event but a dispatch. On a pull request HEAD
   # is the merge ref, whose first parent is the base branch tip; on a push it is the previous
@@ -1051,22 +1098,17 @@ jobs:
   # nfpm is fetched and checked against its pinned sha256 on every run, ahead of the diff. A
   # Renovate PR that bumps the pin changes no render, so with the fetch behind the diff gate a
   # wrong digest or a 404 URL would reach master green.
-  host_packages:
+  host_packages_build:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    name: build the host packages (render, nfpm, lint)
     runs-on: ubuntu-26.04
-    # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
-    # apt's retries can take minutes, and the cases boot three containers per leg.
-    timeout-minutes: 30
-    strategy:
-      # Each leg reports its own conclusion, so one release's failure does not hide the other's.
-      fail-fast: false
-      matrix:
-        # The releases the fleet runs or is moving to (C5), each with the python3 minor it
-        # carries, which reconcile runs under.
-        include:
-          - {release: "24.04", python: "3.12"}
-          - {release: "26.04", python: "3.14"}
+    timeout-minutes: 15
+    # What the `host_packages` legs gate their steps on, from the render step below.
+    outputs:
+      changed: ${{ steps.render.outputs.changed }}
+      cases: ${{ steps.render.outputs.cases }}
+      upgrade: ${{ steps.render.outputs.upgrade }}
     env:
       # The custom manager in renovate.json reads this annotation and moves the version and the
       # digest in one PR. The digest is the sha256 of nfpm_<version>_Linux_x86_64.tar.gz, which
@@ -1102,9 +1144,10 @@ jobs:
       # fixture specs, and the cases' own code. CASE_INPUTS is the one list of them, and
       # ansible/tests/repo/test_host_package_case_inputs_census.py holds it to every
       # `validate` module the cases script imports. The renderer is a render input, so it
-      # reaches the cases through `changed` when it alters a real render. The job's own steps
-      # invoke the cases, so an edit to this job counts too. `job-changed` compares it as
-      # parsed YAML, so a comment-only edit, or an edit to another job, does not. The cases'
+      # reaches the cases through `changed` when it alters a real render. This job builds what
+      # the cases read and the `host_packages` job invokes them, so an edit to either job counts
+      # too. `job-changed` compares each as parsed YAML, so a comment-only edit, or an edit to
+      # another job, does not. The cases'
       # fixture exercises renderer paths no real package does, so `fixture-changed` renders it
       # in each tree with that tree's renderer, and a differing fixture counts too (#5066).
       #
@@ -1119,8 +1162,14 @@ jobs:
           CASE_INPUTS: |
             hosts/lib/tests/container/
             scripts/validate/host_package_cases.py
+            scripts/validate/host_packages.py
             scripts/validate/validate_lib/host_container.py
+            scripts/validate/validate_lib/conffile_case.py
             scripts/validate/validate_lib/host_fixtures.py
+            scripts/validate/validate_lib/package_roots.py
+            scripts/validate/validate_lib/repos_case.py
+            scripts/validate/validate_lib/secrets_case.py
+            scripts/validate/validate_lib/pi_host_seed.py
         run: |
           set -euo pipefail
           if [ "$EVENT" = workflow_dispatch ]; then
@@ -1155,9 +1204,9 @@ jobs:
           fi
           if [ "$cases" = false ]; then
             job=$(uv run python scripts/validate/host_packages.py job-changed "$base" \
-              --workflow .github/workflows/ci.yml --job host_packages)
+              --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages)
             if [ "$job" = true ]; then
-              echo "::notice::This PR changes the host_packages job's steps, so the cases run."
+              echo "::notice::This PR changes the host package jobs' steps, so the cases run."
               cases=true
             fi
           fi
@@ -1170,6 +1219,49 @@ jobs:
             fi
           fi
           echo "cases=$cases" >> "$GITHUB_OUTPUT"
+
+      # H4.1c. The two scans read the head render's package roots alone, so they sit here, after
+      # the render and ahead of every step that stands down when the tree is unchanged. Neither
+      # step has an `if:`: a PR that changes only .gitleaks.toml or the gitleaks pin renders no
+      # package differently, and it still runs them (test_host_package_scans_run_on_every_pr.py).
+      # The scan runs the gitleaks release that prek.toml pins, checked against the release's own
+      # checksums file, so the version has one home and Renovate's prek.toml manager moves it.
+      # `prove-scan` runs first: it shows the binary exempts a token at a package's ciphertext
+      # path and flags the same token anywhere else.
+      - name: Scan the named package roots for secrets
+        run: |
+          set -euo pipefail
+          version=$(sed -n '/repo = "https:\/\/github.com\/gitleaks\/gitleaks"/{n;s/^rev = "v\(.*\)"$/\1/p}' prek.toml)
+          [ -n "$version" ] || { echo "::error::prek.toml pins no gitleaks rev"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/leaks"
+          cd "$RUNNER_TEMP/leaks"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v$version"
+          curl --retry 3 -fsSLO "$base/gitleaks_${version}_linux_x64.tar.gz"
+          curl --retry 3 -fsSLo checksums.txt "$base/gitleaks_${version}_checksums.txt"
+          # --ignore-missing skips the other platforms' lines; a run that verifies no file fails.
+          sha256sum -c --ignore-missing --strict checksums.txt
+          tar -xzf "gitleaks_${version}_linux_x64.tar.gz" gitleaks
+          cd "$GITHUB_WORKSPACE"
+          uv run python scripts/validate/host_packages.py prove-scan \
+            --gitleaks "$RUNNER_TEMP/leaks/gitleaks" --config .gitleaks.toml
+          uv run python scripts/validate/host_packages.py scan-roots "$RUNNER_TEMP/render/head" \
+            --gitleaks "$RUNNER_TEMP/leaks/gitleaks" --config .gitleaks.toml
+
+      - name: Check the named package roots' placeholders against their SOPS keys
+        run: uv run python scripts/validate/host_packages.py placeholders "$RUNNER_TEMP/render/head"
+
+      # homelab-tools renders pins and no bytes (H3.11). The builder's own `install_tools`
+      # fetches each pinned file, checks its sha256 and places it under the tree's root/, so a
+      # wrong digest or a 404 URL fails here, and a Renovate bump of a pin reaches master only
+      # if its new digest verifies. The cache is keyed by digest, so the base and head trees
+      # share one download.
+      - name: Fetch the pinned homelab-tools binaries and check their sha256
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
+        run: |
+          uv run python scripts/validate/host_packages.py fetch-tools \
+            "$RUNNER_TEMP/render" --cache "$RUNNER_TEMP/tools-cache"
 
       # The version is H3's *Package rules* shape, `0.<first-parent count>+g<12 hex>`, taken
       # from each side's own commit, as the builder takes it from the commit it builds.
@@ -1200,6 +1292,18 @@ jobs:
               dpkg-deb --contents "$deb"
             done
 
+      # The `host_tools_arm64` job installs this build on a real arm64 runner.
+      - name: Hand the arm64 homelab-tools build to the arm64 job
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: homelab-tools-arm64
+          path: ${{ runner.temp }}/debs/head/homelab-tools_*_arm64.deb
+          if-no-files-found: warn
+          retention-days: 1
+
       - name: Run the type-config and maintainer-script lints over both renders and builds
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
@@ -1228,17 +1332,84 @@ jobs:
           grep -q 'conffiles lists /etc/homelab-red.conf' "$RUNNER_TEMP/red.log"
           grep -qF "postinst:2: 'rm -rf /etc/foo'" "$RUNNER_TEMP/red.log"
 
+      # The `host_packages` legs read the render and the debs, and build their fixture packages
+      # with the same nfpm. One tarball carries all three, because an artifact's zip does not
+      # keep a file's mode and the render ships executable maintainer scripts.
+      - name: Hand the render, the debs and nfpm to the cases legs
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
+        run: tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP" render debs bin/nfpm
+
+      - name: Upload the hand-off for the cases legs
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: host-packages-build
+          path: ${{ runner.temp }}/host-packages-build.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  # Steps 4 and 5 of the host packages, one leg per release. The header above
+  # `host_packages_build` says what each job does. Every step but the checkout and the setup
+  # skips when that job built nothing, and the leg ends green.
+  host_packages:
+    needs: [prove, host_packages_build]
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    runs-on: ubuntu-26.04
+    # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
+    # apt's retries can take minutes, and the cases boot three containers per leg.
+    timeout-minutes: 30
+    strategy:
+      # Each leg reports its own conclusion, so one release's failure does not hide the other's.
+      fail-fast: false
+      matrix:
+        # The releases the fleet runs or is moving to (C5), each with the python3 minor it
+        # carries, which reconcile runs under.
+        include:
+          - {release: "24.04", python: "3.12"}
+          - {release: "26.04", python: "3.14"}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes or fetches
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - name: Download the hand-off from the build job
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: host-packages-build
+          path: ${{ runner.temp }}/handoff
+
+      # The tarball unpacks to the paths the build job wrote, so the cases read `$RUNNER_TEMP/render`
+      # and `$RUNNER_TEMP/debs` as they did when both halves were one job.
+      - name: Unpack the render, the debs and nfpm
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        run: |
+          set -euo pipefail
+          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/nfpm" --version
+
       # Step 4. The Dockerfile pins the release by digest and the packages by snapshot. The
       # runner's CA bundle reaches the build only, for the snapshot archive's https redirect.
       # The early exit is in the script, not the `if:`, because a dispatch must reach this
       # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
       - name: Build the test image for this release
         if: >-
-          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
-          || steps.render.outputs.cases == 'true'
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
-          UPGRADE: ${{ steps.render.outputs.upgrade }}
+          UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
         run: |
           set -euo pipefail
           if [ "$UPGRADE" != true ]; then
@@ -1257,12 +1428,12 @@ jobs:
       # Step 5: every case, on this leg's release. The script's docstring lists them.
       - name: Run the updater cases in systemd containers
         if: >-
-          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
-          || steps.render.outputs.cases == 'true'
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
-          UPGRADE: ${{ steps.render.outputs.upgrade }}
+          UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no case can upgrade; no case runs."
@@ -1271,6 +1442,59 @@ jobs:
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases"
+
+  # Target slice H3.11, the `arm64` half of homelab-tools (docs/target-architecture/host/
+  # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages_build` job builds
+  # both architectures with the pinned nfpm and uploads the `arm64` .deb. This job installs it
+  # in the test image, built here for `arm64`, and runs each tool's `--version`, so a binary
+  # that does not execute on `arm64` fails before the Pi installs it.
+  #
+  # RUNNER LABEL: GitHub's hosted `arm64` Linux runner. If GitHub refuses the label for this
+  # repository, the job falls back to QEMU on `ubuntu-26.04`, and the PR that does so records the
+  # run time (Open question 9). A run that leaves this job queued is that refusal.
+  #
+  # It waits for `host_packages_build` alone, not for the cases legs (#6151).
+  #
+  # When `host_packages_build` built no homelab-tools, because no render changed, there is no
+  # artifact and the job ends green with a notice.
+  host_tools_arm64:
+    needs: [prove, host_packages_build]
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes or fetches
+
+      - name: Download the arm64 homelab-tools build
+        continue-on-error: true  # no artifact when host_packages_build built nothing
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: homelab-tools-arm64
+          path: ${{ runner.temp }}/debs
+
+      - name: Install the build in the test image and run each tool
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          debs=("$RUNNER_TEMP"/debs/homelab-tools_*_arm64.deb)
+          if [ "${#debs[@]}" -eq 0 ]; then
+            echo "::notice::host_packages_build built no homelab-tools, so there is nothing to install."
+            exit 0
+          fi
+          docker build --build-arg RELEASE=24.04 --build-context runner-ca=/etc/ssl/certs \
+            -t homelab-host-test:24.04 hosts/lib/tests/container
+          docker run --rm -v "$RUNNER_TEMP/debs:/debs:ro" homelab-host-test:24.04 sh -euc '
+            test "$(dpkg --print-architecture)" = arm64
+            DEBIAN_FRONTEND=noninteractive apt-get install -y /debs/homelab-tools_*_arm64.deb
+            dpkg-query -W homelab-tools:arm64
+            for tool in sops chezmoi; do
+              /usr/lib/homelab/bin/$tool --version
+              if command -v "$tool"; then echo "$tool is on PATH" >&2; exit 1; fi
+            done
+            test -z "$(dpkg --verify homelab-tools)"
+          '
 
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
@@ -1281,7 +1505,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages]
+    needs: [prove, hooks, pr_gates, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -1303,21 +1527,26 @@ jobs:
       # job succeeded with `proven=true`: that is the proven path, where the pushed tree is one a
       # green PR run swept. A skip on any other path is a failure, because a skipped job otherwise
       # reads as a pass to GitHub.
-      - name: Require all seven halves to have succeeded
+      - name: Require every half to have succeeded
         env:
           PROVE: ${{ needs.prove.result }}
           PROVEN: ${{ needs.prove.outputs.proven }}
           HOOKS: ${{ needs.hooks.result }}
+          PR_GATES: ${{ needs.pr_gates.result }}
           PYTEST: ${{ needs.pytest.result }}
           ANSIBLE_LINT: ${{ needs.ansible_lint.result }}
           DECK_MOD: ${{ needs.deck_mod.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
           SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
+          HOST_PACKAGES_BUILD: ${{ needs.host_packages_build.result }}
           HOST_PACKAGES: ${{ needs.host_packages.result }}
+          HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
-          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT" \
+          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
+            "ansible-lint=$ANSIBLE_LINT" \
             "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
-            "host-packages=$HOST_PACKAGES"
+            "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
+            "host-tools-arm64=$HOST_TOOLS_ARM64"
           # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
           # dependent ran (#5783).
@@ -1325,8 +1554,10 @@ jobs:
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
-          ok "$HOOKS" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
-            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES"
+          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
+            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
+            && ok "$HOST_PACKAGES" \
+            && ok "$HOST_TOOLS_ARM64"
 
       # Records what this green run tested, for the push run's `prove` job (#5489). On a pull
       # request GITHUB_SHA is the merge commit of refs/pull/N/merge, and its tree is the tree

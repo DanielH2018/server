@@ -32,6 +32,11 @@ questions* 2) that a host-network CronJob looks the addresses up into a ConfigMa
 absent arm. After the deploy, the `crowdsec-home-ips` ConfigMap held an IPv4 address and a
 /64, and the sidecar logged `crowdsec-home-allowlist: status=up`. D5's #5765 (`c7ce725f6`)
 moved the four cron arms and the file arm into `k8s_host_files`.
+PR H2.3d, the drill moves to a CronJob: [#6105](https://github.com/DanielH2018/server/pull/6105).
+The CronJob ships suspended, and H2.3e unsuspends it after the operator confirms
+`/etc/cron.d/longhorn-restore-drill` is gone.
+PR H2.3e, unsuspend: this PR sets `suspend: false`. It stays open for the first scheduled run's
+evidence, and for two consecutive runs that drilled different volumes.
 Depends on: H1, D3 and H6, per PR. H2.2a needs H1.5a and H1.6. H2.3b needs H1.5a and the C3
 row of *Open questions* 12. H2.8a needs H1.7b (and through it D3) and H6.4b, with the
 region-key gate of *Open questions* 11. No other H2 PR waits outside H2 (*Open questions*

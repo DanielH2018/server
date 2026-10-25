@@ -10,6 +10,7 @@ Run: uv run pytest ansible/tests/k8s/test_rbac_against_rest_script.py
 """
 
 import importlib
+import json
 
 from _helpers import K8S_ROLES
 from _k8s_render import render_role_template
@@ -189,4 +190,82 @@ def test_the_home_ips_role_without_patch_is_flagged(monkeypatch) -> None:
             rule["verbs"] = ["get"]
     assert missing(needs, grants(docs, "homelab", "crowdsec-home-ips")) == [
         ("homelab", "", "configmaps", "patch", "crowdsec-home-ips")
+    ]
+
+
+def _reconcile_calls(monkeypatch, tmp_path) -> list[tuple[str, str]]:
+    """H1.6: the longhorn-reconcile CronJob's calls on a run that has every write to make.
+
+    One volume sits in a group it must leave, so the run lists both collections and patches the
+    volume. Since #5958 it makes no Deployment call: the CSI request is a Longhorn Setting.
+    """
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "longhorn-reconcile" / "files"))
+    script = importlib.import_module("longhorn_reconcile")
+    calls = []
+    volume = {
+        "metadata": {
+            "name": "pvc-1",
+            "labels": {"recurring-job-group.longhorn.io/default": "enabled"},
+        },
+        "status": {
+            "kubernetesStatus": {"namespace": "homelab", "pvcName": "crowdsec-db"}
+        },
+    }
+
+    class Recorder(script.Kube):
+        def __init__(self):
+            super().__init__("https://api", "token")
+
+        def call(self, method, path, body=None, content_type=script.MERGE_PATCH):
+            calls.append((method, path))
+            if path.endswith("/volumes"):
+                return 200, {"items": [volume]}
+            if path == "/api/v1/persistentvolumeclaims":
+                return 200, {"items": []}
+            return 200, {}
+
+    tiers = tmp_path / "tiers.json"
+    tiers.write_text(
+        json.dumps({"r2": [], "weekly": {}, "nobackup": ["homelab/crowdsec-db"]})
+    )
+    env = {
+        "RECONCILE_NAMESPACE": "longhorn-system",
+        "RECONCILE_TIERS_FILE": str(tiers),
+    }
+    assert script.main([], env, Recorder()) == 0
+    assert [m for m, _ in calls].count("PATCH") == 1
+    return calls
+
+
+def _reconcile_rbac() -> list[dict]:
+    return list(
+        yaml_fast.safe_load_all(
+            render_role_template("longhorn-reconcile", "rbac.yaml.j2")
+        )
+    )
+
+
+def test_the_longhorn_reconcile_role_grants_every_call_its_script_makes(
+    monkeypatch, tmp_path
+) -> None:
+    # fact: ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#What it writes, and how often (the autonomous-role contract)
+    needs = rest_needs(_reconcile_calls(monkeypatch, tmp_path))
+    # The H1 plan's grant set, less the `get` on volumes: the script lists once and never reads
+    # one volume, where kubectl's `label` and `patch` read the object first.
+    assert needs == {
+        ("longhorn-system", "longhorn.io", "volumes", "list", None),
+        ("longhorn-system", "longhorn.io", "volumes", "patch", "pvc-1"),
+        (None, "", "persistentvolumeclaims", "list", None),
+    }
+    granted = grants(_reconcile_rbac(), "longhorn-system", "longhorn-reconcile")
+    assert missing(needs, granted) == []
+
+
+def test_the_longhorn_reconcile_role_without_the_pvc_list_is_flagged(
+    monkeypatch, tmp_path
+) -> None:
+    needs = rest_needs(_reconcile_calls(monkeypatch, tmp_path))
+    docs = [d for d in _reconcile_rbac() if "ClusterRole" not in d["kind"]]
+    assert missing(needs, grants(docs, "longhorn-system", "longhorn-reconcile")) == [
+        (None, "", "persistentvolumeclaims", "list", None)
     ]

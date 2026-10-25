@@ -1,11 +1,13 @@
 # The Pi's three heartbeats (H3.8b, docs/target-architecture/host/h3-pi-pilot.md). Until H3.8b
 # the optimize_pi role installed them as three crons. Each script runs as a oneshot service on a
 # timer, as sys_user, which reaches `docker` and the journal through its supplementary groups.
-# The two push tokens arrive through `LoadCredential=` from the interim files optimize_pi stages
-# under /etc/homelab/interim/; H4 replaces that source with /run/credstore/.
+# The two push tokens arrive through `LoadCredential=` from /run/credstore/, which
+# homelab-secrets.service fills from the Pi's SOPS file (H4.5). The interim files optimize_pi
+# stages under /etc/homelab/interim/ stay on disk, read by nothing, until H4.6 retires them.
 #
 # - homelab-pi-sd-health, every 5 minutes: the root filesystem's ext4 errors_count, the
-#   rotated-log integrity verdict and the log2ram mount, pushed to "Daniel Pi SD Health".
+#   rotated-log integrity verdict and the log2ram mount, pushed to "Daniel Pi SD Health" and
+#   written to pi-sd-health.prom in node_exporter's textfile directory (M6 B5).
 # - homelab-pi-gz-integrity, daily at 01:40: `gzip -t` over every rotated log, written as the
 #   verdict the SD-health heartbeat reads. It pushes nothing itself.
 # - homelab-pi-recovery, every 5 minutes: the contract below.
@@ -15,11 +17,18 @@
 # `docker start` on any watched container it finds not running, every 5 minutes, unattended.
 #
 # - Scope / exclusions: exactly the containers this host deploys, which is every
-#   containers_list entry in inventory/host_vars/daniel-pi.yml plus the docker-proxy role's
-#   sub-proxies. One `docker start` per watched container per cycle and nothing else: never a
+#   containers_list and compose_services entry in inventory/host_vars/daniel-pi.yml plus the
+#   docker-proxy role's sub-proxies. One `docker start` per watched container per cycle and nothing else: never a
 #   restart, recreate, `docker rm` or pull, and nothing on the other two hosts.
 #   docs/pi-host-tuning-record.md has why the watch set is the deploy list rather than
 #   `docker ps -a --filter status=exited`.
+# - Compose read (H5.2b, interim): one read of homelab_compose.prom in node_exporter's textfile
+#   directory, the file homelab-compose.service's compose-run writes. A result of 0 makes the
+#   cycle push `down`, naming `homelab-compose` and the result's SHA. The read acts on nothing, so
+#   it adds no action to this contract. An absent file adds nothing, because it is absent by
+#   design until the first run. A file that exists but cannot be read, or holds no result line,
+#   pushes `down` and is never treated as absent. M1's rule on homelab_compose_up_result
+#   replaces the read (docs/target-architecture/host/h5-pi-compose.md, *Open questions* 5).
 # - Why it acts at all: `restart: unless-stopped` covers a process exit, not a failed create
 #   at the OCI runtime, which is what this 512 MB board actually produces.
 # - Mode (explicit and reversible): optimize_pi_recovery_restart_enabled arms the timer and
@@ -30,8 +39,9 @@
 # - Authoritative sources: `docker ps` against the real socket, not docker-proxy, so it reports
 #   docker-proxy's own death too. `docker inspect` is read BEFORE the restart, which erases the
 #   exit code, the daemon's Error string and FinishedAt.
-# - Required evidence, every cycle: a Kuma push to "Daniel Pi Recovery" and a
-#   /var/log/pi-health/health.log line naming what died and whether the restart took.
+# - Required evidence, every cycle: a Kuma push to "Daniel Pi Recovery", a
+#   /var/log/pi-health/health.log line naming what died and whether the restart took, and
+#   pi-recovery-health.prom in node_exporter's textfile directory (M6 B5).
 # - It pushes `down` on a cycle it fixed, on purpose: an `up` after a successful restart would
 #   hide a container crashing every 5 minutes. The script's `# DECIDED:` marker has the
 #   declined re-proposal.
@@ -79,9 +89,14 @@ files:
   - {src: templates/pi-sd-health.sh.j2, dst: /usr/lib/homelab/pi-sd-health, mode: "0755"}
   - {src: templates/pi-gz-integrity.sh.j2, dst: /usr/lib/homelab/pi-gz-integrity, mode: "0755"}
   - {src: templates/pi-recovery-health.sh.j2, dst: /usr/lib/homelab/pi-recovery-health, mode: "0755"}
-  # A package-owned copy of initial_setup's helper, which stays the single source. The scripts
-  # source this copy, so the package carries everything its units run.
-  - {shared: kuma-push-lib.sh, dst: /usr/lib/homelab/kuma-push-lib.sh}
+  # The push helper the scripts source, /usr/lib/homelab/kuma-push-lib.sh, is the `kuma-push`
+  # component's since H4.3b1. daniel-pi's package lists both components, so it still carries the
+  # file the scripts source.
+  #
+  # A package-owned copy of initial_setup's textfile writer (M6 B5), which stays the single
+  # source: the two token scripts call its write_check_textfile before their push, so Prometheus
+  # reads each cycle's verdict.
+  - {shared: homelab-check-lib.sh, dst: /usr/lib/homelab/homelab-check-lib.sh}
   # A plain file at the path optimize_pi wrote, so dpkg takes it over on unpack.
   - {src: templates/pi-health.logrotate.j2, dst: /etc/logrotate.d/pi-health}
   - {src: units/homelab-pi-sd-health.service.j2, dst: /usr/lib/systemd/system/homelab-pi-sd-health.service}

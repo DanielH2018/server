@@ -30,7 +30,11 @@ import yaml
 from lib import yaml_fast
 from lib.git import git
 from lib.narrow_git import CannotNarrow, mapping_at, show_at
-from deploy_tools.narrow_lib.setup_playbook import declared_tags, playbook_roles
+from deploy_tools.narrow_lib.setup_playbook import (
+    declared_tags,
+    play_role_includes,
+    playbook_roles,
+)
 from deploy_tools.narrow_lib.task_walk import (
     _SPECIAL_TAGS,
     _dynamic_includes,
@@ -197,14 +201,19 @@ class RoleIndex:
             question on every step of its walk.
         reachable: the task files the role's `tasks/main` reaches through static imports — the
             only ones the role's entry in its playbook runs. A tag read off any other file (one
-            a separate playbook imports, one only a play-level `include_role` with
-            `tasks_from:` reaches) can select nothing under the printed command.
+            a separate playbook imports) can select nothing under the printed command.
+        play_included: task file -> the tags of the play task in `playbook_text` that runs it
+            with `include_role ... tasks_from:`, or the reason none provably does. Empty
+            without a playbook. `k3s-bringup.yml`'s join play reaches `tasks/agent.yml` this
+            way under `k3s_agent`, which the remediation prints with `-e join_agent=` (#5628).
         included: task file -> the tags selecting it, for a file a reachable one pulls in
             with `include_tasks`, or the reason no tag provably does (`_dynamic_includes`).
             Several include sites union, each refusal refusing the file.
     """
 
-    def __init__(self, role: str, ref: str, repo: str) -> None:
+    def __init__(
+        self, role: str, ref: str, repo: str, playbook_text: str | None = None
+    ) -> None:
         self.prefix = f"{SETUP_TREE}/{role}/"
         self.tags: dict[str, frozenset[str] | None] = {}
         self.task_text: dict[str, str] = {}
@@ -235,6 +244,7 @@ class RoleIndex:
             raise CannotNarrow(f"{self.prefix}tasks/ holds no task file at {ref}")
         self.reachable = self._reachable_from(self._main_task_file(ref))
         self.included = self._included_from(self.reachable)
+        self.play_included = self._play_included_from(playbook_text, role)
 
     def _facts_set_by(self, rel: str) -> frozenset[str]:
         """The facts one task file derives, read off its parsed tasks."""
@@ -291,6 +301,56 @@ class RoleIndex:
                 out[target] = answer if isinstance(answer, str) else before | answer
         return out
 
+    def _play_included_from(
+        self, playbook_text: str | None, role: str
+    ) -> dict[str, frozenset[str] | str]:
+        """`play_role_includes` keyed by the task file each `tasks_from:` resolves to.
+
+        A name resolves the way `_main_task_file` resolves `main`: bare, or with one of the
+        extensions Ansible loads. Two files answering one name refuse that name rather than
+        guess which Ansible picks. Several include sites union, each refusal refusing the file.
+        """
+        out: dict[str, frozenset[str] | str] = {}
+        for name, answer in play_role_includes(playbook_text, role):
+            stem = posixpath.normpath(f"tasks/{name}")
+            found = [
+                stem + ext for ext in _LOADED_EXTENSIONS if stem + ext in self.task_text
+            ]
+            if len(found) > 1:
+                answer = f"tasks_from: {name} names {' and '.join(found)}"
+            for rel in found:
+                before = out.get(rel, frozenset())
+                if not isinstance(before, str):
+                    out[rel] = answer if isinstance(answer, str) else before | answer
+        return out
+
+    def _play_included_tags(self, rel: str) -> frozenset[str]:
+        """The include's tags that every task of a play-included file also carries.
+
+        `include_role` is dynamic: its tags select the include, and the tasks inside then run
+        on their own tags alone. So a tag selects all of the file's work only when the include
+        AND every task in the file carry it — every task of `agent.yml` carries `k3s_agent`.
+        """
+        answer = self.play_included[rel]
+        if isinstance(answer, str):
+            raise CannotNarrow(answer)
+        doc = yaml_fast.safe_load(self.task_text[rel])
+        per_task = _task_tags(doc if isinstance(doc, list) else [], frozenset())
+        if any("never" in t for t in per_task):
+            raise CannotNarrow(
+                f"{rel} carries the special tag never, which selects opt-in tasks "
+                "rather than this change's work"
+            )
+        tags = (
+            answer.intersection(*per_task) - _SPECIAL_TAGS if per_task else frozenset()
+        )
+        if not tags:
+            raise CannotNarrow(
+                f"{rel} is included from a play under {', '.join(sorted(answer))}, which not "
+                "every task in it carries, so that tag may run none of them"
+            )
+        return tags
+
     def tags_of(self, rel: str, seen: frozenset[str] = frozenset()) -> frozenset[str]:
         """The tags selecting one task file; refuses one untagged, unknown or unreached.
 
@@ -326,11 +386,13 @@ class RoleIndex:
                     f"{rel} carries the special tag never, which selects opt-in tasks "
                     "rather than this change's work"
                 )
+        elif rel in self.play_included:
+            tags = self._play_included_tags(rel)
         else:
             raise CannotNarrow(
                 f"{rel} is neither statically imported from the role's tasks/main file nor "
-                "included with tags that select it, so the role's entry in its playbook "
-                "never runs it under its own tags"
+                "included with tags that select it, from the role or from a play of its "
+                "playbook, so no printed command runs it under its own tags"
             )
         if tags is None:
             raise CannotNarrow(

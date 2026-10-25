@@ -37,11 +37,7 @@ _FILTER_CALLERS_EXEMPT = {
     ),
 }
 KNOWN_FILTER_CALLERS = {
-    "ansible/filter_plugins/service_tier.py": {"k3s"},
     "ansible/filter_plugins/k8s_autodeploy.py": {"gitops_deploy"},
-    "ansible/filter_plugins/longhorn_groups.py": {"k3s"},
-    # Registers no filter, but `longhorn_groups` and `service_tier` wrap theirs in it (#4527).
-    "ansible/filter_plugins/filter_errors.py": {"k3s"},
 }
 _COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
 
@@ -248,7 +244,9 @@ def test_the_defaults_rows_equal_the_trees_cross_role_reads():
     }
     assert {path: roles for path, roles in kept.items() if roles} == recorded
     assert recorded.get("ansible/roles/setup/initial_setup/defaults/main.yml") == {
-        "claude_code"
+        "claude_code",
+        "homelab_builder",
+        "renovate_agent",
     }
 
 

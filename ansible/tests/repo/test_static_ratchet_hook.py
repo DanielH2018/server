@@ -16,6 +16,7 @@ import shlex
 import tomllib
 
 import pytest
+import xdist_width
 from _helpers import REPO
 
 HOOK_ID = "static-ratchet-tests"
@@ -237,3 +238,76 @@ def test_the_lander_gate_matches_every_k8s_input_its_render_reads(path):
 def test_the_lander_gate_skips_a_k8s_role_doc():
     lander = next(h for h in _ratchet_hooks() if h["id"] == f"{HOOK_ID}-lander")
     assert not re.search(lander["files"], "ansible/roles/k8s/bento-pdf/CLAUDE.md")
+
+
+# The session ceiling `PYTEST_XDIST_AUTO_NUM_WORKERS` sets for every Claude session.
+SESSION_CEILING = 4
+
+# A multi-module pytest hook that still takes `-n auto`, with the PR that pins it. #5919 pins
+# `static-ratchet-tests` at `-n 4`; delete its row once that lands.
+UNPINNED = {"static-ratchet-tests": "#5919"}
+
+
+def _pytest_hooks() -> list[dict]:
+    """Every prek hook whose entry runs pytest."""
+    config = tomllib.loads((REPO / "prek.toml").read_text())
+    return [
+        hook
+        for repo in config["repos"]
+        for hook in repo.get("hooks", [])
+        if "pytest" in shlex.split(hook.get("entry", ""))
+    ]
+
+
+def _pinned_width(entry: str) -> int | None:
+    """The `-n` an entry passes itself, or None when it leaves the width to `-n auto`."""
+    tokens = shlex.split(entry)
+    pinned = [after for flag, after in itertools.pairwise(tokens) if flag == "-n"]
+    pinned += [t[2:] for t in tokens if t.startswith("-n") and t[2:].isdigit()]
+    if pinned and pinned[-1] != "auto":
+        return int(pinned[-1])
+    return None
+
+
+def _left_to_auto(hooks: list[dict]) -> list[str]:
+    """The ids of multi-module hooks whose width `-n auto` sizes at one worker."""
+    return [
+        h["id"]
+        for h in hooks
+        if len(_modules(h)) > 1
+        and _pinned_width(h["entry"]) is None
+        and xdist_width.workers_for(len(_modules(h)), SESSION_CEILING) <= 1
+    ]
+
+
+def test_no_multi_module_pytest_hook_leaves_its_width_to_auto():
+    """xdist_width gives `-n auto` one worker per 15 modules, which serialised five (#5917).
+
+    An explicit `-n`, `-n0` included, is a measured choice; the defect is the silent fallback.
+    """
+    hooks = _pytest_hooks()
+    assert "static-ratchet-tests-python" in {h["id"] for h in hooks}
+    serial = [i for i in _left_to_auto(hooks) if i not in UNPINNED]
+    assert not serial, (
+        f"`-n auto` runs these on one worker; pin an explicit `-n`: {serial}"
+    )
+
+
+def test_every_unpinned_exemption_still_applies():
+    """Once the named PR pins its hook, this fails so the exemption row goes with it."""
+    stale = sorted(set(UNPINNED) - set(_left_to_auto(_pytest_hooks())))
+    assert not stale, f"these hooks are pinned now; delete their UNPINNED rows: {stale}"
+
+
+@pytest.mark.parametrize(
+    ("entry", "flagged"),
+    [
+        ("uv run pytest -q -p no:cacheprovider a.py b.py c.py", True),
+        ("uv run pytest -q -n auto a.py b.py", True),
+        ("uv run pytest -q -n 4 a.py b.py", False),
+        ("uv run pytest -q -n0 a.py b.py", False),
+        ("uv run pytest -q a.py", False),
+    ],
+)
+def test_the_guard_flags_only_an_unpinned_multi_module_entry(entry, flagged):
+    assert _left_to_auto([{"id": "h", "entry": entry}]) == (["h"] if flagged else [])

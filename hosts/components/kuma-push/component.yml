@@ -1,0 +1,14 @@
+# The Kuma push helper (H4.3b1, docs/target-architecture/host/h4-secrets-unit.md, *Steps, as
+# PRs*, item 9). Several heartbeats source /usr/lib/homelab/kuma-push-lib.sh: the Pi's three
+# (pi-heartbeats, H3.8b) and, from H4.3c, daniel-server's UPS watchdog. A host package that lists
+# this component installs the one copy, so no other component ships that path. The renderer
+# refuses a package in which two components install the same path.
+#
+# The file stays single at its Ansible path, ansible/roles/setup/initial_setup/files/, where
+# initial_setup still installs it for the hosts that have no package. This component copies the
+# same bytes (renderer_lib/host_sources.py:SHARED_FILES).
+#
+# On the Pi the file moved here from pi-heartbeats at the same path, in the same package. dpkg
+# therefore keeps the file in place across the upgrade.
+files:
+  - {shared: kuma-push-lib.sh, dst: /usr/lib/homelab/kuma-push-lib.sh}

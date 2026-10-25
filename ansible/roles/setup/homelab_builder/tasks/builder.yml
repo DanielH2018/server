@@ -49,13 +49,14 @@
     owner: root
     group: homelab-builder
     mode: "0640"
-  # The deployer's CI gate, walk bound and repo (builder step 4). They are gitops_deploy's
-  # defaults, so deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES carries the row that
-  # re-applies this role when one changes. H7.2e moves the CI keys into inventory and owes that
-  # row's replacement.
+  # The CI gate and walk bound every deploy path grades by (builder step 4) live in
+  # `group_vars/all.yml` since H7.2e. The deployer's repo is still its role default, so
+  # `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` carries its row. A change to the two
+  # group_vars keys is a deploy-plane change, which re-renders no setup role's settings file:
+  # `group_vars/all.yml` beside them says what the operator applies.
   vars:
-    homelab_builder_ci_contexts: "{{ gitops_deploy_ci_contexts }}"
-    homelab_builder_ci_walk_max: "{{ gitops_deploy_ci_ancestor_walk_max }}"
+    homelab_builder_ci_contexts: "{{ ci_required_contexts }}"
+    homelab_builder_ci_walk_max: "{{ ci_ancestor_walk_max }}"
     homelab_builder_github_repo: "{{ gitops_deploy_github_repo }}"
   become: true
   # It renders homelab_builder_github_token. no_log also hides an undefined-variable failure:
@@ -87,8 +88,32 @@
   become: true
 
 # The uv and Python steps of common/tasks/agent_user.yml, not the whole file, which also installs
-# Claude Code. A copy of the uv binary initial_setup pins, so a uv bump reaches the builder on the
-# next apply of this role. Root-owned, for the reason the code directory is.
+# Claude Code. A copy of the uv binary initial_setup pins. Naming `initial_setup_uv_version` here
+# is what makes a pin bump re-apply this role: deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES
+# routes initial_setup's defaults to it, and narrow_setup keeps this tag for that key (#5945).
+- name: Read the operator's uv version for the builder
+  tags: [homelab-builder-install]
+  ansible.builtin.command:
+    argv: ["/home/{{ sys_user }}/.local/bin/uv", --version]
+  register: homelab_builder_operator_uv
+  changed_when: false
+  check_mode: false
+  become: false
+
+- name: Refuse to give the builder a uv the pin has moved past
+  tags: [homelab-builder-install]
+  # initial_setup.yml applies initial_setup's `tooling` block first, so a mismatch means that
+  # apply was skipped on this host, and the copy below would ship the old binary. Check mode
+  # installs nothing, so the operator's uv there is still the old one.
+  ansible.builtin.assert:
+    that: homelab_builder_operator_uv.stdout.split()[1:2] == [initial_setup_uv_version]
+    fail_msg: >-
+      The operator's uv is '{{ homelab_builder_operator_uv.stdout }}', and the pin is
+      {{ initial_setup_uv_version }}. Apply `initial_setup.yml --tags tooling` on this host first.
+    quiet: true
+  when: not ansible_check_mode
+
+# Root-owned, for the reason the code directory is.
 - name: Give the builder the operator's pinned uv
   tags: [homelab-builder-install]
   ansible.builtin.copy:
@@ -129,7 +154,7 @@
     + (homelab_builder_python.stdout | default(''))
   become: true
 
-- name: Install the builder script, the signer script and publish-textfile
+- name: Install the builder script, its siblings, the signer script and publish-textfile
   tags: [homelab-builder-install]
   ansible.builtin.copy:
     src: "{{ item.src }}"
@@ -140,6 +165,9 @@
   loop:
     - { src: host_package_builder.py, dest: host_package_builder.py }
     - { src: homelab_repo_sign.py, dest: homelab_repo_sign.py }
+    - { src: homelab_tool_fetch.py, dest: homelab_tool_fetch.py }
+    - { src: builder_ci_grade.py, dest: builder_ci_grade.py }
+    - { src: builder_rollout_gate.py, dest: builder_rollout_gate.py }
     - { src: publish-textfile.sh, dest: publish-textfile }
   loop_control:
     label: "{{ item.dest }}"
@@ -162,12 +190,18 @@
         src: ansible/roles/setup/homelab_builder/files/host_package_builder.py
       - live: /opt/homelab-builder/homelab_repo_sign.py
         src: ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py
+      - live: /opt/homelab-builder/homelab_tool_fetch.py
+        src: ansible/roles/setup/homelab_builder/files/homelab_tool_fetch.py
+      - live: /opt/homelab-builder/builder_ci_grade.py
+        src: ansible/roles/setup/homelab_builder/files/builder_ci_grade.py
+      - live: /opt/homelab-builder/builder_rollout_gate.py
+        src: ansible/roles/setup/homelab_builder/files/builder_rollout_gate.py
       - live: /opt/homelab-builder/publish-textfile
         src: ansible/roles/setup/homelab_builder/files/publish-textfile.sh
       - live: /opt/homelab-builder/host_lib.py
-        src: ansible/roles/setup/common/files/host_lib.py
+        src: hosts/lib/host_lib.py
       - live: /opt/homelab-builder/kuma_push.py
-        src: ansible/roles/setup/common/files/kuma_push.py
+        src: hosts/lib/kuma_push.py
 
 - name: Install the builder and signer units
   tags: [homelab-builder-install]
@@ -180,7 +214,7 @@
     - homelab-builder.timer
     - homelab-repo-sign.service
   become: true
-  notify: Reload systemd
+  notify: Reload systemd for homelab_builder
 
 - name: Install the builder's failure alert
   tags: [homelab-builder-install]

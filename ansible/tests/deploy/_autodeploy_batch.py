@@ -1,10 +1,9 @@
 """Is a Job or CronJob credited as gated -- the batch half of the auto-deploy derivation.
 
-A batch workload is credited when a live task of the role waits on it by name or delegates
-to `cronjob-gate`, or, for a flux-owned role, when the role names the CronJob in
-`flux_cronjob_gates`; whether the role also holds a completion gate and a failure escalation
-are separate predicates the guard combines. Everything here
-reads tasks through `_autodeploy._live_tasks`, so a task commented out, tagged `never` or
+A batch workload is credited when a live task of the role waits on it by name, or, for a
+flux-owned role, when the role names the CronJob in `flux_cronjob_gates`; whether the role
+also holds a completion gate and a failure escalation are separate predicates the guard
+combines. Everything here reads tasks through `_autodeploy._live_tasks`, so a task commented out, tagged `never` or
 behind a `when: false` is invisible to the credit exactly as it is invisible to a deploy.
 Consumed by `test_k8s_autodeploy_batch_gates.py` and by `_autodeploy_rollout.py`.
 """
@@ -26,9 +25,10 @@ def _owners() -> dict[str, str]:
 def flux_gated_names(role: Path, owners: dict[str, str] | None = None) -> set[str]:
     """The CronJobs a flux-owned role gates through `flux_cronjob_gates`.
 
-    Flux runs no task of a flux-owned role, so no `k8s/cronjob-gate` include can gate it.
-    The renderer copies each CronJob the role names there into a gate Job in `<tag>-verify`,
-    which Flux runs once per role revision (`scripts/renderer/renderer_lib/cronjob_gate.py`).
+    A CronJob has no rollout and nothing runs it at deploy time, so this is the only credit a
+    CronJob gets. The renderer copies each CronJob the role names there into a gate Job in
+    `<tag>-verify`, which Flux runs once per role revision
+    (`scripts/renderer/renderer_lib/cronjob_gate.py`).
     A role Ansible still owns gets no credit for the opt-in, because nothing renders its gate.
 
     Args:
@@ -84,15 +84,9 @@ def _batch_gated_names(role: Path) -> set[str]:
        fragment like image-builder's `job/build-{{ image_builder_name }}` is refused outright
        rather than truncated into the shorter, wrong-but-plausible literal `build-`.
 
-    2. An `include_role: k8s/cronjob-gate` with `cronjob_gate_name: <cronjob>`. A CronJob
-       fires on its schedule and nothing runs at deploy time, so no `job/<name>` wait can be
-       written for it. The credited name is `cronjob_gate_name` VERBATIM — the CronJob's own
-       `metadata.name`, and therefore what `_batch_templates` yields for the caller's template.
-       A non-literal value (a Jinja expression) is not credited, the same fail-closed choice
-       `_deployment_docs` makes for a non-literal Deployment name — see `_LITERAL_NAME` below,
-       reused here rather than redefined. The Job the shared role creates is
-       `<name>-deploy-gate`; crediting that instead would be a string no rendered manifest can
-       ever equal — a marker that gates nothing, with no symptom.
+    2. A CronJob a flux-owned role names in `flux_cronjob_gates` (`flux_gated_names`). A
+       CronJob fires on its schedule and nothing runs at deploy time, so no `job/<name>` wait
+       can be written for it.
 
     Reading the file as YAML also removes the ordering assumption a text scan needed: a caller
     writing `vars:` above `ansible.builtin.include_role:` is the same task dict either way.
@@ -100,8 +94,8 @@ def _batch_gated_names(role: Path) -> set[str]:
     Delegating to `k8s/image-builder` is NOT credited. The Job lives in image-builder's own
     templates, not this role's, so a role that only delegates renders zero batch templates of
     its own and `test_auto_deployable_roles_gate_every_batch_workload_they_render` passes it on
-    an empty loop rather than through this function. `_GATING_SHARED_ROLES` asserts that both
-    shared roles really do gate what they claim to.
+    an empty loop rather than through this function. `_GATING_SHARED_ROLES` asserts that the
+    shared role really does gate what it claims to.
     """
     names = flux_gated_names(role)
     tasks_file = role / "tasks/main.yml"
@@ -115,11 +109,6 @@ def _batch_gated_names(role: Path) -> set[str]:
                 for token in _JOB_NAME_TOKEN.findall(m.group(1)):
                     if _LITERAL_NAME.match(token):
                         names.add(token)
-        include = task.get("ansible.builtin.include_role")
-        if isinstance(include, dict) and include.get("name") == "k8s/cronjob-gate":
-            gate_name = (task.get("vars") or {}).get("cronjob_gate_name")
-            if isinstance(gate_name, str) and _LITERAL_NAME.match(gate_name):
-                names.add(gate_name)
     return names
 
 
@@ -165,8 +154,8 @@ def _has_failure_escalation(role: Path) -> bool:
     Routed through `_live_tasks` for the same reason `_has_completion_gate` is: a substring
     test (`"ansible.builtin.fail" in text`) is satisfied by
     `ansible.builtin.debug:  # never ansible.builtin.fail here`, and by a real `fail` under
-    `when: false` or `tags: [never]`. It is the only thing standing behind `_batch_gated_names`
-    crediting every `k8s/cronjob-gate` caller, so it carries more weight than its size suggests.
+    `when: false` or `tags: [never]`. It is what makes a role's completion gate
+    fail the deploy rather than only report.
 
     `ansible.builtin.fail` and the short `fail` Ansible also accepts, read as a module KEY on
     the task dict rather than as text anywhere in the file.

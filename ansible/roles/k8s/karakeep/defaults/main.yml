@@ -114,7 +114,8 @@ karakeep_k8s_pruner_auto_tags: ["0-1m", "1-5m", "0-5m", "5-10m", "10-15m", "15-3
 # The first API call retries for this long, covering kube-router's lag in admitting a new
 # pod's source IP and a karakeep pod that is mid-restart when the deploy gate fires.
 karakeep_k8s_pruner_connect_budget_seconds: 300
-# Below cronjob-gate's 660s timeout, which must exceed it (test_cronjob_gate_decision.py).
+# The renderer sets the `karakeep-verify` timeout above this, so a hung gate run fails on its
+# own deadline (scripts/renderer/renderer_lib/ordering.py:VERIFY_DEADLINE_MARGIN_S).
 karakeep_k8s_pruner_deadline_seconds: 600
 
 # 487M — the bookmark library, archived page snapshots and db.db. On `longhorn` (backed up)
@@ -135,7 +136,9 @@ karakeep_k8s_meili_size: 2Gi
 # template on a machine that has never deployed. It is 17K, far inside the 1M ConfigMap ceiling.
 # test_karakeep_time_tagger_script.py pins it to the upstream commit URL and sha256.
 
-# The claims k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+# The claims the renderer emits for this role. The karakeep Kustomization applies them after the
+# karakeep-snapshot Job; after a handback, k8s/manifests applies them ahead of the pre-apply
+# snapshot.
 # karakeep-meili is a plain claim on longhorn-nobackup: the Meilisearch index is derived from
 # db.db and rebuilt with "Reindex All Bookmarks", so it is neither seeded nor worth B2
 # transactions.
@@ -148,8 +151,8 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
     size: "{{ karakeep_k8s_meili_size }}"
 
 # Under Flux the renderer copies the pruner CronJob into one Job per role revision, in
-# `karakeep-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). It replaces the
-# k8s/cronjob-gate include in tasks/main.yml, which runs only after a handback. With
+# `karakeep-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). It replaced the
+# k8s/cronjob-gate include at the flip. With
 # karakeep_k8s_pruner_apply true the run deletes, so it is a mutation, and the named test shows
 # a second run changes nothing.
 flux_cronjob_gates:  # noqa var-naming[no-role-prefix]

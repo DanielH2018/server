@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Guards the shape of the `snapshot-data-integrity` settings patch.
+"""Guards the shape of the rendered `snapshot-data-integrity` Settings.
 
 `snapshot-data-integrity` is `DataEngineSpecific: true`, which makes its `value` a JSON MAP
 SERIALISED AS A STRING -- `{"v1":"enabled","v2":"enabled"}` -- and not the bare string every
-other Longhorn setting patched in `longhorn.yml` takes. The failure mode is quiet: a patch
-copying a sibling's `{"value":"enabled"}` shape is accepted by kubectl, stored, and ignored by
+other Longhorn setting the `longhorn` role renders takes. The failure mode is quiet: a Setting
+copying a sibling's `value: enabled` shape is accepted by the API, stored, and ignored by
 Longhorn, so the cluster keeps running `fast-check` while the repo and a green deploy both say
 `enabled`. The shape is worth a guard rather than a comment.
 
 The two halves below are the accept/reject pair this repo requires of a new check: a bare-string
 value must be REJECTED, and the rendered map must be ACCEPTED. Without the rejecting half there
-is no evidence the assertion can go red.
+is no evidence the assertion can go red. The rendered Settings are read from `rendered_docs()`,
+the deploy's own render, and `NAMED` below is the member each read must find, so a render that
+stops producing a Setting fails by name.
 
 Run: uv run pytest ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py
 """
@@ -19,86 +21,64 @@ import json
 
 import pytest
 
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 from _helpers import load_yaml
+from _k8s_render import rendered_docs
+from lib.repo_paths import K8S_ROLES
 
+LONGHORN_DEFAULTS = K8S_ROLES / "longhorn" / "defaults" / "main.yml"
 
-TASKS = K3S_ROLE / "tasks" / "longhorn.yml"
-TASK_NAME = "Set the Longhorn snapshot data-integrity mode"
-CRON_TASK_NAME = "Set the Longhorn snapshot data-integrity cron schedule"
-
-# Both settings are DataEngineSpecific, so both patches must carry the map shape.
-# Task name -> (setting, patch var).
-MAP_PATCHES = {
-    TASK_NAME: ("snapshot-data-integrity", "integrity_patch"),
-    CRON_TASK_NAME: ("snapshot-data-integrity-cronjob", "integrity_cron_patch"),
+# Both settings are DataEngineSpecific, so both must carry the map shape.
+# Setting name -> the defaults key its value renders from.
+MAP_SETTINGS = {
+    "snapshot-data-integrity": "k3s_longhorn_snapshot_data_integrity",
+    "snapshot-data-integrity-cronjob": "k3s_longhorn_snapshot_data_integrity_cronjob",
 }
 
 
-def _task(name: str = TASK_NAME) -> dict:
-    for task in load_yaml(TASKS):
-        if task.get("name") == name:
-            return task
+def _rendered_value(name: str) -> object:
+    """The `value` of the Setting `name` in the `longhorn` role's render."""
+    for role, _tpl, doc in rendered_docs():
+        if (
+            role == "longhorn"
+            and doc.get("kind") == "Setting"
+            and doc["metadata"]["name"] == name
+        ):
+            return doc["value"]
     raise AssertionError(
-        f"{name!r} is gone from {TASKS.name}; it is what arms bit-rot detection"
+        f"the longhorn render holds no Setting {name!r}; it is what arms bit-rot detection"
     )
 
 
-def _rendered_patch(mode: str) -> str:
-    """What the task's `integrity_patch` expression produces for `mode`.
-
-    Mirrors `{"value":{{ {"v1": m, "v2": m} | to_json | to_json }}}` -- the inner `to_json`
-    renders the map, the outer quotes it as a JSON string.
-    """
-    return '{"value":%s}' % json.dumps(json.dumps({"v1": mode, "v2": mode}))
-
-
-@pytest.mark.parametrize("name", MAP_PATCHES)
-def test_the_task_is_present_and_patches_the_right_setting(name: str) -> None:
-    setting, _ = MAP_PATCHES[name]
-    cmd = _task(name)["ansible.builtin.command"]["cmd"]
-    assert f"settings.longhorn.io {setting} " in cmd
-    assert "--type=merge" in cmd
+def _is_map_of(value: object, expected: str) -> bool:
+    """True when `value` is a STRING whose content parses as the {v1, v2} map of `expected`."""
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return False
+    return parsed == {"v1": expected, "v2": expected}
 
 
-@pytest.mark.parametrize("name", MAP_PATCHES)
-def test_the_task_builds_its_value_with_a_double_to_json(name: str) -> None:
-    """The double `to_json` is the whole mechanism -- a single one stores a bare map, not a string."""
-    _, patch_var = MAP_PATCHES[name]
-    expr = _task(name)["vars"][patch_var]
-    assert expr.count("to_json") == 2, (
-        f"{patch_var} must pipe through to_json twice: once to render the map, once to "
-        f"quote it as a JSON string. Got: {expr!r}"
+@pytest.mark.parametrize("name", MAP_SETTINGS)
+def test_a_rendered_setting_carries_its_default_as_a_json_map_string(name: str) -> None:
+    """The shape Longhorn actually reads, built from the value the defaults hold."""
+    default = load_yaml(LONGHORN_DEFAULTS)[MAP_SETTINGS[name]]
+    assert _is_map_of(_rendered_value(name), default), (
+        f"{name} must render as a string holding {{'v1': {default!r}, 'v2': {default!r}}}; "
+        f"got {_rendered_value(name)!r}"
     )
-
-
-def test_a_json_map_value_is_accepted() -> None:
-    """The shape Longhorn actually reads: `value` is a STRING whose content parses as a map."""
-    patch = json.loads(_rendered_patch("enabled"))
-    assert isinstance(patch["value"], str), (
-        "value must be a string, not a nested object"
-    )
-    assert json.loads(patch["value"]) == {"v1": "enabled", "v2": "enabled"}
 
 
 def test_a_bare_string_value_is_flagged() -> None:
-    """The mistake this guard exists for: copying a sibling setting's `{"value":"enabled"}`."""
-    bare = json.loads('{"value":"enabled"}')
-    assert isinstance(bare["value"], str)
-    try:
-        parsed = json.loads(bare["value"])
-    except json.JSONDecodeError:
-        parsed = None
-    assert parsed != {"v1": "enabled", "v2": "enabled"}, (
-        "a bare-string value must NOT satisfy the map check -- if it does, this guard cannot "
-        "distinguish the correct shape from the one that Longhorn silently ignores"
-    )
+    """The mistake this guard exists for: copying a sibling setting's `value: enabled`."""
+    assert _is_map_of('{"v1":"enabled","v2":"enabled"}', "enabled")
+    assert not _is_map_of("enabled", "enabled")
+    assert not _is_map_of({"v1": "enabled", "v2": "enabled"}, "enabled")
 
 
-def test_the_mode_comes_from_a_default_rather_than_a_literal() -> None:
-    """A literal in the task would make the revert-after-measurement a code edit, not a var flip."""
-    assert "k3s_longhorn_snapshot_data_integrity" in _task()["vars"]["integrity_mode"]
-    defaults = load_yaml(K3S_DEFAULTS)
+def test_the_mode_is_a_value_longhorn_knows() -> None:
+    defaults = load_yaml(LONGHORN_DEFAULTS)
     assert defaults["k3s_longhorn_snapshot_data_integrity"] in (
         "enabled",
         "fast-check",
@@ -106,11 +86,10 @@ def test_the_mode_comes_from_a_default_rather_than_a_literal() -> None:
     )
 
 
-def test_the_schedule_comes_from_a_default_and_is_a_five_field_cron() -> None:
-    """The schedule is a variable so `-e` can fire a check early without a code edit."""
-    expr = _task(CRON_TASK_NAME)["vars"]["integrity_cron"]
-    assert "k3s_longhorn_snapshot_data_integrity_cronjob" in expr
-    schedule = load_yaml(K3S_DEFAULTS)["k3s_longhorn_snapshot_data_integrity_cronjob"]
+def test_the_schedule_is_a_five_field_cron() -> None:
+    schedule = load_yaml(LONGHORN_DEFAULTS)[
+        "k3s_longhorn_snapshot_data_integrity_cronjob"
+    ]
     assert len(schedule.split()) == 5, (
         f"Longhorn takes a five-field cron; got {schedule!r}"
     )

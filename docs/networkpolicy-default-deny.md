@@ -392,7 +392,7 @@ bazarr → sonarr/radarr, freshrss → feed-cache, home-assistant → mosquitto.
 - Namespace baselines: a new role `ansible/roles/k8s/netpol-baseline/`, placed in
   `containers_list` **after traefik** (CRDs) and before the workloads. It genuinely belongs
   to no single service; precedent for a non-service-owned policy is
-  `setup/k3s/files/longhorn-metrics-networkpolicy.yaml`.
+  `roles/k8s/longhorn/templates/networkpolicy-metrics.yaml.j2`.
 - Per-workload policies: `ansible/roles/k8s/<name>/templates/networkpolicy.yaml.j2`,
   alongside the four that already exist.
 - Probe jobs: `ansible/roles/k8s/<name>/templates/netpol-probe-job.yaml.j2`, same pattern.

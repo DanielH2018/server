@@ -80,8 +80,11 @@ spec:
   HTTP/2 was cut at 200 MiB after 608s, HTTP/1.1 at 210 MiB after 572s, and HTTP/2 limited
   to 120 KB/s at 60 MiB after 513s. The cap is time-based and not HTTP/2, so
   `GODEBUG=http2client=0` would not help. distribution's proxy refetches from byte 0 on each
-  request and never resumes, so retries die at the same point. A Jinja comment, so that
-  editing it renames no verify Job and rolls nothing.
+  request and never resumes, so retries die at the same point. The cap binds only while GHCR
+  is slow. On 2026-10-24 the redirect went to pkg-containers.githubusercontent.com, and a cold
+  960 MB tdarr layer came through this mirror at 49 MB/s in 20s. registry-gc.sh's weekly warm
+  phase (setup/k8s_host_files) fetches every referenced blob ahead of need for that reason. A
+  Jinja comment, so that editing it renames no verify Job and rolls nothing.
 #}
             - name: REGISTRY_PROXY_REMOTEURL
               value: https://ghcr.io

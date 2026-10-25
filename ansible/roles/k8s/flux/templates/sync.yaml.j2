@@ -1,14 +1,14 @@
 {#
   What Flux follows, and where it reports. A deferred file (`manifests_deferred_files`): every
-  kind here is a Flux CRD that components.yaml.j2 installs, so the shared directory apply
-  would refuse these on a cluster that lacks the CRDs. tasks/main.yml waits for the CRDs to
-  be Established, then applies this file.
+  kind here is a Flux CRD that components.yaml.j2 installs, so the renderer writes this file
+  into `cluster/flux-deferred/`, and the Kustomization `flux-deferred` applies it once `flux`
+  reads Ready (D5 step 29). The root `homelab` applies `flux-deferred` in turn.
 
-  The artifact holds one empty root Kustomization, so the root `homelab` applies nothing and
-  Ansible still deploys every service.
-
-  `spec.suspend` renders only while flux_sync_suspend is true. The apply is client-side, so an
-  explicit `suspend: false` would undo an operator's hand suspend at the role's next run.
+  No object here renders `spec.suspend`. The renderer refuses `flux_sync_suspend: true`
+  (renderer_lib/suspension.py), because Flux would suspend its own source and never fetch the
+  commit that clears it, and an explicit `suspend: false` would take the field back from an
+  operator's hand suspend. docs/flux-deploy-plane.md, *Recovering Flux by hand*, stops
+  everything by hand instead.
 #}
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -17,10 +17,19 @@ metadata:
   name: homelab
   namespace: {{ flux_namespace }}
 spec:
-{% if flux_sync_suspend %}
-  suspend: true
-{% endif %}
   interval: 1m
+{% if flux_break_glass | bool %}
+  # The break-glass form (D6.11): the in-cluster registry, which serves plain HTTP, and the
+  # operator's key in place of the keyless identity. docs/break-glass.md has the runbook.
+  url: {{ flux_break_glass_url }}
+  insecure: true
+  ref:
+    tag: {{ flux_break_glass_tag }}
+  verify:
+    provider: cosign
+    secretRef:
+      name: {{ flux_break_glass_secret }}
+{% else %}
   url: {{ flux_artifact_url }}
   ref:
     tag: {{ flux_artifact_tag }}
@@ -31,6 +40,7 @@ spec:
     matchOIDCIdentity:
       - issuer: '{{ flux_signer_issuer }}'
         subject: '{{ flux_signer_subject }}'
+{% endif %}
 ---
 # The base the soak Job diffs R's changed set against (D5.3b2): `settle` moves the `last-good`
 # tag to each verified commit. No Kustomization reads it. The same `verify` block as `homelab`,
@@ -41,9 +51,6 @@ metadata:
   name: last-good
   namespace: {{ flux_namespace }}
 spec:
-{% if flux_sync_suspend %}
-  suspend: true
-{% endif %}
   interval: 1m
   url: {{ flux_artifact_url }}
   ref:
@@ -57,8 +64,8 @@ spec:
 ---
 # The signature drill: the unsigned tag `promote.yml`'s `verify_drill` dispatch pushes, checked
 # against the same identity, so it must read Ready=False. No Kustomization reads it, and the
-# `deploy-errors` Alert does not name it as a source. tasks/main.yml deletes it while
-# flux_verify_drill is false.
+# `deploy-errors` Alert does not name it as a source. While flux_verify_drill is false the
+# render drops it, and `flux-deferred`'s prune deletes it (prune: true, D5 step 29).
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
@@ -85,9 +92,6 @@ metadata:
   name: homelab
   namespace: {{ flux_namespace }}
 spec:
-{% if flux_sync_suspend %}
-  suspend: true
-{% endif %}
   interval: 10m
   retryInterval: 1m
   timeout: 5m

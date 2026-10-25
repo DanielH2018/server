@@ -36,9 +36,19 @@ PROMOTE_LIB_MEMBERS = frozenset(
     }
 )
 
-# The modules that read only the checkout, so they have no forge call to route and need not
-# import the adapter. The forbidden imports still hold for them.
-CHECKOUT_ONLY = frozenset({"reboot_window.py"})
+# The modules that read only the checkout or the handoff directory, or compute from what they
+# are passed, so they have no forge call to route and need not import the adapter. The
+# forbidden imports still hold for them.
+CHECKOUT_ONLY = frozenset(
+    {
+        "controller_rollout.py",
+        "decision.py",
+        "supersede.py",
+        "reboot_window.py",
+        "storage_rollout.py",
+        "verify_handoff.py",
+    }
+)
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
 # and `pty` are here because `gh` and `cosign` are forge calls too.
 FORBIDDEN = (
@@ -66,10 +76,10 @@ ALLOWED_LIB = frozenset(
     }
 )
 
-# The `deployer_lib` modules promote.py may import, for the same reason: `deploy_git` is pure,
-# while `deploy_toolbox.fetch_ci_verdict` reads GitHub's check-runs API through `urlopen` and
-# `deploy_alerts` posts to webhooks.
-ALLOWED_DEPLOYER_LIB = frozenset({"deployer_lib.deploy_git"})
+# No `deployer_lib` module: `ci_verdict` moved to `hosts/lib/` in H7.2e, and the rest of the
+# deployer reads GitHub's check-runs API through `urlopen` (`deploy_toolbox.fetch_ci_verdict`)
+# or posts to webhooks (`deploy_alerts`).
+ALLOWED_DEPLOYER_LIB: frozenset[str] = frozenset()
 
 # Each package whose imports are held to an allowlist, by the package name.
 ALLOWLISTS = {"lib": ALLOWED_LIB, "deployer_lib": ALLOWED_DEPLOYER_LIB}
@@ -185,6 +195,7 @@ def test_a_module_starting_gh_itself_is_flagged():
             "deployer_lib.deploy_toolbox",
         ),
         ("from deployer_lib import deploy_alerts\n", "deployer_lib.deploy_alerts"),
+        ("from deployer_lib.deploy_git import ci_verdict\n", "deployer_lib.deploy_git"),
     ],
     ids=[
         "from-lib-gh",
@@ -194,6 +205,7 @@ def test_a_module_starting_gh_itself_is_flagged():
         "os-popen",
         "deployer-lib-toolbox",
         "from-deployer-lib-import-alerts",
+        "deployer-lib-git",
     ],
 )
 def test_a_module_reaching_gh_through_a_package_or_os_is_flagged(source, flagged):
@@ -209,7 +221,7 @@ def test_the_allowed_package_imports_are_found_in_promote():
             for p in [PROMOTE, *PROMOTE_LIB]
         )
     )
-    assert {"lib.git", "lib.yaml_fast", "deployer_lib.deploy_git"} <= modules
+    assert {"lib.git", "lib.yaml_fast", "ci_verdict"} <= modules
     assert {name for name in modules if name.startswith("lib.")} <= ALLOWED_LIB
     assert {
         name for name in modules if name.startswith("deployer_lib.")
@@ -284,3 +296,15 @@ def test_a_client_that_lists_tags_is_flagged(tmp_path, monkeypatch, capsys):
     result = world.decide(monkeypatch, capsys, trigger=tip, registry=registry)
     assert result.outputs["target"] == tip
     assert not _registry_requests_within_budget(world, [tip])
+
+
+def test_the_shared_ci_verdict_module_imports_nothing_that_reaches_a_forge():
+    """`promote.py` imports `hosts/lib/ci_verdict.py` bare, so the module is held to the boundary.
+
+    It must import only the standard library's `collections.abc` and `__future__`, and
+    `forbidden_imports` finds no HTTP library, `subprocess` or `os` exec in it.
+    """
+    path = Path(promote.__file__).parents[2] / "hosts" / "lib" / "ci_verdict.py"
+    source = path.read_text(encoding="utf-8")
+    assert forbidden_imports(source) == set()
+    assert imported_modules(source) == {"__future__", "collections.abc"}

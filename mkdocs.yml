@@ -176,6 +176,8 @@ nav:
       - "ADR-0022 The cluster decrypts its own file with its own key": adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md
       - "ADR-0023 Fact support is a diff notice": adr/0023-fact-support-is-a-diff-notice.md
       - "ADR-0024 Code scanning is off": adr/0024-code-scanning-is-off.md
+      - "ADR-0025 SUC upgrades k3s, and homelab-k3s-restart restarts it": adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md
+      - "ADR-0026 One alert plane on Prometheus and Alertmanager; Uptime Kuma retired": adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
@@ -215,7 +217,6 @@ nav:
           - monitor-bridge check record: monitor-bridge-checks.md
           - uptime-kuma and AutoKuma record: uptime-kuma-autokuma-record.md
           - observability record: observability-dashboards.md
-          - cronjob-gate design record: cronjob-gate-design.md
           - autofix-bridge actuators: autofix-bridge-actuators.md
       - Access and host security:
           - WireGuard private access: wireguard-private-homelab-access.md
@@ -290,6 +291,7 @@ nav:
           - D4 Ordering: target-architecture/deploy/d4-ordering.md
           - D5 Bulk move: target-architecture/deploy/d5-bulk-move.md
           - D6 Delete the old path: target-architecture/deploy/d6-delete-old-path.md
+          - D7 Superseding promotions: target-architecture/deploy/d7-superseding-promotions.md
       - Monitoring:
           - M1 Alertmanager: target-architecture/monitoring/m1-alertmanager.md
           - M2 First bridge family: target-architecture/monitoring/m2-first-bridge-family.md

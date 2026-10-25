@@ -297,12 +297,15 @@ def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plan
     )
 
 
-def test_a_shared_role_alone_derives_no_tag_of_its_own_and_reaches_its_callers():
+def test_a_shared_role_alone_derives_no_tag_of_its_own_and_reaches_its_callers(
+    flux_handed_back,
+):
     files = ["ansible/roles/k8s/manifests/tasks/main.yml"]
     tags, source = land_tags.derive(files, changed_files=1)
     assert (tags, source) == ([], "pr")
     # One caller since #3124; `test_shared_role_smoke_caller.py` owns the narrowing itself.
-    assert len(land_tags.shared_caller_tags(files)["manifests"]) == 1
+    reached = land_tags.shared_caller_tags(files, host_vars=flux_handed_back)
+    assert len(reached["manifests"]) == 1
 
 
 def test_an_ordinary_service_role_is_neither_dropped_nor_reported():

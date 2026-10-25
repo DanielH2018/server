@@ -95,6 +95,24 @@ group pages on them. `docs/flux-deploy-plane.md` says what each alert means.
 - **The scrape target's port is a literal in `prometheus.yaml.j2`.**
   `ansible/tests/services/test_deploy_pipeline_scrape.py` holds it to this role's default.
 
+## The check exporter
+
+`files/verdict_export.py` serves each row's verdict beside the Kuma push, as part of M6
+(`docs/target-architecture/monitoring/m6-retire-kuma.md`, *The bridge as an exporter*). It runs
+on its own port, the `metrics` item on this role's `containers_list` entry, and observability's
+`monitor-bridge` scrape job collects it. The deploy-pipeline family keeps its own listener and
+job, so neither job sees the other's series.
+
+- **Three gauges per row and one for the table.** `homelab_check_success`,
+  `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` carry
+  `check="<row>"`. `homelab_check_rows` counts the enabled rows of `CHECKS`, gate rows included.
+  It is not `registry.build_checks`' length, which drops every gate row.
+- **The value is the verdict before suppression and before `startup_grace`.** A row whose gate
+  reads down exports 0 and its body is not called. A body that raises exports 0. The push keeps
+  today's values until the push path is deleted.
+- **`--once`, `--dry-run` and `--check` serve nothing**, like the deploy-pipeline family.
+- **No rule reads these series yet.** `bridge-exporter.yaml` arrives with the shadow PRs.
+
 ## Module layout — and the one rule that governs it
 
 `files/` holds its flat modules and three packages: `bridge/` (shared plumbing), `checks/` (one
@@ -102,7 +120,7 @@ module per domain of `check_*` bodies, mirroring its test file) and `verdicts/` 
 taking its inputs as arguments). `check_table.py` imports only `bridge.types` and the
 `checks.*` bodies; `registry.py` and `gates.py` import it, never each other. A row's fields
 but `fn` are literals: `ansible/filter_plugins/py_table.py` parses the table without running
-it. Modules split at 600 lines; the internals page has the per-module table.
+it. Modules split at the module-length cap; the internals page has the per-module table.
 
 **Adding a module means adding its path to `monitor_bridge_modules`** in `defaults/main.yml`.
 `templates/script-configmap.yaml.j2` renders each entry as its own ConfigMap, and the

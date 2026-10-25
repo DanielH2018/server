@@ -1,5 +1,5 @@
 {
-  "checksum": "0708d49c02bdc9ccd8ec4cf9d19490d274bbba276b8bda87423343838eb60f81",
+  "checksum": "5e780c19e1b2ff9c6e8f5e1e345761199059860172d7613f12a789e0b650b89b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/gitops_deploy/CLAUDE.md#Safety",
   "row": {
@@ -9,9 +9,10 @@
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "docs/gitops-pipeline.md": "60fc646704304a39c486cd25cee64f94e3b56d69d1b15076af2b9124a4d00c18",
       "docs/landing.md": "7933f9f7ba643d82bfba99ad1fe7a11dafe6a34dbc23c588838c482d406e7e27",
+      "hosts/lib/ci_verdict.py:ci_verdict": "e40f03f2c2cd82ab0419c837b25833ef0c642dbccc8b55b7dfa66492e7bc013e",
       "scripts/deploy_tools/setup_routing.py": "f625a92f6fb5f312f62635c7fd66580dd12257a811e81ddaf56672e1248617df"
     },
     "python": "3.14",
-    "verified_sha": "36685a15e"
+    "verified_sha": "65b1917f5"
   }
 }

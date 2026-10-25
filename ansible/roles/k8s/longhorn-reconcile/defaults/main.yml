@@ -1,0 +1,102 @@
+---
+# Auto-deploy stance. Flux applies the tag, so this gates no apply; the stance decides whether
+# Renovate automerges a bump of the python image below.
+# DECIDED: `true`, as configarr's CronJob does. The image carries a stdlib script and no
+# state, and every bump runs the reconcile once as a gate Job in `longhorn-reconcile-verify`,
+# which fails the revision on a read or a write that errors. The role writes Volume labels, but
+# a bump changes the interpreter and not the script, and a wrong label is one merge patch to
+# undo. The alternative, `false`, would need a manual rule in renovate.json for the shared
+# python digest, as the denied roles carry. Contradict this with a measured interpreter break.
+k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in longhorn-reconcile-verify, which proves the new image RUNS the reconcile and fails the revision on a read or a write that errors; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but a patch to a label or a target already set is a no-op, so running the same plan twice is harmless"  # noqa var-naming[no-role-prefix]
+
+# The python image the CronJob runs, the same digest as the other stdlib-only k8s jobs
+# (crowdsec_k8s_jobs_image, configarr_k8s_health_image). It needs no kubectl: the script calls the
+# API server directly with the pod's ServiceAccount token.
+longhorn_reconcile_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+
+# DECIDED: hourly, at minute 17. The Ansible tasks this job replaces ran once per `k3s-bringup.yml`
+# apply, with no clock, so there was no host cron to copy; the H1 plan fixes "hourly"
+# (*Longhorn objects that are not static*). Hourly bounds how long a PVC recreated from the
+# `longhorn` class sits in the daily group after a deploy that put it on another tier. Minute 17 keeps the run clear of the :00 and
+# :30 marks that Longhorn's own cluster-wide jobs and the */10 health readers share. The job
+# writes nothing on a converged cluster, so the schedule costs two list calls an hour.
+longhorn_reconcile_k8s_schedule: "17 * * * *"
+
+# A run that reads two lists and patches a few volumes ends well inside this. It sits below the `longhorn-reconcile-verify`
+# Kustomization's 600 s timeout, so a hung gate run fails on its own message.
+longhorn_reconcile_k8s_deadline_seconds: 300
+
+# A run missed by more than half an hour is not made up: the next one reads the same state.
+longhorn_reconcile_k8s_starting_deadline_seconds: 1800
+
+# nobody. The script writes no file and needs no home directory, and a uid with no entry in the
+# image's /etc/passwd is fine for a stdlib script.
+longhorn_reconcile_k8s_uid: 65534
+
+longhorn_reconcile_k8s_cpu_limit: 200m
+longhorn_reconcile_k8s_mem_limit: 128Mi
+longhorn_reconcile_k8s_cpu_request: 10m
+longhorn_reconcile_k8s_mem_request: 32Mi
+
+# The three tier lists, moved here from `setup/k3s`'s defaults in H1.7a under the names they had.
+# This role's ConfigMap renders them into `tiers.json`, and the job applies them to the cluster:
+# the recurring-job group of every claim and, for the R2 list, the Volume's backup target. The
+# docs generators, the catalogue and the tier tests read them from this file
+# (`scripts/lib/service_tiers.py:resolved_tier_lists`).
+#
+# Each is a Jinja expression over `containers_list`, so a raw YAML read returns the expression;
+# Python readers resolve it through `scripts/lib/service_tiers.py`. None carries a
+# `default([])` on `containers_list`: an empty result is not "route nothing". It returns every
+# `r2` volume to B2 and every weekly volume to the daily group, so an undefined list must fail
+# the render instead.
+
+# The volumes whose restore path must not be rate-limited: the TLS material the whole edge
+# depends on, the SSO store behind every authenticated route, and the two home-automation
+# stores that are slow and error-prone to rebuild by hand. Small, config-shaped, and exactly
+# the set worth putting on a target with free egress. Names are namespace/pvcName, matching
+# the keys of k3s_longhorn_weekly_volumes below.
+#
+# Derived, not listed: every `backup_claims` volume of every `home-critical` containers_list
+# entry (tier `home-edge` or `home-automation`; filter_plugins/service_tier.py, #3389). To
+# change the set, edit the entry.
+k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical', k8s_namespace) }}"  # noqa var-naming[no-role-prefix]
+
+# The weekly B2 tier, as `{namespace/pvcName: shard}`. A volume's backup weekday is its shard
+# (0=Sunday), so no weekday stacks two heavy volumes under B2's daily transaction cap.
+#
+# Derived, not listed: every `weekly_backup_claims` entry of every containers_list entry, each
+# naming its own shard (filter_plugins/longhorn_groups.py, #4207). To change the set, edit the
+# entry. The shard used to be the volume's index mod 7 in a hand list here, so removing one
+# volume moved every volume below it to another weekday; a declared shard moves only itself.
+# This job swaps each volume's recurring-job group label, so a PVC recreated from the `longhorn`
+# StorageClass reverts to daily until its next hourly run: drift in the over-backed-up
+# direction, caught by the next run.
+k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_namespace) }}"  # noqa var-naming[no-role-prefix]
+
+# Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
+# whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
+# lever because storageClassName is immutable: a volume that must leave the backup set after it is
+# bound cannot be moved by editing the class.
+#
+# Exclude only what regenerates. An excluded volume keeps a single frozen restore point that is
+# never pruned and never refreshed, so excluding a volume to buy quiet under a live B2 cap
+# leaves it with stale recovery. Under a cap the answer is a staggered weekly group, not a
+# permanent exclusion. `Backup.status.size` is the backup's LOGICAL volume size, not blocks
+# uploaded (traefik-acme reports 35 -> 48 MB across daily backups of a 25 MB volume), and B2
+# publishes no cap-headroom endpoint, so **B2 Reachable** is the readout for a cap that fires.
+#
+# Derived, not listed: every `no_backup_claims` entry of every containers_list entry, where
+# each claim carries the reason it is excluded (filter_plugins/longhorn_groups.py, #4207).
+k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8s_namespace) }}"  # noqa var-naming[no-role-prefix]
+
+# The CronJob's one-off run per role revision, `longhorn-reconcile-deploy-gate-<spec digest8>` in
+# `longhorn-reconcile-verify`. It is a post-apply mutation: the run holds the tier labels and
+# backup targets the revision declares, and a second run finds them held and writes nothing, which
+# the named test proves. The Job keeps no ownerReference to the CronJob, so `concurrencyPolicy:
+# Forbid` does not keep a scheduled firing off a gate run. An overlap computes the same plan
+# from the same lists, and a patch to a label already set is a no-op.
+flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+  longhorn-reconcile:
+    kind: mutation
+    rerun_safe: ansible/roles/k8s/longhorn-reconcile/tests/test_longhorn_reconcile.py::test_a_second_run_changes_nothing

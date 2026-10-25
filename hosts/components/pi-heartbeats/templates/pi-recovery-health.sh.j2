@@ -14,8 +14,8 @@
 # unhealthy Pi containers stop self-recovering; if docker-proxy dies, Alloy's docker_sd finds
 # no targets and this host's container logs stop reaching Loki, while Alloy keeps running
 # with zero targets. Kuma sees wg-easy from outside; docker-proxy-lifecycle it does not.
-# This heartbeat watches EVERY container the host deploys (containers_list, plus the docker-proxy
-# role's sub-proxies, which are services inside its compose file rather than list entries)
+# This heartbeat watches EVERY container the host deploys (containers_list and compose_services,
+# plus the docker-proxy role's sub-proxies, which are services inside its compose file rather than list entries)
 # and pushes `up` only while all of them run, to the static "Daniel Pi Recovery" Kuma push
 # monitor (uptime-kuma role), every 5 min.
 # Dead-man's-switch: an explicit `down` names the dead container fast, while a dead timer/host
@@ -35,6 +35,11 @@ source /usr/lib/homelab/kuma-push-lib.sh || {
   logger -t pi-recovery-health "kuma-push-lib.sh missing — reinstall homelab-daniel-pi"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t pi-recovery-health "homelab-check-lib.sh missing — reinstall homelab-daniel-pi"
+  exit 1
+}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
@@ -49,8 +54,12 @@ if ! PUSH_TOKEN=$(cat "$TOKEN_FILE" 2>/dev/null) || [ -z "$PUSH_TOKEN" ]; then
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
-{# The watch set is DERIVED, not listed: every containers_list entry this host deploys, plus
-    the sub-proxies the docker-proxy role's compose file declares beside its list entry
+{# The watch set is DERIVED, not listed: every entry this host deploys in either of the Pi's two
+    lists (containers_list, which Ansible's Docker play deploys, and compose_services, which the
+    package deploys; a service sits in exactly one), sorted by name, so a move between the
+    lists leaves the script unchanged. Neither key has a default, so a missing one fails the
+    render. The set also holds the sub-proxies the docker-proxy role's compose file declares
+    beside its list entry
     (docker-proxy-lifecycle always; docker-proxy-codeserver only under has_code_server, the
     same gate the compose template uses). A blanket `docker ps -a --filter status=exited`
     would catch those for free and also resurrect a container an operator `docker stop`ped
@@ -58,7 +67,7 @@ PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
     this. Until #1910 the set was hardcoded to autoheal + docker-proxy, so glances, wg-easy
     and docker-proxy-lifecycle sat Exited/RestartCount 0 after a failed start until a human
     noticed. #}
-{% set _names = containers_list | map(attribute='name') | list %}
+{% set _names = (containers_list + compose_services) | map(attribute='name') | sort | list %}
 {% if 'docker-proxy' in _names %}
 {%   set _names = _names + ['docker-proxy-lifecycle'] %}
 {%   if has_code_server | default(false) %}
@@ -143,7 +152,29 @@ if ! docker version --format '{% raw %}{{.Server.Version}}{% endraw %}' >/dev/nu
     tr '\n' ' ' | cut -c1-400)"
 fi
 
-if [ -z "$DOWN" ]; then
+# THE COMPOSE ARM (H5.2b, the interim failure signal). compose-run writes homelab_compose.prom
+# whatever the outcome, and a run that failed leaves every container as it was, so the loop above
+# can read all-clear while the package's project is not up. This reads the result and acts on
+# nothing. An absent file adds nothing, because it is absent by design until the first run. A file
+# that exists but cannot be read, or holds no result line, is reported: reading it as absent would
+# turn a broken signal into an all-clear. M1's rule on homelab_compose_up_result replaces this arm.
+COMPOSE_PROM="${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}/homelab_compose.prom"
+COMPOSE_MSG=""
+if [ -e "$COMPOSE_PROM" ] || [ -L "$COMPOSE_PROM" ]; then
+  if ! COMPOSE_BODY="$(cat "$COMPOSE_PROM" 2>/dev/null)"; then
+    COMPOSE_MSG="homelab-compose: ${COMPOSE_PROM} exists and cannot be read"
+  else
+    COMPOSE_LINE="$(grep -m1 '^homelab_compose_up_result[{ ]' <<<"$COMPOSE_BODY")"
+    COMPOSE_SHA="$(sed -n 's/.*sha="\([^"]*\)".*/\1/p' <<<"$COMPOSE_LINE")"
+    if [ -z "$COMPOSE_LINE" ]; then
+      COMPOSE_MSG="homelab-compose: ${COMPOSE_PROM} holds no homelab_compose_up_result"
+    elif [ "${COMPOSE_LINE##* }" != "1" ]; then
+      COMPOSE_MSG="homelab-compose: the last run failed (homelab_compose_up_result ${COMPOSE_LINE##* } at ${COMPOSE_SHA:-unknown})"
+    fi
+  fi
+fi
+
+if [ -z "$DOWN" ] && [ -z "$COMPOSE_MSG" ]; then
   STATUS=up;   MSG="all {{ _names | length }} containers running"
 else
   # DECIDED: STATUS stays `down` even when the restart worked. Pushing `up` after a
@@ -156,11 +187,24 @@ else
   # declined 2026-09-11: those two episodes ARE the loop this rule exists to keep visible, and
   # no evidence was offered against the original reasoning. The recurring fault worth fixing is
   # that autoheal stops at all, filed separately.
-  STATUS=down; MSG="not running: ${DOWN}"
-  [ -n "$RECOVERED" ] && MSG="${MSG}; restarted: ${RECOVERED}"
-  [ -n "$FAILED" ] && MSG="${MSG}; restart FAILED: ${FAILED}"
+  STATUS=down; MSG=""
+  if [ -n "$DOWN" ]; then
+    MSG="not running: ${DOWN}"
+    [ -n "$RECOVERED" ] && MSG="${MSG}; restarted: ${RECOVERED}"
+    [ -n "$FAILED" ] && MSG="${MSG}; restart FAILED: ${FAILED}"
+  fi
+  [ -n "$COMPOSE_MSG" ] && MSG="${MSG:+${MSG}; }${COMPOSE_MSG}"
   [ -n "$DAEMON" ] && MSG="${MSG}; dockerd: ${DAEMON% }"
 fi
+
+# The textfile verdict for Prometheus, before the push: kuma_push retries for over 60s on a failed
+# push, and the verdict should not wait behind it (M6 B5, docs/target-architecture/monitoring/
+# m6-retire-kuma.md). DEADLINE_S is 2 x the timer's 300s period + 300s, as M3 derives it; a
+# test pins the rule's literals to it. The directory is root:sys_user 2775, so this unit's user
+# can write it.
+DEADLINE_S=900
+write_check_textfile pi-recovery-health "$([ "$STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t pi-recovery-health "textfile write failed (status=${STATUS})"
 
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recovery-health
 

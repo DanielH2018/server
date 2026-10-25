@@ -352,6 +352,17 @@ OUTSIDE_ROLE_EXEMPT: dict[tuple[str, str, str], str] = {
         "ConfigMap the API server publishes in every namespace. No role renders it, and its "
         "ca.crt changes only when the cluster CA is rotated, which is a rebuild."
     ),
+    ("coredns", "ConfigMap", "coredns-custom"): (
+        "H1.4. An optional volume, k3s's documented seam for `*.override` and `*.server` "
+        "Corefile imports. No role renders it and none exists live (measured 2026-10-22). The "
+        "`reload` plugin re-reads imported files, so a change to it needs no pod roll."
+    ),
+    ("node-exporter", "ConfigMap", "nut-ghcr-mirror-probe"): (
+        "#5542. The ghcr-mirror-pull sidecar GETs nut's manifest through each node's ghcr.io "
+        "mirror, and only nut's render sees nut's content tag, so nut renders it. The volume "
+        "is a whole-directory optional mount the sidecar re-reads on every write, so a new tag "
+        "needs no pod roll."
+    ),
 }
 
 

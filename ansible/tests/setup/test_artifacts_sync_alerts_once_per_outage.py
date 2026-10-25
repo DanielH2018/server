@@ -33,6 +33,7 @@ from _helpers import ROLES, load_defaults
 from _shell_render import render_shell_script, rendered_shell_text
 
 CLAUDE_CODE = ROLES / "setup" / "claude_code"
+CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 TEMPLATE = ("setup", "claude_code", "sync-artifacts.sh.j2")
 
 DEFAULTS = load_defaults(CLAUDE_CODE)
@@ -60,6 +61,7 @@ class _Runner:
     pushes: Path
     calls: Path
     stars: Path
+    prom: Path
 
     def __call__(self, outcome: str) -> subprocess.CompletedProcess:
         return self.execute(outcome)
@@ -98,6 +100,8 @@ def _runner(tmp_path: Path) -> _Runner:
     pushes.touch()
     calls = tmp_path / "rsync-calls"
     calls.touch()
+    textfile = tmp_path / "textfile"
+    textfile.mkdir()
     kuma_lib = tmp_path / "kuma-push-lib.sh"
     kuma_lib.write_text(
         'kuma_push() { printf "%s|%s\\n" "$1" "$2" >>"$SYNC_ARTIFACTS_PUSHES"; }\n'
@@ -113,6 +117,8 @@ def _runner(tmp_path: Path) -> _Runner:
                 "SYNC_ARTIFACTS_STUB": str(stub),
                 "SYNC_ARTIFACTS_JOURNAL": str(journal),
                 "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
+                "SYNC_ARTIFACTS_CHECK_LIB": str(CHECK_LIB),
+                "TEXTFILE_DIR": str(textfile),
                 "SYNC_ARTIFACTS_PUSHES": str(pushes),
                 "SYNC_ARTIFACTS_CALLS": str(calls),
                 "SYNC_ARTIFACTS_STARS": str(stars),
@@ -121,7 +127,7 @@ def _runner(tmp_path: Path) -> _Runner:
             },
         )
 
-    return _Runner(run, journal, pushes, calls, stars)
+    return _Runner(run, journal, pushes, calls, stars, textfile / "sync-artifacts.prom")
 
 
 def test_a_sustained_outage_mails_on_the_threshold_run_alone(tmp_path):
@@ -320,3 +326,24 @@ def test_a_sync_leaves_the_peer_directory_at_the_k8s_host_files_mode(tmp_path):
     assert (peer_dir / PEER / "sub" / "plan.html").read_text() == "<p>plan</p>\n"
     mode = _peer_directory_task_mode()
     assert oct((peer_dir / PEER).stat().st_mode & 0o777) == oct(int(mode, 8)), mode
+
+
+def _series(prom: Path) -> dict[str, str]:
+    """`name{labels}` -> value for every sample line of a check file."""
+    lines = prom.read_text().splitlines()
+    return dict(line.rsplit(" ", 1) for line in lines if not line.startswith("#"))
+
+
+def test_the_textfile_follows_the_pushed_verdict_and_carries_the_derived_deadline(
+    tmp_path,
+):
+    """M6 batch B6 shadows the tile with rules on this file, so it must say what the push says."""
+    run = _runner(tmp_path)
+    for _ in range(THRESHOLD - 1):
+        run("fail")
+    assert _series(run.prom)['homelab_check_success{check="sync-artifacts"}'] == "1"
+    run("fail")
+    series = _series(run.prom)
+    assert series['homelab_check_success{check="sync-artifacts"}'] == "0"
+    # */5 renders two periods plus 300s.
+    assert series['homelab_check_deadline_seconds{check="sync-artifacts"}'] == "900"

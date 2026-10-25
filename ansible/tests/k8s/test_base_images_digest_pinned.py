@@ -115,6 +115,16 @@ PENDING_DIGEST_PINS = {
 }
 
 
+# Bare pins that follow a source other than a registry tag stream, so a digest has no
+# bump to ride on. The test that holds each pin to its source carries the reason.
+BARE_BY_DESIGN = {
+    # The pin equals the image k3s's bundled manifests/coredns.yaml names, with its registry
+    # placeholder emptied. test_coredns_image_follows_bundled_manifest.py holds that equality,
+    # and renovate.json disables Renovate for the key, so no PR would ever add a digest.
+    "coredns_image": "follows k3s's bundled CoreDNS manifest, moved by hand with k3s_version",
+}
+
+
 def _bare_pins(text):
     """Return (var, repo, tag) for every external image pin in `text` carrying no digest.
 
@@ -143,7 +153,7 @@ def test_every_external_image_pin_carries_a_digest():
     offenders = {
         var: where
         for var, where in _all_bare_pins().items()
-        if var not in PENDING_DIGEST_PINS
+        if var not in PENDING_DIGEST_PINS and var not in BARE_BY_DESIGN
     }
     assert not offenders, (
         "These image pins carry a tag and no digest. Renovate's pinDigests should have "
@@ -159,6 +169,12 @@ def test_pending_digest_pins_are_still_bare():
         "Delete these from PENDING_DIGEST_PINS; each now carries a digest or no longer "
         "exists: " + ", ".join(stale)
     )
+
+
+def test_bare_by_design_pins_are_still_bare():
+    """An entry whose pin gained a digest, or went away, must leave the list."""
+    stale = sorted(set(BARE_BY_DESIGN) - set(_all_bare_pins()))
+    assert not stale, "Delete these from BARE_BY_DESIGN: " + ", ".join(stale)
 
 
 def test_the_scan_finds_at_least_one_pin():

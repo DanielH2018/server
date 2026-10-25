@@ -1,0 +1,175 @@
+# promtool unit tests for files/rules/gitops-checks.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# Both deadlines are 90000s (25 hours), so the cases step an hour at a time: `evaluation_interval`
+# and every input series use 1h, which puts a sample on each evaluation and keeps the 5m lookback
+# out of the arithmetic. The input series carry the labels the `node` scrape job adds. promtool's
+# `time()` is the evaluation time in seconds from 0, so a frozen timestamp series stays at 0 and a
+# fresh one reads 3600 x the hour index (`0+3600xN`).
+#
+# A NotReporting rule fires with one of two label sets. Its first arm keeps the series' labels,
+# `job` and `instance` included. Its absent_over_time arm carries only the equality matchers'
+# `check` and `origin`.
+rule_files:
+  - ../../files/rules/gitops-checks.yaml
+evaluation_interval: 1h
+tests:
+  # The zero-series case: no input at all, so no verdict has existed for longer than any
+  # deadline. Both NotReporting rules fire through absent_over_time, and neither Failed rule has
+  # a series to read.
+  - interval: 1h
+    input_series: []
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: GitHubRulesetDriftNotReporting
+        exp_alerts:
+          - exp_labels: {check: github-ruleset-drift, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+            exp_annotations:
+              summary: daniel-box's GitHub ruleset drift check has stopped reporting.
+              description: >-
+                No github-ruleset-drift verdict newer than 25 hours reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the merge gate matches the
+                repo. Read `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
+                /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
+      - eval_time: 30h
+        alertname: GitHubRulesetDrift
+        exp_alerts: []
+      - eval_time: 30h
+        alertname: GitHubInteractionLimitNotReporting
+        exp_alerts:
+          - exp_labels: {check: github-interaction-limit, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+            exp_annotations:
+              summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
+              description: >-
+                No github-interaction-limit verdict newer than 25 hours reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the limit is being re-armed
+                before GitHub lets it lapse. Read `systemctl status
+                kuma-check-github-interaction-limit` on daniel-box, then
+                /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
+      - eval_time: 30h
+        alertname: GitHubInteractionLimitNotArmed
+        exp_alerts: []
+
+  # Each Failed rule: a verdict of 0 fires it, and a verdict of 1 does not. The first half of the
+  # series is the control for the second.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_success{check="github-ruleset-drift", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x3 0x3'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: GitHubRulesetDrift
+        exp_alerts: []
+      - eval_time: 4h
+        alertname: GitHubRulesetDrift
+        exp_alerts:
+          - exp_labels: {check: github-ruleset-drift, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+            exp_annotations:
+              summary: The live GitHub rulesets no longer match the values the repo declares.
+              description: >-
+                github-ruleset-drift.sh on daniel-box ended with status=down: the repo is not
+                public, a ruleset's required contexts, bypass actors, Renovate exclusion or
+                agent-branch fence differ from roles/setup/gitops_deploy/defaults/main.yml, or
+                GitHub could not be read. The `github-ruleset-drift` syslog tag names the ruleset
+                id and the property. Revert the ruleset change unless it was deliberate,
+                otherwise update the defaults.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_success{check="github-interaction-limit", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x3 0x3'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: GitHubInteractionLimitNotArmed
+        exp_alerts: []
+      - eval_time: 4h
+        alertname: GitHubInteractionLimitNotArmed
+        exp_alerts:
+          - exp_labels: {check: github-interaction-limit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+            exp_annotations:
+              summary: The repo's GitHub interaction limit was not re-armed.
+              description: >-
+                github-interaction-limit.sh on daniel-box ended with status=down: gh is not
+                logged in for the deploy user, the PUT failed, or the readback did not match the
+                declared limit. The repo is open to non-collaborators until the limit is set
+                again. Run `gh auth status` as the deploy user, then check the limit in the repo
+                settings.
+
+  # The file stopped being refreshed: node_exporter keeps serving the timestamp written at 0.
+  # The first arm is quiet when the gap equals the deadline and fires one hour later.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="github-ruleset-drift", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x28'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x28'
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: GitHubRulesetDriftNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: GitHubRulesetDriftNotReporting
+        exp_alerts:
+          - exp_labels: {check: github-ruleset-drift, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+            exp_annotations:
+              summary: daniel-box's GitHub ruleset drift check has stopped reporting.
+              description: >-
+                No github-ruleset-drift verdict newer than 25 hours reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the merge gate matches the
+                repo. Read `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
+                /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="github-interaction-limit", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x28'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x28'
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: GitHubInteractionLimitNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: GitHubInteractionLimitNotReporting
+        exp_alerts:
+          - exp_labels: {check: github-interaction-limit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+            exp_annotations:
+              summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
+              description: >-
+                No github-interaction-limit verdict newer than 25 hours reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the limit is being re-armed
+                before GitHub lets it lapse. Read `systemctl status
+                kuma-check-github-interaction-limit` on daniel-box, then
+                /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
+
+  # A fresh timestamp keeps both rules quiet: the file is rewritten every hour here.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="github-ruleset-drift", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+3600x28'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="github-interaction-limit", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+3600x28'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x28'
+    alert_rule_test:
+      - eval_time: 28h
+        alertname: GitHubRulesetDriftNotReporting
+        exp_alerts: []
+      - eval_time: 28h
+        alertname: GitHubInteractionLimitNotReporting
+        exp_alerts: []
+
+  # A dead node exporter is the `targets` check's to report: the stale timestamp and the missing
+  # series both stay quiet while up{job="node"} is 0.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="github-ruleset-drift", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x28'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x28'
+    alert_rule_test:
+      - eval_time: 28h
+        alertname: GitHubRulesetDriftNotReporting
+        exp_alerts: []
+      - eval_time: 28h
+        alertname: GitHubInteractionLimitNotReporting
+        exp_alerts: []

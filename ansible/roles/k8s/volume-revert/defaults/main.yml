@@ -20,7 +20,7 @@ volume_revert_api_timeout: 30
 # This role deploys no workload of its own: it reverts another role's volume during a failed
 # deploy's rollback, renders no manifest for `rollout status` to gate, and pins no `_image:` var
 # for Renovate to bump. Declared rather than added to the filter plugin's SHARED_ROLES, because
-# it carries a defaults/main.yml — the same choice cronjob-gate, longhorn-api and
+# it carries a defaults/main.yml — the same choice longhorn-api and
 # volume-snapshot make for the same reason.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "deploys no workload of its own — reverts a volume to a pre-deploy snapshot during a rollback; it renders no manifest and pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]

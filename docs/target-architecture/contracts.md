@@ -31,12 +31,13 @@ merged.
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
 | D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. littlelink's flux PR also M6's B-1e. monitor-bridge's flip also M6's A6-7a, live. No flip waits on M6's C-1: the operator ruled on 2026-10-21 that uptime-kuma flips with janitorr and jellyfin, and M6's Phase C works on flux-owned roles (#5821) |
 | D6 | Delete the old deploy path; ADR superseding 0010 | D5, and M6's C-2b, live. D6.11 needs only D5.1a2 and D5's flux PR; #5425 dropped D6.10 |
+| D7 | Superseding promotions | D5, through #5704's soak fix |
 | M1 | Alertmanager and its watcher | — |
 | M2 | One bridge family to rules | M1 |
 | M3 | One host timer to the textfile collector | M1. The cutover also M2's PR 3 |
 | M4 | blackbox_exporter for the ingress probes | M1. PR 3 also M2's PR 3 |
 | M5 | loki-homelab ruler | M1. The cutover also M2's PR 3 |
-| M6a | Retire Kuma, Phase A: drain the producers | M2, M3, M4, M5. A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live |
+| M6a | Retire Kuma, Phase A: drain the producers | M2, M3, M4, M5's functional PRs; their token-retirement PRs may trail (the note under the table). A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live |
 | M6b | Retire Kuma, Phase B: switch the readers | M6a's A6. B-1, B-1d and B-1e need only M1 and C7's health-gate selector |
 | M6c | Retire Kuma, Phase C: delete Kuma | M6a, M6b. C-1a also D5's registry PR; C-4b also D6 |
 | H1 | Hand the cluster content to Flux | D2, D4. H1.7b also D3; H1.9 also R4 |
@@ -70,6 +71,12 @@ D5's other edge to M6 keeps monitor-bridge Ansible-owned until A6-7a, an M6 step
 `land.sh`'s order, has deployed (M6 *When D5 flips a role M6 edits*). It adds no cycle either.
 A6-7a waits on Phase A batches and on M2 to M5, and none of those waits on D5. M6's C-1a
 waits on D5's registry PR, which waits on no M6 step.
+
+M6a starts once the functional PRs of M2, M3, M4 and M5 have landed. The operator ruled this on
+2026-10-23. A push-token-retirement PR, such as M3's PR 6 and M5's PR 5 (#5856), may trail
+M6a's start, because retiring a token removes a secret that no M6 batch reads. M6 is the
+critical path to D6.12, D6.16, D6.17, R4 and H7, and M5's token PR is date-gated to about
+2026-10-29. The M6a row's other edges are unchanged.
 
 The roles M6's Phase C orders, observability, netpol-baseline and uptime-kuma, flip before C-1
 (#5821). The operator ruled on 2026-10-21 that holding uptime-kuma for C-1 put D5's last three
@@ -313,6 +320,20 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   `DECIDED: a verification in flight is guarded by two checks`. Any other job that moves
   `prod` or `last-good`, such as D5's `reset_to_last_good` dispatch, must hold both checks
   true or state why it may break them. *The reset input* holds both.
+- **A superseding promotion** (D7). With `promote.SUPERSEDE` on, `decide` may promote T over
+  P, `prod`'s commit, while P's verification is in flight, instead of waiting.
+  `promote_lib/supersede.py` holds the conditions: `DEPLOY_HOLD` reads `none`, `prod` is
+  not the `held` or the `superseding` digest, P has no failure yet, T's own change is
+  disjoint from P's changed set, neither touches `longhorn`, `flux` or `cluster-vars` nor
+  widened, and T names no forward-only tag or snapshot role. Any failed condition leaves
+  the wait above in place.
+    - T's changed set, its record of statuses and its reboot-window timeout are taken
+      against `last-good` rather than `prod`, so T's verification covers P's changes too.
+    - `tag` tags T `superseding` before it moves `prod`, so a verification is superseded at
+      most once.
+    - A verdict on T counts only while `prod` names T's digest. P's `verify` prints
+      `superseded` once `prod` moves past it, and `settle` writes neither `last-good`, the
+      hold, `held` nor the reset for a run whose T `prod` no longer names (D7.1, D7.2).
 - **The reset input.** A `reset_to_last_good` dispatch input moves `prod` to `last-good` and
   does nothing else. It runs in its own concurrency group, `promote-reset`, and ignores the
   reboot window. It refuses unless `DEPLOY_HOLD` holds a hold: `none`, an empty value and a
@@ -325,9 +346,10 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   D2's `settle` is unchanged. D5 *A reset input* has the argument and the one residual race
   under the revert rule (D5).
 - **Clearing a hold.** Clearing `DEPLOY_HOLD` means setting it back to `none` with
-  `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Clearing by hand is
-  **operator-only**, and an agent hook denies that command (D1). *The revert rule* below is
-  the one exception.
+  `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Clearing by hand is the
+  operator's decision. An agent runs that command only through the permission prompt the
+  agent hook raises for it, so the operator approves each clear (D1). *The revert rule* below
+  is the one exception.
 - **The revert rule.** The operator adopted this rule on 2026-10-16, with the `soak`
   exclusion below (D5 Open question 17).
     - While `DEPLOY_HOLD` reads `<T> failed=<names>`, `decide` may promote a candidate U that
@@ -432,7 +454,9 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 - **Ordering.** `dependsOn` is generated, and no slice hand-writes it. Its edges come from
   `ansible/filter_plugins/toposort.py`, or from a renderer rule that the adding slice names,
   such as D3's `cluster-vars` edge and D4's `-deferred` edges.
-- **Prune exemptions.** PVCs and Namespaces carry `kustomize.toolkit.fluxcd.io/prune: disabled`.
+- **Prune exemptions.** PVCs and Namespaces carry `kustomize.toolkit.fluxcd.io/prune: disabled`,
+  and so does a ConfigMap that holds state no render restores, named by its slice. H2's
+  `longhorn-restore-drill-stamps` is the first member (H2 Open question 12).
 - **Secrets.** CI never holds an age key, and an agent never decrypts. A cluster secret takes
   one of two paths:
   - One Secret, `homelab-cluster-vars`, holds every value the cluster manifests reference as a
@@ -503,8 +527,11 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 - **Package names:**
   - `homelab-<hostname>`, one per host;
-  - `homelab-updater`, the pull timer;
-  - `homelab-repos`, the third-party apt sources and keyrings.
+  - `homelab-updater`, the pull timer.
+
+  The third-party apt sources and keyrings ship in the host packages that use them, as the
+  `apt-docker`, `apt-azlux` and `apt-github-cli` components (operator ruling, 2026-10-24). No
+  shared `homelab-repos` package exists, because no source is used by every host.
 - **Version.** `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`,
   with `Architecture: all`. `<chosen>` is the commit the builder builds: the newest commit on
   `origin/master`'s first-parent chain with a green CI verdict, which can be older than the
@@ -641,7 +668,10 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   producer metric contract*). A producer that is a CronJob, such as M6's B7 or one of H2's
   moved crons, takes the kube-state-metrics recipe instead. Its rules read
   `kube_cronjob_status_last_successful_time` and `kube_job_status_failed`, and the first PR
-  that uses the recipe adds `cronjobs,jobs` to kube-state-metrics' collectors (M6).
+  that uses the recipe adds `cronjobs` to kube-state-metrics' collectors (M6 B6b), because
+  `jobs` was already collected (#5675). A CronJob that reports a verdict, not only success,
+  patches it onto a ConfigMap it owns, and B6b also adds the `configmaps` collector with one
+  allowlisted annotation, `homelab/check-verdict`.
 - **Health gate.** `probe.py health <tag>` reads
   `ALERTS{alertstate="firing",service="<tag>"}` and `probe_success{service="<tag>"}`, with six
   departures from that literal selector (M6):
@@ -790,14 +820,10 @@ No request on the slice index is open.
   role that passes `manifests_deferred_files` gets `<tag>-deferred` once it is flux-owned",
   because D1 adds the flux role as a fourth caller, and *Reserved names* says that D4.2
   reserves the suffix. No gate is named.
-- **Wider prune exemptions.**
-    - PersistentVolumes and StorageClasses join PVCs and Namespaces (D6 Open question 12).
-      Gate: before D6.19 merges. Without the amendment, D6.19 refuses to remove a tag whose
-      render at `prod` holds a PersistentVolume, and the rename procedure excludes
-      media-volume.
-    - "and a ConfigMap that holds state no render restores, named by its slice", with H2's
-      restore-drill stamp ConfigMap as its member (H2 Open question 12). Gate: before H2.3b
-      merges.
+- **Wider prune exemptions.** PersistentVolumes and StorageClasses join PVCs and Namespaces
+  (D6 Open question 12). Gate: before D6.19 merges. Without the amendment, D6.19 refuses to
+  remove a tag whose render at `prod` holds a PersistentVolume, and the rename procedure
+  excludes media-volume.
 - **The deletion policy's kept set** (D6 Open question 7). If D6.20 merges, it switches every
   `<tag>` except `flux`. `flux`, every `<tag>-deferred` and every shared kind keep `Orphan`.
   Gate: before D6.20 merges.
@@ -1283,3 +1309,16 @@ Applied to this page:
 - **`service="unmapped"`** (M2 Open question 5). C7 *Rule labels* records `unmapped` as a
   value outside the deploy-tag rule and names `WorkloadServiceUnmapped`, which pages with
   `service="observability"` alongside it. This clears the gate before M2's PR 4b merges.
+
+### Applied requests (2026-10-24)
+
+- **Superseding promotions** (D7 *Requested amendment*). C2 gains *A superseding
+  promotion*. The operator approved D7 as planned on 2026-10-24, which clears the gate
+  before D7.5 merges. The request on the shape of `verify` stays open; if `verify` changes
+  shape, the `superseded` read moves with it.
+
+- **A prune exemption for a ConfigMap that holds state no render restores** (H2 Open
+  question 12). C3 *Prune exemptions* gains "and a ConfigMap that holds state no render
+  restores, named by its slice", with H2's `longhorn-restore-drill-stamps` as its first
+  member. The row left *Wider prune exemptions*, which keeps the PersistentVolume and
+  StorageClass request. This clears the gate before H2.3b merges.

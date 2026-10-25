@@ -17,7 +17,7 @@ from typing import Any
 # and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
-from lib.ansible_inventory import containers_entries_in
+from lib.ansible_inventory import PI_HOST, containers_entries_in, pi_entries_in
 
 from infra_map.constants import (
     _CONTAINER_NAME,
@@ -76,6 +76,20 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
             batch.add(role.name)
         for name in names:
             owners[name] = role.name
+
+    # A Pi service in the package (H5, `compose_services`) owns its `container_name`s the same
+    # way, so a moved container such as `docker-proxy-lifecycle` keeps its owner. The service's
+    # directory is its owner, as the role directory is for the trees above.
+    services = repo_root / "hosts" / "components" / "pi-compose" / "services"
+    for service in sorted(p for p in services.glob("*") if p.is_dir()):
+        compose = service / "compose.yaml.j2"
+        if not compose.is_file():
+            continue
+        names = _CONTAINER_NAME.findall(compose.read_text())
+        if not names:
+            batch.add(service.name)
+        for name in names:
+            owners[name] = service.name
 
     # A k8s role that declares no long-running workload has nothing to find
     # between deploys, so "not running" is correct for it, not a fault. That is
@@ -150,10 +164,19 @@ def load_inventory(
 
 
 def declared_services(host: str, host_vars: dict, global_vars: dict) -> list[dict]:
-    """Flatten a host's ``containers_list`` into normalized service records."""
+    """Flatten a host's ``containers_list`` into normalized service records.
+
+    daniel-pi reads ``compose_services`` too (H5), so a service that moved into the Pi's
+    Compose project keeps its declaration; ``pi_entries_in`` raises when either key is missing.
+    """
     variables = {**global_vars, **host_vars}
     services = []
-    for entry in containers_entries_in(host_vars):
+    entries = (
+        pi_entries_in(host_vars)
+        if host == PI_HOST
+        else containers_entries_in(host_vars)
+    )
+    for entry in entries:
         name = entry["name"]
         platform = entry.get("platform", "docker")
         hostname = resolve_vars(entry.get("hostname", name), variables)

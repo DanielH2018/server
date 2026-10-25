@@ -16,6 +16,13 @@ manager of that field. A suspend from git reads as kustomize-controller's, and a
 hand suspend as `homelab-operator`'s (docs/target-architecture/deploy/d5-bulk-move.md, *The
 stop lever*).
 
+The fifth is H1's: the break-glass procedures annotate named plumbing objects with
+`kustomize.toolkit.fluxcd.io/reconcile=disabled` so kustomize-controller skips them, and the
+line names each one that still carries it. A cluster-wide search for an annotation is not one
+call, so the read covers the objects a runbook tells an operator to annotate
+(`RECONCILE_MEMBERS`). H1.4 lists the CoreDNS Deployment, ConfigMap and Service, and H1.7b lists
+both BackupTargets.
+
 Run: imported only, by `landing_blockers.py`.
 """
 
@@ -49,6 +56,20 @@ REVISION_ANNOTATION = "org.opencontainers.image.revision"
 # The Flux kinds an operator suspends: each Kustomization and the root's source.
 SUSPENDABLE_KINDS = "kustomizations.kustomize.toolkit.fluxcd.io,ocirepositories.source.toolkit.fluxcd.io"
 
+# The annotation a break-glass puts on an object so kustomize-controller skips it, and the value
+# that means "skip". docs/k3s-upgrade.md names it for CoreDNS.
+RECONCILE_ANNOTATION = "kustomize.toolkit.fluxcd.io/reconcile"
+RECONCILE_DISABLED = "disabled"
+# The objects a break-glass runbook tells an operator to annotate, as `kind/name` per namespace.
+# Add a row in the PR that adds the runbook step. These are the named members of the listing.
+RECONCILE_MEMBERS = {
+    "kube-system": ("deployment/coredns", "configmap/coredns", "service/kube-dns"),
+    "longhorn-system": (
+        "backuptargets.longhorn.io/default",
+        "backuptargets.longhorn.io/r2",
+    ),
+}
+
 
 @dataclass(frozen=True)
 class PromoteReads:
@@ -60,12 +81,17 @@ class PromoteReads:
         last_good: `{"commit", "digest"}` of the tag `last-good`, or None while it is absent.
         suspended: `{"kind", "name", "managers"}` for each suspended Flux object
             (`suspended_objects`). None makes no such read.
+        reconcile_disabled: `{"kind", "namespace", "name"}` for each named member that carries
+            the reconcile-disabled annotation (`reconcile_disabled_objects`). None makes no such
+            read. The read raises when a named member cannot be read, so a failed read never
+            passes for "no annotation".
     """
 
     deploy_hold: Callable[[], str | None]
     prod: Callable[[], dict]
     last_good: Callable[[], dict | None]
     suspended: Callable[[], list[dict]] | None = None
+    reconcile_disabled: Callable[[], list[dict]] | None = None
 
 
 _ARTIFACT_REVISION = re.compile(r"master@sha1:([0-9a-f]{40})")
@@ -182,12 +208,56 @@ def _suspended() -> list[dict]:
     return suspended_objects(json.loads(proc.stdout).get("items") or [])
 
 
-LIVE_PROMOTE_READS = PromoteReads(_deploy_hold, _prod, _last_good, _suspended)
+def reconcile_disabled_objects(items: list[dict]) -> list[dict]:
+    """`{"kind", "namespace", "name"}` for each of `items` that carries the disable annotation."""
+    return [
+        {
+            "kind": item.get("kind", ""),
+            "namespace": (item.get("metadata") or {}).get("namespace", ""),
+            "name": (item.get("metadata") or {}).get("name", ""),
+        }
+        for item in items
+        if ((item.get("metadata") or {}).get("annotations") or {}).get(
+            RECONCILE_ANNOTATION
+        )
+        == RECONCILE_DISABLED
+    ]
+
+
+def _reconcile_disabled(kubectl=_kubectl.kubectl) -> list[dict]:
+    found: list[dict] = []
+    for namespace, members in RECONCILE_MEMBERS.items():
+        proc = kubectl(
+            "prod",
+            "get",
+            *members,
+            "-n",
+            namespace,
+            "-o",
+            "json",
+            timeout=PROMOTE_READ_TIMEOUT_S,
+        )
+        # A named member that cannot be read fails the whole read. An absent object is a
+        # problem in its own right, and must not read as "no annotation".
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"kubectl exited {proc.returncode} reading {', '.join(members)} in "
+                f"{namespace}: {proc.stderr.strip()}"
+            )
+        doc = json.loads(proc.stdout)
+        found += reconcile_disabled_objects(doc["items"] if "items" in doc else [doc])
+    return found
+
+
+LIVE_PROMOTE_READS = PromoteReads(
+    _deploy_hold, _prod, _last_good, _suspended, _reconcile_disabled
+)
 
 
 def hold_lines(snap: dict) -> list[str]:
-    """The two holds, `prod` and `last-good`, then the suspended Flux objects.
+    """The two holds, `prod`, `last-good`, the suspended Flux objects and the skipped ones.
 
+    The last line names the objects a break-glass left with the reconcile-disabled annotation.
     The two holds coexist while the deployer and `promote` do. Each hold line names its source and the plane it holds, and prints even when it reads
     `none`. A `failed=` hold prints its names. `prod` is reported equal to `last-good` only
     when both digests were read and match. The suspension line names each object's field
@@ -216,6 +286,8 @@ def hold_lines(snap: dict) -> list[str]:
         f"prod: {artifact(prod)}   last-good: "
         + ("the same digest as prod" if same else artifact(last_good)),
         "suspended (Flux): " + suspension(promote.get("suspended")),
+        "reconcile-disabled (Flux skips): "
+        + reconcile_disabled_line(promote.get("reconcile_disabled")),
     ]
 
 
@@ -254,3 +326,12 @@ def suspension(objects: list[dict] | None) -> str:
         f"{o['kind']}/{o['name']} by {','.join(o['managers']) or 'no manager'}"
         for o in objects
     )
+
+
+def reconcile_disabled_line(objects: list[dict] | None) -> str:
+    """The annotated objects as one line's value: `unknown`, `none`, or each named."""
+    if objects is None:
+        return "unknown"
+    if not objects:
+        return "none"
+    return "; ".join(f"{o['kind']}/{o['name']} in {o['namespace']}" for o in objects)

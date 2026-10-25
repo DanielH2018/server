@@ -1,0 +1,15 @@
+---
+# No Flux path runs this file: the tag is flux-owned from its first commit. It stays so the role
+# has the shape every k8s role has, and the renderer reads the include's vars.
+#
+# `manifests_rollout: ''` names no restart target, so the renderer stamps no `checksum/restart`
+# on the pod template. DECIDED: a Corefile edit never rolls the pod. The `reload` plugin
+# re-reads the Corefile within about 30 seconds, and the Ansible path this replaced made the
+# same choice in its own words: "no restart is issued, because bouncing the only DNS replica
+# costs more than waiting for it". A restart annotation would trade a few seconds of reload for
+# a cluster-DNS gap on every Corefile edit.
+- name: Deploy CoreDNS to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_rollout: ''

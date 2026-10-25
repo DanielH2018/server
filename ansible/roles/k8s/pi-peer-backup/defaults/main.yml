@@ -5,7 +5,7 @@ pi_peer_backup_k8s_image: "{{ k8s_registry_pull_host }}/pi-peer-backup:{{ k8s_bu
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "CronJob gated at deploy time by k8s/cronjob-gate, which proves the new image RUNS but deliberately does not enforce a successful run; concurrencyPolicy Forbid and a retention-free rsync mirror, so the gate's one-off run is idempotent and a briefly unreachable Pi is reported rather than fatal. NOTHING CAN TRIGGER THIS PROMOTION: the only pin, pi_peer_backup_k8s_image, is a registry-built image listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer — so what moves is the FROM in templates/Dockerfile.j2, which is not the defaults/main.yml path split_k8s_auto_deploy promotes. The promotion is correct and harmless, not active."  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in pi-peer-backup-verify, which proves the new image RUNS and fails the revision on a run that exits non-zero; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but the rsync mirror is retention-free, so the extra run is idempotent. NOTHING CAN TRIGGER THIS PROMOTION: the only pin, pi_peer_backup_k8s_image, is a registry-built image listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer — so what moves is the FROM in templates/Dockerfile.j2, which is not the defaults/main.yml path split_k8s_auto_deploy promotes. The promotion is correct and harmless, not active."  # noqa var-naming[no-role-prefix]
 
 pi_peer_backup_k8s_claim: pi-peer-backup-data
 # Plain `longhorn` ON PURPOSE (not -nobackup): riding the Longhorn backup to B2 (the Saturday
@@ -27,6 +27,13 @@ pi_peer_backup_k8s_size: 128Mi
 # clear under both offsets.
 pi_peer_backup_k8s_schedule: "0 23 * * *"
 
+# The ConfigMap the script writes its verdict to as annotations, which kube-state-metrics exports
+# (M6 batch B7). The shadow rule PiPeerBackupNotReporting holds the CronJob's last successful run
+# to three periods of the schedule above, 259200s. The rule file is plain YAML, so
+# ansible/tests/services/test_pod_producer_rule_literals.py holds its literals to this name and
+# that schedule.
+pi_peer_backup_k8s_verdict_configmap: pi-peer-backup-verdict
+
 # The one directory the pull key may read. Named once because two places must agree on it:
 # the CronJob's PI_SRC and the forced command sshd pins the key to (files/pi-peer-backup-shell.sh
 # refuses any other path).
@@ -39,14 +46,15 @@ pi_peer_backup_src_dir: "/home/{{ sys_user }}/server/containers/wg-easy/config/"
 # the entry to one Secret of `SOPS_MANIFEST_KEYS` keys.
 render_sops_manifests: [ssh-key-secret.yaml]  # noqa var-naming[no-role-prefix]
 
-# The claim k8s/manifests renders and applies for this role, ahead of the CronJob (#3387).
+# The claim the renderer emits for this role, which the pi-peer-backup Kustomization applies
+# with the CronJob (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ pi_peer_backup_k8s_claim }}"
     storage_class: "{{ pi_peer_backup_k8s_storage_class }}"
     size: "{{ pi_peer_backup_k8s_size }}"
 
 # Under Flux the renderer copies the CronJob into one verify Job per role revision, in
-# `pi-peer-backup-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). It replaces the
-# k8s/cronjob-gate include in tasks/main.yml, which runs only after a handback.
+# `pi-peer-backup-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). It replaced the
+# k8s/cronjob-gate include at the flip.
 flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
   pi-peer-backup: {kind: verify}

@@ -48,8 +48,9 @@ stringData:
   # author, in files/discord-message.liquid, one template every monitor shares. The header is
   # load-bearing: axios sends a string body as application/x-www-form-urlencoded and Discord
   # rejects that. The AutoKuma id stays `discord` so no monitor's notification_name_list moves,
-  # and the name stays "Homelab Alerts" because monitor-bridge's Kuma Notification Delivery
-  # check reads it out of Kuma's `Cannot send notification to <name>` line.
+  # and the name stays "Homelab Alerts", which Kuma prints in its
+  # `Cannot send notification to <name>` line. The loki-homelab rule KumaNotificationDropped
+  # filters on that text and names no notification, so the name is kept for readability.
   #
   # The Liquid body is wrapped in Tera's raw block. AutoKuma runs EVERY entity through Tera
   # before it parses it (autokuma/src/entity.rs, get_entity_from_settings — unconditional,
@@ -222,15 +223,6 @@ stringData:
     {"type": "push", "name": "Cloudflare DDNS Direct", "description": "The cloudflare-ddns-direct Deployment (favonia/cloudflare-ddns) beats only after a successful update of the unproxied terraria and valheim A records. DOWN means no successful update in 6 min: the pod is not running or Cloudflare API calls are failing. Read the cloudflare-ddns-direct pod logs first.", "interval": 360, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ cloudflare_ddns_direct_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   longhorn-backup.json: |
     {"type": "push", "name": "k3s Longhorn Backup", "description": "A daniel-box cron runs longhorn_backup_health.py every 10 min with the read-only kubeconfig: backup target availability, per-tier freshness, errored backups, failed jobs, the restore drill stamp and restore coverage. DOWN names the failing check. Run journalctl -t longhorn-backup-health, then check the Longhorn UI.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ longhorn_backup_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-disaster-recovery/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-{# M3's cutover step (docs/target-architecture/monitoring/m3-textfile-timer.md, PR 4; PR 5 deletes this
-   tile). INTERVAL IS ONE WEEK (604800s), not the 1200s of a live 10-minute cron: the rules in
-   host-checks.yaml page a red verdict and a silent cron, so this tile's deadline no longer has to
-   notice a silent cron. Widening it first lets PR 5 stop the script's pushes before it deletes the
-   tile, with no gap long enough to page however long the merge, CI wait or Flux `promote` run
-   takes. A `down` push still pages at once. Until PR 5, Healthchecks.io's dead-man (2100s) is the
-   pager for a silent cron. #}
-  daniel-box-disk.json: |
-    {"type": "push", "name": "daniel-box Disk", "description": "A daniel-box cron runs df on / every 10 min, independent of Prometheus. DOWN means the root LV is over 75 percent used, the point where Longhorn stops scheduling replicas, or df returned nothing. Run df -h / on daniel-box; Longhorn replicas, container images and etcd all live on that volume.", "interval": 604800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ daniel_box_disk_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {# The weekly registry garbage collection (k8s/registry role, registry-gc.sh). INTERVAL IS DERIVED FROM THE
    CRONTAB: `20 4 * * 0` (registry_k8s_gc_cron_* in the registry defaults), a 604800s period,
    plus one hour — the same grace the dead-man carries (docs/healthchecks-io-deadman.md) and
@@ -492,19 +484,6 @@ stringData:
   # the re-arm happened. A missed beat here means the lapse window is open again.
   github-interaction-limit.json: |
     {"type": "push", "name": "GitHub Interaction Limit", "description": "The daily 06:50 kuma-check-github-interaction-limit timer on daniel-box re-PUTs the repo collaborators_only interaction limit, which GitHub only offers as a six-month expiring setting; it reruns every 30 min while red. DOWN means gh is not logged in, the PUT failed, or the readback did not match the declared limit. Run gh auth status as the deploy user, then check the limit in repo settings; systemctl status kuma-check-github-interaction-limit on daniel-box.", "interval": 90000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ interaction_limit_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{# The hourly render-record producer (setup/render_records). A producer that stopped
-   must read as red, never as a fleet with nothing to compare, so the timer pushes up only when
-   every renderable service's record was refreshed at the chosen commit. The interval is
-   render_records_push_interval_s in group_vars/all.yml, derived there from the same hourly
-   cadence the timer runs on. Gated on the token like its siblings.
-
-   This tile has no inner gate on render_records_enabled: such a gate would make kuma-drift
-   excuse a missing tile, and an excuse would hide a tile that failed to appear. Setting
-   render_records_enabled false leaves this tile red until the producer is re-armed. #}
-{% if render_records_push_token is defined %}
-  render-records.json: |
-    {"type": "push", "name": "k8s Render Records", "description": "The hourly kuma-check-render-records timer on daniel-box dry-runs every renderable k8s service at the newest green origin/master commit and writes /var/lib/homelab/k8s-renders.d, which probe.py releases --stale-only reads. DOWN names the services whose record was not refreshed; a missing beat means the producer stopped or keeps deferring on a pending CI walk. journalctl -u kuma-check-render-records on daniel-box.", "interval": {{ render_records_push_interval_s }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ render_records_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
   # 1800s, NOT the bridge fleet's 600s: this monitor's feeder is k8s/crowdsec's `*/15`
   # cron, not the 300s monitor-bridge loop. A 600s interval expired mid-cycle, so the tile
   # alternated up/down every ~7.5 min (measured 2026-08-21: 24 transitions in 3h, up 2/3

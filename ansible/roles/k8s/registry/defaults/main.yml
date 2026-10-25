@@ -38,7 +38,7 @@ registry_k8s_ghcr_mirror_keep_revisions: 3
 # so the two never collide if they share a pod again.
 registry_k8s_ghcr_mirror_debug_port: 5003
 
-# The claim k8s/manifests renders and applies for this role (#3387).
+# The claim the renderer emits for this role, which the registry Kustomization applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ registry_k8s_claim }}"
     storage_class: "{{ registry_k8s_storage_class }}"

@@ -43,10 +43,12 @@ from lib.render_guard import (  # noqa: F401
     service_records_at_or_none,
     service_tags_at,
 )
-from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+
+sys.path.insert(0, str(HOST_LIB_FILES))
 from deployer_lib.deploy_logic import (
     broad_remediation,
     k8s_remediation,

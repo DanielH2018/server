@@ -23,6 +23,19 @@ nut_host_watchdog_armed: true
 
 # One value drives both the cron cadence and the Kuma tile's interval below, so a schedule
 # change cannot leave the tile with a grace period derived from the old one. The tile gets 2x
-# the cadence, which is one missed run of slack — the same ratio daniel-box Disk uses (10 min
-# cron, 1200 s interval).
+# the cadence, which is one missed run of slack — the same ratio the k3s Longhorn Backup tile
+# uses (10 min cron, 1200 s interval).
 nut_host_watchdog_interval_minutes: 10
+
+# ── The packaged watchdog (H4.3b3) ──────────────────────────────────────────────
+# True only in the host-package component's render context (hosts/components/nut-secondary,
+# H4.3c), which sets it above these defaults. No task and no inventory file sets it, so every
+# host the role applies to renders the Ansible-era branch of ups-secondary-health.sh.j2. In the
+# packaged branch the script sources /usr/lib/homelab/kuma-push-lib.sh, reads its token from the
+# unit's credential and reads the endpoint from the file upsmon uses.
+nut_host_watchdog_packaged: false
+
+# The secret key whose value the packaged watchdog unit loads as its `kuma_push_token`
+# credential. It names the same key the Ansible-era env file selects per host, so the unit and
+# that file cannot disagree about which tile a host reports to.
+nut_host_watchdog_token_key: "{{ 'ups_secondary_daniel_server_push_token' if inventory_hostname == ups_host else 'ups_secondary_push_token' }}"

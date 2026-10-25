@@ -12,6 +12,7 @@ import pytest
 
 from deployer_lib import deploy_narrow
 import narrow_setup
+from lib.repo_paths import REPO
 
 from _narrow_fixtures import _refs
 from _setup_role_fixtures import BETA, DEFAULTS, PLAYBOOK, ROLE, Tree, build, narrow
@@ -343,3 +344,19 @@ def test_a_comment_edit_to_defaults_alone_needs_nothing(tree):
     tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS + "# the comment, reworded\n")
     with pytest.raises(narrow_setup.NothingToApply, match="reaches no host"):
         narrow(tree, *_refs(tree))
+
+
+@pytest.mark.parametrize(
+    ("role", "tags"),
+    [
+        ("homelab_builder", {"homelab-builder-install"}),
+        ("renovate_agent", {"renovate-agent-code", "renovate-agent-service"}),
+        ("claude_code", {"claude_code"}),
+    ],
+)
+def test_the_real_uv_pin_reaches_every_role_copying_the_operators_uv(role, tags):
+    """Each role copies the uv initial_setup pins, so a bump of the pin keeps its copy's tag
+    (#5945). Before, a uv bump narrowed claude_code to nothing and never reached the other
+    two, and all three copies stayed on the old version."""
+    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
+    assert index.key_readers("initial_setup_uv_version") == frozenset(tags)

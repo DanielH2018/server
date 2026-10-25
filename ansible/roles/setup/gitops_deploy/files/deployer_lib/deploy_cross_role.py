@@ -7,8 +7,9 @@ role calling a changed filter plugin's filters. They are static because every ca
 paths alone, and `ansible/tests/setup/test_setup_cross_role_files.py` holds each one to the
 tree.
 
-The k8s plane needs no table: `k8s_lookup_readers` derives its readers from the templates and
-tasks that name another role's file in a `lookup()`.
+The k8s plane needs one table, `K8S_BUILD_CONTEXT_FILES`, for a file outside `ansible/roles/k8s/`
+that a role's image embeds. Every other k8s reader is derived: `k8s_lookup_readers` reads the
+templates and tasks that name another role's file in a `lookup()`.
 
 A module of its own, not part of `deploy_changes`, because the tick and `land.sh` parse
 another commit's copy of THIS file by path (`tables_in`, `CROSS_ROLE_FILE`). Nothing else may
@@ -38,6 +39,8 @@ _HOST_LIB = frozenset(
         "renovate_notify",
     }
 )
+_K3S = frozenset({"k3s"})
+_LH = "scripts/lib/longhorn_lib"
 _STAMPED = _HOST_LIB | {"claude_code", "deploy_ui", "initial_setup"}
 _KUMA_CHECK = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
 _ALERT_UNIT = frozenset(
@@ -54,8 +57,19 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/unit-failure-alert.service.j2": _ALERT_UNIT,
     f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
     f"{_COMMON}/tasks/agent_user.yml": frozenset({"claude_code", "renovate_agent"}),
-    f"{_COMMON}/files/host_lib.py": _HOST_LIB,
-    f"{_COMMON}/files/kuma_push.py": _HOST_LIB,
+    # `hosts/lib/` since H7.2e: the packages ship it, and the Ansible consumers below still copy
+    # it beside their scripts until their own PRs move them. `ci_verdict.py` is the deployer's
+    # alone (`gitops_deploy/tasks/code.yml` copies it), and the longhorn_lib modules are the
+    # k3s role's backup-health reader's (`k3s/tasks/health-crons.yml` copies them).
+    "hosts/lib/host_lib.py": _HOST_LIB,
+    "hosts/lib/kuma_push.py": _HOST_LIB,
+    "hosts/lib/ci_verdict.py": frozenset({"gitops_deploy"}),
+    f"{_LH}/longhorn_backup_health_logic.py": _K3S,
+    f"{_LH}/longhorn_backups.py": _K3S,
+    f"{_LH}/longhorn_cluster_state.py": _K3S,
+    f"{_LH}/longhorn_cron_evidence_logic.py": _K3S,
+    f"{_LH}/longhorn_restore_drill_stamps.py": _K3S,
+    f"{_LH}/longhorn_skipped_volumes_logic.py": _K3S,
     f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
     f"{_COMMON}/tasks/kuma_check_timer.yml": _KUMA_CHECK,
     f"{_COMMON}/templates/kuma-check.service.j2": _KUMA_CHECK,
@@ -63,7 +77,7 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/kuma-check-boot.service.j2": _KUMA_CHECK,
     f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
-    f"{_COMMON}/tasks/stamp_render.yml": _STAMPED | {"nut_host"},
+    f"{_COMMON}/tasks/stamp_render.yml": _STAMPED,
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),
@@ -78,8 +92,12 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # moved the socket away from every agent. A change to that key applies the whole
     # claude_code tag: its reader, `tasks/agent_access.yml`, runs only inside the agent
     # include, whose tasks all carry that one tag. A change to keys claude_code never reads
-    # drops claude_code from the tick's run (#4361).
-    "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset({"claude_code"}),
+    # drops claude_code from the tick's run (#4361). claude_code, renovate_agent and
+    # homelab_builder each copy the uv binary `initial_setup_uv_version` pins, and name that key
+    # where they check the copy, so a uv bump re-applies all three after initial_setup (#5945).
+    "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
+        {"claude_code", "homelab_builder", "renovate_agent"}
+    ),
     # initial_setup's worktree-holder crons read the agent list, the agent user, its primary
     # profile and the operator checkout from claude_code's defaults (#4357).
     "ansible/roles/setup/claude_code/defaults/main.yml": frozenset({"initial_setup"}),
@@ -114,12 +132,24 @@ SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
 # readers stage host_lib.py and kuma_push.py into their CronJobs' ConfigMaps, so no k8s role
 # imports install_host_lib.yml or stamp_deployed.yml any more.
 K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
-    f"{_COMMON}/files/host_lib.py": frozenset({"configarr", "janitorr"}),
+    "hosts/lib/host_lib.py": frozenset({"configarr", "janitorr"}),
     # autofix-bridge, configarr, crowdsec, janitorr and uptime-kuma stage it into a pod's
     # ConfigMap (#3745); crowdsec's is its crowdsec-jobs sidecar's, since H2.4b.
-    f"{_COMMON}/files/kuma_push.py": frozenset(
+    "hosts/lib/kuma_push.py": frozenset(
         {"autofix-bridge", "configarr", "crowdsec", "janitorr", "uptime-kuma"}
     ),
+}
+
+
+# A file outside `ansible/roles/k8s/` that a k8s role's `image_builder_context_files` embeds in
+# its image, mapped to those roles (#4840). image-builder hashes the build context into the
+# content tag the Deployment names, so an edit here moves the role's applied bytes. The path
+# sits under no role, so without this row it mapped to no deploy tag and wrote no
+# `k8s_unapplied` line, and `probe.py releases` blamed whichever unrelated path also moved.
+# A Flux-owned role still lands here first; `deploy_inventory.route_not_ansible_owned` then
+# moves it to `cs.flux`. `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+K8S_BUILD_CONTEXT_FILES: dict[str, frozenset[str]] = {
+    "scripts/diagnostics/probe_lib/obs_api.py": frozenset({"homelab-mcp"}),
 }
 
 
@@ -134,10 +164,6 @@ SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
         {"claude_code", "initial_setup"}
     ),
     "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
-    "ansible/filter_plugins/longhorn_groups.py": frozenset({"k3s"}),
-    "ansible/filter_plugins/service_tier.py": frozenset({"k3s"}),
-    # Registers no filter; `longhorn_groups` and `service_tier` wrap theirs in it (#4527).
-    "ansible/filter_plugins/filter_errors.py": frozenset({"k3s"}),
 }
 
 
@@ -146,6 +172,7 @@ CROSS_ROLE_FILE = (
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py"
 )
 TABLE_NAMES = (
+    "K8S_BUILD_CONTEXT_FILES",
     "K8S_ROLES_IMPORTING_SETUP_FILES",
     "SETUP_FILES_ROUTED_TO_OWNER",
     "SETUP_FILES_SHIPPED_BY_OTHER_ROLES",
@@ -258,6 +285,28 @@ def current_tables() -> dict[str, object]:
     return {name: globals()[name] for name in TABLE_NAMES}
 
 
+def k8s_roles_holding(path: str) -> frozenset[str]:
+    """The k8s roles holding a copy of `path` from outside their own tree.
+
+    That is a setup file one imports (`K8S_ROLES_IMPORTING_SETUP_FILES`) or a file its image
+    embeds (`K8S_BUILD_CONTEXT_FILES`). Read from this module's globals, so a copy
+    `use_tables` adopted answers.
+    """
+    return globals()["K8S_ROLES_IMPORTING_SETUP_FILES"].get(
+        path, frozenset()
+    ) | globals()["K8S_BUILD_CONTEXT_FILES"].get(path, frozenset())
+
+
+def setup_roles_outside_the_tree(path: str) -> set[str]:
+    """The setup roles a file outside `roles/setup/` re-applies.
+
+    They are the filter plugins' callers and the roles that install a shared module from
+    `hosts/lib/` or `scripts/lib/` (H7.2e). Read from this module's globals, like the others.
+    """
+    callers = globals()["SETUP_ROLES_CALLING_FILTER_PLUGINS"].get(path, ())
+    return {*callers, *globals()["SETUP_FILES_SHIPPED_BY_OTHER_ROLES"].get(path, ())}
+
+
 def owner_routed_consumers(owner: str) -> frozenset[str]:
     """The roles that render a file of `owner`'s that `SETUP_FILES_ROUTED_TO_OWNER` records.
 
@@ -286,12 +335,13 @@ def use_tables(tables: dict[str, object]) -> None:
 
 
 # A `lookup('file' | 'template', playbook_dir ~ '/roles/k8s/<role>/<path>')` naming one file,
-# with `+` or `~` as the join. Group 1 is the path from `roles/`. A lookup that builds its path
-# from a variable (`'/roles/k8s/x/files/' + name`) names a directory, never a file, and every
-# such lookup in the tree reads its own role.
+# with `+` or `~` as the join and any keyword arguments after the path (`rstrip=False`, #5463).
+# Group 1 is the path from `roles/`. A lookup that builds its path from a variable
+# (`'/roles/k8s/x/files/' + name`) names a directory, never a file, and every such lookup in
+# the tree reads its own role.
 _K8S_LOOKUP_RE = re.compile(
     r"lookup\(\s*'(?:ansible\.builtin\.)?(?:file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
-    r"'/(roles/k8s/[^']+)'\s*\)"
+    r"'/(roles/k8s/[^']+)'\s*(?:,[^)]*)?\)"
 )
 
 

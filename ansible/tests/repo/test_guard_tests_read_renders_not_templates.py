@@ -91,6 +91,11 @@ TEMPLATE_SOURCE_READERS = {
         "the `*_push_token` NAMES are a render INPUT — they decide which gated tiles render "
         "at all, so they are read before the render rather than out of it"
     ),
+    "setup/test_pi_service_lists_census.py": (
+        "the red proof copies monitor-bridge's env template with the Pi's second key removed, "
+        "to show the census flags a reader that reads `containers_list` alone; a render has "
+        "no source to edit"
+    ),
     "services/test_n8n_build_is_pinned.py": (
         "Renovate's `matchString` runs against `Dockerfile.j2` on disk, braces intact; a "
         "render is not what Renovate sees"
@@ -129,6 +134,11 @@ TEMPLATE_SOURCE_READERS = {
         "the shared alert template IS rendered, but with each caller's import `vars:`, which "
         "no role-scoped render context carries; the `OnFailure=<name>-alert.service` scan "
         "reads a literal unit name that no variable feeds"
+    ),
+    "setup/test_setup_crons_write_a_textfile.py": (
+        "a census over every setup role's timer and service templates, asking whether one "
+        "calls write_check_textfile or imports the macro that does. A render needs each "
+        "role's host context and a guess at loop items, and the call is the same text either way"
     ),
     "deploy/test_setup_render_manifest.py": (
         "hashes the template's raw BYTES — a trailing newline and a truncated-read "

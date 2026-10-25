@@ -9,8 +9,13 @@ read the `metallb.io` Service annotations, which the
 
 from lib import yaml_fast
 
-from _manifest_guards import ALL_VARS_VALUES, K3S_DEFAULT_VALUES, _render
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
+from _manifest_guards import ALL_VARS_VALUES, K8S, _render
+
+# The pool template, the pool's address range and the version pin all live in the `metallb`
+# role since H1.3; `setup/k3s` keeps none of them.
+METALLB_ROLE = K8S / "metallb"
+METALLB_DEFAULTS = METALLB_ROLE / "defaults" / "main.yml"
+METALLB_DEFAULT_VALUES = yaml_fast.safe_load(METALLB_DEFAULTS.read_text())
 
 
 def _ip_to_int(addr: str) -> int:
@@ -21,11 +26,9 @@ def _ip_to_int(addr: str) -> int:
 def _pool_docs() -> list[dict]:
     """IPAddressPool documents in FILE order — the order kubectl applies them in."""
     rendered = _render(
-        K3S_ROLE / "templates" / "metallb-pool.yaml.j2",
+        METALLB_ROLE / "templates" / "metallb-pool.yaml.j2",
         k3s_metallb_ingress_vip=ALL_VARS_VALUES["k3s_metallb_ingress_vip"],
-        k3s_metallb_pool=yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
-            "k3s_metallb_pool"
-        ],
+        k3s_metallb_pool=METALLB_DEFAULT_VALUES["k3s_metallb_pool"],
     )
     docs = [d for d in yaml_fast.safe_load_all(rendered) if d]
     return [d for d in docs if d["kind"] == "IPAddressPool"]
@@ -77,7 +80,7 @@ def test_metallb_version_still_supports_the_metallb_io_annotations():
     A downgrade past that would make every pinned address silently fall back to the auto-assign
     pool, so tie the annotation row to the version pin rather than leaving the two to drift apart.
     """
-    pin = K3S_DEFAULT_VALUES["k3s_metallb_version"].lstrip("v")
+    pin = METALLB_DEFAULT_VALUES["k3s_metallb_version"].lstrip("v")
     major, minor = (int(p) for p in pin.split(".")[:2])
     assert (major, minor) >= (0, 15), (
         f"k3s_metallb_version is {pin}, which predates the metallb.io/ Service annotations "

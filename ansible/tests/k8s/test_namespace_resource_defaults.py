@@ -27,9 +27,11 @@ k8s_default_limitrange in group_vars/all.yml for why the ceiling is set where it
 from lib.proc_testing import run
 
 from lib import yaml_fast
-from _k8s_render import deploy_play, pod_spec, rendered_build_job_text, rendered_docs
+from _k8s_render import pod_spec, rendered_build_job_text, rendered_docs
 from _helpers import REPO as _REPO
-from _helpers import ALL_VARS, jinja_env, load_yaml
+from _helpers import ALL_VARS, load_yaml
+from renderer.renderer_lib.bundle import homelab_namespace_files
+from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
 
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}
@@ -54,42 +56,17 @@ def _pod_specs():
                 yield role, name, f"{key}/{container['name']}", container
 
 
-def _eval(node, ctx, env):
-    """Expand `{{ ... }}` through a structure, keeping non-string results as objects.
-
-    A NativeEnvironment rather than a plain one because the expressions under test PRODUCE
-    structures — `{{ k8s_default_limitrange | combine(...) }}` is a dict, and a normal Jinja
-    env would hand back its repr as a string, which then asserts clean against nothing.
-    """
-    if isinstance(node, str):
-        return env.from_string(node).render(ctx) if "{{" in node else node
-    if isinstance(node, dict):
-        return {k: _eval(v, ctx, env) for k, v in node.items()}
-    if isinstance(node, list):
-        return [_eval(v, ctx, env) for v in node]
-    return node
-
-
 def _homelab_ns_items() -> list[dict]:
-    """The objects deploy.yml applies alongside the homelab namespace, fully expanded."""
-    task = next(
-        t
-        for t in deploy_play().get("pre_tasks", [])
-        if "Build the workload namespace manifest" in str(t.get("name", ""))
-    )
-    # `jinja_env` carries the real `combine`, not a shim: it decides whether
-    # `type: Container` reaches the LimitRange at all, and that is the field this test is about.
-    env = jinja_env()
+    """The objects the shared kind `homelab-namespace` renders, its only writer (D5 step 30).
 
-    ctx = dict(_all_vars())
-    ctx.update(_eval(task.get("vars", {}), ctx, env))
-    manifest = _eval(
-        task["ansible.builtin.set_fact"]["deploy_k8s_ns_manifest"], ctx, env
-    )
-    assert manifest["kind"] == "List", (
-        "the namespace apply is no longer a multi-object List"
-    )
-    return list(manifest["items"])
+    Read from the rendered files rather than from `namespace.py`'s dicts, so a LimitRange the
+    kind's `kustomization.yaml` leaves out, or `type: Container` lost on the way to the file,
+    shows here.
+    """
+    files = homelab_namespace_files("600s")
+    directory = f"cluster/{HOMELAB_NAMESPACE}"
+    listed = yaml_fast.safe_load(files[f"{directory}/kustomization.yaml"])["resources"]
+    return [yaml_fast.safe_load(files[f"{directory}/{name}"]) for name in listed]
 
 
 def _limitranges() -> dict[str, dict]:
@@ -209,30 +186,6 @@ def test_the_limitrange_sets_defaults_only() -> None:
             )
 
 
-def test_the_namespace_is_applied_before_its_limitrange() -> None:
-    kinds = [item["kind"] for item in _homelab_ns_items()]
-    assert kinds.index("Namespace") < kinds.index("LimitRange"), (
-        "a LimitRange is namespace-scoped and fails to apply before its namespace exists"
-    )
-
-
-def test_the_namespace_apply_reports_changed_per_line() -> None:
-    task = next(
-        t
-        for t in deploy_play().get("pre_tasks", [])
-        if "Apply the workload namespace" in str(t.get("name", ""))
-    )
-    changed_when = str(task["changed_when"])
-    # A whole-stdout substring test is the specific bug: with two objects applied together,
-    # `namespace/homelab unchanged` on line one hides `limitrange/... created` on line two,
-    # and the run that created the LimitRange is the one that reports ok.
-    assert "stdout_lines" in changed_when, (
-        "this task applies more than one object, so its changed test has to read stdout "
-        f"line by line: {changed_when}"
-    )
-    assert "deploy_k8s_ns_apply.stdout " not in f"{changed_when} ", changed_when
-
-
 def test_no_resourcequota_is_declared_anywhere() -> None:
     # Grepped rather than read off the rendered docs: a ResourceQuota added to a role that
     # renders no manifests, or staged by a `kubectl create quota`, would never appear in
@@ -266,8 +219,9 @@ def test_the_limitrange_values_live_in_group_vars_only() -> None:
     all_vars = _all_vars()
     assert set(all_vars["k8s_default_limitrange"]) == {"default", "defaultRequest"}
 
-    # Two roles read it — deploy.yml for homelab, observability for observability — so a role
-    # default would be invisible to one of them and silently win for the other.
+    # Two readers — the renderer's homelab-namespace kind for homelab, the observability role
+    # for observability — so a role default would be invisible to one of them and silently win
+    # for the other.
     duplicated = [
         str(path.relative_to(_REPO))
         for path in _REPO.glob("ansible/roles/**/defaults/main.yml")

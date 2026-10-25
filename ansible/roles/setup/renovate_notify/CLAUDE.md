@@ -81,6 +81,9 @@ failed Discord post retries next run.
 `monitor_bridge_renovate_alive_push_token`) and runs only when `ExecStart` succeeded, so a
 crash pages twice — `OnFailure=renovate-notify-alert.service` and the missed 36h beat.
 **That monitor watches the notifier, not Renovate**, and greens whatever Discord did.
+A second `ExecStartPost` runs first and writes `renovate-notify.prom` to node_exporter's textfile
+directory (M6 batch B4). The `+` prefix runs that one line outside the sandbox, because
+`ProtectSystem=strict` leaves the directory read-only.
 
 The unit is sandboxed (`ProtectSystem=strict` + `ProtectHome=read-only`), and two overrides
 are load-bearing: `UV_CACHE_DIR=/tmp/uv-cache`, without which the unit dies with exit 2 before
@@ -93,7 +96,7 @@ both, and the gaps the alive monitor leaves.
 Two pure modules, `files/notify_logic.py` and `files/pending_logic.py`, with
 `files/renovate_notify.py` as the fetch/persist/post shell. **A new module here needs BOTH
 ship-list sites in `tasks/code.yml`**: the copy loop and the `stamp_deployed_pairs` drift
-list. `host_lib.py` is copied in from `roles/setup/common/files/` — edit it there, not here.
+list. `host_lib.py` is copied in from `hosts/lib/` — edit it there, not here.
 
 ```bash
 uv run pytest ansible/roles/setup/renovate_notify -q -n0

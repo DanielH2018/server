@@ -17,12 +17,19 @@
 # HC_PING_URL is set, which is what still alerts when the whole cluster (Kuma included) is
 # down. `set -uo` (not -euo) so the rsync exit code is captured and reported, not swallowed.
 #
+# The verdict also leaves the pod as annotations on one ConfigMap (VERDICT_CONFIGMAP), which
+# kube-state-metrics exports to Prometheus (M6 batch B7, docs/target-architecture/monitoring/
+# m6-retire-kuma.md). The image carries no kubectl, so export_verdict sends one merge PATCH with
+# curl and the pod's ServiceAccount token. A failed export makes the run exit 1, so the CronJob's
+# last successful time stops moving and the NotReporting rule fires.
+#
 # Usage: pull-pi-peers.sh (no arguments)
 # Runs as the pi-peer-backup CronJob at 23:00 America/Chicago, and once per deploy as the
 # pi-peer-backup-deploy-gate Job. Environment: PI_SRC (required, the Pi's source
-# directory), KUMA_PUSH_URL (required), HC_PING_URL (optional Healthchecks.io ping), and
-# HOSTNAME (a pod name starting pi-peer-backup-deploy-gate- skips both pushes). Reads the
-# SSH identity at /ssh/id and writes to /data/peers.
+# directory), KUMA_PUSH_URL (required), HC_PING_URL (optional Healthchecks.io ping),
+# VERDICT_CONFIGMAP (optional; the ConfigMap the verdict is also written to, empty for none),
+# and HOSTNAME (a pod name starting pi-peer-backup-deploy-gate- skips both pushes and the
+# export). Reads the SSH identity at /ssh/id and writes to /data/peers.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -42,14 +49,15 @@ DEST=/data/peers
 install -m 0700 -d "$HOME/.ssh"
 install -m 0400 /ssh/id "$HOME/.ssh/id"
 
-# k8s/cronjob-gate (ansible/roles/k8s/cronjob-gate) runs a one-off gate Job named
-# pi-peer-backup-deploy-gate on every deploy of this role, to prove a bumped image still runs.
+# Flux runs a one-off gate Job named pi-peer-backup-deploy-gate-<spec digest8> in
+# pi-peer-backup-verify once per role revision, to prove a bumped image still runs. The renderer
+# copies it from this CronJob (scripts/renderer/renderer_lib/cronjob_gate.py).
 # That run is not the scheduled backup, and it must not report as one: pushing here would make
 # the Kuma monitor mean "something ran" instead of "the nightly backup ran", masking a missed
 # 23:00 firing for the rest of its 2.5-day window, and a failing gate run would page the
 # operator from a deploy-time probe rather than from the backup itself. The pod's hostname is
-# `<job-name>-<random>` (kubectl create job --from=cronjob copies the pod spec verbatim, so
-# there is no other way for the script to tell the two runs apart).
+# `<job-name>-<random>` (the gate Job carries the CronJob's pod template verbatim, so there is
+# no other way for the script to tell the two runs apart).
 GATE_RUN=0
 [[ "${HOSTNAME:-}" == pi-peer-backup-deploy-gate-* ]] && GATE_RUN=1
 
@@ -69,6 +77,38 @@ report() { # line
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${HOSTNAME:-pi-peer-backup} pi-peer-backup: $1"
 }
 
+# The ServiceAccount mount (SERVICEACCOUNT_DIR is the test's seam onto it), and the API Service
+# by its DNS name: the pod sets enableServiceLinks: false, so KUBERNETES_SERVICE_HOST is not
+# injected.
+SA_DIR="${SERVICEACCOUNT_DIR:-/var/run/secrets/kubernetes.io/serviceaccount}"
+VERDICT_CONFIGMAP="${VERDICT_CONFIGMAP:-}"
+EXPORT_FAILED=0
+
+# Writes the verdict to the verdict ConfigMap's annotations. The role renders that ConfigMap with
+# no annotations, and its Role grants `patch` on that one name, which is all a bare PATCH needs
+# (`kubectl patch` would GET first, but this sends no GET). The message is redacted of IPv4
+# addresses and stripped of the characters JSON would need escaped, so a rsync error naming the
+# Pi's address leaves the pod as `<ip>`. A no-op for the gate run and for an empty
+# VERDICT_CONFIGMAP. Sets EXPORT_FAILED on any failure, and the caller turns that into exit 1.
+export_verdict() { # status msg
+  [[ -n "${VERDICT_CONFIGMAP:-}" && "$GATE_RUN" -eq 0 ]] || return 0
+  local msg body code rc ns
+  msg=$(printf '%s' "$2" | sed -E 's/[0-9]{1,3}(\.[0-9]{1,3}){3}/<ip>/g' | tr -d '"\134' | tr '\n\t' '  ' | cut -c1-200)
+  body=$(printf '{"metadata":{"annotations":{"homelab/check-verdict":"%s","homelab/check-last-run":"%s","homelab/check-message":"%s"}}}' \
+    "$1" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$msg")
+  ns=$(cat "$SA_DIR/namespace" 2>/dev/null) || ns=""
+  code=$(curl -sS -m 10 -o /dev/null -w '%{http_code}' -X PATCH \
+    --cacert "$SA_DIR/ca.crt" \
+    -H "Authorization: Bearer $(cat "$SA_DIR/token" 2>/dev/null)" \
+    -H 'Content-Type: application/merge-patch+json' \
+    --data "$body" \
+    "https://kubernetes.default.svc/api/v1/namespaces/${ns}/configmaps/${VERDICT_CONFIGMAP}" 2>/dev/null) && rc=0 || rc=$?
+  if [[ "$rc" -ne 0 || "$code" != 200 ]]; then
+    report "export failed: cannot patch ${VERDICT_CONFIGMAP} (http=${code:-none} rc=${rc})" >&2
+    EXPORT_FAILED=1
+  fi
+}
+
 push() { # status msg
   if [[ "$GATE_RUN" -eq 1 ]]; then
     echo "deploy-gate run — not pushing Kuma/Healthchecks ($1: $2)"
@@ -76,6 +116,8 @@ push() { # status msg
   fi
 
   report "status=$1 $2"
+  # Before the Kuma push, so a Kuma outage cannot keep the verdict from Prometheus.
+  export_verdict "$1" "$2"
   local reply meta body http_code curl_rc ctype by re kuma_msg token
   # The body comes first and the `-w` line last, as in kuma-push-lib.sh.
   reply=$(curl -sS -m 10 --get "$KUMA_PUSH_URL" \
@@ -155,3 +197,7 @@ if [ "${FILES:-0}" -lt 2 ]; then
 fi
 
 push up "pulled $FILES peer file(s) from daniel-pi"
+# A backup that ran but could not export its verdict still fails the Job, so the CronJob's last
+# successful time stops moving and PiPeerBackupNotReporting fires. The down paths above exit 1
+# already.
+[[ "$EXPORT_FAILED" -eq 0 ]] || exit 1

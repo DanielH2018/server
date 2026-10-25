@@ -20,7 +20,7 @@ a snapshot is **unexercised** and nothing below should be read as covering it.
 
 **Where the synthetic payload enters.** `test_the_listing_jsonpath_parses` runs the role's own
 argv against the live API server, so the `stdout_lines` the retention tests inject enter at the
-seam the real ones do. That test is not decoration: `test_cronjob_gate_decision.py` records the
+seam the real ones do. That test is not decoration: the retired `test_cronjob_gate_decision.py` recorded the
 sibling case where synthetic payloads injected downstream of a broken `cmd:` string left an
 entire branch dead while every test passed.
 
@@ -260,7 +260,7 @@ def test_the_listing_jsonpath_parses() -> None:
     """The synthetic listings above are only worth something if the real command produces that
     shape. Run the role's own argv against the live API server.
 
-    This is the seam test `test_cronjob_gate_decision.py` learned to write the hard way: a
+    This is the seam test the retired `test_cronjob_gate_decision.py` learned to write the hard way: a
     jsonpath kubectl rejects returns rc=1 and an empty read, every retention test above still
     passes, and the prune silently never deletes anything.
 

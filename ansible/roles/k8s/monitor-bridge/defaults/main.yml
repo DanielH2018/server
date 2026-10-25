@@ -44,6 +44,7 @@ monitor_bridge_modules:
   - longhorn_robustness.py
   - gates.py
   - deploy_pipeline.py
+  - verdict_export.py
   - bridge/types.py
   - bridge/config.py
   - bridge/config_host.py

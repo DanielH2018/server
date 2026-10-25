@@ -15,6 +15,7 @@ import pytest
 import bridge.common
 from bridge.config import load_config
 import cli
+import verdict_export
 import deploy_pipeline
 from _bridge_env import bridge_env
 from _check_gate_helpers import mk
@@ -54,9 +55,9 @@ def _silence(pushes, ran, names=("disk",), probe_prometheus=None, **env):
         # Unserved, so a looping main() binds no port. The rendered token is blank, so the
         # family reads nothing either.
         "exposition": deploy_pipeline.Exposition(),
+        "check_exposition": verdict_export.CheckExposition(300),
         "gate_config": Gates(
             probe_prometheus=probe_prometheus or (lambda _cfg, _src: (True, "prom ok")),
-            probe_loki=lambda _cfg, _src: (True, "loki ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
             probe_b2=lambda _cfg, _src: (True, "b2 ok"),
         ),
@@ -271,7 +272,7 @@ def test_a_gate_disabled_under_its_dependents_exits_two():
     """
     pushes, ran = [], []
     wired = _silence(pushes, ran)
-    assert cli.main(["--once", "--check", "loki_ingestion"], **wired) == 2
+    assert cli.main(["--once", "--check", "memory"], **wired) == 2
     assert ran == []
 
 

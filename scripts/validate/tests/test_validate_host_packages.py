@@ -187,6 +187,13 @@ def test_a_base_without_the_workflow_is_a_job_change():
     assert host_packages.job_differs(None, _WORKFLOW, "host_packages")
 
 
+def test_an_edit_to_any_named_job_is_a_change():
+    """CI names the build job and the cases job, and an edit to either runs the cases (#6151)."""
+    edited = _WORKFLOW.replace("prek run", "prek run --all-files")
+    assert not host_packages.jobs_differ(_WORKFLOW, edited, ["host_packages"])
+    assert host_packages.jobs_differ(_WORKFLOW, edited, ["host_packages", "hooks"])
+
+
 def test_the_same_tree_renders_the_same_fixture(tmp_path):
     """The payload variant's random payload would make every pair of renders differ."""
     assert host_packages.render_fixtures(REPO, tmp_path)
@@ -198,3 +205,54 @@ def test_the_same_tree_renders_the_same_fixture(tmp_path):
 
 def test_a_base_without_the_fixture_module_is_a_fixture_change(tmp_path):
     assert host_packages.fixture_changed(tmp_path, REPO)
+
+
+# ── fetch-tools: the pins of every rendered homelab-tools tree, fetched and verified ─────
+
+
+def _tools_render(tmp_path: Path, body: bytes) -> Path:
+    """A render holding the real homelab-tools trees, their pins repointed at `body`'s digest."""
+    import hashlib
+    import json
+
+    out = tmp_path / "render"
+    assert host_packages.render(REPO, out) == 0
+    digest = hashlib.sha256(body).hexdigest()
+    pins = sorted(out.rglob("tools.json"))
+    for path in pins:
+        data = json.loads(path.read_text())
+        for pin in data.values():
+            pin.update(sha256=digest, url="https://example.invalid/x")
+            pin.pop("member", None)
+        path.write_text(json.dumps(data))
+    # Named member: a render that held no tools tree would fetch nothing and pass.
+    assert len(pins) == 2
+    return out
+
+
+class _Body:
+    def __init__(self, body: bytes):
+        self.body = body
+
+    def __call__(self, request, timeout=None):
+        import io
+
+        return io.BytesIO(self.body)
+
+
+def test_a_pin_whose_download_matches_is_placed_in_every_architecture(tmp_path):
+    render = _tools_render(tmp_path, b"binary")
+    problems = host_packages.fetch_tools(render, tmp_path / "cache", _Body(b"binary"))
+    assert problems == []
+    placed = sorted(
+        p.relative_to(render).parts[2] for p in render.rglob("usr/lib/homelab/bin/sops")
+    )
+    assert placed == ["amd64", "arm64"]
+
+
+def test_a_pin_whose_download_differs_is_flagged_for_every_architecture(tmp_path):
+    render = _tools_render(tmp_path, b"binary")
+    problems = host_packages.fetch_tools(render, tmp_path / "cache", _Body(b"other"))
+    assert len(problems) == 2
+    assert all(p.startswith("[FAIL] ") and "the pin names" in p for p in problems)
+    assert not list(render.rglob("usr/lib/homelab/bin/sops"))

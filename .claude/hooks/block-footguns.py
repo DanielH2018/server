@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
-"""PreToolUse(Bash) guard: eight commands that fail silently or cost a second write here.
+"""PreToolUse(Bash) guard: nine commands that fail silently or cost a second write here.
 
 Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
 standalone. It reads the hook JSON payload on stdin. It prints a `deny` (or `ask`) decision JSON
@@ -54,14 +54,13 @@ a gate the repo requires, so nothing downstream notices either way.
      template afterwards and rewrites the body to fit it, which was 40 of the PR body edits
      read for #3963. Denying the create moves the fit to before the PR exists.
 
-  8. A write to the repository variable `DEPLOY_HOLD` or `PROD_DIGEST`, or an OCI tag move.
-     Each succeeds and moves what the cluster applies; `_deploy_plane_rule.py` has the rule.
+  8. An OCI tag move is denied, and a write that clears `DEPLOY_HOLD` or writes `PROD_DIGEST`
+     asks the operator. Setting a hold passes; `_deploy_plane_rule.py` has the rule.
+
+  9. A `probe.py` gate from a worktree behind `origin/master` (#5912); `_stale_probe_rule.py`.
 
 Rules that key on a host tool or on GitHub rather than on this repo live in
 `claude_guard.footguns`, which every repo's PreToolUse hook runs.
-
-Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fix; otherwise no
-output -> normal permission flow. The hook can only ever DENY.
 """
 
 import functools
@@ -79,7 +78,8 @@ from _hook_common import (
     split_stages,
     strip_shell_keywords,
 )
-from _deploy_plane_rule import TAG_MOVES, deploy_plane_write_problem
+from _deploy_plane_rule import TAG_MOVES, deploy_plane_variable_ask, tag_move_problem
+from _stale_probe_rule import stale_probe_problem as stale_probe
 
 _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 # The checkout on the REMOTE host: the guard fires on `ssh daniel-<host> git ...`, and each
@@ -460,7 +460,7 @@ _RULES = (
     remote_git_problem,
     burst_public_hostname_problem,
     issue_create_by_hand_problem,
-    deploy_plane_write_problem,
+    tag_move_problem,
     skip_staleness_problem,
     ci_dispatch_on_master_problem,
 )
@@ -481,7 +481,7 @@ _RULE_BINARY_RE = re.compile(
 def could_fire(command: str) -> bool:
     """True if `command` names a binary one of `_RULES` keys on, read off the raw text.
 
-    Rule 9 keys on a flag rather than a binary: `deploy.sh` is almost always typed behind a
+    Rule 5 keys on a flag rather than a binary: `deploy.sh` is almost always typed behind a
     `./scripts/` path, which the regex's lookbehind refuses, so the flag literal is the gate.
     """
     return _RULE_BINARY_RE.search(command) is not None or _STALENESS_FLAG in command
@@ -523,7 +523,7 @@ def _first_problem(
             found = rule(words)
             if found:
                 return found
-        found = pr_body_problem(words, here, command)
+        found = pr_body_problem(words, here, command) or stale_probe(words, here)
         if found:
             return found
     return None
@@ -534,12 +534,11 @@ def decide(
 ) -> tuple[str, str] | tuple[None, None]:
     """The (decision, reason) pair for `command`, or (None, None).
 
-    A `deny` carries what `problem` found. An `ask` is emitted where the splitter cannot read
-    a command that names a rule's binary: the package's contract for a non-ok parse is a
-    refusal, never "nothing here". It is gated on `could_fire` the way
-    `block-protected-bash.py` gates its own on a writer shape — a deny guard that prompts on
-    every unreadable command, or on every command where the package is not deployed, is a
-    guard the operator turns off.
+    A `deny` carries what `problem` found, and an `ask` what `deploy_plane_variable_ask` found.
+    An `ask` is also emitted where the splitter cannot read a command naming a rule's binary,
+    since a non-ok parse is a refusal, never "nothing here". It is gated on `could_fire` as
+    `block-protected-bash.py` gates its own on a writer shape: a guard that prompts on every
+    unreadable command, or wherever the package is not deployed, is one the operator turns off.
     """
     try:
         stages = split(command)
@@ -561,7 +560,8 @@ def decide(
     found = _first_problem(stages, cwd=cwd, command=command)
     if found:
         return "deny", found
-    return None, None
+    asked = next(filter(None, map(deploy_plane_variable_ask, stages)), None)
+    return ("ask", asked) if asked else (None, None)
 
 
 def decision(payload) -> tuple[str, str] | None:

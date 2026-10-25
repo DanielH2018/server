@@ -46,7 +46,8 @@ uptime_kuma_k8s_storage_class: longhorn
 uptime_kuma_k8s_autokuma_claim: autokuma-data
 uptime_kuma_k8s_autokuma_size: 1Gi
 
-# The claims k8s/manifests renders and applies for this role, ahead of the workload.
+# The claims the renderer emits for this role, which the uptime-kuma Kustomization applies
+# (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ uptime_kuma_k8s_claim }}"
     storage_class: "{{ uptime_kuma_k8s_storage_class }}"
@@ -255,7 +256,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^docs-refresh$"
       - "^manifest-prune-check$"
       - "^release-staleness-check$"
-      - "^render-records$"
       - "^homelab-eval-sweep$"
       - "^status-page-sync$"
       - "^artifacts-sync$"

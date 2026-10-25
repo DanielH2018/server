@@ -15,11 +15,10 @@ from pathlib import Path
 
 from lib import yaml_fast
 
-from lib.repo_paths import K3S_DEFAULTS
-from _restore_drill import harness
+from _restore_drill import DRILL_DEFAULTS, harness
 
 CAP = int(
-    yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
+    yaml_fast.safe_load(DRILL_DEFAULTS.read_text())[
         "k3s_longhorn_restore_drill_max_actual_bytes"
     ]
 )
@@ -28,21 +27,21 @@ BIG = "b-config"
 
 
 def _excluded(run) -> list[str]:
-    return (run.stamp_dir / "excluded_oversize").read_text().splitlines()
+    return run.cm["excluded_oversize"].splitlines()
 
 
 def test_backed_volume_over_the_cap_is_published_as_excluded(tmp_path: Path) -> None:
     run = harness(tmp_path, [SMALL, BIG], actual_sizes={BIG: CAP + 1})
     run()
     assert _excluded(run) == [f"{BIG}\t{CAP + 1}"]
-    assert (run.stamp_dir / "candidates").read_text().split() == [SMALL]
+    assert run.cm["candidates"].split() == [SMALL]
 
 
 def test_volume_at_the_cap_is_a_candidate_not_excluded(tmp_path: Path) -> None:
     run = harness(tmp_path, [SMALL, BIG], actual_sizes={BIG: CAP})
     run()
     assert _excluded(run) == []
-    assert (run.stamp_dir / "candidates").read_text().split() == [SMALL, BIG]
+    assert run.cm["candidates"].split() == [SMALL, BIG]
 
 
 def test_oversize_volume_with_no_completed_backup_is_not_excluded(
@@ -88,8 +87,8 @@ def test_an_opt_out_volume_with_the_trim_label_is_no_tier(tmp_path: Path) -> Non
     )
     run()
     assert _excluded(run) == []
-    assert (run.stamp_dir / "excluded_nopvc").read_text() == ""
-    assert (run.stamp_dir / "candidates").read_text().split() == [SMALL]
+    assert run.cm["excluded_nopvc"] == ""
+    assert run.cm["candidates"].split() == [SMALL]
 
 
 def test_a_trim_group_label_reads_as_a_backup_tier(tmp_path: Path) -> None:

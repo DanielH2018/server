@@ -19,3 +19,7 @@ spec:
     - name: metrics
       port: {{ containers_list | metrics_port('crowdsec') }}
       targetPort: metrics
+    # The crowdsec-jobs sidecar's check exporter, scraped by the `crowdsec-jobs` job.
+    - name: jobs-metrics
+      port: {{ containers_list | metrics_port('crowdsec-jobs') }}
+      targetPort: jobs-metrics

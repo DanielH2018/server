@@ -3,7 +3,9 @@
 
 `scripts/validate/host_package_cases.py` runs the cases. This module builds what they install:
 the fixture homelab-daniel-pi in three versions, rendered by the real renderer from
-`hosts/lib/tests/container/fixture/`; a homelab-updater whose unit changes; a copy of the real
+`hosts/lib/tests/container/fixture/`, a fourth, `sealed`, that carries `secrets-unit`
+(H4.1c), and a fifth, `conffile`, whose line-arm edit lands in another package's conffile
+(#6088); a homelab-updater whose unit changes; a copy of the real
 homelab-daniel-pi whose drop-in on the updater's timer changes; the real homelab-daniel-pi
 rendered with its container-recovery timer disarmed; and the apt repository, in
 suite `homelab`, that serves a chosen set of them. `publish` signs that repository's `InRelease`
@@ -34,7 +36,10 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 FIXTURE = REPO / "hosts" / "lib" / "tests" / "container" / "fixture"
-VARIANTS = ("base", "head", "payload")
+VARIANTS = ("base", "head", "payload", "sealed", "conffile")
+# The `sealed` variant carries `secrets-unit`, which ships a host's ciphertext. This stand-in is
+# the file the render takes where no ciphertext is given, and it holds no value (H4.1c).
+STAND_IN = FIXTURE.parent / "standin"
 HOST = "daniel-pi"
 UPDATER = "homelab-updater"
 HOST_PKG = f"homelab-{HOST}"
@@ -69,8 +74,15 @@ def box_address(render: Path) -> str:
     raise ValueError(f"{sources} names no URIs")
 
 
-def render_fixture(variant: str, out: Path, payload_bytes: int = PAYLOAD_BYTES) -> Path:
+def render_fixture(
+    variant: str,
+    out: Path,
+    payload_bytes: int = PAYLOAD_BYTES,
+    sops_dir: Path = STAND_IN,
+) -> Path:
     """Render fixture `variant` as homelab-daniel-pi under `out`; return its directory.
+
+    `sops_dir` holds the ciphertext a variant that carries `secrets-unit` ships.
 
     The scratch tree links the repo's real `hosts/lib`, `hosts/keys`, components and shared
     packages, and
@@ -90,7 +102,7 @@ def render_fixture(variant: str, out: Path, payload_bytes: int = PAYLOAD_BYTES) 
             (package_dir / "files" / Path(PAYLOAD).name).write_bytes(
                 os.urandom(payload_bytes)
             )
-        package = host_mode.render_host(HOST, hosts_root=hosts)
+        package = host_mode.render_host(HOST, hosts_root=hosts, sops_dir=sops_dir)
         host_mode.write_packages([package], out)
     return out / package.directory
 
@@ -117,7 +129,7 @@ def pi_dropin_variant(head: Path, out: Path) -> Path:
         ValueError: the head render's drop-in does not fire at DROPIN_MINUTE.
     """
     directory = out / "hosts" / HOST
-    shutil.copytree(head / "hosts" / HOST, directory)
+    shutil.copytree(head / "hosts" / HOST, directory, symlinks=True)
     dropin = directory / f"root{DROPIN}"
     text = dropin.read_text()
     if DROPIN_MINUTE not in text:
@@ -140,11 +152,15 @@ def disarmed_inventory(directory: Path) -> Inventory:
     return dataclasses.replace(REPO_INVENTORY, host_vars=host_vars)
 
 
-def pi_disarmed_variant(out: Path) -> Path:
-    """Render the real homelab-daniel-pi with its recovery timer disarmed under `out`; return it."""
+def pi_disarmed_variant(out: Path, sops_dir: Path | None = None) -> Path:
+    """Render the real homelab-daniel-pi with its recovery timer disarmed under `out`; return it.
+
+    `sops_dir` holds the ciphertext the package carries; None keeps the repo's own.
+    """
+    given = {} if sops_dir is None else {"sops_dir": sops_dir}
     with tempfile.TemporaryDirectory() as scratch:
         package = host_mode.render_host(
-            HOST, inventory=disarmed_inventory(Path(scratch))
+            HOST, inventory=disarmed_inventory(Path(scratch)), **given
         )
     host_mode.write_packages([package], out)
     return out / package.directory

@@ -69,7 +69,9 @@ has its own test under `scripts/diagnostics/tests/`.
 - **`takeover <tag>`** lists the field paths Flux's first apply of a tag strips: a field a
   manager `kustomize-controller` cleans owns, such as `kubectl-rollout`'s `restartedAt`, that no
   other manager owns and the render omits (`probe_lib/takeover.py`). It renders the tag and
-  reads each live object with `--show-managed-fields`, and prints paths only. A tag with no
+  reads each live object with `--show-managed-fields`, and prints paths only. The objects it
+compares are the files each rendered `kustomization.yaml` lists under `resources:`, so a role's
+vendored `files/upstream/` objects are compared and its `patches/` are not (#5721). A tag with no
   rendered object live exits 75. `docs/flux-deploy-plane.md` (*What a takeover strips*) has the
   rules and the operator's `flux diff kustomization` command.
 
@@ -232,17 +234,43 @@ the target is not loaded yet: the route was added since `observability` last dep
 Prometheus read that fails exits 75, never a pass. The Pi's
 `--docker` path does not read the alert plane.
 
+For the `coredns` and `longhorn` tags, a passing rollout verdict also runs a plumbing check
+before the alert plane (`scripts/diagnostics/probe_lib/health_plumbing.py`). The `coredns`
+check fails on an empty `NodeHosts` key in ConfigMap `kube-system/coredns`. It also fails when
+`kubernetes.default.svc.cluster.local` or `pi.hole` does not resolve through the `kube-dns`
+Service. A `Corefile` edit rolls no pod, so the check first waits until 120s after the last
+write of the `Corefile` key, the time kubelet's sync and the `reload` plugin take to apply it.
+The dig runs from this host, so the check exits 75 on a host that is not a node of
+the cluster kubectl serves. The `longhorn` check fails when the live `longhorn` StorageClass's
+parameters differ from the class in ConfigMap `longhorn-system/longhorn-storageclass`. The fix
+for that is an **operator-only** delete of the class, which longhorn-manager recreates. Each
+check runs only once its tag resolves to a k8s role.
+
+The gate reads the role's workloads from the role's files in the checkout it runs from. It
+exits 75 rather than judge from an old definition: when `origin/master` holds the role and this
+checkout does not, and when `origin/master` changed the role after this checkout's HEAD
+(`scripts/diagnostics/probe_lib/health_checkout.py`, #5909 and #5912). It also exits 75 when `origin/master` changed the tag's `owner` in host_vars since this checkout, because `owner` picks the gate path. The read uses the local
+`origin/master` ref, so it is as fresh as the last fetch. To gate a merged change, run the probe
+from a checkout at or after the merge commit.
+
 `--docker` inspects the Pi's container over ssh instead.
 
 A role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr and pi-peer-backup) is gated the same way on its most recent Job instead
 (`scripts/diagnostics/probe_lib/health_cronjob.py`'s `format_cronjob_health`): the Job must have
-succeeded, be newer than the deploy that just ran (read from the `release_stamp.yml` record),
-and carry no restarted container. `homelab-readonly`, the identity `probe.py` runs as, cannot
-create a Job (the `view` ClusterRole it is bound to refuses it), so this only ever reads the Job `k8s/cronjob-gate` already
-created at deploy time, never triggers one. When no Job has landed since the deploy, it falls
-back to the CronJob's own daily/weekly schedule: the previous run must have succeeded and not be
-more than twice its interval old. Any other schedule shape fails closed rather than guess an
-interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
+succeeded, be newer than the deploy that just ran, and carry no restarted container.
+`homelab-readonly`, the identity `probe.py` runs as, cannot
+create a Job (the `view` ClusterRole it is bound to refuses it), so this only ever reads a Job that already exists, never triggers one.
+It reads the Jobs the CronJob owns and the gate Job Flux runs in `<tag>-verify`, which names no
+owner.
+
+What "the deploy" means depends on the role's owner. For an `owner: flux` role, the gate Job of
+the revision Flux applies is the one whose pod template's `homelab/role-digest8` equals the first
+eight characters of Kustomization `<tag>`'s `homelab/content-digest`. With no such gate Job the
+check fails, and otherwise it judges the newest Job, which is that gate or a later firing. For
+any other role the reference is the `release_stamp.yml` record's `applied_at`. When no Job has
+landed since then, the check falls back to the CronJob's own daily/weekly schedule: the
+previous run must have succeeded and not be more than twice its interval old. Any other
+schedule shape fails closed rather than guess an interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
 reports "declares no rollout-checkable workload," which the deploy notifier skips.
 
 ### `landing [--json]`
@@ -263,7 +291,7 @@ agrees. Each fact comes from a reader that already exists:
 - A deploy-ui older than the `manual_plane_owed` key leaves the manual planes `null`. A `null`
   field means the source was not readable, not that nothing is owed. It adds no blocker.
 - Master CI is the newest `ci.yml` run on master. A run in progress is pending, and a
-  conclusion in `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict. Neither counts as red.
+  conclusion in `ci_verdict._CI_NO_VERDICT_CONCLUSIONS` is no verdict. Neither counts as red.
 - deploy-ui's `/api/inflight` lists the runs in flight. A run's `VERDICT:` line is read with
   `land_lib.detach.verdict_in` where its log is readable on this host. Elsewhere it comes from
   deploy-ui's `/api/log`, which serves only the logs of runs deploy-ui started. So off
@@ -777,7 +805,9 @@ self-matching `pgrep -f` and a partial `security_and_analysis` PATCH.
 ### `session-health` (SessionStart)
 
 On opening a session here, it prints a health banner. It is silent when all-green, read-only
-and timeout-bounded. The banner's problem lines come in three groups, in this order:
+and timeout-bounded. Its probes run at the same time, in `hooklib/sections.py`, under one
+`TOTAL_DEADLINE_S` inside the hook's 15s budget. A probe still running at that deadline
+prints a `⚠ … did not finish` line rather than nothing. The banner's problem lines come in three groups, in this order:
 
 - **Service lines** (`.claude/hooks/hooklib/service_lines.py`): a down Prometheus scrape target, and
   services whose running release is behind origin/master's manifests.

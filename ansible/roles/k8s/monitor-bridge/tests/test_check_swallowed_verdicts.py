@@ -14,7 +14,13 @@ import gates
 import registry
 from _fake_sources import FakeSources
 from _shell_render import rendered_shell_texts
-from verdicts.logs import HC_ROUTED_TAGS, parse_push_line, swallowed_verdicts
+from lib.repo_paths import K3S_FILES
+from verdicts.logs import (
+    HC_ROUTED_TAGS,
+    KUMA_RETIRING_TAGS,
+    parse_push_line,
+    swallowed_verdicts,
+)
 
 
 def _unread_clock():
@@ -58,6 +64,8 @@ _REJECTED_UP = _H + (
     "release-staleness-check: push failed (http=404 rc=0 by=kuma) (status=up: 0 service(s) "
     "stale)"
 )
+# The same refusal from a tag outside KUMA_RETIRING_TAGS, which `swallowed_verdicts` still counts.
+_REJECTED_UNLISTED = _REJECTED_UP.replace("release-staleness-check", "some-other-cron")
 
 
 def test_parse_reads_the_three_line_shapes_and_rejects_the_transient_one():
@@ -139,9 +147,9 @@ def test_a_push_kuma_rejected_is_flagged_whatever_its_status_and_company():
     # sibling in the window — both of the conditions that keep a plain swallowed push quiet —
     # and it still pages, because nothing else can: Kuma answered, so the edge tiles are green,
     # and a token with no monitor has no tile to reach a deadline.
-    ok, msg = swallowed_verdicts([(1, _REJECTED_UP)], "3h", truncated=False)
+    ok, msg = swallowed_verdicts([(1, _REJECTED_UNLISTED)], "3h", truncated=False)
     assert not ok
-    assert "Kuma rejected the push for release-staleness-check on daniel-box" in msg
+    assert "Kuma rejected the push for some-other-cron on daniel-box" in msg
     assert "http=404 rc=0 by=kuma, status=up" in msg
     # Kuma answers 404 for any exception, so the page points at Kuma's own reason rather than
     # asserting a token mismatch: a DB error matched the token on 2026-10-11 (#4481).
@@ -149,12 +157,83 @@ def test_a_push_kuma_rejected_is_flagged_whatever_its_status_and_company():
     assert "no live monitor holds the token" not in msg
 
 
+def test_a_rejected_push_from_a_retiring_tag_is_clean_and_from_any_other_is_flagged():
+    # B6's shadow week: once Cutover-1a deletes a tile, its producer's push is refused until
+    # Cutover-2 drops it. The same refused line from an unlisted tag must still page.
+    for tag in sorted(KUMA_RETIRING_TAGS):
+        refused = _REJECTED_UP.replace("release-staleness-check", tag)
+        ok, msg = swallowed_verdicts([(1, refused)], "3h", truncated=False)
+        assert ok, msg
+    ok, _ = swallowed_verdicts([(1, _REJECTED_UNLISTED)], "3h", truncated=False)
+    assert not ok
+
+
+def test_a_lost_down_push_from_a_retiring_tag_still_pages_beside_a_landed_sibling():
+    lost = _SWALLOWED_DOWN.replace("release-staleness-check", "sync-artifacts")
+    ok, msg = swallowed_verdicts([(1, lost), (2, _SIBLING_RUN)], "3h", truncated=False)
+    assert not ok
+    assert "sync-artifacts" in msg
+
+
+# B6b's pod producers: the crowdsec-jobs sidecar's three pushing jobs and the two health
+# CronJobs. Their tags are read from the role files that log them, not from a rendered shell
+# script, because none of them is one.
+_B6B_TAGS = {
+    "crowdsec-remote-allowlist",
+    "crowdsec-appsec-verify",
+    "crowdsec-home-allowlist",
+    "configarr-health",
+    "janitorr-health",
+}
+_K8S = Path(__file__).resolve().parents[2]
+
+
+def _pod_producer_tags():
+    """Tags the B6b producers log under: `Job("<tag>", ... push_env=<set>)` and `TAG = "<tag>"`."""
+    jobs = (_K8S / "crowdsec" / "files" / "crowdsec_jobs.py").read_text()
+    tags = set(re.findall(r'Job\(\s*"([a-z-]+)",[^)]*?push_env="[A-Z_]+",?\s*\)', jobs))
+    for role, script in (
+        ("configarr", "configarr_health.py"),
+        ("janitorr", "janitorr_health.py"),
+    ):
+        text = (_K8S / role / "files" / script).read_text()
+        tags.update(re.findall(r'^TAG = "([a-z-]+)"', text, flags=re.M))
+    return tags
+
+
+def test_a_rejected_push_from_a_b6b_pod_producer_is_clean_and_from_any_other_is_flagged():
+    for tag in sorted(_B6B_TAGS):
+        refused = _REJECTED_UP.replace("release-staleness-check", tag)
+        ok, msg = swallowed_verdicts([(1, refused)], "3h", truncated=False)
+        assert ok, (tag, msg)
+    ok, _ = swallowed_verdicts([(1, _REJECTED_UNLISTED)], "3h", truncated=False)
+    assert not ok
+
+
+def test_a_lost_down_push_from_a_b6b_pod_producer_still_pages_beside_a_landed_sibling():
+    lost = _SWALLOWED_DOWN.replace("release-staleness-check", "configarr-health")
+    ok, msg = swallowed_verdicts([(1, lost), (2, _SIBLING_RUN)], "3h", truncated=False)
+    assert not ok
+    assert "configarr-health" in msg
+
+
+def test_the_b6b_tags_are_the_tags_the_pod_producers_log_under():
+    # Derived from the tree, so a misspelt tag excludes nothing. The second assertion is the
+    # red proof: a misspelt tag is absent from what the producers log.
+    producers = _pod_producer_tags()
+    assert producers == _B6B_TAGS
+    assert _B6B_TAGS <= KUMA_RETIRING_TAGS
+    assert "configarr-healht" not in producers
+
+
 def test_a_rejected_push_that_the_next_run_landed_is_clean():
     # REJECT (the pair): the newest line decides here as everywhere — the tokens were
     # re-aligned and the tag's next push landed.
-    later_run = _RUN_DOWN.replace("13:00:00", "13:30:00")
+    later_run = _RUN_DOWN.replace("13:00:00", "13:30:00").replace(
+        "release-staleness-check", "some-other-cron"
+    )
     ok, msg = swallowed_verdicts(
-        [(1, _REJECTED_UP), (2, later_run)], "3h", truncated=False
+        [(1, _REJECTED_UNLISTED), (2, later_run)], "3h", truncated=False
     )
     assert ok, msg
 
@@ -181,10 +260,10 @@ def test_the_logql_excludes_the_transient_retry_line_at_the_source():
     assert '{job="syslog"}' in checks.logs.SWALLOWED_VERDICTS_LOGQL
 
 
-def test_the_check_is_registered_and_loki_gated():
+def test_the_check_is_registered_and_startup_graced():
     names = {c.name for c in registry.build_checks()}
     assert "swallowed_verdicts" in names
-    assert "swallowed_verdicts" in gates.LOKI_DEPENDENT
+    assert "swallowed_verdicts" in gates.STARTUP_GRACE
 
 
 def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted():
@@ -215,6 +294,48 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
 
 
+# B7's pod producer, the pi-peer-backup script. The other B7 pods log to no stream these
+# selectors read. The tag is derived from `report()`: `${HOSTNAME:-<pod>} <tag>: $1`.
+_B7_TAGS = {"pi-peer-backup"}
+
+
+def _b7_producer_tags():
+    script = (_K8S / "pi-peer-backup" / "files" / "pull-pi-peers.sh").read_text()
+    return set(re.findall(r"\$\{HOSTNAME:-[a-z-]+\} ([a-z-]+): \$1", script))
+
+
+def test_the_b7_pod_producer_is_listed_quiet_when_refused_and_paging_when_lost():
+    producers = _b7_producer_tags()
+    assert producers == _B7_TAGS <= KUMA_RETIRING_TAGS
+    # The red proof: a misspelt tag is not one the script logs.
+    assert "pi-peer-bakcup" not in producers
+    refused = _REJECTED_UP.replace("release-staleness-check", "pi-peer-backup")
+    assert swallowed_verdicts([(1, refused)], "3h", truncated=False)[0]
+    lost = _SWALLOWED_DOWN.replace("release-staleness-check", "pi-peer-backup")
+    ok, msg = swallowed_verdicts([(1, lost), (2, _SIBLING_RUN)], "3h", truncated=False)
+    assert not ok and "pi-peer-backup" in msg
+
+
+def _producer_tags():
+    """Every syslog tag a rendered host script, a k3s Python producer or a pod producer logs under."""
+    tags = _pod_producer_tags() | _b7_producer_tags()
+    for _plane, _role, _name, text in rendered_shell_texts():
+        tags.update(re.findall(r"logger -t ([A-Za-z0-9_.-]+)", text))
+    for source in K3S_FILES.glob("*.py"):
+        tags.update(re.findall(r'ident="([A-Za-z0-9_.-]+)"', source.read_text()))
+    return tags
+
+
+def test_every_retiring_tag_is_one_a_rendered_producer_logs_under():
+    # A misspelt tag excludes nothing, so its producer's refused push pages. Derived from the
+    # renders, as the HC_ROUTED_TAGS test above is. The second assertion is the red proof.
+    producers = _producer_tags()
+    assert sorted(KUMA_RETIRING_TAGS - producers) == []
+    assert sorted((KUMA_RETIRING_TAGS | {"manifest-prune-chek"}) - producers) == [
+        "manifest-prune-chek"
+    ]
+
+
 def _src(fetch):
     """The file's one seam onto `Sources.loki_lines(logql, window_s, limit)`."""
     return FakeSources(loki_lines=fetch)
@@ -234,8 +355,8 @@ def _streams(syslog, pod):
 
 
 def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
-    # The Loki gate probes /labels, which stays fast while a range query is what a busy Loki
-    # is slow at, so a raise here would page this tile for a slow Loki, not a lost verdict.
+    # A range query is what a busy Loki is slow at, so a raise here would page this tile
+    # for a slow Loki, not a lost verdict.
     def _raise(*a, **k):
         raise RuntimeError("loki-homelab: timed out")
 
@@ -243,14 +364,17 @@ def test_a_fetch_error_fails_open_and_names_the_owner(cfg):
         cfg, _src(_raise), uptime_s=_unread_clock
     )
     assert ok
-    assert "timed out" in msg and "Loki Reachable" in msg
+    assert "timed out" in msg and "ruler" in msg
 
 
 # pi-peer-backup's CronJob container, the one pusher that is a pod rather than a host cron
 # Its script echoes the syslog shape, host = the pod name, so the reader sees it.
 _POD_H = "2026-09-10T13:05:00Z pi-peer-backup-29312345-x7k2q pi-peer-backup: "
 _POD_RUN_UP = _POD_H + "status=up pulled 2 peer file(s) from daniel-pi"
-_POD_REJECTED = _POD_H + (
+# The refused push comes from a tag outside KUMA_RETIRING_TAGS: pi-peer-backup joined it in B7,
+# so a refused push from it is clean and would no longer prove that the pod stream still pages.
+_POD_UNLISTED_H = "2026-09-10T13:05:00Z other-pod-x7k2q some-other-pod-job: "
+_POD_REJECTED = _POD_UNLISTED_H + (
     "push failed (http=404 rc=0 by=kuma) (status=up: pulled 2 peer file(s) from daniel-pi)"
 )
 # The CronJob's earlier shape, which the reader must still not match: a line
@@ -339,10 +463,7 @@ def test_a_rejected_push_from_the_pod_stream_is_flagged(cfg):
     src = _src(_streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP), (3, _POD_REJECTED)]))
     ok, msg = checks.logs.check_swallowed_verdicts(cfg, src, uptime_s=_unread_clock)
     assert not ok
-    assert (
-        "Kuma rejected the push for pi-peer-backup on pi-peer-backup-29312345-x7k2q"
-        in msg
-    )
+    assert "Kuma rejected the push for some-other-pod-job on other-pod-x7k2q" in msg
 
 
 def test_the_pre_1943_pod_line_is_not_read_as_anything(cfg):

@@ -1,18 +1,16 @@
 {
-  "checksum": "6a7802c75395b6cde49347b88f1a4a920af46f6acdd7f9cb8326d50fa92de5c6",
+  "checksum": "15a7c286faa4575697f4e882f81da12e3ffda4d0d3b3ad9fb836a34ce3663adc",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Notable",
   "row": {
     "atoms": {
-      "ansible/roles/setup/k3s/tasks/stale-checkout-guard.yml": "c8d2a1e0cd3cab4f181581ce6e8365c5133dfac02d0440708509279d82dedada",
       "ansible/roles/setup/k3s/tests/test_live_drift_check.py::test_a_handed_back_flux_object_is_compared": "29baa8c8e8db354582087203540333c8012acc63bbc2d72e862af172a8b3f76c",
       "ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py::test_a_labelled_object_whose_kustomization_is_gone_is_flagged": "abc50dd24685838384ee47b3e402e66947f00ca03befd3738c5169a58d889f82",
-      "ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_metallb_instance": "34e28fac26dd4152b1be97e259aa7b78d61b233fcd05dbd6b2e3be84e8a9662a",
-      "ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest": "2c303334d1711e695d3af95be410d408cca553aa0d2a17eaf3767abfb4f5f2d1",
+      "ansible/tests/repo/_k3s_write_verbs_row.py:K3S_WRITE_ALLOW": "4b6b11513b650f1bd89eafa73bfbe23cf1dd62b63d8a93dd502a3a083f4ac950",
       "ansible/tests/setup/test_k3s_unit_logging.py": "db4fe34a98da1e3bd07598ad1f372e3b647f7840bd7320b55d17a82a68413f96",
       "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d"
     },
     "python": "3.14",
-    "verified_sha": "41fadef59"
+    "verified_sha": "66f485f5c"
   }
 }

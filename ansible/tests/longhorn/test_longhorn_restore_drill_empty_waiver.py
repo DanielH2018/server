@@ -14,22 +14,21 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiv
 
 from pathlib import Path
 
-from lib.repo_paths import K3S_DEFAULTS
 from _helpers import load_yaml
-from _restore_drill import harness
+from _restore_drill import DRILL_DEFAULTS, harness
 
 # n8n-files' own recorded actualSize, the reading the ceiling was derived from.
 RECORDED_BARE_EXT4_BYTES = 51712000
 
 
 def _ceiling() -> int:
-    return load_yaml(K3S_DEFAULTS)[
+    return load_yaml(DRILL_DEFAULTS)[
         "k3s_longhorn_restore_drill_empty_ok_max_actual_bytes"
     ]
 
 
 def _declared() -> str:
-    declared = load_yaml(K3S_DEFAULTS)["k3s_longhorn_restore_drill_empty_ok_pvcs"]
+    declared = load_yaml(DRILL_DEFAULTS)["k3s_longhorn_restore_drill_empty_ok_pvcs"]
     assert declared, (
         "no volume is declared may-be-empty — this suite has nothing to exercise"
     )
@@ -42,8 +41,8 @@ def test_a_still_empty_declared_volume_passes_and_stamps(tmp_path: Path) -> None
     run = harness(tmp_path, [pvc], actual_sizes={pvc: RECORDED_BARE_EXT4_BYTES})
     proc = run(restore="pass", env={"K3S_STUB_PROBE": "files=0 bytes=0"})
     assert proc.returncode == 0, proc.stderr
-    assert (run.stamp_dir / "last-success").exists()
-    assert (run.stamp_dir / "success" / pvc).exists()
+    assert "last-success" in run.cm
+    assert f"success.{pvc}" in run.cm
 
 
 def test_a_filled_declared_volume_fails_and_stamps_nothing(tmp_path: Path) -> None:
@@ -56,5 +55,5 @@ def test_a_filled_declared_volume_fails_and_stamps_nothing(tmp_path: Path) -> No
     assert "the waiver does not apply" in proc.stderr, proc.stderr
     # Neither stamp: check 7 would read the first as "the nightly drill is alive" and check 8 the
     # second as "this volume restores", both off a run that brought back nothing.
-    assert not (run.stamp_dir / "last-success").exists()
-    assert not (run.stamp_dir / "success" / pvc).exists()
+    assert "last-success" not in run.cm
+    assert f"success.{pvc}" not in run.cm

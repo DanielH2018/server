@@ -6,6 +6,8 @@ OnFailure=renovate-notify-alert.service
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 User={{ sys_user }}
 # Sandbox: a narrow notifier — queries open PRs over HTTPS and writes ONLY its state dir — so it
 # can be confined, unlike the gitops-deploy unit which deploys the whole fleet. Limits blast radius
@@ -30,6 +32,20 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # which ProtectHome=read-only permits.
 Environment=UV_CACHE_DIR=/tmp/uv-cache
 ExecStart=/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/renovate-notify/renovate_notify.py
+# The same run's verdict for node_exporter's textfile collector (M6 batch B4). It runs only when
+# ExecStart succeeded and comes before the Kuma beat, so a failed beat cannot cost the file. A
+# crash writes nothing, which is the Kuma tile's own reading: the missed beat is the signal, and
+# the rules in other-setup-checks.yaml carry only a NotReporting arm for it.
+#
+# `+` runs this one line unsandboxed, because ProtectSystem=strict above leaves the textfile
+# directory read-only and ReadWritePaths= should not widen for a single file. `env -i
+# PATH=/usr/bin:/bin` pins the command's environment, the same form the agent unit uses. It is
+# /bin/bash, not /bin/sh, since homelab-check-lib.sh is bash-shaped. Both write failures end in a logged
+# line and exit 0, so the unit never fails over its own telemetry. 129600 is the DEADLINE_S of
+# the "Renovate Notifier — Alive" tile, a daily run plus a missed one and slack, and
+# ansible/tests/setup/test_b4_rule_literals.py pins the rule's literal and the tile's interval
+# to it. `%%s` is systemd's escape for the date format's `%s`.
+ExecStartPost=+/usr/bin/env -i PATH=/usr/bin:/bin /bin/bash -c 'source /usr/local/lib/homelab-check-lib.sh && write_check_textfile renovate-notify 1 "$(date +%%s)" 129600 || logger -t renovate-notify "textfile write failed (homelab-check-lib.sh missing or the textfile directory unwritable)"'
 # Runs only when ExecStart succeeded — the direct "alive" beat that replaced the
 # monitor-bridge renovate_alive check (host flip 2, 2026-08-14). Failure still pages
 # twice: OnFailure hits Discord immediately, and the missed beat reds the Kuma monitor

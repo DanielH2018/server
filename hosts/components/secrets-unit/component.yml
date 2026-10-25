@@ -1,0 +1,23 @@
+# The secrets unit (H4, docs/target-architecture/host/h4-secrets-unit.md, *homelab-secrets.service*).
+# A host package that lists this component decrypts its own SOPS file with its own age key, writes
+# each credential to /run/credstore and each declared output under /run/homelab-secrets or
+# /var/lib/homelab-secrets, and queues the dependents owed a restart. The script calls no
+# systemctl: reconcile owns every restart (*The restart contract*).
+#
+# The renderer adds the rest of what the unit reads (renderer_lib/host_outputs.py):
+#   - /usr/lib/homelab/secrets.json, the manifest the script reads. Its schema is the docstring
+#     of hosts/lib/homelab-secrets: the host's sops_file, the credential keys from `credentials:`,
+#     and one row per `outputs:` entry with its template, destination, owner, group, mode,
+#     `persist` flag, dependents and key list;
+#   - /usr/lib/homelab/secrets/<host>.sops.yaml, the host's ciphertext from
+#     ansible/vars/hosts/<host>.sops.yaml;
+#   - /usr/lib/homelab/secret-templates/, where each declared output installs;
+#   - `secrets_inputs_sha256` in the manifest, which reconcile compares.
+#
+# Not enabled at boot: a dependent's Wants=/After=homelab-secrets.service pulls it in, and
+# reconcile restarts it when its inputs change or it is not active.
+depends:
+  - homelab-tools
+files:
+  - {lib: homelab-secrets, dst: /usr/lib/homelab/homelab-secrets, mode: "0755"}
+  - {src: units/homelab-secrets.service, dst: /usr/lib/systemd/system/homelab-secrets.service}

@@ -1,0 +1,236 @@
+# The temporary guard for M6's no-pager windows (docs/target-architecture/monitoring/
+# m6-retire-kuma.md, "No-pager windows"). A check pages from Kuma or from Alertmanager, never
+# both, and a window in which a batch has neither is the unsafe direction.
+#
+# A rule that does not fire has no series, so PromQL cannot read its `shadow` label. This rule
+# lists the tiles itself. Each shadow PR adds one
+# `absent_over_time(monitor_status{monitor_name="<tile>"}[2h])` term per tile its batch retires,
+# and each shadow-dropping PR (Cutover-b, Cutover-1b, A6-7b) removes its batch's terms. A term
+# exists exactly while its rule is shadow, and it reads 1 once the tile has reported nothing for
+# two hours. A PR that removes the last term deletes this file and its
+# `observability_rule_groups` entry; a PR that adds a term to a missing group re-creates both.
+#
+# THE TWO HOURS LIVE IN THE EXPRESSION, NEVER IN `for:`. renderer_lib/soak.py:longest_for adds
+# the `for:` of every unshadowed critical rule to its service's soak wait, so `for: 2h` on a
+# uptime-kuma rule lengthens every promotion's soak by 7200s and fails
+# ansible/tests/setup/test_lander_deadlines_cover_the_soak.py.
+#
+# A Kuma outage fires no term, because Kuma's own liveness pager covers it. `absent_over_time`
+# carries the tile's name as a label, so the page names the tile. `service: uptime-kuma` is the
+# role whose tiles it counts, so C7's gate on `observability` does not read it.
+# DECIDED: each term's range is max(2h, 2 x the tile's push interval + 10m). Kuma restarts
+# (19 in 7 days) drop a push tile's monitor_status series until its next push, so a 2h range
+# on a tile that pushes less often than hourly would page while the tile is healthy. A daily
+# tile therefore uses [48h10m]. Add a term with its own interval's range, never a bare 2h.
+# Read the interval from the tile's declaration. Every monitor-bridge tile shares
+# uptime_kuma_k8s_bridge_push_interval (1200s), so its range is [2h].
+# A tile whose interval is 90000s (a daily timer plus an hour) uses [50h10m], as B3's two do.
+# B7's WG Pi Peer Backup has a 216000s interval (2.5 days), so its range is [120h10m]. B7's other
+# three tiles (360s and 600s) use [2h].
+# B9's three AIDE tiles (626400s) use [348h10m] and its three rkhunter tiles (612000s) use
+# [340h10m], both inside the 30d retention.
+# B4's two etcd drill tiles have no term: a monthly push tile's range would be 70d10m, which
+# exceeds Prometheus's 30d retention. A Kuma restart drops the series until the next monthly
+# push, and after 30d no earlier sample remains to keep the term quiet, so it would page falsely.
+groups:
+  - name: kuma-cutover
+    rules:
+      - alert: CheckWithoutPager
+        expr: |
+          (
+              absent_over_time(monitor_status{monitor_name="k3s Container Restarts"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Container OOM"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s CPU Throttling"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Scrape Targets"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Cluster Scrape Targets"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Log Shipper Dropped Entries"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Docs Refresh"}[26h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Secret Rotation"}[50h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Setup Plane Drift (agent hosts)"}[50h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Homelab Evals"}[348h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="AIDE Integrity (daniel-box)"}[348h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="AIDE Integrity (daniel-server)"}[348h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="AIDE Integrity (daniel-pi)"}[348h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-box)"}[340h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-server)"}[340h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-pi)"}[340h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-box)"}[4h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-server)"}[4h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="UPS Secondary (daniel-box)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="UPS Secondary (daniel-server)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Fake Remux Scan"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Fake Remux Replace"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="MKV Attachment Repair"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Renovate Notifier — Alive"}[72h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Renovate Agent — Alive"}[56h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="TLS Cert Expiry"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Traefik 5xx"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Traefik Latency"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Traefik 404 Flood"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Traefik 421"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Longhorn Backup"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Off-box etcd Snapshot"}[50h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Manifest Prune Drift"}[50h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Release Staleness Drift"}[2h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Live Object Drift"}[50h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Longhorn Volume Redundancy"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s PVC Fullness"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Longhorn Snapshot Headroom"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Kubelet CSI Mount Read-Only"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="etcd DB Size"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Root Disk"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Memory"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Host Temperature"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="UPS Battery Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Artifacts Peer Sync"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Telemetry OTLP Door"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi Host"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi WG Easy"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi SD Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Daniel Pi Recovery"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Email-to-RSS (Worker)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="iCal Proxy k8s"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s LiveSync"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Scrutiny"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Loki"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s homelab-mcp (edge gate)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Homelab Edge (all-clear)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Pi-hole k8s DNS"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Mosquitto (VIP)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Jellyfin (VIP)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="SLZB-06M Coordinator"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s nut (upsd)"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Pi Pressure"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Workload Log Errors"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec Remote Allowlist"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec AppSec"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="CrowdSec Home Allowlist"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Configarr Sync"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Janitorr Errors"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="n8n Prod Workflows"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Bazarr Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Prowlarr Indexers"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="SMART Data / Health"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="k3s Speedtest"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Swallowed Push Verdicts"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="GitHub Ruleset Drift"}[50h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="GitHub Interaction Limit"}[50h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="WAN Reachable"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Discord Delivery"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="R2 Free Tier Headroom"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Cloudflare IP Drift"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Healthchecks.io Console Drift"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="B2 Reachable"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="B2 Free Tier Headroom"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Arr Queue Warnings"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="GitOps Deploy — Alive"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="GitOps Deploy — Status"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="etcd Restore Drill"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Home Assistant Automations"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Arr Auto-Block"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Cloudflare DDNS Direct"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="Cloudflare DDNS Proxied"}[2h])
+            or
+              absent_over_time(monitor_status{monitor_name="WG Pi Peer Backup"}[120h10m])
+          )
+          unless on() (up{job="uptime-kuma"} == 0)
+        labels:
+          severity: critical
+          service: uptime-kuma
+        annotations:
+          summary: Kuma's {{ $labels.monitor_name }} tile is gone and no alert rule pages in its place.
+          description: >-
+            M6's cutover removed the {{ $labels.monitor_name }} tile more than two hours ago, and
+            its replacement rule still carries shadow="true". Drop `shadow` from the rule, or
+            revert the Kuma-side PR to restore the tile.

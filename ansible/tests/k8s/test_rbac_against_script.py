@@ -2,12 +2,12 @@
 
 Target slice H2.1 lands the derivation in `_script_rbac.py` before any cron moves. Each H2 family
 PR that turns a host cron into a CronJob adds a case here that derives its script's needs and
-checks them against that job's rendered Role or ClusterRole: the drill at H2.3c, the CrowdSec
-sidecar's remote allowlist at H2.4b and its home allowlist at H2.4c, and the *arr checks at H2.5b and H2.5c. H2.5d's qbittorrent prefs check
+checks them against that job's rendered Role or ClusterRole: the CrowdSec sidecar's remote
+allowlist at H2.4b and its home allowlist at H2.4c, and the *arr checks at H2.5b and H2.5c.
+The drill's case is in test_rbac_against_script_drill.py. H2.5d's qbittorrent prefs check
 adds no case: it calls no Kubernetes API and runs with no ServiceAccount token, so it has no
-grants to derive. Until then the real drill is the
-named member: its derived set must hold `get` on its backup target and the `watch` its teardown
-needs, or the derivation reads nothing.
+grants to derive. The real drill is the named member below: its derived set must hold `get`
+on its backup target and the `watch` its teardown needs, or the derivation reads nothing.
 
 A script that calls the API through a REST client rather than kubectl, such as D5's jellyfin
 cap and pihole guard, has its case in test_rbac_against_rest_script.py instead.
@@ -22,19 +22,14 @@ from datetime import UTC, datetime
 import pytest
 from _helpers import K8S_ROLES
 from _k8s_render import render_role_template
-from _script_rbac import (
-    ALL_NAMESPACES,
-    grants,
-    missing,
-    recorded_needs,
-    shell_needs,
-)
+from _script_rbac import ALL_NAMESPACES, grants, missing, recorded_needs, shell_needs
 from _shell_render import render_shell_script
 from lib import yaml_fast
 
 # The drill restores into the claim's own namespace, and every claim it can pick is in
 # `homelab` (the plan's *The drill: state into a ConfigMap first, then the move*).
-DRILL_NAMESPACES = {"$PVC_NS": "homelab"}
+DRILL_NAMESPACES = {"$PVC_NS": "homelab", "$STATE_NS": "homelab"}
+DRILL_TEMPLATE = ("k8s", "longhorn-restore-drill", "longhorn-restore-drill.sh.j2")
 
 
 def _role(rules: list[dict], namespace: str | None = "homelab") -> list[dict]:
@@ -60,7 +55,7 @@ def _gaps(needs: set[tuple], docs: list[dict]) -> list[tuple]:
 
 def test_the_real_drill_needs_its_backup_target_and_the_delete_wait() -> None:
     """The named member: the drill's script, as the host runs it, read through the derivation."""
-    script = render_shell_script("setup", "k3s", "longhorn-restore-drill.sh.j2")
+    script = render_shell_script(*DRILL_TEMPLATE)
     # The calls' shape, without the object names, which the drill holds in variables.
     needs = {need[:4] for need in shell_needs(script, DRILL_NAMESPACES)}
     assert ("longhorn-system", "longhorn.io", "backuptargets", "get") in needs
@@ -232,8 +227,10 @@ _STAMPS = {
 
 def test_a_name_restricted_rule_is_flagged_for_another_name() -> None:
     needs = shell_needs("$KUBECTL -n homelab patch configmap other-cm -p '{}'\n")
+    # `kubectl patch` GETs the object before it sends the PATCH, so both verbs are needs.
     assert _gaps(needs, _role([_STAMPS])) == [
-        ("homelab", "", "configmaps", "patch", "other-cm")
+        ("homelab", "", "configmaps", "get", "other-cm"),
+        ("homelab", "", "configmaps", "patch", "other-cm"),
     ]
 
 
@@ -465,3 +462,34 @@ def test_the_crowdsec_jobs_role_without_its_configmap_rule_is_flagged(
     assert missing(needs, grants(docs, "homelab", "crowdsec-jobs")) == [
         ("homelab", "", "configmaps", "get", "crowdsec-home-ips")
     ]
+
+
+@pytest.mark.parametrize("role", ["configarr", "janitorr"])
+def test_the_health_roles_grant_the_verdict_export_patch(monkeypatch, role) -> None:
+    """M6 B6b: the export's `kubectl patch configmap` is granted on the one named ConfigMap."""
+    monkeypatch.syspath_prepend(str(K8S_ROLES / role / "files"))
+    reader = importlib.import_module(f"{role}_health")
+    argvs = []
+
+    def record(*args: str) -> tuple[int, str]:
+        argvs.append(["kubectl", "-n", "homelab", *args])
+        return 0, ""
+
+    reader.export_verdict(record, f"{role}-health-verdict", "up", "ok", 0.0)
+    needs = recorded_needs(argvs)
+    # `kubectl patch` GETs the object before it sends the PATCH.
+    assert {need[:4] for need in needs} == {
+        ("homelab", "", "configmaps", "get"),
+        ("homelab", "", "configmaps", "patch"),
+    }
+    docs = list(
+        yaml_fast.safe_load_all(render_role_template(role, "health-rbac.yaml.j2"))
+    )
+    assert missing(needs, grants(docs, "homelab", f"{role}-health")) == []
+    # The red half: a Role without the rule is missing the get and the patch.
+    for doc in docs:
+        if doc.get("kind") == "Role":
+            doc["rules"] = [
+                r for r in doc["rules"] if "configmaps" not in r["resources"]
+            ]
+    assert missing(needs, grants(docs, "homelab", f"{role}-health"))

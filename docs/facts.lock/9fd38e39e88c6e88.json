@@ -1,0 +1,19 @@
+{
+  "checksum": "3f5cd1973d1513fd75e4f83f022e01c03c8f1b1eb38ab29ce41aa549255582b7",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/metallb/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/filter_plugins/service_tier.py": "4f5e784e468e22de5c3736acba1c47934e1d5e2794af865159bdaeeff9171f1e",
+      "ansible/tests/k8s/test_forward_only_tags.py": "715f9d64ed41ed2cdb8d2a9ca3ddb4e5039bf96c496abdffadd5706f44f1ae20",
+      "ansible/tests/k8s/test_metallb_vendored_manifest.py::test_the_vendored_file_declares_the_prometheus_template_annotations": "b7f807d57f90acb4d508d2eee70d7318509b468b173d47975dc1bcbabdf77557",
+      "ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune": "b5aa7a0b15e57ef1aaaef7b8e886e31e7c8813709d26cf6ee0eca3d0c0c20d0e",
+      "ansible/tests/k8s/test_vip_pins.py::test_announcement_and_the_primary_node_variable_agree": "fa78448a9a13e69a92f92df454600382e1f4344fa348aa8d0f3150306ba967d4",
+      "ansible/tests/repo/test_lan_facts_have_one_source.py": "64531a1a51ae9959f8cc932581104c72a02169faf939822bf8679ebfa00f334b",
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "scripts/dev/vendor_manifest.py": "f0c0c9df684a1ed3d858ec17f02c8e7c279dbb7595180eb00d70a50e42a9d7ef"
+    },
+    "python": "3.14",
+    "verified_sha": "8783d3ca3"
+  }
+}

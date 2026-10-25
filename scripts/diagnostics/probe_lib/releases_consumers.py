@@ -39,24 +39,42 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from lib.repo_paths import K8S_ROLES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, K8S_ROLES
+
+# The build-context table is the deployer's own, so the census and the tick name the same
+# role for a file outside every role (#4840).
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from deployer_lib import deploy_cross_role
 
 
 def role_paths_for(service, shared_roles, consumers=None):
-    """The `ansible/roles/k8s/` paths whose history decides whether `service` is stale.
+    """The paths whose history decides whether `service` is stale.
 
     `consumers` is `consumers_for`'s mapping: a shared role listed there joins this list only
     for the services that reach its tasks. A role the mapping does not answer for -- the
     renderer, or one nothing reaches -- joins every service's list, as does every role when
     the caller passes no mapping at all. The default widens.
+
+    The list ends with each file outside `ansible/roles/k8s/` that the service's image embeds,
+    from `K8S_BUILD_CONTEXT_FILES`. An edit to one moves the image's content tag, so without it
+    a drift that file caused was reported under whatever unrelated path also moved (#4840).
     """
     consumers = consumers or {}
-    return [f"ansible/roles/k8s/{service}/"] + [
-        f"ansible/roles/k8s/{r}/"
-        for r in sorted(shared_roles)
-        # `{service}` as the default is the widening: an unanswered role contains it.
-        if service in consumers.get(r, {service})
-    ]
+    build_context = sorted(
+        path
+        for path, roles in deploy_cross_role.K8S_BUILD_CONTEXT_FILES.items()
+        if service in roles
+    )
+    return (
+        [f"ansible/roles/k8s/{service}/"]
+        + [
+            f"ansible/roles/k8s/{r}/"
+            for r in sorted(shared_roles)
+            # `{service}` as the default is the widening: an unanswered role contains it.
+            if service in consumers.get(r, {service})
+        ]
+        + build_context
+    )
 
 
 def _closure(role, callers):

@@ -85,12 +85,14 @@ def test_setup_role_hosts_reads_the_when_gate_per_host(_synthetic_setup_inventor
     assert land_reach.setup_role_hosts(
         "gitops_deploy", playbook, all_vars, host_vars_dir
     ) == frozenset({"daniel-box"})
-    # nut_host: `inventory_hostname == ups_host or nut_host_secondary_armed | bool` --
-    # daniel-server matches the first clause, daniel-box the second (armed there), daniel-pi
-    # neither.
-    assert land_reach.setup_role_hosts(
-        "nut_host", playbook, all_vars, host_vars_dir
-    ) == frozenset({"daniel-box", "daniel-server"})
+    # nut_host: `inventory_hostname == ups_host or nut_host_secondary_armed | bool` -- the
+    # play gate reaches daniel-server (first clause) and daniel-box (second, armed there), and
+    # daniel-pi neither. The live role's unconditional `end_role` then drops both, whose
+    # halves their packages own (H4.3c, H7.33).
+    assert (
+        land_reach.setup_role_hosts("nut_host", playbook, all_vars, host_vars_dir)
+        == frozenset()
+    )
     assert land_reach.setup_role_hosts(
         "optimize_pi", playbook, all_vars, host_vars_dir
     ) == frozenset({"daniel-pi"})

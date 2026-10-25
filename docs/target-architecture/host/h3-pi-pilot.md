@@ -1,6 +1,6 @@
 # H3 — Pi pilot: builder, updater, versioning
 
-Status: IN PROGRESS
+Status: DONE
 
 PR H3.1, the renderer's host and package modes: [#4911](https://github.com/DanielH2018/server/pull/4911).
 PR H3.2a, the updater package: [#4917](https://github.com/DanielH2018/server/pull/4917).
@@ -67,8 +67,35 @@ first timer run exited 0 between 22:42:59 and 22:45:11 UTC, and no monitor dropp
 ([readings](https://github.com/DanielH2018/server/pull/5348#issuecomment-6226115060)). The owed
 `optimize_pi` line was cleared with no Ansible apply.
 PR H3.9a, the host-wait module, unwired: [#5383](https://github.com/DanielH2018/server/pull/5383).
-It merged at `340f20772` and deployed nothing. Nothing calls `land_lib/host_wait.py` yet. Its
-`HOST_INPUTS` audit caught D5.3b2's soak imports reaching a host render before D5.3b2 merged.
+It merged at `340f20772` and deployed nothing. Nothing called `land_lib/host_wait.py` until
+H3.9b. Its `HOST_INPUTS` audit caught D5.3b2's soak imports reaching a host render before
+D5.3b2 merged.
+PR H3.9b, wire the host wait and arm the Pi: [#6020](https://github.com/DanielH2018/server/pull/6020).
+It merged at `b0c40b65`, and the Pi package ships the enable link for `homelab-updater.timer`.
+The Pi package repo published `b0c40b65` (`homelab_repo_published_info{package="homelab-daniel-pi"}`
+read sha `b0c40b65693c`). On 2026-10-23 at about 17:05Z the operator started
+`homelab-updater.service` on the Pi by hand (item 9 of H3.9b), and `systemctl is-active
+homelab-updater.timer` printed `active`.
+PR H3.9c, the Pi joins `HostUpdateStale`: the PR that carries this line. It adds daniel-pi
+(job `node-pi`, 11400 seconds) to `observability_expected_hosts` and its rule to
+`host-checks.yaml`.
+PR H3.10a, arm the canary: [#6033](https://github.com/DanielH2018/server/pull/6033). It merged at
+`3f8e28fde`. It ships `homelab-pi-canary.service`,
+`homelab-pi-canary.timer` and the timer's enable link in the Pi package. The operator check passed:
+`systemctl is-active homelab-pi-canary.timer` printed `active` and the `timers.target.wants`
+count was 1.
+PR H3.10b, drop the canary: [#6039](https://github.com/DanielH2018/server/pull/6039). It merged at
+`14c43910d`. It removes both units and the link. The operator check passed: the canary timer read
+`LoadState=not-found` and `ActiveState=inactive`, and the `timers.target.wants` count was 0.
+PR H3.11, `homelab-tools`: [#6045](https://github.com/DanielH2018/server/pull/6045). It merged at
+`b5e1e1ebb`. It adds the package with `sops` and `chezmoi` pinned for `amd64` and `arm64`, and the
+Pi package `Depends` on it. The builder fetches and checks each pin, and the `host_tools_arm64` CI
+job installs the `arm64` build. The operator check passed on 2026-10-23: `dpkg-query -W
+homelab-tools:arm64` printed `homelab-tools 0.6096+g9ebb51406c47`, `dpkg --verify homelab-tools`
+printed nothing, and `/usr/lib/homelab/bin/` holds `chezmoi` and `sops`.
+PR H3.12, staged rollout: the PR that carries this line. It adds the gate, the `canary` reason and
+the root-owned `release` override to the builder, and `PROMETHEUS_URLS` to its settings file. It
+changes nothing while the Pi is the only host with a package.
 
 Depends on: R1
 Unblocks: H4, H5
@@ -287,7 +314,7 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
       its legacy entries (below) and the secret keys its units load at run time, and carries a
       `defaults:` map for its own variables.
     - `hosts/packages/<name>/` holds a shared package: `homelab-updater` (H3) and
-      `homelab-repos` (H7).
+      `homelab-tools` (H3). H7's apt sources are components, not a shared package.
     - `hosts/lib/` holds the scripts several packages ship, with tests in `hosts/lib/tests/`.
     - `hosts/bootstrap-host.sh` is the bring-up script.
     - `hosts/keys/` holds the public keys hosts trust. PR H3.4c commits the first,
@@ -297,8 +324,8 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
       without its suffix, the way a `lib:` entry names `hosts/lib/<name>`. Both are copied
       byte for byte, and they are the only sources outside a component's own directory.
 - **Packages and the slice that creates each.** `homelab-updater`, `homelab-daniel-pi` and
-  `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6, and
-  `homelab-repos` in H7. `homelab-tools` is the one architecture-specific package (C5,
+  `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6. H7's
+  apt sources are components of the host packages, with no `homelab-repos`. `homelab-tools` is the one architecture-specific package (C5,
   *`homelab-tools`* below).
 - **Installed paths.**
     - Scripts go in `/usr/lib/homelab/`.
@@ -960,10 +987,13 @@ publishes a second host package.
 
 ### CI (builds, never signs)
 
-The host-package checks are one job, `host_packages`, in `.github/workflows/ci.yml`, not a
-workflow of their own. The `prek` gate lists it in `needs` and reads `needs.host_packages.result`
-in its step, so the required context covers it. The job inherits `ci.yml`'s SHA-keyed
-concurrency group on push. It needs no secrets, and it does these steps:
+The host-package checks are two jobs in `.github/workflows/ci.yml`, not a workflow of their
+own. `host_packages_build` does steps 1 to 3 and step 6. It hands the render, the debs and nfpm
+to the `host_packages` matrix, which does steps 4 and 5 on each release. The split lets the
+`host_tools_arm64` job start once the build is done, instead of after the cases (#6151). The
+`prek` gate lists both jobs in `needs` and reads each `needs.<job>.result` in its step, so the
+required context covers them. The jobs inherit `ci.yml`'s SHA-keyed concurrency group on push.
+They need no secrets, and they do these steps:
 
 1. It renders every package at the PR head and at its merge base, on every run. A path filter
    would miss a `group_vars` change that alters a render, such as a `containers_list` edit that
@@ -973,9 +1003,9 @@ concurrency group on push. It needs no secrets, and it does these steps:
    `hosts/lib/tests/container/`, which holds the fixture specs, and the cases' own scripts.
    `CASE_INPUTS` on the render step lists them, and
    `ansible/tests/repo/test_host_package_case_inputs_census.py` holds that list to
-   every `validate` module the cases script imports (#5004). An edit to the
-   `host_packages` job itself counts too, because its steps invoke the cases.
-   `host_packages.py job-changed` compares the job as parsed YAML, so an edit to a comment
+   every `validate` module the cases script imports (#5004). An edit to either job counts
+   too, because one builds what the cases read and the other invokes them.
+   `host_packages.py job-changed` compares each job as parsed YAML, so an edit to a comment
    alone does not count. A renderer change that alters only the cases' fixture counts too,
    because the fixture exercises renderer paths no real package does until H3.6.
    `host_packages.py fixture-changed` renders the fixture in each tree with that tree's own
@@ -1054,11 +1084,12 @@ concurrency group on push. It needs no secrets, and it does these steps:
     - run the common path and assert that `/var/cache/apt/pkgcache.bin` is unchanged.
 6. It writes the file-level package diff to the job summary.
 
-The job has no `name:` key. GitHub names each matrix leg after the job id and the leg's
-values, such as `host_packages (24.04, 3.12)`. The gate census in
+The `host_packages` job has no `name:` key. GitHub names each matrix leg after the job id and
+the leg's values, such as `host_packages (24.04, 3.12)`. The gate census in
 `ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
-`needs.host_packages.result` fails when either leg fails. Later host slices extend this job
-and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
+`needs.host_packages.result` fails when either leg fails. The build job's `name:` does not
+start with `host_packages`, so the prefix filter below still selects the two legs alone. Later
+host slices extend these jobs and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
 filtered by the job name's prefix:
 
 ```bash
@@ -1076,6 +1107,14 @@ adds it, and the Pi is its `arm64` pilot.
 - `hosts/packages/homelab-tools/package.yml` lists each tool with its version and, for each
   architecture, its upstream URL and its sha256. A Renovate manager bumps each pin, as the
   nfpm pin's manager does (H3.3a).
+- The render carries the pins and never the bytes. It writes one tree per architecture,
+  `packages/homelab-tools/<arch>/`, each with a literal `arch:` in its `nfpm.yaml` and a
+  `tools.json` of that architecture's pins. Each architecture block of `package.yml` carries
+  its own `version` and `# renovate:` annotation, because the Renovate manager moves one
+  version and one digest per match; the renderer refuses a tool whose versions differ by
+  architecture. A pin's `url` holds `{version}` and `{bare}` placeholders, so a bump moves only
+  the version and the digest. A tool upstream ships as a `.tar.gz` names the file to install
+  with `member`.
 - Each binary installs at `/usr/lib/homelab/bin/<tool>`, never on `PATH`. `sops` is
   `/usr/lib/homelab/bin/sops`, the absolute path H4's `homelab-secrets` calls, and
   `chezmoi` is `/usr/lib/homelab/bin/chezmoi`. A test of the rendered package holds
@@ -1521,8 +1560,8 @@ says otherwise.
           pin that differs fails it.
         - Step 5 runs `apt-get update --error-on=any` restricted to the homelab source,
           then `apt-get install homelab-updater homelab-<hostname>`.
-      Steps 3, 4 and 6 are H7's. H7 also adds `homelab-repos` to step 2, because H7.1
-      creates it, and `chezmoi` from `homelab-tools` to step 5. H3.11 builds
+      Steps 3, 4 and 6 are H7's. H7 no longer adds `homelab-repos` to step 2: the 2026-10-24 ruling
+      ships each apt source in its host's package. It adds `chezmoi` from `homelab-tools` to step 5. H3.11 builds
       `homelab-tools`.
     - The script types the repository URL (*Shared names*, Repository). Add `hosts` to
       `test_lan_facts_have_one_source.py:SCAN_ROOTS` and `.sh` to its `SCAN_SUFFIXES`, with
@@ -2838,7 +2877,7 @@ reason is given.
 - **H3-R10-15 (medium) H3.6's bootstrap steps depended on H7's packages.** Fixed. H3.6 now
   spells out its three steps under H7's numbers: the hostname check; the keyring checked
   against the pinned fingerprint and `homelab.sources`; and the install of `homelab-updater`
-  and `homelab-<hostname>`. H7 adds `homelab-repos` and `homelab-tools`. The C5 name for
+  and `homelab-<hostname>`. H7 adds `homelab-tools`. The C5 name for
   `homelab-tools` is a cross-slice note.
 - **H3-R10-16 (medium) Several PRs exceeded the 100 to 200 line guide.** Fixed. H3.2 is
   H3.2a (updater), H3.2b (reconcile) and H3.2c (censuses and the unit validator). H3.3 is

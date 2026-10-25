@@ -18,9 +18,12 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 <!-- /generated_from -->
 
 - **No `REGISTRY_AUTH`.** Network reachability to `k8s_registry_port` IS the access
-  control: `templates/networkpolicy.yaml.j2` admits only two ingress rules, keyed off
-  the node's own `cni0`/`flannel.1` gateway address (containerd's pulls arrive SNAT'd
-  to it, so a podSelector can't admit them — only an `ipBlock` can).
+  control. `templates/networkpolicy.yaml.j2` admits three sources. image-builder's Jobs and
+  this role's self-test Jobs push. Each node's `cni0`/`flannel.1` gateway address carries
+  containerd's pulls, which arrive SNAT'd to it, so only an `ipBlock` can admit them.
+  `flux-system`'s source-controller fetches the break-glass artifact (#6046).
+  `ansible/roles/k8s/registry/templates/networkpolicy.yaml.j2:DECIDED: a standing grant for source-controller`
+  has why that grant stands rather than being applied by hand at break-glass time.
 - **`registry-data` is `longhorn-nobackup`**, 10Gi. Every stored image rebuilds from a
   Dockerfile in this repo, so backing it up would spend B2 transactions on bytes a rebuild
   regenerates.
@@ -72,7 +75,19 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   - A cold blob that takes over about 8 minutes to fetch never completes through the
     mirror. ghcr.io's signed blob URL expires mid-transfer on HTTP/1.1 and HTTP/2 alike,
     and the proxy never resumes (#5654). The measurement is in the comment above
-    `REGISTRY_PROXY_REMOTEURL` in `templates/ghcr-mirror.yaml.j2`.
+    `REGISTRY_PROXY_REMOTEURL` in `templates/ghcr-mirror.yaml.j2`. The cap binds only while
+    GHCR is slow: it served 0.15-0.45 MB/s from 2026-10-17 to 2026-10-19, and 44-98 MB/s on
+    2026-10-24.
+  - **`registry-gc.sh` warms the store after each weekly GC.** Once the mirror serves again,
+    it GETs every linux/amd64 blob of every `ghcr.io` ref it read for the keep set, through
+    the mirror. That caches images a node pulled before the mirror existed, and pulls that fell
+    back to `ghcr.io` during a GC, while GHCR is at its normal rate rather than when a cold
+    start needs them. A cached blob streams from the store and costs no WAN. On 2026-10-24 a
+    cold warm fetched 354 blobs (6.2 GB) in 133s, and a second pass took 49s.
+    `k8s_host_files_ghcr_mirror_warm_budget_s` (1800s) bounds the phase. A blob that fails to
+    warm is named in the `registry-gc` journal and the run's message, and leaves the run up.
+    `ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2:DECIDED: a blob that fails to warm`
+    has why.
   - containerd falls back to `ghcr.io` while the GC scales the mirror to zero. No build writes
     the mirror's store, so the GC does not wait for builds.
   - **Nothing but `registry-gc.sh` writes the mirror's `spec.replicas`**, so the operator
@@ -90,10 +105,28 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   `deploy/registry`, whose `replicas: 1` Flux renders after the flip, so Flux would restore
   the pod mid-GC, the corruption the stop-the-world rule exists to prevent. Every
   `k8s/image-builder` caller is flux-owned and pulls from GHCR, so no build reaches the store.
-  It still grows, with no bound. The verify Job's seed adds each new `flux_job_image` pin, 20.38
-  MB compressed when measured on 2026-10-19, under a new tag. Each upstream rebuild of
+  It still grows. The verify Job's seed adds each new `flux_job_image` pin, 20.38 MB
+  compressed when measured on 2026-10-19, under a new tag. Each upstream rebuild of
   `registry_k8s_probe_source` adds a copy too. Nothing reclaims either, because only
-  `garbage-collect` frees blobs (#5752).
+  `garbage-collect` frees blobs.
+  - **monitor-bridge's `pvc_fullness` page is the bound** (#5752). It pages when a claim passes
+    85%, and `registry-data` is not in its `PVC_EXCLUDE`. On 2026-10-24 the claim was 38% full
+    (3.98 GB), so at about 1 GiB a year of pins it pages years before the claim fills.
+    `ansible/tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page`
+    fails if the claim joins the exclusion. No runbook for a page exists yet. A collection
+    must not race Flux on `spec.replicas`, and #6114 tracks the options.
+- **A sidecar on every node proves the mirror serves pulls** (#5542). containerd falls back
+  to `ghcr.io` past a broken mirror, so nothing else notices one while the WAN is up.
+  node-exporter's `ghcr-mirror-pull` sidecar
+  (`ansible/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh`) GETs nut's manifest every
+  600s through the endpoint the node's `registries.yaml` names. The pod is hostNetwork, so
+  the request reaches this role's fence from the same node grant containerd's pulls use. nut's
+  role renders the tag to GET, in `ansible/roles/k8s/nut/templates/ghcr-mirror-probe-configmap.yaml.j2`.
+  Observability's `GhcrMirrorPullFailed` pages a node whose check has failed for 45 minutes,
+  past the longest GC hold, and `GhcrMirrorPullNotReporting` pages a node whose check file
+  went stale. Both rules are in `files/rules/registry.yaml` there. The check proves the path
+  and the mirror's answer, not the cache: with the WAN up, the proxy fetches a missing tag
+  from GHCR and still answers 200.
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
   static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
   healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until

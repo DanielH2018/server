@@ -1,8 +1,23 @@
 # H4 — Secrets unit; NUT on daniel-server first
 
-Status: PLANNED
+Status: IN PROGRESS
 Depends on: H3
 Unblocks: H5, H6
+
+PR H4.1a1, the secrets script: decrypt and render: [#6056](https://github.com/DanielH2018/server/pull/6056).
+PR H4.1a2, the secrets script: the restart queue: [#6059](https://github.com/DanielH2018/server/pull/6059).
+PR H4.1a3, the host renderer's declared outputs and compose files: [#6060](https://github.com/DanielH2018/server/pull/6060).
+PR H4.1c, the CI checks: [#6064](https://github.com/DanielH2018/server/pull/6064). The scans read the head render's package roots from each root, so the anchored allowlist entry is `^usr/lib/homelab/secrets/[^/]+\.sops\.yaml$`, and the fixture-versus-real comparison also allows the manifest's `secrets_inputs_sha256`.
+PR H4.1d, the per-host SOPS files' tool: [#6058](https://github.com/DanielH2018/server/pull/6058). It adds the ADR-0022 amendment, which the operator accepted on 2026-10-23. It also corrects this plan: `domain` left SOPS in #5087, so no host file carries it.
+PR H4.3b2, one reader for a role's leading `end_role` guard: [#6057](https://github.com/DanielH2018/server/pull/6057), merged 2026-10-23, `nothing-to-deploy`. It added `setup_gates.role_end_guard` and `role_end_hosts`, and the census, `land_reach.setup_role_hosts` and `glance_facts.setup_glance_lines` now read the guard. The live-tree outputs were byte-identical before and after.
+PR H4.3b3, the watchdog's packaged branch: [#6062](https://github.com/DanielH2018/server/pull/6062). It added `nut_host_watchdog_packaged` and `nut_host_watchdog_token_key` and the packaged branch of `ups-secondary-health.sh.j2`, which keeps B4's check-library path in both branches. daniel-box's render is byte-identical, and daniel-server owes the hand apply.
+PR H4.1b, the restart contract in reconcile: [#6063](https://github.com/DanielH2018/server/pull/6063). It republishes `homelab-daniel-pi`. Its legacy-entry gate is package-wide, because `manifest.json` attributes no legacy entry to a component, and its existence gate covers outputs only, because `secrets.json` maps no credential to a unit.
+PR H4.2, daniel-server's age key, SOPS file and bring-up: [#6069](https://github.com/DanielH2018/server/pull/6069). The per-host file arrives by the operator's `host_secrets.py sync` commit on the PR's branch, so the PR stays a draft until then. `bootstrap-host.sh` reads the keyring from beside itself, so the operator copies it out of `hosts/keys/` first.
+PR H4.3a, daniel-server's `upsmon.conf`, rendered and read by nothing: [#6082](https://github.com/DanielH2018/server/pull/6082). The operator's `host_secrets.py sync` added `nut_monitor_password`. It added the `nut-secondary` component and a `role:` key in component.yml, which names a `host_sources.ROLE_SOURCES` role whose defaults sit beneath the component's and whose template a `role:<name>.j2` `src` renders in place. `HOST_INPUTS` gained that role's defaults and the one template.
+PR H4.3b1, the `kuma-push` component and reconcile's udev arm: [#6089](https://github.com/DanielH2018/server/pull/6089). It republishes `homelab-daniel-pi` and `homelab-daniel-server`. The arm hashes `/usr/lib/udev/rules.d/NN-homelab-*.rules` from disk instead of reading a manifest field, so no renderer change was needed, and it lives in `reconcile_lib/udev.py`. The Pi's `kuma-push-lib.sh` kept its sha256, path and package.
+PR H4.3c, NUT on daniel-server: [#6096](https://github.com/DanielH2018/server/pull/6096). It republishes `homelab-daniel-server` and ends the `nut_host` role on `ups_host`. A component file entry now takes `src: role:<template>`, as an output does, and `HOST_INPUTS` gained the watchdog template. The rollout text's step 2 is inexact: the output's new dependent changes `secrets.json`, so `secrets_inputs_sha256` moves and reconcile restarts `homelab-secrets` once before it restarts `nut-monitor`. The NUT container cases of *Verification* have no PR, so the environ read stands in for them.
+PR H4.4, the Pi's SOPS creation rule: [#6092](https://github.com/DanielH2018/server/pull/6092). It carries only the rule and `docs/break-glass.md` item 12. The Pi's file, `credentials:`, `LIVE_HOST_FILES` entry and `check` member moved to H4.5, because `host_outputs.py:finish` refuses a credential without a `secrets-unit`. The Pi's bootstrap step 3 ran on 2026-10-24.
+PR H4.5, the Pi switches to `/run/credstore`: [#6107](https://github.com/DanielH2018/server/pull/6107). It adds the `secrets-unit` component, the two `credentials:` and the `LIVE_HOST_FILES` entry to the Pi, and repoints both token heartbeats at `/run/credstore`. The Pi's file came from the operator's `host_secrets.py sync daniel-pi` commit on the PR's branch. `HOST_INPUTS` gained `ansible/vars/hosts/`, because a host render opens that file. It keeps the interim files, which H4.6 retires.
 
 This slice adds `homelab-secrets.service`, which decrypts a per-host SOPS file on the host
 with the host's own age key. It proves the unit on the UPS shutdown chain of daniel-server,
@@ -19,11 +34,12 @@ Afterwards, `homelab-daniel-server` exists, and its NUT secondary is package-own
   drop-in points upsmon there with `NUT_CONFPATH`, and `homelab-secrets` renders the file
   from ciphertext the package carries.
 - The UPS watchdog runs as a package timer. It pushes daniel-server's own Kuma tile with
-  `ups_secondary_daniel_server_push_token`, and reads `domain` as a credential too.
+  `ups_secondary_daniel_server_push_token`, and renders `domain` into the script from inventory.
 - daniel-box keeps its Ansible-owned secondary, cron and token until H7.8.
 
-The Pi's two token heartbeats read their three credentials, the two push tokens and `domain`,
-from `/run/credstore`. `homelab-secrets` decrypts them from a Pi-only SOPS file.
+The Pi's two token heartbeats read their two push tokens from `/run/credstore`.
+`homelab-secrets` decrypts them from a Pi-only SOPS file. Both scripts render `domain` from
+inventory (H3.8b), so it is in no host file.
 
 The exit criterion has five parts, all observed together:
 
@@ -95,8 +111,9 @@ The exit criterion has five parts, all observed together:
   path from role tasks, and `scripts/secrets_mgmt/tests/test_secret_bearing_host_paths.py`
   pins it.
     - The script renders `domain` inline: `KUMA_HOST="uptime-kuma.local.{{ domain }}"`.
-      `grep -c '^domain: ENC\['` on `ansible/vars/secrets.yml` prints 1, so `domain` is a
-      SOPS key. `KUMA_RESOLVE_IP` reads `k3s_metallb_ingress_vip` from
+      `grep -c '^domain:'` on `ansible/vars/secrets.yml` prints 0, because #5087 moved `domain`
+      to `ansible/inventory/group_vars/all.yml`. It is therefore not a SOPS key, and no host
+      file carries it. `KUMA_RESOLVE_IP` reads `k3s_metallb_ingress_vip` from
       `ansible/inventory/group_vars/all.yml`, which is not a secret.
     - `test_nut_host_secondary.py:test_the_usb_half_is_confined_to_the_ups_host` asserts
       that the udev tasks still exist.
@@ -165,7 +182,7 @@ The exit criterion has five parts, all observed together:
 - **These push tokens rotate only by hand.** `ansible/secret_rotation.yml` records
   `ups_secondary_push_token`, `ups_secondary_daniel_server_push_token`,
   `pi_sd_health_push_token` and `pi_recovery_push_token` as tier `auto`,
-  `nut_monitor_password` as `assisted`, and `domain` as `ignore`.
+  and `nut_monitor_password` as `assisted`.
     - All four push tokens are in `scripts/secrets_mgmt/consumers.py:CROSS_HOST_PUSH_TOKENS`,
       and `consumers.py:consumer_tags` returns `()` for each of them.
     - The unattended path of `scripts/secrets_mgmt/secret_rotation.py:cmd_rotate` keeps only
@@ -195,12 +212,13 @@ The exit criterion has five parts, all observed together:
   ciphertext beside a suggestive key name, and that a line-regex allowlist does not work in
   the pre-commit `gitleaks git --staged` mode. `prek.toml` runs gitleaks on commits. Nothing
   scans a built artifact.
-- **H3 leaves three interim files on the Pi.** Per H3's PR H3.8a, `optimize_pi` writes
-  `/etc/homelab/interim/pi_sd_health_push_token`, `pi_recovery_push_token` and `domain`.
-  H3.8b's two token scripts read all three from `$CREDENTIALS_DIRECTORY/<key>`, and their
+- **H3 leaves two interim files on the Pi.** Per H3's PR H3.8a, `optimize_pi` writes
+  `/etc/homelab/interim/pi_sd_health_push_token` and `pi_recovery_push_token`. H3.8b renders
+  `domain` into both scripts from inventory. The scripts read both tokens from
+  `$CREDENTIALS_DIRECTORY/<key>`, and their
   units declare one `LoadCredential=` line per key. H3.8b also ships
   `/usr/lib/homelab/kuma-push-lib.sh` inside the `pi-heartbeats` component. H3's *Open
-  questions* 6 says that H4's last PR retires the three files.
+  questions* 6 says that H4's last PR retires the two files.
 - **H3's reconcile, as planned.** Step 2 starts every enabled unit that is not active.
   Step 3 restarts the units whose file or drop-in hash changed. Step 6 writes `applied.json`
   and exits non-zero if any step failed, so only a killed run leaves `applied.json`
@@ -275,7 +293,7 @@ The unit is `Type=oneshot` with `RemainAfterExit=yes`, `TimeoutStartSec=60` and
    (below). The script exits non-zero if any output or credential failed.
 
 The script runs the `sops` that `homelab-tools` ships. C5 makes that package the one
-architecture-specific package, and H3 builds it for `amd64` and `arm64`. The `secrets`
+architecture-specific package, and H3 builds it for `amd64` and `arm64`. The `secrets-unit`
 component declares `Depends: homelab-tools`, and the host package itself stays
 `Architecture: all`. The script calls `sops` by the absolute path that `homelab-tools`
 installs, `/usr/lib/homelab/bin/sops` (H3.11), and never through `PATH`. H3.11 also makes the
@@ -283,7 +301,7 @@ updater upgrade every installed `homelab-*` package, so an unversioned
 `Depends: homelab-tools` still picks up later builds. The first publish of
 `homelab-daniel-server` follows H3.12's staged rollout. `/usr/local/bin` comes first on `PATH`,
 and it holds the binary `sops_setup` installs until H7.1 lists that file as a legacy entry.
-H4.2 ships the first `secrets` component to an `amd64` host, and H4.5 ships it to the Pi.
+H4.2 ships the first `secrets-unit` component to an `amd64` host, and H4.5 ships it to the Pi.
 Each of the two waits on H3's `homelab-tools` build for its host's architecture.
 
 ### Persisted outputs
@@ -300,7 +318,7 @@ This slice persists exactly one:
 
 Every other secret-bearing value that this slice and H6 add stays on tmpfs:
 
-- the Pi's three credentials and daniel-server's two go to `/run/credstore`;
+- the Pi's two credentials and daniel-server's one go to `/run/credstore`;
 - H6's `k3s_readonly_token` goes to `/run/credstore` on both cluster nodes.
 
 The Pi therefore persists no output, and its SD card holds no rendered plaintext. H5
@@ -311,7 +329,7 @@ rule, because `homelab-compose` already starts after `homelab-secrets`. The rout
 
 Two files under the persisted root are state, not outputs: `.digests` and `.hmac-key`
 (step 5). They hold one HMAC per output and the random key the HMACs use, and never a value.
-Every host that carries the `secrets` component has them, the Pi included.
+Every host that carries the `secrets-unit` component has them, the Pi included.
 
 A census in `hosts/lib/tests/` holds the set of persisted outputs across every rendered
 package equal to a named list. The list has one member, daniel-server's `upsmon.conf`, and
@@ -354,22 +372,22 @@ and "Restart k3s-agent so the log drop-in takes effect" in
 
 H4.1b changes H3's reconcile in the ways below. Every host package ships reconcile (H3
 *Shared names*), so the change reaches the Pi at H4.1b, long before any Pi package carries
-`secrets`.
+`secrets-unit`.
 
-- **The secrets rules apply only to a package that ships the `secrets` component.**
+- **The secrets rules apply only to a package that ships the `secrets-unit` component.**
     - The renderer writes `secrets_inputs_sha256` into the manifest, and `secrets.json` into
       the package, only for such a package. It fails the render of a package whose
-      components list an output or a credential without the `secrets` component.
+      components list an output or a credential without the `secrets-unit` component.
     - Reconcile keys the secrets step, the existence gate and the legacy-entry gate below on
       that manifest field. Without the field, reconcile makes no `systemctl` call that names
       `homelab-secrets`, the existence gate passes every unit, and legacy entries retire
       under H3's handoff rule 3 alone.
-    - The Pi carries no `secrets` component until H4.5. Between H4.1b and H4.5, the Pi's
+    - The Pi carries no `secrets-unit` component until H4.5. Between H4.1b and H4.5, the Pi's
       reconcile differs from H3's only in the restart rules below.
 - **The restart queue exists on every host.** Reconcile creates `/run/homelab-secrets/` as
   root:root 0755 when it is absent, and reads a missing `pending.json` as an empty queue. A
-  unit whose start fails on a host without `secrets` is therefore queued like any other.
-- **A secrets step, between H3's steps 1 and 2, in a package that ships `secrets`.**
+  unit whose start fails on a host without `secrets-unit` is therefore queued like any other.
+- **A secrets step, between H3's steps 1 and 2, in a package that ships `secrets-unit`.**
     - Its manifest carries `secrets_inputs_sha256`, a hash over the ciphertext file,
       `secrets.json` and every file under `/usr/lib/homelab/secret-templates/`.
     - When that hash differs from `applied.json`, or `homelab-secrets` is not active,
@@ -423,11 +441,11 @@ H4.1b changes H3's reconcile in the ways below. Every host package ships reconci
       hash change would otherwise be missing from the next run's set, and its restart lost.
     - Reconcile removes a unit from `pending.json` after its start or restart succeeds,
       when the unit is neither enabled nor active, or when the manifest marks it `windowed`.
-- **Legacy entries wait for the secrets.** In a package that ships `secrets`, reconcile
+- **Legacy entries wait for the secrets.** In a package that ships `secrets-unit`, reconcile
   retires the legacy entries of a component that lists an output or a credential only when
   `homelab-secrets` is active and every output and credential that component lists exists.
   This gates H3's handoff rule 3 on the secrets as well as on unit starts. A component that
-  lists neither, and every component of a package without `secrets`, retires its legacy
+  lists neither, and every component of a package without `secrets-unit`, retires its legacy
   entries under rule 3 alone.
 
 Three properties follow from these rules, and H5 relies on each one.
@@ -478,9 +496,11 @@ rendered tree names, as placeholders or as credentials.
   2026-10-03 removal that `docs/break-glass.md` records.
 - **Contents in this slice.**
     - daniel-server: `ups_secondary_daniel_server_push_token` from H4.2,
-      `nut_monitor_password` from H4.3a and `domain` from H4.3c.
-    - daniel-pi: `pi_sd_health_push_token`, `pi_recovery_push_token` and `domain` from H4.4.
-      Those are the three credentials H3.8b's heartbeats load (Baseline).
+      `nut_monitor_password` from H4.3a.
+    - daniel-pi: `pi_sd_health_push_token` and `pi_recovery_push_token` from H4.5. Those are
+      the two credentials H3.8b's heartbeats load (Baseline).
+    - `domain` is in no host file. It is not a SOPS key since #5087, and a rendered template
+      reads it from inventory.
     - daniel-box's file arrives with its package in H6 (*Open questions* 7).
 - **`scripts/secrets_mgmt/host_secrets.py check`** keeps each copy in step. It runs in the
   pytest job without a key, and it fails on any of these:
@@ -610,23 +630,20 @@ itself (H5), declared outputs through `homelab-secrets`. These rules change C1 a
       `nut_host_watchdog_interval_minutes` minutes. The timer's enable link ships only while
       `nut_host_watchdog_armed` is true, so the disarm path survives, as H3.8b does for the
       recovery timer.
-    - The service runs as root and loads two credentials:
-      `LoadCredential=kuma_push_token:/run/credstore/{{ nut_host_watchdog_token_key }}` and
-      `LoadCredential=domain:/run/credstore/domain`.
+    - The service runs as root and loads one credential:
+      `LoadCredential=kuma_push_token:/run/credstore/{{ nut_host_watchdog_token_key }}`. It
+      reads `domain` from inventory through the rendered script.
     - A role default, `nut_host_watchdog_token_key`, names the key per host:
       `ups_secondary_daniel_server_push_token` on `ups_host` and `ups_secondary_push_token`
       elsewhere. The component's test pins it to `TILES`.
-    - `package.yml` lists `ups_secondary_daniel_server_push_token` and `domain` in the
+    - `package.yml` lists `ups_secondary_daniel_server_push_token` in the
       credentials `homelab-secrets` materialises. A census fails a package whose unit loads a
       credential the package does not list.
 - **The shared watchdog template.** `ups-secondary-health.sh.j2` gains one role default,
   `nut_host_watchdog_packaged` (false), which only the component's render context sets. When
-  it is true, the template differs from the daniel-box render in four lines:
+  it is true, the template differs from the daniel-box render in three lines:
     - it sources `/usr/lib/homelab/kuma-push-lib.sh`;
     - it reads its token from `$CREDENTIALS_DIRECTORY/kuma_push_token`;
-    - it builds `KUMA_HOST` from `$CREDENTIALS_DIRECTORY/domain`. `{{ domain }}` stays inside
-      the daniel-box branch, so the packaged render reads no secret and passes host mode's
-      strict render;
     - it reads the endpoint from `/var/lib/homelab-secrets/etc/nut/upsmon.conf`, the file
       upsmon uses.
 
@@ -693,7 +710,7 @@ homelab-secrets (age key /etc/homelab/age.key)        │
 
 ```diff
 + hosts/lib/homelab-secrets
-+ hosts/components/secrets/component.yml
++ hosts/components/secrets-unit/component.yml
 + hosts/components/kuma-push/component.yml            (kuma-push-lib.sh, out of pi-heartbeats)
 + hosts/components/nut-secondary/component.yml        (renders nut_host's templates until H7.8)
 + hosts/components/nut-secondary/templates/           (drop-in, watchdog units, udev rule)
@@ -739,11 +756,12 @@ meaning.
     - Add step 5: the HMAC baseline under `/var/lib/homelab-secrets/`, `pending.json` and its
       lock, with unit tests.
     - No host changes.
-3. **H4.1a3 The `secrets` component and the host renderer (about 200 lines).** Gate: the C1
+3. **H4.1a3 The `secrets-unit` component and the host renderer (about 200 lines).** Gate: the C1
    amendment in *Open questions* 6. Its row must stand in contracts.md's *Requested
    amendments not yet applied*, or the amendment must be applied, before this PR merges.
-    - The `secrets` component: the unit, and the `secrets.json` schema with its `persist`
-      flag and each output's key list.
+    - The `secrets-unit` component: the unit, and the `secrets.json` schema with its `persist`
+      flag and each output's key list. It is named `secrets-unit` because the operator's
+      tooling guard denies agent writes under any `secrets/` directory.
     - The renderer reads each component's declared `outputs:`. It renders their secret
       references as placeholders with C1's escape and routes them to `secret-templates/`. It
       keeps a declared compose file at its real path (*Secret-bearing files*). It fails a
@@ -755,16 +773,16 @@ meaning.
       `inventory_hostname` at `70591c307`. If H3.9's host wait finds the Pi's tree changed
       all the same, the PR takes H4.1b's landing.
 4. **H4.1b The restart contract in reconcile (about 200 lines). A Pi host change.**
-    - Extend `hosts/lib/homelab-reconcile` with the `secrets`-component condition, the queue
+    - Extend `hosts/lib/homelab-reconcile` with the `secrets-unit`-component condition, the queue
       directory, the secrets step, the restart set built before step 2, step 2's skip and
       `reset-failed`, step 2's `windowed` skip, the existence gate, the `pending.json` drain
       and refill, and the legacy-entry gate.
-    - Stub-`systemctl` tests in `hosts/lib/tests/`, including a manifest without `secrets`
+    - Stub-`systemctl` tests in `hosts/lib/tests/`, including a manifest without `secrets-unit`
       (*Verification*).
     - **What changes on the Pi.** Every host package ships reconcile (H3 *Shared names*), and
       the builder publishes a package whose rendered tree differs (H3 *Package rules*). The
       merge therefore republishes `homelab-daniel-pi`, and the Pi runs the changed reconcile.
-        - The Pi's manifest carries no `secrets`, so no secrets rule acts there.
+        - The Pi's manifest carries no `secrets-unit`, so no secrets rule acts there.
         - The Pi's own units move from H3's `try-restart` to `reset-failed` and a blocking
           `restart`, and step 2 resets a unit before it starts it. This is the slice's first
           behaviour change on a live host.
@@ -781,12 +799,12 @@ meaning.
         - the container installs the `homelab-tools` package that the job builds, so the
           tests run the `sops` the hosts run. Until H3's `homelab-tools` build exists, it
           installs `sops` at `sops_setup_version`, pinned by sha256;
-        - each container test of a package that carries `secrets` generates an age key,
+        - each container test of a package that carries `secrets-unit` generates an age key,
           writes it to `/etc/homelab/age.key`, and builds the package with a fixture
           ciphertext encrypted to that key. The fixture holds the real key names with fake
           values. The test asserts that the fixture build differs from the real build only
           at the ciphertext path. Until H4.2 adds the first real one, a fixture package
-          that carries `secrets` exercises this path;
+          that carries `secrets-unit` exercises this path;
         - `gitleaks dir` over a named set of package roots, which starts as
           `homelab-updater` and `homelab-daniel-pi`;
         - the placeholder check over the same named set. It reads each root's declared
@@ -829,7 +847,7 @@ meaning.
     - **Operator-only:** run `host_secrets.py sync`, which decrypts `secrets.yml` and writes
       daniel-server's file holding `ups_secondary_daniel_server_push_token`. Commit it in
       this PR.
-    - Add `hosts/daniel-server/package.yml` with the `reconcile` and `secrets` components,
+    - Add `hosts/daniel-server/package.yml` with the `reconcile` and `secrets-unit` components,
       the enable link for `homelab-updater.timer`, and one credential,
       `ups_secondary_daniel_server_push_token`, which nothing reads yet.
     - Add `homelab-daniel-server` to the named sets of both CI scans, and daniel-server to the
@@ -844,7 +862,7 @@ meaning.
       because daniel-server ships no updater drop-in (*Open questions* 5). That is the
       expected result, and the operator's bring-up follows.
     - **Gate:** H3's `homelab-tools` build for `amd64` is published, because this PR ships
-      the first `secrets` component to a host.
+      the first `secrets-unit` component to a host.
     - **Operator-only**, after merge, on daniel-server:
         1. copy the key from `~ubuntu/.config/sops/age/keys.txt` to `/etc/homelab/age.key`
            (root 0600) instead of generating one. The recipient lists stay unchanged;
@@ -900,7 +918,7 @@ meaning.
           checkout. `Setup Plane Drift (agent hosts)` therefore reads DOWN from its first run
           that sees the edited template until the apply.
         - The landing note names this apply already:
-          `scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_the_same_run`
+          `scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_no_run`
           pins it at `70591c307`.
         - **Operator-only**, after merge, on daniel-server, from its own checkout at the merge
           commit or later: `uv run ansible-playbook ansible/initial_setup.yml --tags nut_host -e target=daniel-server`.
@@ -909,9 +927,8 @@ meaning.
           its next run.
 12. **H4.3c NUT on daniel-server (about 200 lines).** This one PR applies the handoff rule.
     - Add the rest of the component: the drop-in, the dependent, the udev rule, the watchdog
-      service and timer, the `domain` credential, and the legacy entries.
-    - **Operator-only:** run `host_secrets.py sync`, which adds `domain` to daniel-server's
-      file.
+      service and timer, and the legacy entries. The watchdog renders `domain` from inventory,
+      so daniel-server's SOPS file does not change and no `sync` runs.
     - In the role, delete the udev tasks and add the `end_role` guard.
       `ansible/initial_setup.yml` stays untouched.
     - Rewrite `test_the_usb_half_is_confined_to_the_ups_host` and the two `land_reach` tests
@@ -924,9 +941,8 @@ meaning.
     - Rollout on daniel-server, within 5 minutes of the builder publishing:
         1. dpkg unpacks, and the postinst reloads systemd. The running upsmon keeps the
            config it loaded at start.
-        2. The SOPS file changed, so reconcile's secrets step restarts `homelab-secrets`. It
-           writes the `domain` credential, finds the output's HMAC unchanged since H4.3a, and
-           adds nothing to `pending.json`.
+        2. The SOPS file and the credentials are unchanged since H4.3a, so reconcile's secrets
+           step does not restart `homelab-secrets`, and `pending.json` stays empty.
         3. Step 2 starts `homelab-ups-watchdog.timer`, which is enabled, inactive and outside
            the restart set.
         4. Step 3 runs `reset-failed` on `nut-monitor`, then restarts it once, because its
@@ -935,23 +951,26 @@ meaning.
            criterion 1 prints `1` (**operator-only**).
         5. Step 4 retires the cron, the script, the env file, the old udev rule and the stamp
            fragment.
-13. **H4.4 The Pi's own SOPS file (about 80 lines).**
-    - **Operator-only:**
-        - run step 3 of `bootstrap-host.sh` on the Pi;
-        - add the creation rule for `ansible/vars/hosts/daniel-pi.sops.yaml` ahead of the
-          general rule, with the Pi's printed key, daniel-box's key and the recovery key;
-        - run `host_secrets.py sync`, which writes the file holding `pi_sd_health_push_token`,
-          `pi_recovery_push_token` and `domain`.
-    - Add daniel-pi to the hosts `host_secrets.py check` must find.
+13. **H4.4 The Pi's own SOPS file (about 30 lines).** The file itself moved to H4.5, because
+    `host_outputs.py:finish` refuses a package that has a credential but no `secrets-unit`,
+    and the Pi gets that component in H4.5. So `sync daniel-pi` cannot run in H4.4.
+    - **Operator-only:** run step 3 of `bootstrap-host.sh` on the Pi. Done on 2026-10-24.
+    - Add the creation rule for `ansible/vars/hosts/daniel-pi.sops.yaml` ahead of the
+      general rule, with the Pi's printed key, daniel-box's key and the recovery key.
     - `docs/break-glass.md` gains the Pi's `/etc/homelab/age.key`, that the Pi is a
       recipient of its own file only, and H4.2's loss rule. A lost SD card is a lost host
       key, so the derived rotation list covers every value in the files the Pi's key
       decrypts.
-14. **H4.5 The Pi switches to `/run/credstore` (about 60 lines).**
+14. **H4.5 The Pi switches to `/run/credstore` (about 100 lines).**
     - **Gate:** H3's `homelab-tools` build for `arm64`, the Pi pilot, is published.
-    - Add the `secrets` component to the Pi package.
-    - Repoint all three `LoadCredential=` lines of the two heartbeat units, the two push
-      tokens and `domain`, at `/run/credstore/<key>`, with `After=` and `Wants=` on
+    - Add the `secrets-unit` component to the Pi package.
+    - Add the Pi's `credentials:` (`pi_sd_health_push_token`, `pi_recovery_push_token`) and
+      its `LIVE_HOST_FILES` entry. This moved from H4.4, because `host_outputs.py:finish`
+      refuses a package with a credential and no `secrets-unit`.
+    - Add daniel-pi to the hosts `host_secrets.py check` must find.
+    - **Operator-only:** run `host_secrets.py sync daniel-pi`, which writes the file holding
+      `pi_sd_health_push_token` and `pi_recovery_push_token`.
+    - Repoint both `LoadCredential=` lines of the two heartbeat units, one per push token, at `/run/credstore/<key>`, with `After=` and `Wants=` on
       `homelab-secrets.service`.
     - Keep the interim files and their `optimize_pi` tasks. Nothing is a legacy entry yet.
 15. **H4.6 Retire the interim files (about 40 lines).**
@@ -960,7 +979,7 @@ meaning.
       `ssh daniel-pi systemctl is-active homelab-secrets` must also print `active`
       (**operator-only**: the agent has no login on the Pi).
     - Delete the interim tasks from `optimize_pi`, and list `/etc/homelab/interim/` as a
-      legacy entry. Reconcile retires it only once all three credentials exist in
+      legacy entry. Reconcile retires it only once both credentials exist in
       `/run/credstore`.
     - The tick records a `manual_plane` line for `optimize_pi`, because the role is gated
       onto the Pi (Baseline). No apply is needed: the deleted tasks only wrote the interim
@@ -1124,7 +1143,7 @@ and before the slice closes.
       with the output written, restarts it once although no hash changed. A fixture
       reconcile that drops a skipped hash-change unit without queuing it is flagged;
     - a component whose credential is missing from `/run/credstore` keeps its legacy entries;
-    - a manifest without the `secrets` component, the Pi's shape until H4.5. The case starts
+    - a manifest without the `secrets-unit` component, the Pi's shape until H4.5. The case starts
       from an `applied.json` in H3's format, with one legacy entry unretired, one changed
       active unit, and no `/run/homelab-secrets/`. Reconcile makes no `systemctl` call that
       names `homelab-secrets`, retires the legacy entry, restarts the unit once after
@@ -1147,9 +1166,9 @@ and before the slice closes.
   `ups_secondary_push_token` is flagged too.
 - *The packaged watchdog reads no secret (H4.3b3).* A component test renders
   `ups-secondary-health.sh.j2` in host mode for daniel-server with the packaged branch on.
-  The strict render succeeds with every secret stripped, and the watchdog unit loads both
-  `kuma_push_token` and `domain`. A fixture template that reads `{{ domain }}` inside the
-  packaged branch is flagged: the host-mode render raises and names `domain`.
+  The strict render succeeds with every secret stripped, and the watchdog unit loads
+  `kuma_push_token` alone. A fixture template that reads a SOPS key inside the packaged branch
+  is flagged: the host-mode render raises and names the key.
 - *One template source (H4.3b3).* A test in `ansible/tests/setup/` asserts that daniel-box's
   role render and daniel-server's component render resolve the same two template files under
   `ansible/roles/setup/nut_host/templates/`. It also asserts that daniel-box's render of
@@ -1216,9 +1235,9 @@ and before the slice closes.
   A host file whose `sync` rewrote ten or more keys at once is clean, because the host-file
   walk runs without the re-encrypt guard. The live files are clean. The test names the
   members it must find: daniel-server's file from H4.2, holding
-  `ups_secondary_daniel_server_push_token`, then `nut_monitor_password` from H4.3a and
-  `domain` from H4.3c; and the Pi's file from H4.4, holding `pi_sd_health_push_token`,
-  `pi_recovery_push_token` and `domain`. An empty host list or a missing key cannot pass.
+  `ups_secondary_daniel_server_push_token`, then `nut_monitor_password` from H4.3a; and the
+  Pi's file from H4.5, holding `pi_sd_health_push_token` and `pi_recovery_push_token`. An empty
+  host list or a missing key cannot pass.
 - *No unattended rotation of a host-file key (H4.1d).* A `secret_rotation.py` test runs the
   unattended path over a fixture registry. An `auto`-tier key with consumer tags that a host
   file carries is skipped with its reason. A fixture `cmd_rotate` that rotates it is
@@ -1292,10 +1311,15 @@ and before the slice closes.
       `k3s nut (upsd)`, and `UPS Secondary (daniel-box)`, whose watchdog pushes `down` when
       `upsc` returns an empty `ups.status` from the pod. `UPS Secondary (daniel-server)` goes
       DOWN at its 1200 s deadline, because no watchdog runs there.
-- **H4.4:** revert. The Pi file and its creation rule go. The Pi keeps its interim files,
-  because H4.6 has not run.
+- **H4.4:** revert. The Pi's creation rule goes, and no Pi file exists yet. The Pi keeps its
+  interim files, because H4.6 has not run.
 - **H4.5:** revert. The heartbeats point back at `/etc/homelab/interim/`, which still holds
-  all three files.
+  both files. The revert also drops the Pi's `secrets-unit` component and `credentials:`
+  entry, and it removes the Pi's SOPS file from the tree. The Pi's next package no longer
+  ships `homelab-secrets.service`, so nothing deletes `/run/credstore` or
+  `/var/lib/homelab-secrets` there. The credential files vanish at the next reboot, and the
+  state directory stays until deleted by hand (**operator-only**). The Pi's creation rule
+  and its age key stay, which lets a re-landed H4.5 reuse them.
 - **H4.6:** revert, then the operator re-applies H3.8a's tags on the Pi to recreate the
   interim files, and clears the `manual_plane` line the revert records with
   `--applied` naming those tags (**operator-only**).
@@ -1341,8 +1365,8 @@ and before the slice closes.
       `NUT_CONFPATH` on the running upsmon.
 - **H4.1b and H4.3b1 change the live Pi.** Every host package ships reconcile, so each edit
   to it republishes the Pi package (H3 *Shared names* and *Package rules*). The secrets rules
-  key on the `secrets` component, which the Pi lacks until H4.5. The stub case of a manifest
-  without `secrets` is the red proof. A reconcile failure there holds the Pi, and H3.9's
+  key on the `secrets-unit` component, which the Pi lacks until H4.5. The stub case of a manifest
+  without `secrets-unit` is the red proof. A reconcile failure there holds the Pi, and H3.9's
   landing reports it as `deploy-failed`.
 - **H4.3c's rollback removes the packaged udev rule.** The rollback restores the Ansible rule
   first, and the udev arm never triggers on a dropped rule.
@@ -1420,7 +1444,7 @@ and before the slice closes.
 - **H4.1b:**
     - `hosts/lib/tests/` covers the reconcile secrets step, the restart set, step 2's skip
       and reset, step 2's `windowed` skip, the existence gate, and the `pending.json` drain
-      and refill. It also covers a manifest without `secrets`, starting from an
+      and refill. It also covers a manifest without `secrets-unit`, starting from an
       `applied.json` in H3's format;
     - H3's reconcile test that expects a changed service to be try-restarted expects
       `reset-failed` and `restart` instead, and its step 2 test expects `reset-failed`
@@ -1461,7 +1485,7 @@ and before the slice closes.
       the token, the udev rule the package ships, and the boot order.
     - In `scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py`,
       `test_nut_host_reaches_daniel_box_and_daniel_server` expects daniel-box only, and
-      `test_the_landing_owes_daniel_server_the_same_run` asserts that the note does not
+      `test_the_landing_owes_daniel_server_no_run` asserts that the note does not
       name daniel-server. The module docstring and the two test names change with them.
     - `ansible/roles/setup/nut_host/CLAUDE.md` says the role ends on `ups_host` and why, and
       that the `ups_host` half is package-owned. Its generated glance block is regenerated,
@@ -1471,11 +1495,11 @@ and before the slice closes.
     - `scripts/secrets_mgmt/secret_bearing_host_paths.py` and its test stay unchanged,
       because the task that installs `/usr/local/bin/ups-secondary-health.sh` still applies
       to daniel-box.
-- **H4.4:**
-    - `docs/break-glass.md` gains the Pi's key and the loss rule;
-    - the `host_secrets.py check` test gains daniel-pi, with its three keys, as members it
+- **H4.4:** `docs/break-glass.md` gains the Pi's key and the loss rule.
+- **H4.5:**
+    - H3's heartbeat component tests change their three `LoadCredential=` assertions;
+    - the `host_secrets.py check` test gains daniel-pi, with its two keys, as members it
       must find.
-- **H4.5:** H3's heartbeat component tests change their three `LoadCredential=` assertions.
 - **H4.6:** H3's two-writer census sees no `optimize_pi` task writing `/etc/homelab/interim/`.
 
 ## Complexity delta
@@ -1489,7 +1513,7 @@ and before the slice closes.
     - declared secret outputs in the renderer, with host-mode placeholders, C1's escape and
       a persisted output root that holds one output;
     - one persisted-output census with a one-member list;
-    - a `Depends: homelab-tools` on the `secrets` component;
+    - a `Depends: homelab-tools` on the `secrets-unit` component;
     - `inventory_hostname` in the host render context;
     - two per-host SOPS files, one each for daniel-server and the Pi, and the `sync` step
       each key change costs;
@@ -1516,7 +1540,7 @@ and before the slice closes.
    for that tile.
 2. **Where does `sops` come from?** Resolved by the C5 amendment that the pillar review
    fold applied. `homelab-tools` is the one architecture-specific package, and H3 builds it
-   for `amd64` and `arm64`. The `secrets` component depends on it and calls its `sops` by
+   for `amd64` and `arm64`. The `secrets-unit` component depends on it and calls its `sops` by
    absolute path (*`homelab-secrets.service`*). H4.2 and H4.5 each wait on the build for
    their host's architecture.
 3. **Does upsmon honour `NUT_CONFPATH` on daniel-server's nut-client?** The string is present
@@ -1649,7 +1673,7 @@ and before the slice closes.
    hand the row to contracts.md. The row must stand in the register before H4.1a3 merges,
    and H4.1a3's gate says so.
 7. **The other hosts' ciphertext.** This slice ships per-host SOPS files for daniel-server and
-   the Pi. H6 ships daniel-box's package with `secrets`, and H7's rebuild runbook adds a
+   the Pi. H6 ships daniel-box's package with `secrets-unit`, and H7's rebuild runbook adds a
    rebuilt host's key as a recipient. Resolution: H6 adds
    `ansible/vars/hosts/daniel-box.sops.yaml` with the keys its tree names, and its
    `add-secret` step for `k3s_readonly_token` gains the **operator-only** `sync`. H7's
@@ -1905,8 +1929,8 @@ How each was handled, with the evidence:
   H4.3b1's udev arm does the same to both packages. The restart contract now keys the
   secrets step, the existence gate and the legacy-entry gate on the manifest's
   `secrets_inputs_sha256`, which the renderer writes only for a package that ships
-  `secrets`. Reconcile creates the queue directory itself. A stub case of a manifest without
-  `secrets`, from an `applied.json` in H3's format, asserts no `homelab-secrets` call and
+  `secrets-unit`. Reconcile creates the queue directory itself. A stub case of a manifest without
+  `secrets-unit`, from an `applied.json` in H3's format, asserts no `homelab-secrets` call and
   exit 0, with an unconditional secrets step as its red fixture. H4.1b and H4.3b1 are
   restated as host changes with an H3.9 landing, a Prometheus read of both hosts'
   `homelab_host_reconcile_ok` and `homelab_host_applied_info`, and a Rollback that
@@ -1922,7 +1946,7 @@ How each was handled, with the evidence:
   reports drift until the role is re-applied. H4.3b3 keeps its scope and adds the
   **operator-only** `--tags nut_host` apply on daniel-server, which the landing note
   already names
-  (`scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_the_same_run`).
+  (`scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_no_run`).
   The tile `Setup Plane Drift (agent hosts)` reads DOWN until then. The template branch did
   not move into H4.3c, which would undo R10-15's split. The Rollback mirrors the apply.
 - **C1-04.** `nut_host/tasks/main.yml` writes the rule with `MODE="0666"`, and H4.3c retires

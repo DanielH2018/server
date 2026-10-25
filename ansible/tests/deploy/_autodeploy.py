@@ -38,12 +38,8 @@ _SHARED = {"manifests"}
 # named here really does hold a completion gate backed by a failure escalation.
 #
 # What belongs here: any role under roles/k8s/ whose job is to make a caller's batch workload
-# observable at deploy time. image-builder applies and waits on a build Job of its own;
-# cronjob-gate creates a one-off Job from the CALLER's CronJob and polls it. cronjob-gate's
-# membership is load-bearing rather than documentary — `_batch_gated_names` credits a
-# delegation to it, so without this assertion the poll could be gutted and every guard in this
-# file would stay green while crediting a gate that no longer gates.
-_GATING_SHARED_ROLES = {"image-builder", "cronjob-gate"}
+# observable at deploy time. image-builder applies and waits on a build Job of its own.
+_GATING_SHARED_ROLES = {"image-builder"}
 
 
 def _denylist() -> set[str]:
@@ -318,7 +314,7 @@ def _task_runs_on_a_normal_deploy(
     - `tags: never`, likewise at either level, is Ansible's own reserved exclusion tag: it runs
       only when a play names it explicitly, which a normal auto-deploy never does.
     - every real gate task in this repo (headlamp, media-volume, n8n, netpol-baseline, prowlarr,
-      registry, and every `k8s/cronjob-gate` include) carries `tags: [deploy]`. A task whose
+      registry) carries `tags: [deploy]`. A task whose
       EFFECTIVE tags are non-empty but exclude `deploy` is read as excluded here, even though a
       plain `--tags <role>` run would still select it via `include_role: apply: tags:`
       mechanics — this repo also runs config-only deploys (`--skip-tags deploy`), and crediting
@@ -370,9 +366,8 @@ def _task_command_text(task: dict) -> str | None:
     Reads both spellings a command/shell task can take: `cmd:` (a single string, however it was
     folded/literal-blocked in YAML — `yaml.safe_load` already normalized that) and `argv:` (a
     list of raw arguments, joined with spaces here so the same regexes downstream can read
-    either form). `argv:` is not hypothetical in this codebase — `k8s/cronjob-gate` itself uses
-    it for its own container-state read. A guard that could not read the spelling this repo already
-    established as the correct one would false-offend the next role that follows the precedent.
+    either form). A guard that could not read the `argv:` spelling would false-offend the next
+    role that writes its wait that way.
     """
     for module in (
         "ansible.builtin.command",

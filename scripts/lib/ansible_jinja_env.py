@@ -132,6 +132,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     env-secret and the Kuma tiles. The k3s RecurringJob template names each weekly shard
     through ``weekly_backup_group``, which raises on a shard outside 0-6, and the restore drill
     names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``.
+    longhorn-reconcile's ConfigMap computes the three tier lists with ``tier_backup_claims``,
+    ``longhorn_weekly_claims`` and ``longhorn_nobackup_claims``, which raise on a shard outside
+    0-6 or a claim two entries declare.
     The flux role fits its vendored install to the workload guards through ``flux_components``,
     which raises on a Deployment volume it has no rename for. observability's dashboard
     ConfigMaps inject the deploy-annotation queries into each board through
@@ -210,6 +213,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     service_tier_filters = service_tier.FilterModule().filters()
     env.filters["tier_priority_class"] = service_tier_filters["tier_priority_class"]
     env.filters["in_service_tier"] = service_tier_filters["in_service_tier"]
+    # The three tier filters longhorn-reconcile's ConfigMap calls over `containers_list` (H1.6).
+    env.filters["tier_backup_claims"] = service_tier_filters["tier_backup_claims"]
     scrape_filters = scrape_jobs.FilterModule().filters()
     env.filters["scrape_jobs"] = scrape_filters["scrape_jobs"]
     env.filters["metrics_port"] = scrape_filters["metrics_port"]
@@ -238,6 +243,8 @@ def register_ansible_filters(env: Environment) -> Environment:
         "weekly_backup_group",
         "weekly_backup_shard",
         "longhorn_backup_name",
+        "longhorn_weekly_claims",
+        "longhorn_nobackup_claims",
     ):
         env.filters[name] = longhorn_filters[name]
     env.tests["search"] = search

@@ -139,7 +139,10 @@ def test_the_daemonset_runs_the_script_and_the_exporter_reads_its_directory():
 HELP_LINE = re.compile(r'# HELP (homelab_check_\w+) ([^"\\\n]+)')
 PRODUCERS = frozenset(
     {
+        "ansible/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh",
         "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh",
+        "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+        "ansible/roles/setup/k3s/files/live_drift_check.py",
         "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
     }
 )
@@ -177,4 +180,8 @@ def test_a_producer_with_a_different_help_text_is_flagged():
     texts = _producer_texts()
     path = "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh"
     texts[path] = texts[path].replace("last verdict was up", "verdict is up")
-    assert help_conflicts(texts) == [f"homelab_check_success: {sorted(PRODUCERS)}"]
+    # The first producer, in path order, to carry each text names its variant: the iSCSI
+    # script's edited one, and the ghcr-mirror-pull script's for the text every other
+    # producer still writes.
+    first = "ansible/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh"
+    assert help_conflicts(texts) == [f"homelab_check_success: {sorted([path, first])}"]

@@ -8,7 +8,7 @@ from reach import reach, tag_for
 _SERVICE = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
 _BRINGUP = "ansible/k3s-bringup.yml"
 # A setup-role file that two k8s roles ship a copy of, and that no k8s role `lookup()`s.
-_COPIED = "ansible/roles/setup/common/files/host_lib.py"
+_COPIED = "hosts/lib/host_lib.py"
 # A monitor-bridge file uptime-kuma `lookup()`s to render one tile per check (#3781).
 _LOOKED_UP = "ansible/roles/k8s/monitor-bridge/files/check_table.py"
 
@@ -42,6 +42,13 @@ def test_tags_adds_a_lookup_reader_and_changes_does_not():
     assert r.tags(declared) == {"monitor-bridge", "uptime-kuma"}
     assert "uptime-kuma" not in r.changes.k8s | r.changes.services
     assert "uptime-kuma" in r.touched()
+
+
+def test_a_build_context_file_outside_every_role_tags_the_role_embedding_it():
+    """An `obs_api.py`-only landing deploys homelab-mcp, whose image embeds it (#4840)."""
+    r = reach(["scripts/diagnostics/probe_lib/obs_api.py"])
+    assert r.tags({"homelab-mcp", "sonarr"}) == {"homelab-mcp"}
+    assert "homelab-mcp" in r.touched()
 
 
 def test_tags_keeps_only_declared_roles_and_drops_role_tests():

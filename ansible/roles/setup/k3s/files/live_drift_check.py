@@ -56,6 +56,9 @@ Run by kuma-check-live-drift.timer (daily) as the sys_user, installed as
   KUMA_HOST      Kuma host the verdict is pushed to
   PUSH_TOKEN     push token of the live-drift monitor
   BOOT_GRACE_S   exit 1 with no push while uptime is under this many seconds (default 0)
+  DEADLINE_S     the longest legitimate gap between two textfile writes, in seconds; the unit
+                 renders it from k3s_daily_check_deadline_s. Unset, the run writes no textfile
+  TEXTFILE_DIR   node_exporter's textfile directory (default /var/lib/node-exporter-textfile)
   HOST_LIB_DIR   directory holding host_lib (default /opt/live-drift-check)
 """
 
@@ -67,6 +70,8 @@ import re
 import subprocess
 import sys
 import syslog
+import tempfile
+import time
 
 # The k3s role installs host_lib here (tasks/health-crons.yml). The script runs through a
 # /usr/local/bin symlink into a per-SHA release directory, which is all Python puts on sys.path
@@ -135,7 +140,7 @@ CONTROLLER_OBJECTS = frozenset({"kube-root-ca.crt"})
 # about the object.
 PATCH_MAINTAINED = {
     ("configmap", "longhorn-system", "longhorn-storageclass"): (
-        "written by `kubectl patch --type=merge` at roles/setup/k3s/tasks/longhorn.yml:197, "
+        "written by `kubectl patch --type=merge` by the task H1.5a moved to the `longhorn` Flux tag, "
         'so its baseline is still Longhorn\'s upstream bundle (numberOfReplicas: "3")'
     ),
 }
@@ -339,6 +344,66 @@ def verdict(
     )
 
 
+TEXTFILE_DIR_DEFAULT = "/var/lib/node-exporter-textfile"
+CHECK = "live-drift-check"
+
+
+def write_check_textfile(
+    success: int, verdict_ts: int, deadline_s: int, directory: str
+) -> None:
+    """Write the three `homelab_check_*` series to <directory>/live-drift-check.prom, atomically.
+
+    The producer metric contract is docs/target-architecture/monitoring/m3-textfile-timer.md.
+    homelab-check-lib.sh's `write_check_textfile` writes the same file for the shell checks and
+    this is its Python twin. The HELP text matches it byte for byte, because node_exporter drops
+    a family whose HELP differs between two files (test_iscsi_sessions.py holds the census).
+    mkstemp's random suffix never ends in `.prom`, so node_exporter skips a half-written file.
+    mkstemp creates 0600 and the collector reads as uid 65534, hence the chmod to 0644.
+    """
+    body = (
+        "# HELP homelab_check_success 1 when the check's last verdict was up, 0 when down.\n"
+        "# TYPE homelab_check_success gauge\n"
+        f'homelab_check_success{{check="{CHECK}"}} {success}\n'
+        "# HELP homelab_check_last_run_timestamp_seconds Unix time the check's last verdict was taken.\n"
+        "# TYPE homelab_check_last_run_timestamp_seconds gauge\n"
+        f'homelab_check_last_run_timestamp_seconds{{check="{CHECK}"}} {verdict_ts}\n'
+        "# HELP homelab_check_deadline_seconds Longest legitimate gap between two of the check's writes.\n"
+        "# TYPE homelab_check_deadline_seconds gauge\n"
+        f'homelab_check_deadline_seconds{{check="{CHECK}"}} {deadline_s}\n'
+    )
+    fd, tmp = tempfile.mkstemp(prefix=f"{CHECK}.prom.", dir=directory)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(body)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, os.path.join(directory, f"{CHECK}.prom"))
+    except OSError:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def record_textfile(code: int, verdict_ts: int) -> None:
+    """Write the verdict's textfile, and report a failure on stderr without ending the run.
+
+    Called before `push`, so a slow or refused push cannot age the file. A missing or malformed
+    DEADLINE_S writes nothing: a file with a guessed deadline would hide a wrong schedule.
+    """
+    try:
+        deadline_s = int(os.environ["DEADLINE_S"])
+    except KeyError, ValueError:
+        print(
+            f"{CHECK}: DEADLINE_S unset or not a number, no textfile written",
+            file=sys.stderr,
+        )
+        return
+    directory = os.environ.get("TEXTFILE_DIR", TEXTFILE_DIR_DEFAULT)
+    try:
+        write_check_textfile(int(code == 0), verdict_ts, deadline_s, directory)
+    except OSError as exc:
+        print(f"{CHECK}: textfile write to {directory} failed: {exc}", file=sys.stderr)
+
+
 def push(status: str, message: str) -> None:
     """Push the result to Uptime Kuma, if a token is configured, and record it in syslog.
 
@@ -472,6 +537,7 @@ def main() -> int:
         f"{checked} object(s) compared against their last-applied baseline. {message}"
     )
 
+    record_textfile(code, int(time.time()))
     push("up" if code == 0 else "down", message)
     return code
 

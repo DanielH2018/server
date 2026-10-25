@@ -5,6 +5,11 @@ naming no handler fails only on the run where its task changes something, which 
 sees, so this resolves every notify statically. optimize_pi notifies two handlers that
 initial_setup defines, so the lookup is across the whole play's role list, not per role.
 
+That same play-wide lookup is why no two roles may define one handler name. Ansible resolves a
+duplicate to the last one loaded into the play, and a role skipped on the host skips that
+handler: six roles' `Reload systemd` left claude_code's login cap unreloaded on daniel-server
+(#5483).
+
 Run: uv run pytest ansible/tests/setup/test_setup_handlers_resolve.py
 """
 
@@ -48,6 +53,22 @@ def defined(roles: list[str]) -> list[str]:
     return names
 
 
+def handler_owners(roles: list[str]) -> dict[str, list[str]]:
+    """Handler name -> the roles defining it. `listen:` topics are left out: a shared topic fans
+    out to every listener, where a shared name reaches only one handler."""
+    owners: dict[str, list[str]] = {}
+    for role in roles:
+        path = SETUP_ROLES / role / "handlers" / "main.yml"
+        if path.exists():
+            for handler in yaml_fast.safe_load(path.read_text()) or []:
+                owners.setdefault(handler["name"], []).append(role)
+    return owners
+
+
+def duplicated(owners: dict[str, list[str]]) -> dict[str, list[str]]:
+    return {name: roles for name, roles in owners.items() if len(roles) > 1}
+
+
 def unresolved(notifies: dict[str, set[str]], handlers: list[str]) -> list[str]:
     return sorted(name for name in notifies if name not in handlers)
 
@@ -70,6 +91,19 @@ def test_a_notify_with_no_handler_is_flagged() -> None:
     assert unresolved({"Restart nothing": {"x"}}, defined(play_roles())) == [
         "Restart nothing"
     ]
+
+
+def test_no_two_roles_in_the_play_define_one_handler_name() -> None:
+    owners = handler_owners(play_roles())
+    assert owners.get("Reload systemd for claude_code") == ["claude_code"], (
+        "the census no longer finds claude_code's own reload handler"
+    )
+    assert duplicated(owners) == {}
+
+
+def test_a_handler_name_two_roles_define_is_flagged() -> None:
+    owners = {"Reload systemd": ["claude_code", "renovate_agent"], "Restart x": ["x"]}
+    assert duplicated(owners) == {"Reload systemd": ["claude_code", "renovate_agent"]}
 
 
 def test_the_playbook_defines_no_handlers() -> None:

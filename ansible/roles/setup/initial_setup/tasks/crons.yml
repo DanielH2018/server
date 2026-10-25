@@ -29,6 +29,19 @@
     mode: "0644"
   become: true
 
+- name: Deploy the shared host-check library
+  # `always` for the same reason as the push helper above: consumers under other roles' tags
+  # source it with a `|| exit 1` guard, and `install_host_lib.yml` runs under each consumer's tag
+  # only. Every M6 host batch waits for this task's apply on its own host.
+  tags: [always]
+  ansible.builtin.copy:
+    src: homelab-check-lib.sh
+    dest: /usr/local/lib/homelab-check-lib.sh
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Deploy the shared setup-plane drift arms
   # `always` for the same reason as the push helper above: it is sourced by scripts rendered
   # under other roles' tags (manifest-prune-check.sh under the k3s role's, setup-drift-check.sh
@@ -672,6 +685,17 @@
       - live: /usr/local/lib/kuma-push-lib.sh
         src: ansible/roles/setup/initial_setup/files/kuma-push-lib.sh
 
+# homelab-check-lib.sh is sourced by the host checks M6 moves off Kuma, with a `|| exit 1` guard.
+# `tags: [always]`, matching the copy task it records.
+- name: Record the deployed shared host-check library
+  tags: [always]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: homelab-check-lib
+    stamp_deployed_pairs:
+      - live: /usr/local/lib/homelab-check-lib.sh
+        src: ansible/roles/setup/initial_setup/files/homelab-check-lib.sh
+
 # The drift library is itself copy:-deployed, so the arm it implements watches it. `tags:
 # [always]`, matching the copy task above, so a tag-scoped run cannot leave this fragment
 # describing a version it never deployed.
@@ -784,6 +808,24 @@
     mode: "0640"
   become: true
   no_log: true  # renders a Kuma push token
+
+- name: Let the Loki read-route witness write to the node_exporter textfile directory
+  tags: [crons, loki_route_witness]
+  # node-exporter's textfile collector reads this directory through a hostPath with no `type`, so
+  # the kubelet creates it root 0755 on first start, and the witness runs as {{ sys_user }}. The
+  # owner, group and mode are M3's contract (docs/target-architecture/monitoring/m3-textfile-timer.md,
+  # *The textfile directory's owner*), the same values as the k3s role's task on daniel-box:
+  # the group gets write access, and setgid keeps it on new files. Files are written 0644, which
+  # node_exporter (uid 65534) reads. Gated on the witness hosts like the rest of this block, which
+  # is both k3s nodes; the Pi's directory belongs to optimize_pi.
+  when: inventory_hostname in loki_route_witness_hosts
+  ansible.builtin.file:
+    path: /var/lib/node-exporter-textfile
+    state: directory
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "2775"
+  become: true
 
 - name: Create the Loki read-route verdict reader directory
   tags: [crons, loki_route_witness]

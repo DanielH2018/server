@@ -92,6 +92,14 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 - **A sidecar crash takes the LAPI out of its Service** until the container restarts, because
   pod Ready needs every container. The scheduler never exits on a job's failure, and its memory
   limit is twice the measured peak (`ansible/roles/k8s/crowdsec/defaults/main.yml:crowdsec_k8s_jobs_mem_limit`).
+- **The sidecar also exports the three Kuma-pushed verdicts on `/metrics`** (M6 B6b, ruled on
+  2026-10-23). `jobs_metrics.py` serves `homelab_check_success`,
+  `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per job tag,
+  on the port of the `crowdsec-jobs` item in this role's `metrics` list. The export runs
+  beside the Kuma push until M6's Cutover-2. observability's `crowdsec-jobs` scrape job and
+  the `pod-producers` shadow rules read it, and netpol-baseline's Prometheus grant admits the
+  port. autofix-bridge ships the same file in its own ConfigMap (M6 B7), so an edit to
+  `jobs_metrics.py` changes two pods.
 - **Run a job by hand** (operator-only, the read-only ServiceAccount is refused `pods/exec`):
   `sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec-jobs -- python3
   /jobs/crowdsec_jobs.py --run crowdsec-appsec-verify`. It pushes as a scheduled run does.
@@ -131,14 +139,20 @@ operator split the job in two on 2026-10-18 (#5701):
 ## The `crowdsec-verify` Job proves the edge enforces a ban
 
 `templates/verify/` holds the Job. The renderer emits it into `crowdsec-verify`, which depends on
-the `crowdsec` Kustomization's `wait: true`, so it starts after the new pod is Ready. The
+the `crowdsec` and `traefik` Kustomizations, so a new Job starts after both new pods are Ready.
+The `traefik` edge comes from `flux_verify_after` in `defaults/main.yml` (#5999). Without it the
+Job raced traefik's `Recreate` roll, because traefik also depends on `crowdsec`. It could then
+pass against the old Traefik pod, which still held a key the LAPI accepted. The edge orders a
+run only when the Job is renamed, which is on every revision that rolls the crowdsec pod, a
+bouncer-key rotation included. A revision that rolls Traefik alone keeps the completed Job, so
+nothing re-proves the ban against that roll. The
 operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
 
 - **`files/crowdsec_verify.py` bans daniel-pi through LAPI's machine API**, with no
   `pods/exec`. It sends the same `POST /v1/alerts` that `cscli decisions add` sends, reads it
   back, and lifts it in a `finally`.
-- **The edge's answer comes from Prometheus.** The `crowdsec-edge-probe` timer on daniel-pi
-  (`ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml`) probes the VIP every minute. The
+- **The edge's answer comes from Prometheus.** The `homelab-crowdsec-probe` timer on daniel-pi
+  (`hosts/components/crowdsec-probe/`) probes the VIP every minute. The
   Pi's Alloy counts each answer as `loki_process_custom_crowdsec_edge_probe_total` by
   `status`, and Prometheus scrapes it as `alloy-pi`, a path that never crosses Traefik.
 - **The gate's hop 2, the bouncer's pull, has no Job form.** LAPI v1.8.1 serves no bouncer

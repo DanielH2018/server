@@ -112,14 +112,9 @@ MAILS_ONLY_ON_FAILURE = {
     "Registry garbage collection": _KUMA + ", plus a Healthchecks /fail ping",
     "fake-remux health": _KUMA,
     "Longhorn backup health": _KUMA + ", plus a Healthchecks /fail ping",
-    "Longhorn restore drill": (
-        "its PASS line goes to logger alone; a failure prints to stderr, and "
-        "longhorn-backup-health alerts on the drill's stale stamp"
-    ),
     "daniel-box disk health": _KUMA + ", plus a Healthchecks /fail ping",
     "Release staleness drift check": _KUMA,
     "Off-box etcd snapshot": _KUMA + ", plus a Healthchecks /fail ping",
-    "UPS secondary watchdog": _KUMA,
     "Homelab eval sweep": (
         "writes its output to log files; the EXIT trap reports to logger and Kuma"
     ),
@@ -139,11 +134,10 @@ KNOWN_CRONS = frozenset(
         "Sync peer Claude artifacts",  # roles/k8s
         "Refresh generated docs",  # setup/initial_setup/tasks/crons.yml
         "Longhorn filesystem trim",  # setup/k3s/tasks/health-crons.yml
-        "UPS secondary watchdog",  # setup/nut_host
         "Weekly AIDE file integrity check",  # setup/initial_setup/tasks/integrity.yml
     }
 )
-_CENSUS_FLOOR = 30
+_CENSUS_FLOOR = 29
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 

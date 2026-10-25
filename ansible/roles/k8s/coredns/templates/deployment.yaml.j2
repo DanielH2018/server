@@ -1,0 +1,130 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+{#
+  k3s's CoreDNS Deployment from manifests/coredns.yaml at k3s_version (v1.37.1+k3s1), read
+  through `gh api` on 2026-10-11, with `%{SYSTEM_DEFAULT_REGISTRY}%` written as the empty string.
+  Everything below is upstream's except what the fleet guards force (H1.4). Each change below
+  reaches the cluster at the promote, and the pod-template ones roll the single replica:
+    - `spec_shell` writes `revisionHistoryLimit: 3` over upstream's `0`. It is a spec field, so
+      nothing rolls for it.
+    - `pod_shell` writes `enableServiceLinks: false`, which upstream lacks.
+    - `pod_shell` writes the pod-level `runAsNonRoot: true` and `runAsUser: 65532`. The pinned
+      image declares `USER 65532:65532` (read from the registry's image config for
+      rancher/mirrored-coredns-coredns:1.14.7 on 2026-10-22), so the pod already runs as that
+      uid. The pin asserts what the image does and refuses a tag whose USER moves.
+    - `container_resources` adds `limits.cpu: "1"`, which upstream lacks. Memory and both
+      requests are upstream's. test_namespace_resource_defaults.py requires every container to
+      set all four quantities, and CoreDNS measured 3m CPU on 2026-10-22, so 1 core cannot
+      throttle it.
+    - `hardened_security_context` writes `drop: [ALL]` where upstream writes `drop: [all]`. The
+      runtime reads both as the same capability set. The block keeps upstream's
+      `NET_BIND_SERVICE` add-back, which binding port 53 needs.
+    - The image is `coredns_image`, which equals upstream's line by the test in
+      ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py.
+#}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coredns
+  namespace: kube-system
+  labels:
+    k8s-app: kube-dns
+    kubernetes.io/name: "CoreDNS"
+spec:
+{{ spec_shell('RollingUpdate', max_unavailable=1) }}
+  selector:
+    matchLabels:
+      k8s-app: kube-dns
+  template:
+    metadata:
+      labels:
+        k8s-app: kube-dns
+    spec:
+      # DECIDED: `system-cluster-critical`, a system class, not a homelab tier. k3s ships it so,
+      # and every tier and Flux's own controllers resolve names through this pod, so it outranks
+      # every homelab class. The entry is untiered on purpose, because `tier: platform` would
+      # derive `homelab-critical` and lower it. ansible/tests/k8s/test_pod_template_hygiene.py
+      # lists it in `_SYSTEM_TIER` with this reason.
+{{ pod_shell('system-cluster-critical', service_account='coredns', run_as_user=65532, non_root=true) }}
+      tolerations:
+        - key: "CriticalAddonsOnly"
+          operator: "Exists"
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+      nodeSelector:
+        kubernetes.io/os: linux
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      containers:
+        - name: coredns
+          image: "{{ coredns_image }}"
+          imagePullPolicy: IfNotPresent
+{{ container_resources(cpu_limit='1', mem_limit='170Mi', cpu_request='100m', mem_request='70Mi') }}
+          args: ["-conf", "/etc/coredns/Corefile"]
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/coredns
+              readOnly: true
+            - name: custom-config-volume
+              mountPath: /etc/coredns/custom
+              readOnly: true
+          ports:
+            - containerPort: 53
+              name: dns
+              protocol: UDP
+            - containerPort: 53
+              name: dns-tcp
+              protocol: TCP
+            - containerPort: 9153
+              name: metrics
+              protocol: TCP
+          # `drop: [ALL]` plus NET_BIND_SERVICE is what binding port 53 as a non-root uid needs.
+{{ hardened_security_context(read_only=true, add=['NET_BIND_SERVICE']) }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8181
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 2
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+      dnsPolicy: Default
+      volumes:
+        - name: config-volume
+          configMap:
+            name: coredns
+            items:
+              - key: Corefile
+                path: Corefile
+              - key: NodeHosts
+                path: NodeHosts
+        - name: custom-config-volume
+          configMap:
+            name: coredns-custom
+            optional: true

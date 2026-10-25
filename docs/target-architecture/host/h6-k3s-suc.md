@@ -179,8 +179,14 @@ The exit criterion is three observations, in order:
   client-go's `LeaderElector.tryAcquireOrRenew` writes a new `acquireTime` whenever a
   different holder takes the Lease. The `kube-system/kube-controller-manager` Lease's
   `acquireTime` should therefore move on every k3s server start.
-- That last step is unmeasured. The read-only account cannot read Leases (above), and an
-  agent cannot use `sudo`. H6.3a's pre-merge step reads it (*Steps*).
+- The operator measured that last step on daniel-box on 2026-10-24, with `sudo k3s kubectl`,
+  because the read-only account cannot read Leases (above) and an agent cannot use `sudo`.
+  The Lease read `daniel-box_adffef0e-d846-4ae6-b892-f68861a63f49`, `acquireTime`
+  `2026-10-18T14:21:11.955974Z`, `renewTime` `2026-10-24T16:12:56.623907Z` and
+  `leaseDurationSeconds` 15. `systemctl show k3s` read `ExecMainStartTimestamp=Sun
+  2026-10-18 14:20:47 UTC`. The `acquireTime` is 25 seconds after the k3s start, so the
+  Lease does not predate the restart and tracks it. The 25-second gap is far below the
+  guard's 15-minute bound, so the guard refuses for the full 15 minutes after a restart.
 - Events would show a kubelet `Starting` event per start, but k3s keeps events for an hour
   and none were listed. An absent event would also read as "no restart", which is failure
   class 3. This plan does not use events.
@@ -1030,8 +1036,10 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       Job every 900 seconds meanwhile, which re-fires the alert. To stop that, the operator
       labels daniel-box `homelab/k3s-upgrade-paused=true`. Then the operator clears the
       hold (**operator-only**) with `gh variable set DEPLOY_HOLD --body none -R
-      DanielH2018/server`. The next `promote` moves `prod` to the revert, and Flux prunes
-      the drill Plan. The operator then removes the label, and silences or waits out the
+      DanielH2018/server`. The next `promote` moves `prod` to the revert, but the tag renders
+      `prune: false` (the CRD census requires it for any tag rendering a CRD), so Flux does
+      not prune the drill Plan. **Operator-only:** `kubectl -n system-upgrade delete plan
+      k3s-redproof` removes it. The operator then removes the label, and silences or waits out the
       alert's 2-hour `keep_firing_for`.
 5. **H6.2 daniel-box's package (about 60 lines).**
     - **Operator-only:** copy daniel-box's age key to `/etc/homelab/age.key`, as H4.2 did on
@@ -1040,8 +1048,11 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       general rule in `ansible/.sops.yaml`, with the recipients H4 names. Add
       `homelab-daniel-box` to the named sets of both CI scans (H4).
     - **Operator-only:** run `sudo hosts/bootstrap-host.sh daniel-box`. `homelab-daniel-box`
-      starts with only `reconcile`. Its `package.yml` carries the `windowed` mark for
-      `k3s.service` from this first commit.
+      starts with only `reconcile`.
+    - **Amended 2026-10-24:** the `windowed` mark for `k3s.service` moves from H6.2 to H6.4a,
+      because the renderer refuses a unit policy that no package installs or drops in on.
+      H6.4a adds `units: {k3s.service: {policy: windowed}}` with its first `k3s.service`
+      drop-in.
     - The `secrets` component, daniel-box's SOPS file and its `host_secrets.py check` entry
       arrive in H6.3b with the first daniel-box key. H4's check compares the file's keys
       with the credentials the host uses, and before H6.3b daniel-box uses none.
@@ -1071,6 +1082,20 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       Add the `secrets` component to daniel-box's package, and daniel-box to the hosts
       `host_secrets.py check` must find. Declare `k3s_readonly_token` as a credential in
       both `package.yml` files.
+    - **Amended 2026-10-24:** `k3s_readonly_token` was absent from SOPS when H6.3b was written,
+      so H6.3b ships daniel-box only. daniel-box's package gains `secrets-unit`, the credential
+      and `k3s-restart`, and `host_secrets.py check` finds daniel-box through its `package.yml`.
+      daniel-server's package stays as it is, so its k3s-agent restart stays a hand step until
+      a follow-up adds `k3s-restart`, the credential and its sync (*Open questions* 7). The
+      `windowed` mark for `k3s-agent.service` joins that follow-up or H6.5a, whichever ships the
+      first `k3s-agent.service` drop-in, for the reason H6.2's amendment gives. H6.4a's gate on
+      `probe.py metric` therefore lists daniel-box alone until the follow-up lands.
+    - **Amended 2026-10-24:** a component's `lib:` entry may name a top-level module such as
+      `k3s_gates.py`, which `homelab-k3s-restart` imports from its own directory. A host sets
+      `k3s_restart_window` in its `host_vars`, because a package-level `defaults:` map reaches
+      only the package's own files. The unit hashes the manifest `activations` entries whose
+      action is `manual:<unit>`, so H6.4a's files declare that action, and an empty set is a
+      valid hash.
     - **Operator-only**, before merging: `sudo ls -l` the server CA file on both nodes
       (`/var/lib/rancher/k3s/agent/server-ca.crt` is the expected path) and fix the
       component's CA path to what it shows.
@@ -1094,7 +1119,18 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       file's `tmpfiles.d` entry. Each `package.yml` sets its own `k3s_restart_window`. Add
       the `windowed` mark for `k3s-agent.service` to daniel-server's `package.yml`.
     - Add the other three alert rules and their promtool tests.
+    - **Amended 2026-10-24:** H6.3b adds `K3sConfigRestartFailed` and `K3sConfigRestartPending`,
+      each with a literal `service: daniel-box` and its promtool test. `K3sConfigRestartMetricsAbsent`
+      stays in H6.4a (its own step), and `K3sNodeVersionSkew` already landed in H6.1b.
     - Add the window-derivation test.
+    - **Amended 2026-10-24:** the window's span is `AccuracySec` plus `TimeoutStartSec`, 7
+      minutes and 1 second, so no start time avoids a `*/5` schedule. Two exist on daniel-box:
+      the `Sync peer Claude artifacts` cron and the `crowdsec-home-ips` CronJob. The derivation
+      test lists both in `EXEMPT`, with the reason that a missed run is not made up and that
+      neither reads cluster state the restart disturbs. It also lists `homelab-builder.timer`,
+      `claude-triage-poll.timer` and `claude-fanout-server-lander.timer`, the monotonic timers
+      this list did not name. The operator confirms or narrows these in H6.3b's review
+      (*Open questions* 3).
     - The first run on each host records the hash, writes the three series and restarts
       nothing. It runs at the next window, or sooner when the operator runs `sudo
       systemctl start homelab-k3s-restart.service`, which on a first run only records.
@@ -1137,6 +1173,8 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - Add the `k3s-server` component with the same-path files, the audit log directory, the
       logging lines of `50-homelab.conf`, `/etc/logrotate.d/k3s` and the `tmpfiles.d` entry.
       Add the legacy entry for the server's `10-log-to-file.conf`.
+    - Add `units: {k3s.service: {policy: windowed}}` to daniel-box's `package.yml` in the
+      same PR, because this PR ships the first `k3s.service` drop-in (H6.2's amendment).
     - Delete these from `server.yml`: the audit directory, audit policy, authentication
       config and `registries.yaml` tasks; the `unit-logging.yml` import; and `Restart k3s so
       the log drop-in takes effect`. Delete the `.skip` task from `coredns.yml`.
@@ -1453,14 +1491,21 @@ which journald does not store on these hosts, so it reads zero on every run.
 ## Rollback
 
 - **H6.1a:** revert.
-- **H6.1b:** revert. Flux prunes the Plans. The CRD and Namespace stay because they are
-  prune-exempt, and the operator deletes them by hand if the role is abandoned. The pin
+- **H6.1b:** revert. The `system-upgrade` tag renders `prune: false`, because the CRD census
+  (`scripts/renderer/tests/test_renderer_crd_census.py`) requires `flux_prune: false` for any
+  tag that renders a CRD. Flux therefore does not prune the Plans, the CRD or the Namespace.
+  **Operator-only:** after the revert lands, delete the Plans by hand with `kubectl -n
+  system-upgrade delete plan k3s-server k3s-agent`, because Flux no longer owns their removal.
+  Both select no node, so a Plan left live upgrades nothing, but SUC keeps reconciling it. The operator deletes the
+  CRD and Namespace by hand as well if the role is abandoned. The pin
   returns to `setup/k3s`. The revert removes the `system-upgrade` entry from
   `containers_list`. D2.1c records a removed Flux-born entry by its fields too, so the
   revert reaches the same readers as H6.1b and no own tag. Before D6.12, the revert
   therefore follows H6.1b's narrow procedure: the recorded narrow output,
   D1.2's stop rule before the PR and before `land.sh`, and the same refusal exit.
-- **H6.1c:** the drill's own revert is part of the step.
+- **H6.1c:** the drill's own revert is part of the step. Flux does not prune the drill Plan
+  (see H6.1b above), so the revert is followed by the **operator-only** `kubectl -n
+  system-upgrade delete plan k3s-redproof`.
 - **H6.2:** `sudo apt-get remove homelab-daniel-box` on daniel-box. This is valid only before
   H6.4a. After H6.4a, removing the package deletes files that `ExecStart` names.
 - **H6.3a and H6.3b:** revert. dpkg removes the restart unit and the script. Before H6.3c,
@@ -1788,6 +1833,11 @@ which journald does not store on these hosts, so it reads zero on every run.
 3. **The window.** `k3s_restart_window` is weekdays from the 2nd to the 31st, at 11:32 on
    daniel-box and at 11:52 on daniel-server. Resolution: the operator confirms or moves
    them in H6.3b's review, and the derivation test re-checks any move.
+   Ruled 2026-10-24: the operator confirmed 11:32 for daniel-box and the five derivation-test
+   exemptions: the `Sync peer Claude artifacts` cron, the `crowdsec-home-ips` CronJob,
+   `homelab-builder.timer`, `claude-triage-poll.timer` and `claude-fanout-server-lander.timer`.
+   A collision needs a k3s config change in the same window, and each job reruns within its
+   own period.
 4. **The join token.** H6 moves no token, because the agent's token is the server token
    (Baseline). Putting it in SOPS would hold the credential that `docs/break-glass.md` item 2
    keeps out of band. Resolution: H7's fresh join decides. The k3s docs allow adding an
@@ -1885,6 +1935,16 @@ which journald does not store on these hosts, so it reads zero on every run.
     accepts it, the k3s `registries.yaml` that H6's config drop-ins carry gains a
     `mirrors."ghcr.io"` entry pointing at that registry. Resolution: the PR that carries the
     entry lands after D5 Open question 2 is ruled, and before nut's Wave C PR.
+16. **The Job backoff limit (opened 2026-10-24, for H6.3c).** The vendored controller manifest
+    sets `SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT: "99"` in `default-controller-env`
+    (`ansible/roles/k8s/system-upgrade/files/upstream/system-upgrade-controller.yaml:201`).
+    The Baseline and *Gates at apply time* say a failing `prepare` ends in `JobFailed` after
+    three pods, from `job.go`'s `BackoffLimit` 2. If v0.20.2's `job.go` reads that variable,
+    a failing `prepare` retries until the Job deadline instead, and `JobFailed` arrives only
+    at 3600 or 5400 seconds. That changes the agent-deadline argument, the timing of
+    `K3sUpgradeJobFailed` and the red-path drill's expected time to red. Resolution: before
+    H6.3c widens a Plan, read `job.go` at the pinned version, then either restate those three
+    places or set the variable in `files/patches/system-upgrade-controller-env.yaml`.
 
 ## Review log
 
@@ -2355,7 +2415,8 @@ How each was handled, with the evidence measured at `70591c307`:
 
 - Cross-slice note from H1: no change. H6 edits `server.yml` in place (its install guard, its
   file tasks and its args clause) but does not move, rename or replace it, and adds no cluster
-  writer to it, so H1.1h's guard placement and its test stay valid.
+  writer to it, so H1.1h's guard placement and its test stay valid. (#5957 later retired the
+  guard, once H1.7b had removed its last writer.)
 
 ### Pillar review fold (2026-10-12)
 

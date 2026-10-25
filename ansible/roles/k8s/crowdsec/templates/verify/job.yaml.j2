@@ -2,7 +2,8 @@
   crowdsec's verify Job and the ConfigMap that carries its script.
 
   This directory is `verify/`, which the renderer emits into `crowdsec-verify` once the
-  `crowdsec` Kustomization reads Ready (D5, *`<tag>-verify`*). The renderer passes
+  `crowdsec` and `traefik` Kustomizations read Ready (D5, *`<tag>-verify`*). The `traefik` edge is
+  `flux_verify_after` in the role's defaults, so the ban proof reads the rolled Traefik pod (#5999). The renderer passes
   `flux_job_image` and `flux_job_connect`, the helper's text, to every `templates/verify/` file
   (`render_tag`).
 

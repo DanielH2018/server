@@ -67,11 +67,18 @@ def test_the_rendered_config_carries_the_ancestor_walk_bound():
 
     import yaml
 
+    from lib.repo_paths import ALL_VARS
+
     role = pathlib.Path(__file__).resolve().parents[1]
     template = (role / "templates" / "config.env.j2").read_text()
     defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text())
+    shared = yaml.safe_load(ALL_VARS.read_text())
     assert "CI_ANCESTOR_WALK_MAX={{ gitops_deploy_ci_ancestor_walk_max }}" in template
-    assert defaults["gitops_deploy_ci_ancestor_walk_max"] >= 1
+    # The role default refers to the shared key since H7.2e, so the bound is read from there.
+    assert (
+        defaults["gitops_deploy_ci_ancestor_walk_max"] == "{{ ci_ancestor_walk_max }}"
+    )
+    assert shared["ci_ancestor_walk_max"] >= 1
 
 
 def test_a_boolean_is_true_only_for_the_literal_word():

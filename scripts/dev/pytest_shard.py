@@ -10,12 +10,14 @@ one xdist worker so a module-scoped fixture is built once. Splitting a module ac
 would rebuild those fixtures per shard and give the saving straight back.
 
 WHY WEIGHTS, AND NOT A HASH. A stable hash of the module path is the obvious split and it
-balances badly here: the suite's cost is concentrated, not flat. Measured against a
-serial `--durations=0` run of the whole suite (103.6s over 505 files), projected pole shard at
-N=4 was 42.7s for a sha256 split and 39.8s for a greedy split weighted by the number of `def
-test_` in each file, against 24.9s for a greedy split weighted by measured per-file seconds —
-an even split being 25.9s. File byte size fared no better than the hash (36.2s). So the split
-is longest-processing-time bin packing over recorded per-file durations.
+balances badly here: the suite's cost is concentrated, not flat. Measured against a serial
+`--durations=0` run of the whole suite (103.6s over 505 files), projected pole shard at N=4 was
+42.7s for a sha256 split and 39.8s for a greedy split weighted by the number of `def test_` in
+each file, against 24.9s for a greedy split weighted by measured per-file seconds — an even
+split being 25.9s. File byte size fared no better than the hash (36.2s). So the split is
+longest-processing-time bin packing over per-file durations. It packs the runner seconds in
+`pytest_shard_runner_weights.json` where that table has the module, and scales the recorded
+weight otherwise; `shard_weight_gate.RUNNER_WEIGHTS_PATH` says why there are two tables.
 
 STALENESS IS GRACEFUL, WHICH IS WHY THE RECORDED FILE IS SAFE TO COMMIT. A path with no
 recorded weight is given the median of the recorded ones, and a recorded path that no longer
@@ -25,8 +27,7 @@ in exactly one shard, so a stale table makes CI slower, never wrong.
 THE MEDIAN IS A BAD GUESS FOR A HEAVY FILE, AND THE TABLE CANNOT KNOW WHICH FILES ARE HEAVY.
 The suite's median is 0.0s, so an unweighted file is packed as the lightest thing in the
 suite and placed last, into whichever shard happened to be least loaded. One unrecorded 30s
-module landing that way skews the four CI shards to 65/99/99/68s against
-a 43s projection for every one.
+module landing that way skews the four CI shards to 65/99/99/68s against a 43s projection.
 
 ONE GATE GUARDS THE TABLE, AND IT IS A CI STEP: `--check-durations`. It reads the durations
 report CI's own test step already wrote, so it measures each module by running it. That is what
@@ -106,9 +107,12 @@ from lib.repo_paths import REPO
 from shard_weight_gate import (
     RUNNER_HEAVY_FAIL_SECONDS,
     RUNNER_HEAVY_SECONDS,
+    RUNNER_WEIGHTS_PATH,
     STALE_WEIGHT_RATIO,
     gate_complaints,
+    packing_table,
     parse_durations,
+    write_runner_weights,
 )
 
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
@@ -135,6 +139,18 @@ DRIFT_FLOOR_SECONDS = 0.5
 # The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
 # consecutive periods of this length, so successive runs visit successive slices.
 _SLICE_PERIOD_SECONDS = 12 * 60 * 60
+
+# Weights only CI can measure, which every write to the table keeps. A module whose expensive
+# legs skip on every host here and run on CI records about 0s from any local re-measure, so
+# `--record-files`, the gate's own repair, would write back the number the gate rejected, and
+# `--refresh-drifted` would undo a hand fix within days (#5756). Set a pin to the sum of the
+# module's lines in CI's `--durations` report, then run `--record-files` on it so the table,
+# which is all CI reads, carries the pin too.
+CI_ONLY_WEIGHTS = {
+    # Four legs run the jobs image under docker, which no host here has. CI hands them the real
+    # PATH through `ansible/tests/leakguard.py:_LIVE_API_TESTS`. 22.8s on master run 39813591673.
+    "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py": 22.8,
+}
 
 
 def testpaths() -> list[str]:
@@ -206,7 +222,7 @@ def shard_files(shard: int, shards: int, files=None, weights=None) -> list[str]:
     if not 1 <= shard <= shards:
         raise ValueError(f"shard {shard} is outside 1..{shards}")
     files = census() if files is None else files
-    weights = load_weights() if weights is None else weights
+    weights = packing_table(load_weights()) if weights is None else weights
     placed = assign(files, shards, weights)
     return sorted(f for f, i in placed.items() if i == shard - 1)
 
@@ -257,16 +273,26 @@ def measure_weights(files: list[str] | None = None) -> dict[str, float]:
     return totals
 
 
-def _write_weights(weights: dict[str, float], path: Path) -> dict[str, float]:
-    ordered = dict(sorted(weights.items()))
+def _write_weights(
+    weights: dict[str, float], path: Path, pins: dict[str, float] = CI_ONLY_WEIGHTS
+) -> dict[str, float]:
+    pinned = {f: w for f, w in pins.items() if f in weights}
+    ordered = dict(sorted((weights | pinned).items()))
     path.write_text(json.dumps(ordered, indent=1, sort_keys=True) + "\n")
     return ordered
 
 
-def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
+def record_weights(
+    path: Path = WEIGHTS_PATH,
+    *,
+    files: list[str] | None = None,
+    measure=measure_weights,
+    pins: dict[str, float] = CI_ONLY_WEIGHTS,
+) -> dict[str, float]:
     """Re-measure every file's seconds from a serial run of the whole suite and write them out."""
-    measured = measure_weights()
-    return _write_weights({f: measured.get(f, 0.0) for f in census()}, path)
+    measured = measure()
+    files = census() if files is None else files
+    return _write_weights({f: measured.get(f, 0.0) for f in files}, path, pins)
 
 
 def record_missing_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
@@ -287,7 +313,12 @@ def record_missing_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
 
 
 def record_named_weights(
-    paths: list[str], path: Path = WEIGHTS_PATH
+    paths: list[str],
+    path: Path = WEIGHTS_PATH,
+    *,
+    files: list[str] | None = None,
+    measure=measure_weights,
+    pins: dict[str, float] = CI_ONLY_WEIGHTS,
 ) -> dict[str, float]:
     """Re-measure exactly `paths` and write the merged table, refreshing entries that exist.
 
@@ -299,7 +330,7 @@ def record_named_weights(
     so a typo and an unstaged file both land here, and silently writing an entry no shard can
     ever use is how the table grows rows nobody can explain.
     """
-    files = census()
+    files = census() if files is None else files
     if unknown := [p for p in paths if p not in files]:
         raise SystemExit(
             "not a committed test file under testpaths, so no shard runs it: "
@@ -307,9 +338,9 @@ def record_named_weights(
         )
     known = load_weights(path)
     kept = {f: known[f] for f in files if f in known}
-    measured = measure_weights(paths)
+    measured = measure(paths)
     kept |= {f: measured.get(f, 0.0) for f in paths}
-    return _write_weights(kept, path)
+    return _write_weights(kept, path, pins)
 
 
 def refresh_slice(path: str, slices: int) -> int:
@@ -342,6 +373,7 @@ def refresh_drifted_weights(
     *,
     files: list[str] | None = None,
     measure=measure_weights,
+    pins: dict[str, float] = CI_ONLY_WEIGHTS,
 ) -> list[str]:
     """Re-measure slice `index` of `slices` of the recorded entries, and rewrite the drifted ones.
 
@@ -356,6 +388,7 @@ def refresh_drifted_weights(
         path: The weights table to read and rewrite.
         files: The census to keep entries for; `census()` when None.
         measure: Measures a list of files, as `measure_weights` does.
+        pins: The CI-only weights, which are neither measured nor rewritten.
 
     Returns:
         The paths whose weights were rewritten, sorted.
@@ -363,23 +396,23 @@ def refresh_drifted_weights(
     files = census() if files is None else files
     known = load_weights(path)
     kept = {f: known[f] for f in files if f in known}
-    chosen = [f for f in kept if refresh_slice(f, slices) == index]
+    chosen = [f for f in kept if refresh_slice(f, slices) == index and f not in pins]
     measured = measure(chosen) if chosen else {}
     moved = sorted(f for f in chosen if drifted(kept[f], measured.get(f, 0.0)))
     kept |= {f: measured.get(f, 0.0) for f in moved}
-    _write_weights(kept, path)
+    _write_weights(kept, path, pins)
     return moved
 
 
 def _summary(shards: int) -> str:
-    files, weights = census(), load_weights()
+    files, weights = census(), packing_table(load_weights())
     placed = assign(files, shards, weights)
     lines = []
     for i in range(shards):
         members = [f for f, s in placed.items() if s == i]
         cost = sum(weights.get(f, 0.0) + _PER_FILE_SECONDS for f in members)
         lines.append(
-            f"  shard {i + 1}: {len(members):>4} files, {cost:6.1f}s projected"
+            f"  shard {i + 1}: {len(members):>4} files, {cost:6.1f} runner seconds projected"
         )
     unknown = sum(1 for f in files if f not in weights)
     lines.append(f"  {len(files)} files, {unknown} with no recorded weight")
@@ -418,6 +451,13 @@ def main(argv=None) -> int:
             "re-measure one of SLICES hash slices of the recorded weights, chosen by the "
             "12-hour period, and rewrite the entries that drifted past DRIFT_RATIO"
         ),
+    )
+    parser.add_argument(
+        "--record-runner",
+        nargs="+",
+        type=Path,
+        metavar="LOG",
+        help="rewrite the runner table from CI shard logs, each module at its median",
     )
     parser.add_argument(
         "--check-durations",
@@ -527,13 +567,18 @@ def main(argv=None) -> int:
             f"weight(s){': ' + ', '.join(moved) if moved else ''} in {WEIGHTS_PATH}"
         )
         return 0
+    if args.record_runner:
+        reports = [log.read_text(errors="replace") for log in args.record_runner]
+        written = write_runner_weights(reports, census())
+        print(f"recorded {len(written)} runner weights to {RUNNER_WEIGHTS_PATH}")
+        return 0
     if args.summary:
         print(_summary(args.of))
         return 0
     if args.shard is None:
         parser.error(
             "one of --shard, --summary, --record, --record-missing, --record-files, "
-            "--refresh-drifted or --check-durations is required"
+            "--refresh-drifted, --record-runner or --check-durations is required"
         )
 
     files = shard_files(args.shard, args.of)

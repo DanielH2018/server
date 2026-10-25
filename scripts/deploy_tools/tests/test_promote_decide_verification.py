@@ -20,6 +20,7 @@ from _promote_fakes import NOW, World, bundle_files, digest_of
 from renderer.renderer_lib.bundle import tag_kustomization
 
 import promote
+from deploy_tools.promote_lib import verify_handoff
 from deploy_tools.promote_lib import verify_promotion as vp
 
 
@@ -80,7 +81,7 @@ def test_a_promotion_hands_both_bundles_to_verify(world, monkeypatch, capsys):
     world.publish(tip, files=_digests(bento_pdf="b"))
     exit_code, outputs, bundle_dir, _ = _decide(world, monkeypatch, capsys, tip)
     assert (exit_code, outputs["verdict"], outputs["prior"]) == (0, "promote", c0)
-    prod, target = vp.read_handoff(bundle_dir)
+    prod, target = verify_handoff.read_handoff(bundle_dir)
     assert prod is not None
     assert json.loads(prod["digests.json"])["bento-pdf"]["footprint"] == "a"
     assert json.loads(target["digests.json"])["bento-pdf"]["footprint"] == "b"
@@ -129,7 +130,7 @@ def test_a_first_run_seeds_nothing_and_hands_on_no_prod(world, monkeypatch, caps
         "false",
         "",
     )
-    assert vp.read_handoff(bundle_dir)[0] is None
+    assert verify_handoff.read_handoff(bundle_dir)[0] is None
 
 
 def test_verify_waits_on_t_not_on_the_triggering_commit(world, monkeypatch, capsys):
@@ -141,7 +142,7 @@ def test_verify_waits_on_t_not_on_the_triggering_commit(world, monkeypatch, caps
     world.publish(t, files=_digests(bento_pdf="b"))
     _, outputs, bundle_dir, _ = _decide(world, monkeypatch, capsys, x)
     assert outputs["target"] == t
-    prod, target = vp.read_handoff(bundle_dir)
+    prod, target = verify_handoff.read_handoff(bundle_dir)
     expected = vp.expected_set(target, prod)
     assert expected.names == {"homelab", "bento-pdf"}
     statuses = world.clients().github.statuses
@@ -362,7 +363,7 @@ def test_verify_excuses_from_decides_record_and_never_reads_prods_commit(
     _, outputs, bundle_dir, err = _decide(world, monkeypatch, capsys, tip)
     assert outputs["verdict"] == "promote"
     assert f"recorded on prod's commit {c0}: flux/longhorn=failure" in err
-    assert vp.read_recorded(bundle_dir) == {"longhorn": "failure"}
+    assert verify_handoff.read_recorded(bundle_dir) == {"longhorn": "failure"}
 
     world.transport.statuses[c0] = {"flux/longhorn": "success"}
     world.transport.statuses[tip] = {
@@ -373,7 +374,11 @@ def test_verify_excuses_from_decides_record_and_never_reads_prods_commit(
     world.transport.status_times[tip] = "2026-10-15T01:02:00Z"
     sent = len(world.transport.requests)
     args = argparse.Namespace(
-        target=tip, prior=c0, bundle_dir=bundle_dir, moved_at=MOVED_AT.isoformat()
+        target=tip,
+        prior=c0,
+        bundle_dir=bundle_dir,
+        moved_at=MOVED_AT.isoformat(),
+        digest="",
     )
     assert vp.run(world.clients(), args, None) == 0
     assert "excused longhorn" in capsys.readouterr().out

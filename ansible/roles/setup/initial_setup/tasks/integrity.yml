@@ -135,6 +135,7 @@
 
 - name: Set default umask to 027 in /etc/login.defs
   tags: [login-defs]
+  when: inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: '^UMASK\s'
@@ -143,6 +144,7 @@
 
 - name: Configure password hash rounds in /etc/login.defs
   tags: [login-defs]
+  when: inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: '^#?\s*{{ item.key }}\s'
@@ -154,6 +156,7 @@
 
 - name: Configure password age policy in /etc/login.defs
   tags: [login-defs]
+  when: inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   ansible.builtin.lineinfile:
     path: /etc/login.defs
     regexp: '^{{ item.key }}\s'
@@ -166,6 +169,7 @@
 
 - name: Disable core dumps in /etc/security/limits.conf
   tags: [coredumps]
+  when: inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   ansible.builtin.lineinfile:
     path: /etc/security/limits.conf
     line: "* hard core 0"

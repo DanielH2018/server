@@ -32,6 +32,8 @@ NOTHING_MOVES = {
     "no_reset": "",
     "stateful": "",
     "suspended_hold": "",
+    "supersedes": "",
+    "hold_read": "none",
 }
 
 
@@ -160,9 +162,9 @@ def test_a_candidate_head_that_returns_500_is_refused_not_skipped(
 @pytest.mark.parametrize(
     "contexts_yaml",
     [
-        "gitops_deploy_ci_contexts: []\n",
-        'gitops_deploy_ci_contexts: "{{ ci_required_contexts }}"\n',
-        "gitops_deploy_ci_contexts:\n  - ''\n",
+        "ci_required_contexts: []\n",
+        'ci_required_contexts: "{{ some_other_key }}"\n',
+        "ci_required_contexts:\n  - ''\n",
         "other_key: 1\n",
     ],
     ids=["empty-list", "jinja-string", "empty-name", "missing-key"],

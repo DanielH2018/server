@@ -73,7 +73,7 @@ import json
 import subprocess
 import time
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -112,7 +112,9 @@ from fanout_lib.review.red_gate import (
     red_section,
     labelled_skip_reason,
 )
+from fanout_lib.review.green_contest import contested, settle
 from fanout_lib.review.hardened_runs import ResetFailed
+from fanout_lib.review.red_tests import issue_subjects
 from fanout_lib.review.worktree_reset import reset_worktree
 from fanout_lib.review.base_check import BaseCheck, unproven_tests
 from fanout_lib.review.git_state import GitState, changed, snapshot
@@ -138,6 +140,7 @@ from fanout_lib.launch import (
     SYSTEM_PROMPT_FILE,
     stop_hook_settings,
 )
+from fanout_lib.prompt_tool import prompt_tool_args
 from fanout_lib.status import PR_URL
 from fanout_lib.target import Target
 
@@ -163,7 +166,7 @@ STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
-# DECIDED: one module over the 600-line guideline rather than a mixin. The red phase and the
+# DECIDED: one module, even past the line guideline, rather than a mixin. The red phase and the
 # green gate read the pipeline's state and call its `_claude`, `_git` and argv builders, so a
 # module holding them alone could not be read without this class (#3661's `conjoined:` rule).
 class Pipeline:
@@ -232,8 +235,7 @@ class Pipeline:
         self.review_prompt = PROMPT_FILE.read_text()
         self.headless_prompt = HEADLESS_PROMPT_FILE.read_text()
         self.hooks = read_hooks(SOURCE_ROOT)
-        # Another repo's snapshot carries no `.claude/settings.json`, and its worktree's
-        # settings are that repo's, not these.
+        # Another repo's snapshot has no `.claude/settings.json`; its worktree's are its own.
         self.project_settings = (
             (SOURCE_ROOT / ".claude" / "settings.json").read_text()
             if target.is_server
@@ -320,7 +322,7 @@ class Pipeline:
     ) -> list[str]:
         return [
             *(prefix or self._stop_hook()),
-            "-p", "--model", "opus", "--permission-mode", "auto",
+            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
             "--output-format", "json", "--max-budget-usd", str(BUDGET_USD),
             "--append-system-prompt", self.headless_prompt + prompt, "--effort", "medium",
         ]  # fmt: skip
@@ -328,7 +330,7 @@ class Pipeline:
     def _red_author(self) -> list[str]:
         return [
             *self._stop_hook(),
-            "-p", "--model", "opus", "--permission-mode", "auto",
+            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
             "--json-schema", json.dumps(RED_SCHEMA), "--effort", "medium",
         ]  # fmt: skip
@@ -348,7 +350,7 @@ class Pipeline:
             )
         return [
             *self._held_settings(),
-            "-p", "--model", "opus", "--permission-mode", "auto",
+            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
             "--append-system-prompt", prompt,
             "--disallowedTools", "Edit,Write,NotebookEdit", "--effort", self.record.review_effort,
@@ -419,6 +421,8 @@ class Pipeline:
         self.record.red_tests = len(gate.nodes)
         self.record.red_by_absence = len(gate.absent)
         self.record.red_gate = "passed" if gate.passed else gate.reason
+        # A copy, since a scripted gate may hand every batch the same `Gate`.
+        gate = replace(gate, subjects=issue_subjects(issues))
         return (red, gate) if gate.passed else None
 
     def _refuse_git_changes(self, held: GitState) -> None:
@@ -553,7 +557,10 @@ class Pipeline:
             )
             last = fix if PR_URL.search(fix.text) else impl
             after = self.record.head = self._git("rev-parse", "HEAD")
-            if after == head:
+            # A contest of a correct fix commits nothing, and still needs its fresh reader.
+            if after == head and not contested(
+                green, fix.text, red[1] if red else None
+            ):
                 self.record.remaining = list(self.record.actionable)
             else:
                 delta = self._claude(
@@ -580,8 +587,11 @@ class Pipeline:
                     self.record.remaining = [
                         f for f in self.record.remaining if f.get("file") != GREEN_FILE
                     ]
+                else:
+                    green = settle(self.record, green, fix.text, red[1])
 
-        if red is not None and not green:
+        # Reverting hunks under red tests that fail anyway, after a contest, measures nothing.
+        if red is not None and not green and not self.record.green_contest:
             self._detection(red)
         # Whatever the review found, since a PR left a draft gets no CI.
         ready = ready_gate(self)

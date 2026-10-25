@@ -22,6 +22,7 @@ from lib.repo_paths import REPO
 import promote
 from chained_timeout import VERIFY_CAP_S
 from deploy_tools.promote_lib import reboot_window
+from deploy_tools.promote_lib import verify_handoff
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
 from renderer.renderer_lib.bundle import tag_kustomization
@@ -214,7 +215,7 @@ def test_the_scheduled_run_at_the_windows_end_hands_verify_its_full_timeout(worl
     assert (decision.verdict, decision.target) == ("promote", tip)
     handoff = world.tmp_path / "verify-input"
     promote.hand_off(decision, handoff)
-    prod, target = vp.read_handoff(handoff)
+    prod, target = verify_handoff.read_handoff(handoff)
     verify_timeout = vp.expected_set(target, prod).timeout_s
     assert verify_timeout >= 2 * 60 * 60
     early = END - timedelta(seconds=verify_timeout) + timedelta(minutes=1)

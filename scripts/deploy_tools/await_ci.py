@@ -42,7 +42,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 sys.path.insert(0, str(HOST_LIB_FILES))
 
-from deployer_lib.deploy_git import ci_walk_candidates
+from deployer_lib.deploy_git import ci_walk_candidates, read_check_pages
 from deployer_lib.deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
 from host_lib import github_get, github_token
 
@@ -52,9 +52,9 @@ CI_REPO = "DanielH2018/server"
 # .github/workflows/ci.yml exactly, since a name matching nothing silently drops a required
 # check.
 #
-# This must equal the deployer's gate, which is `gitops_deploy_ci_contexts` in
-# roles/setup/gitops_deploy/defaults/main.yml (rendered to CI_CONTEXTS in config.env, a
-# root-owned file on daniel-box that a worktree session cannot read). Equal in BOTH
+# This must equal the gate every deploy path grades by, which is `ci_required_contexts` in
+# ansible/inventory/group_vars/all.yml (the deployer renders it to CI_CONTEXTS in its settings
+# file, root-owned on daniel-box, which a worktree session cannot read). Equal in BOTH
 # directions: a name here the deployer does not require blocks a landing the deployer would
 # have deployed. `renovate config validator` is the live instance -- it runs on master and
 # can go red, and the deployer deliberately excludes it because a red renovate.json changes
@@ -98,7 +98,7 @@ def fetch_check_runs(sha: str) -> list[dict]:
     those 60, so the second landing in an hour starved the tick's gate into deferring on a
     403. host_lib.github_token carries the numbers.
     """
-    return _github_get(f"commits/{sha}/check-runs?per_page=100").get("check_runs", [])
+    return _github_pages(f"commits/{sha}/check-runs", "check_runs")
 
 
 def fetch_check_suites(sha: str) -> list[dict]:
@@ -108,20 +108,19 @@ def fetch_check_suites(sha: str) -> list[dict]:
     registered a check-run. Fetched only when no required run exists, so it costs
     nothing on the ordinary path.
     """
-    return _github_get(f"commits/{sha}/check-suites?per_page=100").get(
-        "check_suites", []
+    return _github_pages(f"commits/{sha}/check-suites", "check_suites")
+
+
+def _github_pages(path: str, key: str) -> list[dict]:
+    """Every page of a listing, as the deployer's gate reads it (#5977); short reads raise."""
+    token = github_token(os.environ, subprocess.run)
+    url = f"repos/{CI_REPO}/{path}"
+    return read_check_pages(
+        lambda query: github_get(url + query, token, user_agent="await-ci"), key
     )
 
 
-def _github_get(path: str) -> dict:
-    return github_get(
-        f"repos/{CI_REPO}/{path}",
-        github_token(os.environ, subprocess.run),
-        user_agent="await-ci",
-    )
-
-
-def verdict_for(sha: str, fetch=fetch_check_runs, required=None) -> str:
+def verdict_for(sha: str, fetch=fetch_check_runs, required=None, suites=None) -> str:
     """`pass` / `pending` / `fail` for one SHA. An unreachable API reads as pending."""
     required = required_contexts() if required is None else required
     if not required:
@@ -132,7 +131,7 @@ def verdict_for(sha: str, fetch=fetch_check_runs, required=None) -> str:
         runs = fetch(sha)
     except urllib.error.URLError, TimeoutError, ValueError, OSError:
         return "pending"
-    return ci_verdict(runs, required)
+    return ci_verdict(runs, required, lambda: (suites or fetch_check_suites)(sha))
 
 
 def _fetch_tip() -> str:
@@ -350,7 +349,7 @@ def green_after(
             verdict = "pending"
         else:
             verdict = verdict_for(
-                candidate, fetch=lambda _s, _r=runs: _r, required=required
+                candidate, lambda _s, _r=runs: _r, required, fetch_suites
             )
         if verdict == "pass":
             return candidate, ""
@@ -459,7 +458,7 @@ def wait(
         # `runs` is bound as a default rather than closed over: verdict_for calls this
         # synchronously within the iteration, so late binding is harmless today, but a
         # future caller that deferred the call would silently read the next poll's runs.
-        verdict = verdict_for(target, fetch=lambda _s, _runs=runs: _runs)
+        verdict = verdict_for(target, lambda _s, _runs=runs: _runs, None, fetch_suites)
         if verdict == "pass":
             return 0, f"{target[:8]}: CI green"
         if verdict == "fail":

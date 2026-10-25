@@ -8,10 +8,14 @@ step. This module holds the bounds and the three arms; `pytest_shard.main` reads
 hands over the committed table and turns the complaints into an exit code.
 
 Split out of `pytest_shard.py` when the margin band (#4010) took that module past the
-600-line cap.
+600-line cap. The runner-seconds table that `pytest_shard.py` packs the shards on lives here
+too, at the end, for the same reason (#6149).
 """
 
+import json
 import re
+import statistics
+from pathlib import Path
 
 # A line of pytest's durations report: seconds, phase, then a nodeid whose leading segment,
 # up to the first pair of colons, is the test file this weight belongs to.
@@ -146,7 +150,8 @@ RECORD_MISSING_HINT = (
 # cheap enough that nobody reaches for a stale entry as the lesser evil.
 RECORD_FILES_HINT = (
     "re-measure just those files with `uv run python scripts/dev/pytest_shard.py "
-    "--record-files <path>...` and commit scripts/dev/pytest_shard_weights.json"
+    "--record-files <path>...` and commit scripts/dev/pytest_shard_weights.json; for a "
+    "path in pytest_shard.py's CI_ONLY_WEIGHTS, first set its pin to the measured seconds"
 )
 
 
@@ -435,3 +440,89 @@ def gate_complaints(
             + durations_warnings(outside, weights, threshold, fail_above, ratio=ratio)
         ]
     return problems, warnings
+
+
+# ── The runner-seconds table the shards are packed on (#6149) ─────────────────────────────────
+#
+# WHY A SECOND TABLE. `pytest_shard_weights.json` holds workstation seconds, and the runner does
+# not scale them evenly. Over three CI runs on 2026-10-24 (40125170130, 40131095618,
+# 40130851623), the middle 90% of the 290 modules recorded at 0.5s or more measured 1.0x to
+# 5.5x their recorded weight on the runner, with a median of 2.3x. On run 40125170130 every
+# shard recorded 157-159s, the runner measured them at 327-612s, and their test steps took 133s
+# to 241s. Packing on what the runner measured projects every shard at 460-468 runner seconds
+# over the same three runs.
+#
+# WHY NOT WRITE RUNNER SECONDS INTO THE WEIGHT TABLE. The docs-refresh cron's
+# `--refresh-drifted` re-measures that table on daniel-box and rewrites any entry 1.5x away from
+# what it measured, so runner seconds there would drift back within days (#5432). The gate's
+# ratio arms also compare that table with the runner on purpose, at bounds wide enough for the
+# scale gap. So the weight table keeps feeding the gate and the cron, and this one feeds only
+# `assign`.
+#
+# STALENESS IS GRACEFUL, as with the weight table. A module this table lacks is packed at its
+# recorded weight times the median runner-to-recorded ratio, and an entry for a deleted module
+# is ignored. Nothing refreshes the table on a schedule. To refresh it, download each shard's
+# log from two or three recent green runs and run
+# `pytest_shard.py --record-runner LOG...`; each module takes the median of what the logs
+# measured, because one module measured about 8s on one run and 15.6s on the next (#3604).
+RUNNER_WEIGHTS_PATH = (
+    Path(__file__).resolve().with_name("pytest_shard_runner_weights.json")
+)
+# A recorded weight below this is too small to give a meaningful runner-to-recorded ratio.
+_RATIO_FLOOR_SECONDS = 0.5
+# A GitHub job log prefixes each line with a timestamp, and pytest colours its report.
+_LOG_NOISE = re.compile(r"^\S+Z |\x1b\[[0-9;]*m", re.M)
+
+
+def runner_weights(reports: list[str]) -> dict[str, float]:
+    """Each module's median seconds across CI `--durations` reports, one report per shard log.
+
+    A module appears in one shard per run, so with logs from three runs each module takes the
+    median of its three measurements.
+    """
+    seen: dict[str, list[float]] = {}
+    for text in reports:
+        for module, seconds in parse_durations(_LOG_NOISE.sub("", text)).items():
+            seen.setdefault(module, []).append(seconds)
+    return {m: round(statistics.median(v), 2) for m, v in sorted(seen.items())}
+
+
+def load_runner_weights(path: Path = RUNNER_WEIGHTS_PATH) -> dict[str, float]:
+    if not path.exists():
+        return {}
+    return {k: float(v) for k, v in json.loads(path.read_text()).items()}
+
+
+def write_runner_weights(
+    reports: list[str], keep: list[str], path: Path = RUNNER_WEIGHTS_PATH
+) -> dict[str, float]:
+    """Rewrite the runner table from `reports`, for the modules in `keep`; return it.
+
+    A run on a pull request also measures the modules that PR adds, which may never land.
+    """
+    kept = set(keep)
+    table = {m: s for m, s in runner_weights(reports).items() if m in kept}
+    if not table:
+        raise ValueError(
+            "no durations line in any report, so there is nothing to record"
+        )
+    path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n")
+    return table
+
+
+def packing_weights(
+    recorded: dict[str, float], runner: dict[str, float]
+) -> dict[str, float]:
+    """The weights `assign` packs: runner seconds where measured, else scaled recorded ones."""
+    ratios = [
+        runner[m] / recorded[m]
+        for m in runner
+        if recorded.get(m, 0.0) >= _RATIO_FLOOR_SECONDS
+    ]
+    scale = statistics.median(ratios) if ratios else 1.0
+    return {**{m: w * scale for m, w in recorded.items()}, **runner}
+
+
+def packing_table(recorded: dict[str, float]) -> dict[str, float]:
+    """`packing_weights` over the committed runner table."""
+    return packing_weights(recorded, load_runner_weights())

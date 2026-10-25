@@ -340,7 +340,8 @@ include:
 - **`env_file:` is named on every include.** The Compose `include` reference says an include's
   `env_file` "defaults to `.env` file in the `project_directory`". It does not say whether the
   CLI's `--env-file` reaches an included file. Naming the file on every include removes that
-  doubt, and the H5.2b canary proves that a value arrives.
+  doubt. H5.7, the first move that carries a secret, proves that a value arrives (*Open
+  questions* 7, the 2026-10-24 ruling).
 - **Order inside the project is `depends_on`.** In its own move PR, autoheal gains `depends_on:
   docker-proxy-lifecycle`, and alloy gains `depends_on: docker-proxy`. That replaces
   `PI_ORDERING`'s list-order rule. Compose rejects a project whose `depends_on` names a
@@ -834,16 +835,19 @@ adds one service to the package. The PR body records the output of
           cannot be read is reported as `down`, never treated as absent. The signal lasts
           until M1's rule replaces it (*Open questions* 5, note to M1).
         - The project's first service is `pi-canary`, a digest-pinned `busybox` running
-          `sleep infinity`, which costs about 1 MB. It sets `HOMELAB_DOMAIN=${domain}`, so
-          the canary also proves that an included file receives a value from `compose.env`.
+          `sleep infinity`, which costs about 1 MB. It sets `HOMELAB_DOMAIN={{ domain }}`, a
+          plain variable that renders into the compose file at build time. It reads no secret,
+          has no `env_file:`, and `pi-compose` declares no `outputs:` entry, so no `compose.env`
+          exists yet (*Open questions* 7, the 2026-10-24 ruling). The proof that an included
+          file receives a value from `compose.env` waits for H5.7.
         - Point `compose_templates.py`, `decisions.py:_PLANES`, `pins.py:_COMPOSE_FILES`
           and `scripts/infra_map/inventory.py:load_roles` at
           `hosts/components/pi-compose/services/` as well as `roles/containers`. Each tool
           asserts a named member: `pi-canary`'s template, the autoheal marker `DECIDED
           autoheal runs with NO healthcheck`, alloy's `image:` line, and `pi-canary` as an
           owner in the role index.
-        - **Operator-only:** run `host_secrets.py sync` and commit the Pi file, which then
-          carries `domain`.
+        - No `host_secrets.py sync` runs in this PR, and the Pi's SOPS file is untouched
+          (*Open questions* 7, the 2026-10-24 ruling).
         - Two-writer check: `pi-canary` exists in no Ansible list.
 3. **H5.3 The engine upgrade and the land wait.**
     - Change `engine-upgrade.yml` as *The engine upgrade* describes, with its test and red
@@ -936,6 +940,9 @@ adds one service to the package. The PR body records the output of
       not merge, and the file route in *Secrets* replaces it.
     - Same shape. Add `depends_on: docker-proxy`, the `sys.env` config, the plain
       `config.alloy` file and its label.
+    - `HOMELAB_DOMAIN` renders from the plain variable `domain` at build time, not from
+      `compose.env`, which carries only SOPS keys (*Open questions* 7, the 2026-10-24 ruling).
+      Only `alloy_pi_http_password` goes through `compose.env`.
     - Legacy entries: `/home/ubuntu/server/containers/alloy/docker-compose.yml` and
       `/home/ubuntu/server/containers/alloy/config/config.alloy`.
     - **Operator-only:** run `host_secrets.py sync` and commit the Pi file with
@@ -958,7 +965,7 @@ adds one service to the package. The PR body records the output of
       (`scripts/diagnostics/probe_lib/core.py:k8s_endpoint`), so that form is the
       operator's. *Open questions* 5 asks D5 to accept the agent transport.
 9. **H5.9 wg-easy.**
-    - Same shape as autoheal. wg-easy reads `${domain}`, which the Pi file carries from H5.2b.
+    - Same shape as autoheal. wg-easy reads the plain variable `domain`, which renders into its compose file at build time and not through `compose.env` (*Open questions* 7, the 2026-10-24 ruling).
     - Legacy entry: `/home/ubuntu/server/containers/wg-easy/docker-compose.yml`.
     - **The facts lock**, until G2 retires it: run `fact_status.py forget` for
       `ansible/roles/containers/wg-easy/CLAUDE.md#Notable` and
@@ -1086,7 +1093,8 @@ gh pr list --author app/renovate --search 'hosts/components/pi-compose' --state 
 # never an interpolated value.
 ssh daniel-pi 'dpkg-query -W homelab-daniel-pi; docker compose ls --format json; sudo docker compose -f /usr/lib/homelab/compose/compose.yaml config --services | sort; docker ps --format "{{.Names}} {{.Label \"com.docker.compose.project\"}} {{.Status}}" | sort; cat /var/lib/node-exporter-textfile/homelab_compose.prom; journalctl -t compose-adopt --since -1h --no-pager | tail -n 5'
 
-# Operator, H5.2b: the canary received a value from compose.env (prints 1, never the value).
+# Operator, H5.2b: the canary received the build-time `domain` (prints 1, never the value).
+# This does not prove compose.env; H5.7's autoheal check does (*Open questions* 4).
 ssh daniel-pi 'docker inspect pi-canary --format "{{range .Config.Env}}{{println .}}{{end}}" | grep -c "^HOMELAB_DOMAIN=."'
 
 # Operator, exit observation 2: the bumped image reached the Pi.
@@ -1211,6 +1219,12 @@ The expected results are:
   the tmpfiles file lists, or `/var/run/docker.sock`. Each one carries `create_host_path:
   false`. A fixture source under `/run/homelab-secrets/` is flagged, and so is a relative
   source with no tmpfiles line. The test asserts it found `alloy/data` and `wg-easy/config`.
+- *Memory floor (H5.2b follow-up).* The Docker daemon refuses a memory limit or reservation
+  under 6 MiB at `up`, though the Compose model and `config -q` accept it. The canary's first
+  run failed on a 2M reservation (2026-10-24). Every compose file the package installs is read
+  for `deploy.resources.{limits,reservations}.memory`, `mem_limit` and `mem_reservation`. A
+  fixture reservation of 2M, a limit of 5M or 512k, and an unreadable size are flagged, and 6M
+  with a 16M limit passes. The test asserts it found the canary's own 16M and 6M.
 - *Engine upgrade.* A test parses `engine-upgrade.yml`. It asserts five things:
     - a task before the apt probe masks `homelab-updater.timer`, and a later task, still
       before any `state: stopped`, waits on `homelab-updater.service` and
@@ -1517,9 +1531,9 @@ upstream, revert its downstreams before it.
       operator declines, exit observation 2 becomes a hand-written digest bump through the
       same pipeline.
     - Either way, wg-easy's pin sits in a manual group, and the two alloy pins move together.
-2. **When does C5's dependency rule reach Docker?** C5 says third-party sources such as
-   Docker's ship in `homelab-repos`. H5 keeps the engine under `docker_install`, so H5 adds
-   no `Depends: docker-ce`. Resolution: H7 moves the engine and creates `homelab-repos`.
+2. **When does C5's dependency rule reach Docker?** C5 said third-party sources such as
+   Docker's ship in `homelab-repos`; the 2026-10-24 ruling puts each in the component of the host that uses it. H5 keeps the engine under `docker_install`, so H5 adds
+   no `Depends: docker-ce`. Resolution: H7 moves the engine, and Docker's source goes to the `apt-docker` component of `homelab-daniel-pi`.
 3. **Who owns pi-peer-backup's two writes on the Pi?** R4's open question 4 expects H5's
    package to list them. They are an authorized key and a forced-command wrapper, not Compose
    services, so H5 does not move them. D5 moves the two tasks into `k8s_host_files` with
@@ -1527,8 +1541,11 @@ upstream, revert its downstreams before it.
    them, as H7.4's `pi-peer-backup-target` component already allows. Until then the k8s role
    writes them, or `k8s_host_files` once D5 has converted pi-peer-backup. *Open questions* 5
    asks D5 to name H7 instead of H5.
-4. **What if the canary shows that `env_file:` on an include delivers nothing?** H5.2b stops
-   before any service moves. Resolution: the project renders as one merged file with no
+4. **What if the first secret-bearing move shows that `env_file:` on an include delivers
+   nothing?** The canary no longer carries this proof (*Open questions* 7, the 2026-10-24
+   ruling). H5.7 is the first move that carries a real secret (autoheal's
+   `monitor_discord_webhook_url`), so H5.7 carries it. H5.7 stops before its container is
+   removed, and the other services have not moved. Resolution: the project renders as one merged file with no
    `include:`. Its relative paths are then written as absolute paths under each service's
    data directory.
 5. **Behaviour this plan needs from other slices.** H5 adopts H4's restart contract as
@@ -1613,8 +1630,22 @@ upstream, revert its downstreams before it.
    `-e target=daniel-pi`, and H5.6 to H5.9 replace that path.
     - Resolution: the operator decides before H5.2b merges (**operator-only**), because H5.2b
       is the first PR that runs a service through the package. H5.12 carries the ADR text.
-    - If the operator declines, H5.2b does not merge, H5.2a3 to H5.2a1 revert, and no
-      service has moved.
+    - **Ruled 2026-10-24: the operator accepted the amendment**, so H5.2b may merge. H5.2b's
+      PR body records the ruling, and `docs/adr/0013-daniel-pi-stays-on-docker.md` stays
+      unedited until H5.12.
+    - **Ruled 2026-10-24, on finding that `domain` is no SOPS key** (#5087 made it a plain
+      variable in `group_vars/all.yml`, so `keys: [domain]` is refused as "not keys of
+      secrets.yml"). The operator chose that the canary reads no secret:
+        1. `pi-canary` has no `env_file:`, and `pi-compose` declares no `outputs:` entry for
+           `compose.env` in H5.2b. No `host_secrets.py sync` runs, and the Pi's SOPS file is
+           untouched.
+        2. A plain variable such as `domain` renders into the compose file at package build
+           time. It does not go through `compose.env`, which carries only SOPS keys.
+        3. The proof that `env_file:` on an include delivers a value moves to the first move
+           that carries a real secret, which is H5.7 (autoheal, `monitor_discord_webhook_url`).
+           H5.8 and H5.9 read `domain` as a plain variable.
+    - Had the operator declined, H5.2b would not merge, H5.2a3 to H5.2a1 would revert, and no
+      service would have moved.
 
 ## Review log
 

@@ -106,6 +106,12 @@ def _without(render, directory: str, file_part: str, old: str):
         ("traefik", "static-config", "${email}", "${email} in traefik's"),
         ("authelia", "config-secret", "${", "a placeholder in authelia's"),
         ("qbittorrent", "netns", "$${", "an escaped $${ in qbittorrent's"),
+        (
+            "longhorn-backup",
+            "backuptarget-default",
+            "${longhorn_b2_bucket}",
+            "${longhorn_b2_bucket} (or a blank backupTargetURL) in longhorn-backup's",
+        ),
     ],
 )
 def test_an_output_rule_member_removed_from_the_fleet_is_flagged(

@@ -37,6 +37,8 @@ spec:
           ports:
             - name: metrics
               containerPort: {{ monitor_bridge_deploy_pipeline_port }}
+            - name: checks
+              containerPort: {{ containers_list | metrics_port('monitor-bridge') }}
 {{ hardened_security_context(read_only=true) }}
           # The settings, one plain value per entry of config/env.yaml.j2; the credentials come
           # from env-secret.yaml.j2. A quoted number belongs there, never in the Secret: Flux's

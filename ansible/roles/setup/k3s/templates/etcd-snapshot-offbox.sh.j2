@@ -45,6 +45,17 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t etcd-snapshot-offbox "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t etcd-snapshot-offbox "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: a day plus an hour, the interval that
+# the check's Kuma tile carries. `k3s_daily_check_deadline_s` names it in defaults/main.yml, and
+# ansible/tests/services/test_b1_rule_literals.py pins the rule's literal to this value.
+DEADLINE_S={{ k3s_daily_check_deadline_s }}
+TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 # Cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts the binary.
 # Without this the snapshot silently never runs and this script pushes a permanent false "up" —
@@ -100,8 +111,13 @@ push_healthchecks() {
 # real on 2026-08-16: the first manual run of this script produced no output and no journal entry,
 # and proving it had worked needed root and a `kubectl get etcdsnapshotfile`.
 report() {
-  local status="$1" msg="$2"
+  local status="$1" msg="$2" success=0
   logger -t etcd-snapshot-offbox "status=${status} ${msg}"
+  # Every path out of this script reports through here, so the textfile carries each verdict. It
+  # is written before the push, which must not delay it. A failed write logs and the push goes on.
+  [[ "$status" == "up" ]] && success=1
+  write_check_textfile etcd-snapshot-offbox "$success" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t etcd-snapshot-offbox "textfile write to ${TEXTFILE_DIR} failed (status=${status})"
   push_kuma "$status" "$msg"
   push_healthchecks "$status"
 }
@@ -144,7 +160,7 @@ OUTPUT=$(k3s etcd-snapshot save \
   --s3-bucket "$ETCD_S3_BUCKET" \
   --s3-folder "{{ k3s_etcd_s3_folder }}" \
   --s3-endpoint "$ETCD_S3_ENDPOINT" \
-  --s3-region "{{ k3s_longhorn_r2_region }}" \
+  --s3-region "{{ k3s_etcd_s3_region }}" \
   --s3-retention {{ k3s_etcd_s3_retention }} 2>&1)
 RC=$?
 

@@ -23,12 +23,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.core import Unreadable
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
-from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
+from lib.repo_paths import HOST_LIB_FILES
 
 # The Backup CR reader and the backup group and target names, shared with the backup-health
 # cron (#3735, #3737); it imports host_lib, so both directories go on sys.path.
 _sys.path.insert(0, str(HOST_LIB_FILES))
-_sys.path.insert(0, str(K3S_FILES))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 
 
@@ -75,6 +75,49 @@ def volume_owned_backup_counts(cluster=DEFAULT_CLUSTER, _run=None):
     return owners
 
 
+def weekly_retain(cluster=DEFAULT_CLUSTER, _run=None):
+    """The `spec.retain` of the live weekly RecurringJobs, as the largest of their seven values.
+
+    One list call, in place of the `--retain` the b2-budget cron used to bake from
+    `k3s_longhorn_weekly_backup_retain` (H1.7a). The seven weekday jobs share the one key, so
+    their retains agree once an apply has finished; the largest is the answer while a rollout is
+    half done, because it flags the fewest backups as unpruned.
+
+    Raises:
+        Unreadable: the list call failed, or it held no weekly shard job with an integer
+            `spec.retain`. There is no fallback to a default: a retain the cluster did not give
+            is a guess, and the caller reads the value to say which backups no job will prune.
+    """
+    run = _run or (lambda *args: kubectl(cluster, *args))
+    out = run("-n", "longhorn-system", "get", "recurringjobs.longhorn.io", "-o", "json")
+    if out.returncode != 0:
+        raise Unreadable("kubectl failed: " + out.stderr.strip()[:300])
+    try:
+        items = json.loads(out.stdout).get("items", [])
+    except json.JSONDecodeError, AttributeError:
+        raise Unreadable("recurringjobs.longhorn.io list is not JSON") from None
+    retains = [
+        (item.get("spec") or {}).get("retain")
+        for item in items
+        if ((item.get("metadata") or {}).get("name") or "").startswith(
+            longhorn_backups.WEEKLY_SHARD_PREFIX
+        )
+    ]
+    retains = [r for r in retains if isinstance(r, int) and not isinstance(r, bool)]
+    if not retains:
+        raise Unreadable("no weekly RecurringJob with an integer spec.retain")
+    return max(retains)
+
+
+def resolve_retain(retain, cluster=DEFAULT_CLUSTER, _run=None):
+    """`retain` as the caller gave it, or the live weekly retain when it gave none.
+
+    Raises:
+        Unreadable: `retain` is None and `weekly_retain` could not read the cluster.
+    """
+    return retain if retain is not None else weekly_retain(cluster, _run)
+
+
 def pvc_names(cluster=DEFAULT_CLUSTER, _run=None):
     """{longhorn volume: PVC name}, so the report reads in service terms."""
     run = _run or (lambda *args: kubectl(cluster, *args))
@@ -91,8 +134,8 @@ def pvc_names(cluster=DEFAULT_CLUSTER, _run=None):
 # --- which BackupTarget is B2 -----------------------------------------------------------------
 
 # The cluster holds two BackupTargets and only one of them is B2: `default` carries the B2 URL
-# (`longhorn-backup.yml` patches it with `longhorn_b2_bucket`), `r2` carries Cloudflare's
-# (`longhorn-backuptarget-r2.yaml.j2`). R2's caps are monthly and vast, so charging an R2
+# (`longhorn-backuptarget-default.yaml.j2` renders it with `longhorn_b2_bucket`), `r2` carries
+# Cloudflare's (`longhorn-backuptarget-r2.yaml.j2`). R2's caps are monthly and vast, so charging an R2
 # deletion against B2's 2,500/day Class C cap would inflate the ledger against a cap that does
 # not apply to it. The deletion log line names the target URL, not the target NAME, so the
 # mapping has to come from the CRs — inferring B2 from the `us-east-005` region component would

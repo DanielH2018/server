@@ -73,10 +73,15 @@ spec:
     # not SNAT'd, because ETP=Local on mosquitto-lan preserves the client address for a
     # cross-node LoadBalancer hop. This caller is not in the task-5 brief's template; omitting
     # it would have silently fenced a live Kuma monitor the moment this policy was applied.
+    # blackbox-exporter's `tcp_connect` probe of the same VIP replaces that monitor (M6 batch
+    # B8). It is a pod on either node, so it arrives the same way.
     - from:
         - podSelector:
             matchLabels:
               app: uptime-kuma
+        - podSelector:
+            matchLabels:
+              app: blackbox-exporter
       ports:
         - port: 1883
           protocol: TCP

@@ -1,0 +1,14 @@
+{
+  "checksum": "d751842ddbbbcf4124db26dfa3980ec72f4553397091774faa682ec3cfd4dfcc",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-backup/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/repo/test_census_rows_roles.py::test_census_row_holds_on_the_tree": "3517271dec93e78a96e775ed1530225b87c538ea15b6f25186cd223d4dfce72d",
+      "ansible/tests/setup/test_etcd_s3_region_mirrors_the_r2_region.py::test_a_changed_twin_is_flagged": "29ea0e727cf66bef72e6b02c306398b9ae832b4493e2dd87a72d80f8dbb0bd85",
+      "scripts/renderer/renderer_lib/secret_checks.py:PLACEHOLDER_KIND_EXEMPT": "6e9966ad203330c80ee6fe732a345762e31941c8610f5b1c8dabf6a5c6194854"
+    },
+    "python": "3.14",
+    "verified_sha": "8ab0ff874"
+  }
+}

@@ -1,0 +1,88 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  The Longhorn reconcile job, hourly: hold each Volume CR in the recurring-job group and backup
+  target its tier names. It replaced the `setup/k3s` tasks in `tasks/longhorn.yml` and
+  `tasks/longhorn-weekly-shard.yml` at H1.6. The script's docstring is the design, and this
+  role's CLAUDE.md has the write contract.
+
+  It WRITES to the cluster: a merge patch of group labels and backup target on a Volume CR that
+  must move. A converged cluster gets no write. Its ServiceAccount (rbac.yaml.j2) holds those verbs and no
+  others, so this pod mounts its token.
+
+  `concurrencyPolicy: Forbid` keeps two scheduled runs off each other. The gate Job that Flux
+  copies from this jobTemplate into `longhorn-reconcile-verify` (`flux_cronjob_gates`) carries
+  no ownerReference to the CronJob, so Forbid does not cover it. A run that overlaps computes
+  the same plan from the same lists, so the second patch finds the label set.
+
+  The pod spec's shell fields (`enableServiceLinks`, the priority class, the token mount) are
+  written out here because `pod_shell` emits at a Deployment's depth and a CronJob pod spec sits
+  one level further in (workload-shell.yml.j2). The container-level hardening is the CronJob
+  twin of its macro.
+
+  The pod carries no `netpol-baseline` label: `longhorn-system` is outside the default-deny
+  rollout (ansible/tests/k8s/test_netpol_baseline_labels.py names the fenced roles). It opens
+  no inbound connection and reaches only the API server.
+#}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: longhorn-reconcile
+  namespace: {{ k8s_longhorn_namespace }}
+spec:
+  schedule: "{{ longhorn_reconcile_k8s_schedule }}"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ longhorn_reconcile_k8s_starting_deadline_seconds }}
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    metadata:
+      labels:
+        app: longhorn-reconcile
+    spec:
+      activeDeadlineSeconds: {{ longhorn_reconcile_k8s_deadline_seconds }}
+      # No retry: the next run is an hour away and reads the same state.
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: longhorn-reconcile
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          serviceAccountName: longhorn-reconcile
+          automountServiceAccountToken: true
+          priorityClassName: homelab-best-effort
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ longhorn_reconcile_k8s_uid }}
+            runAsGroup: {{ longhorn_reconcile_k8s_uid }}
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: longhorn-reconcile
+              image: {{ longhorn_reconcile_k8s_image }}
+              command: ["python3", "/config/longhorn_reconcile.py"]
+              env:
+                - name: RECONCILE_NAMESPACE
+                  value: "{{ k8s_longhorn_namespace }}"
+                - name: RECONCILE_TIERS_FILE
+                  value: /config/tiers.json
+                # The API server's CA, which the automounted token volume carries.
+                - name: SSL_CERT_FILE
+                  value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+{{ job_hardened_security_context(read_only=true) }}
+              volumeMounts:
+                - name: longhorn-reconcile-code
+                  mountPath: /config
+                  readOnly: true
+{{ job_container_resources(cpu_limit=longhorn_reconcile_k8s_cpu_limit, mem_limit=longhorn_reconcile_k8s_mem_limit, cpu_request=longhorn_reconcile_k8s_cpu_request, mem_request=longhorn_reconcile_k8s_mem_request) }}
+          volumes:
+            - name: longhorn-reconcile-code
+              configMap:
+                name: longhorn-reconcile

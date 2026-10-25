@@ -72,10 +72,10 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_RED
+from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object
 from lib import removes_object
-from deploy_tools.land_lib import gh_read, pin_gate, policy
+from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
@@ -486,13 +486,18 @@ def await_merge(ln: Landing) -> None:
 
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
     reads its head green, unless master moved past the PR's base: then the branch is updated
-    once and the merge waits for the updated head to go green. Without --arm-merge this only
-    polls, for a PR merged some other way.
+    once and the merge waits for the updated head to go green. A green head also waits while
+    master CI has a backlog (`pace.hold`). Without --arm-merge this only polls, for a PR merged
+    some other way.
     """
     o, t = ln.opts, ln.tools
     waited = 0
     conflicting = 0
     last_refusal = ""
+    # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
+    ci_pending = ""
+    # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
+    paced = ""
     # The head this landing updated the branch from; empty until it does.
     updated_from = ""
     # The head the handback refusal and the pin gate last passed, so a merge GitHub refuses
@@ -534,6 +539,7 @@ def await_merge(ln: Landing) -> None:
             continue
         if head:
             rc, line = t.await_ci(head, 0)
+            ci_pending = line if rc == CI_PENDING else ""
             if rc == CI_RED:
                 ln.die(
                     f"PR #{o.pr} cannot merge — its own CI is red ({line}); fix it, push, "
@@ -545,7 +551,11 @@ def await_merge(ln: Landing) -> None:
             # never fire on a disarmed gate; a merge made some other way keeps the wait.
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
-            if rc == CI_GREEN and ln.direct_merge_subject:
+            hold = pace.hold(ln) if rc == CI_GREEN and ln.direct_merge_subject else ""
+            if hold and hold != paced:
+                say(hold)
+            paced = hold
+            if rc == CI_GREEN and ln.direct_merge_subject and not hold:
                 moved = [] if updated_from else _stale_paths(ln, head)
                 if moved:
                     _update_branch(ln, head, moved)
@@ -567,9 +577,17 @@ def await_merge(ln: Landing) -> None:
                         )
                         last_refusal = refusal
         if waited >= o.merge_timeout:
+            # A run cancelled on the head, or skipped because the PR was a draft, never
+            # supplies a verdict on its own (#5931).
+            why = (
+                f"its head has no CI verdict ({ci_pending}); if its run was cancelled or "
+                "skipped as a draft, none arrives on its own: re-run the cancelled run with "
+                "`gh run rerun <run-id>`, or mark the PR ready or push"
+                if ci_pending
+                else paced or "look at its checks or the queue"
+            )
             ln.die(
-                f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; "
-                "look at its checks or the queue",
+                f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; {why}",
                 75,
                 Verdict.MERGE_TIMEOUT,
             )

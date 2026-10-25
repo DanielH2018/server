@@ -10,6 +10,7 @@ Run: uv run pytest ansible/roles/k8s/janitorr/tests/test_janitorr_health.py
 """
 
 import importlib.util
+import json
 import re
 import socket
 import subprocess
@@ -57,12 +58,12 @@ def pushes(monkeypatch) -> list[tuple]:
     return []
 
 
-def _main(pushes: list[tuple], kubectl) -> int:
+def _main(pushes: list[tuple], kubectl, **kwargs) -> int:
     def push(status, msg, base, token, *, log=None):
         pushes.append((status, msg, base, token))
         return True
 
-    return janitorr_health.main(kubectl=kubectl, push=push, now=lambda: _NOW)
+    return janitorr_health.main(kubectl=kubectl, push=push, now=lambda: _NOW, **kwargs)
 
 
 def _replies(replies: dict[str, tuple[int, str]]):
@@ -129,6 +130,41 @@ def test_with_no_token_it_prints_the_verdict_and_pushes_nothing(
         capsys.readouterr().out
         == "down\tcannot read the janitorr pod in homelab: Forbidden\n"
     )
+
+
+def test_the_verdict_is_also_patched_onto_the_verdict_configmap(pushes):
+    calls = []
+
+    def kubectl(*argv):
+        calls.append(argv)
+        return (
+            (0, "")
+            if argv[0] == "patch"
+            else {"get": (0, _STARTED), "logs": (0, "INFO ok\n")}[argv[0]]
+        )
+
+    assert _main(pushes, kubectl, verdict_configmap="janitorr-health-verdict") == 0
+    [patch] = [c for c in calls if c[0] == "patch"]
+    assert patch[:3] == ("patch", "configmap", "janitorr-health-verdict")
+    annotations = json.loads(patch[-1].removeprefix("--patch="))["metadata"][
+        "annotations"
+    ]
+    assert annotations["homelab/check-verdict"] == pushes[0][0]
+    assert annotations["homelab/check-last-run"].endswith("Z")
+    assert len(pushes) == 1  # the Kuma push still runs beside the export
+
+
+def test_a_failed_export_exits_one_after_the_push(pushes):
+
+    def kubectl(*argv):
+        return (
+            (1, "Forbidden")
+            if argv[0] == "patch"
+            else {"get": (0, _STARTED), "logs": (0, "INFO ok\n")}[argv[0]]
+        )
+
+    assert _main(pushes, kubectl, verdict_configmap="janitorr-health-verdict") == 1
+    assert len(pushes) == 1
 
 
 def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):

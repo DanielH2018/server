@@ -33,11 +33,13 @@ import json
 
 from deploy_tools.deploy_lib import tags as deploy_tags
 from lib.k8s_roles import role_callers
-from lib.repo_paths import GITOPS_DEPLOY_FILES, ROLES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, HOST_VARS, ROLES
 from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_caller
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
+
+_sys.path.insert(0, str(HOST_LIB_FILES))
 from deployer_lib.deploy_logic import role_of
 
 # The path-to-role mapper and the test-path rule live in `reach`, the module that answers
@@ -91,7 +93,10 @@ def shared_roles(
 
 
 def shared_caller_tags(
-    files, declared: set[str] | None = None, roles_root: _Path | None = None
+    files,
+    declared: set[str] | None = None,
+    roles_root: _Path | None = None,
+    host_vars: _Path = HOST_VARS,
 ) -> dict[str, set[str]]:
     """For each shared role `files` changes, the tags of the roles that run it.
 
@@ -104,11 +109,12 @@ def shared_caller_tags(
 
     The landing deploys these tags, and `land_tags.plane_note` drops every role this gives a
     non-empty set. An empty set is a role nothing deploys, which stays in the note.
+    `host_vars` is the inventory `smoke_caller` reads; a test passes a fixture copy.
     """
     declared = declared_tags() if declared is None else declared
     callers = role_callers()
     return {
-        r: narrowed(r, caller_tags(r, declared, callers), files)
+        r: narrowed(r, caller_tags(r, declared, callers), files, host_vars)
         for r in shared_roles(files, declared, roles_root)
     }
 
@@ -150,7 +156,9 @@ def deploy_run_only(role: str, files) -> bool:
     return bool(subdirs) and subdirs <= _DEPLOY_RUN_SUBDIRS
 
 
-def narrowed(role: str, tags: set[str], files) -> set[str]:
+def narrowed(
+    role: str, tags: set[str], files, host_vars: _Path = HOST_VARS
+) -> set[str]:
     """`tags`, or the one smoke caller where the narrowing applies. NEVER empty.
 
     Empty is not a valid answer: `land_tags.plane_note` reads an empty caller set as a role
@@ -161,16 +169,19 @@ def narrowed(role: str, tags: set[str], files) -> set[str]:
         role: the shared role's directory name.
         tags: its caller tags, as `shared_role_callers.caller_tags` derives them.
         files: the PR's changed paths, the whole list.
+        host_vars: the `inventory/host_vars/` directory `smoke_caller` reads.
     """
     if role not in SMOKE_TESTABLE_SHARED_ROLES or len(tags) < 2:
         return tags
     if not deploy_run_only(role, files):
         return tags
-    one = smoke_caller(tags)
+    one = smoke_caller(tags, host_vars)
     return {one} if one else tags
 
 
-def narrowed_roles(files, declared: set[str] | None = None) -> frozenset[str]:
+def narrowed_roles(
+    files, declared: set[str] | None = None, host_vars: _Path = HOST_VARS
+) -> frozenset[str]:
     """The shared roles `shared_caller_tags` narrowed to one smoke caller.
 
     What `land_lib.classify` says to the operator is read off this. A line claiming that every
@@ -182,7 +193,7 @@ def narrowed_roles(files, declared: set[str] | None = None) -> frozenset[str]:
     out = set()
     for role in shared_roles(files, declared):
         tags = caller_tags(role, declared, callers)
-        if tags and narrowed(role, tags, files) != tags:
+        if tags and narrowed(role, tags, files, host_vars) != tags:
             out.add(role)
     return frozenset(out)
 

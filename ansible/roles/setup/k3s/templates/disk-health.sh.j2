@@ -3,12 +3,12 @@
 #
 # Usage: disk-health.sh [-h|--help]
 # Takes no arguments. Cron job "daniel-box disk health" runs it as the deploy user every
-# k3s_disk_health_cron_minute minutes (cron file disk-health). It reads the Kuma push token from
-# /etc/rancher/k3s/kuma-push.env and the optional healthchecks ping URL from
-# /etc/healthchecks/ping.env. Each run writes its verdict to $TEXTFILE_DIR/disk-health.prom for
-# node_exporter's textfile collector, then pushes the root filesystem's used percentage to Kuma
-# and pings Healthchecks.io. TEXTFILE_DIR defaults to /var/lib/node-exporter-textfile; a test
-# points it elsewhere. Running it by hand is safe.
+# k3s_disk_health_cron_minute minutes (cron file disk-health). It reads the optional
+# healthchecks ping URL from /etc/healthchecks/ping.env. Each run writes its verdict to
+# $TEXTFILE_DIR/disk-health.prom for node_exporter's textfile collector, then pings
+# Healthchecks.io. Prometheus rules in host-checks.yaml page the verdict through Alertmanager.
+# TEXTFILE_DIR defaults to /var/lib/node-exporter-textfile; a test points it elsewhere. Running
+# it by hand is safe.
 #
 # The textfile follows the producer metric contract in
 # docs/target-architecture/monitoring/m3-textfile-timer.md (*The producer metric contract*).
@@ -40,38 +40,13 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-# Token sourced, never inlined: this script lands 0755, so an inlined token is readable by every
-# local account and is enough to forge or suppress a heartbeat. 0640 root:{{ sys_user }} env file,
-# same split as ping.env below and live-drift-check.env.
-DANIEL_BOX_DISK_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r /etc/rancher/k3s/kuma-push.env ]] && . /etc/rancher/k3s/kuma-push.env
-# A missing token skips the two Kuma pushes and nothing else: the run still reads the disk and
-# writes the textfile, which is the verdict Prometheus reads.
-if [[ -z "$DANIEL_BOX_DISK_PUSH_TOKEN" ]]; then
-  logger -t disk-health "kuma push token unreadable — skipping the Kuma push (run initial_setup.yml)"
-fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${DANIEL_BOX_DISK_PUSH_TOKEN}"
-
 # Skip the first run after a boot, same reasoning as its */10 sibling longhorn-backup-health:
 # this feeds the daniel-box-disk-health dead-man, which sends `/fail` on a failed run and so
 # pages immediately regardless of its configured grace.
 #
-# The Kuma beat still goes, and that is why the guard sits AFTER PUSH_URL rather than at the top
-# of the script. The `daniel-box Disk` tile has a 1200s window against this 600s cron, so it
-# tolerates exactly one missed push — the one a silent skip would consume, leaving the tile's
-# margin decided by cron jitter. Pushing `up` with a skip message keeps the heartbeat alive
-# without claiming a reading, the same thing run_once does for a gated bridge check.
-#
-# The skipped run writes no textfile, so the previous file stays as it was. DEADLINE_S below
-# already covers one skipped slot.
+# The skipped run writes no textfile and pushes nothing, so the previous file stays as it was.
+# DEADLINE_S below already covers one skipped slot.
 if boot_grace_active {{ k3s_health_cron_boot_grace_s }} disk-health; then
-  [[ -n "$DANIEL_BOX_DISK_PUSH_TOKEN" ]] \
-    && kuma_push up "skipped — host still booting" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" disk-health
   exit 0
 fi
 
@@ -108,15 +83,14 @@ SUCCESS=0
 # Taken at the verdict, so a slow push or ping below cannot age it.
 VERDICT_TS=$(date +%s)
 
-# Unconditional, before the push — see longhorn-backup-health.sh.j2 for the full rationale.
-# Short version: the `|| logger` below only fires when the curl fails, so a successfully-pushed
-# DOWN leaves no durable record and `probe.py alerts` can never reconstruct this monitor.
+# Unconditional, before the textfile write and the ping, so a DOWN verdict always leaves a
+# durable record for `probe.py alerts` to reconstruct.
 logger -t disk-health "status=${STATUS} ${MSG}"
 
-# The textfile, before any push: kuma_push retries for over 60s on a failed push, and the file
-# must not wait on Kuma. Atomic, in claude-cgroup-metrics.sh's pattern. mktemp's random suffix
+# The textfile, before the ping: the file must not wait on the network. Atomic, in
+# claude-cgroup-metrics.sh's pattern. mktemp's random suffix
 # never ends in .prom, so node_exporter skips the half-written file, and `mv` replaces the old
-# one in a single step. A failed write logs and the run goes on to its pings.
+# one in a single step. A failed write logs and the run goes on to its ping.
 write_textfile() {
   TMP=$(mktemp "$TEXTFILE_DIR/disk-health.prom.XXXXXX" 2>/dev/null) || return 1
   trap 'rm -f "$TMP"' EXIT
@@ -140,9 +114,6 @@ write_textfile() {
   chmod 0644 "$TMP" && mv "$TMP" "$TEXTFILE_DIR/disk-health.prom"
 }
 write_textfile || logger -t disk-health "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
-
-[[ -n "$DANIEL_BOX_DISK_PUSH_TOKEN" ]] \
-  && kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" disk-health
 
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
 # Short version: Kuma runs on the cluster this watches, so an outage silences both the push and

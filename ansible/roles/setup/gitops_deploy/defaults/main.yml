@@ -6,44 +6,17 @@
 # files). Set false to deploy whatever is on master.
 gitops_deploy_require_ci: true
 
-# Check-run names that must be green. These are GitHub's check-run NAMES, which are also the
-# strings branch protection calls contexts — they must match ci.yml's `name:` EXACTLY, and that
-# file carries a comment saying as much. `renovate config validator` is deliberately not required,
-# but NOT because it skips: `ci.yml`'s guard is
-# `if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'`, whose left
-# operand is true on a push, so it runs unconditionally on master — which is exactly the tip
-# `fetch_ci_verdict` reads, and ci.yml says so itself. It is excluded because a red
-# renovate.json does not change what a deploy renders or applies: the config is consumed by the
-# hosted Mend app when it opens PRs, a plane this deployer never touches. Blocking the deploy
-# gate on it would park every later image bump behind a dependency-management fault.
-#
-# `scripts/deploy_tools/promote.py decide` also reads this list, from this file in its own
-# checkout, to decide whether a master commit may move the cluster's `prod` tag. promote.py
-# refuses anything but a non-empty list of strings, so moving this key or making it a Jinja
-# reference means repointing promote.py in the same change.
-gitops_deploy_ci_contexts:
-  - prek (lint + validate + tests + secrets)
+# Check-run names that must be green. The list lives in `ansible/inventory/group_vars/all.yml`
+# as `ci_required_contexts` since H7.2e, with the reasoning, because `promote.py decide`, the
+# host-package builder and `homelab-checkout-sync` read it and outlive this role. This default
+# is a reference to it until H7.19a retires the deployer, so the deployer's settings file renders
+# the same list.
+gitops_deploy_ci_contexts: "{{ ci_required_contexts }}"
 
 # How many commits back from the tip the gate may ask GitHub about when the tip is not green.
-# The tip's own request counts, so 10 is at most ten requests on a tick that would otherwise
-# defer, and zero on every other tick. It bounds `deploy_phases.assess`'s walk to the newest
-# green ancestor: master takes about 124 merges a day (median gap 315s) against a ~103s CI
-# sweep, so the tip is pending on most ticks that would deploy, and gating on the tip alone parks
-# a green commit behind every later merge's sweep.
-#
-# 10 rather than a larger number: it covers the measured p25 merge gap of 88s against a sweep
-# of ~103s several times over, and the walk is spent inside one tick's wall clock while the
-# tree lock is held. A range longer than ten commits behind a red tail is a state for the
-# behind-origin watchdog to page on, not one to keep spending requests on.
-#
-# Worst case, authenticated: ten GETs on one tick against 5000/hour per token. ANONYMOUS the
-# walk does not run at all — `deploy_phases._newest_green_ancestor` asks
-# `tools.github_authenticated()` first and logs one line saying it skipped. The anonymous limit
-# is 60/hour per source IP, shared with every landing's await_ci.py poll (45 per 900s wait), so
-# a ten-request burst per tick would exhaust it and every reader on the host would then read
-# `HTTP Error 403`, which this gate maps to `pending` — buying one tick's latency by deferring
-# the next several. 0 (or any value below it) disarms the walk on every host.
-gitops_deploy_ci_ancestor_walk_max: 10
+# The value and its reasoning live in `ansible/inventory/group_vars/all.yml` as
+# `ci_ancestor_walk_max` since H7.2e. This default is a reference to it until H7.19a.
+gitops_deploy_ci_ancestor_walk_max: "{{ ci_ancestor_walk_max }}"
 
 # One GET per tick that would otherwise deploy, authenticated through `gh auth token` when the
 # CLI is logged in (deploy_logic.github_token) — anonymous is 60/hour per source IP, shared with
@@ -237,8 +210,10 @@ gitops_deploy_k8s_timeout_s: 1440
 # The in-role term matters. A role's own `tasks/` run before k8s/manifests/tasks/drain.yml, so
 # what they wait for adds to the drain rather than overlapping it. prowlarr waited
 # `--timeout=300s` for its flaresolverr isolation probe Job on top of its 780s rollout, which
-# made it the worst promoted service at 480 + 300 + 780 + 60 = 1620s. Its flip deleted the probe
-# (#5594), so it is still the worst, at 1320s. An inline `rollout status` gate is
+# made it the worst promoted service at 480 + 300 + 780 + 60 = 1620s. Only an Ansible-owned role
+# counts, because the deployer never rolls a flux-owned tag back, and every promoted,
+# claim-declaring role is flux-owned since the D5 flips. prowlarr handed back would need 1320s.
+# An inline `rollout status` gate is
 # NOT counted — sonarr's 660s gate waits for the rollout the drain also waits for, so the two are
 # alternatives on one timeline, not additions.
 #

@@ -1,0 +1,223 @@
+# The storage layer, read from the `longhorn`, `kubernetes-kubelet`, `node` and
+# `kubernetes-apiserver` scrape jobs: the Longhorn volumes' redundancy, the claims' fullness, the
+# snapshot space against a declared cap, the CSI mounts and etcd's database size. These are the
+# monitor-bridge rows longhorn_volumes, pvc_fullness, snapshot_headroom, kubelet_plugin_readonly
+# and etcd_db_size. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim.
+# The design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch A5.
+#
+# SHADOW UNTIL M6's BATCH A5 CUTOVER-B. Each rule runs beside the Kuma tile of the bridge row it
+# ports, so each carries `shadow: "true"` and pages nobody. Cutover-b drops the label.
+#
+# THE LITERALS. Each threshold mirrors an env value of the bridge row it ports, and
+# ansible/tests/services/test_storage_rule_literals.py pins it (M1 convention 1).
+#
+# THE `for:` HOLDS. A bridge streak of N cycles is N x 300s, as in A2. The rows with no streak
+# (fullness, the free-space floor, the read-only mount and the etcd size) hold for one bridge
+# cycle, 5m: the bridge sampled once per cycle, and a rule evaluating every minute would
+# otherwise page on a single scrape.
+#
+# LONGHORN'S ONE-HOT `state` LABEL. `longhorn_volume_robustness` carries four series per volume,
+# one per state, valued 0 or 1. A rule selects on the label and never compares the value to an
+# ordinal. The allow-list `state!~"healthy|unknown"` equals SAFE_ROBUSTNESS in monitor-bridge's
+# longhorn_robustness.py, so a state Longhorn adds or renames pages instead of passing (#3668).
+# `unknown` is a detached volume, such as a game server scaled to zero on purpose.
+#
+# DOUBLE SCRAPES. The kubelet's series arrive under two jobs (`kubernetes-kubelet` and
+# `kubernetes-apiserver`), and the two longhorn-manager pods report disjoint volume subsets. Each
+# rule groups with `max by` so a series seen twice is one reading.
+groups:
+  - name: storage
+    rules:
+      # monitor-bridge's `longhorn_volumes`: a volume that lost redundancy. `k3s_longhorn_replica_count`
+      # is 2, so `degraded` is a single copy, and `faulted` has no healthy replica left. `for: 15m`
+      # is LONGHORN_CONSECUTIVE (3) x 300s, which rides out a node drain or the Sunday reboot.
+      - alert: LonghornVolumeDegraded
+        expr: max by (volume, pvc, state) (longhorn_volume_robustness{state!~"healthy|unknown"} == 1)
+        for: 15m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: Longhorn volume {{ $labels.pvc }} is {{ $labels.state }}.
+          description: >-
+            {{ $labels.volume }} (claim {{ $labels.pvc }}) has reported the robustness
+            {{ $labels.state }} for 15 minutes. With two replicas, degraded is one copy from data
+            loss and faulted is no healthy replica. `longhorn-disaster-recovery` has the rebuild
+            and revert procedures.
+      # The bridge's "no longhorn_volume_robustness series" branch: the one-hot shape guarantees a
+      # `state="healthy"` series per volume even at value 0, so its absence means the exporter
+      # went away, which is not the same as healthy. The second arm requires up == 1, so a failed
+      # scrape stays ScrapeTargetDown's page (M1 convention 5). `for: 15m` is the bridge's
+      # "scrape gap grace" (LONGHORN_CONSECUTIVE).
+      - alert: LonghornVolumesMissing
+        expr: >-
+          absent(up{job="longhorn"})
+          or
+          (
+            absent(longhorn_volume_robustness{state="healthy"})
+            and on () (up{job="longhorn"} == 1)
+          )
+        for: 15m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: Prometheus has lost Longhorn's scrape job or its volume series.
+          description: >-
+            Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
+            the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
+            UNMONITORED while this fires, which is not the same as healthy.
+      # monitor-bridge's `pvc_fullness`, percentage arm: a claim over PVC_MAX_PCT (85). media-data
+      # is PVC_EXCLUDE: a `local` PV that is the `/` filesystem the host disk rules already watch.
+      - alert: PVCFull
+        expr: >-
+          max by (namespace, persistentvolumeclaim) (
+            100 * (1 - kubelet_volume_stats_available_bytes{persistentvolumeclaim!~"media-data"}
+            / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim!~"media-data"})
+          ) > 85
+        for: 5m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: The claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is over 85% full.
+          description: >-
+            {{ $labels.persistentvolumeclaim }} is {{ $value | printf "%.0f" }}% full. A claim
+            cannot borrow space, so expand the volume in its role.
+      # The `pvc_fullness` free-bytes floor (#1875), for a claim whose peak is a step rather than a
+      # slope. PVC_MIN_FREE declares valheim-server's largest transient, 3 GiB.
+      - alert: PVCBelowFreeFloor
+        expr: >-
+          max by (namespace, persistentvolumeclaim) (
+            kubelet_volume_stats_available_bytes{persistentvolumeclaim="valheim-server"}
+          ) < 3221225472
+        for: 5m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: The claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less free space than its largest transient.
+          description: >-
+            {{ $labels.persistentvolumeclaim }} has {{ $value | humanize1024 }}B free, under the
+            3 GiB its updater stages before swapping the install in. Expand the volume in its role.
+      # A declared floor whose claim reports no free bytes is a breach, not silence: the arm above
+      # evaluates to nothing exactly when its input vanishes.
+      - alert: PVCFreeFloorUnmonitored
+        expr: absent(kubelet_volume_stats_available_bytes{persistentvolumeclaim="valheim-server"})
+        for: 5m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: The kubelet reports no free bytes for the claim valheim-server.
+          description: >-
+            PVCBelowFreeFloor reads kubelet_volume_stats_available_bytes for valheim-server and
+            finds no series, so its free-space floor is UNMONITORED. The claim was renamed or
+            excluded, or the kubelet stopped reporting it.
+      # The `pvc_fullness` census (PVC_MIN_CLAIMS, 32): fewer claims visible than the floor means
+      # the kubelet stats are not scraped, and an empty fullness vector reads like "no claim is
+      # full". The count includes excluded claims, as the bridge's does. A dead kubelet job is
+      # PARTIAL blindness (the apiserver job still answers for 27 claims), so this rule does not
+      # wait on `up`. `for: 15m` is PVC_CLAIMS_CONSECUTIVE (3) x 300s.
+      - alert: PVCCoverageShortfall
+        expr: >-
+          (count(count by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes)) or vector(0)) < 32
+        for: 15m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: The kubelet reports fewer than 32 claims.
+          description: >-
+            Only {{ $value | printf "%.0f" }} claims report kubelet_volume_stats, below the floor
+            of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet and
+            kubernetes-apiserver targets.
+      # monitor-bridge's `snapshot_headroom` (#1627): snapshot bytes against the declared
+      # spec.snapshotMaxSize, at SNAPSHOT_CAP_WARN_RATIO (0.9) of the cap. Longhorn refuses new
+      # snapshots at the cap, which fails every deploy of the service. SNAPSHOT_CAPS declares
+      # jellyfin-config=17179869184, the only capped volume. The snapshot metric carries `volume`
+      # and the claim name lives on the capacity metric, so the join takes `pvc` from there;
+      # `group` makes the capacity side a value of 1. The inner `max by (volume, snapshot)` is the
+      # bridge's dedupe of a snapshot two managers report. `for: 15m` is SNAPSHOT_CAP_CONSECUTIVE (3)
+      # x 300s.
+      - alert: LonghornSnapshotNearCap
+        expr: >-
+          sum by (pvc) (
+            max by (volume, snapshot) (longhorn_snapshot_actual_size_bytes)
+            * on (volume) group_left (pvc)
+            group by (volume, pvc) (longhorn_volume_capacity_bytes{pvc="jellyfin-config"})
+          ) >= 17179869184 * 0.9
+        for: 15m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: Snapshot space of {{ $labels.pvc }} is at 90% of its cap.
+          description: >-
+            {{ $labels.pvc }} holds {{ $value | humanize1024 }}B of snapshots against a cap of
+            16 GiB. Longhorn refuses new snapshots at the cap rather than pruning, so the next
+            deploy of the service fails until snapshots are deleted by hand.
+      # A capped claim with a capacity series and no snapshot series is a breach, not green. A
+      # capped volume is snapshotted on every deploy, so an empty reading means the exporter or
+      # the join went away. Zero capacity series is LonghornVolumesMissing's case.
+      - alert: LonghornSnapshotCapUnmonitored
+        expr: >-
+          group by (pvc) (longhorn_volume_capacity_bytes{pvc="jellyfin-config"})
+          unless on (pvc)
+          sum by (pvc) (
+            max by (volume, snapshot) (longhorn_snapshot_actual_size_bytes)
+            * on (volume) group_left (pvc)
+            group by (volume, pvc) (longhorn_volume_capacity_bytes{pvc="jellyfin-config"})
+          )
+        for: 15m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: Longhorn reports no snapshot series for the capped claim {{ $labels.pvc }}.
+          description: >-
+            {{ $labels.pvc }} declares a snapshot cap and has no longhorn_snapshot_actual_size_bytes
+            series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
+      # monitor-bridge's `kubelet_plugin_readonly` (#1243): a CSI global mount remounted ext4
+      # read-only after an iSCSI stall. Longhorn's own state stays healthy through it. The
+      # selector takes every origin: the Pi has no kubelet plugin mounts, and a pin to one
+      # origin would hide the same fault on another node. An absent series is healthy.
+      - alert: KubeletCSIMountReadOnly
+        expr: node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/plugins/.*"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: The CSI mount {{ $labels.mountpoint }} is read-only.
+          description: >-
+            {{ $labels.mountpoint }} remounted read-only after an iSCSI stall, behind a Longhorn
+            volume that still reads healthy. Scale the workload to 0, wait for the volume to
+            detach, and scale back.
+      # monitor-bridge's `etcd_db_size` (#2403): the DB over ETCD_DB_MAX_PCT (80) of its
+      # 2147483648-byte backend quota. At the quota etcd goes read-only and the control plane stops
+      # accepting writes. The size comes from `apiserver_storage_size_bytes`, which two jobs carry
+      # with one value, so `max` reads it once. The bridge treats an absent series as UP, because
+      # ScrapeTargetDown owns a dead apiserver scrape, so this rule has no census arm.
+      - alert: EtcdDBNearQuota
+        expr: 100 * max(apiserver_storage_size_bytes) / 2147483648 >= 80
+        for: 5m
+        labels:
+          severity: critical
+          service: etcd
+          shadow: "true"
+        annotations:
+          summary: The etcd database is over 80% of its backend quota.
+          description: >-
+            The etcd database is {{ $value | printf "%.0f" }}% of its 2 GiB quota. At the quota
+            etcd rejects every write and the control plane stops. Compact and defragment, or raise
+            --etcd-arg=quota-backend-bytes. `k3s-etcd-restore` has the procedure.

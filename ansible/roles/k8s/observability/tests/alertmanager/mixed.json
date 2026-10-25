@@ -1,0 +1,41 @@
+{
+  "receiver": "discord",
+  "status": "firing",
+  "groupLabels": {"alertname": "LonghornVolumeDegraded", "service": "longhorn"},
+  "commonLabels": {"alertname": "LonghornVolumeDegraded", "service": "longhorn", "severity": "critical"},
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager.observability:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {"alertname": "LonghornVolumeDegraded", "service": "longhorn", "severity": "critical", "pvc": "jellyfin-config"},
+      "annotations": {
+        "summary": "Longhorn volume jellyfin-config is degraded.",
+        "description": "jellyfin-config has fewer healthy replicas than it asks for. Read `kubectl -n longhorn-system get volumes.longhorn.io` for its robustness."
+      },
+      "startsAt": "2026-10-24T14:03:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "status": "firing",
+      "labels": {"alertname": "LonghornVolumeDegraded", "service": "longhorn", "severity": "critical", "pvc": "sonarr-config"},
+      "annotations": {
+        "summary": "Longhorn volume sonarr-config is degraded.",
+        "description": "sonarr-config has fewer healthy replicas than it asks for. Read `kubectl -n longhorn-system get volumes.longhorn.io` for its robustness.",
+        "runbook_url": "https://docs.local.example.com/longhorn-disaster-recovery/"
+      },
+      "startsAt": "2026-10-24T14:05:30Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "status": "resolved",
+      "labels": {"alertname": "LonghornVolumeDegraded", "service": "longhorn", "severity": "critical", "pvc": "radarr-config"},
+      "annotations": {
+        "summary": "Longhorn volume radarr-config is degraded.",
+        "description": "radarr-config has fewer healthy replicas than it asks for. Read `kubectl -n longhorn-system get volumes.longhorn.io` for its robustness."
+      },
+      "startsAt": "2026-10-24T13:40:00Z",
+      "endsAt": "2026-10-24T14:10:00Z"
+    }
+  ]
+}

@@ -275,7 +275,6 @@ def test_shared_k8s_roles_matches_the_known_set():
     every consumer of this function would go quiet rather than fail loudly."""
     assert pr.shared_k8s_roles() == {
         "arr-notification",
-        "cronjob-gate",
         "image-builder",
         "longhorn-api",
         "manifests",
@@ -320,7 +319,6 @@ def test_manifest_affecting_shared_roles_drops_the_deploy_time_roles():
     """
     assert pr.manifest_affecting_shared_roles().isdisjoint(
         {
-            "cronjob-gate",
             "longhorn-api",
             "volume-revert",
             "volume-snapshot",

@@ -266,32 +266,29 @@ def gate_snapshot(primary: Path, sha: str) -> Generator[Path | None]:
     on the first landing of every new service, which is the landing that most needs gating.
 
     UV_PROJECT_ENVIRONMENT is pointed at the primary's `.venv` for the life of the snapshot,
-    for the reason `deploy_playbook.run_playbook` sets it: `uv run` resolves its
-    project from the working directory, and a snapshot carries no `.venv`, so the probe would
-    otherwise build a fresh environment inside a directory removed seconds later.
+    for the reason `deploy_playbook.run_playbook` sets it: a snapshot carries no `.venv`, so
+    the probe would otherwise build a fresh environment in a directory removed seconds later.
 
-    DECIDED: NO tree lock is taken. `git worktree add --detach <tmp> <pinned sha>` reads and
-    writes nothing in the primary's working tree -- it writes the new directory and one file
-    under `.git/worktrees/` -- so there is nothing here for the lock that guards that tree to
-    serialise. Taking it non-blocking and degrading on a refusal is what the first cut did,
-    and it reopened the gap this whole path closes: `gitops-deploy.service` holds that lock
-    for its entire unit run, so the tick most landings race is exactly when the gate would
-    have fallen back to the primary and read `skipped` on a role the primary has not pulled.
+    DECIDED: NO tree lock is taken. `git worktree add --detach <tmp> <pinned sha>` writes the
+    new directory and one file under `.git/worktrees/`, nothing in the primary's working tree,
+    so there is nothing for the lock that guards that tree to serialise. Taking it
+    non-blocking and degrading on a refusal is what the first cut did, and it reopened the
+    gap this whole path closes: `gitops-deploy.service` holds that lock for its entire unit
+    run, so the tick most landings race is exactly when the gate would have fallen back to
+    the primary and read `skipped` on a role the primary has not pulled.
 
     DECIDED: under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. deploy.sh's
     reaper collects any directory there whose `.deploy-owner.lock` nobody holds -- and it
     creates that lock file itself to ask, so an unowned live gate snapshot would be reaped
     mid-gate by a concurrent deploy. Outside the root the reaper never looks, and the prune at
-    `deploy_under_locks.reap_dead_snapshots` only deregisters worktrees whose directory is already gone.
+    `deploy_under_locks.reap_dead_snapshots` only deregisters worktrees already gone.
 
-    Yields None, never raises, when the worktree could not be created. The caller decides what
-    that means -- it must NOT assume the primary can answer instead (see
-    `health_verdict.gate_from_the_deployed_tree`).
+    Yields None, never raises, when the worktree could not be created. The caller must NOT
+    assume the primary can answer instead (see `health_verdict.gate_from_the_deployed_tree`).
 
     DECIDED: the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s
     own default, which honours TMPDIR -- on this host that is `/tmp/user/1000`, so a leaked
-    snapshot would sit somewhere the recovery below does not name and an operator following it
-    would delete nothing. A test moves it with GATE_TMP_ROOT_ENV; nothing else sets that.
+    snapshot would sit where the recovery below does not look. GATE_TMP_ROOT_ENV moves it.
 
     A SIGKILL or a host reboot still leaks the registration: the directory survives, so
     nothing prunes it. Recover by hand with `rm -rf /tmp/land-gate-*` then
@@ -567,6 +564,9 @@ class Tools:
     clock: Callable[[], float] = time.monotonic
     # Wall-clock seconds, for comparing with a release record's `applied_at`.
     wall_clock: Callable[[], float] = time.time
+    # None means `host_wait`'s own, which imports this module and so cannot be named here.
+    host_targets: Callable[[Path, str], list[Any]] | None = None
+    wait_for_hosts: Callable[..., None] | None = None
 
 
 @dataclass(frozen=True)

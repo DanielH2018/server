@@ -98,7 +98,8 @@ the operator's approval for a module added beside a directory of the same name, 
 It also needs approval for a module at the top of one `sys.path` root that `land.py` inserts
 when it shadows a directory or module at the top of another. It reads those roots from
 `land.py`'s own inserts, not from `pythonpath`: the refusal protects what `land.py` imports,
-and `pythonpath` applies only under pytest. Across the `pythonpath` roots, the
+and `pythonpath` applies only under pytest. Across the `pythonpath` roots, every role's `files/`
+and every `scripts/<dir>` holding a `tests/`, the
 `no-two-import-roots-share-a-module-basename` row of `ansible/tests/repo/test_census_rows_python.py`
 catches two roots that hold the same module name. No test catches a module that shadows a
 directory in another root.
@@ -246,8 +247,10 @@ cannot see that difference, because it runs on 3.14 where both spellings are laz
 and its two companions, non-vacuity and a measured transport. They apply to every validator or
 guard in this tree.
 
-**Length and `monkeypatch` are ratcheted.** A module may be 600 lines and a test module 500,
-counted the way `wc -l` counts. A test module may patch no first-party module at all — a
+**Length and `monkeypatch` are ratcheted.** A module may be 450 code lines and a test
+module 400. A code line holds a token that is neither a comment nor part of a docstring,
+so blank lines, comments and docstrings are free and the cap never argues for deleting
+documentation. A test module may patch no first-party module at all — a
 patch on the standard library is not counted, because no seam here can remove one. The files
 already past either limit are listed one per line in
 `ansible/tests/repo/module_length_allowlist.txt` and
@@ -263,14 +266,17 @@ spots are written down.
 It also diffs both lists against `origin/master`, so an entry only ever falls or is deleted
 and the lists shrink to nothing as the splits land. A path may be added to a list only when
 `origin/master` does not track the file — it is new, or renamed — or when the same commit
-changes the guard, since a widened rule finds files that were always over.
+changes the guard and leaves the file itself alone, since a widened rule finds files that
+were always over, and a file that was always over has the content it had on the base.
 
 **The length cap prompts a decision; it does not force a split** (#3661). Split a module
 where each piece reads alone. A split whose piece calls methods only its parent defines, or
 copies a literal it may not import, adds an interface and hides nothing. Such a module stays
 whole, and its length entry ends `# conjoined: <why>`. The ratchet accepts that entry as an
 addition. It accepts a rise only in a diff that rewrites the reason to name the new max, so
-growth restates the decision and the number it approves. The `# DECIDED:` marker at the top of `module_length_allowlist.txt` is the ruling.
+growth restates the decision and the number it approves. A reason names one line count at
+most, the max it approves; the earlier raises are in the commit history, not on the line.
+The `# DECIDED:` marker at the top of `module_length_allowlist.txt` is the ruling.
 The monkeypatch list takes no reason, because a seam can always remove a patch.
 
 That comparison

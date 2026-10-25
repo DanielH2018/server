@@ -18,6 +18,7 @@
     agent_user_home: "{{ claude_code_agent_user_home }}"
     agent_user_clone_dir: "{{ claude_code_agent_user_clone_dir }}"
     agent_user_repo: "{{ claude_code_agent_user_repo }}"
+    agent_user_uv_version: "{{ initial_setup_uv_version }}"
 
 # The reverse of the expiry the switched-off arm below sets.
 - name: Lift the agent user's account expiry
@@ -111,7 +112,7 @@
   loop: [service, timer]
   become: true
   when: claude_code_agent_user_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 # Shares claude-rc's webhook file in /etc/claude-rc, which the role creates on every host.
 - name: Install the agent user's clone sync failure alert
@@ -517,4 +518,4 @@
     - clone-sync-alert.service
   become: true
   when: not claude_code_agent_user_enabled
-  notify: Reload systemd
+  notify: Reload systemd for claude_code

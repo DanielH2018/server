@@ -61,7 +61,6 @@ _UNCOVERED_ROLES = {
     # test_image_builder_security_context.py owns those.
     "image-builder",
     # No manifest templates — each resolves a fact or drives kubectl/the Longhorn API directly.
-    "cronjob-gate",
     "volume-snapshot",
     "longhorn-api",
     "volume-revert",
@@ -72,6 +71,10 @@ _UNCOVERED_ROLES = {
     # No manifest templates — its only content is upstream's vendored CRD file, which starts
     # no container.
     "traefik-crds",
+    # No manifest templates — its workloads are upstream's vendored longhorn.yaml, and the fleet
+    # guards do not read vendored files (the H1 plan, *Vendored upstream manifests*). Its
+    # longhorn-manager runs privileged by upstream's design, which this corpus would refuse.
+    "longhorn",
 }
 
 # The real container count is ~103. A floor of 40 cannot distinguish a broken collector from

@@ -47,6 +47,25 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t release-staleness-check "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t release-staleness-check "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: two cron periods plus 300s. One period is
+# the normal gap, the second is a slot that a boot grace or a failed run skips, and the 300s covers
+# cron start jitter, the 1m `node` scrape and the 1m rule evaluation. Rendered from the cron's own
+# minute, read as `*/N`. Any other shape has no single period, so the render fails rather than
+# publish a deadline shorter than the real gap. ansible/tests/services/test_b1_rule_literals.py
+# pins the rule's literal to this value.
+{% set _every_n = k3s_release_staleness_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if _every_n.isdigit() and '*/' ~ _every_n == k3s_release_staleness_cron_minute | string %}
+DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
+{% else %}
+{{ release_staleness_cron_minute_not_every_n | mandatory('k3s_release_staleness_cron_minute must be */N for this script to derive DEADLINE_S, got ' ~ k3s_release_staleness_cron_minute) }}
+{% endif %}
+TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP, same reasoning as manifest-prune-check.sh beside this one:
@@ -118,6 +137,11 @@ if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   fi
   MSG="${REACHOUT_NOTE}git fetch origin master failed in ${REPO_DIR}: ${FETCH_ERR}"
   logger -t release-staleness-check "status=${STATUS} ${MSG}"
+  # The textfile, before the push, as at the end of the script. This run's verdict is the fetch's.
+  SUCCESS=0
+  [[ "$STATUS" == "up" ]] && SUCCESS=1
+  write_check_textfile release-staleness-check "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t release-staleness-check "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
   kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
   seed_empty_set
   exit 0
@@ -195,6 +219,14 @@ if [[ -n "$REALERT" ]]; then
 fi
 
 logger -t release-staleness-check "status=${STATUS} ${MSG}"
+# The textfile, before the push: the verdict must not wait on Kuma. This is the run's one verdict.
+# The "Not a recovery" UP above is a notification marker, so it writes nothing. The producer metric
+# contract is docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh
+# writes the file atomically. A failed write logs and the run goes on to its push.
+SUCCESS=0
+[[ "$STATUS" == "up" ]] && SUCCESS=1
+write_check_textfile release-staleness-check "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t release-staleness-check "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
 
 # The set is recorded whatever the push outcome. A lost DOWN push is paged by monitor-bridge's

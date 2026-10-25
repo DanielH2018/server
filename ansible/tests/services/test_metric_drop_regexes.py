@@ -136,7 +136,13 @@ MUST_KEEP = [
     (
         "kube-state-metrics",
         "kube_job_status_failed",
-        "a gate Job's outcome; one prefix from the dropped kube_job_failed",
+        "a gate Job's outcome; the pod count, beside kube_job_failed's condition",
+    ),
+    (
+        "kube-state-metrics",
+        "kube_job_failed",
+        "K3sUpgradeJobFailed in observability's files/rules/k3s-upgrade.yaml reads the "
+        "Failed condition (H6.1b); until then the family was dropped and the rule was inert",
     ),
     (
         "kube-state-metrics",

@@ -57,6 +57,15 @@ directory.
   opaquely, check `gitops_deploy_discord_webhook` is in scope.
 - **It pages a login dead at start, not one that dies mid-run**, which leaves the host
   `active`. `docs/claude-code-rc-caps.md` has why (#4618).
+- **A timer that stops firing pages through a textfile, because `OnFailure=` sees only a failed
+  run** (#6165). The clone, dotfiles and memory syncs, the triage poller and the fan-out server
+  lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.
+  Observability's `host-checks.yaml` pages a stale file as `Claude<Check>NotReporting` on each
+  host that arms the timer. The deadline derives from the timer's period, which must stay
+  `<N>min`. ENFORCED: `ansible/tests/setup/test_claude_timer_rule_literals.py`. A timer's flag
+  set false makes its rule fire, so the PR that disarms a timer deletes its rule.
+  `claude-rc-restart` writes no file, and `ansible/tests/setup/test_setup_crons_write_a_textfile.py`
+  holds the reason in its `EXEMPT`.
 
 ## Traps already paid for
 
@@ -127,6 +136,14 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   (`scripts/secrets_mgmt/consumers.py`), because no deploy tag re-renders these scripts.
 - **No task here notifies `Restart claude-rc`**, so an apply that changes only these crons
   leaves every Remote Control session running.
+- **Each cron also writes a check file** to `/var/lib/node-exporter-textfile/`,
+  `sync-artifacts.prom` and `claude-otel-health.prom`, through `write_check_textfile` in
+  `homelab-check-lib.sh` (M6 batch B6). The `ArtifactsSync*` and `OtlpDoor*` rules in
+  observability's `host-checks.yaml` page them in shadow beside the Kuma tiles until their
+  cutover. Each script renders its deadline from its own cron minute, so that minute must stay
+  `*/N`, and `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it. The
+  directory task in `tasks/node_crons.yml` sets the same owner, group and mode as the k3s
+  role's disk-health task, so the crons do not wait on a hand apply of `k3s-bringup.yml`.
 
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 
@@ -138,8 +155,9 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   `claude_code_artifacts_peer_sources` (and its twin) stops that peer's sync.
 - **Abort valve:** a `flock` holds runs to one at a time, and ssh runs in `BatchMode` with a
   10-second connect timeout, so an unreachable peer fails the run rather than hanging it.
-- **Evidence:** `journalctl -t sync-artifacts`, and the `Artifacts Peer Sync` Kuma tile, which
-  goes DOWN at `claude_code_artifacts_sync_alert_after_failures` consecutive failures.
+- **Evidence:** `journalctl -t sync-artifacts`, the `Artifacts Peer Sync` Kuma tile, which
+  goes DOWN at `claude_code_artifacts_sync_alert_after_failures` consecutive failures, and
+  `sync-artifacts.prom`, which carries the same verdict for the shadow rules.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 
@@ -151,7 +169,8 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   stops the timer and removes its units.
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.
 - **Evidence:** `journalctl -u claude-memory-sync` lists each file a run changed or deleted;
-  a failure pages Discord.
+  a failure pages Discord, and `claude-memory-sync.prom` pages a timer that stopped. A run the
+  empty-index condition skips writes no file either, so an empty store pages too.
 
 ## Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
 
@@ -173,7 +192,7 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately, and a
   poller failure pages at most once an hour. In shadow
   mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u claude-triage-poll` list each
-  run the poller would have started.
+  run the poller would have started. `claude-triage-poll.prom` pages a poller that stopped.
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
   what the runs diagnosed and what they cost.
 
@@ -184,7 +203,10 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Mode:** the agent's `state` and `dotfiles`; off removes its `<name>-*-sync` units.
 - **Abort valve:** the clone sync skips unless the clone is a clean `master`; the dotfiles sync
   refuses a source without the agent variant.
-- **Evidence:** `journalctl -u <name>-{clone,dotfiles}-sync`; a failure pages Discord.
+- **Evidence:** `journalctl -u <name>-{clone,dotfiles}-sync`; a failure pages Discord, and
+  `<name>-{clone,dotfiles}-sync.prom` pages a timer that stopped. A clone left dirty or off
+  `master` skips with exit 0 and still writes its file, so the file says the timer runs, not
+  that the clone is current.
 
 ## Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)
 
@@ -224,7 +246,8 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   `homelab_awaiting_operator{reason}` and its `_oldest_seconds` twin to
   `/var/lib/node-exporter-textfile/fanout_operator_waits.prom`: the PRs and batches that wait
   on a person, and the owed manual-plane applies (`scripts/dev/fanout_lib/operator_waits.py`).
-  Disarming removes the file.
+  Disarming removes the file. Each clean run also writes `claude-fanout-server-lander.prom`,
+  which pages a timer that stopped.
 - **Next-run review:** before raising the pace cap or widening the rule, read a week of
   `ineligible` reasons and the verdicts of the landings it started.
 

@@ -237,6 +237,18 @@ gate 3 needs the API server up.
 Single-server cluster, so this is a `--cluster-reset` restore on daniel-box. **It rolls the whole
 cluster back to the snapshot's moment** — anything created since is gone.
 
+**First mask the two timers that restart or replace k3s unattended** (H6), so neither fires while
+k3s is stopped or half restored. `homelab-k3s-restart.timer` would restart the unit inside its
+window, and `homelab-updater.timer` installs package changes that reach it. Mask them before the
+stop, and unmask them only once the checks under *After the restore* pass. Do not start the
+restore on a weekday between 11:32 and 11:40 (host time) without masking first.
+
+```bash
+sudo systemctl mask --now homelab-k3s-restart.timer homelab-updater.timer
+```
+
+Then stop k3s and restore:
+
 ```bash
 sudo systemctl stop k3s
 sudo -i
@@ -275,9 +287,22 @@ If it does not rejoin, re-run the documented join:
    with a PVC can start.
 3. Longhorn UI — volumes attached and healthy. If a volume's data is also lost, restore it from
    the Longhorn backup *after* the PVC object exists, not before.
-4. Redeploy from Ansible (`./scripts/deploy.sh`) to reconcile anything the snapshot predates.
+4. Let Flux reconcile anything the snapshot predates. The snapshot holds Flux's controllers,
+   its sync objects and every Kustomization, so Flux follows `prod` again once the API
+   server answers. When `flux-system` is missing or broken, install Flux by
+   [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in `docs/flux-deploy-plane.md`, and when
+   a sync object is broken, take *Recovering Flux by hand* there. No Ansible path deploys a
+   workload on the cluster.
 5. Run `sudo /usr/local/bin/manifest-prune-check.sh` — a restore can resurrect objects that were
    deliberately retired between the snapshot and now, which is exactly what it detects. The
    staged manifest dirs it diffs against are mode 0700, so a non-`sudo` run now fails fast
    (`exit 64`, "must run as root") rather than doing anything useful — it needs root to see the
    real manifest set at all.
+
+Last, unmask the two timers once steps 1 to 4 pass, and start them so the next window and the next
+update run on schedule:
+
+```bash
+sudo systemctl unmask homelab-k3s-restart.timer homelab-updater.timer
+sudo systemctl start homelab-k3s-restart.timer homelab-updater.timer
+```

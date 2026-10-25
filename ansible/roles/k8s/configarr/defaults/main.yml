@@ -3,7 +3,7 @@
 # configarr-health, that READS the last Job through its own ServiceAccount and pushes Kuma.
 # Until H2.5b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13) that reader
 # was a daniel-box host cron; setup/k8s_host_files keeps the absent arms that remove it.
-configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.35.0@sha256:13ef4d9a6ebc13178c8c74813dd12e11ea7331e186a492d79d938513887b96d4
+configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.36.0@sha256:0d15c74cf74cd980bb2f9e9dd0cfdde1655a8f928e481c3258d7ccd4cde9dcbc
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
@@ -52,6 +52,11 @@ configarr_k8s_max_age_hours: 26
 # sync runs. Each run re-reads the same Job and re-reports it; the age gate above is what
 # turns a stale one red. The host cron's UTC minute field, unchanged.
 configarr_k8s_health_schedule: "*/10 * * * *"
+
+# The ConfigMap the health reader writes its verdict to as annotations, which kube-state-metrics
+# exports (M6 batch B6b). The shadow rule ConfigarrHealthNotReporting holds the CronJob's last
+# successful run to three periods of the schedule above, 1800s.
+configarr_k8s_health_verdict_configmap: configarr-health-verdict
 
 # The health reader runs in the repo's pinned python image and gets kubectl from an init
 # container of alpine/k8s, which keeps the binary at /usr/bin/kubectl (its upstream Dockerfile,

@@ -1,9 +1,12 @@
 """The sets derived from containers_list ``tier``, for readers outside Ansible.
 
 ``k3s_longhorn_r2_volumes`` is a Jinja expression over ``containers_list`` (#3389), and so are
-``k3s_longhorn_weekly_volumes`` and ``k3s_longhorn_nobackup_volumes`` (#4207). A raw YAML read
-of the k3s defaults returns the expressions rather than the volumes. Every Python reader of
-the tier lists resolves them here, through the same filters
+``k3s_longhorn_weekly_volumes`` and ``k3s_longhorn_nobackup_volumes`` (#4207). The three live
+in the ``longhorn-reconcile`` role's defaults (``repo_paths.LONGHORN_RECONCILE_ROLE``) since
+H1.7a. The schedule, retain and arm keys are the ``longhorn-backup`` role's since H1.7b
+(``repo_paths.LONGHORN_BACKUP_ROLE``). A raw YAML read of those defaults returns the expressions
+rather than the volumes. Every
+Python reader of the tier lists resolves them here, through the same filters
 ``ansible/filter_plugins/service_tier.py`` and ``longhorn_groups.py`` the playbook runs. ``shed_set`` is the lost-node
 shed set ``probe.py shed-set`` prints, from the same module.
 """
@@ -67,7 +70,11 @@ _DERIVED = {
 
 
 def resolved_tier_lists(k3s_defaults: dict, entries: list[dict] | None = None) -> dict:
-    """A copy of the k3s role's raw defaults with each derived tier list resolved.
+    """A copy of a role's raw defaults with each derived tier list resolved.
+
+    The expressions sit in the ``longhorn-reconcile`` role's defaults. A dict that lacks a tier
+    key is treated like one holding the expression, so a caller that passes the k3s role's
+    defaults, to read its schedule keys as well, still gets all three lists.
 
     The derived lists are ``k3s_longhorn_r2_volumes``, ``k3s_longhorn_weekly_volumes`` (a
     ``{namespace/pvcName: shard}`` map) and ``k3s_longhorn_nobackup_volumes``. A value that is

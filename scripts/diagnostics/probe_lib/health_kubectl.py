@@ -67,6 +67,19 @@ def k8s_cronjob_args(name, namespace):
     return ["-n", namespace, "get", "cronjob", name, "-o", "json"]
 
 
+def k8s_kustomization_args(tag):
+    """The kubectl arguments that fetch Flux's Kustomization `<tag>` as JSON."""
+    return [
+        "-n",
+        "flux-system",
+        "get",
+        "kustomizations.kustomize.toolkit.fluxcd.io",
+        tag,
+        "-o",
+        "json",
+    ]
+
+
 def k8s_jobs_args(namespace):
     """The kubectl arguments for every Job in a namespace, as JSON.
 
@@ -82,8 +95,7 @@ def k8s_jobs_args(namespace):
 def k8s_job_pods_args(job_name, namespace):
     """The kubectl arguments for one Job's pods, as JSON.
 
-    `batch.kubernetes.io/job-name`, not the deprecated bare `job-name` — the same choice
-    `roles/k8s/cronjob-gate/tasks/main.yml` documents and makes, for the same reason: if the
+    `batch.kubernetes.io/job-name`, not the deprecated bare `job-name`: if the
     legacy label is ever dropped, the other selector silently matches nothing.
     """
     return [

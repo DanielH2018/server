@@ -1,4 +1,4 @@
-"""Log-pipeline verdicts for check.py — Loki ingestion freshness and shipper/server drops.
+"""Log-pipeline verdicts for check.py — shipper drops, swallowed verdicts, OTel and Tempo errors.
 
 These decide; `checks/logs.py` fetches. Each takes its inputs as arguments and reads no
 module-level config, which is what makes it safe to live here — see bridge/parsing.py's header
@@ -10,16 +10,6 @@ consumes, so its name said less about its contents with every addition.
 """
 
 import re
-
-
-def loki_ingestion_fresh(count: float | None, window: str) -> tuple[bool, str]:
-    """Decide log-pipeline freshness from the line count over `window` (None = no series)."""
-    if not count:  # None or 0 — nothing shipped: Alloy dead, positions corrupt, etc.
-        return (
-            False,
-            "no log lines ingested in %s — Alloy/Loki pipeline silent" % window,
-        )
-    return True, "%d log lines in %s" % (int(count), window)
 
 
 # Loki's discard reason for an entry that arrived outside its accept window. Distinct from every
@@ -226,6 +216,56 @@ HC_ROUTED_TAGS = frozenset(
     {"longhorn-backup-health", "pi-sd-health", "pi-recovery-health"}
 )
 
+# The producers whose Kuma tile M6 is deleting (docs/target-architecture/monitoring/m6-retire-kuma.md,
+# "The cutover order"). From a batch's Cutover-1a until its Cutover-2, the producer still pushes
+# into a token whose tile is gone, and kuma_push logs that refused push as a `rejected` line. A
+# tag listed here is left out of the `rejected` set ONLY: a lost `status=down` push still counts,
+# and its `status=` lines still count as landed siblings. Each batch's shadow PR adds its tags, a
+# week before its Cutover-1a, so the exclusion is deployed before any tile goes. A tag is the one
+# `parse_push_line` reads: a shell script's `logger -t` name, or a Python producer's syslog
+# identifier. The set goes with `swallowed_verdicts` in C-7. One tag per line, so a batch's
+# additions merge without touching another's.
+KUMA_RETIRING_TAGS = frozenset(
+    {
+        "claude-otel-health",
+        "configarr-health",
+        "crowdsec-appsec-verify",
+        "crowdsec-home-allowlist",
+        "crowdsec-remote-allowlist",
+        # B2: initial_setup. secret_rotation.py's own push logs under a `warning:` prefix that
+        # parse_push_line does not match, so only the wrapper's tag is listed.
+        "docs-refresh",
+        "etcd-restore-drill-vm",
+        "etcd-snapshot-offbox",
+        "eval-run",
+        # B3: gitops_deploy's two timers.
+        "github-interaction-limit",
+        "github-ruleset-drift",
+        # B4: other setup roles. The renovate notifier and agent beat from a unit's curl, which
+        # logs no `push failed` line, so they list nothing. The drill's two tiles share the tag.
+        "fake-remux-health",
+        "janitorr-health",
+        "live-drift-check",
+        "loki-read-route-health",
+        "longhorn-backup-health",
+        "manifest-prune-check",
+        # B7: the pi-peer-backup CronJob logs under this name from `report()` in its script, and
+        # swallowed_verdicts reads the pod through `{container="pi-peer-backup"}`. autofix-bridge
+        # and cloudflare-ddns log to no stream the selector reads, so they list nothing.
+        "pi-peer-backup",
+        # B5: the Pi package's two token heartbeats. They are also HC_ROUTED_TAGS while they
+        # read KUMA_PUSH_OK, and listing them here keeps their refused pushes quiet once
+        # Cutover-2 drops that routing.
+        "pi-recovery-health",
+        "pi-sd-health",
+        "release-staleness-check",
+        "secret-rotation-audit",
+        "setup-drift-check",
+        "sync-artifacts",
+        "ups-secondary-health",
+    }
+)
+
 
 def swallowed_verdicts(
     lines: list[tuple[int, str]], window: str, truncated: bool
@@ -268,6 +308,9 @@ def swallowed_verdicts(
 
     A tag in HC_ROUTED_TAGS is not counted either: its own script already pages a lost push
     through healthchecks.io.
+
+    A REJECTED push from a tag in KUMA_RETIRING_TAGS is not counted either: its tile is being
+    deleted, so the token matches no tile by design. Its lost DOWN pushes still count.
     """
     latest: dict[str, tuple[int, str, str, str, str]] = {}
     for ts, line in lines:
@@ -281,7 +324,9 @@ def swallowed_verdicts(
     rejected = {
         t: v
         for t, v in latest.items()
-        if v[2] == "rejected" and t not in HC_ROUTED_TAGS
+        if v[2] == "rejected"
+        and t not in HC_ROUTED_TAGS
+        and t not in KUMA_RETIRING_TAGS
     }
     if rejected:
         named = "; ".join(
@@ -325,107 +370,4 @@ def swallowed_verdicts(
         "DOWN verdict swallowed for %s while %d sibling tag(s) landed in %s — the tile "
         "reads stale until its deadline; `journalctl -t <tag>` has the verdict"
         % (named, len(landed), window)
-    )
-
-
-# Kuma's `server/model/monitor.js` logs a failed send as TWO error-level lines and moves on:
-# `Cannot send notification to <name>`, then the error itself (`log.error("monitor", e)`), which
-# for an HTTP provider is the axios message `throwGeneralAxiosError` builds — `Error: Request
-# failed with status code 429 (code=ERR_BAD_REQUEST) (HTTP 429 Too Many Requests) {...body}`.
-# A failed send is not retried, so the alert it carried reached nobody (#1891). Both lines are
-# printed through Kuma's colour logger, so ANSI escapes surround the level tag and can follow
-# the name; the name runs to the first escape or the end of the line. #1895 filed the reason
-# as debug-only and absent from Loki; measured 2026-09-17 over 14 days it is there at ERROR
-# level, one reason line per drop (74 drops, 69 x HTTP 429 + 5 x HTTP 400), so the tile can
-# say why without raising Kuma's log level — which would write the webhook URL to Loki
-# (uptime-kuma/CLAUDE.md, the AutoKuma notification-rewrite trap).
-_NOTIFY_FAILURE_RE = re.compile(
-    r"Cannot send notification to (?P<name>[^\x1b]+?)\s*(?:\x1b|$)"
-)
-# The reason line: `ERROR:` (optionally colour-reset), then `Error: <message>`. Kuma's own
-# check-failure lines are WARN and read `Pending: Request failed with status code 500`, so
-# anchoring on the ERROR tag is what keeps a flapping monitor's probes out of the reason set.
-_NOTIFY_REASON_RE = re.compile(r"ERROR:(?:\x1b\[[0-9;]*m)?\s*Error: (?P<msg>.+)$")
-# The status the provider recorded, in the form Kuma writes it: `(HTTP 429 Too Many Requests)`.
-_HTTP_STATUS_RE = re.compile(r"\(HTTP (?P<status>\d{3}[^)]*)\)")
-_URL_RE = re.compile(r"https?://\S+")
-_REASON_MAX = 60
-
-
-def parse_notify_failure_line(line: str) -> str | None:
-    """The notification name Kuma failed to send to, else None."""
-    m = _NOTIFY_FAILURE_RE.search(line)
-    return m["name"] if m else None
-
-
-def parse_notify_reason_line(line: str) -> str | None:
-    """The reason Kuma recorded for a dropped send, else None for any other line.
-
-    An HTTP provider's reason is reduced to its status — `HTTP 429 Too Many Requests` — rather
-    than the whole axios message: the response body Kuma appends is the provider's JSON, and the
-    message can carry the request URL, which for Discord IS the webhook secret. A non-HTTP
-    reason (an SMTP login failure) keeps the message's first %d characters with any URL
-    replaced, for the same secrecy reason. The tile's message reaches Discord and email.
-    """ % _REASON_MAX
-    m = _NOTIFY_REASON_RE.search(line)
-    if not m:
-        return None
-    status = _HTTP_STATUS_RE.search(m["msg"])
-    if status:
-        return "HTTP " + status["status"].strip()
-    return _URL_RE.sub("<url>", m["msg"])[:_REASON_MAX].strip()
-
-
-def kuma_notify_failures(
-    lines: list[tuple[int, str]], window: str, truncated: bool
-) -> tuple[bool, str]:
-    """Pure: did Kuma drop a notification send inside `window`, and why?
-
-    `lines` is [(ts, line), ...] for the failure AND reason lines a range query returned over
-    `window`; `truncated` says the fetch hit its cap. Every failure counts — a drop is a drop
-    whether the tile in question was transitioning or resending, and Kuma's log does not say
-    which. The verdict names each notification with its drop count and the reasons Kuma
-    recorded with theirs, so a Discord rate-limit (HTTP 429) and a webhook Discord rejected
-    (HTTP 400) read differently on the tile, and the tile itself notifies BOTH channels
-    (uptime-kuma's static-monitors template) — a page for a dropped Discord POST sent only
-    over the same Discord webhook is the failure it reports.
-
-    Reasons are counted as a SET beside the drops, not joined to them one to one: four drops
-    landed inside two seconds on 2026-09-09 20:20, and a nearest-timestamp join would put a
-    429 on a 400's drop and read as fact. A drop whose reason line is outside the window, or
-    that Kuma logged without one, is reported as `reason not logged` rather than assumed.
-
-    The window is the whole hysteresis: a drop pages for `window` and then clears, and the
-    Discord tile's transition message plus this page together say "an alert went missing
-    around <time>; check the tiles' current state".
-    """
-    counts: dict[str, int] = {}
-    reasons: dict[str, int] = {}
-    for _ts, line in lines:
-        name = parse_notify_failure_line(line)
-        if name is not None:
-            counts[name] = counts.get(name, 0) + 1
-            continue
-        reason = parse_notify_reason_line(line)
-        if reason is not None:
-            reasons[reason] = reasons.get(reason, 0) + 1
-    if not counts:
-        if truncated:
-            return True, (
-                "no dropped Kuma notifications in the newest part of %s — fetch hit its "
-                "line cap, older lines unread" % window
-            )
-        return True, "no dropped Kuma notifications in %s" % window
-    dropped = sum(counts.values())
-    unexplained = dropped - sum(reasons.values())
-    if unexplained > 0:
-        reasons["reason not logged"] = unexplained
-    named = ", ".join("%s x%d" % (n, c) for n, c in sorted(counts.items()))
-    why = ", ".join(
-        "%s x%d" % (r, c) for r, c in sorted(reasons.items(), key=lambda rc: -rc[1])
-    )
-    return False, (
-        "Kuma dropped %d notification send(s) in %s (%s) — reasons: %s — Kuma does not "
-        "retry a failed send, so an alert reached nobody; check the DOWN tiles' current state"
-        % (dropped, window, named, why)
     )

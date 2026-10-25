@@ -59,7 +59,7 @@
     mode: "0644"
   become: true
   loop: "{{ claude_code_login_caps_uids }}"
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 # The reverse of the two tasks above. It sweeps every user-<uid>.slice.d rather than naming the
 # uids to remove: a uid that left the list is no longer in any variable, and the switch-off case
@@ -83,7 +83,7 @@
   when: >-
     (item.path | basename | replace('user-', '') | replace('.slice.d', '') | int)
     not in claude_code_login_caps_uids
-  notify: Reload systemd
+  notify: Reload systemd for claude_code
 
 # ── The pytest fan-out cap ──────────────────────────────────────────────────────────────
 # One environment.d file per account, in that account's own home: pam_systemd reads

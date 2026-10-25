@@ -1,0 +1,373 @@
+# Scrape health: every target Prometheus scrapes, read from the `up` series. Plain YAML, never
+# Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m6-retire-kuma.md, "A3 and the handoffs it closes".
+#
+# SHADOW UNTIL M6's BATCH A3 CUTS OVER. Kuma's Scrape Targets and Cluster Scrape Targets tiles
+# page `up == 0` today. monitor-bridge's check_targets_down reads `up{origin="daniel-server"}`
+# and check_cluster_targets reads the complement, so between them they read every series
+# below with no job exempt. M1 convention 5 allows one pager, so every rule here routes to the
+# blackhole receiver until Cutover-b drops `shadow`.
+#
+# One `ScrapeTargetDown` rule per owning role. A rule's `service` is a literal, because
+# scripts/validate/alert_conventions.py takes `service` from a literal, a workload-service
+# join, or a job whose every target sets it, and a static scrape job has none of the last two.
+# The last rule is the catch-all: a job that no earlier rule names still pages, with
+# service="unmapped". ansible/tests/services/test_scrape_target_rule_jobs.py fails until every
+# job in the rendered prometheus.yml is in exactly one earlier rule, so "unmapped" is a
+# fallback and never a destination.
+#
+# DECIDED: service is the deploy tag of the role that deploys the target (Open question 2 of
+# the M6 plan), with `k3s` for the control plane's own endpoints, `daniel-pi` for the Pi's
+# host-level exporters and `exportarr` for the *arr sidecars, whose pods belong to three
+# roles at once. The three blackbox jobs carry service="blackbox-exporter" by this rule's literal,
+# which overrides the per-probe `service` its targets set, because a failed scrape of that job
+# means the exporter is unreachable and says nothing about the probed service.
+groups:
+  - name: scrape-targets
+    rules:
+      - alert: ScrapeTargetDown
+        expr: up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job=~"loki-homelab|alloy"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="alloy-pi"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: alloy
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job=~"node-pi|dockerd-pi|containerd-pi"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="node"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: node-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="gpu"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: gpu-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job=~"deploy-pipeline|monitor-bridge"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      # autofix-bridge's check exporter (M6 batch B7). It gets its own rule rather than the
+      # catch-all's `unmapped` service. AutofixBridgeDown reads the same series with an `absent()`
+      # arm and a critical severity; this rule keeps A3's one-rule-per-job census whole.
+      - alert: ScrapeTargetDown
+        expr: up{job="autofix-bridge"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: autofix-bridge
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="flux"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: flux
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: crowdsec
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="traefik-k8s"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="speedtest"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: speedtest
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="pihole"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: pihole
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="uptime-kuma"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: uptime-kuma
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="home-assistant"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: home-assistant
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="nut"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: nut-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job=~"valheim-stats|terraria-stats"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: game-stats
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="longhorn"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="coredns-host"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: coredns
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job="exportarr"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: exportarr
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: k3s
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: blackbox-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      - alert: ScrapeTargetDown
+        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: unmapped
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
+            minutes, so its exporter is down or unreachable from Prometheus and its series have
+            gone stale. Read the exporter pod's events and log, or the host's unit for a static
+            target.
+      # The bridge's two fail-closed floors, ported: CLUSTER_TARGETS_MIN visible series outside
+      # daniel-server and TARGETS_MIN on it. A Prometheus that answers while its `up` vector has
+      # emptied makes every rule above evaluate to nothing, which this rule reads as a fault.
+      # `or vector(0)` turns an empty count into 0, so the empty-input case fires. The 10m hold
+      # matches ScrapeTargetDown's, so a rolling pod's scrape gap pages neither.
+      # ansible/tests/services/test_scrape_target_rule_jobs.py pins both floors to the bridge.
+      - alert: ScrapeTargetsMissing
+        expr: >-
+          (count(up{origin!="daniel-server"}) or vector(0)) < 3
+          or (count(up{origin="daniel-server"}) or vector(0)) < 1
+        for: 10m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: Prometheus sees too few scrape targets.
+          description: >-
+            Fewer than 3 scrape targets outside daniel-server, or none on it, have reported for
+            10 minutes. The metrics estate is missing, so target health is unknown rather than
+            fine. Read prometheus_tsdb_head_series, then daniel-server's remote write.

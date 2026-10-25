@@ -1,0 +1,83 @@
+---
+# What Longhorn needs on the node itself, as opposed to the objects in the cluster: the iSCSI and
+# NFS client packages, and multipathd's blacklist for Longhorn's devices. Longhorn's own install is
+# the `longhorn` Kustomization's (H1.5a); this file is the host half it leaves behind.
+#
+# TAGGED `longhorn_host` ONLY, never `longhorn` or `longhorn_backup`. From H1.5a until H1.7b,
+# bring-up step 1 skipped both of those tags (the H1 plan's *The Longhorn window*), because the
+# tasks they selected read `longhorn-system` objects before Flux had created them. No task carries
+# either tag now, and the test keeps it so: a `--skip-tags` exclusion matches any tag a task
+# carries, so a host task that regained `longhorn` would again name an object Flux owns.
+# ansible/tests/setup/test_k3s_longhorn_host_tasks.py holds this.
+#
+# The agent flow keeps its own copies of the first three tasks in agent.yml. The fourth removes
+# the manifests that retired tasks staged on the server, Longhorn's and five others', so it has
+# no agent copy: no agent ever staged them. It sits here because `longhorn_host` is the narrow
+# tag a hand apply of this role already runs, and it touches nothing in the cluster.
+
+- name: Install Longhorn prerequisites
+  tags: [longhorn_host]
+  # open-iscsi is not optional: without it volumes hang in "Attaching" with an error that
+  # never names the missing package.
+  ansible.builtin.apt:
+    name:
+      - open-iscsi
+      - nfs-common
+    state: present
+  become: true
+
+- name: Blacklist Longhorn devices from multipathd
+  tags: [longhorn_host]
+  # The Longhorn KB's multipath fix (troubleshooting-volume-with-multipath): multipathd
+  # claims freshly attached /dev/longhorn devices and every mount fails "already in use".
+  # Latent behind the node CR's standing Multipathd:False warning until a mass reattach
+  # cycle stalls many workloads on it at once.
+  ansible.builtin.blockinfile:
+    path: /etc/multipath.conf
+    create: true
+    mode: "0644"
+    owner: root
+    group: root
+    marker: "# {mark} ANSIBLE MANAGED - longhorn multipath blacklist"
+    block: |
+      blacklist {
+          devnode "^sd[a-z0-9]+"
+      }
+  become: true
+  register: k3s_multipath_conf
+
+- name: Restart multipathd after a blacklist change # noqa no-handler
+  tags: [longhorn_host]
+  # Not a handler on purpose: the role's play has no handler flush before the Longhorn
+  # verify tasks, and a deferred restart would leave multipathd claiming devices through
+  # the very checks that prove volumes mount.
+  ansible.builtin.systemd:
+    name: multipathd
+    state: restarted
+  become: true
+  when: k3s_multipath_conf is changed
+
+- name: Remove the manifests staged before Flux owned their objects
+  tags: [longhorn_host]
+  # Each H1 and D5 slice that handed a staged object to Flux deleted the task that staged the
+  # file and applied it with `kubectl apply -f`, and left the file on the server: Longhorn's
+  # (H1.5a, H1.5b, H1.7b), CoreDNS's patch, MetalLB's pool, cluster-base's PriorityClasses and
+  # read-only identity, and traefik's RBAC (staged by the k8s traefik role). Flux owns every
+  # object they declare, so a hand `kubectl apply -f` of one would be a second writer. The R2
+  # target's file also holds the real bucket name, mode 0644 (#5942).
+  ansible.builtin.file:
+    path: "/etc/rancher/k3s/{{ item }}"
+    state: absent
+  loop:
+    - longhorn-backuptarget-r2.yaml
+    - longhorn-recurringjob.yaml
+    - longhorn-metrics-networkpolicy.yaml
+    - longhorn-storageclass.yaml
+    - longhorn-storageclass-nobackup.yaml
+    - longhorn-storageclass-configmap-patch.json
+    - coredns-corefile-patch.json
+    - metallb-pool.yaml
+    - priorityclass.yaml
+    - readonly-rbac.yaml
+    - traefik-clusterrole.yaml
+  become: true

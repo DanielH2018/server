@@ -25,7 +25,8 @@ pihole_k8s_claim_2: pihole-etc-2
 pihole_k8s_storage_class: longhorn-nobackup
 pihole_k8s_size: 2Gi
 
-# Both instances' claims, which k8s/manifests renders and applies for this role (#3387).
+# Both instances' claims, which the renderer emits for this role and the pihole Kustomization
+# applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ pihole_k8s_claim }}"
     storage_class: "{{ pihole_k8s_storage_class }}"
@@ -43,7 +44,7 @@ pihole_k8s_unbound_port: 5335
 pihole_k8s_lan_ip: "{{ dns_k8s_vip }}"
 
 # Pinned so CoreDNS can name it. Cluster DNS forwards to this address rather than to the LAN
-# VIP (see k3s_coredns_upstreams): kube-proxy reaches either Pi-hole pod through it, where
+# VIP (see coredns_upstreams): kube-proxy reaches either Pi-hole pod through it, where
 # the VIP is subject to externalTrafficPolicy: Local. An unpinned clusterIP would be
 # reassigned if the Service were ever recreated, silently pointing cluster DNS at nothing.
 # Immutable once bound — changing it needs the Service deleted and recreated.

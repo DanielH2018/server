@@ -1,0 +1,12 @@
+{
+  "checksum": "b48fc5457a212750f2805be2186ce093c69ca38592f8270e185cd05e2caf493a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/nut/CLAUDE.md#Why the two poweroffs are not staggered",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2": "a5e0bddb57988b1cd0bbda70321447fe8a71c37edd723ba940d7b5cef082f8c2"
+    },
+    "python": "3.14",
+    "verified_sha": "eab40596f"
+  }
+}

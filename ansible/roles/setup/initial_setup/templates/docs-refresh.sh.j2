@@ -122,6 +122,11 @@ source /usr/local/lib/kuma-push-lib.sh 2>/dev/null \
 # closed is the whole point: this exists because a real failure read green for hours.
 PUSH_STATUS=down
 PUSH_MSG="docs-refresh exited without setting a status"
+# The longest legitimate gap between two textfile writes. The cron runs at 06:17 and 18:17, so
+# the gap is 12h (43200s); the extra hour is the margin Kuma's tile keeps (interval 46800), so
+# the textfile rules and the tile page on the same lateness during the shadow soak.
+# ansible/tests/services/test_initial_setup_check_rule_literals.py pins the rule's literals to it.
+DEADLINE_S=46800
 # Separate from PUSH_STATUS because a generator failure does not stop the run: the site is still
 # built and the surviving pages are still worth committing (see below). Without this flag the
 # successful publish at the end would overwrite the degradation and report a clean up.
@@ -139,11 +144,26 @@ on_exit() {
   # host-cron pushers by matching that token in syslog, and a push straight to Kuma leaves no
   # other durable trace.
   logger -t docs-refresh "status=${PUSH_STATUS} ${PUSH_MSG}"
+  # The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and
+  # the file must not wait on Kuma. Every exit path reaches this trap, so every run writes.
+  write_check_textfile docs-refresh "$([ "$PUSH_STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t docs-refresh "textfile write failed (status=${PUSH_STATUS})"
   [ -n "$DOCS_REFRESH_PUSH_TOKEN" ] || return 0
   command -v kuma_push >/dev/null 2>&1 || return 0
   kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" docs-refresh
 }
 trap on_exit EXIT
+
+# The shared check library, which the textfile write in on_exit needs. It sits below the trap so a
+# host that lacks it still reports `down` through the push, and unlike the push library above it
+# aborts on a miss: its copy task is `tags: [always]`, so a host without it has skipped
+# initial_setup (M6 batch B2). on_exit's write then fails with a log line, because the function is
+# undefined.
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t docs-refresh "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
 
 # Records the message as well as logging it, so every existing call site feeds the push without
 # needing its own push call -- there are eleven exit paths and one of them is a bare crash.

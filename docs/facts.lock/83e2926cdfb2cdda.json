@@ -1,0 +1,12 @@
+{
+  "checksum": "d9b62b01cf56772b8be6cd398cc19fb84b1bc41e6d44035a9173ccbf7da9d851",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn/CLAUDE.md#Host tasks and the backup plane",
+  "row": {
+    "atoms": {
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+    },
+    "python": "3.14",
+    "verified_sha": "8783d3ca3"
+  }
+}

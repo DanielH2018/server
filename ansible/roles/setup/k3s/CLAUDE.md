@@ -1,13 +1,15 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
-install, the agent join, MetalLB, Longhorn with its backup targets, the read-only kubeconfig,
-CoreDNS, and the host crons that watch and exercise backups. `daniel-box` is
-the server and `daniel-server` an agent (`tasks/agent.yml`).
+install, the agent join, the packages Longhorn needs on the node, the read-only kubeconfig, the
+marker that releases k3s's CoreDNS addon, and the host crons that watch and exercise backups.
+`daniel-box` is the server and `daniel-server` an agent (`tasks/agent.yml`). The CoreDNS objects
+belong to the k8s `coredns` role and the Longhorn install to the k8s `longhorn` role, and Flux
+applies both. The Longhorn backup targets, their credentials and the RecurringJobs are the
+`longhorn-backup` role's (H1.7b).
 
 `ansible/k3s-bringup.yml` applies it, and that is one of the `_BROAD_MANUAL_PREFIXES` playbooks
-the GitOps deployer never runs itself, so every change here is a hand apply. The drill's bounds,
-the cron-evidence checks, the read-only crons, the control-plane gates and the four measured
+the GitOps deployer never runs itself, so every change here is a hand apply. The cron-evidence checks, the read-only crons, the control-plane gates and the four measured
 incidents are in `docs/k3s-node-plane-crons-and-incidents.md`.
 
 **`--tags k3s` is the MAXIMAL apply, not the one to reach for.** It reapplies every task, and
@@ -20,22 +22,24 @@ deployer prints this warning beside the command it suggests, from
 **`--tags k3s` never reaches an agent node.** `tasks/agent.yml` runs only from the opt-in join
 plays, so a change it reads, such as `templates/registries.yaml.j2`, also needs
 `uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent`
-before the role's `manual_plane` line is cleared. The deployer prints that command beside the
-whole-role tag for each host in `k3s_agent_hosts` (`ansible/inventory/group_vars/all.yml`), from
-`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`. It records the hosts
-on the line as `agent_hosts`, so the SessionStart banner, `probe.py gitops` and monitor-bridge
-print the same command from the row.
+before the role's `manual_plane` line is cleared. The deployer prints that command for each
+host in `k3s_agent_hosts` (`ansible/inventory/group_vars/all.yml`), from
+`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`. It prints it beside
+the whole-role tag, and for any narrowed row holding `k3s_agent`. `narrow_setup.py` reads the
+join play's `include_role`, so `tasks/agent.yml` alone narrows to `k3s_agent` and prints the join
+with no server command. `templates/registries.yaml.j2` narrows to `k3s_server` plus the join.
+The deployer records the hosts on the line as `agent_hosts`, so the SessionStart banner,
+`probe.py gitops` and monitor-bridge print the same commands from the row.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`;
   `k3s-bringup.yml --tags "node-address"`
-- **Crons (9):**
+- **Crons (8):**
   - `Longhorn backup health` — `*/10 * * * *`
   - `Longhorn filesystem trim` — `10 6 * * *`
   - `B2 deletion accounting` — `10 7 * * *`
   - `B2 backup budget listing` — `20 7 * * *`
-  - `Longhorn restore drill` — `10 4 * * *`
   - `daniel-box disk health` — `*/10 * * * *`
   - `Release staleness drift check` — `*/30 * * * *`
   - `Off-box etcd snapshot` — `45 2 * * *`
@@ -52,6 +56,12 @@ selection sees every task's own tags.
 some carrying a `DECIDED` marker. `files/` holds the Python the crons run, tested under
 `tests/`; `templates/` holds the cron scripts and the manifests this role applies.
 
+**The k3s pin is not in this role's defaults.** `k3s_version`, `k3s_install_script_url` and
+`k3s_install_script_sha256` live in `ansible/roles/k8s/system-upgrade/defaults/main.yml`
+since H6.1b, so a pin change routes to the Flux-owned `system-upgrade` tag and writes no
+`manual_plane` line for this role. `tasks/server.yml` and `tasks/agent.yml` read the file with
+`include_vars`. `SYSTEM_UPGRADE_DEFAULTS` in `scripts/lib/repo_paths.py` is the Python readers' path.
+
 Backup tiering, restoring a volume, restoring etcd and the two upgrade runbooks each have a
 docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recovery.md`,
 `docs/k3s-etcd-restore.md`, `docs/k3s-upgrade.md`, `docs/longhorn-upgrade.md`.
@@ -59,43 +69,34 @@ docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recove
 ## Autonomous-role contract (the crons that change state with no human in the loop)
 
 `tasks/health-crons.yml` installs a dozen crons; most read the cluster and push a Kuma tile.
-Three change state, and so do the Longhorn RecurringJobs `tasks/longhorn.yml` applies. The
-authority of those four actuators is written here so a later edit cannot quietly widen it.
+Two change state. The authority of those two actuators is written here so a later edit
+cannot quietly widen it. Three state-changing actuators left this role. The volume-label
+reconcile left at H1.6, and its contract is the `longhorn-reconcile` role's `CLAUDE.md`. The
+Longhorn RecurringJobs left at H1.7b, and their contract is the `longhorn-backup` role's
+`CLAUDE.md`. The restore drill left at H2.3d, and its contract is the `longhorn-restore-drill`
+role's `CLAUDE.md`.
 
 - **Scope, per actuator.** The **trim** (`longhorn-trim-volumes.sh`, daily) discards blocks ext4
-  already freed and reaches no live data. The **restore drill** (`longhorn-restore-drill.sh`,
-  daily) restores ONE volume's newest backup into a NEW volume, proves it in a throwaway pod and
-  tears it down, never touching the live volume. The **off-box etcd snapshot**
-  (`etcd-snapshot-offbox.sh`, daily) uploads the snapshot and never the cluster token. The
-  **RecurringJobs** delete old backups through their `retain` counts, and their `default` group
-  covers every volume with no job of its own, so opting OUT is the explicit act — the `no-backup`
-  group, assigned by `files/longhorn-storageclass-nobackup.yaml`.
-- **The drill's three bounds** — an operator pin, an empty-restore waiver with a size ceiling and
-  one retry per failure — are derived on the docs page, each held by a test. ENFORCED:
-  `ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`,
-  `ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py::test_an_undeclared_volume_still_fails_with_no_files`,
-  `ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py::test_a_filled_declared_volume_fails_and_stamps_nothing`,
-  `ansible/tests/longhorn/test_longhorn_restore_drill_retry.py::test_a_retry_already_spent_leaves_the_rotation_alone`.
+  already freed and reaches no live data. The **off-box etcd snapshot**
+  (`etcd-snapshot-offbox.sh`, daily) uploads the snapshot and never the cluster token.
 - **Never a cron:** the two reapers delete stranded objects, operator-invoked and dry-run by
   default; scheduling either is out of contract. They are the `backups` and `snapshots`
   subcommands of `scripts/backup/longhorn_reap.py` and run from the repo checkout, so this role
   installs nothing of theirs. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_setup_role_schedules_a_reaper`.
-- **Mode / arming:** `k3s_manage_health_crons` withholds the whole set,
-  `k3s_manage_backup_targets` the R2/B2 targets and the RecurringJobs, and
-  `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here. Both
-  `k3s_manage_*` flags default to `true`, and no host overrides either.
-- **Abort valves:** the drill tears down on EVERY exit path, the trim aborts when the node's
+- **Mode / arming:** `k3s_manage_health_crons` withholds the whole set, and
+  `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here. The
+  `k3s_manage_health_crons` flag defaults to `true`, and no host overrides it.
+- **Abort valves:** the trim aborts when the node's
   longhorn-manager pod is not ready or the volume list fails, and the weekly B2 tier is sharded across weekdays so no
   day's deletions reach the B2 transaction cap.
-- **Required evidence:** the trim, the drill and the two B2 accounting crons log every run
+- **Required evidence:** the trim and the two B2 accounting crons log every run
   through `logger`, which is evidence only because checks 9 and 10 of `longhorn-backup-health.sh`
   read it, matching each line AS WRITTEN. `docs/k3s-node-plane-crons-and-incidents.md` names the
   regex and the file to edit together. ENFORCED:
-  `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`,
-  `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone`.
-- **Next-run review:** read the B2 ledger and the drill's `/var/log` records before widening
-  scope.
+  `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`,
+  `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone`.
+- **Next-run review:** read the B2 ledger before widening scope.
 
 ## Notable
 
@@ -115,11 +116,17 @@ authority of those four actuators is written here so a later edit cannot quietly
   is why each check also reads live state. ENFORCED:
   `ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py::test_a_labelled_object_whose_kustomization_is_gone_is_flagged`,
   `ansible/roles/setup/k3s/tests/test_live_drift_check.py::test_a_handed_back_flux_object_is_compared`.
-- **A stale checkout stops before it writes an object Flux owns.**
-  `ansible/roles/setup/k3s/tasks/stale-checkout-guard.yml` imports `tasks/stale-checkout-check.yml`
-  once per tag set that the role's cluster writers carry, directly after `server.yml`. Each
-  instance reads every Kustomization's inventory and fails when an id one of its rows names is
-  there. A host-only tag such as `node-address` selects no instance, so it never reads the API.
-  An H1 PR that deletes a writer task deletes its row in the same commit. ENFORCED:
-  `ansible/tests/setup/test_k3s_stale_checkout_map.py::test_the_real_map_is_honest`,
-  `ansible/tests/setup/test_k3s_stale_checkout_guard.py::test_skip_tags_kubeconfig_still_runs_the_metallb_instance`.
+- **No task here writes an object Flux owns, and a new cluster writer is refused.** The
+  `k3s-role-cluster-writes-are-counted` census row fails on a task that writes the cluster from
+  any file outside `ansible/tests/repo/_k3s_write_verbs_row.py:K3S_WRITE_ALLOW`, which names
+  `storage_smoke.yml` and `agent_verify.yml` only. Hand the objects to a Flux tag instead.
+  The stale-checkout guard that H1 ran beside it was retired in #5957 once H1.7b had removed its
+  last row. A checkout older than H1.7b still carries its own guard, so this tree's empty copy
+  protected nothing. To revive it, take it from #5316 in git history.
+- **The five heartbeat checks also write a textfile verdict (M6 batch B1).** Longhorn backup
+  health, the off-box etcd snapshot, the manifest-prune and release-staleness checks, and the
+  live-drift check each write the three homelab_check_* series to node_exporter's textfile
+  directory before their Kuma push. Shadow rules in observability's host-checks.yaml read the
+  files until B1's cutover. The deadline of a */N cron derives from its minute variable, and the
+  three daily checks share k3s_daily_check_deadline_s. A change to a schedule moves its deadline,
+  and the rule's literal follows it (the pin is ansible/tests/services/test_b1_rule_literals.py).

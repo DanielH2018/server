@@ -342,6 +342,7 @@ def collect(
             "prod": None,
             "last_good": None,
             "suspended": None,
+            "reconcile_disabled": None,
         },
         "errors": [],
     }
@@ -453,6 +454,13 @@ def collect(
                 snap["promote"]["suspended"] = read_objects()
 
             attempt("suspended", read_suspended)
+        read_annotated = promote.reconcile_disabled
+        if read_annotated is not None:
+
+            def read_reconcile_disabled():
+                snap["promote"]["reconcile_disabled"] = read_annotated()
+
+            attempt("reconcile_disabled", read_reconcile_disabled)
     attempt("hold", read_hold)
     attempt("ci", read_ci)
     attempt("runs", read_runs)
@@ -485,6 +493,10 @@ def owed_lines(row: dict) -> list[str]:
         if row["agents"]:
             lines.append("  Then join each agent node:")
             lines += [f"    {a}" for a in row["agents"]]
+    elif row["agents"]:
+        # A row reaching only the agent half: the server play would select nothing (#5628).
+        lines.append("  Join each agent node by hand:")
+        lines += [f"    {a}" for a in row["agents"]]
     else:
         lines.append(f"  {row['by_hand'][:1].upper()}{row['by_hand'][1:]}.")
     lines += ["  Then clear its ledger line:", f"    {row['clear']}"]

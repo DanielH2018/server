@@ -16,7 +16,21 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 RECONCILE = REPO / "hosts" / "lib" / "homelab-reconcile"
+LIBRARY = REPO / "hosts" / "lib" / "reconcile_lib"
 SCRIPT = "/usr/lib/homelab/homelab-reconcile"
+MODULES = "/usr/lib/homelab/reconcile_lib"
+# Modules the package must hold, so a glob that stopped finding them cannot pass the tests below.
+LIBRARY_MEMBERS = frozenset(
+    {
+        "activate.py",
+        "common.py",
+        "libvirt.py",
+        "lines.py",
+        "textfile.py",
+        "ufw.py",
+        "users.py",
+    }
+)
 SERVICE = "/usr/lib/systemd/system/homelab-reconcile.service"
 
 
@@ -25,9 +39,20 @@ def package(tmp_path_factory) -> host_mode.Package:
     return render_reconcile(tmp_path_factory.mktemp("reconcile"))
 
 
-def test_the_component_renders_the_script_and_its_unit(package):
-    assert sorted(package.files) == [SCRIPT, SERVICE]
+def library_files() -> list:
+    return sorted(LIBRARY.glob("*.py"))
+
+
+def test_the_library_glob_finds_its_members():
+    assert LIBRARY_MEMBERS <= {path.name for path in library_files()}
+
+
+def test_the_component_renders_the_script_its_library_and_its_unit(package):
+    modules = [f"{MODULES}/{path.name}" for path in library_files()]
+    assert sorted(package.files) == sorted([SCRIPT, *modules, SERVICE])
     assert package.files[SCRIPT] == (RECONCILE.read_bytes(), 0o755)
+    for path in library_files():
+        assert package.files[f"{MODULES}/{path.name}"] == (path.read_bytes(), 0o644)
     assert package.units() == ["homelab-reconcile.service"]
     unit = package.files[SERVICE][0].decode()
     assert "Type=oneshot\n" in unit
@@ -47,8 +72,9 @@ def parses_under_3_12(source: str) -> bool:
     return True
 
 
-def test_reconcile_parses_with_the_3_12_grammar():
-    assert parses_under_3_12(RECONCILE.read_text())
+def test_reconcile_and_its_library_parse_with_the_3_12_grammar():
+    for path in [RECONCILE, *library_files()]:
+        assert parses_under_3_12(path.read_text()), path
 
 
 @pytest.mark.parametrize(

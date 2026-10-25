@@ -16,8 +16,10 @@ reason it is a member. The table lists the members, generated from that column.
 
 The rules below shaped those memberships.
 
-- **`LOKI_DEPENDENT`**: `ha_heartbeat` is deliberately NOT a member. Its ban arm fails open on a
-  Loki error, so the heartbeat verdict survives a Loki outage.
+- **There is no Loki gate.** The `loki_reachable` gate left with M5's PR 4a, and a Loki fault
+  pages from the `loki-homelab` ruler's `LokiHomelabMetricsMissing`. `ha_heartbeat`,
+  `swallowed_verdicts` and `workload_log_errors` read Loki and fail open on a Loki error, so
+  each keeps its own verdict, and none sits in a gate set.
 - **`B2_DEPENDENT`**: the gate runs one `b2_authorize_account` per `B2_PROBE_INTERVAL_S`
   (1800 s) with a BILLED outcome cached, because the fault it detects is a transaction cap. A
   failure that never reached B2 takes the short `B2_TRANSPORT_RETRY_S` TTL.
@@ -30,9 +32,8 @@ The rules below shaped those memberships.
 - **`STARTUP_GRACE`** is disjoint from every skip set, so a check that gains a gate leaves
   this set; a test holds both.
 - **`workload_log_errors`** is in `STARTUP_GRACE` and in no gate set. It reads Loki, not
-  Prometheus, so `PROM_DEPENDENT` does not apply. It is not in `LOKI_DEPENDENT` either, because
-  its arm fails open on a Loki error (`with_log_errors`) and Loki Reachable owns that page. It
-  is the only caller of `with_log_errors`, and M6's batch A7 deletes the row.
+  Prometheus, so `PROM_DEPENDENT` does not apply. Its arm fails open on a Loki error
+  (`with_log_errors`), so a Loki fault pages from the ruler. It is the only caller of `with_log_errors`, and M6's batch A7 deletes the row.
 - **The retired second Prometheus gate.** `Cluster Prometheus Reachable` gated a
   `CLUSTER_DEPENDENT` set reading `CLUSTER_PROMETHEUS_URL` until 2026-09-28. Both URLs named one
   cluster Service after the Docker plane retired (2026-08-14), so its tile could not go red on its
@@ -109,6 +110,7 @@ The rules below shaped those memberships.
 | `gates.py` | the `*_DEPENDENT` sets derived from `CHECKS`' `gate` column, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
 | `gitops_markers.py`, `gitops_ledger.py`, `gitops_hold.py` | generated verbatim copies of the deployer's marker parsers, written by `scripts/dev/gen_gitops_markers.py` (edit the source under `roles/setup/gitops_deploy/files/`, never the copy). `gitops_markers.py` holds the line-format markers, `gitops_ledger.py` the `owed` ledger and tick receipt, and `gitops_hold.py` the `DeployerSnapshot` that `check_gitops_status` reads every marker through |
 | `deploy_pipeline.py` | the deploy-pipeline exporter: `collect(cfg, src, now)` reads `promote`'s state with three `api.github.com` GETs and two `ghcr.io` GETs into four `homelab_deploy_*` gauges, adds `homelab_deploy_reboot_window_active` from the `WEEKLY_REBOOT_*` schedule, and `Exposition` serves them on `DEPLOY_PIPELINE_PORT` from a daemon thread. `cli.main()` starts the listener and calls `refresh` after each cycle's pushes. The one family the bridge serves rather than pushes |
+| `verdict_export.py` | the check exporter: `CheckExposition` (a `deploy_pipeline.Exposition` on its own port, `CHECK_EXPORTER_PORT`) serves `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per row and `homelab_check_rows` for the table. `check.run_once` and `gates._gate` record each row's verdict through `export`; `cli.main()` sets the row count from `check_table.CHECKS` |
 | `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Import-free, because `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` imports the same file from the checkout to judge the CRs (#3668) |
 | `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
 | `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_etcd`, `cluster_traefik`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `storage`, `wan`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `check_gitops_status` reads every marker it judges through `gitops_hold.DeployerSnapshot`, the third generated copy. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |

@@ -40,7 +40,7 @@ from deployer_lib import deploy_narrow
 from deployer_lib import deploy_release
 from deployer_lib import deploy_setup_roles
 from deployer_lib.deploy_config import WARNING, Config, log
-from deployer_lib.deploy_git import ci_verdict
+from deployer_lib.deploy_git import ci_verdict, read_check_pages
 from host_lib import discord_post, flush_discord_spool, github_get, github_token
 
 
@@ -85,6 +85,9 @@ def fetch_ci_verdict(
     says why: the anonymous 60/hour limit is per source IP and shared with every landing's
     `await_ci.py` poll, and two landings exhaust it), anonymous otherwise.
 
+    It reads every page of the check-runs, and a read short of their `total_count` is malformed
+    (`deploy_git.read_check_pages`, #5977).
+
     An unreachable or malformed API reads as `pending`, never `pass`: the gate has to fail closed
     or it is not a gate. That defers the tick and retries in 30 minutes, and because the tick still
     completes normally (writing `last_run`), a GitHub outage does NOT trip GitOps-Alive the way a
@@ -94,10 +97,11 @@ def fetch_ci_verdict(
     if not require_ci:
         return "pass"
     try:
-        payload = github_get(
-            f"repos/{repo}/commits/{sha}/check-runs?per_page=100",
-            github_token(os.environ, subprocess.run),
-            user_agent="gitops-deploy",
+        token = github_token(os.environ, subprocess.run)
+        url = f"repos/{repo}/commits/{sha}/check-runs"
+        runs = read_check_pages(
+            lambda query: github_get(url + query, token, user_agent="gitops-deploy"),
+            "check_runs",
         )
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         log(
@@ -105,7 +109,7 @@ def fetch_ci_verdict(
             level=WARNING,
         )
         return "pending"
-    return ci_verdict(payload.get("check_runs", []), contexts)
+    return ci_verdict(runs, contexts)
 
 
 def github_authenticated() -> bool:

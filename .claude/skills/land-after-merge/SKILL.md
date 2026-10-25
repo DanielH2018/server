@@ -40,6 +40,13 @@ approved: the update would void the approval, so `land.sh` refuses it and names 
 which is to rebase onto origin/master, push and get the new head approved.
 `land_lib/merge.py`'s module docstring owns the rule.
 
+**A master CI backlog holds the merge.** While 2 or more master `ci.yml` runs are unfinished,
+a green PR waits to merge and `land.sh` prints `pacing the merge: …`. Merging faster than
+master CI clears only deepens the runner queue every landing waits on (#5526). The wait counts
+against the merge budget, so a backlog that never drains ends at `merge-timeout`, a resume
+point. `LAND_PACE_MASTER_RUNS` sets the cap and `0` turns pacing off; `land_lib/pace.py` owns
+the rule.
+
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
@@ -105,6 +112,7 @@ The `VERDICT:` line is the last line of the log. `land.sh --help` lists the clos
 | `settled` | Exercise the thing you actually changed. The gate sees the workload, not your change. |
 | `needs-manual-apply` | **Read every remediation line, not the first.** One PR can reach two, and each prints its own. |
 | `deferred` | Nothing is wrong; the next tick applies it. Re-run only if the line says this run stopped watching a tick mid-apply. With cause `promote-timeout`, no promotion covered a flux-owned tag in time: read the `promote` workflow's failed `publish` jobs first. If the line says the health gate could not read its store, the deploy went ungraded: re-run `land.sh`. |
+| `deferred`, for a host | A PR that changes a host's package waits for that host to apply it. When the line names the updater's start command, the host's timer is not armed yet, or its next fire is more than 45 minutes away. Start the updater on that host, then re-run the same `land.sh` command: its first query finds the host settled. |
 | `tip-outran-retries` | A resume point, not a fault in your change: master merged faster than one tick-and-deploy cycle. Re-run the same command. |
 | `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. |
 | `ci-unproven` | GitHub never ran CI for the merge commit, and no later master commit can stand in for it, so a re-run alone never converges. The detail names the tip and the way out. When no commit has run CI, dispatch it with `gh workflow run ci.yml --ref master` and re-run. When a red commit sits between the merge commit and a green one, deploy the tip by hand with the `deploy.sh --at <tip>` command it prints. |

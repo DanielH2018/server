@@ -1,0 +1,19 @@
+# Shipped by homelab-daniel-pi. Started by homelab-crowdsec-probe.timer.
+[Unit]
+Description=Probe the edge VIP from daniel-pi for crowdsec's off-cluster verify
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+User={{ sys_user }}
+# jellyfin's hostname matches a real router from any client address (the script's header).
+ExecStart=/usr/lib/homelab/crowdsec-edge-probe jellyfin.local.{{ domain }} {{ k3s_metallb_ingress_vip }}
+# /var/log/pi-health is the pi-heartbeats component's directory, owned by User=. systemd
+# re-owns it to the starting unit's user when the owners differ, so this unit and the three
+# heartbeat services must name the same User= (test_crowdsec_probe_component.py holds that).
+LogsDirectory=pi-health
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

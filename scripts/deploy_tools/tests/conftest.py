@@ -69,6 +69,21 @@ def _no_syslog(tmp_path_factory, monkeypatch):
     return stub_logger_on_path(tmp_path_factory, monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def _own_ansible_tmp(tmp_path_factory, monkeypatch):
+    """Point ansible's local and remote temp directories at a directory of this test's own.
+
+    A deploy.sh run that passes its gates sweeps both for stale directories
+    (`deploy_lib/ansible_tmp.py`), and by default both are `~/.ansible/tmp`, which every
+    session and deploy on the host shares. A test must not delete from it. Autouse for the
+    reason `_no_syslog` gives: the subprocess runs inherit `os.environ`.
+    """
+    path = tmp_path_factory.mktemp("ansible-tmp")
+    monkeypatch.setenv("ANSIBLE_LOCAL_TEMP", str(path))
+    monkeypatch.setenv("ANSIBLE_REMOTE_TEMP", str(path))
+    return path
+
+
 @pytest.fixture
 def logger_calls(_no_syslog) -> Path:
     """The file the stubbed `logger` appends to, one line per call."""
@@ -195,3 +210,29 @@ def run(tree_lock: Path, journal):
         )
 
     return _run
+
+
+@pytest.fixture
+def flux_handed_back(tmp_path: Path) -> Path:
+    """A copy of `inventory/host_vars/` with flux's `owner` removed, for `smoke_caller` to read.
+
+    Since D5 step 29 every k8s render target carries `owner: flux`, so on the live inventory
+    `smoke_caller` finds no candidate and the narrowing keeps every caller, which `land.sh`
+    then leaves out. The narrowing stays until D6.4 deletes it, so the live-tree tests keep
+    their subject on this copy, passed as `host_vars`: the handback a revert of the flux PR
+    makes (D5, *Rollback*).
+    """
+    import shutil
+
+    from lib.repo_paths import HOST_VARS
+
+    host_vars = tmp_path / "host_vars"
+    shutil.copytree(HOST_VARS, host_vars)
+    box = host_vars / "daniel-box.yml"
+    entry = "  - name: flux\n    platform: k8s\n    tier: platform\n    owner: flux\n"
+    text = box.read_text()
+    assert text.count(entry) == 1, (
+        "flux's containers_list entry moved; update this fixture"
+    )
+    box.write_text(text.replace(entry, entry.replace("    owner: flux\n", "")))
+    return host_vars

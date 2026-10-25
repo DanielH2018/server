@@ -1,7 +1,7 @@
 ---
 # The tag stays alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:7f296f2f4f3fbc5ad7281a83743d3342a7ff143b9f382f0c8e87bdf5a4b29438
+speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:14b7850d1a0c06cc49e14546717f93996ad44e90127bb01418af293ae2d98fc7
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Auto-deploy is on although strategy is Recreate and speedtest_k8s_claim below is seeded
@@ -31,7 +31,9 @@ speedtest_k8s_claim: speedtest-config
 speedtest_k8s_storage_class: longhorn-nobackup
 speedtest_k8s_size: 1Gi
 
-# The claim k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot.
+# The claim the renderer emits for this role. The speedtest Kustomization applies it after the
+# speedtest-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply
+# snapshot.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ speedtest_k8s_claim }}"
     storage_class: "{{ speedtest_k8s_storage_class }}"

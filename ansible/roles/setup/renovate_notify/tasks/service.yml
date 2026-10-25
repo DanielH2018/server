@@ -22,7 +22,7 @@
     - renovate-notify.timer
   become: true
   notify:
-    - Reload systemd
+    - Reload systemd for renovate_notify
     - Run renovate-notify once
 
 - name: Install the renovate-notify failure alert

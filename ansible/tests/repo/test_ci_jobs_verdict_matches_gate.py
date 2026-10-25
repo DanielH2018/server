@@ -1,6 +1,6 @@
 """The verdict readers' job list equals the CI gate's `needs`, and their rule equals its script.
 
-WHY THIS IS A TEST. `deploy_git.jobs_verdict` decides green or red from the check-runs of the jobs
+WHY THIS IS A TEST. `ci_verdict.jobs_verdict` (hosts/lib) decides green or red from the check-runs of the jobs
 the `prek` gate aggregates, so a landing does not wait on a runner for the gate job (#5507). It
 holds a hand-written list of check-run names, and a drift in either direction is silent:
 
@@ -22,7 +22,7 @@ import subprocess
 
 import pytest
 from _helpers import REPO
-from deployer_lib.deploy_git import (
+from ci_verdict import (
     CI_GATE_NAME,
     CI_GATE_NEEDS_JOBS,
     CI_PROVE_JOB,
@@ -99,7 +99,11 @@ def test_a_skipped_dependent_can_only_mean_the_tree_was_proven():
         if job_id == "prove":
             continue
         job = jobs[job_id]
-        assert job["needs"] == "prove", job_id
+        # `host_tools_arm64` and `host_packages` also wait for `host_packages_build`; each
+        # skips only when that does.
+        needs = [job["needs"]] if isinstance(job["needs"], str) else job["needs"]
+        assert needs[0] == "prove", job_id
+        assert set(needs[1:]) <= set(_gate_job()["needs"]), job_id
         condition = (
             str(job["if"]).strip().removeprefix("${{").removesuffix("}}").strip()
         )

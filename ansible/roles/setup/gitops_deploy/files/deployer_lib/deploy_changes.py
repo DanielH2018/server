@@ -498,6 +498,11 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if p == _SECRETS_FILE:
             cs.secrets = True
             continue
+        # A k8s role holding a copy of a file outside its own tree defer-and-alerts like its
+        # own change would: a setup file it imports, or a file its image embeds (#4840). Here
+        # rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from this
+        # function alone to name the commit each `k8s_unapplied` line records (#3111).
+        cs.k8s |= deploy_cross_role.k8s_roles_holding(p)
         # Tested FIRST, and it does not `continue` past the plane flags below: the manual
         # set overlaps _BROAD_SETUP_PREFIXES (the bring-up playbooks sit in both), and the
         # alert still needs to name the right remediation playbook.
@@ -512,12 +517,6 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad = True
             cs.broad_setup = True
             cs.setup_roles |= setup_roles_for(p)
-            # A k8s role importing this setup file defer-and-alerts like its own change would.
-            # Here rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from
-            # this function alone to name the commit each `k8s_unapplied` line records (#3111).
-            cs.k8s |= deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES.get(
-                p, frozenset()
-            )
             continue
         if p.startswith(_PI_SHARED_PREFIX):
             cs.pi_shared = True
@@ -528,20 +527,21 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.setup_roles |= setup_roles_for(p)  # filter-plugin callers (#3874)
             cs.broad_setup |= bool(cs.setup_roles)
             continue
+        if shipped := setup_roles_for(p):  # a shared module setup roles install (H7.2e)
+            cs.broad = cs.broad_setup = True
+            cs.setup_roles |= shipped
+            continue
         at = role_of(p)
         if at is None:
             continue
         if at.plane == "k8s":
             # A k8s role change the deployer applies only as a promoted image-pin bump
             # (`split_k8s_auto_deploy`, `cs.k8s_deploy`); every other one defer-and-alerts.
-            # The WHOLE role dir, not split by subdirectory the way containers/ is below,
-            # because the alert only needs to name the role.
+            # The whole role dir, because the alert only needs to name the role.
             cs.k8s.add(at.role)
         elif at.plane != "containers":
             # A setup-plane path, which `_BROAD_SETUP_PREFIXES` consumes before this loop
-            # reaches here. Named rather than left to fall through, because the branches
-            # below are about a CONTAINER role and `role_of` can hand them a setup path —
-            # the `containers/`-anchored regexes it replaced could not.
+            # reaches here. Named so the branches below only see a CONTAINER role's path.
             continue
         elif at.subdir in ("templates", "files"):
             # A bind-mounted file under a container role: the docker-compose.yml.j2 OR any
@@ -563,7 +563,7 @@ def setup_roles_for(path: str) -> set[str]:
     """Every setup role a change to `path` re-applies: owner, shippers, or filter callers."""
     at = role_of(path)
     if at is None or at.plane != "setup":
-        return set(deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS.get(path, ()))
+        return deploy_cross_role.setup_roles_outside_the_tree(path)
     shippers = deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(
         path, frozenset()
     )

@@ -1,0 +1,409 @@
+# promtool unit tests for files/rules/storage.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# Longhorn's `longhorn_volume_robustness` is one-hot: every volume carries a series per state,
+# valued 0 or 1. The fixtures keep that shape, so a rule that compared the value to an ordinal
+# would fail here.
+rule_files:
+  - ../../files/rules/storage.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the longhorn job is missing from the config.
+  # LonghornVolumesMissing fires through its first arm once its 15m hold has passed.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: LonghornVolumesMissing
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: LonghornVolumesMissing
+        exp_alerts:
+          - exp_labels:
+              job: longhorn
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus has lost Longhorn's scrape job or its volume series.
+              description: >-
+                Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
+                the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
+                UNMONITORED while this fires, which is not the same as healthy.
+      # No kubelet series at all: the claim census reads 0 through `or vector(0)`.
+      - eval_time: 16m
+        alertname: PVCCoverageShortfall
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: The kubelet reports fewer than 32 claims.
+              description: >-
+                Only 0 claims report kubelet_volume_stats, below the floor
+                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet and
+                kubernetes-apiserver targets.
+
+  # The scrape works and the volume series are gone. LonghornVolumesMissing fires through its
+  # second arm. A failed scrape (up 0) leaves it quiet: ScrapeTargetDown owns that page.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="longhorn", instance="10.42.0.10:9500"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: LonghornVolumesMissing
+        exp_alerts:
+          - exp_labels:
+              state: healthy
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus has lost Longhorn's scrape job or its volume series.
+              description: >-
+                Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
+                the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
+                UNMONITORED while this fires, which is not the same as healthy.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="longhorn", instance="10.42.0.10:9500"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LonghornVolumesMissing
+        exp_alerts: []
+
+  # Redundancy. `degraded-vol` is one-hot degraded and fires after the 15m hold. `idle-vol` is
+  # detached (`unknown`), which is no fault. `fine-vol` is healthy. A state Longhorn has not
+  # defined, on `odd-vol`, fires because the selector is an allow-list.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="longhorn", instance="10.42.0.10:9500"}'
+        values: '1x30'
+      - series: 'longhorn_volume_robustness{job="longhorn", volume="pvc-aaa", pvc="degraded-vol", state="healthy"}'
+        values: '0x30'
+      - series: 'longhorn_volume_robustness{job="longhorn", volume="pvc-aaa", pvc="degraded-vol", state="degraded"}'
+        values: '1x30'
+      - series: 'longhorn_volume_robustness{job="longhorn", volume="pvc-aaa", pvc="degraded-vol", state="faulted"}'
+        values: '0x30'
+      - series: 'longhorn_volume_robustness{job="longhorn", volume="pvc-bbb", pvc="idle-vol", state="healthy"}'
+        values: '0x30'
+      - series: 'longhorn_volume_robustness{job="longhorn", volume="pvc-bbb", pvc="idle-vol", state="unknown"}'
+        values: '1x30'
+      - series: 'longhorn_volume_robustness{job="longhorn", volume="pvc-ccc", pvc="fine-vol", state="healthy"}'
+        values: '1x30'
+      - series: 'longhorn_volume_robustness{job="longhorn", volume="pvc-ccc", pvc="fine-vol", state="degraded"}'
+        values: '0x30'
+      - series: 'longhorn_volume_robustness{job="longhorn", volume="pvc-ddd", pvc="odd-vol", state="rebalancing"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: LonghornVolumeDegraded
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: LonghornVolumeDegraded
+        exp_alerts:
+          - exp_labels:
+              volume: pvc-aaa
+              pvc: degraded-vol
+              state: degraded
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: Longhorn volume degraded-vol is degraded.
+              description: >-
+                pvc-aaa (claim degraded-vol) has reported the robustness
+                degraded for 15 minutes. With two replicas, degraded is one copy from data
+                loss and faulted is no healthy replica. `longhorn-disaster-recovery` has the rebuild
+                and revert procedures.
+          - exp_labels:
+              volume: pvc-ddd
+              pvc: odd-vol
+              state: rebalancing
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: Longhorn volume odd-vol is rebalancing.
+              description: >-
+                pvc-ddd (claim odd-vol) has reported the robustness
+                rebalancing for 15 minutes. With two replicas, degraded is one copy from data
+                loss and faulted is no healthy replica. `longhorn-disaster-recovery` has the rebuild
+                and revert procedures.
+      - eval_time: 16m
+        alertname: LonghornVolumesMissing
+        exp_alerts: []
+
+  # PVC fullness. `full` is 90% full and fires after the 5m hold. `roomy` is 50% full. `media-data`
+  # is 99% full and excluded. The same claim scraped under two jobs reads once. valheim-server
+  # has 1 GiB free, under its 3 GiB floor. PVCCoverageShortfall stays quiet with 32 claims.
+  - interval: 1m
+    input_series:
+      - series: 'kubelet_volume_stats_capacity_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="full"}'
+        values: '1000x30'
+      - series: 'kubelet_volume_stats_available_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="full"}'
+        values: '100x30'
+      - series: 'kubelet_volume_stats_capacity_bytes{job="kubernetes-apiserver", namespace="homelab", persistentvolumeclaim="full"}'
+        values: '1000x30'
+      - series: 'kubelet_volume_stats_available_bytes{job="kubernetes-apiserver", namespace="homelab", persistentvolumeclaim="full"}'
+        values: '100x30'
+      - series: 'kubelet_volume_stats_capacity_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="roomy"}'
+        values: '1000x30'
+      - series: 'kubelet_volume_stats_available_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="roomy"}'
+        values: '500x30'
+      - series: 'kubelet_volume_stats_capacity_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="media-data"}'
+        values: '1000x30'
+      - series: 'kubelet_volume_stats_available_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="media-data"}'
+        values: '10x30'
+      - series: 'kubelet_volume_stats_capacity_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="valheim-server"}'
+        values: '21474836480x30'
+      - series: 'kubelet_volume_stats_available_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="valheim-server"}'
+        values: '1073741824x30'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PVCFull
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PVCFull
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              persistentvolumeclaim: full
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: The claim homelab/full is over 85% full.
+              description: >-
+                full is 90% full. A claim
+                cannot borrow space, so expand the volume in its role.
+          - exp_labels:
+              namespace: homelab
+              persistentvolumeclaim: valheim-server
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: The claim homelab/valheim-server is over 85% full.
+              description: >-
+                valheim-server is 95% full. A claim
+                cannot borrow space, so expand the volume in its role.
+      - eval_time: 6m
+        alertname: PVCBelowFreeFloor
+        exp_alerts:
+          - exp_labels:
+              namespace: homelab
+              persistentvolumeclaim: valheim-server
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: The claim homelab/valheim-server has less free space than its largest transient.
+              description: >-
+                valheim-server has 1GiB free, under the
+                3 GiB its updater stages before swapping the install in. Expand the volume in its role.
+      - eval_time: 6m
+        alertname: PVCFreeFloorUnmonitored
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PVCCoverageShortfall
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: The kubelet reports fewer than 32 claims.
+              description: >-
+                Only 4 claims report kubelet_volume_stats, below the floor
+                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet and
+                kubernetes-apiserver targets.
+
+  # The free-bytes floor's claim stops reporting while others do: PVCFreeFloorUnmonitored fires.
+  - interval: 1m
+    input_series:
+      - series: 'kubelet_volume_stats_available_bytes{job="kubernetes-kubelet", namespace="homelab", persistentvolumeclaim="roomy"}'
+        values: '500x30'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PVCFreeFloorUnmonitored
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PVCFreeFloorUnmonitored
+        exp_alerts:
+          - exp_labels:
+              persistentvolumeclaim: valheim-server
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: The kubelet reports no free bytes for the claim valheim-server.
+              description: >-
+                PVCBelowFreeFloor reads kubelet_volume_stats_available_bytes for valheim-server and
+                finds no series, so its free-space floor is UNMONITORED. The claim was renamed or
+                excluded, or the kubelet stopped reporting it.
+
+  # The claim census with one claim reporting: PVCCoverageShortfall fires and names the count.
+  - interval: 1m
+    input_series:
+      - series: 'kubelet_volume_stats_capacity_bytes{job="kubernetes-apiserver", namespace="homelab", persistentvolumeclaim="a"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: PVCCoverageShortfall
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: The kubelet reports fewer than 32 claims.
+              description: >-
+                Only 1 claims report kubelet_volume_stats, below the floor
+                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet and
+                kubernetes-apiserver targets.
+
+  # Snapshot headroom. jellyfin-config has a 16 GiB cap. Two snapshots of 8 GiB and 7 GiB sum to
+  # 15 GiB, over 90% (14.4 GiB). A snapshot both managers report counts once. Another claim's
+  # snapshots are not capped and are not read.
+  - interval: 1m
+    input_series:
+      - series: 'longhorn_volume_capacity_bytes{job="longhorn", volume="pvc-jf", pvc="jellyfin-config", node="a"}'
+        values: '1x30'
+      - series: 'longhorn_volume_capacity_bytes{job="longhorn", volume="pvc-other", pvc="other", node="a"}'
+        values: '1x30'
+      - series: 'longhorn_snapshot_actual_size_bytes{job="longhorn", volume="pvc-jf", snapshot="s1", node="a"}'
+        values: '8589934592x30'
+      - series: 'longhorn_snapshot_actual_size_bytes{job="longhorn", volume="pvc-jf", snapshot="s1", node="b"}'
+        values: '8589934592x30'
+      - series: 'longhorn_snapshot_actual_size_bytes{job="longhorn", volume="pvc-jf", snapshot="s2", node="a"}'
+        values: '7516192768x30'
+      - series: 'longhorn_snapshot_actual_size_bytes{job="longhorn", volume="pvc-other", snapshot="s3", node="a"}'
+        values: '99999999999999x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: LonghornSnapshotNearCap
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: LonghornSnapshotNearCap
+        exp_alerts:
+          - exp_labels:
+              pvc: jellyfin-config
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: Snapshot space of jellyfin-config is at 90% of its cap.
+              description: >-
+                jellyfin-config holds 15GiB of snapshots against a cap of
+                16 GiB. Longhorn refuses new snapshots at the cap rather than pruning, so the next
+                deploy of the service fails until snapshots are deleted by hand.
+      - eval_time: 16m
+        alertname: LonghornSnapshotCapUnmonitored
+        exp_alerts: []
+
+  # Under the cap: 10 GiB of 16 GiB does not fire.
+  - interval: 1m
+    input_series:
+      - series: 'longhorn_volume_capacity_bytes{job="longhorn", volume="pvc-jf", pvc="jellyfin-config"}'
+        values: '1x30'
+      - series: 'longhorn_snapshot_actual_size_bytes{job="longhorn", volume="pvc-jf", snapshot="s1"}'
+        values: '10737418240x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: LonghornSnapshotNearCap
+        exp_alerts: []
+
+  # The capped claim has a capacity series and no snapshot series: LonghornSnapshotCapUnmonitored
+  # fires after its 15m hold.
+  - interval: 1m
+    input_series:
+      - series: 'longhorn_volume_capacity_bytes{job="longhorn", volume="pvc-jf", pvc="jellyfin-config"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: LonghornSnapshotCapUnmonitored
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: LonghornSnapshotCapUnmonitored
+        exp_alerts:
+          - exp_labels:
+              pvc: jellyfin-config
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: Longhorn reports no snapshot series for the capped claim jellyfin-config.
+              description: >-
+                jellyfin-config declares a snapshot cap and has no longhorn_snapshot_actual_size_bytes
+                series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
+
+  # A CSI global mount remounted read-only fires after the 5m hold. A writable mount and a
+  # read-only mount outside the plugins directory do not.
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_readonly{job="node", instance="box:9100", mountpoint="/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount"}'
+        values: '1x30'
+      - series: 'node_filesystem_readonly{job="node", instance="box:9100", mountpoint="/var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/def/globalmount"}'
+        values: '0x30'
+      - series: 'node_filesystem_readonly{job="node", instance="box:9100", mountpoint="/boot/efi"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: KubeletCSIMountReadOnly
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: KubeletCSIMountReadOnly
+        exp_alerts:
+          - exp_labels:
+              job: node
+              instance: box:9100
+              mountpoint: /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount
+              severity: critical
+              service: longhorn
+              shadow: "true"
+            exp_annotations:
+              summary: The CSI mount /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount is read-only.
+              description: >-
+                /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount remounted read-only after an iSCSI stall, behind a Longhorn
+                volume that still reads healthy. Scale the workload to 0, wait for the volume to
+                detach, and scale back.
+
+  # etcd's database. The apiserver and kubelet jobs carry the same series, so `max` reads it once.
+  # 1.8 GiB of the 2 GiB quota is 90%, over 80%. 1 GiB is 50% and does not fire. The absent-series
+  # case is no input at all: the bridge reads it as UP, so nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'apiserver_storage_size_bytes{job="kubernetes-apiserver", storage_cluster_id="etcd-0"}'
+        values: '1932735283x30'
+      - series: 'apiserver_storage_size_bytes{job="kubernetes-kubelet", storage_cluster_id="etcd-0"}'
+        values: '1932735283x30'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: EtcdDBNearQuota
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: EtcdDBNearQuota
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: etcd
+              shadow: "true"
+            exp_annotations:
+              summary: The etcd database is over 80% of its backend quota.
+              description: >-
+                The etcd database is 90% of its 2 GiB quota. At the quota
+                etcd rejects every write and the control plane stops. Compact and defragment, or raise
+                --etcd-arg=quota-backend-bytes. `k3s-etcd-restore` has the procedure.
+  - interval: 1m
+    input_series:
+      - series: 'apiserver_storage_size_bytes{job="kubernetes-apiserver", storage_cluster_id="etcd-0"}'
+        values: '1073741824x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: EtcdDBNearQuota
+        exp_alerts: []

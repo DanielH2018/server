@@ -29,6 +29,9 @@ This module is a library, not the entry point. Running `check.py` directly print
 to `cli.py` on stderr and exits 2. `-h` and `--help` print this text and exit 0.
 """
 
+import time
+from typing import TYPE_CHECKING
+
 import bridge.common
 import bridge.streaks
 
@@ -40,6 +43,10 @@ from bridge.config import Config
 from bridge.sources import Sink, Sources
 from bridge.types import Check
 from gates import Gates
+
+if TYPE_CHECKING:
+    # Annotation only: the exporter module is wired in by cli.py.
+    from verdict_export import CheckExposition
 
 # Checks whose `up` line is logged every cycle, because something reads it as data. The
 # Longhorn Storage dashboard's four B2 panels regex the used/cap/pct/versions figures out of
@@ -56,10 +63,11 @@ def run_once(
     sink: Sink,
     dry_run: bool = False,
     only: frozenset[str] | None = None,
+    export: "CheckExposition | None" = None,
 ) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
-    Evaluates the Prometheus, Loki, B2 and WAN gates first, so a single
+    Evaluates the Prometheus, B2 and WAN gates first, so a single
     outage in one of them suppresses its dependent checks (pushed `up` with a skip
     message) instead of paging each of them separately. Every enabled check in `checks` is
     then evaluated (unless suppressed by a gate or an exporter outage) and its result is
@@ -78,12 +86,16 @@ def run_once(
         which is what the pod runs with, so it must be threaded to EVERY check_enabled call
         below — a filter validated in main() and not passed here would print an enabled count
         it does not honour.
-      gates: Which checks each gate suppresses, and the four gate bodies. REQUIRED, so a
+      gates: Which checks each gate suppresses, and the three gate bodies. REQUIRED, so a
         caller states the gate configuration it means: cli.main() builds the one production
         `Gates()` and passes it every cycle.
       sink: Where every gate's and every check's verdict is pushed. REQUIRED rather than
         defaulted to a live `Sink(cfg)`, so a test that forgets it fails instead of pushing to
         the real Kuma. cli.main() builds the one production `Sink` per process.
+      export: Where each enabled row's verdict is also recorded for Prometheus. A row skipped
+        by a gate records 0 and its body is not called. Any other row records `_evaluate`'s
+        verdict, taken before `startup_grace` holds it `up`. None records nothing, which is
+        every caller but the looping pod.
     """
     only = cfg.CHECKS_ONLY if only is None else only
     skip = cfg.CHECKS_SKIP
@@ -93,7 +105,7 @@ def run_once(
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
     prom_ok, _prom_msg = gate_lib._gate(
-        cfg, src, "prometheus", gates.probe_prometheus, sink, dry_run, only
+        cfg, src, "prometheus", gates.probe_prometheus, sink, dry_run, only, export
     )
 
     # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
@@ -127,19 +139,7 @@ def run_once(
         except Exception as e:
             bridge.common.log("WARN: exporter-health probe failed:", e)
 
-    # Loki-reachability gate (peer of the Prometheus gate): probe Loki once so a single Loki outage
-    # is one page (Loki Reachable), not a storm across every Loki-querying check (loki_dependent).
-    loki_ok, _loki_msg = gate_lib._gate(
-        cfg,
-        src,
-        "loki_reachable",
-        gates.probe_loki,
-        sink,
-        dry_run,
-        only,
-    )
-
-    # B2-reachability gate (peer of the two above): B2 caps TRANSACTIONS separately from storage
+    # B2-reachability gate (peer of the Prometheus gate): B2 caps TRANSACTIONS separately from storage
     # bytes, and the kopia-era state-file checks this used to gate all reported their last
     # successful cron run rather than current B2 health — the 2026-08-02 transaction-cap incident.
     # Those checks are gone (backup moved to Longhorn), but b2_reachable stays: Longhorn still
@@ -147,7 +147,7 @@ def run_once(
     # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
     # heartbeat stays alive.
     b2_ok, _b2_msg = gate_lib._gate(
-        cfg, src, "b2_reachable", gates.probe_b2, sink, dry_run, only
+        cfg, src, "b2_reachable", gates.probe_b2, sink, dry_run, only, export
     )
 
     # WAN-reachability gate (peer of the two above): an internet outage had no gate at all,
@@ -155,7 +155,7 @@ def run_once(
     # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
     # answers, so a single provider's outage does not silence a dependent reading the other.
     wan_ok, _wan_msg = gate_lib._gate(
-        cfg, src, "wan_reachable", gates.probe_wan, sink, dry_run, only
+        cfg, src, "wan_reachable", gates.probe_wan, sink, dry_run, only, export
     )
 
     # A routine verdict is logged only on a narrowed or dry run, where someone reads the
@@ -174,11 +174,10 @@ def run_once(
         name, token, fn = entry.name, entry.token, entry.fn
         if not gate_lib.check_enabled(name, only, skip):
             continue
+        # The verdict the exporter records: 0 for a row a gate skips, else the body's own.
+        exported = False
         if not prom_ok and name in gates.prom_dependent:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
-            log_skip(name, msg)
-        elif not loki_ok and name in gates.loki_dependent:
-            ok, msg = True, "skipped — Loki unreachable (see Loki Reachable monitor)"
             log_skip(name, msg)
         elif not b2_ok and name in gates.b2_dependent:
             ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
@@ -191,12 +190,15 @@ def run_once(
             log_skip(name, msg)
         else:
             ok, msg = gate_lib._evaluate(cfg, src, name, fn)
+            exported = ok
             if name in gates.startup_grace:
                 ok, msg = bridge.streaks.apply_startup_grace(
                     name, ok, msg, cfg.GRACE_CYCLES, src.state.grace_streaks
                 )
             if log_all or not ok or "streak" in msg or name in LOGGED_WHEN_UP:
                 bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
+        if export is not None:
+            export.record(name, exported, time.time())
         if msg.startswith("skipped"):
             counts["skipped"] += 1
         else:

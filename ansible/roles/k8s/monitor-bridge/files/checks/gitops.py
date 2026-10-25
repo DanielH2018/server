@@ -33,6 +33,7 @@ from gitops_markers import (
     owed_clear_cmd,
     parse_behind,
     parse_contention,
+    server_tags,
     target_arg,
 )
 from gitops_ledger import (
@@ -67,20 +68,22 @@ def _apply_and_clear(pending, narrow) -> str:
     for role in sorted(oldest):
         entry = oldest[role]
         selected = narrow.get(role) or {role}
-        warning = maximal_apply_warning(role, selected)
-        how = by_hand(entry.playbook) or "apply `%s %s --tags %s%s` by hand%s%s" % (
-            PLAYBOOK_CMD,
-            entry.playbook,
-            ",".join(sorted(selected)),
-            target_arg(entry.host),
-            " (WARNING: %s)" % warning if warning else "",
-            "".join(
-                " and `%s`" % a
-                for a in agent_join_cmds(
-                    role, entry.playbook, selected, entry.agent_hosts
-                )
-            ),
-        )
+        server = server_tags(role, selected)
+        warning = maximal_apply_warning(role, server)
+        agents = agent_join_cmds(role, entry.playbook, selected, entry.agent_hosts)
+        how = by_hand(entry.playbook)
+        if not how and server:
+            how = "apply `%s %s --tags %s%s` by hand%s%s" % (
+                PLAYBOOK_CMD,
+                entry.playbook,
+                ",".join(sorted(server)),
+                target_arg(entry.host),
+                " (WARNING: %s)" % warning if warning else "",
+                "".join(" and `%s`" % a for a in agents),
+            )
+        elif not how:
+            # A row reaching only the agent half: the server play would select nothing.
+            how = "apply %s by hand" % " and ".join("`%s`" % a for a in agents)
         parts.append(
             "%s, then `%s`" % (how, owed_clear_cmd(OWED_MANUAL_PLANE, role, selected))
         )
@@ -317,15 +320,21 @@ def check_host_packages(
     deployer's state directory outside the Prometheus gate, and a Prometheus-sourced arm there
     would page on every Prometheus outage. The query names no origin, because only daniel-box
     runs the builder, and `bridge.net.origin_sel` would pin daniel-server.
+
+    A third query reads `homelab_host_reconcile_drift` on every host and puts a non-zero count
+    in the message. It never changes the verdict (`verdicts.service.host_packages`).
     """
     fetch = src.prom_scalar('homelab_builder_fetch_timestamp_seconds{job="node"}')
     unbuilt = src.prom_vector(
         'homelab_builder_unbuilt_since_timestamp_seconds{job="node"}'
     )
+    # Every host's reconcile drift, so no `job=` selector: the Pi scrapes as `node-pi`.
+    drift = src.prom_vector("homelab_host_reconcile_drift > 0")
     return host_packages(
         fetch,
         unbuilt,
         now if now is not None else time.time(),
         cfg.BUILDER_MAX_FETCH_AGE_S,
         cfg.BUILDER_MAX_LAG_S,
+        drift,
     )

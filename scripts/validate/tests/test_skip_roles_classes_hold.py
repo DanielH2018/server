@@ -17,12 +17,9 @@ The classes rot in OPPOSITE directions, which is why each gets its own assertion
 Run: uv run pytest scripts/validate/tests/test_skip_roles_classes_hold.py
 """
 
-import sys
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Imported from the module that DEFINES them, not from validate.k8s_manifests, which only
 # re-exports them. A guard that reads a re-export passes just as happily when the
@@ -108,6 +105,15 @@ def test_a_lookup_into_templates_config_is_clean():
 def test_a_lookup_into_templates_top_level_is_flagged():
     src = (_EMBED % "services.yaml.j2") + "\n" + (_EMBED % "config/widgets.yaml.j2")
     assert misplaced_template_lookups(src) == ["services.yaml.j2"]
+
+
+def test_a_shell_script_lookup_at_top_level_is_clean():
+    """The accept half: a script is rendered and linted by the shell gate, not parsed here."""
+    assert misplaced_template_lookups(_EMBED % "restore-drill.sh.j2") == []
+    # The reject half stays: the same name without the script suffix is still flagged.
+    assert misplaced_template_lookups(_EMBED % "restore-drill.yaml.j2") == [
+        "restore-drill.yaml.j2"
+    ]
 
 
 def test_a_lookup_with_a_variable_target_is_not_judged():

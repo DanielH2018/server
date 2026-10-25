@@ -76,7 +76,7 @@ PERMISSIONS = {
         "statuses": "read",
     },
     "tag": {"packages": "write"},
-    "verify": {"contents": "read", "statuses": "read"},
+    "verify": {"contents": "read", "statuses": "read", "packages": "read"},
     "settle": {"packages": "write", "actions": "write"},
     "post": {"contents": "read"},
     "reset-check": {"contents": "read", "packages": "read", "actions": "read"},
@@ -259,6 +259,8 @@ def problems(wf: dict, flux_version: str) -> list[str]:
     run = triggers.get("workflow_run") or {}
     if run.get("workflows") != ["CI"] or run.get("types") != ["completed"]:
         found.append("the workflow_run trigger is not CI's completed runs")
+    if run.get("branches") != ["master"]:
+        found.append("the workflow_run trigger is not filtered to master")
     for banned in ("pull_request", "pull_request_target"):
         if banned in triggers:
             found.append(f"the workflow triggers on {banned}")
@@ -370,6 +372,10 @@ def _pull_request_trigger(wf):
     _triggers(wf)["pull_request"] = None
 
 
+def _every_branch_trigger(wf):
+    del _triggers(wf)["workflow_run"]["branches"]
+
+
 def _tag_without_the_verdict_gate(wf):
     job = wf["jobs"]["tag"]
     job["if"] = job["if"].replace(VERDICT_GATE, "true")
@@ -419,6 +425,10 @@ RED = {
     "a pull_request trigger": (
         _pull_request_trigger,
         "the workflow triggers on pull_request",
+    ),
+    "a trigger on every branch's CI": (
+        _every_branch_trigger,
+        "the workflow_run trigger is not filtered to master",
     ),
     "tag without the verdict gate": (
         _tag_without_the_verdict_gate,

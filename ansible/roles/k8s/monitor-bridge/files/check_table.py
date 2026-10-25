@@ -3,7 +3,7 @@
 This table is the one place a check is declared. Everything else derives from it:
 
 - `registry.build_checks` runs every row without `is_gate`, in table order.
-- `gates.py` builds `PROM_DEPENDENT`, `LOKI_DEPENDENT`, `B2_DEPENDENT`, `WAN_DEPENDENT` and
+- `gates.py` builds `PROM_DEPENDENT`, `B2_DEPENDENT`, `WAN_DEPENDENT` and
   `STARTUP_GRACE` from the `gate` column, and `GATE_DEPENDENTS` from the `is_gate` rows.
   `EXPORTER_DEPENDENT` stays in `gates.py`: it is keyed by scrape job, and one check can sit
   under two jobs.
@@ -216,11 +216,6 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="k3s-speedtest", display="k3s Speedtest", status_group="Services", gate="startup_grace",
         description="monitor-bridge reads the newest speedtest-tracker result every 5 min; the app itself runs about every 6 h. DOWN means the last run is older than 8 h, did not complete, or downloaded under 100 Mbps; an unreachable API is tolerated for 2 cycles. Open the speedtest UI and check its scheduler and last result.",
     ),
-    PushCheck(
-        name="loki_ingestion", fn=logs.check_loki_ingestion, token="monitor_bridge_loki_push_token",
-        kuma_id="monitor-bridge-loki", display="Loki Log Ingestion", status_group="Observability", gate="loki_reachable",
-        description="One of Loki's three stream arms went silent: the file-tailed syslog/authlog union, the container stream, or daniel-pi's Alloy. Loki itself answers; the shipper does not.",
-    ),
     # The token's SOPS name predates the Alloy cutover; renaming a secret is a rotation.
     PushCheck(
         name="shipper_dropped", fn=logs.check_shipper_dropped, token="monitor_bridge_promtail_dropped_push_token",
@@ -233,16 +228,8 @@ CHECKS: tuple[PushCheck, ...] = (
     # rejected the push (`by=kuma`): a fleet-wide loss is the edge or host tiles' page.
     PushCheck(
         name="swallowed_verdicts", fn=logs.check_swallowed_verdicts, token="monitor_bridge_swallowed_verdicts_push_token",
-        kuma_id="monitor-bridge-swallowed-verdicts", display="Swallowed Push Verdicts", status_group="Observability", gate="loki_reachable",
+        kuma_id="monitor-bridge-swallowed-verdicts", display="Swallowed Push Verdicts", status_group="Observability", gate="startup_grace",
         description="A host cron pushed status=down and the push failed while a sibling cron's push landed, so the verdict was lost rather than the network. The message names the cron; run it by hand and read its logger lines.",
-    ),
-    # #1891: Kuma logs `Cannot send notification to <name>` and never retries, and check_discord
-    # cannot see a dropped POST. Reads that line out of Loki. Critical, so it pages email too:
-    # a page about a dropped Discord send that goes only over Discord is the failure it reports.
-    PushCheck(
-        name="kuma_notify_failures", fn=logs.check_kuma_notify_failures, token="monitor_bridge_kuma_notify_failures_push_token",
-        kuma_id="monitor-bridge-kuma-notify-failures", display="Kuma Notification Delivery", status_group="Observability", gate="loki_reachable", critical=True,
-        description="Kuma tried to send a notification and dropped it (`Cannot send notification to`), usually a Discord 429 or 400. Kuma does not retry, so the alert behind it reached nobody — read the tile list for what fired in that window. Also emails.",
     ),
     PushCheck(
         name="discord", fn=notify.check_discord, token="monitor_bridge_discord_push_token",
@@ -280,7 +267,7 @@ CHECKS: tuple[PushCheck, ...] = (
     # The Kubernetes arms of the old k8s_workloads row now live in the k8s-workloads rules. This
     # row keeps only the log-pattern arm, which reads Loki; M6's batch A7 ports it to loki-homelab.
     # `startup_grace` rather than a gate: the row reads no Prometheus, and the arm fails open on a
-    # Loki error by itself, so it names neither `prometheus` nor `loki_reachable`.
+    # Loki error by itself, so it names no gate.
     PushCheck(
         name="workload_log_errors", fn=logs.check_workload_log_errors, token="monitor_bridge_k8s_workloads_push_token",
         kuma_id="monitor-bridge-k8s-workloads", display="Workload Log Errors", status_group="Cluster Health", gate="startup_grace",
@@ -318,17 +305,12 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="monitor-bridge-kubelet-readonly", display="Kubelet CSI Mount Read-Only", status_group="Backups & Storage", gate="prometheus", critical=True, runbook="longhorn-disaster-recovery",
         description="monitor-bridge reads node_filesystem_readonly for /var/lib/kubelet/plugins mounts. DOWN: a Longhorn volume's ext4 remounted read-only after an iSCSI stall (#1243); Longhorn's own state stays healthy through it. Scale the workload to 0, wait for detached, scale back.",
     ),
-    # The four reachability gates. A gate has no gate of its own: a tile that cannot go red is
+    # The three reachability gates. A gate has no gate of its own: a tile that cannot go red is
     # not coverage (#2825).
     PushCheck(
         name="prometheus", fn=cluster.check_prometheus, token="monitor_bridge_prometheus_push_token",
         kuma_id="monitor-bridge-prometheus", display="Prometheus Reachable", status_group="Observability", is_gate=True,
         description="monitor-bridge's gate for every Prometheus-backed check: a vector(1) query every 5 min. DOWN: Prometheus itself is unreachable, and every dependent tile is held green with a `skipped` message so this one pages alone. Check the prometheus pod first.",
-    ),
-    PushCheck(
-        name="loki_reachable", fn=logs.check_loki_reachable, token="monitor_bridge_loki_reachable_push_token",
-        kuma_id="monitor-bridge-loki-reachable", display="Loki Reachable", status_group="Observability", is_gate=True,
-        description="monitor-bridge's gate for the Loki-reading checks: a /loki/api/v1/labels probe every 5 min. DOWN: Loki does not answer, and the dependent tiles are held green with a `skipped` message. Loki up but nothing shipping is Loki Log Ingestion's page.",
     ),
     PushCheck(
         name="b2_reachable", fn=b2.check_b2_reachable, token="monitor_bridge_b2_reachable_push_token",

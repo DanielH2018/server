@@ -77,7 +77,7 @@ def _mentions_deploy_tag(role_name: str, text: str) -> bool:
     """True if some line names both the role and a literal `--tags` flag.
 
     The bare word "tag" matches "outage" and "voltage". A shared role with no standalone tag
-    passes by saying so ("not `--tags cronjob-gate`"), which is the fact a reader needs.
+    passes by saying so ("not `--tags longhorn-api`"), which is the fact a reader needs.
     """
     name = role_name.lower()
     return any("--tags" in line and name in line for line in text.lower().splitlines())

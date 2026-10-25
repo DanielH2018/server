@@ -100,7 +100,10 @@ first connect.
 - **Required evidence:** `/var/log/etcd-restore-drill/<run-id>/` — including
   `egress-fence.log`, the fence leg's per-target verdicts — retained
   `hypervisor_etcd_drill_log_retention_days`, and the two Kuma tiles that alarm, sized
-  from `etcd_drill_full_kuma_interval_s`.
+  from `etcd_drill_full_kuma_interval_s`. Each verdict is also written to
+  `etcd-restore-drill-vm.prom` (the drill) and `etcd-restore-drill-egress-fence.prom` (the fence
+  leg) in node_exporter's textfile directory before its push (M6 batch B4), and shadow rules in
+  `observability/files/rules/other-setup-checks.yaml` read them.
 - **Next-run review:** read the last run's directory before changing the cadence or what ships
   into the guest. `ansible/tests/staging/test_etcd_drill_vm.py` pins the fence, the host key, no
   `define` and the deadline.

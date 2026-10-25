@@ -42,8 +42,10 @@ from _fence_probe import (
     rendered_orchestrator,
 )
 from _helpers import ALL_VARS, HOST_VARS, ROLES
-from lib.repo_paths import K3S_DEFAULTS
+from lib.repo_paths import K8S_ROLES
 from _setup_render import rendered_setup_text
+
+COREDNS_DEFAULTS = K8S_ROLES / "coredns" / "defaults" / "main.yml"
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
 NWFILTER_TEMPLATE = HYPERVISOR / "templates" / "staging-nwfilter.xml.j2"
@@ -220,15 +222,15 @@ def test_the_cluster_dns_ip_falls_inside_the_fenced_service_cidr():
     """Pins the premise that the Service CIDR is really the cluster's, not a guessed range.
 
     k3s_service_cidr is declared in group_vars while the address k3s actually hands CoreDNS
-    lives in the k3s role's defaults. If the two drift, the fence names a range no Service is
+    lives in the coredns role's defaults (`coredns_cluster_ip`, H1.4). If the two drift, the fence names a range no Service is
     in — which fences nothing and reads green in every check above.
     """
     service_cidr = ipaddress.ip_network(_all_vars()[SERVICE_CIDR_VAR])
-    k3s_defaults = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
-    dns_ip = ipaddress.ip_address(k3s_defaults["k3s_cluster_dns_ip"])
+    coredns_defaults = yaml_fast.safe_load(COREDNS_DEFAULTS.read_text())
+    dns_ip = ipaddress.ip_address(coredns_defaults["coredns_cluster_ip"])
     assert dns_ip in service_cidr, (
-        f"{SERVICE_CIDR_VAR} is {service_cidr}, which does not contain k3s_cluster_dns_ip "
-        f"{dns_ip} from {K3S_DEFAULTS}. One of the two was changed without the other, and "
+        f"{SERVICE_CIDR_VAR} is {service_cidr}, which does not contain coredns_cluster_ip "
+        f"{dns_ip} from {COREDNS_DEFAULTS}. One of the two was changed without the other, and "
         f"the fence is around a range the cluster does not use."
     )
 
@@ -385,8 +387,12 @@ def test_the_leg_runs_before_the_guest_is_handed_any_credential():
     on a guest that can reach production.
     """
     body = rendered_orchestrator()
+    boot = body.index("boot_guest() {")
+    assert "\n  fence_check" in body[boot : body.index("\n}\n", boot)], (
+        "boot_guest() no longer runs the fence leg"
+    )
     main = body.index("main() {")
-    leg = body.index("\n  fence_check\n", main)
+    leg = body.index("\n  boot_guest\n", main)
     for marker, what in (
         ('. "$AGENT_ENV"', "the cluster token is read"),
         ("etcd-s3.env", "the R2 credentials are staged"),

@@ -23,6 +23,11 @@ census flattens each `fieldsV1` tree into leaf paths and prints, by set differen
 - `rolls`: a Deployment, DaemonSet or StatefulSet with a `removed` path under its pod template,
   such as `kubectl.kubernetes.io/restartedAt` under `kubectl-rollout`.
 
+An object whose dry run carries no `kustomize-controller` Apply entry declares nothing: upstream
+ships it with metadata only, such as MetalLB's webhook-cert Secret its controller fills. It prints
+as `declares nothing` with each manager that owns a live field, marking a cleaned one with the
+paths the flip deletes, and the census goes on to the next object.
+
 A path only `kubectl-client-side-apply` owns that its last-applied config omits is a field the
 server defaulted at the create. It prints apart as a presumed default and does not set `rolls`,
 as `probe.py takeover` does: the server defaults it again to the same value.
@@ -36,8 +41,10 @@ comment names the upstream source: kustomize-controller's
 It prints field paths and manager names only, never a value, because the inputs can hold
 Secret data.
 
-Exit codes: 0 the census printed; 1 an input is unreadable, the two inputs share no object, or
-a dry-run object carries no `kustomize-controller` Apply entry; 64 a usage error. An empty match
+Exit codes: 0 the census printed; 1 an input is unreadable, the two inputs share no object, no
+shared dry-run object carries a `kustomize-controller` Apply entry, or a cleaned manager owns a
+live field of a declares-nothing object other than the expected `last-applied-configuration`
+(printed after the full census); 64 a usage error. An empty match
 proves nothing, so it never passes.
 """
 
@@ -107,14 +114,64 @@ def _entries(obj):
 
 
 def declared_paths(dryrun):
-    """The leaf paths the render declares: the dry run's kustomize-controller Apply entry."""
+    """The leaf paths the render declares: the dry run's kustomize-controller Apply entry.
+
+    None when the dry run has no such entry, so the object declares nothing.
+    """
     applies = [e for e in _entries(dryrun) if is_flux_apply(e)]
     if not applies:
-        raise CensusError(
-            f"{label(key(dryrun))}: the dry-run object has no {FLUX_MANAGER} Apply entry, so it "
-            f"was not applied with --field-manager={FLUX_MANAGER} and declares nothing"
-        )
+        return None
     return set().union(*(leaf_paths(e.get("fieldsV1")) for e in applies))
+
+
+def owners(live):
+    """`{manager: (cleaned, paths)}` for the live entries a takeover could touch.
+
+    Subresource entries and Flux's own last apply are skipped, as in `compare`.
+    """
+    out = {}
+    for entry in _entries(live):
+        if entry.get("subresource") or is_flux_apply(entry):
+            continue
+        cleaned, paths = out.get(entry.get("manager"), (False, set()))
+        out[entry.get("manager")] = (
+            cleaned or is_cleaned(entry),
+            paths | leaf_paths(entry.get("fieldsV1")),
+        )
+    return out
+
+
+def declares_nothing(obj_key, live, dryrun):
+    """The report lines for an object the render declares nothing of, and whether it fails.
+
+    It reads `removed` from `compare` with nothing declared, so a path another manager co-owns
+    and a presumed server default are not counted as deleted, exactly as for any other object.
+    Any path left in `removed` fails the census except `last-applied-configuration`, the
+    expected entry every client-side-applied object carries (#5933).
+    """
+    removed, _, defaulted = compare(live, dryrun)
+    by_manager = owners(live)
+    lines = [f"{label(obj_key)}: declares nothing"]
+    lines.append(f"  live field owners ({len(by_manager)}):")
+    for manager in sorted(by_manager, key=str):
+        cleaned, paths = by_manager[manager]
+        if not cleaned:
+            lines.append(f"    {manager}  ({len(paths)} field(s))")
+            continue
+        deletes = sorted((p for p in removed if manager in removed[p]), key=format_path)
+        lines.append(
+            f"    {manager}  (cleaned: the flip deletes {len(deletes)} field(s))"
+        )
+        lines += [
+            f"      {format_path(p)}{'  (expected)' if p == LAST_APPLIED_PATH else ''}"
+            for p in deletes
+        ]
+    if defaulted:
+        lines.append(
+            f"  presumed server defaults, inferred and not measured ({len(defaulted)}):"
+        )
+        lines += [f"    {format_path(p)}" for p in sorted(defaulted, key=format_path)]
+    return lines, any(p != LAST_APPLIED_PATH for p in removed)
 
 
 def compare(live, dryrun):
@@ -124,7 +181,7 @@ def compare(live, dryrun):
     neither cleaned nor kept, as `matchFieldManager` skips it and the render never writes there.
     A live kustomize-controller Apply entry is Flux's own last apply, which the next one replaces.
     """
-    declared = declared_paths(dryrun)
+    declared = declared_paths(dryrun) or set()
     cleaned, other = {}, set()
     for entry in _entries(live):
         if entry.get("subresource") or is_flux_apply(entry):
@@ -149,10 +206,19 @@ def compare(live, dryrun):
 
 
 def census(live_objs, dryrun_objs):
-    """The census text for two object lists.
+    """The census text for two object lists."""
+    return report(live_objs, dryrun_objs)[0]
+
+
+def report(live_objs, dryrun_objs):
+    """`(text, failed)`: the census text, and whether it fails.
+
+    It fails when a cleaned manager owns a field of an object that declares nothing, other
+    than the expected last-applied annotation.
 
     Raises:
-        CensusError: the lists share no object, so there is nothing to compare.
+        CensusError: the lists share no object, or no shared dry-run object carries a
+            kustomize-controller Apply entry, so the dry run was not applied as Flux.
     """
     live_by_key = {key(obj): obj for obj in live_objs}
     dry_by_key = {key(obj): obj for obj in dryrun_objs}
@@ -160,6 +226,11 @@ def census(live_objs, dryrun_objs):
     if not shared:
         raise CensusError(
             "the live and dry-run inputs share no object, so the census proves nothing"
+        )
+    if all(declared_paths(dry_by_key[k]) is None for k in shared):
+        raise CensusError(
+            f"no dry-run object has a {FLUX_MANAGER} Apply entry: either the dry run was not "
+            f"applied with --field-manager={FLUX_MANAGER}, or every object declares nothing"
         )
     lines = []
     for only, where in (
@@ -174,8 +245,16 @@ def census(live_objs, dryrun_objs):
     ):
         lines += [f"{label(k)}: {where}" for k in sorted(only)]
     removed_total = kept_total = 0
-    rolling = []
+    rolling, empty, failed = [], [], False
     for obj_key in shared:
+        if declared_paths(dry_by_key[obj_key]) is None:
+            block, owned = declares_nothing(
+                obj_key, live_by_key[obj_key], dry_by_key[obj_key]
+            )
+            lines += block
+            empty.append(label(obj_key))
+            failed = failed or owned
+            continue
         removed, kept, defaulted = compare(live_by_key[obj_key], dry_by_key[obj_key])
         flag = rolls(obj_key[1], removed)
         lines.append(f"{label(obj_key)}:{' rolls' if flag else ''}")
@@ -200,8 +279,9 @@ def census(live_objs, dryrun_objs):
         f"{removed_total} removed and {kept_total} kept across {len(shared)} object(s); "
         f"{len(rolling)} workload(s) roll"
         + (f": {', '.join(rolling)}" if rolling else "")
+        + (f"; {len(empty)} declare(s) nothing: {', '.join(empty)}" if empty else "")
     )
-    return "\n".join(lines)
+    return "\n".join(lines), failed
 
 
 def _read(arg, stdin):
@@ -230,13 +310,20 @@ def main(argv=None, stdin=None):
     if args.live == args.dryrun == "-":
         parser.error("only one input can be standard input")
     try:
-        text = census(
+        text, failed = report(
             _read(args.live, stdin or sys.stdin), _read(args.dryrun, stdin or sys.stdin)
         )
     except CensusError as exc:
         print(f"takeover_census: {exc}", file=sys.stderr)
         return FAILED
     print(text)
+    if failed:
+        print(
+            "takeover_census: a cleaned manager owns a field of an object that declares "
+            "nothing, so the flip deletes it",
+            file=sys.stderr,
+        )
+        return FAILED
     return OK
 
 

@@ -15,9 +15,28 @@ from lib.repo_paths import REPO
 
 RECONCILE = REPO / "hosts" / "lib" / "homelab-reconcile"
 STUB = Path(__file__).with_name("_reconcile_stub.py")
-COMMANDS = ("hostname", "dpkg-query", "dpkg", "crontab", "systemctl")
+COMMANDS = (
+    "hostname",
+    "dpkg-query",
+    "dpkg",
+    "crontab",
+    "systemctl",
+    "sysctl",
+    "sshd",
+    "fail2ban-client",
+    "ufw",
+    "getent",
+    "usermod",
+    "systemd-sysusers",
+    "virsh",
+    "udevadm",
+)
 # The verbs that change a unit, as opposed to the reads reconcile asks before acting.
 ACTIONS = frozenset({"start", "stop", "restart", "try-restart", "disable"})
+
+# Every systemctl verb that changes a unit or its failed state, `reset-failed` included.
+WRITES = ACTIONS | {"reset-failed"}
+SECRETS_UNIT = "homelab-secrets.service"
 
 V1 = "0.100+gaaaaaaaaaaaa"
 UNIT_DIR = "usr/lib/systemd/system"
@@ -26,7 +45,9 @@ UNIT_DIR = "usr/lib/systemd/system"
 class Node:
     """A fake daniel-pi: the stub's state, the files reconcile reads, and a way to run it."""
 
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(self, tmp_path: Path, script: Path = RECONCILE) -> None:
+        # A red fixture passes a copy of reconcile with one rule removed.
+        self.script = script
         self.root = tmp_path / "root"
         self.stub = tmp_path / "stub"
         self.bin = tmp_path / "bin"
@@ -56,6 +77,8 @@ class Node:
             "fail": [],
             "owned": [],
             "crontabs": {},
+            "commands": {},
+            "ufw": {"active": True, "rules": [], "fail": []},
         }
         self.manifest: dict = {
             "units": {},
@@ -117,14 +140,18 @@ class Node:
         self.manifest_path.write_text(json.dumps(self.manifest))
 
     def run(self) -> subprocess.CompletedProcess:
-        result = run([sys.executable, str(RECONCILE)], env=self._prepare())
+        result = run([sys.executable, str(self.script)], env=self._prepare())
         self.state = json.loads((self.stub / "state.json").read_text())
         return result
+
+    def command(self) -> tuple[list[str], dict[str, str]]:
+        """The argv and environment that run reconcile on the current state, for a caller that starts it."""
+        return [sys.executable, str(self.script)], self._prepare()
 
     def start(self) -> subprocess.Popen:
         """Start reconcile without waiting for it; `finish` collects it."""
         return subprocess.Popen(
-            [sys.executable, str(RECONCILE)],
+            [sys.executable, str(self.script)],
             env=self._prepare(),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -148,6 +175,65 @@ class Node:
             for call in self.calls("systemctl")
             if call["argv"][1] in ACTIONS
         ]
+
+    def writes(self) -> list[list[str]]:
+        """Each systemctl call that changes a unit or clears its failure, as [verb, unit]."""
+        return [
+            call["argv"][1:]
+            for call in self.calls("systemctl")
+            if call["argv"][1] in WRITES
+        ]
+
+    def rule(self, name: str, text: str = 'ACTION=="add"\n') -> None:
+        """Ship (or rewrite) the udev rule file `name` under /usr/lib/udev/rules.d."""
+        path = self.root / "usr/lib/udev/rules.d" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def drop_rule(self, name: str) -> None:
+        (self.root / "usr/lib/udev/rules.d" / name).unlink()
+
+    def udevadm(self) -> list[list[str]]:
+        """Each udevadm call, as its arguments."""
+        return [call["argv"][1:] for call in self.calls("udevadm")]
+
+    def secrets(
+        self,
+        outputs: list[dict] | None = None,
+        credentials: list[str] | None = None,
+        digest: str = "a" * 64,
+    ) -> None:
+        """Make this a package that ships `secrets-unit`: the digest, secrets.json and the unit."""
+        self.manifest["secrets_inputs_sha256"] = digest
+        self.unit(SECRETS_UNIT, "[Service]\nType=oneshot\n", active="active")
+        path = self.root / "usr/lib/homelab/secrets.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"credentials": credentials or [], "outputs": outputs or []})
+        )
+
+    def output_file(self, destination: str, *, persist: bool = False) -> None:
+        """Write the rendered output `homelab-secrets` would have left at `destination`."""
+        top = "var/lib/homelab-secrets" if persist else "run/homelab-secrets"
+        path = self.root / top / destination
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("rendered\n")
+
+    def credential(self, key: str) -> None:
+        path = self.root / "run/credstore" / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("value\n")
+
+    @property
+    def pending_path(self) -> Path:
+        return self.root / "run/homelab-secrets/pending.json"
+
+    def queue(self, *units: str) -> None:
+        self.pending_path.parent.mkdir(parents=True, exist_ok=True)
+        self.pending_path.write_text(json.dumps(sorted(units)))
+
+    def pending(self) -> list[str]:
+        return json.loads(self.pending_path.read_text())
 
     def applied(self) -> dict:
         return json.loads(self.applied_path.read_text())

@@ -169,6 +169,20 @@ revert lands. This is the live proof of the hold rule, the post, the entry point
 resume order. After the flux PR the drill runs again, and waits through one reconcile of the
 root and of `speedtest` before step 2.
 
+### Drill record
+
+The full evidence for each drill is in `docs/target-architecture/deploy/d5-bulk-move.md`.
+
+- **Wave B, before the flux PR.** [#5605](https://github.com/DanielH2018/server/pull/5605)
+  broke speedtest's readinessProbe, and the revert
+  [#5664](https://github.com/DanielH2018/server/pull/5664) promoted.
+- **2026-10-23, after the flux PR (D5 exit 6).**
+  [#5998](https://github.com/DanielH2018/server/pull/5998) broke the probe, and Branch 1
+  reverted it. Both hand suspends survived a reconcile of `homelab` and `flux-deferred` and
+  kept the field manager `homelab-operator`. The held soak Job failed on its own after the
+  reset, with no pod delete. speedtest read 1/1 at 15:09:58Z, and the revert
+  [#6008](https://github.com/DanielH2018/server/pull/6008) cleared the hold at about 15:14Z.
+
 ## The maintenance-mode attach was never reached by a deploy, and #2740 retired it
 
 Between 2026-08 and 2026-09-27 a claim whose readiness wait timed out on a non-`attached` volume
@@ -438,5 +452,5 @@ because the one call site that exists already keeps this role from starting unde
 
 This role is reached as a dependency rather than named on the command line, so a tag-keyed
 refusal could never have covered it — which is why it guards itself. `volume-claim`,
-`image-builder`, `cronjob-gate` and `volume-revert` are all in the same position. The `k8s_dry_run_unsupported`
+`image-builder` and `volume-revert` are all in the same position. The `k8s_dry_run_unsupported`
 list that once held the alternative was deleted empty in #2876.

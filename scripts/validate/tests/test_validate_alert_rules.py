@@ -14,7 +14,17 @@ import yaml
 
 from lib import yaml_fast
 from lib.repo_paths import REPO
-from validate import alert_conventions, alert_rules
+from validate import alert_conventions, notification_renders, alert_rules
+
+
+def _tools_pass(argv: list[str]) -> tuple[int, str]:
+    """A runner under which every tool passes and each notification render prints its
+    expected text."""
+    if argv[:3] == ["amtool", "template", "render"]:
+        for check, expected in notification_renders.render_checks():
+            if check == argv:
+                return 0, expected.read_text()
+    return 0, ""
 
 
 def _proof_runner(bad_code: int, bad_output: str, good_code: int = 0):
@@ -76,7 +86,7 @@ def test_every_discovered_input_gets_its_tool_check(tmp_path):
 
 
 def test_the_tree_with_tools_that_pass_is_clean():
-    assert alert_rules.check_tree(run=lambda argv: (0, "")) == []
+    assert alert_rules.check_tree(run=_tools_pass) == []
 
 
 def test_a_tool_rejecting_the_rendered_config_is_flagged():
@@ -89,7 +99,9 @@ def test_a_tool_rejecting_the_rendered_config_is_flagged():
 def test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged():
     problems = alert_rules.check_tree(
         run=lambda argv: (
-            (1, "could not parse expression") if argv[0] == "lokitool" else (0, "")
+            (1, "could not parse expression")
+            if argv[0] == "lokitool"
+            else _tools_pass(argv)
         )
     )
     assert len(problems) == 1, problems
@@ -101,7 +113,11 @@ def test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged():
 
 def test_a_rejected_alertmanager_config_is_flagged():
     problems = alert_rules.check_tree(
-        run=lambda argv: (1, "undefined receiver") if argv[0] == "amtool" else (0, "")
+        run=lambda argv: (
+            (1, "undefined receiver")
+            if argv[:2] == ["amtool", "check-config"]
+            else _tools_pass(argv)
+        )
     )
     assert len(problems) == 1, problems
     assert "amtool check-config" in problems[0] and "undefined receiver" in problems[0]
@@ -125,6 +141,7 @@ def test_go_templates_that_survive_the_render_are_clean():
     assert set(alert_rules.TEMPLATE_DEFINE.findall(templates)) == {
         "homelab.title",
         "homelab.message",
+        "homelab.email",
     }
     assert alert_rules.go_template_problems(source, rendered, templates) == []
 
@@ -135,7 +152,7 @@ def test_a_parseable_go_expression_the_render_consumed_is_flagged():
     `define` in homelab.tmpl still requires it."""
     source, rendered, templates = _alertmanager_render()
     reference = "'{% raw %}{{ template \"homelab.message\" . }}{% endraw %}'"
-    assert source.count(reference) == 2, "the fixture edit no longer matches the source"
+    assert source.count(reference) == 1, "the fixture edit no longer matches the source"
     edited = source.replace(reference, "'{{ template_message | default(\"\") }}'")
     consumed = rendered.replace('{{ template "homelab.message" . }}', "")
     problems = alert_rules.go_template_problems(edited, consumed, templates)
@@ -175,7 +192,7 @@ def test_a_render_that_fails_is_flagged_rather_than_raised():
     def fail() -> dict[str, str]:
         raise RuntimeError("observability/alertmanager-secret.yaml.j2 failed to render")
 
-    problems = alert_rules.check_tree(run=lambda argv: (0, ""), render=fail)
+    problems = alert_rules.check_tree(run=_tools_pass, render=fail)
     assert problems == ["observability/alertmanager-secret.yaml.j2 failed to render"]
 
 
@@ -256,9 +273,25 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "flux",
         "ingress-probes",
         "host-checks",
+        "initial-setup-checks",
+        "gitops-checks",
+        "pi-checks",
+        "other-setup-checks",
         "deploy-pipeline",
         "gate-jobs",
         "registry",
+        "bridge-exporter",
+        "container-checks",
+        "kuma-cutover",
+        "scrape-targets",
+        "log-pipeline",
+        "edge",
+        "storage",
+        "hosts",
+        "extra-probes",
+        "pod-producers",
+        "pods",
+        "k3s-upgrade",
     ]
     assert keys == {
         "alerting-meta.yaml",
@@ -269,9 +302,25 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "flux.yaml",
         "ingress-probes.yaml",
         "host-checks.yaml",
+        "initial-setup-checks.yaml",
+        "gitops-checks.yaml",
+        "pi-checks.yaml",
+        "other-setup-checks.yaml",
         "deploy-pipeline.yaml",
         "gate-jobs.yaml",
         "registry.yaml",
+        "bridge-exporter.yaml",
+        "container-checks.yaml",
+        "kuma-cutover.yaml",
+        "scrape-targets.yaml",
+        "log-pipeline.yaml",
+        "edge.yaml",
+        "storage.yaml",
+        "hosts.yaml",
+        "extra-probes.yaml",
+        "pod-producers.yaml",
+        "pods.yaml",
+        "k3s-upgrade.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
@@ -303,7 +352,7 @@ def test_a_loki_rule_file_the_list_does_not_name_is_flagged(tmp_path):
         (tmp_path / f"{stem}.yaml").write_text("groups: []\n")
 
     problems = alert_rules.check_tree(
-        run=lambda argv: (0, ""),
+        run=_tools_pass,
         render_loki_rules=lambda: (["homelab-logs"], {"homelab-logs.yaml"}),
         loki_rules_dir=tmp_path,
     )
@@ -321,7 +370,7 @@ def test_a_placeholder_in_the_rendered_alertmanager_config_is_clean():
         "smtp_from:", "smtp_from: ${email} #", 1
     )
     assert "${email}" in found["alertmanager.yml"]
-    problems = alert_rules.check_tree(run=lambda argv: (0, ""), render=lambda: found)
+    problems = alert_rules.check_tree(run=_tools_pass, render=lambda: found)
     assert problems == []
 
 
@@ -385,7 +434,7 @@ def _tree_with_a_job_service_alert(tmp_path, target_labels):
     )
     found["prometheus.yml"] = yaml.safe_dump(config)
     return alert_rules.check_tree(
-        run=lambda argv: (0, ""),
+        run=_tools_pass,
         render=lambda: found,
         render_rules=lambda: (["alerting-meta"], {"alerting-meta.yaml"}),
         rules_dir=rules_dir,

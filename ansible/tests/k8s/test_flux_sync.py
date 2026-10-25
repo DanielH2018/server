@@ -1,6 +1,7 @@
-"""The flux role's sync objects (`templates/sync.yaml.j2`): the suspend lever, the drill, the signer.
+"""The flux role's sync objects (`templates/sync.yaml.j2`): no suspend, the drill, the signer.
 
-- `flux_sync_suspend` renders `suspend: true` or no `suspend` key, never `false`;
+- the sync render carries no `suspend` key, and the renderer refuses `flux_sync_suspend: true`
+  (D5 step 29), because Flux applies these objects itself from then on;
 - the `verify-drill` OCIRepository renders only with its lever on, and is no Discord source;
 - the OCIRepository admits exactly the signer `promote.py` verifies, and `last-good`, the soak
   Job's base, carries the same `verify` block.
@@ -10,15 +11,21 @@ Run: uv run pytest ansible/tests/k8s/test_flux_sync.py
 
 import copy
 import re
+import shutil
 
 import forge
 import pytest
 
 from _k8s_render import render_role_template
 from lib import yaml_fast
+from lib.repo_paths import K8S_ROLES
+from renderer.homelab_render import secret_keys
+from renderer.renderer_lib.cluster import render_tag
+from renderer.renderer_lib.environment import RenderError
+from renderer.renderer_lib.placeholders import placeholder_vars
 
 
-# --- The suspend lever renders only `true`, never `false` -------------------------------
+# --- No suspend renders, and the renderer refuses the old lever ---------------------------
 
 _SUSPENDABLE = {
     ("OCIRepository", "homelab"),
@@ -32,13 +39,13 @@ def _sync_docs(**overrides) -> list[dict]:
     return [d for d in yaml_fast.safe_load_all(text) if isinstance(d, dict)]
 
 
-def suspend_offences(docs: list[dict], lever: bool) -> list[str]:
-    """`<kind>/<name>` for each suspendable object whose `spec.suspend` the lever does not explain.
+def suspend_offences(docs: list[dict]) -> list[str]:
+    """`<kind>/<name>` for each suspendable object that renders a `spec.suspend` key at all.
 
-    Lever on: both objects must carry `suspend: true`. Lever off: neither may carry the key at
-    all, because the client-side apply would turn an explicit `false` into an undo of an
-    operator's hand suspend. A suspendable object missing from the render is an offence too,
-    so a renamed object cannot pass by absence.
+    `true` would stop Flux's own source, and an explicit `false` would take the field back
+    from an operator's hand suspend at the next reconcile of `flux-deferred`. A suspendable
+    object missing from the render is an offence too, so a renamed object cannot pass by
+    absence.
     """
     found = {
         (d["kind"], d["metadata"]["name"]): d["spec"]
@@ -46,33 +53,60 @@ def suspend_offences(docs: list[dict], lever: bool) -> list[str]:
         if (d["kind"], d["metadata"]["name"]) in _SUSPENDABLE
     }
     offences = [f"{k}/{n} missing" for k, n in sorted(_SUSPENDABLE - set(found))]
-    for (kind, name), spec in sorted(found.items()):
-        if lever and spec.get("suspend") is not True:
-            offences.append(f"{kind}/{name} suspend={spec.get('suspend', '<absent>')}")
-        if not lever and "suspend" in spec:
-            offences.append(f"{kind}/{name} suspend={spec['suspend']}")
+    offences += [
+        f"{kind}/{name} suspend={spec['suspend']}"
+        for (kind, name), spec in sorted(found.items())
+        if "suspend" in spec
+    ]
     return offences
 
 
-def test_suspend_offences_is_clean_with_the_lever_off():
-    assert suspend_offences(_sync_docs(flux_sync_suspend=False), lever=False) == []
+def test_suspend_offences_is_clean_on_the_sync_render():
+    assert suspend_offences(_sync_docs()) == []
 
 
-def test_suspend_offences_is_clean_with_the_lever_on():
-    assert suspend_offences(_sync_docs(flux_sync_suspend=True), lever=True) == []
-
-
-def test_suspend_offences_is_flagged_on_an_explicit_false():
-    """The red half: `suspend: false` with the lever off undoes a hand suspend."""
-    docs = copy.deepcopy(_sync_docs(flux_sync_suspend=False))
-    for doc in docs:
-        if (doc["kind"], doc["metadata"]["name"]) in _SUSPENDABLE:
-            doc["spec"]["suspend"] = False
-    assert suspend_offences(docs, lever=False) == [
+def test_suspend_offences_is_flagged_on_a_rendered_suspend():
+    """The red half: either value of the field is an offence."""
+    docs = copy.deepcopy(_sync_docs())
+    for value, doc in zip(
+        (True, False, False),
+        (d for d in docs if (d["kind"], d["metadata"]["name"]) in _SUSPENDABLE),
+        strict=True,
+    ):
+        doc["spec"]["suspend"] = value
+    assert suspend_offences(docs) == [
         "Kustomization/homelab suspend=False",
-        "OCIRepository/homelab suspend=False",
+        "OCIRepository/homelab suspend=True",
         "OCIRepository/last-good suspend=False",
     ]
+
+
+def _placeholders() -> dict[str, object]:
+    """The extra vars a placeholder render lays over the context: one sentinel per secret."""
+    return placeholder_vars(secret_keys())
+
+
+def test_the_renderer_renders_the_flux_role_with_the_lever_off():
+    assert "sync.yaml" in render_tag("flux", _placeholders()).deferred
+
+
+def test_the_renderer_refuses_flux_sync_suspend_true_in_the_roles_defaults(tmp_path):
+    """The red half, as a PR would write it: the role's own defaults set the key."""
+    shutil.copytree(K8S_ROLES / "flux", tmp_path / "flux")
+    defaults = tmp_path / "flux" / "defaults" / "main.yml"
+    text = defaults.read_text()
+    assert "\nflux_sync_suspend: false\n" in text
+    defaults.write_text(
+        text.replace("\nflux_sync_suspend: false\n", "\nflux_sync_suspend: true\n")
+    )
+    with pytest.raises(RenderError, match="flux_sync_suspend is true"):
+        render_tag("flux", _placeholders(), roles=tmp_path)
+
+
+def test_the_renderer_refuses_flux_sync_suspend_true_as_an_extra_var():
+    """The string an `-e` assignment carries is read through Ansible's `bool`, as the role is."""
+    with pytest.raises(RenderError, match="flux_sync_suspend is true"):
+        render_tag("flux", {**_placeholders(), "flux_sync_suspend": "true"})
 
 
 # --- The verify drill is a lever, and never a Discord source -----------------------------
@@ -154,3 +188,91 @@ def test_identity_admits_the_signer_promote_verifies():
 )
 def test_identity_admits_is_flagged_on_another_signer(subject):
     assert not identity_admits(_sync_docs(), subject, forge.SIGNER_ISSUER)
+
+
+# --- The break-glass source form (D6.11) --------------------------------------------------
+
+_PRODUCTION_HOMELAB = {
+    "interval": "1m",
+    "url": "oci://ghcr.io/danielh2018/homelab-manifests",
+    "ref": {"tag": "prod"},
+    "verify": {
+        "provider": "cosign",
+        "matchOIDCIdentity": [
+            {
+                "issuer": "^https://token\\.actions\\.githubusercontent\\.com$",
+                "subject": "^https://github\\.com/DanielH2018/server/\\.github/workflows/promote\\.yml@refs/heads/master$",
+            }
+        ],
+    },
+}
+
+
+def _homelab_source(**overrides) -> dict:
+    return next(
+        d["spec"]
+        for d in _sync_docs(**overrides)
+        if (d["kind"], d["metadata"]["name"]) == ("OCIRepository", "homelab")
+    )
+
+
+def test_the_production_render_is_the_ghcr_form_with_the_keyless_identity():
+    """The lever is off by default, and the render then carries no key and no plain HTTP."""
+    assert _homelab_source() == _PRODUCTION_HOMELAB
+
+
+def test_the_break_glass_lever_renders_the_registry_and_the_key_in_place_of_ghcr():
+    spec = _homelab_source(flux_break_glass=True)
+    assert spec["url"].startswith("oci://registry.")
+    assert spec["insecure"] is True
+    assert spec["ref"] == {"tag": "break-glass"}
+    assert spec["verify"] == {
+        "provider": "cosign",
+        "secretRef": {"name": "flux-break-glass-key"},
+    }
+
+
+def test_the_break_glass_lever_leaves_last_good_on_ghcr():
+    docs = _sync_docs(flux_break_glass=True)
+    last_good = next(d for d in docs if d["metadata"]["name"] == "last-good")
+    assert last_good["spec"]["url"] == _PRODUCTION_HOMELAB["url"]
+    assert "matchOIDCIdentity" in last_good["spec"]["verify"]
+
+
+def _break_glass_secret(**overrides) -> dict:
+    text = render_role_template("flux", "secret.yaml.j2", overrides)
+    return next(
+        d
+        for d in yaml_fast.safe_load_all(text)
+        if d and d["metadata"]["name"] == "flux-break-glass-key"
+    )
+
+
+def key_offences(secret: dict) -> list[str]:
+    """What is wrong with the break-glass Secret: it must hold one public key and nothing else."""
+    data = secret.get("stringData", {})
+    pem = data.get("cosign.pub", "")
+    offences = []
+    if set(data) != {"cosign.pub"}:
+        offences.append(f"keys {sorted(data)} are not exactly cosign.pub")
+    if "BEGIN PUBLIC KEY" not in pem:
+        offences.append("cosign.pub holds no public key")
+    if "PRIVATE" in pem or "ENCRYPTED" in pem:
+        offences.append("cosign.pub holds private key material")
+    return offences
+
+
+def test_key_offences_is_clean_on_the_committed_secret():
+    assert key_offences(_break_glass_secret()) == []
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----\nAAAA\n-----END ENCRYPTED SIGSTORE PRIVATE KEY-----\n",
+        "not a key\n",
+    ],
+    ids=["private-half", "no-key"],
+)
+def test_key_offences_is_flagged_on_a_private_half_or_a_missing_key(key):
+    assert key_offences(_break_glass_secret(flux_break_glass_public_key=key))

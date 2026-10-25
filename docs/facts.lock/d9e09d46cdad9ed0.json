@@ -1,14 +1,17 @@
 {
-  "checksum": "165ac30cb67f411f914b0b1828b83ba7286726af725f368e610fb149117fdc2f",
+  "checksum": "05fef1d52672bf6ead3d36dd247955b0d364306868cbb5f45b73432686750e7b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/flux/CLAUDE.md#What Flux follows",
   "row": {
     "atoms": {
       "ansible/tests/k8s/test_flux_sync.py": "49ddf8430a81103091f4b93eaf5aa695809b3a5057f44a04fa96d6143dc25a52",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
-      "scripts/deploy_tools/forge.py": "fa950982c71e0ea939b682d660d22f2a6c64971c676732c180e6d43f130e75c9"
+      "scripts/deploy_tools/forge.py": "fa950982c71e0ea939b682d660d22f2a6c64971c676732c180e6d43f130e75c9",
+      "scripts/renderer/renderer_lib/bundle.py:flux_files": "bd41de22fb4ddf9c4c3db7b41a6d9d06e3a1ae16945f91a32580b19e5b4bceda",
+      "scripts/renderer/tests/test_renderer_bootstrap_documents.py": "f8f71e522df8edadec2cd71774e585ca6189d4e6f1ab59daf839afe290638ebd",
+      "scripts/renderer/tests/test_renderer_crd_census.py": "7fa9c323c1792f6a53133bd2b9c79da13b3f8314adc5516a32d64e2acd22e5e9"
     },
     "python": "3.14",
-    "verified_sha": "5d3d189d5"
+    "verified_sha": "35a19551f"
   }
 }

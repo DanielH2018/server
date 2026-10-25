@@ -1,0 +1,13 @@
+{
+  "checksum": "3d245b704d241911fa2ab3d075bd3efbf6e756526b11e2fe41489b34846b0e00",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-reconcile/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml": "827dc249c7a6ab9cb0f93ddb1b2c43b3986475fc8137e37a60a0ef932f38d042",
+      "scripts/lib/service_tiers.py:resolved_tier_lists": "1b0cf57ab2becca73fcb9c1e8c901ae94c9f41c8fc9ac267dd6804beae0aabbe"
+    },
+    "python": "3.14",
+    "verified_sha": "fa24696ee"
+  }
+}

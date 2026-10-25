@@ -36,6 +36,189 @@ it was last staged. The signer's state is `/var/lib/homelab-signer/state.json`, 
 set lands in `/var/lib/homelab-signer/refused/<UTC time>/`. Both services log to the journal:
 `journalctl -u homelab-builder -u homelab-repo-sign`.
 
+## The host packages
+
+Each host installs `homelab-updater` and its own package, which `hosts/<host>/package.yml`
+lists.
+
+- `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats.
+- `homelab-daniel-server` ships reconcile, the secrets unit, the `kuma-push` component and the
+  UPS shutdown chain.
+- `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
+  `k3s-restart` component. Its one credential is `k3s_readonly_token`, which
+  `ansible/vars/hosts/daniel-box.sops.yaml` carries. Ansible keeps the builder, the repository and
+  every other daniel-box timer until H7, and the deployer keeps k3s's files until H6.4a. To
+  remove the package before H6.4a, run `sudo apt-get remove homelab-daniel-box`. After H6.4a the
+  package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
+  daniel-server's package does not ship the component yet, so a k3s-agent restart there stays a
+  hand step.
+
+## The restart contract
+
+`homelab-reconcile` is the only process that starts or restarts a unit outside the boot path,
+unless the manifest marks the unit `windowed`. `homelab-secrets` calls no `systemctl`, and
+systemd's own `Restart=` policy and an operator's hand command stay outside the rule. The
+design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The restart contract*.
+
+- **Hand path.** `systemctl start homelab-reconcile` runs one reconcile now. A person who
+  restarts `homelab-secrets` by hand restarts no dependent: that run queues the dependents of
+  every changed output in `/run/homelab-secrets/pending.json`, and the next reconcile run
+  restarts them.
+- **`windowed` units.** Reconcile neither starts nor restarts a unit the manifest marks
+  `windowed` (`k3s.service` and `k3s-agent.service`, once H6 marks them). Its queue entry is
+  dropped. Two other processes restart such a unit, each under its own condition
+  ([the H4 plan](target-architecture/host/h4-secrets-unit.md), *The restart contract*):
+    - **SUC's upgrade container** restarts it after replacing the binary. It runs when `promote`
+      applies a changed Plan, behind the Plan's `prepare` gates, outside any window.
+    - **`homelab-k3s-restart.service`** (the `k3s-restart` component, H6.3b) restarts it inside
+      the host's `k3s_restart_window`, once per changed hash of the files the package ships for
+      the unit. It runs behind `k3s_gates.py host` and makes one attempt per hash. A package
+      that lists the component declares the credential `k3s_readonly_token`.
+    - **The two exclude each other on a node.** `prepare` refuses while
+      `/run/homelab-k3s-restart/` exists, which the unit's `RuntimeDirectory=` creates. The unit
+      refuses while a Plan is applying or a SUC Job in `system-upgrade` has no `Complete` or
+      `Failed` condition.
+    - **To pause the window**, run `sudo systemctl mask --now homelab-k3s-restart.timer`. To
+      resume, `unmask` it and `start` it. **To retry a failed attempt**, remove
+      `/var/lib/homelab-k3s-restart/failed.sha256`. A k3s that a failed restart left down is
+      restarted by hand (H6, *Rollback*), because the unit's gates need the API.
+- **The restart set.** Before step 2, reconcile builds one set from the units whose file or
+  drop-in changed and the units in `pending.json`. A unit enters it only when it is enabled or
+  active. Step 2 starts every other enabled unit that is not active. Step 3 restarts the set.
+  Each unit gets at most one call per run, preceded by `systemctl reset-failed`, and no call
+  uses `--no-block`.
+- **A unit that cannot start yet.** A unit whose rendered outputs do not exist, or whose call
+  fails, is added to `pending.json` and keeps its old hash in `applied.json`. The run exits 1,
+  so the host holds. The next run tries it again.
+- **A package that ships `secrets-unit`.** The manifest then carries `secrets_inputs_sha256`.
+  When it differs from `applied.json`, or `homelab-secrets.service` is not active, reconcile runs
+  a blocking `systemctl restart homelab-secrets.service` before step 2. Legacy entries retire only
+  once that unit is active and every credential and output in `secrets.json` exists. A package
+  without the field makes no call that names `homelab-secrets`, as the Pi's did until H4.5.
+
+## Activation, pending state and drift
+
+`dpkg` installs a packaged file and applies nothing. A file entry in a `component.yml` therefore
+carries `activate:`, and reconcile runs that action in step 3b when the installed file's hash
+changes. The grammar and the validations are the docstring of
+`hosts/lib/reconcile_lib/activate.py`. The design is H7's *How moved config becomes live*.
+
+- **A validation failure is a fault.** `sshd -t` or `fail2ban-client -t` fails, or reconcile
+  cannot parse a sysctl or journald file. The running service stays as it was, the run exits 1,
+  the host holds, and reconcile writes `/run/homelab/validate-failed`. The next run that passes
+  every validation removes the flag. `homelab-reboot.timer`, which H7.7 adds, refuses to reboot
+  while the flag exists.
+- **Reboot-pending and activation-pending.** A `reboot` action creates
+  `/run/homelab/reboot-pending`, which the next boot clears. A `manual:<unit>` action, or any
+  action on a unit the manifest marks `manual` or `windowed`, records the unit's `InvocationID`
+  in `applied.json`. The record clears when the unit restarts. Reconcile writes both states to
+  `homelab_host_reboot_pending{host}` and `homelab_host_activation_pending{host,unit}` in
+  `homelab_host_reconcile.prom`, beside the updater's `homelab_host.prom`. While the flag
+  exists, `homelab_host_reboot_pending_since_seconds{host}` carries its mtime, the time the
+  host first owed the reboot; a later reboot-class change leaves it alone.
+- **Drift is not a failure.** `homelab_host_reconcile_drift{host,arm}` counts items an arm
+  left alone on purpose: UFW rules the floor kept, libvirt objects a running guest still
+  references, users the floor kept, and legacy services that are still running.
+  The run succeeds, so a revert still updates the host. The `host_packages` check names a
+  non-zero count in its message and does not go down. To retry the items before the host's next
+  package version, run `sudo systemctl start homelab-reconcile.service` on the host
+  (**operator-only**).
+
+## The UFW arm
+
+A host package declares firewall rules in a `ufw:` key, and the UFW arm of reconcile
+(`hosts/lib/reconcile_lib/ufw.py`) keeps them. The arm labels every rule it writes with
+`comment 'homelab:<id>'`, or `homelab:keep:<id>` for the SSH and join rules it must never
+delete. A manifest that declares no UFW rule, and has never declared one, makes the arm run no
+`ufw` command at all.
+
+UFW 0.36.2-6, measured on Ubuntu 24.04 by extracting the package and driving its Python front
+end with `--rootdir` on a copy of the stock `/etc/ufw`:
+
+| Command | Result |
+|---|---|
+| `ufw allow 80/tcp comment 'x'`, then `ufw allow 80/tcp comment 'y'` | one rule, comment `y`: appending an existing spec relabels it in place |
+| `ufw insert 1 allow 8/tcp comment 'b2'` for a spec that exists | `Skipping inserting existing rule`; the old comment stays |
+| `ufw delete allow 80/tcp` | deletes the rule whatever its comment |
+| `ufw delete allow 22/tcp comment 'zzz'` | `Could not delete non-existent rule`; a different comment matches nothing |
+| `ufw show added` | `ufw <spec> comment '<text>'` per rule, in order, and `(None)` for an empty list |
+
+The measurement did not cover exit codes, and it did not cover the `Status: inactive` output of
+`ufw status numbered`, which needs root and iptables. The container case that records both is an
+open follow-up. The stub in `hosts/lib/tests/_reconcile_stub.py` replays the table above.
+
+So the arm adopts a rule that predates it, such as the live hosts' `limit 22/tcp` with no comment, by
+appending it again, and it uses `insert 1` only for a spec that is missing. A legacy entry that
+names a spec a declaration shares never deletes it, because that rule is the adopted one.
+
+Reconcile enables UFW only when `ufw status` reads `Status: inactive`, and only once the keep
+rules `ssh-limit` and `lan-ssh` are declared and present. A rebuilt host is the case it exists
+for. The live hosts are active, so there the step does nothing.
+
+## The users, libvirt and line arms
+
+Three more arms of reconcile keep state that `dpkg` does not hold. Each has the same early exit
+as the UFW arm: a manifest that declares nothing for the arm, and has never declared anything,
+makes the arm run no command at all. The keys a component writes are the docstring of
+`scripts/renderer/renderer_lib/host_arms.py`, and each arm's manifest schema is the docstring of
+its module in `hosts/lib/reconcile_lib/`.
+
+| Arm | A component declares | The arm keeps | A fault holds the host | Drift never holds it |
+|---|---|---|---|---|
+| `users` | `users:` with a fixed uid per user | the users, created by `systemd-sysusers` from `/usr/lib/sysusers.d/homelab.conf` | a declared uid that differs from the live uid, a user still missing after `systemd-sysusers` | a user the floor kept |
+| `libvirt` | `libvirt:` with networks and network filters, each XML pinning its name and UUID | the objects, defined when their XML hash changes or libvirt lost them | a failed define | a removal that libvirt refuses |
+| `lines` | `lines:` with line or block edits and an optional `activate:` | one anchored line or one marker-delimited block per edit | an edit of an owned file that is not a conffile | none |
+
+Reconcile runs the users arm and then the line arm before it starts any unit, so a unit that
+runs as a new user starts, and the activation step reads the file the line arm edited. It runs
+the libvirt arm and then the UFW arm last. The line arm therefore edits `/etc/ufw/sysctl.conf`
+before an enable of UFW applies it.
+
+- **The arms delete nothing they did not record.** The users arm expires a user that leaves the
+  list with `usermod --expiredate 1` and never deletes one. The libvirt arm removes only a name
+  its own record holds, so libvirt's `default` network is never touched. The line arm never
+  removes a line. Removing a user's home, or a line, is an operator step.
+- **An empty declaration is a floor.** A revert to a version that declares no users, or no
+  libvirt object, expires and removes nothing, and counts each recorded item as drift. Without
+  that floor a revert would remove the agent users or the staging network, and a host held
+  after a revert could never clear its hold.
+- **The line arm refuses an owned file unless it is a conffile.** It runs `dpkg -S` and then
+  `dpkg-query -W -f='${Conffiles}'` on each owner. An unowned file, and a conffile, take the
+  edit. Any other owned file is a fault: the package shipped something wrong. The arm
+  rewrites a file in place and keeps its owner and mode, because sshd rejects an
+  `authorized_keys` file with the wrong ones. Its regexp and markers equal the Ansible
+  task's, so the first run adopts the line or block Ansible wrote.
+- **The checks at render time run before the arm's.** A `lines:` entry whose line its own regexp
+  misses would be appended again on every run, and a libvirt XML without a `<uuid>` would make
+  `net-define` collide with the live object. Both fail the render.
+
+The line arm's two owning-package upgrade cases run on both sides. The tests in
+`hosts/lib/tests/test_reconcile_lines_arm.py` cover the arm's side with stub `dpkg`. The
+`host_packages` container job covers the `dpkg` side (`scripts/validate/validate_lib/conffile_case.py`).
+It installs a fixture package that owns a conffile, then a homelab fixture whose `lines:` edit lands
+in it, and upgrades the owner under `--force-confold`: once with the conffile unchanged and once
+changed. Each upgrade records whether `dpkg` kept the local file or held the package back. The
+case fails when the line was gone before the next reconcile, and checks it again after that
+reconcile.
+
+### Getting a host out of one of these holds
+
+A fault in these arms holds the host like any failed reconcile. The updater stops installing
+until a version reconciles. `hosts/lib/tests/test_reconcile_hold_way_out.py` drives the real
+updater against the real reconcile through a uid mismatch. It proves that `--clear-hold` alone
+keeps the hold while the fault stands, and that installing a version which declares the live uid
+clears it. The commands are the ones in *Clearing a host's hold* (**operator-only**).
+
+## The `udev` arm
+
+Step 5 of reconcile reloads `udev` when a package's rule changes. A package ships a rule as
+`/usr/lib/udev/rules.d/NN-homelab-*.rules`. Reconcile hashes each such file and compares it with
+`udev` in `applied.json`. A rule that is new or whose hash differs runs
+`udevadm control --reload-rules` and then `udevadm trigger --subsystem-match=usb`. A host with no
+such rule, an unchanged rule and a dropped rule make no `udevadm` call. After a drop, a device
+keeps the mode of its last `udev` event until the next event, such as a re-plug, a trigger or a
+reboot. A failed call exits 1 and leaves the old hash, so the next run retries it.
+
 ## Clearing a deployer hold that a failed `homelab_builder` or `gitops_deploy` apply wrote
 
 The GitOps tick applies `homelab_builder` on daniel-box through the setup plane. From PR H3.5a
@@ -116,7 +299,7 @@ names what to read first.
 Each limit exceeds the longest gap between two of the host's updater fires plus the updater's
 `TimeoutStartSec`, so one failed fetch never pages.
 `scripts/renderer/tests/test_renderer_host_update_limits.py` fails a limit the host's rendered
-schedule outgrows. The map is empty until H3.9c adds daniel-pi.
+schedule outgrows. The map lists daniel-pi (job `node-pi`, 11400 seconds), added by H3.9c.
 
 ## Clearing a host's hold
 
@@ -141,6 +324,26 @@ LAN session:
 
     A failure writes the hold again. With nothing newer published, this acts as
     `--clear-hold`.
+
+## The timers the Pi package ships
+
+`homelab-daniel-pi` links these timers in `timers.target`:
+
+- `homelab-updater.timer` installs the newest packages and runs reconcile;
+- `homelab-pi-sd-health.timer`, `homelab-pi-gz-integrity.timer` and `homelab-pi-recovery.timer`
+  run the three heartbeats of `hosts/components/pi-heartbeats/`;
+- `homelab-crowdsec-probe.timer` (H5.14, `hosts/components/crowdsec-probe/`) runs CrowdSec's edge
+  probe once a minute, as the same user as the heartbeats.
+
+To confirm the package owns the probe and its last run succeeded, run this read-only call:
+
+```bash
+ssh daniel-pi 'dpkg -S /usr/lib/systemd/system/homelab-crowdsec-probe.timer; systemctl show homelab-crowdsec-probe.service -p ExecMainExitTimestamp -p ExecMainStatus -p Result -p User; stat -c "%U %n" /var/log/pi-health'
+```
+
+To stop the probe for a while, run `sudo systemctl stop homelab-crowdsec-probe.timer` on the Pi.
+The next package install starts it again. To stop it for good, drop the timer's `enable:` line
+from the component in a package version. Reconcile stops the timer on the install that drops it.
 
 ## Stopping updates on one host
 
@@ -191,6 +394,34 @@ merge that. The tick applies the teardown, which removes the units, the code, th
 `/var/lib/homelab-builder/`. It keeps the signer's GnuPG home and the published tree. The
 repository is unreachable while disarmed, so each host's updater fails its fetch, and
 `HostUpdateStale` fires once the host's limit passes.
+
+## Releasing the other hosts before the canary reports: the rollout gate
+
+A run whose changed set holds more than one host package stages only the canary's package
+(daniel-pi, then daniel-server, then daniel-box) and opens a gate at that commit. While the gate
+is open, the unbuilt-since series reads `reason="canary"`, and its `sha` names the gate's commit.
+The gate closes by itself once Prometheus reports the canary at that commit or a descendant with
+`homelab_host_reconcile_ok` at 1. The "Host Packages — Status" tile pages once the gate has stayed
+open for 2 hours.
+
+To close the gate before the canary reports, name the gate's commit on daniel-box. The gate's
+commit is the `sha` label of the series, and a descendant of it also works:
+
+```bash
+echo <sha-from-the-canary-series> | sudo tee /etc/homelab-builder/release
+```
+
+`sudo tee` makes the file root's, and the builder user cannot create or change it. The next builder
+run closes the gate without asking Prometheus, then builds the deferred host packages at the
+commit it chooses. To leave the override behind, remove it once the run has built them:
+
+```bash
+sudo rm /etc/homelab-builder/release
+```
+
+A file that names an older commit, or no SHA at all, leaves the gate open. The builder logs
+`rollout gate at <sha> closed` in `journalctl -u homelab-builder` when the gate closes. Shared
+packages (`homelab-updater`, `homelab-tools`) never wait on the gate.
 
 ## Rolling a host back
 
@@ -394,11 +625,15 @@ new version, which costs each host one install.
 ### `reason="no-green"` that persists: a renamed CI job
 
 The builder grades each commit over `CI_CONTEXTS`, which the role renders from
-`gitops_deploy_ci_contexts`. When a CI job is renamed, no commit carries the old context, so no
-commit is ever green. Change `gitops_deploy_ci_contexts` in
-`ansible/roles/setup/gitops_deploy/defaults/main.yml` to the new name, spelled exactly as
-`ci.yml`'s `name:`, and merge that. The tick re-applies both `gitops_deploy` and
-`homelab_builder`, because that defaults file is a cross-role row naming this role.
+`ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
+commit is ever green. Change `ci_required_contexts` in `ansible/inventory/group_vars/all.yml` to
+the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The key is a deploy-plane
+change, so the tick re-renders neither settings file. Re-apply both roles by hand on daniel-box
+(**operator-only**):
+
+```bash
+cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy,homelab_builder
+```
 
 ### `reason="keyring"`
 
@@ -417,14 +652,13 @@ procedure above. The first builder run after the fix builds.
 ### `reason="ci"`
 
 The builder refuses to grade anything, because `CI_CONTEXTS` is empty or
-`CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `gitops_deploy_ci_contexts` or
-`gitops_deploy_ci_ancestor_walk_max` in `ansible/roles/setup/gitops_deploy/defaults/main.yml`
-and merge it. The tick re-applies `homelab_builder`, which renders the builder's settings
-again. If the settings file on the host was edited or lost, re-apply the role by hand instead
+`CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `ci_required_contexts` or
+`ci_ancestor_walk_max` in `ansible/inventory/group_vars/all.yml`, merge it, and re-apply the
+role by hand, because the tick re-renders no settings file for that file
 (**operator-only**):
 
 ```bash
-uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
+cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
 ```
 
 ### `reason="token"` and `reason="build"`
@@ -433,3 +667,21 @@ uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
 401 or 403. Replace `homelab_builder_github_token` with the `add-secret` skill and re-apply the
 role. `build` is a render or an `nfpm` run that failed at the chosen commit. Its journal line
 names the package, and the fix lands on master.
+
+### `reason="tools"`: a `homelab-tools` pin did not verify
+
+The builder could not fetch a binary that `hosts/packages/homelab-tools/package.yml` pins, or the
+download's sha256 differs from the pin. It builds and stages nothing at that commit, and the
+journal line names the URL and both digests. Read the line, then check the pin against the
+release's checksum file:
+
+```bash
+journalctl -u homelab-builder -n 20 --no-pager | grep 'tools:'
+```
+
+A digest that differs from a freshly published release means the pin is wrong or the upstream
+asset changed. Fix the pin on master: Renovate's manager moves a version and its digest together,
+so a hand edit that moved only one is the usual cause. A fetch error alone (a 404 or a timeout)
+clears on the next run once the URL answers. The builder keeps a verified download under
+`/var/lib/homelab-builder/tools-cache/<sha256>` and checks it again on every use, so deleting
+that directory only costs a download.

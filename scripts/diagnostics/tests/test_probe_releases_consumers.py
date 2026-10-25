@@ -164,3 +164,33 @@ def test_the_live_tree_attributes_the_shared_roles_to_named_members():
     assert consumers["arr-notification"] == frozenset({"radarr", "sonarr"})
     assert "n8n" in consumers["image-builder"]
     assert "sonarr" not in consumers["image-builder"]
+
+
+def test_a_build_context_file_outside_every_role_names_the_drift_it_causes(tmp_path):
+    """homelab-mcp's image embeds `obs_api.py` from `scripts/` (#4840).
+
+    The edit moves the image's content tag and so the Deployment. Before the fix the path
+    rules could not see the file, and the reason borrowed an unrelated path that moved in the
+    same range. sonarr embeds nothing from `scripts/`, so the same edit leaves it clean.
+    """
+    obs = "scripts/diagnostics/probe_lib/obs_api.py"
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    base = _commit(
+        repo,
+        {
+            obs: "v1\n",
+            "ansible/roles/k8s/homelab-mcp/tasks/main.yml": "v1\n",
+            "ansible/roles/k8s/sonarr/tasks/main.yml": "v1\n",
+        },
+        "baseline",
+    )
+    tip = _commit(repo, {obs: "v2\n"}, "edit the shared client")
+    _set_origin_master(repo, tip)
+
+    stale = pr.compute_stale(
+        [_record("homelab-mcp", commit=base), _record("sonarr", commit=base)],
+        repo_root=repo,
+        shared_roles=set(),
+    )
+    assert stale == {"homelab-mcp": f"changed since applied: {obs}"}

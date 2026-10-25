@@ -11,7 +11,8 @@ State, all under `STATE_DIR` (`/var/lib/homelab-builder`):
 
   * `src/`, a bare clone of the repository, fetched every run;
   * `state.json`: the last built commit, the end of the last successful fetch, the last
-    failure (its reason and the tip it met), and the package directories last staged;
+    failure (its reason and the tip it met), the package directories last staged, and the
+    rollout gate with the host packages it defers (builder_rollout_gate.py);
   * `ci-cache.json`: each `pass` verdict per SHA. A `fail` or a pending one is never cached,
     so it is asked again next run: a CI re-run can turn a red SHA green (#5786);
   * `published/<package dir>/`: the render of each package as it was last staged;
@@ -36,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import urllib.error
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -43,6 +45,14 @@ from pathlib import Path
 from typing import Any
 
 from host_lib import atomic_write, github_get, github_token, parse_env_file
+import homelab_tool_fetch as tools
+from builder_ci_grade import (
+    ci_verdict,
+    read_check_pages,
+    token_refused,
+)
+from builder_rollout_gate import RELEASE, RolloutGate, admit
+from homelab_tool_fetch import Failure
 
 CONFIG = "/etc/homelab-builder/config.env"
 FINGERPRINT = "/etc/homelab-builder/archive-key.fpr"
@@ -53,52 +63,43 @@ PROM = "homelab_builder.prom"
 # Where the keyring sits in homelab-updater's render, relative to the render's --out.
 KEYRING = "packages/homelab-updater/root/usr/share/keyrings/homelab-archive-keyring.gpg"
 
-# The `reason` label of the unbuilt-since series (*Shared names*, Metrics), less the two values
-# later PRs add: `tools` (H3.11) and `canary` (H3.12). ADR-0021 removed `trust` from the plan.
-# `build` is this PR's: a render or an nfpm run that failed at the chosen commit, which the
-# plan's list does not name. `token` is a missing token, or one the check-runs read refused
-# (#5089).
+# The `reason` label of the unbuilt-since series (*Shared names*, Metrics). `canary` is an open
+# rollout gate (H3.12).
+# `build` is a render or an nfpm run that failed at the chosen commit, `token` a missing token or
+# one the check-runs read refused (#5089), and `tools` a `homelab-tools` pin that failed to
+# download or whose digest differs from the pin (H3.11). ADR-0021 removed `trust`.
 REASONS = frozenset(
-    {"ok", "hold", "ancestry", "keyring", "ci", "no-green", "token", "build"}
+    {
+        "ok",
+        "hold",
+        "ancestry",
+        "keyring",
+        "ci",
+        "no-green",
+        "token",
+        "build",
+        "tools",
+        "canary",
+    }
 )
 
-# deploy_git.py's two conclusion sets, which `ci_verdict` below grades by. A test holds the
-# two copies equal, because this script cannot import the deployer's module.
-_CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
-_CI_NO_VERDICT_CONCLUSIONS = frozenset(
-    {"cancelled", "stale", "skipped_by_concurrency", None}
-)
+
+def log(message: str, err: bool = False) -> None:
+    print(
+        f"homelab-builder: {message}",
+        file=sys.stderr if err else sys.stdout,
+        flush=True,
+    )
 
 
-def log(message: str) -> None:
-    print(f"homelab-builder: {message}", flush=True)
-
-
-def ci_verdict(check_runs: list[dict], required: frozenset[str]) -> str:
-    """`pass`, `pending` or `fail` for one commit, graded as `deploy_git.ci_verdict` grades.
-
-    One difference: the caller refuses an empty `required` before it asks (builder step 4),
-    so this never meets the empty set that disarms the deployer's gate.
-    """
-    states: dict[str, set[str]] = {}
-    for run in check_runs:
-        name = run.get("name")
-        if name not in required:
-            continue
-        if run.get("status") != "completed":
-            state = "pending"
-        elif run.get("conclusion") in _CI_PASS_CONCLUSIONS:
-            state = "pass"
-        elif run.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS:
-            state = "pending"
-        else:
-            state = "fail"
-        states.setdefault(name, set()).add(state)
-    if any("fail" in s for s in states.values()):
-        return "fail"
-    if any("pending" in states.get(name, {"pending"}) for name in required):
-        return "pending"
-    return "pass"
+def describe(exc: BaseException, token: str | None = None) -> str:
+    """An exception's type, message, cause and raising call chain (#6074); the token is masked."""
+    chain = ">".join(f.name for f in traceback.extract_tb(exc.__traceback__)) or "-"
+    text = f"{type(exc).__name__}: {exc} [step {chain}]"
+    cause = exc.__cause__
+    if cause is not None:
+        text += f" (caused by {type(cause).__name__}: {cause})"
+    return text.replace(token, "***") if token else text
 
 
 def version(count: int, sha: str) -> str:
@@ -139,49 +140,32 @@ def keyring_fingerprints(keyring: Path, run=subprocess.run) -> list[str]:
 
 
 def tree_files(directory: Path) -> dict[str, tuple[bytes, int]]:
-    """Each file under `directory`, as its bytes and mode, keyed by its relative path."""
+    """Each file and symlink under `directory`, keyed by its relative path.
+
+    A file is its bytes and mode. A symlink is its target text and mode 0, dangling or not:
+    a link into a sibling package (daniel-pi's `timers.target.wants/homelab-updater.timer`)
+    dangles inside its own render, and a comparison that skipped it never saw it change.
+    """
     if not directory.is_dir():
         return {}
-    return {
-        str(path.relative_to(directory)): (
-            path.read_bytes(),
-            path.stat().st_mode & 0o7777,
-        )
-        for path in sorted(directory.rglob("*"))
-        if path.is_file()
-    }
-
-
-def token_refused(exc: urllib.error.HTTPError) -> bool:
-    """Whether GitHub refused the token, rather than rate-limiting it.
-
-    GitHub answers a revoked or expired token 401, and a token without access 403. It also
-    answers a rate limit 403: the primary limit with `X-RateLimit-Remaining: 0`, the
-    secondary one with `Retry-After`. A rate limit clears on its own, so it stays a pending
-    verdict rather than a page.
-    """
-    if exc.code == 401:
-        return True
-    headers = exc.headers or {}
-    limited = headers.get("X-RateLimit-Remaining") == "0" or "Retry-After" in headers
-    return exc.code == 403 and not limited
-
-
-class Failure(Exception):
-    """A run that ends with a reason, before it builds."""
-
-    def __init__(self, reason: str, message: str):
-        super().__init__(message)
-        self.reason = reason
+    files: dict[str, tuple[bytes, int]] = {}
+    for path in sorted(directory.rglob("*")):
+        key = str(path.relative_to(directory))
+        if path.is_symlink():
+            files[key] = (os.fsencode(os.readlink(path)), 0)
+        elif path.is_file():
+            files[key] = (path.read_bytes(), path.stat().st_mode & 0o7777)
+    return files
 
 
 @dataclass
-class Builder:
+class Builder(RolloutGate):
     """One builder run. Every path and transport is a field, so a test can point it elsewhere."""
 
     config_path: Path = Path(CONFIG)
     fingerprint_path: Path = Path(FINGERPRINT)
     hold_path: Path = Path(HOLD)
+    release_path: Path = Path(RELEASE)
     state_dir: Path = Path(STATE_DIR)
     clone_url: str | None = None
     python: str = field(default_factory=lambda: os.environ.get("HOMELAB_PYTHON", ""))
@@ -189,6 +173,7 @@ class Builder:
     nfpm: str = field(default_factory=lambda: os.environ.get("HOMELAB_NFPM", "nfpm"))
     run: Callable[..., Any] = subprocess.run
     opener: Callable[..., Any] | None = None
+    prom_fetch: Callable[[str, float], bytes] | None = None
     now: Callable[[], float] = time.time
 
     def __post_init__(self):
@@ -200,6 +185,7 @@ class Builder:
         self.state: dict = {}
         self.cache: dict[str, str] = {}
         self.requests = 0
+        self.token: str | None = None
 
     # ── state ─────────────────────────────────────────────────────────────────────────────
 
@@ -276,17 +262,20 @@ class Builder:
         if self.hold_path.exists():
             log(f"held by {self.hold_path}; nothing built")
             return self._finish("hold", tip, last)
+        self.close_gate()
         try:
             chosen = self.choose(tip, last)
             if chosen is None:
                 return self._finish("ok" if last == tip else "no-green", tip, last)
             self.build(chosen)
         except Failure as exc:
-            return self._fail(exc.reason, tip, str(exc), last)
+            return self._fail(
+                exc.reason, tip, describe(exc, self.token), last, err=True
+            )
         except (RuntimeError, OSError) as exc:
             # A git, worktree or filesystem error. Left uncaught it would exit 1 on every run,
             # and OnFailure= would page every 2 minutes for one condition.
-            return self._fail("build", tip, f"{type(exc).__name__}: {exc}", last)
+            return self._fail("build", tip, describe(exc, self.token), last, err=True)
         self.state["last_built"] = chosen
         return self._finish("ok", tip, chosen)
 
@@ -307,7 +296,12 @@ class Builder:
                 "ci", f"CI_ANCESTOR_WALK_MAX={walk!r} is not a positive integer"
             )
         if last == tip:
-            return None
+            # A gate that just closed leaves deferred packages to build at the last commit.
+            return (
+                last
+                if self.state.get("deferred") and not self.state.get("gate")
+                else None
+            )
         chain = self.git("rev-list", "--first-parent", tip).split()
         if last is not None and last not in chain:
             raise Failure(
@@ -335,15 +329,20 @@ class Builder:
     def verdict(self, sha: str, contexts: frozenset[str]) -> str:
         if self.cache.get(sha) == "pass":
             return "pass"
-        self.requests += 1
-        try:
-            payload = github_get(
-                f"repos/{self.config['GITHUB_REPO']}/commits/{sha}/check-runs?per_page=100",
+
+        def fetch_page(query: str) -> object:
+            self.requests += 1
+            return github_get(
+                f"repos/{self.config['GITHUB_REPO']}/commits/{sha}/check-runs{query}",
                 self.token,
                 user_agent="homelab-builder",
                 opener=self.opener,
             )
-            runs = payload["check_runs"]
+
+        try:
+            # A ValueError here includes a read short of total_count, so a partial listing
+            # reads as pending below rather than grading page 1 alone (#5991).
+            runs = read_check_pages(fetch_page, "check_runs")
         except urllib.error.HTTPError as exc:
             if token_refused(exc):
                 # The fetch is anonymous and keeps succeeding, so this read is the only one
@@ -369,8 +368,8 @@ class Builder:
         # DECIDED: only `pass` is cached. GitHub's check-runs API returns the latest run per
         # name, so `gh run rerun --failed` turns a red SHA green, and a cached `fail` would
         # never see it while the deployer's gate, which caches nothing, deploys the SHA
-        # (#5786). Re-reading a fail costs one request per red commit in a walk that
-        # CI_ANCESTOR_WALK_MAX bounds.
+        # (#5786). Re-reading a fail costs one request per page of a red commit's runs, in a
+        # walk that CI_ANCESTOR_WALK_MAX bounds.
         if result == "pass":
             self.cache[sha] = result
         return result
@@ -457,12 +456,30 @@ class Builder:
             if str(p) in unconsumed
             or tree_files(out / p) != tree_files(self.published / p)
         ]
+        changed, deferred, gate = admit(changed, self.state.get("gate"), chosen)
         if not changed:
+            self.note_rollout(deferred, gate)
             log(f"{chosen[:12]} changes no package")
             return
         debs.mkdir(parents=True)
+        # Every pin is verified before the first nfpm run: a mismatch builds nothing.
+        tools.fetch_all([out / p for p in changed], self.state_dir, out, self.opener)
         for package in changed:
             self.package(out / package, debs, ver)
+        # DECIDED: `state["staged"]` is saved before staged/ or published/ changes. The signer
+        # takes a set only after a run that exits 0, so a run that fails after the published/
+        # copy leaves a deb in staged/ that nothing has signed. The next run finds that deb
+        # through `staged`. When `staged` was assigned after the copy, it still named the
+        # previous set, the next run deleted the deb, and homelab-daniel-pi never reached the
+        # repository (2026-10-23: copytree raised on a dangling symlink). Saved first, a run
+        # that raises or gets SIGTERM leaves `staged` naming every package whose deb may be
+        # unsigned. The role's CLAUDE.md, *The builder's run*, has the full reasoning.
+        for package in unconsumed & set(deferred):
+            # The gate defers a package whose deb the next lines delete. Its published/ copy
+            # must go too, or nothing would ever rebuild it.
+            shutil.rmtree(self.published / package, ignore_errors=True)
+        self.state["staged"] = changed
+        self._save("state.json", self.state)
         for entry in self.staged.iterdir():
             entry.unlink()
         # A copy, never a move: a file created in the setgid staged/ takes its homelab-signer
@@ -473,16 +490,25 @@ class Builder:
         atomic_write(str(self.staged / "chosen"), chosen[:12] + "\n")
         for package in changed:
             shutil.rmtree(self.published / package, ignore_errors=True)
-            shutil.copytree(out / package, self.published / package)
-        self.state["staged"] = changed
+            # symlinks=True keeps a link as a link. Followed, a link that dangles inside its
+            # own render raises after the rest is copied, and tree_files then compares equal.
+            shutil.copytree(out / package, self.published / package, symlinks=True)
+        self.note_rollout(deferred, gate)
         log(f"staged {', '.join(changed)} at {ver}")
 
     def package(self, directory: Path, target: Path, ver: str) -> None:
         """Build the rendered package in `directory` into `target` at version `ver`."""
+        build = (
+            directory  # a tree with tools.json builds from a copy holding the binaries
+        )
+        if (directory / tools.PINS_FILE).is_file():
+            build = tools.scratch_tree(
+                directory, self.work, self.state_dir, self.opener
+            )
         proc = self.run(
             [self.nfpm, "package", "--config", "nfpm.yaml", "--packager", "deb"]
             + ["--target", f"{target}/"],
-            cwd=directory,
+            cwd=build,
             env={**os.environ, "HOMELAB_VERSION": ver},
             check=False,
         )
@@ -493,9 +519,15 @@ class Builder:
 
     # 8. The metric, and the once-per-condition exit.
     def _fail(
-        self, reason: str, tip: str | None, message: str, last: str | None = None
+        self,
+        reason: str,
+        tip: str | None,
+        message: str,
+        last: str | None = None,
+        err: bool = False,
     ) -> int:
-        log(f"{reason}: {message}")
+        # `err` marks a failure that came from an exception: stderr carries it to the journal.
+        log(f"{reason}: {message}", err=err)
         # The failure is recorded before the metric, whose git reads can fail for the reason
         # that ended the run. A raise there must not skip the record, or every run would
         # exit 1 and page.
@@ -511,6 +543,8 @@ class Builder:
 
     def _finish(self, reason: str, tip: str, last: str | None) -> int:
         self.state.pop("failure", None)
+        if reason == "ok" and self.state.get("gate"):
+            reason = "canary"
         self._write_prom(reason, tip, last)
         return 0
 
@@ -528,7 +562,10 @@ class Builder:
 
     def _write_prom_lines(self, reason: str, tip: str, last: str | None) -> None:
         sha, since = tip, 0.0
-        if last != tip:
+        if reason == "canary":
+            sha = self.state["gate"]["sha"]
+            since = float(self.git("show", "-s", "--format=%ct", sha))
+        elif last != tip:
             chain = self.git("rev-list", "--first-parent", tip).split()
             if last in chain:
                 sha = chain[chain.index(last) - 1]

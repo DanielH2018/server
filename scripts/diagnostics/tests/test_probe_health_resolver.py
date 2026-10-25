@@ -28,6 +28,9 @@ _ROLES_WITH_NO_WORKLOAD = {
     "cluster-base": "PriorityClasses, the read-only identity and an inert ConfigMap; no workload",
     "configarr": "a CronJob and its Secret; the sync runs to completion, nothing stays up",
     "deploy-ui": "a selector-less Service, its EndpointSlice and an IngressRoute onto deploy-ui.service on daniel-box",
+    "longhorn-backup": "two Secrets, two BackupTargets and the RecurringJobs; `probe.py health` reads the targets' availability instead (health_backup_targets.py)",
+    "longhorn-reconcile": "a CronJob, its ConfigMap and its RBAC; the reconcile runs to completion, nothing stays up",
+    "longhorn-restore-drill": "the drill's stamp ConfigMap, and from H2.3d a CronJob that runs to completion; nothing stays up",
     "longhorn-ui": "an IngressRoute, Middleware and TLSOption onto longhorn-system's own UI",
     "media-volume": "a StorageClass, PV, PVC and a one-shot Job — storage, not a workload",
     "netpol-baseline": "NetworkPolicies plus the Job that probes them",
@@ -357,7 +360,7 @@ def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
 
 
 #
-# CronJob-only roles. configarr and pi-peer-backup declare no Deployment/DaemonSet/
+# CronJob-only roles. configarr, longhorn-reconcile and pi-peer-backup declare no Deployment/DaemonSet/
 # StatefulSet, only a CronJob -- until this gate existed, `probe.py health` reported "declares
 # no rollout-checkable workload" for both, which deploy_lib/detach_notify.py's
 # NOT_APPLICABLE_MARKERS turns into a `skipped` verdict rather than a checked one. Neither
@@ -365,7 +368,9 @@ def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
 # run. format_cronjob_health closes that gap.
 #
 
-_CRONJOB_ONLY_ROLES = frozenset({"configarr", "pi-peer-backup"})
+_CRONJOB_ONLY_ROLES = frozenset(
+    {"configarr", "longhorn-reconcile", "pi-peer-backup", "longhorn-restore-drill"}
+)
 
 
 def test_cronjob_only_census_finds_exactly_the_known_roles():
@@ -385,10 +390,10 @@ def test_cronjob_only_census_finds_exactly_the_known_roles():
 
 
 def test_the_no_rollout_checkable_workload_set_still_matches_outside_the_cronjob_roles():
-    """The other four roles in `_ROLES_WITH_NO_WORKLOAD` (deploy-ui, longhorn-ui,
-    media-volume, netpol-baseline) still reach the unchanged skip message
+    """The other roles in `_ROLES_WITH_NO_WORKLOAD` (deploy-ui,
+    longhorn-ui, media-volume, netpol-baseline) still reach the unchanged skip message
     run_health prints --
-    only configarr and pi-peer-backup were pulled onto the new CronJob path."""
+    only configarr, longhorn-reconcile, longhorn-restore-drill and pi-peer-backup were pulled onto the new CronJob path."""
     resolved = _resolved()
     no_workload = {role for role in resolved if not resolved[role]}
     assert (

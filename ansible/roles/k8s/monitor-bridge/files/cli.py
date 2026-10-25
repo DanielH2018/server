@@ -17,12 +17,14 @@ from collections.abc import Callable, Mapping
 
 import bridge.common
 import check
+import verdict_export
 import deploy_pipeline
 import gates
 import registry
 from bridge.config import load_config
 from bridge.sources import Sink, Sources
 from bridge.types import Check
+from check_table import CHECKS
 from gates import Gates
 
 # `lib/exit_codes.py:USAGE_ERROR`, which the pod cannot import: it mounts only this role's
@@ -82,6 +84,7 @@ def main(
     sink: Sink | None = None,
     sleep: Callable[[float], None] | None = None,
     exposition: deploy_pipeline.Exposition | None = None,
+    check_exposition: verdict_export.CheckExposition | None = None,
 ) -> int:
     """Validates the configuration and the check filter, then runs the check loop.
 
@@ -114,6 +117,9 @@ def main(
         None in the looping pod builds one and serves it on DEPLOY_PIPELINE_PORT. `--once`,
         `--dry-run` and `--check` serve nothing and read nothing, so a hand-run beside the pod
         never contends for its port. A test passes an unserved `Exposition` and reads its body.
+      check_exposition: What the per-row verdict gauges are recorded to. None in the looping
+        pod builds one and serves it on CHECK_EXPORTER_PORT, under the same `--once`,
+        `--dry-run` and `--check` rule as `exposition`. A test passes an unserved one.
 
     Returns:
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
@@ -125,7 +131,7 @@ def main(
     # DECIDED: `env` reaches `load_config` and `registry.build_checks`, and nothing else.
     # Slice 17b moved the registry out of `check.py` precisely so `main(env={...})` can decide
     # which monitor a result is pushed to, which it could not while the KUMA_PUSH_* tokens were
-    # read at import into a module-level list. The FOUR reachability-gate tokens are the
+    # read at import into a module-level list. The THREE reachability-gate tokens are the
     # remaining exception: `gates._gate` still reads them from `os.environ` at push time, so
     # `env` does not redirect a gate's push. Each is `bridge.types.push_env(<gate name>)`, derived
     # rather than stored, so there is no module global left to remove — moving them would be a
@@ -168,9 +174,19 @@ def main(
     )
     if args.once or args.dry_run or args.checks:
         exposition = None
-    elif exposition is None:
-        exposition = deploy_pipeline.Exposition()
-        exposition.serve(cfg.DEPLOY_PIPELINE_PORT)
+        check_exposition = None
+    else:
+        if exposition is None:
+            exposition = deploy_pipeline.Exposition()
+            exposition.serve(cfg.DEPLOY_PIPELINE_PORT)
+        if check_exposition is None:
+            check_exposition = verdict_export.CheckExposition(cfg.INTERVAL)
+            check_exposition.serve(cfg.CHECK_EXPORTER_PORT)
+        # Counted from the table, not from `checks`: `registry.build_checks` drops every gate
+        # row, so its length would leave the gate rows' series above the count.
+        check_exposition.set_rows(
+            sum(gates.check_enabled(row.name, only, cfg.CHECKS_SKIP) for row in CHECKS)
+        )
     while True:
         check.run_once(
             cfg,
@@ -180,6 +196,7 @@ def main(
             sink=sink,
             dry_run=args.dry_run,
             only=only,
+            export=check_exposition,
         )
         if exposition is not None:
             deploy_pipeline.refresh(cfg, sources, exposition, now=time.time())

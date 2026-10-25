@@ -1,0 +1,22 @@
+{
+  "checksum": "b959a0ee298b72c25a42f3dbbb9cd2146510ec972692184f053d66e6c6bb49e6",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_rbac_against_script_drill.py::test_a_drill_role_without_the_volume_delete_wait_is_flagged": "3924373d3dcb66b478289e54f388fdf6cbdaf0ce811750652cc1ec8976032263",
+      "ansible/tests/k8s/test_rbac_against_script_drill.py::test_the_drill_role_grants_every_call_its_script_makes": "f56ea80dc42efb70fb648bf1b107990c912511f1d90350438d98125608d66218",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py::test_an_undeclared_volume_still_fails_with_no_files": "e79abead2a2106c7a72e35790d42f3602e41a2dbb670db50cbd35c2bcc38f0e7",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_cronjob_is_unsuspended_and_never_overlaps": "690fbae94f8f85d99162820084907397798159fd28af42620adb169b5782db63",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_deadline_clears_the_restore_timeout_plus_the_probe_bound": "4c9f913496ce2c0d413cdf2c7c4b7b9f4a45ff466743a6daf3c34c7cfe0a8b0d",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py::test_a_filled_declared_volume_fails_and_stamps_nothing": "78f0614543c4881513dd66e55af8a1d1aff20b55321ffa494f807a52d3a99855",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_image.py::test_a_suffixed_mktemp_template_passes_on_the_host_and_fails_under_the_image": "6a29373da4540f271249137c230dd0d38d3f6e80d4e2715c60ff76fd6a3f519e",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick": "337fb955a69cfc8948e872fdfc65c709c551521fdb5a386d5ab9799a5f2bcb81",
+      "ansible/tests/longhorn/test_longhorn_restore_drill_retry.py::test_a_retry_already_spent_leaves_the_rotation_alone": "68f0b43a183a12ed13ba672b821a4d0f1aebd047df68bf97e660e812f9451139",
+      "ansible/tests/repo/test_census_rows_roles.py::test_census_row_holds_on_the_tree": "3517271dec93e78a96e775ed1530225b87c538ea15b6f25186cd223d4dfce72d",
+      "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d"
+    },
+    "python": "3.14",
+    "verified_sha": "4001b7221"
+  }
+}

@@ -9,11 +9,13 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_bundle_ordering.py
 """
 
 import pytest
+import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_REFUSED
 from renderer import homelab_render
 from renderer.renderer_lib import cluster as cluster_mod
+from renderer.renderer_lib import ordering as ordering_mod
 from renderer.renderer_lib.bundle import (
     CLUSTER_VARS_FILE,
     SHARED_KINDS,
@@ -184,8 +186,8 @@ def test_an_ordinary_tag_is_clean():
     "tag", ["soak", "homelab-namespace", "fixture-snapshot", "fixture-verify"]
 )
 def test_a_tag_taking_a_name_d5_reserves_is_flagged(tag):
-    """`homelab-namespace` is refused before it joins SHARED_KINDS, and `soak` after."""
-    assert "homelab-namespace" not in SHARED_KINDS and "soak" in SHARED_KINDS
+    """`soak` and `homelab-namespace` are refused as SHARED_KINDS members, and the suffixes alone."""
+    assert {"homelab-namespace", "soak"} <= SHARED_KINDS
     # The reserved-name text, because none of these is a render target and the
     # unknown-target refusal also names the tag.
     with pytest.raises(cluster_mod.RenderRefused) as refused:
@@ -278,6 +280,37 @@ def test_a_verify_kind_of_a_tag_with_no_deferred_files_depends_on_the_tag():
     directories = {name: {} for name in ("bento-pdf", "bento-pdf-verify")}
     docs = _docs(Ordering(), ["bento-pdf"], directories)
     assert _depends(docs["bento-pdf-verify"]) == ["bento-pdf"]
+
+
+def test_a_verify_kind_waits_on_the_last_kustomization_of_each_tag_it_names():
+    """A named tag's `-deferred` stands in for it, and an Ansible-owned one is annotated."""
+    ordering = Ordering(
+        flux_owned=frozenset({"bento-pdf", "pihole"}),
+        verify_after={"bento-pdf": ["pihole", "traefik"]},
+    )
+    directories = _every_kind() | {"bento-pdf-verify": {}}
+    doc = _docs(ordering, ["bento-pdf", "pihole"], directories)["bento-pdf-verify"]
+    assert _depends(doc) == ["bento-pdf", "pihole-deferred"]
+    assert _dropped(doc) == "traefik"
+
+
+def test_crowdsec_verify_waits_on_the_rolled_traefik():
+    """The ban proof reads the edge, so it must probe the Traefik pod a roll brought (#5999)."""
+    ordering = cluster_mod.bundle_ordering({"crowdsec", "traefik"})
+    assert ordering.verify_after["crowdsec"] == ["traefik"]
+    directories = {name: {} for name in ("crowdsec", "crowdsec-verify", "traefik")}
+    docs = _docs(ordering, ["crowdsec", "traefik"], directories)
+    assert "traefik" in _depends(docs["crowdsec-verify"])
+
+
+@pytest.mark.parametrize("value", [[], ["crowdsec"], "{{ edges }}"])
+def test_a_verify_after_that_is_not_a_list_of_other_tags_is_a_problem(tmp_path, value):
+    defaults = tmp_path / "crowdsec" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text(yaml.safe_dump({"flux_verify_after": value}))
+    found, problems = ordering_mod.verify_after(["crowdsec"], tmp_path)
+    assert found == {}
+    assert problems and "flux_verify_after" in problems[0]
 
 
 def test_a_snapshot_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():

@@ -97,7 +97,7 @@ def test_membership_of_a_transforming_filter_is_flagged(transform, message):
 # -- the five rules, each over a small fixture --------------------------------------------
 
 KEY, SOPS_KEY = "fixture_key", "pi_peer_backup_ssh_key"
-FIXTURE_KEYS = [KEY, SOPS_KEY, "email"]
+FIXTURE_KEYS = [KEY, SOPS_KEY, "email", "longhorn_b2_bucket", "r2_bucket"]
 SECRET_DOC = (
     "apiVersion: v1\nkind: Secret\nmetadata:\n  name: s\nstringData:\n  v: {}\n"
 )
@@ -163,6 +163,59 @@ def test_confined_to_secret_is_flagged():
     assert _rules_1_to_4(CONFIGMAP_DOC.format(sentinel(KEY))) == [
         (CONFINED_TO_SECRET, "ConfigMap/c", KEY)
     ]
+
+
+def _target_doc(url: str) -> str:
+    return (
+        "apiVersion: longhorn.io/v1beta2\nkind: BackupTarget\nmetadata:\n  name: default\n"
+        f"spec:\n  backupTargetURL: {url}\n"
+    )
+
+
+def test_a_kind_exempt_placeholder_in_its_kind_is_clean():
+    # H1.7b: the bucket placeholder sits in a BackupTarget's URL and nowhere else.
+    assert (
+        _rules_1_to_4(_target_doc(f"s3://{sentinel('longhorn_b2_bucket')}@us/l")) == []
+    )
+    assert _rules_1_to_4(_target_doc(f"s3://{sentinel('r2_bucket')}@auto/l")) == []
+
+
+def test_a_kind_exempt_placeholder_outside_its_kind_is_flagged():
+    configmap = CONFIGMAP_DOC.format(sentinel("r2_bucket"))
+    assert _rules_1_to_4(configmap) == [
+        (CONFINED_TO_SECRET, "ConfigMap/c", "r2_bucket")
+    ]
+
+
+def test_another_key_in_a_backup_target_is_flagged():
+    # The pair names the key as well as the kind: the exemption does not cover every key.
+    found = _rules_1_to_4(_target_doc(f"s3://{sentinel(KEY)}@auto/longhorn"))
+    assert found == [(CONFINED_TO_SECRET, "BackupTarget/default", KEY)]
+
+
+KNOWN = [*FIXTURE_KEYS, *SOPS_MANIFEST_KEYS]
+
+
+def _member_render(url: str):
+    tag = RenderedTag("longhorn-backup", {"t.yaml": _target_doc(url)})
+    return apply_placeholders([tag], FIXTURE_KEYS)
+
+
+def test_the_default_backup_target_member_is_found_when_armed():
+    url = f'"s3://{sentinel("longhorn_b2_bucket")}@us-east-005/longhorn"'
+    assert output_members(_member_render(url), KNOWN) == []
+
+
+def test_the_default_backup_target_member_is_found_when_disarmed():
+    # DECIDED in secret_checks.py: a disarm PR renders a blank URL, and its render must pass.
+    assert output_members(_member_render('""'), KNOWN) == []
+
+
+def test_the_default_backup_target_member_is_gone_when_the_url_names_no_placeholder():
+    (missing,) = output_members(
+        _member_render('"s3://hard-coded@us-east-005/longhorn"'), KNOWN
+    )
+    assert "${longhorn_b2_bucket} (or a blank backupTargetURL)" in missing
 
 
 def test_no_sops_manifest_key_is_clean():

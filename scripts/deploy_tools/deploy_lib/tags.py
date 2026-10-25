@@ -59,7 +59,7 @@ from lib.render_guard import (
     service_tags_at_or_none,
 )
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_TAG_MISS
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
 
 def _git_show(ref: str, path: str) -> str:
@@ -90,11 +90,11 @@ def _git_diff_names(*args: str, cwd: Path) -> list[str]:
 # gitops_deploy.py reaches into its own directory.
 DEPLOY_LOGIC_DIR = GITOPS_DEPLOY_FILES
 # Put it on sys.path ONCE, here. The three functions that import from deploy_logic would
-# each insert it per call and never remove it, so sys.path would grow by one entry per
-# call in a long-lived process. The IMPORTS stay lazy inside those functions — see
-# _load_deploy_logic — because only the path entry is constant and free; the import is the
-# part `validate`/`list`/`describe` must not pay for.
+# each insert it per call and never remove it, growing sys.path by one entry per call. The
+# IMPORTS stay lazy inside those functions (see _load_deploy_logic): only the path entry is
+# free; `validate`/`list`/`describe` must not pay for the import. `deploy_git` needs `hosts/lib`.
 _sys.path.insert(0, str(DEPLOY_LOGIC_DIR))
+_sys.path.insert(0, str(HOST_LIB_FILES))
 
 # Every container role block-tags its tasks with these (see the role task files and the
 # `--skip-tags deploy` config-only workflow in CLAUDE.md). They are legitimate --tags
@@ -187,8 +187,8 @@ def split_shared_roles(
 
     A path-to-tag derivation reads a role DIRECTORY name, but only a role with a
     `containers_list` entry has a deploy tag. Several roles under ansible/roles/k8s/ have no
-    entry — manifests, volume-snapshot, volume-revert, image-builder, longhorn-api,
-    cronjob-gate and arr-notification — because other roles include them by literal
+    entry — manifests, volume-snapshot, volume-revert, image-builder, longhorn-api
+    and arr-notification — because other roles include them by literal
     name. Handing one to `--tags` poisons the WHOLE list: deploy.sh validates every tag and
     exits 2 on the first unknown one, so the valid services beside it are refused too.
 

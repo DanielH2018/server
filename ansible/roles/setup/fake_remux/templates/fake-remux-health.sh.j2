@@ -7,7 +7,10 @@
 # It reads the three Kuma push tokens from kuma-push.env in fake_remux_config_dir and the three
 # state files in fake_remux_state_dir, then pushes one heartbeat per state file. It logs to syslog
 # under the tag fake-remux-health. Exit 0 also covers unreadable tokens (the push is skipped);
-# exit 1 means /usr/local/lib/kuma-push-lib.sh is missing.
+# exit 1 means /usr/local/lib/kuma-push-lib.sh or homelab-check-lib.sh is missing. Each run also
+# writes one verdict per state file to $TEXTFILE_DIR/<fake-remux-scan|fake-remux-replace|
+# mkv-attachment-repair>.prom for node_exporter's textfile collector, before the pushes (M6 batch
+# B4; rules in other-setup-checks.yaml run in shadow).
 #
 # Pushes the SAME two Kuma monitors monitor-bridge used to push, with the same tokens, so both keep
 # their history. Only the pusher moved: monitor-bridge then ran on daniel-server, reading that
@@ -35,6 +38,23 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t fake-remux-health "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t fake-remux-health "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: two cron periods plus 300s, the rule
+# M3 fixed (docs/target-architecture/monitoring/m3-textfile-timer.md, "The deadline for
+# disk-health"). It renders from fake_remux_health_cron_minute, which must be `*/N`, and
+# ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+{% set _every_n = fake_remux_health_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if _every_n.isdigit() and '*/' ~ _every_n == fake_remux_health_cron_minute | string %}
+DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
+{% else %}
+{{ fake_remux_health_cron_minute_not_every_n | mandatory('fake_remux_health_cron_minute must be */N for fake-remux-health.sh to derive DEADLINE_S, got ' ~ fake_remux_health_cron_minute) }}
+{% endif %}
+TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
@@ -46,9 +66,12 @@ FAKE_REMUX_REPLACE_PUSH_TOKEN=""
 MKV_ATTACHMENT_PUSH_TOKEN=""
 # shellcheck source=/dev/null
 [[ -r {{ fake_remux_config_dir }}/kuma-push.env ]] && . {{ fake_remux_config_dir }}/kuma-push.env
+# The tokens gate the push only. The textfile verdicts below do not need them, so a host whose
+# env file is unreadable still reports to Prometheus.
+PUSH_TOKENS_READABLE=1
 if [[ -z "$FAKE_REMUX_SCAN_PUSH_TOKEN" || -z "$FAKE_REMUX_REPLACE_PUSH_TOKEN" || -z "$MKV_ATTACHMENT_PUSH_TOKEN" ]]; then
   logger -t fake-remux-health "kuma push tokens unreadable — skipping push (run initial_setup.yml --tags fake_remux)"
-  exit 0
+  PUSH_TOKENS_READABLE=0
 fi
 
 # Order is load-bearing: state_push.py prints one line per triple, in argument order, and the two
@@ -61,6 +84,9 @@ mapfile -t LINES < <(/usr/local/bin/uv run --no-project --no-python-downloads --
 TOKENS=("$FAKE_REMUX_SCAN_PUSH_TOKEN" "$FAKE_REMUX_REPLACE_PUSH_TOKEN" "$MKV_ATTACHMENT_PUSH_TOKEN")
 LABELS=("fake-remux scan" "fake-remux replace" "mkv attachment repair")
 TAGS=(fake-remux-health fake-remux-health fake-remux-health)
+# One textfile per tile, named for what the tile checks. The syslog tag is shared, so it cannot
+# name them (M3 names a check file after its producer's tag, which assumes one verdict per tag).
+CHECKS=(fake-remux-scan fake-remux-replace mkv-attachment-repair)
 
 # Indexed off LABELS rather than a literal `0 1`, which is what this loop said while it pushed two
 # monitors. A third triple added above a literal index list renders a state_push line nobody reads
@@ -77,6 +103,13 @@ for i in "${!LABELS[@]}"; do
     STATUS="${LINE%%$'\t'*}"
     MSG="${LINE#*$'\t'}"
   fi
+  # The textfile carries the verdict before the push, which retries for over a minute and must
+  # not age it. A failed write logs and the run goes on to its push.
+  SUCCESS=0
+  [[ "$STATUS" == "up" ]] && SUCCESS=1
+  write_check_textfile "${CHECKS[$i]}" "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t fake-remux-health "textfile write to ${TEXTFILE_DIR} failed (${CHECKS[$i]} status=${STATUS})"
+  [[ "$PUSH_TOKENS_READABLE" == 1 ]] || continue
   # kuma_push feeds the token-bearing URL to curl on stdin (`-K -`), never as an argv element:
   # /proc is mounted without hidepid here, so any local user can read another user's
   # /proc/<pid>/cmdline and this cron runs every 10 minutes.

@@ -12,16 +12,28 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _helpers import SETUP_ROLES, load_defaults, load_tasks, render_expr, task_named
+from _helpers import (
+    SETUP_ROLES,
+    load_defaults,
+    load_tasks,
+    render_expr,
+    task_named,
+    walk_tasks,
+)
 from _setup_render import render_setup_text
 
 from lib import yaml_fast
-from lib.repo_paths import REPO
+from lib.repo_paths import ALL_VARS, REPO
 
 ROLE = SETUP_ROLES / "homelab_builder"
 
 DEFAULTS = load_defaults(ROLE)
 GITOPS_DEFAULTS = load_defaults(SETUP_ROLES / "gitops_deploy")
+# The CI gate and walk bound the builder shares with every deploy path (H7.2e).
+_GROUP_VARS = yaml_fast.safe_load(ALL_VARS.read_text())
+SHARED_CI_KEYS = {
+    key: _GROUP_VARS[key] for key in ("ci_required_contexts", "ci_ancestor_walk_max")
+}
 BUILDER_TASKS = load_tasks(ROLE / "tasks" / "builder.yml")
 PUBLISH = ROLE / "files" / "publish-textfile.sh"
 
@@ -146,14 +158,60 @@ def test_publish_textfile_runs_as_root_outside_the_sandbox_from_root_owned_code(
     )
 
 
+# syslog priorities, most severe first. journald stores a line whose priority is at or above
+# MaxLevelStore, and a unit's plain stdout and stderr carry its SyslogLevel, info by default.
+_PRIORITIES = ["emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"]
+JOURNALD_CONF = "/etc/systemd/journald.conf.d/50-homelab.conf"
+
+
+def journald_max_level_store() -> str:
+    """The MaxLevelStore initial_setup writes into this host's journald drop-in."""
+    tuning = load_tasks(SETUP_ROLES / "initial_setup" / "tasks" / "system-tuning.yml")
+    [content] = [
+        task["ansible.builtin.copy"]["content"]
+        for task in walk_tasks(tuning)
+        if (task.get("ansible.builtin.copy") or {}).get("dest") == JOURNALD_CONF
+    ]
+    [level] = [
+        line.partition("=")[2].strip()
+        for line in content.splitlines()
+        if line.startswith("MaxLevelStore=")
+    ]
+    return level
+
+
+def syslog_level_problem(text: str, store: str) -> str | None:
+    """None when the unit's output logs at a priority journald stores."""
+    [level] = directives(text).get("SyslogLevel", ["info"])
+    if _PRIORITIES.index(level) <= _PRIORITIES.index(store):
+        return None
+    return f"SyslogLevel={level}, and journald stores {store} and above"
+
+
+@pytest.mark.parametrize("template", sorted(SANDBOX))
+def test_each_units_output_logs_at_a_level_journald_stores(template):
+    """A failed build's exception text is the unit's stderr; dropped, the failure has no cause."""
+    # fact: ansible/roles/setup/homelab_builder/CLAUDE.md#The builder's run
+    store = journald_max_level_store()
+    assert store == "notice"
+    assert syslog_level_problem(render(template), store) is None
+
+
+def test_a_unit_left_at_the_default_level_is_flagged():
+    text = render("homelab-builder.service.j2").replace("SyslogLevel=notice\n", "")
+    assert syslog_level_problem(text, "notice") == (
+        "SyslogLevel=info, and journald stores notice and above"
+    )
+
+
 def test_the_timer_fires_every_two_minutes():
     got = directives(render("homelab-builder.timer.j2"))
     assert got["OnUnitActiveSec"] == ["2min"]
 
 
-def _settings(**gitops_overrides) -> dict[str, str]:
-    """The settings file rendered as the task renders it: its `vars:` over the deployer's defaults."""
-    gitops = {**GITOPS_DEFAULTS, **gitops_overrides}
+def _settings(**overrides) -> dict[str, str]:
+    """The settings file rendered as the task renders it: its `vars:` over the shared keys."""
+    gitops = {**GITOPS_DEFAULTS, **SHARED_CI_KEYS, **overrides}
     task = task_named(BUILDER_TASKS, "Write the builder's configuration")
     task_vars = {k: render_expr(v, **gitops) for k, v in task["vars"].items()}
     text = render("config.env.j2", **task_vars)
@@ -161,8 +219,8 @@ def _settings(**gitops_overrides) -> dict[str, str]:
 
 
 def ci_contexts_problem(settings: dict[str, str]) -> str | None:
-    """None when CI_CONTEXTS is the deployer's list, read from gitops_deploy's defaults file."""
-    want = ",".join(GITOPS_DEFAULTS["gitops_deploy_ci_contexts"])
+    """None when CI_CONTEXTS is the shared list, read from group_vars/all.yml."""
+    want = ",".join(SHARED_CI_KEYS["ci_required_contexts"])
     got = settings.get("CI_CONTEXTS")
     return (
         None if got == want else f"CI_CONTEXTS={got!r}, the deployer's list is {want!r}"
@@ -174,12 +232,33 @@ def test_the_settings_carry_the_deployers_ci_contexts_is_clean():
     assert ci_contexts_problem(settings) is None
     assert settings["CI_CONTEXTS"].startswith("prek ")
     assert settings["CI_ANCESTOR_WALK_MAX"] == str(
-        GITOPS_DEFAULTS["gitops_deploy_ci_ancestor_walk_max"]
+        SHARED_CI_KEYS["ci_ancestor_walk_max"]
     )
 
 
 def test_a_settings_render_from_another_list_is_flagged():
-    assert ci_contexts_problem(_settings(gitops_deploy_ci_contexts=["other"]))
+    assert ci_contexts_problem(_settings(ci_required_contexts=["other"]))
+
+
+def prom_urls_problem(settings: dict[str, str], cluster_ip: str) -> str | None:
+    """None when PROMETHEUS_URLS is loopback, then the ClusterIP, both on port 9090."""
+    want = f"http://127.0.0.1:9090 http://{cluster_ip}:9090"
+    got = settings.get("PROMETHEUS_URLS")
+    return None if got == want else f"PROMETHEUS_URLS={got!r}, want {want!r}"
+
+
+def test_the_settings_carry_loopback_then_the_pinned_prometheus_cluster_ip():
+    """Prometheus publishes loopback only on its own node; the ClusterIP reaches it anywhere."""
+    observability = yaml_fast.safe_load(
+        (SETUP_ROLES.parent / "k8s/observability/defaults/main.yml").read_text()
+    )
+    ip = observability["observability_prometheus_cluster_ip"]
+    assert prom_urls_problem(_settings(), ip) is None
+    assert DEFAULTS["homelab_builder_prom_urls"][1] == f"http://{ip}:9090"
+
+
+def test_a_settings_render_with_another_cluster_ip_is_flagged():
+    assert prom_urls_problem(_settings(), "10.43.0.1")
 
 
 def test_the_settings_write_hides_the_token():
@@ -191,7 +270,7 @@ def test_the_settings_write_hides_the_token():
 def test_the_nfpm_pin_is_ci_s():
     # fact: ansible/roles/setup/homelab_builder/CLAUDE.md#What the builder half writes (H3.5a)
     ci = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
-    env = ci["jobs"]["host_packages"]["env"]
+    env = ci["jobs"]["host_packages_build"]["env"]
     assert DEFAULTS["homelab_builder_nfpm_version"] == env["NFPM_VERSION"]
     assert DEFAULTS["homelab_builder_nfpm_sha256"] == env["NFPM_SHA256"]
 

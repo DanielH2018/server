@@ -2,7 +2,7 @@
 
 A plugin reaches a setup role through the vars key whose value calls one of its filters, so
 the answer is that key's readers (#3878). Until then the whole role applied: `--tags k3s`
-for a `service_tier.py` edit that reaches only `k3s_longhorn_r2_volumes`.
+for a `service_tier.py` edit that reaches only one key.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_plugins.py
 """
@@ -106,7 +106,9 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
 @pytest.mark.parametrize(
     ("role", "plugin", "tags"),
     [
-        ("k3s", "service_tier.py", {"longhorn_backup", "longhorn_r2"}),
+        # `longhorn_groups.py` had one `k3s` caller left after H1.7a, the restore drill's
+        # `longhorn_backup_name` calls. H2.3d moved the drill to its own Flux role, so no setup
+        # role calls a Longhorn filter and this walk keeps one named caller.
         ("gitops_deploy", "k8s_autodeploy.py", {"gitops-deploy-service"}),
     ],
 )

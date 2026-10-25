@@ -1,12 +1,9 @@
-"""Loki: the selector roster, the log-error arm, and the ingestion watchdog.
+"""Loki: the selector roster and the log-error arm.
 
 A LogQL selector naming a label Alloy does not ship matches no stream and reports "no events"
 forever. HA_BAN_SELECTOR shipped that way with app="home-assistant". A fail-open arm cannot tell
 "nothing to report" from "wrong question", so the selector labels are checked against the
 observed stream vocabulary rather than against the check's own verdict.
-
-The ingestion watchdog counts lines for an always-active stream over a window and goes down at
-zero — the freshness analogue of the SMART and restore-drill checks.
 """
 
 import io
@@ -24,11 +21,8 @@ from _bridge_env import bridge_env
 from _fake_sources import FakeSources
 from _loki_streams import (
     LOKI_STREAM_LABELS,
-    LOKI_STREAMS,
-    _PI_STREAMS,
     _alloy_relabel_targets,
     _selector_labels,
-    _selector_matches,
 )
 
 # ── HA ip_ban arm ───────────────────────────────────────────────────────────────────────────
@@ -37,18 +31,25 @@ from _loki_streams import (
 # keeps the ban itself from being silent.
 # Two limits, so this guard is not over-trusted:
 #   1. It reads each selector off the `cfg` fixture, which since #3659 is the rendered
-#      pod environment, so the deployed LOKI_STREAM is what is checked. A selector built at runtime
+#      pod environment, so the deployed LOG_ERROR_SELECTOR is what is checked. A selector built at runtime
 #      from other values is not.
-#   2. The vocabulary in ansible/tests/_loki_streams.py came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
-#      which may legitimately carry labels this set does not list. Widen the set against a live
+#   2. The vocabulary in ansible/tests/_loki_streams.py came from one k8s pod stream. a selector may legitimately carry
+#      labels this set does not list. Widen the set against a live
 #      stream if a genuine selector ever fails — do not delete the guard.
 
 
 def test_the_alloy_config_is_actually_readable():
     """A path typo would make _alloy_relabel_targets() return an empty set, silently reducing
     the vocabulary to the transcribed floor and re-opening the gap this closes."""
-    assert _alloy_relabel_targets() >= {"container", "pod", "namespace", "machine"}, (
-        "the expected target_label values did not parse from the Alloy config — the path or "
+    # `program` is the one label a `stage.labels` block sets rather than a relabel rule.
+    assert _alloy_relabel_targets() >= {
+        "container",
+        "pod",
+        "namespace",
+        "machine",
+        "program",
+    }, (
+        "the expected label names did not parse from the Alloy config — the path or "
         "the config shape changed, and the derived half of LOKI_STREAM_LABELS is now inert"
     )
 
@@ -57,7 +58,7 @@ def _logql_selector_names(cfg):
     """Every `Config` field that holds a LogQL stream selector, found by shape.
 
     Derived rather than listed. A hardcoded list would let a later selector, such as
-    LOKI_PI_STREAM, join unchecked. A selector this cannot see is a selector that can
+    a later HA_BAN_SELECTOR, join unchecked. A selector this cannot see is a selector that can
     name a label Alloy does not emit and go permanently green, which is the exact failure
     the test exists for.
 
@@ -94,9 +95,6 @@ def test_the_selector_roster_covers_the_known_selectors(cfg):
     that matches fewer than the known selectors is a silent narrowing."""
     names = set(_logql_selector_names(cfg))
     known = {
-        "LOKI_STREAM",
-        "LOKI_DOCKER_STREAM",
-        "LOKI_PI_STREAM",
         "HA_BAN_SELECTOR",
         "LOG_ERROR_SELECTOR",
     }
@@ -120,9 +118,6 @@ def test_the_deployed_selector_roster_covers_known_overrides():
     """A render that stopped producing the selectors would make `_deployed_selector_values()`
     return an empty dict, and every loop over it below would pass on nothing."""
     known = {
-        "LOKI_STREAM",
-        "LOKI_DOCKER_STREAM",
-        "LOKI_PI_STREAM",
         "LOG_ERROR_SELECTOR",
     }
     deployed = set(_deployed_selector_values())
@@ -147,58 +142,6 @@ def test_deployed_loki_selectors_use_real_stream_labels():
             "the query matches no stream and the check goes permanently green"
             % (name, selector, sorted(unknown))
         )
-
-
-# ── The cluster arms must not count the Pi ──────────────────────────────────────────────────
-# Arms 1 and 2 of Loki Log Ingestion go down when the CLUSTER stops shipping. A daniel-pi stream
-# they also match keeps their count above zero through a total cluster outage, so neither arm can
-# fire (#3739). The label sets come from the `loki_streams` owner both Alloy configs render from.
-def test_both_pi_streams_are_in_the_census():
-    assert set(_PI_STREAMS) == {"pi_containers", "pi_health"}
-
-
-@pytest.mark.parametrize(
-    "key, cluster_role",
-    [
-        ("LOKI_STREAM", "host_syslog"),
-        ("LOKI_STREAM", "host_authlog"),
-        ("LOKI_DOCKER_STREAM", "cluster_pods"),
-    ],
-)
-def test_cluster_arm_counts_its_cluster_stream(cfg, key, cluster_role):
-    """The other half: a selector that excluded everything would also exclude the Pi."""
-    labels = {
-        **LOKI_STREAMS[cluster_role],
-        "machine": "daniel-box",
-        "container": "authelia",
-    }
-    assert _selector_matches(getattr(cfg, key), labels)
-
-
-@pytest.mark.parametrize("key", ["LOKI_STREAM", "LOKI_DOCKER_STREAM"])
-def test_cluster_arm_counts_no_pi_stream(cfg, key):
-    selector = getattr(cfg, key)
-    held_open = sorted(
-        r for r, labels in _PI_STREAMS.items() if _selector_matches(selector, labels)
-    )
-    assert not held_open, (
-        "%s = %s also matches daniel-pi's %s stream, so the Pi keeps the arm's count above zero "
-        "through a total cluster outage and it never fires" % (key, selector, held_open)
-    )
-
-
-@pytest.mark.parametrize(
-    "key, selector",
-    [
-        # Both as deployed before #3739.
-        ("LOKI_STREAM", '{job=~"authlog|syslog"}'),
-        ("LOKI_DOCKER_STREAM", '{container=~".+"}'),
-    ],
-)
-def test_cluster_arm_that_counts_a_pi_stream_is_flagged(key, selector):
-    cfg = bridge.config.load_config(bridge_env(**{key: selector}))
-    with pytest.raises(AssertionError, match="daniel-pi"):
-        test_cluster_arm_counts_no_pi_stream(cfg, key)
 
 
 def test_log_error_inert_when_the_selector_matches_nothing():
@@ -271,8 +214,8 @@ def test_log_error_burst_wins_the_message_over_healthy_workloads(cfg):
 def test_log_error_arm_fails_open_on_a_loki_outage(cfg):
     """A Loki outage must not turn the folded verdict into a page about Loki.
 
-    This is why the check is NOT in LOKI_DEPENDENT: membership there suppresses the whole
-    check, and Loki Reachable already owns that root cause.
+    This is why the row is gated by `startup_grace` alone: a Loki gate would suppress the whole
+    check during a Loki outage.
     """
     cfg = replace(cfg, LOG_ERROR_SELECTOR='{job=~"k8s|pi"}')
 
@@ -303,7 +246,7 @@ def test_workload_log_errors_pages_on_a_burst(cfg):
 
 
 def test_workload_log_errors_stays_up_on_a_loki_error(cfg):
-    """A Loki error is Loki Reachable's page, so this row reports up and says it could not read."""
+    """A Loki error is the loki-homelab ruler's page, so this row reports up and says it could not read."""
     cfg = replace(cfg, LOG_ERROR_SELECTOR='{job=~"k8s|pi"}')
 
     def boom(*a, **k):
@@ -328,24 +271,6 @@ def _loki_scalar(val):
     }
 
 
-def test_loki_ingestion_with_lines_is_ok():
-    ok, msg = checks.logs.loki_ingestion_fresh(1234, "10m")
-    assert ok
-    assert "1234" in msg
-
-
-def test_loki_ingestion_zero_lines_is_down():
-    ok, msg = checks.logs.loki_ingestion_fresh(0, "10m")
-    assert not ok
-    assert "Alloy/Loki pipeline silent" in msg
-
-
-def test_loki_ingestion_no_series_is_down():
-    # an empty query result (no matching stream at all) is also a silent pipeline
-    ok, _msg = checks.logs.loki_ingestion_fresh(None, "10m")
-    assert not ok
-
-
 def _answering(body):
     """An opener in `urllib.request.urlopen`'s shape that answers every request with `body`."""
     return lambda req, timeout=None: io.BytesIO(json.dumps(body).encode())
@@ -365,39 +290,3 @@ def test_loki_count_non_success_raises(cfg):
     opener = _answering({"status": "error"})
     with pytest.raises(RuntimeError):
         bridge.net.loki_count(cfg, '{job="syslog"}', "10m", opener=opener)
-
-
-def test_check_loki_ingestion_fresh_is_up(cfg):
-    src = FakeSources(loki_count=lambda *a, **k: 500)
-    ok, _ = checks.logs.check_loki_ingestion(cfg, src)
-    assert ok
-
-
-def test_check_loki_ingestion_silent_is_down(cfg):
-    src = FakeSources(loki_count=lambda *a, **k: 0)
-    ok, _msg = checks.logs.check_loki_ingestion(cfg, src)
-    assert not ok
-
-
-def test_check_loki_ingestion_docker_stream_silent_is_down(cfg):
-    # Pod-source failure: the file-tail streams keep flowing, but the highest-volume stream,
-    # every pod's stdout, went silent. The file-tail arm alone stays non-zero and would hide
-    # it — the pod-stream arm must page.
-    def fake_count(selector, window):
-        return 0 if selector == cfg.LOKI_DOCKER_STREAM else 500
-
-    ok, msg = checks.logs.check_loki_ingestion(cfg, FakeSources(loki_count=fake_count))
-    assert not ok
-    assert "container" in msg
-
-
-def test_check_loki_ingestion_filetail_silent_is_down(cfg):
-    # File-tail-only failure: the pod streams keep flowing, but authlog/syslog went silent.
-    # Arm 1's selector must EXCLUDE the pod streams so a healthy pod stream can't mask a dead
-    # file-tail source — the file-tail arm must page.
-    def fake_count(selector, window):
-        return 0 if selector == cfg.LOKI_STREAM else 500
-
-    ok, msg = checks.logs.check_loki_ingestion(cfg, FakeSources(loki_count=fake_count))
-    assert not ok
-    assert "file-tail" in msg

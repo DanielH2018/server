@@ -20,8 +20,6 @@ are in `test_infra_map_live.py`, and the HTML page, diagram and SVG in
 Run: uv run pytest scripts/infra_map/tests/test_gen_infra_map.py
 """
 
-import pytest
-
 import gen_infra_map as g
 
 from _infra_map import (
@@ -33,6 +31,7 @@ from _infra_map import (
     docker_host,
     live_ok,
     model_for,
+    pi_host,
     service,
 )
 
@@ -100,7 +99,7 @@ def test_declared_services_omits_hostname_for_unrouted_services():
 
 
 def test_declared_services_tolerates_a_missing_containers_list():
-    assert g.declared_services("daniel-pi", {}, GLOBALS) == []
+    assert g.declared_services("daniel-server", {}, GLOBALS) == []
 
 
 def test_declared_services_skips_entries_without_a_name():
@@ -308,6 +307,7 @@ def test_build_model_counts_routed_and_sso_gated_services():
                 {"name": "autoheal"},
             ]
         ),
+        "daniel-pi": pi_host([]),
     }
     model = g.build_model(GLOBALS, host_vars, {}, "now", ROLES)
     server = next(h for h in model["hosts"] if h["name"] == "daniel-server")
@@ -335,66 +335,6 @@ def test_main_leaves_the_previous_page_untouched_when_a_tool_is_missing(
     )
     assert g.main(["-o", str(page)]) == 2
     assert page.read_text() == "PREVIOUS RENDER"
-
-
-def test_load_roles_derives_ownership_from_the_role_trees():
-    """The whole companion/job distinction rests on this being repo-derived."""
-    roles = g.load_roles()
-    if not roles.container_owners:
-        pytest.skip("role trees not present")
-    # autoheal is an un-inventoried companion.
-    assert roles.container_owners.get("autoheal") == "autoheal"
-    # Both are CronJob-only k8s roles; the classification is derived from the k8s manifests.
-    assert "configarr" in roles.batch_roles
-    assert "pi-peer-backup" in roles.batch_roles
-    # Roles whose templates hold no long-running workload at all: a route onto a
-    # chart-owned Deployment, a PVC, NetworkPolicies. None may read "Missing · no deployment
-    # found".
-    for role in ("longhorn-ui", "media-volume", "netpol-baseline"):
-        assert role in roles.batch_roles, role
-    # And a DaemonSet-only role is a real workload the collector must find.
-    assert "node-exporter" not in roles.batch_roles
-    assert "dri-device-plugin" not in roles.batch_roles
-    assert roles.manifest_namespaces["dri-device-plugin"] == {"kube-system"}
-    # A role whose namespace is the resolved variable records nothing here.
-    assert "freshrss" not in roles.manifest_namespaces
-
-
-def _k8s_role(repo_root, name, *manifests):
-    templates = repo_root / "ansible" / "roles" / "k8s" / name / "templates"
-    templates.mkdir(parents=True)
-    for index, kind in enumerate(manifests):
-        (templates / f"{index}.yaml.j2").write_text(f"kind: {kind}\n")
-
-
-def test_load_roles_excuses_a_role_with_no_long_running_workload(tmp_path):
-    (tmp_path / "ansible" / "roles" / "containers").mkdir(parents=True)
-    _k8s_role(tmp_path, "policies", "NetworkPolicy", "Job")
-    _k8s_role(tmp_path, "route-only", "IngressRoute", "Middleware")
-    roles = g.load_roles(tmp_path)
-    assert roles.batch_roles == frozenset({"policies", "route-only"})
-
-
-def test_load_roles_does_not_excuse_a_daemonset_or_statefulset_role(tmp_path):
-    (tmp_path / "ansible" / "roles" / "containers").mkdir(parents=True)
-    _k8s_role(tmp_path, "agent", "DaemonSet", "NetworkPolicy")
-    _k8s_role(tmp_path, "db", "StatefulSet")
-    _k8s_role(tmp_path, "web", "Deployment", "CronJob")
-    assert g.load_roles(tmp_path).batch_roles == frozenset()
-
-
-def test_load_roles_records_only_literal_manifest_namespaces(tmp_path):
-    (tmp_path / "ansible" / "roles" / "containers").mkdir(parents=True)
-    templates = tmp_path / "ansible" / "roles" / "k8s" / "plugin" / "templates"
-    templates.mkdir(parents=True)
-    (templates / "a.yaml.j2").write_text(
-        "kind: DaemonSet\nmetadata:\n  namespace: kube-system\n"
-    )
-    (templates / "b.yaml.j2").write_text(
-        "kind: Secret\nmetadata:\n  namespace: {{ k8s_namespace }}\n"
-    )
-    roles = g.load_roles(tmp_path)
-    assert roles.manifest_namespaces == {"plugin": frozenset({"kube-system"})}
 
 
 def test_place_on_nodes_collects_every_node_a_services_pods_landed_on():

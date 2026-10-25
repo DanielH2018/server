@@ -9,49 +9,37 @@ A package lists its components, and may carry files and defaults of its own, lai
 component's are. A component directory under `hosts/components/` holds a `component.yml`::
 
     defaults: {name: value}         # beneath group_vars/all.yml (H3, *Component variables*)
+    role: nut_host                  # its defaults sit below `defaults`; `role:<t>.j2` is its template
     files:
       - {src: templates/x.sh.j2, dst: /usr/lib/homelab/x, mode: "0755"}
       - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
       - {key: homelab-archive-keyring, dst: /usr/share/keyrings/homelab-archive-keyring.gpg}
 
-A `src` ending `.j2` renders through the renderer's strict environment. Any other `src` is
-copied byte for byte. A `lib` entry copies `hosts/lib/<name>`, a script several packages ship,
-byte for byte. A `key` entry copies `hosts/keys/<name>.gpg`, a public keyring hosts trust, byte
-for byte. A `shared` entry copies one of the `SHARED_FILES`, a file an Ansible role still
-installs, byte for byte. Those three are the only sources outside the component a file entry
-may name.
+A `src` ending `.j2` renders through the renderer's strict environment, and a `src` of
+`role:<name>` loads from the component's role templates. Any other `src` is copied byte for byte,
+as are the three sources outside the component a file entry may name: a `lib` entry
+(`hosts/lib/<name>`, a script several packages ship), a `key` entry (`hosts/keys/<name>.gpg`, a
+public keyring hosts trust) and a `shared` entry (one of the `SHARED_FILES`, a file an Ansible role
+still installs).
 
-A package or component may also carry `units`, a policy for each unit reconcile must not
-restart on a change, `enable`, the enable links it installs, and `legacy`, the Ansible-era
-entries reconcile retires (H3, *The host handoff rule*)::
-
-    units: {homelab-x.service: {policy: manual}}    # or windowed
-    enable:                                         # see host_manifest.add_enable_links
-      homelab-x.timer: timers.target
-      homelab-y.timer: {target: timers.target, when: x_enabled}
-    legacy:
-      - {path: /usr/local/bin/x.sh}
-      - {cron: "X heartbeat", user: "{{ sys_user }}"}
-      - {cron_file: x}
-      - {unit: x.service}
-
-Each legacy value renders with the host's context. An enable entry's `when:` is a Jinja
-expression evaluated in that context, and the link ships only when it is true. Each enable link
-ships as an nfpm `type: symlink` entry. A host package installs
-`/usr/lib/homelab/manifest.json`, which `host_manifest` builds from these keys and the units and
+A package or component may also carry `units`, `enable` and `legacy` (host_manifest.py), a
+file entry's `activate:` field and a `ufw:` map (host_arms.py). A host package installs
+`/usr/lib/homelab/manifest.json`, which `host_manifest` builds from them and from the units and
 enable links the packages install. A shared package installs no manifest, and lists no legacy
-entry and no enable link.
+entry, no enable link and no ufw rule.
 
+A component may list `depends:`, `Depends` entries its package gains.
 A package spec may also list `maintainer_scripts`, each rendered from
 `hosts/lib/maintainer-scripts/<name>.j2` into the package's `scripts/`, outside `root/`, and
 named in `nfpm.yaml`'s `scripts:` (H3, *Package rules*).
 
-Host mode renders no secret, because no substitution step follows it (H3, *Host mode renders
-no secret*). The context withholds every top-level key of `ansible/vars/secrets.yml`, and
-resolves under the strict undefined class, so an inventory value that reads a secret is
-dropped too. A template that reads either fails the render, and the error names the secret
-key. A `${` in a template is shell, and renders byte for byte: nothing here imports
-`placeholders.py`.
+Host mode renders no secret, except in two kinds of file (H4, *Secret-bearing files*): a
+spec's declared `outputs:` and its `compose: true` files render a secret reference as `${<key>}`
+with C1's escape, through `host_outputs.py`. Everywhere else no substitution step follows, so
+the context withholds every top-level key of `ansible/vars/secrets.yml`, and resolves under the
+strict undefined class, so an inventory value that reads a secret is dropped too. A template
+that reads either fails the render, and the error names the secret key. A `${` in such a
+template is shell, and renders byte for byte.
 
 Typical usage example:
 
@@ -65,12 +53,9 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import re
-from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import cast
 
 import jinja2
-import yaml
 
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY, Inventory
@@ -78,16 +63,37 @@ from lib.render_context import UnresolvedVarsError, render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
 from lib.repo_paths import ANSIBLE, REPO
 from renderer.renderer_lib.cluster import RenderRefused
-from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
+from renderer.renderer_lib.environment import RenderError, render_file
 from renderer.renderer_lib.host_sources import (
     SHARED_FILES,
-    ConfinedLoader,
     confined,
+    confined_env,
     file_mode,
+    lib_source,
+    role_sources,
+    template_source,
 )
+from renderer.renderer_lib import host_compose
+from renderer.renderer_lib.host_arms import ARM_KEYS, add_activation, add_arms, has_arms
+from renderer.renderer_lib.host_outputs import (
+    SECRETS_COMPONENT,
+    add_credentials,
+    add_output,
+    compose_file,
+    finish,
+)
+from renderer.renderer_lib.host_package import (
+    MAINTAINER_SCRIPTS,
+    VERSION_FIELD as VERSION_FIELD,
+    UNIT_SUFFIXES as UNIT_SUFFIXES,
+    Package,
+)
+from renderer.renderer_lib.placeholders import placeholder_vars
+from renderer.renderer_lib.host_tools import parse_tools, tool_path
+from renderer.renderer_lib.host_write import write_packages as write_packages
 from renderer.renderer_lib.host_manifest import (
-    DROPIN,
-    UNIT_DIR,
+    DROPIN as DROPIN,
+    UNIT_DIR as UNIT_DIR,
     UPDATER,
     add_enable_links,
     add_manifest,
@@ -98,12 +104,15 @@ from renderer.renderer_lib.host_manifest import (
 
 HOSTS = REPO / "hosts"
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
+# The per-host ciphertext a package that ships `secrets-unit` carries (H4, *Which ciphertext*).
+HOST_SOPS = ANSIBLE / "vars" / "hosts"
 
 # Every host package runs reconcile under /usr/bin/python3 (H3, *Package rules*).
 HOST_DEPENDS = ("python3 (>= 3.12)",)
 PACKAGE_KEYS = frozenset(
     {
         "components",
+        "credentials",
         "defaults",
         "depends",
         "description",
@@ -111,108 +120,33 @@ PACKAGE_KEYS = frozenset(
         "files",
         "legacy",
         "maintainer_scripts",
+        "outputs",
+        "tools",
         "units",
+        *ARM_KEYS,
     }
 )
-COMPONENT_KEYS = frozenset({"defaults", "enable", "files", "legacy", "units"})
-# The builder exports the version (H3, *Package rules*). Kept out of the render, so a render
-# changes only when the package's content does, and nfpm expands it at build time.
-VERSION_FIELD = "${HOMELAB_VERSION}"
+COMPONENT_KEYS = frozenset(
+    {
+        "compose",
+        "credentials",
+        "defaults",
+        "depends",
+        "enable",
+        "files",
+        "legacy",
+        "outputs",
+        "role",
+        "units",
+        *ARM_KEYS,
+    }
+)
 
 # A host, package or component name becomes a directory under `hosts/`, so it is one plain
 # path piece: no `/`, no `..`, no leading dot or dash.
 _PLAIN_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 _UNDEFINED = re.compile(r"'([^']+)' is undefined")
-
-# Each maintainer script a spec may list, and the nfpm `scripts:` key that installs it. `preinst`
-# refuses a hostname mismatch, so only a host package may list it.
-MAINTAINER_SCRIPTS = {
-    "preinst": "preinstall",
-    "postinst": "postinstall",
-    "prerm": "preremove",
-}
-UNIT_SUFFIXES = (".service", ".timer", ".socket", ".path")
-
-
-@dataclass
-class Package:
-    """One rendered package: its name, its C1 directory, and every file it installs.
-
-    Attributes:
-        name: The Debian package name.
-        directory: `hosts/<host>` or `packages/<pkg>`, relative to `--out`.
-        files: Each installed path mapped to its bytes and its octal mode.
-        links: Each installed symlink's path mapped to its target, relative to its directory.
-        depends: The `Depends` entries, in the order the spec lists them.
-        description: The package description.
-        scripts: Each maintainer script's name, such as `postinst`, mapped to its bytes.
-        policies: Each unit given a restart policy, mapped to `manual` or `windowed`.
-        legacy: The legacy entries reconcile retires, each with its values rendered.
-    """
-
-    name: str
-    directory: str
-    files: dict[str, tuple[bytes, int]] = field(default_factory=dict)
-    links: dict[str, str] = field(default_factory=dict)
-    depends: list[str] = field(default_factory=list)
-    description: str = ""
-    scripts: dict[str, bytes] = field(default_factory=dict)
-    policies: dict[str, str] = field(default_factory=dict)
-    legacy: list[dict[str, str]] = field(default_factory=list)
-
-    def units(self) -> list[str]:
-        """The unit files the package installs under `/usr/lib/systemd/system/`, by name.
-
-        A drop-in and an enable link sit one directory deeper, so neither is listed.
-        """
-        return sorted(
-            PurePosixPath(dst).name
-            for dst in self.files
-            if PurePosixPath(dst).parent == UNIT_DIR and dst.endswith(UNIT_SUFFIXES)
-        )
-
-    def dropin_targets(self) -> list[str]:
-        """The units, of any package, that this package installs a homelab drop-in for."""
-        return sorted(
-            path.parent.name.removesuffix(".d")
-            for path in map(PurePosixPath, self.files)
-            if path.parent.parent == UNIT_DIR and path.name == DROPIN
-        )
-
-    def enable_links(self) -> list[str]:
-        """The units whose enable link, under `<target>.wants/`, the package installs."""
-        return sorted({PurePosixPath(dst).name for dst in self.links})
-
-    def nfpm_spec(self) -> str:
-        """The `nfpm.yaml` the builder runs `nfpm package` on, from the package directory."""
-        contents = {
-            dst: {"src": f"root{dst}", "dst": dst, "file_info": {"mode": mode}}
-            for dst, (_, mode) in self.files.items()
-        }
-        # nfpm reads a symlink entry's `src` as the link's target.
-        contents |= {
-            dst: {"src": target, "dst": dst, "type": "symlink"}
-            for dst, target in self.links.items()
-        }
-        spec = {
-            "name": self.name,
-            "arch": "all",
-            "platform": "linux",
-            "version": VERSION_FIELD,
-            # nfpm's default, `semver`, would build `0.<count>+g<sha>` as `0.<count>.0+g<sha>`.
-            "version_schema": "none",
-            "maintainer": "homelab",
-            "description": self.description or self.name,
-            "depends": self.depends,
-            "contents": [contents[dst] for dst in sorted(contents)],
-        }
-        if self.scripts:
-            spec["scripts"] = {
-                MAINTAINER_SCRIPTS[name]: f"scripts/{name}"
-                for name in sorted(self.scripts)
-            }
-        return yaml.safe_dump(spec, sort_keys=False)
 
 
 def secret_names(secrets: Path = SECRETS) -> frozenset[str]:
@@ -225,6 +159,7 @@ def render_host(
     hosts_root: Path = HOSTS,
     inventory: Inventory = REPO_INVENTORY,
     secrets: Path = SECRETS,
+    sops_dir: Path = HOST_SOPS,
 ) -> Package:
     """`hosts/<host>/package.yml` rendered with `host`'s inventory layers.
 
@@ -237,6 +172,7 @@ def render_host(
     package.depends.extend(HOST_DEPENDS)
     withheld = secret_names(secrets)
     _render(package, spec, host, hosts_root, inventory, withheld)
+    finish(package, host, sops_dir)
     updater = None
     if (hosts_root / "packages" / UPDATER / "package.yml").is_file():
         updater = render_package(UPDATER, hosts_root, inventory, secrets)
@@ -259,6 +195,10 @@ def render_package(
     spec = hosts_root / "packages" / _plain_name(name, "package") / "package.yml"
     package = Package(name=name, directory=f"packages/{name}")
     _render(package, spec, None, hosts_root, inventory, secret_names(secrets))
+    finish(package, None, HOST_SOPS)
+    for dst in package.files:
+        if any(dst == tool_path(tool) for tool in package.tools):
+            raise RenderRefused(f"{name}: two files install {dst}")
     # Reconcile reads only the host package's manifest, so a shared one's would be dropped.
     if package.legacy:
         raise RenderRefused(
@@ -268,44 +208,11 @@ def render_package(
         raise RenderRefused(
             f"{name}: a shared package lists no enable link; its host package does"
         )
+    if has_arms(package):
+        raise RenderRefused(
+            f"{name}: a shared package declares no ufw, libvirt, users or lines"
+        )
     return package
-
-
-def write_packages(packages: list[Package], out: Path) -> list[Path]:
-    """Write each package's `root/` and `nfpm.yaml` under `out`; return the files written.
-
-    Raises:
-        RenderRefused: A package directory already exists under `out`. Nothing is written.
-    """
-    for package in packages:
-        if (out / package.directory).exists():
-            raise RenderRefused(
-                f"{out / package.directory} exists; render into an empty --out"
-            )
-    written = []
-    for package in packages:
-        base = out / package.directory
-        for dst, (content, mode) in sorted(package.files.items()):
-            path = base / "root" / dst.lstrip("/")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
-            path.chmod(mode)
-            written.append(path)
-        for dst, target in sorted(package.links.items()):
-            path = base / "root" / dst.lstrip("/")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            # A host package's link may point at the updater's unit, absent from this root.
-            path.symlink_to(target)
-            written.append(path)
-        for name, content in sorted(package.scripts.items()):
-            path = base / "scripts" / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
-            path.chmod(0o755)
-            written.append(path)
-        (base / "nfpm.yaml").write_text(package.nfpm_spec())
-        written.append(base / "nfpm.yaml")
-    return written
 
 
 def _render(
@@ -323,6 +230,13 @@ def _render(
     spec = _load(spec_path, PACKAGE_KEYS)
     package.description = str(spec.get("description", ""))
     package.depends.extend(str(entry) for entry in spec.get("depends") or [])
+    if "tools" in spec:
+        if host is not None:
+            raise RenderRefused(
+                f"{spec_path}: a host package lists no tools; a shared package does"
+            )
+        package.tools = parse_tools(spec["tools"], str(spec_path))
+    package.secrets = SECRETS_COMPONENT in (spec.get("components") or [])
     lib = hosts_root / "lib"
     _render_unit(package, spec_path.parent, spec, host, inventory, withheld, lib)
     for name in spec.get("components") or []:
@@ -331,6 +245,9 @@ def _render(
         if not component.is_file():
             raise RenderRefused(f"{spec_path} lists component {name!r}, which has none")
         unit = _load(component, COMPONENT_KEYS)
+        package.depends.extend(
+            str(dep) for dep in unit.get("depends") or [] if dep not in package.depends
+        )
         _render_unit(package, directory, unit, host, inventory, withheld, lib)
     _render_maintainer_scripts(
         package, spec.get("maintainer_scripts") or [], host, inventory, withheld, lib
@@ -348,8 +265,7 @@ def _render_maintainer_scripts(
 ) -> None:
     """Render each listed maintainer script from `hosts/lib/maintainer-scripts/`.
 
-    Each template sees the host's context plus `package_units`, the units the package
-    installs, which is the list `prerm` stops.
+    Each template sees the host's context plus `package_units`, the list of units `prerm` stops.
     """
     directory = lib / "maintainer-scripts"
     for name in names:
@@ -367,8 +283,7 @@ def _render_maintainer_scripts(
         confined(directory, src)
         ctx, reasons = host_context(host, {}, inventory, withheld)
         ctx["package_units"] = package.units()
-        env = renderer_env(directory)
-        env.loader = ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+        env = confined_env(directory)
         package.scripts[name] = _render_template(
             env, src, ctx, reasons, directory
         ).encode()
@@ -409,18 +324,29 @@ def _render_unit(
     """
     files = spec.get("files") or []
     add_policies(package, directory, spec.get("units") or {})
+    add_credentials(package, directory, spec.get("credentials") or [], withheld)
     enable = spec.get("enable") or {}
     legacy = spec.get("legacy") or []
-    if not files and not legacy and not enable:
+    outputs = spec.get("outputs") or []
+    arms = {key: spec[key] for key in ARM_KEYS if spec.get(key)}
+    role, defaults = role_sources(spec, directory)
+    compose = spec.get("compose")
+    if not (files or legacy or enable or outputs or arms or compose):
         return
-    ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
-    env = renderer_env(directory)
-    env.loader = ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+    ctx, reasons = host_context(host, defaults, inventory, withheld)
+    env = confined_env(directory)
     add_enable_links(
         package,
         directory,
         enable,
         lambda expression: _evaluate(env, expression, ctx, reasons, directory),
+    )
+    add_arms(
+        package,
+        directory,
+        arms,
+        lambda text: _render_string(env, text, ctx, reasons, directory),
+        lambda src: _render_template(env, src, ctx, reasons, directory),
     )
     for entry in legacy:
         package.legacy.append(
@@ -430,8 +356,41 @@ def _render_unit(
                 lambda text: _render_string(env, text, ctx, reasons, directory),
             )
         )
+
+    def secret_render(base: Path, name: str, keys: frozenset[str], extra: dict) -> str:
+        """`base/name` with the secrets in `keys` read as sentinels and `extra` in the context."""
+        source = confined(base, name)
+        if not name.endswith(".j2"):
+            return source.read_text()
+        sub, why = host_context(host, defaults, inventory, withheld, keys)
+        sub |= {"secret_placeholders": {k: sub[k] for k in sorted(keys)}, **extra}
+        return _render_template(confined_env(base), name, sub, why, base)
+
+    def secret_text(src: str, keys: frozenset[str]) -> str:
+        """`src` with the secrets in `keys` read as sentinels, for `host_outputs.py`."""
+        return secret_render(*template_source(role, src, directory), keys, {})
+
+    referenced = None
+    if compose:
+        data_root = f"/home/{ctx['sys_user']}/server/containers"
+        referenced = host_compose.add_compose(
+            package,
+            directory,
+            compose,
+            ctx.get(host_compose.LIST_KEY),
+            withheld,
+            data_root,
+            secret_render,
+        )
+
+    if not isinstance(outputs, list):
+        raise RenderRefused(f"{directory}: outputs {outputs!r} is not a list")
+    for entry in outputs:
+        add_output(package, directory, entry, withheld, secret_text)
+    if referenced is not None:
+        host_compose.check_env_output(package, directory, referenced)
     keys = lib.parent / "keys"
-    for entry in files:
+    for entry in host_compose.deferred_last(files):
         sources = {"src", "lib", "key", "shared"} & set(entry)
         if "dst" not in entry or not sources:
             raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")
@@ -447,12 +406,22 @@ def _render_unit(
                 f"{directory}: dst {dst!r} is not a plain absolute path"
             )
         refuse_wants_file(directory, destination)
+        add_activation(package, directory, dst, entry.get("activate"))
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
         mode = file_mode(entry.get("mode", "0644"), directory, dst)
+        ctx = host_compose.inputs_context(package, directory, entry, ctx)
+        if entry.get("compose") is True:
+            if "src" not in entry:
+                raise RenderRefused(f"{directory}: compose file {dst} needs a src")
+            package.files[dst] = (
+                compose_file(directory, str(entry["src"]), dst, withheld, secret_text),
+                mode,
+            )
+            continue
         if "lib" in entry:
             # A plain name has no `.j2` suffix, so a lib script is copied, never rendered.
-            source = confined(lib, _plain_name(entry["lib"], "lib script"))
+            source = lib_source(lib, entry["lib"])
             package.files[dst] = (source.read_bytes(), mode)
             continue
         if "key" in entry:
@@ -469,10 +438,11 @@ def _render_unit(
             source = lib.parent.parent / SHARED_FILES[name]
             package.files[dst] = (source.read_bytes(), mode)
             continue
-        src = str(entry["src"])
-        source = confined(directory, src)
+        base, src = template_source(role, str(entry["src"]), directory)
+        source = confined(base, src)
         if src.endswith(".j2"):
-            content = _render_template(env, src, ctx, reasons, directory).encode()
+            tenv = confined_env(base)
+            content = _render_template(tenv, src, ctx, reasons, base).encode()
         else:
             content = source.read_bytes()
         package.files[dst] = (content, mode)
@@ -483,11 +453,15 @@ def host_context(
     defaults: dict,
     inventory: Inventory = REPO_INVENTORY,
     withheld: frozenset[str] = frozenset(),
+    placeholders: frozenset[str] = frozenset(),
 ) -> tuple[dict, dict[str, str]]:
     """The context a component renders with, and why each name it lacks is missing.
 
     The second value maps each withheld secret name, and each inventory value dropped
-    because it would not expand, to the reason a template reading it gets.
+    because it would not expand, to the reason a template reading it gets. A name in
+    `placeholders` is not withheld: it reads as its sentinel (`placeholders.sentinel`), which
+    a declared output or a compose file turns into `${<key>}`. The sentinel is an override, so
+    an inventory value that aliases the secret expands to it too.
     """
 
     def resolve(strict: bool) -> dict:
@@ -499,13 +473,18 @@ def host_context(
             base={},
             undefined_cls=StrictChainableUndefined,
             component_defaults=defaults,
-            withhold=withheld,
+            withhold=withheld - placeholders,
             # A play sets it before any variable expands, so a default may read it.
-            overrides={"inventory_hostname": host} if host else None,
+            overrides={
+                **placeholder_vars(placeholders),
+                **({"inventory_hostname": host} if host else {}),
+            }
+            or None,
         )
 
     reasons = {
-        name: "a secret key, and host mode renders no secret" for name in withheld
+        name: "a secret key, and host mode renders no secret"
+        for name in withheld - placeholders
     }
     try:
         ctx = resolve(strict=True)

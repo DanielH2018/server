@@ -6,14 +6,17 @@
   - `health_docker.py`  — the Pi's Docker containers and the ClusterIP lookups
   - `health_vendored.py` — the workloads a role's vendored upstream files declare
   - `health_alerts.py`  — the alert plane: firing alerts and ingress probes (C7)
+  - `health_plumbing.py` — the CoreDNS and Longhorn StorageClass checks keyed by tag (H1)
+  - `health_backup_targets.py` — the `longhorn-backup` verdict: the BackupTargets (H1.7b)
+  - `health_render.py` — the render context the workload resolution and alert plane share
 
 What stays here is the part that needs all of them: resolving a deploy tag to the workloads the
 role's rendered manifests declare, fetching each one, and rolling the per-workload verdicts up
 into the line `deploy_lib/detach_notify.py` reads.
 
 The gate exits 0 only when the workload is fully rolled out AND nothing restarted recently,
-and then only when the alert plane agrees (`_with_alert_plane`). Both rollout halves are
-load-bearing, and the reasoning for each sits with the function it governs. A
+and then only when the tag's plumbing check and the alert plane agree (`_with_alert_plane`).
+Both rollout halves are load-bearing, and each one's reasoning sits with its function. A
 role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr, pi-peer-backup) is
 gated the same way on its most recent Job instead — see health_cronjob.format_cronjob_health.
 
@@ -34,6 +37,7 @@ deploy failed would let `land.sh` print `VERDICT: settled` for a deploy whose he
 ran.
 """
 
+import functools
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -51,8 +55,16 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
-from diagnostics.probe_lib import health_alerts
-from diagnostics.probe_lib.health_cronjob import format_cronjob_health, latest_owned_job
+from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
+from diagnostics.probe_lib import health_backup_targets, health_cronjob
+from diagnostics.probe_lib.health_render import render_context as _render_context
+from diagnostics.probe_lib.health_render import rendered_docs
+from diagnostics.probe_lib.health_cronjob import (
+    declared_suspended,
+    format_cronjob_health,
+    format_suspended,
+    latest_owned_job,
+)
 from diagnostics.probe_lib.health_docker import (
     declared_on_pi,
     format_health,
@@ -64,6 +76,7 @@ from diagnostics.probe_lib.health_kubectl import (
     k8s_deploy_args,
     k8s_job_pods_args,
     k8s_jobs_args,
+    k8s_kustomization_args,
     k8s_pods_args,
     pod_selector,
 )
@@ -81,33 +94,7 @@ from lib.kubectl import (
     kubectl,
     served_cluster,
 )
-from lib.repo_paths import K8S_ROLES, REPO
-
-_RENDER_CONTEXT = None
-
-
-def _render_context():
-    """(validator module, containers_list entries), built once per process.
-
-    The import is deferred because it pulls in ansible-core, PyYAML and jsonschema,
-    and twelve of probe.py's thirteen subcommands never need any of it. Measured on daniel-box:
-    0.41s to import, ~5 ms to build one role's context (2026-10-09), 0.02s median to render
-    one role and 0.22s for the slowest (home-assistant) — against the 300s `PROBE_TIMEOUT_S`
-    the notifier allows.
-    """
-    global _RENDER_CONTEXT
-    if _RENDER_CONTEXT is None:
-        import sys as _sys
-
-        # A directly-invoked script gets only its own directory on sys.path, and pyproject's
-        # `pythonpath` is a pytest setting — so the cron and the notifier need this insert.
-        # `scripts/` rather than `scripts/validate/`: the package-qualified name is the same
-        # one pytest imports, so there is one module object however it is reached.
-        _sys.path.insert(0, str(REPO / "scripts"))
-        from validate import k8s_manifests as validator
-
-        _RENDER_CONTEXT = (validator, validator.k8s_entries())
-    return _RENDER_CONTEXT
+from lib.repo_paths import K8S_ROLES
 
 
 def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
@@ -130,33 +117,16 @@ def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
     Raises on a render failure rather than returning None. Fail closed: a role whose templates
     stopped rendering must not degrade to the guess-the-name path, where a miss reads as a skip.
     """
-    # Checked before the render context is built, so a block tag (`config`, `deploy`, `cron`)
-    # costs a directory stat rather than 0.44s of ansible + jsonschema imports, and a
-    # broken renderer environment cannot fail a tag that was never a role.
-    role_dir = roles_dir / role
-    if not role_dir.is_dir():
+    # `rendered_docs` checks the role directory before it builds the render context, so a block
+    # tag (`config`, `deploy`, `cron`) costs a directory stat rather than 0.44s of ansible +
+    # jsonschema imports, and a broken renderer environment cannot fail a tag that was never a
+    # role.
+    docs = rendered_docs(role, roles_dir)
+    if docs is None:
         return None
-
-    validator, entries = _render_context()
-    if role in validator.SKIP_ROLES or role not in entries:
-        return None
-
-    templates = sorted(
-        p
-        for p in (role_dir / "templates").glob("*.j2")
-        if validator.is_manifest_template(p)
-    )
-    ctx = validator.render_context(
-        role_dir, overrides={"container_item": entries[role]}, strict=True
-    )
     targets = set()
-    for tpl in templates:
-        err, docs = validator.check_template(role, tpl, ctx)
-        if err:
-            raise RuntimeError(f"{role}/{tpl.name} failed to render: {err}")
-        for doc in docs:
-            if not isinstance(doc, dict) or doc.get("kind") not in kinds:
-                continue
+    for doc in docs:
+        if doc.get("kind") in kinds:
             meta = doc.get("metadata") or {}
             targets.add(
                 (
@@ -165,7 +135,7 @@ def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
                     meta.get("name"),
                 )
             )
-    targets |= vendored_targets(role_dir, default_namespace, kinds)
+    targets |= vendored_targets(roles_dir / role, default_namespace, kinds)
     return sorted(targets)
 
 
@@ -210,8 +180,8 @@ def role_cronjob_targets(role, default_namespace, roles_dir=K8S_ROLES):
 
     Consulted by run_health only as a fallback, when role_workload_targets found nothing —
     a role that deploys both a Deployment and a CronJob is gated on the Deployment, the same
-    way manifests_rollout gates it, not on this. Only two roles are CronJob-only today
-    (configarr, pi-peer-backup), both already including `k8s/cronjob-gate` at deploy time;
+    way manifests_rollout gates it, not on this. Only two roles are CronJob-only
+    (configarr, pi-peer-backup), both gated by a Job in `<tag>-verify` at each revision;
     this is the read-only, after-the-fact check for the same claim `probe.py health` already
     makes for a Deployment. Two censuses pin that pair from opposite sides, and both assert
     equality rather than a lower bound so a third role cannot join unnoticed:
@@ -354,13 +324,16 @@ def _deploy_applied_at(service):
     return (_release_record(service) or {}).get("applied_at")
 
 
-def _with_alert_plane(role, text, code, ready_at, prom):
-    """(text, exit code) with the alert plane folded in after a passing rollout verdict.
+def _with_alert_plane(role, text, code, ready_at, prom, read):
+    """(text, exit code) with the tag's plumbing check, then the alert plane, folded in.
 
     A failed rollout returns unchanged, without the alert plane's waits. A failing alert plane
     puts its own head line first: the notifier reads only the first line, and the no-workload
     line carries a `NOT_APPLICABLE_MARKERS` substring that would report the failure `skipped`.
+    `read` is `_read` bound to the gate's cluster, for `health_plumbing.with_checks`.
     """
+    if not code:
+        text, code = health_plumbing.with_checks(role, text, read)
     if code:
         return text, code
     from diagnostics.probe_lib.releases_retired import tree_owners
@@ -407,29 +380,47 @@ def release_expected_restarts(record):
     }
 
 
-def _fetch_cronjob(name, namespace, cluster, tools=DEFAULT_TOOLS):
-    """(CronJob doc or None, its latest owned Job or None, that Job's pods doc or None)."""
+def _fetch_cronjob(role, name, namespace, cluster, tools=DEFAULT_TOOLS):
+    """(CronJob or None, its latest owned Job or None, that Job's pods or None, reference).
+
+    The reference is the `health_cronjob.FluxRevision` of an `owner: flux` `role`, which has
+    no release record, and `role`'s release-record `applied_at` otherwise.
+    """
+    from diagnostics.probe_lib.releases_retired import tree_owners
+
     cronjob = _read(cluster, k8s_cronjob_args(name, namespace), tools)
-    latest_job = latest_owned_job(_read(cluster, k8s_jobs_args(namespace), tools), name)
+    jobs = _read(cluster, k8s_jobs_args(namespace), tools)
+    latest_job = latest_owned_job(jobs, name)
     pods = None
     if latest_job:
         job_name = (latest_job.get("metadata") or {}).get("name")
         pods = _read(cluster, k8s_job_pods_args(job_name, namespace), tools)
-    return cronjob, latest_job, pods
+    if tree_owners().get(role) != "flux":
+        return cronjob, latest_job, pods, _deploy_applied_at(role)
+    kustomization = _read(cluster, k8s_kustomization_args(role), tools)
+    revision = health_cronjob.flux_revision(kustomization, jobs, name)
+    return cronjob, latest_job, pods, revision
 
 
-def format_role_cronjob_health(role, checked, now):
+def format_role_cronjob_health(role, checked, now, suspended=frozenset()):
     """(text, exit code) for a role whose manifests declare at least one CronJob.
 
     `checked` is [(namespace, name, cronjob doc or None, latest Job or None, pods doc or
-    None, deploy_applied_at)]. Mirrors format_role_health's shape and its NOT_APPLICABLE_
-    MARKERS constraint: a CronJob the manifests declare and the cluster lacks reads as a
-    failure here too, via format_cronjob_health's own "no CronJob in this namespace" message.
+    None, reference)], as `_fetch_cronjob` reads it. Mirrors format_role_health's shape and
+    its NOT_APPLICABLE_MARKERS constraint: a CronJob the manifests declare and the cluster
+    lacks reads as a failure here too, via format_cronjob_health's "no CronJob" message.
+
+    `suspended` is the `namespace/name` set whose manifest declares `suspend: true`
+    (`health_cronjob.declared_suspended`). A live-suspended CronJob in it passes with no Job
+    to read, and one outside it fails as drift (`health_cronjob.format_suspended`).
     """
     unhealthy, lines = [], []
     for namespace, name, cronjob, latest_job, pods, deploy_applied_at in checked:
-        text, code = format_cronjob_health(
-            f"{namespace}/{name}", cronjob, latest_job, pods, deploy_applied_at, now
+        full = f"{namespace}/{name}"
+        text, code = format_suspended(
+            full, cronjob, suspended
+        ) or format_cronjob_health(
+            full, cronjob, latest_job, pods, deploy_applied_at, now
         )
         lines.append(f"  {text}")
         if code:
@@ -460,12 +451,15 @@ def run_health(
     tools=DEFAULT_TOOLS,
     roles_dir=K8S_ROLES,
     prom=health_alerts.DEFAULT_PROM,
+    on_origin=health_checkout.role_on_origin,
+    stale_reason=health_checkout.stale_checkout_reason,
 ):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
     k8s first because that is where ~50 of the ~55 services live. `tools` is the kubectl
     boundary of the k8s reads, injectable so a test can fail them without patching.
-    `roles_dir` is where the k8s roles live, injectable so a test can resolve a fixture role.
+    `roles_dir` is where the k8s roles live, injectable so a test can resolve a fixture role;
+    `stale_reason` is the stale-checkout refusal (`health_checkout`) and `on_origin` its git read.
     `prom` is the alert plane's Prometheus boundary, read for a role-resolved tag only: the
     Pi's `--docker` path and a guessed workload name stay on the rollout verdict alone.
     """
@@ -509,7 +503,13 @@ def run_health(
         print(f"{container}: {refusal}", file=_sys.stderr)
         return PROBE_UNREADABLE
 
+    # Before the resolver: an old definition of the role yields no verdict (#5912).
+    if stale := stale_reason(container, roles_dir, on_origin):
+        print(f"{container}: {stale}", file=_sys.stderr)
+        return PROBE_UNREADABLE
+
     ns = core.k8s_namespace()
+    read = functools.partial(_read, cluster, tools=tools)
     try:
         targets = role_workload_targets(container, ns, roles_dir)
     except Exception as exc:
@@ -529,9 +529,13 @@ def run_health(
         print(text)
         return code
 
+    if not targets and container == health_backup_targets.BACKUP_ROLE:
+        # No workload; the gate is the targets' availability (H1.7b).
+        return health_backup_targets.report(read, prom, _with_alert_plane)
+
     if not targets:
         # No Deployment/DaemonSet/StatefulSet — the CronJob-only path, the read-only analog
-        # of manifests_rollout for a role that instead includes k8s/cronjob-gate. A role
+        # of manifests_rollout for a role whose CronJob a `flux_cronjob_gates` entry gates. A role
         # deploying both is gated on its rollout above, not here: role_cronjob_targets is
         # only ever consulted when role_workload_targets found nothing to gate on.
         try:
@@ -544,18 +548,17 @@ def run_health(
             return 1
         if cronjob_targets:
             now = datetime.now(timezone.utc)
-            deploy_applied_at = _deploy_applied_at(container)
             checked = [
                 (
                     namespace,
                     name,
-                    *_fetch_cronjob(name, namespace, cluster, tools),
-                    deploy_applied_at,
+                    *_fetch_cronjob(container, name, namespace, cluster, tools),
                 )
                 for namespace, name in cronjob_targets
             ]
-            text, code = format_role_cronjob_health(container, checked, now)
-            text, code = _with_alert_plane(container, text, code, None, prom)
+            declared = declared_suspended(rendered_docs(container, roles_dir) or [], ns)
+            text, code = format_role_cronjob_health(container, checked, now, declared)
+            text, code = _with_alert_plane(container, text, code, None, prom, read)
             print(text)
             return code
         # Genuinely nothing to gate — a Job-only role (media-volume, netpol-baseline) whose
@@ -575,6 +578,7 @@ def run_health(
             0,
             None,
             prom,
+            read,
         )
         print(text)
         return code
@@ -588,6 +592,6 @@ def run_health(
         container, checked, now, release_expected_restarts(_release_record(container))
     )
     ready_at = health_alerts.pods_ready_at([c[4] for c in checked])
-    text, code = _with_alert_plane(container, text, code, ready_at, prom)
+    text, code = _with_alert_plane(container, text, code, ready_at, prom, read)
     print(text)
     return code

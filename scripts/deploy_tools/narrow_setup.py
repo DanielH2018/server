@@ -48,8 +48,10 @@ no `tags:` of its own is the sharpest case: its tasks inherit from wherever it i
 so a hit there says nothing about which tag selects it. A tag must also be REACHABLE in the
 playbook the remediation prints: the role has to sit in that playbook's `roles:`, and the task
 file has to be statically imported from the role's `tasks/main`, or included from a file that
-is with an `apply:` tag the include itself carries (#4384).
-`tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, and `k3s-bringup.yml --tags
+is with an `apply:` tag the include itself carries (#4384), or run from one of that playbook's
+plays by `include_role ... tasks_from:` under a tag every task in the file carries (#5628).
+That last is how `tasks/agent.yml` narrows to `k3s_agent`, which the remediation prints on
+the join command rather than the server one. `tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, and `k3s-bringup.yml --tags
 storage_smoke` selects only `always` tasks.
 
 WHO CALLS IT. Two callers, both through `deploy_narrow.narrow_setup_role`, which runs this
@@ -356,7 +358,7 @@ def role_tags(
     playbook_text = show_at(new, playbook, repo)
     if not playbook_applies_role(playbook_text, role):
         raise CannotNarrow(f"no play in {playbook} lists {role} under roles:")
-    index = RoleIndex(role, new, repo)
+    index = RoleIndex(role, new, repo, playbook_text)
     # A secret the role reads moves no path under it, yet reaches the host only when the role
     # renders again (#5436). Which of its tags read the key is not derived, so the role tag.
     moved = secrets_read(index, shipped, old, new, repo)

@@ -66,6 +66,7 @@ from gitops_markers import (
     owed_clear_cmd,
     parse_behind,
     parse_contention,
+    server_tags,
     target_arg,
 )
 
@@ -97,24 +98,30 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
     entries, narrow = manual_plane_entries(owed)
     for e in entries:
         selected = narrow.get(e.role) or frozenset({e.role})
+        server = server_tags(e.role, selected)
+        hand = by_hand(e.playbook)
+        warning = maximal_apply_warning(e.role, server)
+        # No server command for a row reaching only the agent half: it would select nothing.
         apply = (
-            by_hand(e.playbook)
-            or f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
+            [
+                (
+                    hand
+                    or f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}{target_arg(e.host)}"
+                )
+                + (f" (WARNING: {warning})" if warning else "")
+            ]
+            if hand or server
+            else []
         )
-        warning = maximal_apply_warning(e.role, selected)
         agents = (
-            []
-            if by_hand(e.playbook)
-            else agent_join_cmds(e.role, e.playbook, selected, e.agent_hosts)
+            [] if hand else agent_join_cmds(e.role, e.playbook, selected, e.agent_hosts)
         )
         rows[OWED_MANUAL_PLANE].append(
             {
                 "subject": e.role,
                 "origin": e.origin,
                 "age_s": int(now - e.at),
-                "do": apply
-                + (f" (WARNING: {warning})" if warning else "")
-                + "".join(f" and {a}" for a in agents),
+                "do": " and ".join([*apply, *agents]),
                 "clear": owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             }
         )

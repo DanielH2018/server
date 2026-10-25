@@ -1,0 +1,211 @@
+# promtool unit tests for files/rules/pi-checks.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# Both deadlines are 900s, so the cases step a minute at a time. `evaluation_interval` and every
+# input series use 1m, which puts a sample on each evaluation and keeps the 5m lookback out of the
+# arithmetic. The input series carry the labels the `node-pi` scrape job adds. promtool's `time()`
+# is the evaluation time in seconds from 0, so a frozen timestamp series stays at 0 and a fresh one
+# reads 60 x the minute index (`0+60xN`).
+#
+# A NotReporting rule fires with one of two label sets. Its first arm keeps the series' labels,
+# `job` and `instance` included. Its absent_over_time arm carries only the equality matchers'
+# `check` and `origin`.
+rule_files:
+  - ../../files/rules/pi-checks.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so no verdict has existed for longer than any deadline.
+  # Both NotReporting rules fire through absent_over_time, and no Failed rule has a series to read.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PiSdHealthNotReporting
+        exp_alerts:
+          - exp_labels: {check: pi-sd-health, origin: daniel-pi, severity: critical, service: daniel-pi, shadow: "true"}
+            exp_annotations:
+              summary: daniel-pi's SD-card health heartbeat has stopped reporting.
+              description: >-
+                No pi-sd-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
+                textfile collector, so nothing confirms the SD card is being watched. Read
+                `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then
+                /var/lib/node-exporter-textfile/pi-sd-health.prom.
+      - eval_time: 30m
+        alertname: PiSdHealthFailed
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: PiRecoveryNotReporting
+        exp_alerts:
+          - exp_labels: {check: pi-recovery-health, origin: daniel-pi, severity: warning, service: daniel-pi, shadow: "true"}
+            exp_annotations:
+              summary: daniel-pi's container-recovery heartbeat has stopped reporting.
+              description: >-
+                No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
+                textfile collector, so nothing confirms the Pi's containers are being watched.
+                Read `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
+                /var/lib/node-exporter-textfile/pi-recovery-health.prom. A host that sets
+                optimize_pi_recovery_restart_enabled false drops the timer and fires this on
+                purpose.
+      - eval_time: 30m
+        alertname: PiRecoveryFailed
+        exp_alerts: []
+
+  # Each Failed rule: a verdict of 0 fires it with the host's labels, and a verdict of 1 does not.
+  # The first minutes are the control for the rest.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x3 0x3'
+      - series: 'homelab_check_success{check="pi-recovery-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x3 0x3'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PiSdHealthFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: PiSdHealthFailed
+        exp_alerts:
+          - exp_labels: {check: pi-sd-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: critical, service: daniel-pi, shadow: "true"}
+            exp_annotations:
+              summary: daniel-pi's SD-card health heartbeat reported a failure.
+              description: >-
+                pi-sd-health on daniel-pi ended with status=down: the root filesystem's ext4
+                errors_count is nonzero or unreadable, the rotated-log integrity verdict is bad
+                or stale, or /var/log is not log2ram's tmpfs. The `pi-sd-health` line in
+                /var/log/pi-health/health.log holds the message. Plan an fsck and a card
+                replacement.
+      - eval_time: 2m
+        alertname: PiRecoveryFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: PiRecoveryFailed
+        exp_alerts:
+          - exp_labels: {check: pi-recovery-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi, shadow: "true"}
+            exp_annotations:
+              summary: daniel-pi's container-recovery heartbeat found a container not running.
+              description: >-
+                pi-recovery-health on daniel-pi ended with status=down: a watched container was
+                not running, whether or not its restart took. The `pi-recovery-health` line in
+                /var/log/pi-health/health.log names the container, why it died and any dockerd
+                fault.
+
+  # The file stopped being refreshed: node_exporter keeps serving the timestamp written at 0. The
+  # first arm is quiet when the gap equals the deadline (15m) and fires one minute later.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x30'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-recovery-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x30'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PiSdHealthNotReporting
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PiSdHealthNotReporting
+        exp_alerts:
+          - exp_labels: {check: pi-sd-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: critical, service: daniel-pi, shadow: "true"}
+            exp_annotations:
+              summary: daniel-pi's SD-card health heartbeat has stopped reporting.
+              description: >-
+                No pi-sd-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
+                textfile collector, so nothing confirms the SD card is being watched. Read
+                `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then
+                /var/lib/node-exporter-textfile/pi-sd-health.prom.
+      - eval_time: 15m
+        alertname: PiRecoveryNotReporting
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PiRecoveryNotReporting
+        exp_alerts:
+          - exp_labels: {check: pi-recovery-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi, shadow: "true"}
+            exp_annotations:
+              summary: daniel-pi's container-recovery heartbeat has stopped reporting.
+              description: >-
+                No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
+                textfile collector, so nothing confirms the Pi's containers are being watched.
+                Read `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
+                /var/lib/node-exporter-textfile/pi-recovery-health.prom. A host that sets
+                optimize_pi_recovery_restart_enabled false drops the timer and fires this on
+                purpose.
+
+  # A healthy heartbeat writes every 5 minutes, so the timestamp keeps up and neither rule fires.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+300x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-recovery-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+300x10'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PiSdHealthNotReporting
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: PiRecoveryNotReporting
+        exp_alerts: []
+
+  # The file is gone from minute 2, so the series goes stale while the exporter stays up. The
+  # absent_over_time arm stays quiet while any sample lies inside the deadline window and fires
+  # after it. The exporter-down group below differs only in `up`, so this group is its control.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x1 stale'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PiSdHealthNotReporting
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: PiSdHealthNotReporting
+        exp_alerts:
+          - exp_labels: {check: pi-sd-health, origin: daniel-pi, severity: critical, service: daniel-pi, shadow: "true"}
+            exp_annotations:
+              summary: daniel-pi's SD-card health heartbeat has stopped reporting.
+              description: >-
+                No pi-sd-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
+                textfile collector, so nothing confirms the SD card is being watched. Read
+                `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then
+                /var/lib/node-exporter-textfile/pi-sd-health.prom.
+
+  # The exporter is down from minute 2: `up` reads 0 and the series is gone, as in the control
+  # above. The bridge's `targets` check pages a dead exporter, so the `unless` clause keeps both
+  # NotReporting rules quiet past the point the control fires.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x1 stale'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-recovery-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x1 stale'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x1 0x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PiSdHealthNotReporting
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: PiRecoveryNotReporting
+        exp_alerts: []
+
+  # A short gap: stale samples between fresh timestamps, as a node-exporter roll leaves. A bare
+  # absent() would fire at each stale minute; the absent_over_time arm still sees the earlier
+  # samples and stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x3 stale stale 360+60x10'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PiSdHealthNotReporting
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: PiSdHealthNotReporting
+        exp_alerts: []

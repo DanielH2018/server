@@ -1,0 +1,45 @@
+---
+# Replaces the class inside upstream's `longhorn-storageclass` ConfigMap. longhorn-manager writes
+# the `longhorn` StorageClass from this ConfigMap, and upstream's copy pins `numberOfReplicas:
+# "3"`. A StorageClass parameter beats the `default-replica-count` setting, so on a cluster with
+# fewer nodes every PVC asked for replicas it could never schedule and sat Degraded forever.
+#
+# The single deliberate difference from upstream is the ABSENCE of numberOfReplicas. Omitting it
+# makes `default-replica-count` (k3s_longhorn_replica_count) load-bearing, which leaves one source
+# of truth. It also keeps a raise of the replica count a settings change instead of StorageClass
+# surgery: parameters are immutable, so changing one means deleting and recreating the class.
+#
+# Everything else is verbatim from longhorn v1.13.0 deploy/longhorn.yaml, re-synced 2026-10-22.
+# v1.13.0 changed no class parameter. Keep it verbatim on a version bump
+# (docs/longhorn-upgrade.md, step 2), and do NOT paste numberOfReplicas back in:
+# ansible/tests/longhorn/test_longhorn_storageclass.py fails if it reappears.
+#
+# DECIDED: this ConfigMap patch is the only home of the class text. The class file that used to
+# sit in setup/k3s (files/longhorn-storageclass.yaml) is deleted with the tasks that applied it,
+# so a stale checkout has nothing left to write the class from.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: longhorn-storageclass
+  namespace: longhorn-system
+data:
+  storageclass.yaml: |
+    kind: StorageClass
+    apiVersion: storage.k8s.io/v1
+    metadata:
+      name: longhorn
+      annotations:
+        storageclass.kubernetes.io/is-default-class: "true"
+    provisioner: driver.longhorn.io
+    allowVolumeExpansion: true
+    reclaimPolicy: "Delete"
+    volumeBindingMode: Immediate
+    parameters:
+      staleReplicaTimeout: "30"
+      fromBackup: ""
+      fsType: "ext4"
+      dataLocality: "disabled"
+      unmapMarkSnapChainRemoved: "ignored"
+      disableRevisionCounter: "true"
+      dataEngine: "v1"
+      backupTargetName: "default"

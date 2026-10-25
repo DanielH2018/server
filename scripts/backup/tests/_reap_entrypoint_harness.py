@@ -8,7 +8,7 @@ recording every `kubectl delete` argv the stub receives.
 The entry point runs as a bare subprocess, not an import, because that is how an operator runs
 it (`uv run python scripts/backup/longhorn_reap.py backups`). A subprocess does not inherit
 pytest's pythonpath, so the sys.path bootstraps in the entry point and in longhorn_reap_lib/ are
-the only thing that makes `host_lib` (ansible/roles/setup/common/files/) and
+the only thing that makes `host_lib` (hosts/lib/) and
 `longhorn_reap_lib` importable.
 
 `BACKUPS_ENTRY` and `SNAPSHOTS_ENTRY` are `(entry point, subcommand)` pairs: `_run` puts the

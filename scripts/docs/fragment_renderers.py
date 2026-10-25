@@ -18,7 +18,8 @@ def render_longhorn_tiers(d: dict) -> str:
     """Renders the Longhorn backup-tier markdown table fragment.
 
     Args:
-        d: the k3s role's defaults, carrying the longhorn tier and schedule tunables.
+        d: the `longhorn-backup` role's defaults (schedule, retain and arm flags) laid over the k3s
+            role's, with the three tier lists resolved by `lib.service_tiers`.
     """
     r2 = list(d["k3s_longhorn_r2_volumes"])
     weekly = list(d["k3s_longhorn_weekly_volumes"])

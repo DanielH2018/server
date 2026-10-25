@@ -24,7 +24,7 @@ for every host.
 
 Contract C5 in [the contracts](../target-architecture/contracts.md) names one anchor: a
 commit on `origin/master`'s first-parent chain with a green CI verdict.
-`deploy_git.py:ci_walk_candidates` already gives the GitOps deployer that anchor, and both
+`hosts/lib/ci_verdict.py:ci_walk_candidates` already gives the GitOps deployer that anchor, and both
 k3s nodes take setup roles from master on it.
 
 No operator-signature check can pass on a master commit. `land.sh` squash-merges through

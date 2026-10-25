@@ -10,6 +10,7 @@ Each Docker role has separate channels (the compose or a config template deploys
 
 import pytest
 
+from deployer_lib import deploy_cross_role
 from deployer_lib.deploy_changes import (
     role_of,
     services_from_changed_paths,
@@ -302,7 +303,7 @@ def test_a_host_lib_change_reaches_its_consumers_and_not_common():
     """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The four
     initial_setup consumers apply on the tick, `k3s` is the one role left to record, and
     `common` is named nowhere. A `common` file no role ships still names `common`."""
-    host_lib = ["ansible/roles/setup/common/files/host_lib.py"]
+    host_lib = ["hosts/lib/host_lib.py"]
     consumers = {
         "fake_remux",
         "gitops_deploy",
@@ -314,6 +315,20 @@ def test_a_host_lib_change_reaches_its_consumers_and_not_common():
     assert setup_tags_for(host_lib) == consumers
     resolv = ["ansible/roles/setup/common/templates/resolv.conf.j2"]
     assert services_from_changed_paths(resolv).setup_roles == {"common"}
+
+
+def test_a_table_holding_only_the_old_host_lib_key_routes_the_moved_file_nowhere():
+    """The red half of the move (H7.2e): a table that kept the pre-move key finds no consumer
+    for `hosts/lib/host_lib.py`, so the row must be repointed with the file."""
+    live = deploy_cross_role.current_tables()
+    old = {"ansible/roles/setup/common/files/host_lib.py": frozenset({"k3s"})}
+    deploy_cross_role.use_tables({**live, "SETUP_FILES_SHIPPED_BY_OTHER_ROLES": old})
+    try:
+        assert (
+            services_from_changed_paths(["hosts/lib/host_lib.py"]).setup_roles == set()
+        )
+    finally:
+        deploy_cross_role.use_tables(live)
 
 
 def test_a_common_task_file_change_reaches_the_roles_importing_it():
@@ -342,16 +357,30 @@ def test_a_kuma_check_template_change_reaches_the_roles_importing_its_task_file(
     assert setup_tags_for([path]) == consumers
 
 
-def test_an_initial_setup_defaults_change_reaches_claude_code():
+def test_an_initial_setup_defaults_change_reaches_its_readers():
     """claude_code puts every agent in `initial_setup_worktree_holders_group` (#4303), so a
-    rename re-applied only initial_setup and left the agents in the old group."""
+    rename re-applied only initial_setup and left the agents in the old group. claude_code,
+    renovate_agent and homelab_builder each copy the uv `initial_setup_uv_version` pins, so a
+    uv bump left their copies on the old version (#5945)."""
     path = "ansible/roles/setup/initial_setup/defaults/main.yml"
     assert services_from_changed_paths([path]).setup_roles == {
         "initial_setup",
         "claude_code",
+        "homelab_builder",
+        "renovate_agent",
     }
-    assert setup_roles_for(path) == {"initial_setup", "claude_code"}
-    assert setup_tags_for([path]) == {"initial_setup", "claude_code"}
+    assert setup_roles_for(path) == {
+        "initial_setup",
+        "claude_code",
+        "homelab_builder",
+        "renovate_agent",
+    }
+    assert setup_tags_for([path]) == {
+        "initial_setup",
+        "claude_code",
+        "homelab_builder",
+        "renovate_agent",
+    }
     tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"
     assert setup_roles_for(tasks) == {"initial_setup"}
 
@@ -361,7 +390,7 @@ def test_a_host_lib_change_defers_the_k8s_roles_importing_it():
     (H2.5b, H2.5c). The deployer applies no k8s role for this change, so each lands in `cs.k8s`
     and defer-alerts. A `common` file no k8s role imports names none, and since H2.5c no k8s
     role imports the two host-copy task files."""
-    lib = ["ansible/roles/setup/common/files/host_lib.py"]
+    lib = ["hosts/lib/host_lib.py"]
     assert services_from_changed_paths(lib).k8s == {"configarr", "janitorr"}
     for path in (
         "ansible/roles/setup/common/tasks/install_host_lib.yml",
@@ -370,3 +399,13 @@ def test_a_host_lib_change_defers_the_k8s_roles_importing_it():
         assert services_from_changed_paths([path]).k8s == set()
     timer = ["ansible/roles/setup/common/tasks/kuma_check_timer.yml"]
     assert services_from_changed_paths(timer).k8s == set()
+
+
+def test_a_build_context_file_outside_every_role_defers_the_role_embedding_it():
+    """homelab-mcp's image embeds `obs_api.py` from `scripts/` (#4840). The edit moves the
+    image's content tag, so the role lands in `cs.k8s` and earns a `k8s_unapplied` line, as an
+    edit under the role would. A sibling under `probe_lib/` that no image embeds names none."""
+    obs = ["scripts/diagnostics/probe_lib/obs_api.py"]
+    assert services_from_changed_paths(obs).k8s == {"homelab-mcp"}
+    sibling = ["scripts/diagnostics/probe_lib/releases.py"]
+    assert services_from_changed_paths(sibling).k8s == set()

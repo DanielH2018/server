@@ -45,7 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import answer_help
-from lib.repo_paths import K3S_DEFAULTS
+from lib.repo_paths import SYSTEM_UPGRADE_DEFAULTS
 
 # datreeio/CRDs-catalog publishes one JSON Schema per CRD kind, laid out by API group. It is the
 # schema source kubeconform's own docs point at, so the layout is a de-facto convention rather
@@ -85,6 +85,12 @@ VENDORED = [
     ("kustomize.toolkit.fluxcd.io", "kustomization", "v1"),
     ("notification.toolkit.fluxcd.io", "provider", "v1beta3"),
     ("notification.toolkit.fluxcd.io", "alert", "v1beta3"),
+    ("metallb.io", "ipaddresspool", "v1beta1"),
+    ("metallb.io", "l2advertisement", "v1beta1"),
+    ("longhorn.io", "setting", "v1beta2"),
+    ("longhorn.io", "backuptarget", "v1beta2"),
+    ("longhorn.io", "recurringjob", "v1beta2"),
+    ("upgrade.cattle.io", "plan", "v1"),
 ]
 
 # Authelia publishes a JSON Schema per MINOR release of its own configuration file, and it sets
@@ -103,12 +109,19 @@ AUTHELIA_SCHEMA_PATH = ("authelia.com", f"configuration_{AUTHELIA_SCHEMA_MINOR}.
 
 
 def kubernetes_tag(k3s_defaults: str) -> str:
-    """The kubernetes/kubernetes tag a k3s release is built from: v1.36.4+k3s1 -> v1.36.4."""
+    """The kubernetes/kubernetes tag a k3s release is built from: v1.36.4+k3s1 -> v1.36.4.
+
+    Reads the line as text, so a trailing `# noqa` comment is allowed after the version.
+    """
     match = re.search(
-        r"^k3s_version:\s*(v\d+\.\d+\.\d+)\+k3s\d+\s*$", k3s_defaults, re.MULTILINE
+        r"^k3s_version:\s*(v\d+\.\d+\.\d+)\+k3s\d+\s*(?:#.*)?$",
+        k3s_defaults,
+        re.MULTILINE,
     )
     if not match:
-        raise ValueError("k3s_version not found in roles/setup/k3s/defaults/main.yml")
+        raise ValueError(
+            "k3s_version not found in roles/k8s/system-upgrade/defaults/main.yml"
+        )
     return match.group(1)
 
 
@@ -167,7 +180,7 @@ def fetch(url: str) -> bytes:
 
 def refresh_core() -> int:
     """Vendor Kubernetes' own schemas for the k3s release this repo pins. Returns failures."""
-    tag = kubernetes_tag(K3S_DEFAULTS.read_text())
+    tag = kubernetes_tag(SYSTEM_UPGRADE_DEFAULTS.read_text())
     minor = ".".join(tag.split(".")[:2])
     dest_dir = SCHEMA_DIR / "kubernetes.io" / minor
     dest_dir.mkdir(parents=True, exist_ok=True)

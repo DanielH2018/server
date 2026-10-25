@@ -78,7 +78,7 @@ def test_a_timer_whose_link_was_dropped_is_stopped_and_its_service_is_not(node):
 # Step 3: the restart policy for a changed unit.
 
 
-def test_a_changed_active_service_is_try_restarted_and_an_enabled_timer_restarted(node):
+def test_a_changed_active_service_and_an_enabled_timer_are_each_restarted_once(node):
     node.unit("homelab-pi-sd.service", active="active")
     node.unit("homelab-pi-sd.timer", active="active", linked=True)
     node.unit("homelab-pi-gz.service")
@@ -95,7 +95,7 @@ def test_a_changed_active_service_is_try_restarted_and_an_enabled_timer_restarte
     assert result.returncode == 0, result.stderr
     # The inactive service with no enable link is left for its next start.
     assert node.actions() == [
-        ["try-restart", "homelab-pi-sd.service"],
+        ["restart", "homelab-pi-sd.service"],
         ["restart", "homelab-pi-sd.timer"],
     ]
 
@@ -173,8 +173,8 @@ def test_a_masked_unit_is_never_started_and_an_unmasked_one_is(node):
     result = node.run()
 
     assert result.returncode == 0, result.stderr
-    assert ["start", "homelab-pi-gz.timer"] in node.actions()
-    assert ["start", "homelab-pi-sd.timer"] not in node.actions()
+    assert ["restart", "homelab-pi-gz.timer"] in node.actions()
+    assert ["restart", "homelab-pi-sd.timer"] not in node.actions()
 
 
 # Step 4: legacy entries.
@@ -300,7 +300,7 @@ def test_started_while_the_lock_is_held_reconcile_waits_and_reads_the_later_mani
         node.write_manifest()
 
     assert node.finish(process) == 0
-    assert ["start", "homelab-pi-sd.timer"] in node.actions()
+    assert ["restart", "homelab-pi-sd.timer"] in node.actions()
     assert all(call["lock_free"] for call in node.calls("systemctl"))
 
 
@@ -325,7 +325,7 @@ def test_a_failed_restart_keeps_its_old_hash_and_the_next_run_retries_only_it(no
     before = node.applied()
     for name in ("homelab-pi-sd.service", "homelab-pi-gz.service"):
         node.write_unit(name, "[Service]\nExecStart=/bin/false\n")
-    node.state["fail"] = ["try-restart homelab-pi-sd.service"]
+    node.state["fail"] = ["restart homelab-pi-sd.service"]
 
     failed = node.run()
 
@@ -346,5 +346,5 @@ def test_a_failed_restart_keeps_its_old_hash_and_the_next_run_retries_only_it(no
     retried = node.run()
 
     assert retried.returncode == 0, retried.stderr
-    assert node.actions() == [["try-restart", "homelab-pi-sd.service"]]
+    assert node.actions() == [["restart", "homelab-pi-sd.service"]]
     assert node.applied()["result"]["ok"] is True

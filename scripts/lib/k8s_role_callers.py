@@ -51,7 +51,7 @@ _ROLE_NAME = re.compile(r"^k8s/([^/\s]+)$")
 # per-file question for a changed path; `scripts/lib` imports nothing from `deployer_lib`.
 _ROLE_LOOKUP = re.compile(
     r"lookup\(\s*'(?:ansible\.builtin\.)?(?:file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
-    r"'/roles/k8s/([^/']+)/[^']+'\s*\)"
+    r"'/roles/k8s/([^/']+)/[^']+'\s*(?:,[^)]*)?\)"
 )
 
 

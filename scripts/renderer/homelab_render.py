@@ -46,7 +46,8 @@ placeholder-form documents and `ansible/vars/cluster-vars.source`
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
 PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
 `root/`, the tree the package installs, and `nfpm.yaml`. Host and package modes render no
-secret and keep every `${` literal (`renderer_lib/host.py`).
+secret, except in a spec's declared outputs and compose files, which carry `${<key>}`
+placeholders (`renderer_lib/host_outputs.py`). Every other `${` stays literal.
 
 `--secret-stubs FILE` selects stub mode, R1's shadow mode. It takes the file that
 `shadow_diff.py stubs` writes, and every secret renders as its stub. A stub render is a

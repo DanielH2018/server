@@ -199,7 +199,7 @@ WORK_BEFORE_HELP = (
     "validate.shell_templates",
     "validate.unit_templates",
     "validate.compose_templates",
-    "validate.grafana_dashboards",
+    "validate.grafana_dashboard_uids",
     "validate.jinja_bash_collisions",
     "home_assistant.validate_ha_config",
     "secrets_mgmt.secret_bearing_host_paths",

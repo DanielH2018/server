@@ -11,8 +11,9 @@
 # matchers' `check` and `origin`. HostUpdateStale's two arms differ the same way.
 #
 # fixtures/host-update-stale.yaml holds the HostUpdateStale rule for a one-host map,
-# fixture-host at 11400s, because host-checks.yaml carries none while
-# observability_expected_hosts is empty.
+# fixture-host at 11400s, which gives the rule's shape cases that name no shipped host.
+# host-checks.yaml carries daniel-pi's rule (job node-pi, 11400s) since H3.9c, and the cases
+# after the fixture's own exercise it.
 rule_files:
   - ../../files/rules/host-checks.yaml
   - fixtures/host-update-stale.yaml
@@ -25,6 +26,22 @@ tests:
     input_series: []
     alert_rule_test:
       - eval_time: 26m
+        alertname: ClaudeTriagePollNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-triage-poll
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The triage poller on daniel-box has stopped reporting.
+              description: >-
+                No claude-triage-poll verdict newer than 660s reached Prometheus from daniel-box's
+                textfile collector, so the monitor triage poll has not completed a clean run: the timer
+                stopped firing, or every run since failed and OnFailure has posted to Discord. Read
+                `systemctl status claude-triage-poll.timer` and `journalctl -u claude-triage-poll` on
+                daniel-box. If `claude_code_triage_enabled` was set false on purpose, delete this rule.
+      - eval_time: 26m
         alertname: DiskHealthNotReporting
         exp_alerts:
           - exp_labels:
@@ -32,11 +49,10 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
-                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                No disk-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
@@ -69,7 +85,7 @@ tests:
             exp_annotations:
               summary: daniel-box's iSCSI session check has stopped reporting.
               description: >-
-                No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-box's
+                No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the node's iSCSI sessions. Read the
                 log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
           - exp_labels:
@@ -80,13 +96,13 @@ tests:
             exp_annotations:
               summary: daniel-server's iSCSI session check has stopped reporting.
               description: >-
-                No iscsi-sessions verdict newer than 300s reached Prometheus from
+                No iscsi-sessions verdict newer than 5 minutes reached Prometheus from
                 daniel-server's textfile collector, so nothing is watching the node's iSCSI
                 sessions. Read the log of the node-exporter pod's `iscsi-sessions` container
                 on daniel-server.
 
-  # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires in
-  # shadow at once, and DiskHealthNotReporting stays quiet.
+  # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires at once,
+  # and DiskHealthNotReporting stays quiet.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -109,7 +125,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check is red.
               description: >-
@@ -143,11 +158,10 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
-                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                No disk-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
@@ -174,11 +188,10 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's root disk check has stopped reporting.
               description: >-
-                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                No disk-health verdict newer than 25 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
@@ -196,6 +209,378 @@ tests:
       - eval_time: 40m
         alertname: DiskHealthNotReporting
         exp_alerts: []
+
+  # M6 batch B1. The zero-series case: no input at all, so no k3s cron has written a verdict
+  # inside its deadline, and no Kuma `up` series exists. Each NotReporting rule fires through
+  # absent_over_time, once the longest deadline (90000s) has passed, and KumaDown fires on its
+  # absent() arm. The Failed rules read a series and stay quiet.
+  - interval: 10m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: longhorn-backup-health
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's longhorn-backup-health check has stopped reporting.
+              description: >-
+                No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
+                Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
+                then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+      - eval_time: 26h
+        alertname: LonghornBackupHealthFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: EtcdSnapshotOffboxNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: etcd-snapshot-offbox
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
+              description: >-
+                No etcd-snapshot-offbox verdict newer than 25 hours reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching the off-box etcd snapshot.
+                Read the `Off-box etcd snapshot` cron and the `etcd-snapshot-offbox` syslog tag,
+                then /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
+      - eval_time: 26h
+        alertname: EtcdSnapshotOffboxFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: ManifestPruneCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: manifest-prune-check
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's manifest-prune-check has stopped reporting.
+              description: >-
+                No manifest-prune-check verdict newer than 25 hours reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching deployed-artifact drift.
+                Read the `kuma-check-manifest-prune` timer and the `manifest-prune-check` syslog
+                tag, then /var/lib/node-exporter-textfile/manifest-prune-check.prom on the host.
+      - eval_time: 26h
+        alertname: ManifestPruneCheckFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: release-staleness-check
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's release-staleness-check has stopped reporting.
+              description: >-
+                No release-staleness-check verdict newer than 65 minutes reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching release staleness. Read the
+                `Release staleness drift check` cron and the `release-staleness-check` syslog tag,
+                then /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
+      - eval_time: 26h
+        alertname: ReleaseStalenessCheckFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: LiveDriftCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: live-drift-check
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's live-drift-check has stopped reporting.
+              description: >-
+                No live-drift-check verdict newer than 25 hours reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching live-object drift. Read the
+                `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
+                /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
+      - eval_time: 26h
+        alertname: LiveDriftCheckFailed
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: KumaDown
+        exp_alerts:
+          - exp_labels:
+              job: uptime-kuma
+              severity: critical
+              service: uptime-kuma
+              shadow: "true"
+            exp_annotations:
+              summary: Uptime Kuma has stopped serving /metrics.
+              description: >-
+                Prometheus's scrape of the uptime-kuma Service failed for 5 minutes, or the job has
+                no `up` series at all. Kuma still pages every check that has not moved to an alert
+                rule, so a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get
+                pods` and the pod's log.
+
+  # M6 batch B1. Every check turns red from minute 3 while its file stays fresh. Each Failed
+  # rule fires at once and no NotReporting rule does.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="longhorn-backup-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'homelab_check_success{check="etcd-snapshot-offbox", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="etcd-snapshot-offbox", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'homelab_check_success{check="manifest-prune-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="manifest-prune-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'homelab_check_success{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'homelab_check_success{check="live-drift-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="live-drift-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x7'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: LonghornBackupHealthFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: LonghornBackupHealthFailed
+        exp_alerts:
+          - exp_labels:
+              check: longhorn-backup-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's Longhorn backup check is red.
+              description: >-
+                longhorn_backup_health.py on daniel-box reported a failing backup-plane check: an
+                unavailable backup target, a stale or errored backup, a failed job, or a restore
+                drill that is overdue. `journalctl -t longhorn-backup-health` names the check. Read
+                docs/longhorn-disaster-recovery.md after it.
+      - eval_time: 4m
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: EtcdSnapshotOffboxFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: EtcdSnapshotOffboxFailed
+        exp_alerts:
+          - exp_labels:
+              check: etcd-snapshot-offbox
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's off-box etcd snapshot check is red.
+              description: >-
+                etcd-snapshot-offbox.sh on daniel-box could not take or upload the etcd snapshot, or
+                the cluster token changed since the off-box copy was stamped. `journalctl -t
+                etcd-snapshot-offbox` names which. Read docs/k3s-etcd-restore.md after it.
+      - eval_time: 4m
+        alertname: EtcdSnapshotOffboxNotReporting
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ManifestPruneCheckFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ManifestPruneCheckFailed
+        exp_alerts:
+          - exp_labels:
+              check: manifest-prune-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box has deployed-artifact drift.
+              description: >-
+                manifest-prune-check.sh on daniel-box found a live cluster object that no staged
+                manifest declares, a deployed setup file that differs from the repo, or a rendered
+                script that is older than its template. `journalctl -t manifest-prune-check` names
+                the arm and the object.
+      - eval_time: 4m
+        alertname: ManifestPruneCheckNotReporting
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: ReleaseStalenessCheckFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ReleaseStalenessCheckFailed
+        exp_alerts:
+          - exp_labels:
+              check: release-staleness-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: A k8s service runs an older release than origin/master.
+              description: >-
+                release-staleness-check.sh on daniel-box found a service whose role paths changed on
+                origin/master after its last applied commit. `uv run python
+                scripts/diagnostics/probe.py releases --stale-only` prints each reason, and
+                `./scripts/deploy.sh --tags <svc>` redeploys the service.
+      - eval_time: 4m
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: LiveDriftCheckFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: LiveDriftCheckFailed
+        exp_alerts:
+          - exp_labels:
+              check: live-drift-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: A live cluster object differs from its last-applied manifest.
+              description: >-
+                live_drift_check.py on daniel-box found an object that was patched, edited or scaled
+                by hand after Ansible applied it, or could not read the cluster. `journalctl -t
+                live-drift-check` names the object. Redeploy the owning role.
+      - eval_time: 4m
+        alertname: LiveDriftCheckNotReporting
+        exp_alerts: []
+
+  # M6 batch B1. The files stop being refreshed: node_exporter keeps serving the timestamp
+  # written at 0. The first arm fires once the timestamp is more than the deadline old, so
+  # longhorn-backup-health (1500s) fires between minutes 25 and 26 and
+  # release-staleness-check (3900s) between minutes 65 and 66. The two quiet checks use the
+  # same labels, so a rule that read another check's deadline would show here.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x70'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x70'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x70'
+    alert_rule_test:
+      - eval_time: 24m
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: longhorn-backup-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's longhorn-backup-health check has stopped reporting.
+              description: >-
+                No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
+                Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
+                then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+      - eval_time: 64m
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts: []
+      - eval_time: 66m
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: release-staleness-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's release-staleness-check has stopped reporting.
+              description: >-
+                No release-staleness-check verdict newer than 65 minutes reached Prometheus from
+                daniel-box's textfile collector, so nothing is watching release staleness. Read the
+                `Release staleness drift check` cron and the `release-staleness-check` syslog tag,
+                then /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
+
+  # M6 batch B1. The exporter is down from minute 0 and every file is gone, so the bridge's
+  # `targets` check pages the dead exporter and the `unless` clause keeps all five
+  # NotReporting rules quiet past the point the zero-series case fires them.
+  - interval: 10m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x160'
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: LonghornBackupHealthNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: EtcdSnapshotOffboxNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: ManifestPruneCheckNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: ReleaseStalenessCheckNotReporting
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: LiveDriftCheckNotReporting
+        exp_alerts: []
+
+  # M6 batch B1. KumaDown's up arm: the scrape fails from minute 2, and the rule fires after
+  # its 5 minutes. While Kuma is up it stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="uptime-kuma:3001", job="uptime-kuma"}'
+        values: '1x2 0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KumaDown
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: KumaDown
+        exp_alerts:
+          - exp_labels:
+              instance: uptime-kuma:3001
+              job: uptime-kuma
+              severity: critical
+              service: uptime-kuma
+              shadow: "true"
+            exp_annotations:
+              summary: Uptime Kuma has stopped serving /metrics.
+              description: >-
+                Prometheus's scrape of the uptime-kuma Service failed for 5 minutes, or the job has
+                no `up` series at all. Kuma still pages every check that has not moved to an alert
+                rule, so a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get
+                pods` and the pod's log.
 
   # A short gap: one, then two failed scrapes mark the series stale between fresh timestamps,
   # as a node-exporter roll does. A bare absent() would fire at each stale minute; the
@@ -296,7 +681,7 @@ tests:
               severity: critical
               service: daniel-pi
             exp_annotations:
-              summary: daniel-pi holds after a failed reconcile.
+              summary: daniel-pi's homelab package reconcile failed, so it installs no newer package.
               description: >-
                 homelab_host_reconcile_ok on daniel-pi has read 0 for 15 minutes, so the host
                 holds and installs no newer homelab package. Read `journalctl -u
@@ -328,7 +713,7 @@ tests:
               severity: critical
               service: daniel-box
             exp_annotations:
-              summary: daniel-box holds after a failed reconcile.
+              summary: daniel-box's homelab package reconcile failed, so it installs no newer package.
               description: >-
                 homelab_host_reconcile_ok on daniel-box has read 0 for 15 minutes, so the host
                 holds and installs no newer homelab package. Read `journalctl -u
@@ -345,7 +730,7 @@ tests:
               severity: critical
               service: daniel-server
             exp_annotations:
-              summary: daniel-server holds after a failed reconcile.
+              summary: daniel-server's homelab package reconcile failed, so it installs no newer package.
               description: >-
                 homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes, so the host
                 holds and installs no newer homelab package. Read `journalctl -u
@@ -378,9 +763,9 @@ tests:
               severity: critical
               service: fixture-host
             exp_annotations:
-              summary: fixture-host has had no successful homelab update for 11400s.
+              summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on fixture-host has succeeded in 11400s, or its exporter is
+                No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is
                 up and serves no success timestamp. A failed fetch, a stopped
                 homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
@@ -415,9 +800,9 @@ tests:
               severity: critical
               service: fixture-host
             exp_annotations:
-              summary: fixture-host has had no successful homelab update for 11400s.
+              summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on fixture-host has succeeded in 11400s, or its exporter is
+                No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is
                 up and serves no success timestamp. A failed fetch, a stopped
                 homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
@@ -429,6 +814,86 @@ tests:
   - interval: 1m
     input_series:
       - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostUpdateStale
+        exp_alerts: []
+
+  # daniel-pi's last success stays at 0 while node-pi answers (`up` at 1). HostUpdateStale is
+  # quiet at 189 minutes (11340s) and fires at 191 (11460s) for daniel-pi alone: the
+  # fixture host has no series here.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x200'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 189m
+        alertname: HostUpdateStale
+        exp_alerts: []
+      - eval_time: 191m
+        alertname: HostUpdateStale
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: critical
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi has had no successful homelab update for 3 hours 10 minutes.
+              description: >-
+                No homelab-updater run on daniel-pi has succeeded in 3 hours 10 minutes, or its exporter is
+                up and serves no success timestamp. A failed fetch, a stopped
+                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
+                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
+                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
+                "Host-plane pages".
+
+  # A success timestamp that follows the clock keeps daniel-pi's rule quiet. This is the
+  # control for the group above.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x200'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x200'
+    alert_rule_test:
+      - eval_time: 191m
+        alertname: HostUpdateStale
+        exp_alerts: []
+
+  # node-pi answers and serves no success timestamp: the absent arm fires for daniel-pi.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostUpdateStale
+        exp_alerts:
+          - exp_labels:
+              job: node-pi
+              origin: daniel-pi
+              severity: critical
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi has had no successful homelab update for 3 hours 10 minutes.
+              description: >-
+                No homelab-updater run on daniel-pi has succeeded in 3 hours 10 minutes, or its exporter is
+                up and serves no success timestamp. A failed fetch, a stopped
+                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
+                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
+                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
+                "Host-plane pages".
+
+  # node-pi fails its scrape (`up` at 0, a 30s-timeout miss on the Zero 2 W), so the success
+  # timestamp reads as absent. The rule stays quiet: a failed scrape is not a stale host.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
         values: '0x10'
     alert_rule_test:
       - eval_time: 5m
@@ -634,7 +1099,7 @@ tests:
             exp_annotations:
               summary: daniel-box's iSCSI session check has stopped reporting.
               description: >-
-                No iscsi-sessions verdict newer than 300s reached Prometheus from daniel-box's
+                No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-box's
                 textfile collector, so nothing is watching the node's iSCSI sessions. Read the
                 log of the node-exporter pod's `iscsi-sessions` container on daniel-box.
 
@@ -654,3 +1119,593 @@ tests:
       - eval_time: 6m
         alertname: IscsiSessionsNotReporting
         exp_alerts: []
+  # B6's two daniel-box crons, in shadow beside their Kuma tiles. A failing verdict fires both
+  # Failed rules with shadow="true" and leaves both NotReporting rules quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x30'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x30'
+      - series: 'homelab_check_success{check="claude-otel-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x30'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-otel-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x30'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ArtifactsSyncFailed
+        exp_alerts:
+          - exp_labels:
+              check: sync-artifacts
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: The peer artifact sync on daniel-box is failing.
+              description: >-
+                sync-artifacts.sh has failed a peer for claude_code_artifacts_sync_alert_after_failures
+                consecutive runs, so that peer's artifacts are stale in the browser. Run `journalctl -t
+                sync-artifacts` on daniel-box for the peer and its streak, then ssh to the named peer.
+      - eval_time: 20m
+        alertname: OtlpDoorClosed
+        exp_alerts:
+          - exp_labels:
+              check: claude-otel-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: The telemetry OTLP receiver on daniel-box's loopback refuses connections.
+              description: >-
+                Claude Code cannot export telemetry even with every pod Ready, because the hostPort
+                DNAT is an iptables rule rather than a socket. Check the otel-collector DaemonSet pod
+                on daniel-box, then the portmap rule.
+      - eval_time: 20m
+        alertname: ArtifactsSyncNotReporting
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: OtlpDoorNotReporting
+        exp_alerts: []
+  # The two NotReporting rules differ by their own deadline. The files were last written at
+  # minute 0, so at 20m they are 1200s old: only the 900s sync rule fires. At 40m both do.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x40'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+      - series: 'homelab_check_success{check="claude-otel-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x40'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-otel-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ArtifactsSyncNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: sync-artifacts
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations: &sync_not_reporting
+              summary: The peer artifact sync on daniel-box has stopped reporting.
+              description: >-
+                No sync-artifacts verdict newer than 15 minutes reached Prometheus from daniel-box's
+                textfile collector, so the cron stopped, or its flock is held by a hung run. Read the
+                `Sync peer Claude artifacts` cron and `journalctl -t sync-artifacts`, then
+                /var/lib/node-exporter-textfile/sync-artifacts.prom on the host.
+      - eval_time: 20m
+        alertname: OtlpDoorNotReporting
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: OtlpDoorNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-otel-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations: &otlp_not_reporting
+              summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
+              description: >-
+                No claude-otel-health verdict newer than 25 minutes reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
+                telemetry health` cron and `journalctl -t claude-otel-health`, then
+                /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
+  # Zero-series case: no sample has ever arrived, so both rules fire through absent_over_time,
+  # carrying only the equality matchers' `check` and `origin`.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ArtifactsSyncNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: sync-artifacts
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations: *sync_not_reporting
+      - eval_time: 30m
+        alertname: OtlpDoorNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-otel-health
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations: *otlp_not_reporting
+  # A dead node exporter is the `targets` check's page, so both NotReporting rules stay quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ArtifactsSyncNotReporting
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: OtlpDoorNotReporting
+        exp_alerts: []
+
+  # daniel-pi's AIDE check writes a fresh red verdict. AideCheckFailed fires for daniel-pi from
+  # the `node-pi` job, and AideCheckNotReporting stays quiet for it while the file is fresh.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="aide-check", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="aide-check", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x10'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AideCheckFailed
+        exp_alerts:
+          - exp_labels:
+              check: aide-check
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-pi's weekly AIDE check did not complete.
+              description: >-
+                aide-check.sh on daniel-pi ended with status=down: AIDE exited with an error and
+                checked nothing, or the previous week's run still held the lock. Differences
+                from the baseline read up. Run `journalctl -t aide-check` and `journalctl -t
+                aide` on daniel-pi.
+
+  # No AIDE file on any host, and daniel-pi's exporter is down. The absent_over_time arm fires
+  # for the two k3s nodes, and daniel-pi's rule leaves its dead exporter to the `targets` check
+  # because its `unless` clause reads `node-pi`, not `node`.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x10'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x10'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AideCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: aide-check
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's weekly AIDE check has stopped reporting.
+              description: >-
+                No aide-check verdict newer than 626400s reached Prometheus from daniel-box's
+                textfile collector, so nothing confirms the file-integrity scan still runs. Read
+                the `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+                /var/lib/node-exporter-textfile/aide-check.prom on the host.
+          - exp_labels:
+              check: aide-check
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-server's weekly AIDE check has stopped reporting.
+              description: >-
+                No aide-check verdict newer than 626400s reached Prometheus from daniel-server's
+                textfile collector, so nothing confirms the file-integrity scan still runs. Read
+                the `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+                /var/lib/node-exporter-textfile/aide-check.prom on the host.
+
+  # daniel-server's rkhunter file holds a verdict taken 611000s before time 0, so the test runs
+  # minutes rather than a week. RkhunterScanNotReporting's first arm stays quiet at 10m
+  # (611600s old) and fires at 20m, past the 612000s deadline. The verdict was green, so
+  # RkhunterScanFailed stays quiet. The other two exporters read down, which keeps their hosts'
+  # absent arms out of the case.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x25'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x25'
+      - series: 'homelab_check_success{check="rkhunter-check", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="rkhunter-check", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-611000x25'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x25'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RkhunterScanNotReporting
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: RkhunterScanFailed
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: RkhunterScanNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: rkhunter-check
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-server's weekly rkhunter scan has stopped reporting.
+              description: >-
+                No rkhunter-check verdict newer than 612000s reached Prometheus from
+                daniel-server's textfile collector, so nothing confirms the malware scan still
+                runs. Read the `Weekly rkhunter malware scan` cron and `journalctl -t
+                rkhunter-check`, then /var/lib/node-exporter-textfile/rkhunter-check.prom on the
+                host.
+
+  # A check no per-check rule names stops writing at time 0 with a 600s deadline. HostCheckOverdue
+  # stays quiet at 9m and fires at 11m from its own deadline series. A pod exporter's check with
+  # the same origin and an older timestamp is pods.yaml's to page, so it never appears here.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="new-producer", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x15'
+      - series: 'homelab_check_deadline_seconds{check="new-producer", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '600x15'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="cycle", instance="10.0.0.9:9100", job="autofix-bridge", origin="daniel-box"}'
+        values: '0x15'
+      - series: 'homelab_check_deadline_seconds{check="cycle", instance="10.0.0.9:9100", job="autofix-bridge", origin="daniel-box"}'
+        values: '60x15'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: HostCheckOverdue
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: HostCheckOverdue
+        exp_alerts:
+          - exp_labels:
+              check: new-producer
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's new-producer check is past its own deadline.
+              description: >-
+                The new-producer textfile on daniel-box holds a verdict older than the
+                homelab_check_deadline_seconds it declares, so its producer stopped writing.
+                Read /var/lib/node-exporter-textfile/new-producer.prom on the host, then the
+                journal of the cron or timer that writes it.
+
+  # daniel-pi's collector fails from minute 3. Its own TextfileCollectorError fires after 10m.
+  - interval: 1m
+    input_series:
+      - series: 'node_textfile_scrape_error{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x2 1x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: TextfileCollectorError
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+              shadow: "true"
+            exp_annotations:
+              summary: node_exporter on daniel-pi cannot read a textfile.
+              description: >-
+                node_exporter's textfile collector on daniel-pi has failed for 10 minutes, so a
+                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
+                series in it is gone. Read node_textfile_mtime_seconds for the files it still
+                sees, and `journalctl -u node_exporter` on daniel-pi.
+
+  # The Pi's compose run reads 1, then 0 from minute 3. ComposeUpFailed fires with no hold.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_compose_up_result{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi", sha="abcdef012345"}'
+        values: '1x2 0x5'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ComposeUpFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ComposeUpFailed
+        exp_alerts:
+          - exp_labels:
+              host: daniel-pi
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              sha: abcdef012345
+              severity: warning
+              service: daniel-pi
+              shadow: "true"
+            exp_annotations:
+              summary: The Pi's last Compose run did not bring the project up.
+              description: >-
+                compose-run on daniel-pi wrote homelab_compose_up_result 0 at package
+                abcdef012345: a key check, the config check, an image pull, compose-adopt or
+                `docker compose up --wait` failed. Read `journalctl -u homelab-compose` and
+                `docker ps -a` on daniel-pi.
+
+  # daniel-box first owed a reboot 690000s before time 0, and a later package change rewrites
+  # its reconcile file every minute without moving that time. It is quiet at 10m (690600s, under
+  # the 691200s bound) and fires at 30m. daniel-server's 1 dates from before its last boot, so
+  # that boot already cleared it, and its rule stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_reboot_pending{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x35'
+      - series: 'homelab_host_reboot_pending_since_seconds{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '-690000x35'
+      - series: 'node_textfile_mtime_seconds{file="/textfile/homelab_host_reconcile.prom", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x35'
+      - series: 'node_boot_time_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '-1000000x35'
+      - series: 'homelab_host_reboot_pending{host="daniel-server", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x35'
+      - series: 'homelab_host_reboot_pending_since_seconds{host="daniel-server", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-690000x35'
+      - series: 'node_boot_time_seconds{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-600000x35'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HostRebootOverdue
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: HostRebootOverdue
+        exp_alerts:
+          - exp_labels:
+              host: daniel-box
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box has owed a reboot for more than 8 days.
+              description: >-
+                Reconcile recorded a reboot-class package change on daniel-box more than 8 days
+                ago, and the host has not booted since, so the weekly reboot did not run or was
+                refused. Read `journalctl -t weekly-restart` on daniel-box and
+                docs/host-packages.md, "Reboot-pending and activation-pending", then reboot the
+                host.
+
+  # daniel-box's rkhunter scan writes a fresh red verdict, and RkhunterScanFailed fires for it.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="rkhunter-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RkhunterScanFailed
+        exp_alerts:
+          - exp_labels:
+              check: rkhunter-check
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's weekly rkhunter scan warned or did not complete.
+              description: >-
+                rkhunter-check.sh on daniel-box ended with status=down: rkhunter raised a
+                warning, a suspect file or a possible rootkit, or the scan wrote no summary. An
+                account change clears when the script is run again by hand. Read
+                /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-box.
+
+  # The claude_code timers (#6165). Every check file stopped being refreshed at 0 while both
+  # exporters stay up. Each NotReporting rule stays quiet at its deadline and fires in the next
+  # minute: claude-triage-poll at 660s, the three syncs at 2100s, the lander at 3300s. The two
+  # syncs that run on both hosts fire once per host. The absent_over_time arm is the
+  # zero-series case's.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-clone-sync", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-clone-sync", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-memory-sync", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-triage-poll", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-fanout-server-lander", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x60'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x60'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ClaudeTriagePollNotReporting
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: ClaudeTriagePollNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-triage-poll
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The triage poller on daniel-box has stopped reporting.
+              description: >-
+                No claude-triage-poll verdict newer than 660s reached Prometheus from daniel-box's
+                textfile collector, so the monitor triage poll has not completed a clean run: the timer
+                stopped firing, or every run since failed and OnFailure has posted to Discord. Read
+                `systemctl status claude-triage-poll.timer` and `journalctl -u claude-triage-poll` on
+                daniel-box. If `claude_code_triage_enabled` was set false on purpose, delete this rule.
+      - eval_time: 35m
+        alertname: ClaudeCloneSyncNotReporting
+        exp_alerts: []
+      - eval_time: 36m
+        alertname: ClaudeCloneSyncNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-clone-sync
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The agent clone sync on daniel-box has stopped reporting.
+              description: >-
+                No claude-clone-sync verdict newer than 2100s reached Prometheus from daniel-box's
+                textfile collector, so the agent's clone fast-forward has not completed a clean run: the
+                timer stopped firing, or every run since failed and OnFailure has posted to Discord.
+                Read `systemctl status claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on
+                daniel-box. If `claude_code_agent_user_enabled` was set false on purpose, delete this
+                rule.
+          - exp_labels:
+              check: claude-clone-sync
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: The agent clone sync on daniel-server has stopped reporting.
+              description: >-
+                No claude-clone-sync verdict newer than 2100s reached Prometheus from daniel-server's
+                textfile collector, so the agent's clone fast-forward has not completed a clean run: the
+                timer stopped firing, or every run since failed and OnFailure has posted to Discord.
+                Read `systemctl status claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on
+                daniel-server. If `claude_code_agent_user_enabled` was set false on purpose, delete this
+                rule.
+      - eval_time: 35m
+        alertname: ClaudeDotfilesSyncNotReporting
+        exp_alerts: []
+      - eval_time: 36m
+        alertname: ClaudeDotfilesSyncNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-dotfiles-sync
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The agent dotfiles sync on daniel-box has stopped reporting.
+              description: >-
+                No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from daniel-box's
+                textfile collector, so the agent's dotfiles apply has not completed a clean run: the
+                timer stopped firing, or every run since failed and OnFailure has posted to Discord.
+                Read `systemctl status claude-dotfiles-sync.timer` and `journalctl -u
+                claude-dotfiles-sync` on daniel-box. If `claude_code_agent_dotfiles` was set false on
+                purpose, delete this rule.
+          - exp_labels:
+              check: claude-dotfiles-sync
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: The agent dotfiles sync on daniel-server has stopped reporting.
+              description: >-
+                No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from daniel-server's
+                textfile collector, so the agent's dotfiles apply has not completed a clean run: the
+                timer stopped firing, or every run since failed and OnFailure has posted to Discord.
+                Read `systemctl status claude-dotfiles-sync.timer` and `journalctl -u
+                claude-dotfiles-sync` on daniel-server. If `claude_code_agent_dotfiles` was set false on
+                purpose, delete this rule.
+      - eval_time: 35m
+        alertname: ClaudeMemorySyncNotReporting
+        exp_alerts: []
+      - eval_time: 36m
+        alertname: ClaudeMemorySyncNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-memory-sync
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The Claude memory sync from daniel-box has stopped reporting.
+              description: >-
+                No claude-memory-sync verdict newer than 2100s reached Prometheus from daniel-box's
+                textfile collector, so the memory store copy to daniel-server has not completed a clean
+                run: the timer stopped firing, or every run since failed and OnFailure has posted to
+                Discord. Read `systemctl status claude-memory-sync.timer` and `journalctl -u
+                claude-memory-sync` on daniel-box. If `claude_code_memory_sync_enabled` was set false on
+                purpose, delete this rule. A run the ExecCondition skips, because daniel-box's MEMORY.md
+                is empty, writes nothing either, and an empty store is not a healthy state.
+      - eval_time: 55m
+        alertname: ClaudeFanoutLanderNotReporting
+        exp_alerts: []
+      - eval_time: 56m
+        alertname: ClaudeFanoutLanderNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-fanout-server-lander
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The fan-out server lander on daniel-box has stopped reporting.
+              description: >-
+                No claude-fanout-server-lander verdict newer than 3300s reached Prometheus from
+                daniel-box's textfile collector, so the fan-out server lander has not completed a clean
+                run: the timer stopped firing, or every run since failed and OnFailure has posted to
+                Discord. Read `systemctl status claude-fanout-server-lander.timer` and `journalctl -u
+                claude-fanout-server-lander` on daniel-box. If
+                `claude_code_fanout_server_lander_enabled` was set false on purpose, delete this rule.

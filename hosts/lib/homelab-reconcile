@@ -4,7 +4,9 @@
 The design is H3's *The reconcile unit* (docs/target-architecture/host/h3-pi-pilot.md), and the
 step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
 host's /usr/bin/python3, which is 3.12 on Ubuntu 24.04. It uses the standard library only, and
-hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar.
+hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The activation step,
+the four arms and the metrics file live in the reconcile_lib package beside it, which the same
+component ships; the reconcile-size census counts both against one line ceiling.
 
 Usage: homelab-reconcile        (no arguments; exit 0 when every step succeeded, 1 otherwise)
 
@@ -18,12 +20,33 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
      "enable_links": ["<unit>", ...],
      "legacy": [{"path": "/abs/path"}, {"cron": "<name>", "user": "<user>"},
                 {"cron_file": "<name under /etc/cron.d>"}, {"unit": "<Ansible-era unit>"}],
-     "reconcilers": []}
+     "reconcilers": [] | ["libvirt", "lines", "ufw", "users"],
+     "activations": {"<packaged path>": "<action>"},
+     "ufw": {"rules": [...], "legacy": [...]}, "libvirt": {...}, "users": {...},
+     "lines": {...},
+     "secrets_inputs_sha256": "<hex>"}
 
 `units` names every unit reconcile manages, another homelab package's and another package's
 drop-in target included. `enable_links` names each unit whose enable link the manifest's
-packages ship. No reconciler kind exists yet: H4 adds the udev reload and H7 adds ufw and
-libvirt, so a manifest listing one fails the run here.
+packages ship. `reconcilers` lists the arms the manifest carries state for. The four arms are in
+ARMS, and each section's schema is the docstring of its reconcile_lib module, so a manifest
+listing another kind fails the run here. The udev arm (H4.3b1) is not one of them: it hashes the
+package's /usr/lib/udev/rules.d/NN-homelab-*.rules files, as reconcile_lib/udev.py says.
+`activations` maps a
+packaged file to the action step 3b runs when its hash changes (reconcile_lib/activate.py).
+`secrets_inputs_sha256` is present only when the package ships the `secrets-unit` component, and
+every secrets rule below keys on it.
+
+The restart contract (docs/target-architecture/host/h4-secrets-unit.md, *The restart contract*):
+reconcile is the only process that starts or restarts a unit outside the boot path. It never starts
+or restarts a `windowed` unit, and never restarts a `manual` one. Step 1b runs `homelab-secrets`
+when the secrets inputs changed. The restart set, built before step 2, holds the units whose file
+or drop-in changed and the units in /run/homelab-secrets/pending.json, each only when it is
+enabled or active. Step 2 starts the enabled units outside the set, and step 3 restarts the set.
+A unit gets at most one call per run. `reset-failed` precedes it, and no call uses `--no-block`.
+A unit whose outputs do not exist, or whose call fails, joins pending.json and keeps its old hash,
+and the run exits 1. An entry leaves pending.json after reconcile acts on it, or when its unit is
+`windowed`, `manual`, masked, or neither enabled nor active.
 
 Its state and record, /var/lib/homelab-reconcile/applied.json:
 
@@ -31,11 +54,24 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "last_ok": {the same fields, from the newest run that succeeded},
      "units": {"<unit>": {"file": "<sha256>", "dropin": "<sha256>"} | null},
      "enable_links": ["<unit>", ...],
-     "retired": ["<legacy entry as canonical JSON>", ...]}
+     "retired": ["<legacy entry as canonical JSON>", ...],
+     "files": {"<packaged path>": "<sha256>"},     (activated files, by the hash that ran)
+     "pending": {"<unit>": "<InvocationID>"},      (units owed a restart: the manual: actions)
+     "drift": {"<arm>": <items the arm left alone>},
+     "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
+     "users": {"names": [...]}, "libvirt": {"networks": {...}, "nwfilters": {...}},  (likewise)
+     "udev": {"<rule path>": "<sha256>", ...},     (only while a rule is shipped)
+     "secrets_inputs_sha256": "<hex>"}   (only after a run in which homelab-secrets succeeded)
 
 homelab-updater reads only `result` and `last_ok`. Each per-entry item advances only when its
 step succeeded on it, or when the step's rule left it alone, so the next run retries exactly
 the actions that failed. A `null` hash reads as changed.
+
+Drift is an item an arm or a rule left alone on purpose: a ufw rule the floor kept, a libvirt
+object a running guest still references, a user the floor kept, or a legacy service that is still
+running. It is counted in `drift`, never fails the run, and is retried by
+the next run. A fault fails the run, which holds the host. The run also writes
+homelab_host_reconcile.prom (reconcile_lib/textfile.py).
 
 HOMELAB_ROOT prefixes every path this reads or writes. Only the tests in hosts/lib/tests/ set it.
 """
@@ -46,12 +82,13 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
 
-ROOT = Path(os.environ.get("HOMELAB_ROOT", "/"))
+from reconcile_lib import activate, libvirt, lines, textfile, udev, ufw, users
+from reconcile_lib.common import ROOT, run, say, systemctl, under_root
+
 LOCK = ROOT / "var/lib/dpkg/lock-frontend"
 MANIFEST = ROOT / "usr/lib/homelab/manifest.json"
 APPLIED = ROOT / "var/lib/homelab-reconcile/applied.json"
@@ -59,37 +96,32 @@ UNIT_DIR = Path("/usr/lib/systemd/system")
 ETC_UNIT_DIR = Path("/etc/systemd/system")
 CRON_D = Path("/etc/cron.d")
 DROPIN = "50-homelab.conf"
+SECRETS_UNIT = "homelab-secrets.service"
+SECRETS_JSON = ROOT / "usr/lib/homelab/secrets.json"
+CREDSTORE = ROOT / "run/credstore"
+RUN_DIR = ROOT / "run/homelab-secrets"
+PERSIST_DIR = ROOT / "var/lib/homelab-secrets"
+PENDING = RUN_DIR / "pending.json"
+PENDING_LOCK = RUN_DIR / "pending.lock"
+LOCK_SECONDS = 5  # a holder rewrites a small file; homelab-secrets waits as long
 
 # An upgrade never restarts the run that installed it, whatever the manifest says.
 ALWAYS_MANUAL = frozenset({"homelab-updater.service", "homelab-reconcile.service"})
 UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 POLICIES = frozenset({"manual", "windowed"})
+# Each arm module has valid(section) and reconcile(section, prev) -> (ok, record | None, drift).
+# Users and lines run before the units start, lines before the activations read the files it
+# edits, and libvirt then ufw last, so that ufw's enable applies the sysctl edit already made.
+ARMS = {"users": users, "lines": lines, "libvirt": libvirt, "ufw": ufw}
+EARLY = ("users", "lines")
+SHA256 = re.compile(r"[0-9a-f]{64}")
 # systemctl's exit for a unit that is not loaded: there is nothing to stop.
 NOT_LOADED = 5
 
 
 class ManifestError(Exception):
     """The manifest is missing or malformed, so reconcile acts on nothing."""
-
-
-def say(message: str) -> None:
-    print(f"homelab-reconcile: {message}", file=sys.stderr)
-
-
-def under_root(path: Path) -> Path:
-    return ROOT / path.relative_to("/")
-
-
-def run(*argv: str, stdin: str | None = None) -> subprocess.CompletedProcess:
-    try:
-        return subprocess.run(argv, input=stdin, capture_output=True, text=True)
-    except OSError as exc:
-        return subprocess.CompletedProcess(argv, 127, "", str(exc))
-
-
-def systemctl(*args: str) -> subprocess.CompletedProcess:
-    return run("systemctl", *args)
 
 
 def is_homelab(unit: str) -> bool:
@@ -150,12 +182,31 @@ def parse_manifest(text: str) -> dict:
         )
     if not isinstance(reconcilers, list):
         raise ManifestError(f"{MANIFEST}: reconcilers is not a list")
-    return {
+    activations = manifest.get("activations", {})
+    if not activate.valid_activations(activations):
+        raise ManifestError(f"{MANIFEST}: activations {activations!r} is malformed")
+    for name, arm in ARMS.items():
+        section = manifest.get(name)
+        if (name in reconcilers or section is not None) and not (
+            arm.valid(section) and name in reconcilers
+        ):
+            raise ManifestError(
+                f"{MANIFEST}: the {name} section is malformed or unlisted"
+            )
+    parsed = {
         "units": units,
         "enable_links": links,
         "legacy": legacy,
-        "reconcilers": reconcilers,
+        "reconcilers": [name for name in reconcilers if name not in ARMS],
+        "activations": activations,
+        "arms": {name: manifest.get(name) for name in ARMS},
     }
+    digest = manifest.get("secrets_inputs_sha256")
+    if digest is not None:
+        if not isinstance(digest, str) or not SHA256.fullmatch(digest):
+            raise ManifestError(f"{MANIFEST}: secrets_inputs_sha256 is not a sha256")
+        parsed["secrets_inputs_sha256"] = digest
+    return parsed
 
 
 def valid_legacy(entry: object) -> bool:
@@ -337,6 +388,127 @@ def legacy_key(entry: dict) -> str:
     return json.dumps(entry, sort_keys=True)
 
 
+# The restart queue and the secrets outputs (H4, *The restart contract*).
+
+
+def read_pending() -> set[str]:
+    """The units in pending.json. An absent file is an empty queue, and so is an unreadable one."""
+    try:
+        queue = json.loads(PENDING.read_text())
+    except FileNotFoundError:
+        return set()
+    except (OSError, ValueError):
+        queue = None
+    if not isinstance(queue, list):
+        say(f"{PENDING} is unreadable; reading it as empty")
+        return set()
+    return {unit for unit in queue if isinstance(unit, str)}
+
+
+def update_pending(add: set[str], remove: set[str]) -> bool:
+    """Add and remove units under pending.lock. False when the lock or the write failed."""
+    try:
+        fd = os.open(
+            PENDING_LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600
+        )
+    except OSError as exc:
+        say(f"cannot open {PENDING_LOCK}: {exc}")
+        return False
+    try:
+        deadline = time.monotonic() + LOCK_SECONDS
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    say(f"{PENDING_LOCK} stayed locked for {LOCK_SECONDS}s")
+                    return False
+                time.sleep(0.05)
+        queue = read_pending()
+        wanted = (queue | add) - remove
+        if wanted != queue:
+            tmp = PENDING.with_name(f".{PENDING.name}.{os.getpid()}")
+            tmp.write_text(json.dumps(sorted(wanted)))
+            tmp.chmod(0o644)
+            os.replace(tmp, PENDING)
+        return True
+    except OSError as exc:
+        say(f"cannot rewrite {PENDING}: {exc}")
+        return False
+    finally:
+        os.close(fd)
+
+
+def read_secrets_manifest() -> tuple[list[str], list[dict]] | None:
+    """The credential keys and output rows of secrets.json; None when it is unusable."""
+    try:
+        manifest = json.loads(SECRETS_JSON.read_text())
+        credentials, outputs = manifest["credentials"], manifest["outputs"]
+        valid = (
+            isinstance(credentials, list)
+            and all(isinstance(key, str) for key in credentials)
+            and isinstance(outputs, list)
+            and all(
+                isinstance(out, dict)
+                and isinstance(out.get("destination"), str)
+                and isinstance(out.get("persist"), bool)
+                and isinstance(out.get("dependents"), list)
+                for out in outputs
+            )
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        valid = False
+    if not valid:
+        say(f"{SECRETS_JSON} is unusable")
+        return None
+    return credentials, outputs
+
+
+def output_exists(out: dict) -> bool:
+    return ((PERSIST_DIR if out["persist"] else RUN_DIR) / out["destination"]).is_file()
+
+
+def missing_outputs(unit: str, outputs: list[dict]) -> list[str]:
+    """The destinations of the outputs that list `unit` as a dependent and do not exist."""
+    return [
+        out["destination"]
+        for out in outputs
+        if unit in out["dependents"] and not output_exists(out)
+    ]
+
+
+def secrets_ready(credentials: list[str], outputs: list[dict]) -> bool:
+    """True when homelab-secrets is active and every credential and output exists."""
+    return (
+        is_active(SECRETS_UNIT)
+        and all((CREDSTORE / key).is_file() for key in credentials)
+        and all(map(output_exists, outputs))
+    )
+
+
+def bring_up(unit: str, verb: str, outputs: list[dict], queued: set[str]) -> bool:
+    """One `reset-failed` and one blocking `start` or `restart` of `unit`, behind the existence gate.
+
+    A unit the gate skips, or whose call fails, joins pending.json, and the result is False.
+    A call that succeeds removes the unit from pending.json.
+    """
+    missing = missing_outputs(unit, outputs)
+    if missing:
+        say(f"{verb} {unit} skipped: {', '.join(missing)} does not exist yet")
+        update_pending({unit}, set())
+        return False
+    systemctl(
+        "reset-failed", unit
+    )  # clears the start limit; harmless on a unit that is not failed
+    if systemctl(verb, unit).returncode != 0:
+        say(f"{verb} {unit} failed")
+        update_pending({unit}, set())
+        return False
+    say(f"{verb} {unit}")
+    return update_pending(set(), {unit}) if unit in queued else True
+
+
 # The run.
 
 
@@ -350,6 +522,18 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     links = set(manifest["enable_links"])
     units_state: dict = {}
     links_state = set(links)
+    digest = manifest.get("secrets_inputs_sha256")
+    manual = ALWAYS_MANUAL | ({SECRETS_UNIT} if digest else set())
+    secrets = read_secrets_manifest() if digest else None
+    credentials, outputs = secrets or ([], [])
+    if digest and secrets is None:
+        ok = False
+    try:
+        if not RUN_DIR.is_dir():
+            RUN_DIR.mkdir(parents=True, exist_ok=True)
+            RUN_DIR.chmod(0o755)  # whatever the umask; homelab-secrets corrects an older one
+    except OSError as exc:
+        say(f"cannot create {RUN_DIR}: {exc}")
 
     # Step 1: stop what the manifest dropped, and every homelab unit whose file has gone.
     dropped = {u for u in set(prev_units) - set(units) if is_homelab(u)}
@@ -364,61 +548,158 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         if unit in unlinked:
             links_state.add(unit)
 
-    # Step 2: start every enabled unit that is not active, and never a masked one.
-    started = set()
-    for unit in sorted(links):
+    # Step 1b: in a package that ships `secrets-unit`, run homelab-secrets when its inputs, its
+    # unit file or its activity says the outputs may be stale. A failed run does not stop the rest.
+    secrets_state, secrets_ran = None, True
+    if digest:
+        stale = (
+            digest != prev.get("secrets_inputs_sha256")
+            or (
+                SECRETS_UNIT in units
+                and unit_hash(SECRETS_UNIT) != prev_units.get(SECRETS_UNIT)
+            )
+            or not is_active(SECRETS_UNIT)
+        )
+        if stale and systemctl("restart", SECRETS_UNIT).returncode != 0:
+            say(
+                f"restart {SECRETS_UNIT} failed; carrying on with the outputs that exist"
+            )
+            secrets_ran = ok = False
+        elif stale:
+            say(f"restart {SECRETS_UNIT}")
+        secrets_state = digest if secrets_ran else prev.get("secrets_inputs_sha256")
+
+    # Step 1c: the users and lines arms, so a unit that runs as a new user starts, and step 3b
+    # activates the files the lines arm edited.
+    drift, arms = {"legacy": 0}, {}
+    ok = run_arms(EARLY, manifest, prev, arms, drift) and ok
+
+    # The restart set, built before step 2: the units whose file or drop-in changed, and the
+    # units in pending.json, each only when it is enabled or active. A foreign unit the manifest
+    # dropped is walked once more, because its drop-in has gone.
+    foreign_dropped = {u for u in prev_units if u not in units and not is_homelab(u)}
+    hashes = {}
+    changed = set()
+    for unit in sorted((set(units) | foreign_dropped) - dropped):
+        hashes[unit] = unit_hash(unit), prev_units.get(unit)
+        if hashes[unit][0] != hashes[unit][1] and not left_alone(
+            unit, units, links, manual
+        ):
+            changed.add(unit)
+    queued = read_pending()
+    idle = {unit for unit in queued - changed if left_alone(unit, units, links, manual)}
+    if idle:
+        say(f"dropping {', '.join(sorted(idle))} from the queue: nothing to restart")
+        ok = update_pending(set(), idle) and ok
+    restart_set = sorted(changed | (queued - idle))
+
+    # Step 2: start every enabled unit outside the set that is not active, never a masked or a
+    # windowed one.
+    for unit in sorted(links - set(restart_set)):
+        if units.get(unit, {}).get("policy") == "windowed":
+            continue
         if is_active(unit) or load_state(unit) == "masked":
             continue
-        if systemctl("start", unit).returncode == 0:
-            say(f"started {unit}")
-            started.add(unit)
-        else:
-            say(f"start {unit} failed")
-            ok = False
+        ok = bring_up(unit, "start", outputs, queued) and ok
 
-    # Step 3: apply the restart policy to every unit whose file or drop-in changed. A foreign
-    # unit the manifest dropped is walked once more, because its drop-in has gone.
-    foreign_dropped = {u for u in prev_units if u not in units and not is_homelab(u)}
-    for unit in sorted((set(units) | foreign_dropped) - dropped):
-        new, old = unit_hash(unit), prev_units.get(unit)
+    # Step 3: restart the set. A failed or skipped unit keeps its old hash, so it stays changed.
+    failed = {u for u in restart_set if not bring_up(u, "restart", outputs, queued)}
+    ok = ok and not failed
+
+    # Step 3b: the `activate:` action of each packaged file whose hash changed. A unit step 3
+    # called already gets no second call.
+    raw_files, raw_pending = prev.get("files"), prev.get("pending")
+    pending = activate.refresh_pending(
+        raw_pending if isinstance(raw_pending, dict) else {}, manifest["activations"]
+    )
+    activated, files_state = activate.activate(
+        manifest["activations"],
+        raw_files if isinstance(raw_files, dict) else {},
+        units,
+        {unit: unit not in failed for unit in restart_set},
+        pending,
+    )
+    ok = ok and activated
+    if not secrets_ran:
+        failed.add(SECRETS_UNIT)
+    for unit, (new, old) in hashes.items():
         keep = unit in units
-        if new != old and not left_alone(unit, units, links, started):
-            verb = "try-restart" if unit.endswith(".service") else "restart"
-            if systemctl(verb, unit).returncode == 0:
-                say(f"{verb} {unit}")
-            else:
-                say(f"{verb} {unit} failed")
-                ok = False
-                new, keep = old, True
+        if unit in failed:
+            new, keep = old, True
         if keep:
             units_state[unit] = new
 
-    # Step 4: retire the legacy entries not yet retired.
+    # Step 4: retire the legacy entries not yet retired. A package that ships `secrets-unit`
+    # retires none until every credential and output exists and homelab-secrets is active.
     prev_retired = set(prev.get("retired") or [])
     retired = []
+    waiting = None
     for entry in manifest["legacy"]:
         key = legacy_key(entry)
-        if key in prev_retired or retire(entry):
+        if key not in prev_retired and digest and waiting is None:
+            waiting = not (secrets and secrets_ready(credentials, outputs))
+        # A running service is never stopped to retire it: the entry stays and counts as drift.
+        if key not in prev_retired and not waiting and running_service(entry):
+            drift["legacy"] += 1
+            say(f"keeping {key}: the service is running, so it retires once it is not")
+        elif key in prev_retired or (not waiting and retire(entry)):
             retired.append(key)
         else:
+            if waiting:
+                say(f"keeping {key}: the secrets do not all exist yet")
             ok = False
 
-    # Step 5: the per-kind reconcilers. This version knows none.
+    # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest["reconcilers"]:
         say(f"the manifest lists reconciler {name!r}, which this version does not have")
         ok = False
+    ok = run_arms([name for name in ARMS if name not in EARLY], manifest, prev, arms, drift) and ok
+    udev_ok, udev_state = udev.reconcile(prev.get("udev"))
+    ok = ok and udev_ok
+    if udev_state:
+        arms["udev"] = udev_state
 
-    return ok, {
+    state = {
         "units": units_state,
         "enable_links": sorted(links_state),
         "retired": sorted(retired),
+        "files": files_state,
+        "pending": pending,
+        "drift": drift,
+        **arms,
     }
+    if secrets_state:
+        state["secrets_inputs_sha256"] = secrets_state
+    return ok, state
 
 
-def left_alone(unit: str, units: dict, links: set[str], started: set[str]) -> bool:
-    """True when step 3's rule takes a changed unit's new file without acting on it."""
+def run_arms(names: list, manifest: dict, prev: dict, arms: dict, drift: dict) -> bool:
+    """Run the named arms. Each record goes in `arms`, and each drift count in `drift`."""
+    ok = True
+    for name in names:
+        before = prev.get(name)
+        arm_ok, record, count = ARMS[name].reconcile(
+            manifest["arms"][name], before if isinstance(before, dict) else None
+        )
+        ok = ok and arm_ok
+        if record is not None:
+            arms[name], drift[name] = record, count
+    return ok
+
+
+def running_service(entry: dict) -> bool:
+    """True for a legacy entry that names a service systemd is running or starting."""
+    unit = entry.get("unit", "")
+    return (
+        unit.endswith(".service")
+        and systemctl("is-active", unit).stdout.strip() in activate.RUNNING
+    )
+
+
+def left_alone(unit: str, units: dict, links: set[str], manual: set[str]) -> bool:
+    """True when reconcile takes the unit's new file, or its queue entry, without acting."""
     policy = units.get(unit, {}).get("policy")
-    if unit in ALWAYS_MANUAL or policy in POLICIES or unit in started:
+    if unit in manual or policy in POLICIES:
         return True
     # A masked unit may still have an enable link, so this comes before the next test.
     if load_state(unit) == "masked":
@@ -444,7 +725,20 @@ def main() -> int:
     text, prev, installed = read_under_lock(packages)
     versions = {name: version for name, (_, version) in installed.items()}
 
-    state = {k: prev[k] for k in ("units", "enable_links", "retired") if k in prev}
+    kept = (
+        "units",
+        "enable_links",
+        "retired",
+        "secrets_inputs_sha256",
+        "files",
+        "pending",
+        "drift",
+        "libvirt",
+        "udev",
+        "ufw",
+        "users",
+    )
+    state = {k: prev[k] for k in kept if k in prev}
     broken = [name for name, (status, _) in installed.items() if status != "ii "]
     if broken:
         say(f"{', '.join(broken)} is not installed as 'ii '; acting on nothing")
@@ -466,6 +760,7 @@ def main() -> int:
     if isinstance(last_ok, dict):
         state["last_ok"] = last_ok
     write_applied(state)
+    textfile.write(host, state)
     return 0 if ok else 1
 
 

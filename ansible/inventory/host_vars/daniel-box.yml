@@ -84,11 +84,12 @@ autofix_fake_remux_policy:
 # keys is backed up daily to B2 by the `default` group.
 containers_list:
   # crowdsec must precede traefik: the traefik pod carries a crowdsec agent sidecar that logs
-  # into this engine's LAPI, and a post-deploy task in this role registers the machine
-  # credential — so the engine must exist before a traefik rollout starts the sidecar. Not
-  # derivable from a template, so it is declared as traefik's `depends_on:` below rather than
-  # hand-positioned; see K8S_CRD_EDGE_EXEMPT in toposort.py for why the reverse (CRD) edge is
-  # exempted here instead of cycling against it.
+  # into this engine's LAPI, and the LAPI pod's `lapi-register` initContainer registers the
+  # machine credential before the LAPI serves — so the engine and its registrations must exist
+  # before a traefik rollout starts the sidecar. Not derivable from a template, so it is
+  # declared as traefik's `depends_on:` below rather than hand-positioned; see
+  # K8S_CRD_EDGE_EXEMPT in toposort.py for why the reverse (CRD) edge is exempted here instead
+  # of cycling against it.
   #
   # The cost accepted for that: this role renders an IngressRoute (the LAPI's LAN face)
   # ahead of traefik installing the CRDs. Harmless on the running cluster; on a rebuild it
@@ -119,12 +120,63 @@ containers_list:
     metrics:
       - job: crowdsec
         port: 6060
+      # The crowdsec-jobs sidecar's check exporter (files/jobs_metrics.py), which serves the
+      # three Kuma-pushed jobs' verdicts as homelab_check_* gauges beside the push (M6 B6b). The
+      # process binds whatever JOBS_METRICS_PORT holds, and deployment.yaml.j2 hands it this
+      # number, so unlike the engine's image-fixed 6060 this port moves the listener too.
+      - job: crowdsec-jobs
+        port: 9182
+        interval: 1m
   # The workload-tier PriorityClasses and the read-only cluster identity (H1.2). Flux applies the
   # tag through `promote` and every Ansible path skips it. It renders prune: false, and it is
   # untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: cluster-base
     platform: k8s
     owner: flux
+  # MetalLB's vendored manifest and the address pool (H1.3). Flux applies the tag through
+  # `promote` and every Ansible path skips it. It renders prune: false, and it is untiered, so
+  # `NEVER_SHED` keeps it out of the lost-node shed set.
+  - name: metallb
+    platform: k8s
+    owner: flux
+  # Cluster DNS: the CoreDNS Deployment, Service, RBAC and the Corefile key of its ConfigMap
+  # (H1.4). Flux applies the tag through `promote` and every Ansible path skips it. It renders
+  # prune: false, and it is untiered because its pod keeps `system-cluster-critical`, so
+  # `NEVER_SHED` keeps it out of the lost-node shed set.
+  - name: coredns
+    platform: k8s
+    owner: flux
+  # Longhorn's vendored manifest, the manager memory patch and the `longhorn` class (H1.5a). Flux
+  # applies the tag through `promote` and every Ansible path skips it. It renders prune: false,
+  # and it is untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.
+  - name: longhorn
+    platform: k8s
+    owner: flux
+  # The hourly CronJob that holds each Volume CR in its tier's recurring-job group and the CSI
+  # sidecars' memory request (H1.6). Its objects sit in `longhorn-system`, which `longhorn`'s
+  # vendored file creates, so it depends on that tag. It is untiered and prunes by default, so
+  # the lost-node shed set names it on its "nothing to scale" line and `NEVER_SHED` omits it.
+  - name: longhorn-reconcile
+    platform: k8s
+    owner: flux
+    depends_on: [longhorn]
+  # The two credential Secrets, the BackupTargets `default` and `r2`, and the RecurringJobs
+  # (H1.7b). The `longhorn` vendored file defines the BackupTarget and RecurringJob CRDs, so the
+  # edge stops a first apply on a new cluster from failing on unknown kinds. It renders prune:
+  # false and is forward-only, and it is untiered, so `NEVER_SHED` keeps it out of the lost-node
+  # shed set.
+  - name: longhorn-backup
+    platform: k8s
+    owner: flux
+    depends_on: [longhorn]
+  # The restore drill's stamp ConfigMap (H2.3b), and from H2.3d its CronJob. Its objects live in
+  # `homelab`, which `longhorn` cannot reach on a fresh cluster before step 8 of H1's DR order, so
+  # it is a tag of its own. It depends on `longhorn` for the Longhorn CRDs the CronJob will name.
+  # It prunes, except the stamp ConfigMap, and it is untiered, so `NEVER_SHED` omits it.
+  - name: longhorn-restore-drill
+    platform: k8s
+    owner: flux
+    depends_on: [longhorn]
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
   # the shed set.
@@ -878,6 +930,7 @@ containers_list:
     # daniel-server-guarded route still works.
     netpol_from:
       - uptime-kuma  # the "iCal Proxy k8s" monitor, which probes /calendar1.ics
+      - blackbox-exporter  # the `blackbox-extra` probe of /calendar1.ics that replaces it (M6 batch B8)
     # homepage's Calendar tile reads three feeds over the ClusterIP; this key adds homepage
     # to the callers above.
     homepage_widget: true
@@ -1030,7 +1083,15 @@ containers_list:
     # docs/flux-deploy-plane.md.
     owner: flux
     tier: platform
-  # Host metrics for BOTH nodes.
+    # The check exporter's listener (files/verdict_export.py), beside the deploy-pipeline
+    # exporter's on monitor_bridge_deploy_pipeline_port. The `metrics` item renders the
+    # `monitor-bridge` scrape job and config/env.yaml.j2 hands the same number to the process,
+    # so the two cannot drift apart. The process binds whatever CHECK_EXPORTER_PORT holds, so
+    # unlike an image-fixed port this one moves the listener too.
+    port: 9181
+    metrics:
+      - job: monitor-bridge
+        interval: 1m
   - name: node-exporter
     platform: k8s
     # Flux applies node-exporter through `promote`, and every Ansible path skips it (D5.7). The
@@ -1042,6 +1103,16 @@ containers_list:
     # homelab-cluster-vars (D5.19). The handback is two PRs, `owner: released` then removing
     # `owner`: docs/flux-deploy-plane.md.
     owner: flux
+    # The check exporter's listener (autofix.py, through jobs_metrics.py), which serves the
+    # *arr remediation loop's verdict as homelab_check_* gauges beside the Kuma push (M6 batch
+    # B7). The entry has no `port` of its own, so the item names it. The `metrics` item renders
+    # the `autofix-bridge` scrape job and the Service port, and deployment.yaml.j2 hands the
+    # same number to the process, so the two cannot drift apart. The process binds whatever
+    # CHECK_EXPORTER_PORT holds, so this port moves the listener too.
+    metrics:
+      - job: autofix-bridge
+        port: 9183
+        interval: 1m
   # The NUT primary (upsd + usbhid-ups + upsmon). The pod is pinned to daniel-server, the
   # UPS's USB host — a physical pin that never unwinds. The host's secondary upsmon, the
   # thing that actually powers daniel-server off on FSD, is the nut_host role and keeps its
@@ -1123,12 +1194,25 @@ containers_list:
     # homepage's Scrutiny widget dials the ClusterIP, because scrutiny's route is Authelia-gated.
     # This key adds homepage to the callers above and is its only grant.
     homepage_widget: true
-  # Flux's three controllers in flux-system, owning nothing until D2 of the target
-  # architecture (docs/flux-deploy-plane.md). No port and no hostname: nothing dials the
-  # controllers from outside their namespace but Prometheus, and the role fences that itself.
+  # Flux's three controllers in flux-system and the sync objects they follow
+  # (docs/flux-deploy-plane.md). Flux applies the tag through `promote`, so it reconciles
+  # itself, and every Ansible path skips it (D5 step 29). On a rebuilt cluster the operator
+  # installs it by hand: docs/flux-deploy-plane.md, *Bootstrapping Flux on a rebuilt cluster*.
+  # It renders prune: false, and its tier keeps it out of the lost-node shed set. No port and
+  # no hostname: nothing dials the controllers from outside their namespace but Prometheus,
+  # and the role fences that itself.
   - name: flux
     platform: k8s
     tier: platform
+    owner: flux
+  # system-upgrade-controller, its CRD and the two k3s Plans (docs/target-architecture/host/
+  # h6-k3s-suc.md, H6.1b). Born Flux-owned, so every Ansible path skips it from its first commit.
+  # The Plans select no node until H6.3c and H6.3d widen `system_upgrade_nodes`. No port and no
+  # hostname: nothing dials the controller, and the namespace denies all ingress.
+  - name: system-upgrade
+    platform: k8s
+    tier: platform
+    owner: flux
   # The ingress probes' exporter (docs/target-architecture/monitoring/m4-blackbox-ingress.md).
   # No depends_on: the plan states no order against observability.
   - name: blackbox-exporter
@@ -1277,3 +1361,12 @@ nut_host_secondary_armed: true
 # a repo-scoped token with no contents write (renovate_agent_gh_token) and the lander unit
 # alone could merge. Do not arm it again without both in place.
 renovate_agent_enabled: true
+
+# The window in which homelab-k3s-restart may restart k3s (H6.3b, hosts/components/k3s-restart).
+# An OnCalendar value, read by the component's timer: host_vars sit above a component's defaults,
+# so each host's package carries its own slot (H3, *Component variables*). The slot falls between
+# the `*/10` and `*/30` cron fires at 11:30 and the next at 11:40, misses the `*/15` fire at
+# 11:45 and the hourly :23 timer, and skips the 1st of the month, when the hypervisor drill starts
+# at 11:20 on daniel-server. hosts/lib/tests/test_k3s_restart_window.py derives all of that from
+# the schedules, and re-checks any move.
+k3s_restart_window: "Mon..Fri *-*-02..31 11:32:00"

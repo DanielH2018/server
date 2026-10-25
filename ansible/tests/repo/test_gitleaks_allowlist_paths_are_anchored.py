@@ -48,3 +48,25 @@ def test_every_allowlist_path_in_gitleaks_toml_is_anchored():
     assert any("secrets" in p for p in paths), "subject gone: the secrets.yml entry"
     assert any("cluster-vars" in p for p in paths), "subject gone: the cluster entries"
     assert unanchored(paths) == []
+
+
+def test_the_per_host_sops_entry_exempts_a_host_file_and_nothing_beside_it():
+    regexes = [re.compile(p) for p in _paths() if "vars/hosts" in p]
+    assert regexes, "subject gone: the per-host SOPS entry"
+    exempt = lambda path: any(r.search(path) for r in regexes)
+    assert exempt("ansible/vars/hosts/daniel-server.sops.yaml")
+    assert not exempt("ansible/vars/hosts/daniel-server.sops.yaml.bak")
+    assert not exempt("ansible/vars/hosts/daniel-server.yaml")
+    assert not exempt("ansible/vars/hosts/sub/daniel-server.sops.yaml")
+
+
+def test_the_package_entry_exempts_a_package_root_s_host_file_and_nothing_beside_it():
+    # A package root is scanned as `gitleaks dir .`, so its paths start at `usr/` (H4.1c).
+    regexes = [re.compile(p) for p in _paths() if "usr/lib/homelab" in p]
+    assert regexes, "subject gone: the package ciphertext entry"
+    exempt = lambda path: any(r.search(path) for r in regexes)
+    here = "usr/lib/homelab/secrets"
+    assert exempt(f"{here}/daniel-server.sops.yaml")
+    assert not exempt(f"{here}/daniel-server.sops.yaml.bak")
+    assert not exempt(f"{here}/sub/daniel-server.sops.yaml")
+    assert not exempt(f"etc/{here}/daniel-server.sops.yaml")

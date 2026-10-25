@@ -1,10 +1,8 @@
 """Which tasks in a task file write a cluster object: the predicate of the H1.1h write-verb census.
 
-Two checks read it. The `k3s-role-cluster-writes-are-counted` row in
-`ansible/tests/repo/_k3s_write_verbs_row.py` counts the writers per `setup/k3s` task file, and
-`ansible/tests/setup/test_k3s_stale_checkout_map.py` holds each one to a row of the
-stale-checkout guard's map. It sits at the `ansible/tests` root because that is the directory
-both reach by bare name.
+The `k3s-role-cluster-writes-are-counted` row in `ansible/tests/repo/_k3s_write_verbs_row.py`
+counts the writers per `setup/k3s` task file with it. It sits at the `ansible/tests` root,
+which every test directory reaches by bare name.
 """
 
 import re
@@ -142,15 +140,6 @@ def _writes(task: dict) -> list[str]:
             ):
                 hits.append(f"uri {method}")
     return hits
-
-
-def cluster_writer_names(text: str) -> list[str]:
-    """The name of every task in a task file that writes a cluster object."""
-    return [
-        str(task.get("name", "<unnamed>"))
-        for task in walk_tasks(yaml_fast.safe_load(text) or [])
-        if _writes(task)
-    ]
 
 
 def cluster_writes(subject: Subject) -> list[str]:

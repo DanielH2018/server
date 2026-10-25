@@ -1,0 +1,94 @@
+# The k3s upgrade Jobs (target slice H6, docs/target-architecture/host/h6-k3s-suc.md, *Alerts*).
+# Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim.
+#
+# kube-state-metrics collects Jobs (`jobs` in --resources and in its ClusterRole), and SUC runs
+# every Plan as a Job in the `system-upgrade` namespace. `service` is the deploy tag that owns
+# the Jobs, so `probe.py health system-upgrade` reads these alerts.
+groups:
+  - name: k3s-upgrade
+    rules:
+      # The alert reads the Job's `Failed` condition, not the failed-pod count. SUC sets
+      # BackoffLimit on a Job, so a pod can fail inside a Job that then succeeds, and a pod
+      # count with `for: 0m` would page on it. `keep_firing_for` outlasts the 900-second TTL
+      # after which SUC deletes a failed Job, and the next Job's deadline of up to 90 minutes.
+      # Without it the alert would resolve when SUC deletes the failed Job, then fire again
+      # when the re-created Job fails. It is the only page for a selector-only change, which
+      # promotes before any Job exists, for the operator removing a pause label, and for a Job
+      # SUC re-creates after its TTL.
+      - alert: K3sUpgradeJobFailed
+        expr: kube_job_failed{namespace="system-upgrade", condition="true"} == 1
+        for: 0m
+        keep_firing_for: 2h
+        labels:
+          severity: critical
+          service: system-upgrade
+        annotations:
+          summary: A k3s upgrade Job in system-upgrade has failed.
+          description: >-
+            Job {{ $labels.job_name }} carries a Failed condition. Read the Plan's conditions
+            with kubectl -n system-upgrade get plans, then the Job's pods. A refusing prepare
+            gate that outlasts the Job deadline ends here too. docs/k3s-upgrade.md says how to
+            clear the hold and retry.
+      # The nodes run one kubelet version except while SUC upgrades them, server first. The
+      # server Plan finishes, Longhorn recovers and the agent waits 15 minutes after the
+      # server's start, so a healthy bump holds two versions for well under the 2-hour hold.
+      # The `absent()` arm pages the gap in the other direction: without kube_node_info the
+      # skew cannot be judged, and a rule that reads clean when its series vanish would hide a
+      # node left on the old version behind a lost scrape. It carries the family's zero-series
+      # case, because kube_job_failed is absent whenever no upgrade Job exists.
+      - alert: K3sNodeVersionSkew
+        expr: >-
+          count(count by (kubelet_version) (kube_node_info)) > 1
+          or absent(kube_node_info)
+        for: 2h
+        labels:
+          severity: warning
+          service: system-upgrade
+        annotations:
+          summary: The nodes report more than one kubelet version, or none at all.
+          description: >-
+            For 2 hours either kube_node_info has carried more than one kubelet_version, so an
+            upgrade left one node behind, or the series has been absent, so the skew cannot be
+            judged. Read kubectl get nodes, then the Plans with kubectl -n system-upgrade get
+            plans. docs/k3s-upgrade.md says how to finish or retry the upgrade.
+      # homelab-k3s-restart (H6.3b, hosts/components/k3s-restart) writes these two series on every
+      # run, so a clean host reads 0 and an absent series is not a pass. Each rule names its host
+      # as a literal `service`, the way host-checks.yaml does. daniel-box ships the unit first, and
+      # daniel-server's two rules join when its package lists the component.
+      # K3sConfigRestartMetricsAbsent, which pages a host whose textfile stops reaching Prometheus,
+      # lands in H6.4a after a live query has shown the `host` label on the series.
+      #
+      # `failed` is 1 after an attempt that did not bring k3s back, and after an attempt a kill
+      # interrupted. The unit makes one attempt per hash, so this page stands until the operator
+      # recovers the node and removes failed.sha256 (docs/target-architecture/host/h6-k3s-suc.md,
+      # *Rollback*, H6.4b).
+      - alert: K3sConfigRestartFailed
+        expr: homelab_k3s_restart_failed{host="daniel-box"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          service: daniel-box
+        annotations:
+          summary: homelab-k3s-restart failed to restart k3s on daniel-box.
+          description: >-
+            The last windowed restart of k3s.service on daniel-box did not end with the unit
+            active, under a new MainPID, and the node Ready past its restart, or a run was killed
+            after it restarted k3s. The unit makes one attempt per config hash. Read
+            `journalctl -u homelab-k3s-restart -p notice` on daniel-box, recover the node by
+            hand if it is down, then `sudo rm /var/lib/homelab-k3s-restart/failed.sha256`.
+      # `pending` is 1 while the shipped config differs from the applied hash and a gate refused
+      # the window's restart. 72 hours spans a weekend plus a refused Monday, and still pages a
+      # gate that refuses every window.
+      - alert: K3sConfigRestartPending
+        expr: homelab_k3s_restart_pending{host="daniel-box"} == 1
+        for: 72h
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: A k3s config change on daniel-box has waited 72 hours for a restart.
+          description: >-
+            homelab-k3s-restart has refused to restart k3s.service on daniel-box at every window
+            for 72 hours. Read `journalctl -u homelab-k3s-restart -p notice` for the refusing
+            gate, which is a Longhorn volume, a node, CoreDNS, a SUC run, a Flux promotion, the
+            deployer's lock or hold, or an unreadable API.

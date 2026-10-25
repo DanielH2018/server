@@ -47,13 +47,13 @@ runs:
   using: composite
   steps:
     - if: inputs.python == 'true'
-      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
       with:
         python-version: "3.14.8"
 
     - name: Install uv
       if: inputs.uv == 'true'
-      uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0  # no floating major tag is published; pin the exact release
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2  # no floating major tag is published; pin the exact release
       with:
         # Most prek hooks shell out to `uv run`, which resolves the whole `dev` group
         # (ansible-core, pytest, docker, flask, ruff, ty, shellcheck-py) before the first one
@@ -111,4 +111,4 @@ runs:
     - if: inputs.node == 'true'
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
       with:
-        node-version: "24.21.0"
+        node-version: "24.22.0"

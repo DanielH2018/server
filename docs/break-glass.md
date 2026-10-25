@@ -89,6 +89,14 @@ otherwise; none of the values below are secrets themselves, only names and locat
    so beside it keep the `claude` issue register exported by `findings.py export`: every
    refuted and accepted ruling lives only on GitHub, and without it the next review re-files
    them.
+   The bundle is also the render source for break-glass promotion (*Scenario: GitHub, GHCR or
+   Sigstore is unreachable*), so a refresh covers that use too. Beside it the kit holds the
+   **break-glass private key**, a password-protected cosign key whose public half the flux role
+   commits (`flux_break_glass_public_key`). It is a second signing identity: it never enters
+   the repo, CI or a host, and its only use is the scenario below. The kit also holds the three
+   Flux controller images at `flux_version` (`ansible/roles/k8s/flux/defaults/main.yml`),
+   saved as image archives and refreshed with the bundle, for a rebuilt cluster that cannot
+   reach GHCR.
    Source: `docs/longhorn-disaster-recovery.md` ("The off-site recovery kit").
 
 9. **The host-package archive signing key.** The `homelab_builder` role generates it once on
@@ -138,26 +146,81 @@ otherwise; none of the values below are secrets themselves, only names and locat
    Source: `docs/target-architecture/deploy/d3-secrets.md` ("Where the values come from")
    and `docs/adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md`.
 
+11. **daniel-server's host age key.** `/etc/homelab/age.key` (root, mode 0600) is the key
+    `homelab-secrets.service` decrypts `ansible/vars/hosts/daniel-server.sops.yaml` with. It
+    is the same keypair as daniel-server's key in `~ubuntu/.config/sops/age/keys.txt`, copied
+    rather than generated (H4.2), so one key lives at two paths on one host. Its public half
+    is the first recipient of the generic rule in `ansible/.sops.yaml`. The recovery key
+    (item 1) is a recipient of every file this key decrypts, so it is the way back when the
+    host loses the key.
+    - **To restore it** onto a rebuilt daniel-server, place the recovery key (item 1) at
+      `~ubuntu/.config/sops/age/keys.txt`, as item 7 describes, and copy that file to
+      `/etc/homelab/age.key` (root, mode 0600). Or let `sudo hosts/bootstrap-host.sh
+      daniel-server` create a fresh key at the second path (its step 3) and print the public
+      key. A fresh key then needs the recipient steps in the header of `ansible/.sops.yaml`,
+      applied to every file that rotation list names, before the host decrypts anything.
+    - **A lost or exposed key means rotating every value the host held**, not only re-keying
+      the host. A re-key protects future revisions. Git history and every published
+      package keep ciphertext encrypted to the old key. The rotation list is derived, not
+      remembered: every value in every SOPS file whose creation rule in `ansible/.sops.yaml`
+      lists the host's public key. To print the rules, take the public key from
+      `age-keygen -y` on the surviving copy of the key, or from the first recipient of the
+      generic rule, and run, from the repo root:
+      `uv run python -c 'import sys, yaml; [print(r["path_regex"]) for r in yaml.safe_load(open("ansible/.sops.yaml"))["creation_rules"] if sys.argv[1] in r["age"]]' <public key>`.
+      For daniel-server the rules are the cluster file, the cluster manifests,
+      `vars/hosts/daniel-server.sops.yaml` and the generic rule, so the list is every value in
+      `secrets.yml`, in the cluster file and manifests, and in its host file. Rotate through
+      `docs/secret-rotation.md`, then `host_secrets.py sync daniel-server` (**operator-only**)
+      to refresh the host file's copies.
+   Source: `docs/target-architecture/host/h4-secrets-unit.md` ("Which ciphertext each host
+   carries") and `hosts/bootstrap-host.sh` (step 3).
+12. **daniel-pi's host age key.** `/etc/homelab/age.key` (root, mode 0600) on the Pi is the
+    key `homelab-secrets.service` decrypts `ansible/vars/hosts/daniel-pi.sops.yaml` with. The
+    Pi generated it at `hosts/bootstrap-host.sh` step 3 on 2026-10-24, so it exists at one
+    path on one machine and nowhere else. The Pi is a recipient of its own file only. Its
+    public half appears in the `vars/hosts/daniel-pi\.sops\.yaml$` creation rule of
+    `ansible/.sops.yaml`, beside daniel-box's key and the recovery key (item 1), and in no
+    other rule. The file arrived with H4.5. Since then the key decrypts the two push tokens that
+    the Pi's heartbeats load from `/run/credstore`, so a lost key costs those two values.
+    - **To restore it** onto a rebuilt Pi, run `sudo hosts/bootstrap-host.sh daniel-pi`. Its
+      step 3 creates a fresh key at the same path and prints the public key. No copy of the
+      old key exists to restore. Replace the Pi's public key in the Pi's creation rule. Then,
+      on daniel-box or any host holding the recovery key (item 1), run
+      `sops updatekeys vars/hosts/daniel-pi.sops.yaml` from `ansible/` and commit the result.
+      The recovery key and daniel-box's key are recipients of the file, so either one
+      decrypts it while the Pi has no working key.
+    - **A lost SD card is a lost host key**, and a lost or exposed key means rotating every
+      value the Pi's key decrypts. A re-key protects future revisions. Git history and every
+      published package keep ciphertext encrypted to the old key. The rotation list is the
+      one item 11 derives: every value in every SOPS file whose creation rule lists the Pi's
+      public key. Take the public key from the rule, or from `age-keygen -y` on a surviving
+      copy, and run item 11's command. For the Pi the only rule is
+      `vars/hosts/daniel-pi.sops.yaml`, so the list is every value in that file, which holds
+      `pi_sd_health_push_token` and `pi_recovery_push_token`. Rotate each through
+      `docs/secret-rotation.md`, then `host_secrets.py sync daniel-pi` (**operator-only**)
+      to refresh the host file's copies.
+   Source: `docs/target-architecture/host/h4-secrets-unit.md` (H4.4, H4.5) and
+   `hosts/bootstrap-host.sh` (step 3).
+
 ## What to do first, by scenario
 
 ### Scenario: daniel-box is dead, daniel-server survives
 
 daniel-server keeps its own SOPS key, so decryption still works without the recovery key.
 
-1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*,
-   through *Cluster bring-up*: bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its
-   pubkey to `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull. The
-   bring-up has hand steps since H1.2: the first `k3s-bringup.yml` run skips the `kubeconfig`
-   tag, the operator applies `cluster-base` by hand, and the root `homelab` Kustomization stays
-   suspended until the volumes are restored (that document's *Order from H1.2*).
+1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*, step 1:
+   bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its pubkey to
+   `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
-3. Restore Longhorn volumes per `docs/longhorn-disaster-recovery.md` (*Wait for the backupstore sync*, then
-   *Restore volumes BEFORE any deploy*), **before** the deploy — deploying first provisions
-   empty PVCs under the same names.
-4. Deploy: `./scripts/deploy.sh`.
-5. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's *Verify* step.
+3. Bring up the cluster and Flux by [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in `docs/flux-deploy-plane.md`.
+   That section owns the order: k3s bring-up, the Flux install, the plumbing tags, the
+   Longhorn restores of `docs/longhorn-disaster-recovery.md` (*Wait for the backupstore
+   sync*, then *Restore volumes BEFORE the root exists*), and the root Kustomization last. The
+   root provisions empty PVCs under the backed-up names, so it comes after the restores. No
+   Ansible path deploys a workload on the cluster.
+4. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's *Verify* step.
 
 ### Scenario: daniel-server is dead, daniel-box survives
 
@@ -178,7 +241,7 @@ What happens without any action:
   keep working. Do not chase DNS errors in that window.
 - **Pods with a Longhorn RWO volume stay Terminating.** Longhorn's
   `node-down-pod-deletion-policy` is `do-nothing`, and the `DECIDED:` comment on
-  `k3s_longhorn_node_down_pod_deletion_policy` in `ansible/roles/setup/k3s/defaults/main.yml`
+  `k3s_longhorn_node_down_pod_deletion_policy` in `ansible/roles/k8s/longhorn/defaults/main.yml`
   says why. Their volumes stay attached to the dead node until step 2 below.
 - **`nut` cannot move.** It is pinned to daniel-server because the UPS is USB-attached there.
   While daniel-server is down, daniel-box gets no power-loss shutdown signal and runs to battery
@@ -268,6 +331,38 @@ suspended before it is scaled and resumed rather than redeployed.
    The deploy applies the replica count its manifests declare, so it scales the service back
    up.
 
+### Scenario: Longhorn backups must stop and the disarm PR cannot reach the cluster
+
+The normal lever is a PR that sets `k3s_longhorn_backup_armed: false` (or
+`k3s_longhorn_r2_armed: false`) in `ansible/roles/k8s/longhorn-backup/defaults/main.yml`. Promote
+applies it like any revision, and a failed revision never resets across it, because
+`longhorn-backup` is forward-only. Three cases defeat that path: `DEPLOY_HOLD` holds a value other
+than `none`, a transaction-cap spiral outruns a merge, and `longhorn` is not Ready, so the
+`longhorn-backup` Kustomization applies nothing. For those, every step below is
+**operator-only**:
+
+1. Annotate both BackupTargets, so `kustomize-controller` skips them:
+   `sudo k3s kubectl -n longhorn-system annotate backuptargets.longhorn.io/default backuptargets.longhorn.io/r2 kustomize.toolkit.fluxcd.io/reconcile=disabled`.
+2. Patch each `backupTargetURL` blank:
+   `sudo k3s kubectl -n longhorn-system patch backuptargets.longhorn.io/default --type merge -p '{"spec":{"backupTargetURL":""}}'`,
+   then the same for `backuptargets.longhorn.io/r2`.
+3. Land the disarm PR, then clear the hold:
+   `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
+4. Wait until `longhorn-backup`'s `status.lastAppliedOriginRevision` names the disarm commit or a
+   descendant of it. Read the revision with
+   `sudo k3s kubectl -n flux-system get kustomization longhorn-backup -o jsonpath='{.status.lastAppliedOriginRevision}'`,
+   which prints `master@sha1:<sha>`, and check it with
+   `git merge-base --is-ancestor <disarm-sha> <sha>`. Only then remove the annotation from
+   each target:
+   `sudo k3s kubectl -n longhorn-system annotate backuptargets.longhorn.io/default backuptargets.longhorn.io/r2 kustomize.toolkit.fluxcd.io/reconcile-`.
+   `prod` carrying the disarm is not enough, because the tag applies nothing while `longhorn` is
+   not Ready. Removing the annotation earlier lets Flux restore the armed URL from the
+   repository.
+
+Until step 4, the backup-health monitor reads each annotated target as a problem, and
+`probe.py health longhorn-backup` fails and names it. A forgotten break-glass therefore cannot sit
+behind a green monitor. `docs/adr/0007-backup-tiering-r2-daily-b2-weekly.md` records the choice.
+
 ### Scenario: the laptop/machine holding your working access is dead, the lab hosts are fine
 
 Ansible runs from daniel-box in normal operation (repo-root CLAUDE.md, *Project Overview*).
@@ -329,6 +424,71 @@ For a second person without deep familiarity with the repo:
    kit above (items 1, 2, 3, 7, 8) is what lets a competent operator rebuild from scratch —
    hand it to them rather than improvising a partial fix.
 
+### Scenario: GitHub, GHCR or Sigstore is unreachable
+
+**Operator-only to run.** The normal deploy path needs GitHub, GHCR and Sigstore at once:
+`promote` runs on GitHub, the artifact lives on GHCR, and the OCIRepository verifies keyless
+against the `promote` identity. While any of the three is down, no local path writes the
+cluster, because `deploy.sh` skips every flux-owned entry. This runbook publishes one artifact
+to the in-cluster registry, signs it with the break-glass key, and points the OCIRepository at
+it. The kind drill `.github/workflows/flux-deletion-drill.yml` runs cases `break-glass` and
+`break-glass-red` against the flux role's own break-glass templates. It does not run the
+steps below on production.
+
+1. Clone item 8's repo bundle and commit the change to apply on top of it.
+1. Commit the break-glass source form: set `flux_break_glass: true` in
+   `ansible/roles/k8s/flux/defaults/main.yml`. The OCIRepository `homelab` then names the
+   in-cluster registry (`flux_break_glass_url`), reads it over plain HTTP, and verifies against
+   the Secret `flux-break-glass-key` instead of the keyless identity.
+1. Check that the commit to render equals or descends from the commit that the cluster's
+   OCIRepository status names in `org.opencontainers.image.revision`. Item 8's bundle is
+   refreshed only with the age-key backup, so it can predate `prod`. A render from an older
+   tree prunes every tag added since and reverts every change since. If the bundle fails the
+   check, render from a surviving host checkout that holds that commit.
+1. Render with `homelab-render cluster` in placeholder mode, as the `render` job in
+   `.github/workflows/promote.yml` does.
+1. On daniel-box, push the rendered bundle to the registry's loopback port with the pinned
+   `flux` CLI, then sign the digest it prints with the kit's private half. Sigstore is
+   unreachable by assumption, so the signature skips the transparency log:
+
+   ```bash
+   digest="$(flux push artifact oci://localhost:5000/homelab-manifests:break-glass \
+     --path=out --source=break-glass --revision="break-glass@sha1:$(git rev-parse HEAD)" \
+     --insecure-registry --output=json | jq -r .digest)"
+   cosign sign --key break-glass.key --tlog-upload=false --use-signing-config=false \
+     --allow-http-registry --yes "localhost:5000/homelab-manifests@$digest"
+   ```
+
+1. Apply the rendered OCIRepository `homelab` and the Secret `flux-break-glass-key` by hand.
+   The bundle it serves carries the same source, so whichever Kustomization applies the
+   OCIRepository keeps that source rather than reverting it.
+1. Confirm `kubectl -n flux-system get ocirepository homelab` reads Ready with
+   `SourceVerified=True`, and that every Kustomization reaches the new revision.
+
+**What fires meanwhile.** `ProdMovedOutsidePromote` fires, because `prod`'s live digest no
+longer matches `PROD_DIGEST`. That is expected. The break-glass path neither reads nor clears
+`DEPLOY_HOLD`, which needs GitHub.
+
+**A fresh or rebuilt cluster needs two more steps first.** It holds neither the in-cluster
+registry nor the Flux controllers. Apply the rendered `cluster/registry/` directory before the
+artifact push. Install the Flux controllers from the image archives that item 8's kit
+carries, not from GHCR. Neither step is drilled (Open question 17 of the D6 plan), so the
+drill covers a running cluster only.
+
+**The way back to GHCR.** Re-pointing at GHCR first applies `prod`, which predates the
+emergency change, and silently reverts it. So order the steps:
+
+1. Push the break-glass commits to master with `flux_break_glass` back at `false`.
+1. Wait until `promote` verifies a commit that contains them and moves `prod` there.
+1. Apply `prod`'s OCIRepository by hand, as the flux role renders it with the lever off.
+1. Confirm every Kustomization is Ready at `prod`'s origin revision and that
+   `ProdMovedOutsidePromote` has cleared.
+
+The registry's NetworkPolicy admits source-controller on the push port at all times, so
+neither direction applies or deletes a policy by hand.
+`ansible/roles/k8s/registry/templates/networkpolicy.yaml.j2` has the trade-off, in its
+`DECIDED:` marker for that rule.
+
 ## Documented vs drilled
 
 Never read a runbook's existence as proof it has been exercised. This table states only
@@ -340,6 +500,7 @@ what each source records — not what "should" have happened.
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
 | GitOps bootstrap (`bootstrap.yml` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/roles/setup/sops_setup/CLAUDE.md`, `ansible/bootstrap.yml` header |
+| Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), and the fresh-cluster steps. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass` and `break-glass-red` |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
 ## Annual drill (recommended — do not run this now)

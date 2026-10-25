@@ -61,7 +61,9 @@ module shared across roles goes on `pythonpath` instead.
 `scripts/tests/test_test_module_bootstraps_present.py` refuses an insert the conftest already
 supplies. Every such path lands in the one session a full run shares, so a top-level `files/*.py` needs a basename no other role's
 `files/` or `pythonpath` root uses. Two roles' `app.py` failed six tests only in a full run
-(#2608). The `no-two-import-roots-share-a-module-basename` row of
+(#2608). A `scripts/<dir>` holding a `tests/` counts as a root too, because its tests may
+insert it: the uid validator, then `scripts/validate/grafana_dashboards.py`, hid the filter plugin from
+`pytest scripts` (#5956). The `no-two-import-roots-share-a-module-basename` row of
 `ansible/tests/repo/test_census_rows_python.py` enforces it. A role that ships a `files/*.py`
 with logic gets a `tests/` directory, which the `ansible/roles/*/*/tests` glob in `testpaths` collects.
 
@@ -81,7 +83,7 @@ floor, its named members and its red/green fixtures, and a row whose selector st
 fails with `subject gone: delete this row`. A property needing a second render context, a
 cross-document join or a long exemption list keeps its own file. A predicate with several
 ways to fail is still one row: its extra reject and accept cases go in `more_red` and
-`more_green`. The test file runs every row; once it nears the 500-line test-module cap, a row
+`more_green`. The test file runs every row; once it nears the test-module line cap, a row
 goes in `_config_property_rows.py`, `_workload_property_rows.py`, `_scrape_property_rows.py`
 or `_edge_property_rows.py` beside it.
 

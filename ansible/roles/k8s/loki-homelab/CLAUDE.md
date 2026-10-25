@@ -17,8 +17,9 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **A separate `ingressroute-push` router** is daniel-pi's push-only door.
 - **Persists:** `loki-homelab-data` (`longhorn-nobackup`, 5Gi) — logs, `744h` retention; treated
   as bulky and reconstructible in spirit, so the retention window is the real bound, not backup.
-- **The monitors that read from here:** the Alert History reconstruction and every
-  LogQL-backed monitor-bridge check. A broken apply blinds them without paging.
+- **The monitors that read from here:** the Alert History reconstruction, the ruler's own
+  rules and monitor-bridge's remaining LogQL checks. A broken apply blinds the first and the
+  last without paging.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its
@@ -56,6 +57,13 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   capture group only, so the `_handle_signal_show_view` marker the fault is detected by survives.
   `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` fails on either half. The stage is
   prospective: a record shipped before it still carries the token for the 744h retention window.
+- **Host lines carry a `program` label, and the line itself is untouched.** The
+  `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
+  `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
+  `HostOutOfMemoryKill` pages on the first host-wide OOM kill. The stage runs
+  only `stage.regex` and `stage.labels`, because probe.py and the alert-history dashboard parse
+  the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
+  label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.
 
 ## Ruler
 

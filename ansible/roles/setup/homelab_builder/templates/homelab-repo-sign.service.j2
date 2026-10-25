@@ -29,6 +29,9 @@ ReadWritePaths={{ homelab_builder_signer_dir }}
 ReadWritePaths={{ homelab_builder_state_dir }}/staged
 Environment=HOME={{ homelab_builder_signer_dir }}
 Environment=PYTHONDONTWRITEBYTECODE=1
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout and
+# stderr log at notice, or a failed run's traceback never reaches the journal.
+SyslogLevel=notice
 TimeoutStartSec=10min
 # The host's python3, standard library only: the signer cannot read the builder's pinned
 # interpreter under its 0700 state directory.

@@ -16,6 +16,8 @@ from _shell_render import render_shell_script
 from lib.proc_testing import run, write_exec
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
+# The shared check library, minus the textfile write, which test_k3s_cron_textfiles.py covers.
+CHECK_LIB = ANSIBLE / "roles/setup/initial_setup/files/homelab-check-lib.sh"
 TEMPLATE = ("setup", "k3s", "release-staleness-check.sh.j2")
 FETCH_ERR = "fatal: unable to access 'https://github.com/DanielH2018/server.git/'"
 
@@ -25,6 +27,7 @@ def _run(tmp_path, link_at_start, link_after_fetch):
     body = render_shell_script(*TEMPLATE)
     for literal in (
         "/usr/local/lib/kuma-push-lib.sh",
+        "/usr/local/lib/homelab-check-lib.sh",
         "/etc/rancher/k3s/kuma-push.env",
     ):
         assert literal in body, f"{'/'.join(TEMPLATE)} no longer references {literal}"
@@ -43,13 +46,15 @@ def _run(tmp_path, link_at_start, link_after_fetch):
         f'logger() {{ shift 2; echo "$*" >> "{logs}"; }}\n'
         f'kuma_push() {{ echo "$1 $2" >> "{pushed}"; }}\n'
     )
+    check_lib = tmp_path / "homelab-check-lib.sh"
+    check_lib.write_text(f"source {CHECK_LIB}\nwrite_check_textfile() {{ :; }}\n")
     env = tmp_path / "kuma-push.env"
     env.write_text("RELEASE_STALENESS_PUSH_TOKEN=stubtoken\n")
     script = write_exec(
         tmp_path / "release-staleness-check.sh",
-        body.replace("/usr/local/lib/kuma-push-lib.sh", str(lib)).replace(
-            "/etc/rancher/k3s/kuma-push.env", str(env)
-        ),
+        body.replace("/usr/local/lib/kuma-push-lib.sh", str(lib))
+        .replace("/usr/local/lib/homelab-check-lib.sh", str(check_lib))
+        .replace("/etc/rancher/k3s/kuma-push.env", str(env)),
     )
     run(["bash", str(script)], check=True)
     return pushed.read_text().splitlines(), logs.read_text().splitlines()

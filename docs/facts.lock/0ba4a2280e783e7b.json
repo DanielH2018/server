@@ -1,0 +1,16 @@
+{
+  "checksum": "cdcbeb919143df040288f32b35f3309bf4ecbdf652d9019692c33ec407047c4b",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/deploy.yml": "83efaa4b3f30584c15a7040620863d596818732916afa6870b9f534bf55c78a0",
+      "ansible/tests/k8s/test_restore_drill_stamps.py::test_the_stamp_configmap_renders_empty_with_both_annotations": "54accc5bd07dd6989492ffc32c70431406fb7f7fbf98658c03f742cf4888b679",
+      "ansible/tests/k8s/test_restore_drill_stamps.py::test_the_stamp_namespace_equals_the_host_drills": "2685464cfe8ee748f72c3010bef77019146d5a2bf699f3cc854763aaad9041e2",
+      "ansible/tests/k8s/test_step6_tags_render_into_created_namespaces.py": "a7fc934c4d497a770afcfb319c545a859f0172507b5b9f9b7ea0e9d1db6ee052",
+      "scripts/deploy_tools/bundle_census.py:NAMED_MEMBERS": "c896d96475fae128baffc0244f9eb125083d13509c14a0a93c4a9a67bf1f129f"
+    },
+    "python": "3.14",
+    "verified_sha": "409537e7c"
+  }
+}

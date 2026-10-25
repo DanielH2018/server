@@ -14,7 +14,7 @@ k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "probe-less — no readinessProbe on the Deployment; also the only role that deletes real media, so a wedge is not merely inert"  # noqa var-naming[no-role-prefix]
 
 # "false" is the operator's decision to run live. Dry running cannot show what media-deletion
-# does: it is keyed on free-disk percentage and its loosest rung is 20%. With the disk at
+# does: it is keyed on free-disk percentage and its loosest rung is 25% (#5806). With the disk at
 # 9% used no rung applies and the deletion pass does not execute at all, so there is no dry
 # "would delete" line to wait for.
 #
@@ -54,6 +54,11 @@ janitorr_k8s_startup_grace_seconds: 600
 # CronJob trips the push watchdog. The host cron's UTC minute field, unchanged.
 janitorr_k8s_health_schedule: "*/10 * * * *"
 
+# The ConfigMap the health reader writes its verdict to as annotations, which kube-state-metrics
+# exports (M6 batch B6b). The shadow rule JanitorrHealthNotReporting holds the CronJob's last
+# successful run to three periods of the schedule above, 1800s.
+janitorr_k8s_health_verdict_configmap: janitorr-health-verdict
+
 # The health reader runs in the repo's pinned python image and gets kubectl from an init
 # container of alpine/k8s, which keeps the binary at /usr/bin/kubectl. The same two digests as
 # configarr's health reader (configarr_k8s_health_image), whose defaults record the evidence.
@@ -62,7 +67,8 @@ janitorr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b7
 
 # Above the reader's worst case: two 30 s kubectl calls (JANITORR_KUBECTL_TIMEOUT_S) plus
 # kuma_push's three 10 s attempts and its two 30 s waits, 150 s, plus the cold pull of both
-# images. No k8s/cronjob-gate runs this CronJob, so no gate timeout bounds it from above.
+# images. No flux_cronjob_gates entry copies this CronJob into a gate Job, so no gate timeout
+# bounds it from above.
 janitorr_k8s_health_deadline_seconds: 420
 
 janitorr_k8s_health_cpu_limit: "200m"

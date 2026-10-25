@@ -48,6 +48,7 @@ from diagnostics.probe_lib.longhorn_cluster import (
     # in this module calls it. Same noqa reason as `backup_target_url` above.
     volume_backup_targets,  # noqa: F401
     volume_owned_backup_counts,
+    resolve_retain,
     volume_shard_labels,
 )
 
@@ -88,11 +89,15 @@ def run_b2_budget(ns):
     # fact accounting pass can use.
     ledger.write_prune_snapshot(vols)
     cluster = getattr(ns, "cluster", DEFAULT_CLUSTER)
+    # Read after the snapshot above, so a failed read costs the report and never the prune
+    # prices `b2-deletions` needs. The cron passes no `--retain`: the cluster's weekly jobs say
+    # it (H1.7a), and a read that fails exits non-zero instead of using a default.
+    retain = resolve_retain(ns.retain, cluster)
     text, code = format_backup_budget(
         vols,
         volume_shard_labels(cluster),
         pvc_names(cluster),
-        ns.retain,
+        retain,
         volume_owned_backup_counts(cluster),
     )
     print(text)

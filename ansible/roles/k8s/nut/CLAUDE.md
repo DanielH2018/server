@@ -28,6 +28,11 @@ the pin is physical and never unwinds.
   41.65 MB in four layers. On 2026-10-18 its largest layer (28.2 MB) pulled at 0.36-0.45 MB/s
   from GHCR or through a cold mirror, and in 0.4 s from a warm one. A cold pull of the whole
   image takes about two minutes, well inside Flux's default 600s `timeout`.
+- **The role also renders `nut-ghcr-mirror-probe`**, a ConfigMap holding the repository and
+  content tag node-exporter's `ghcr-mirror-pull` sidecar GETs through each node's mirror
+  (#5542). Only this role's render sees its own tag. No nut pod names the ConfigMap, so it
+  adds nothing to the restart checksum the renderer stamps on nut, and adding it rolled
+  nothing.
 - **Flux applies it, not Ansible** (D5.17, Wave C's UPS PR, which went alone). Its
   `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
   deployer all skip it. A merged change reaches the cluster when `promote` publishes and
@@ -59,14 +64,14 @@ the pin is physical and never unwinds.
 
 ## Two-tier shutdown (unchanged from the Docker era)
 The pod's upsmon (primary) only **raises FSD** — it cannot power off the node. Each HOST
-runs `nut-client` with a `secondary`-mode upsmon (see the `nut_host` role, wired in
-`initial_setup.yml`) watching the same upsd; it performs the real `systemctl poweroff`.
+runs `nut-client` with a `secondary`-mode upsmon (the `nut-secondary` component of the host's
+package) watching the same upsd; it performs the real `systemctl poweroff`.
 Sequence: 300 s on battery (upssched) or LOWBATT → pod `upsmon -c fsd` → every armed host
 secondary powers off.
 
 **Both nodes are armed** since 2026-08-28. daniel-server reaches upsd over the pod's
-`127.0.0.1:3493` hostPort; daniel-box crosses nodes to the ClusterIP and is armed in
-`host_vars/daniel-box.yml`. Before that, daniel-box ran to battery end and lost power
+`127.0.0.1:3493` hostPort; daniel-box crosses nodes to the Service's pinned ClusterIP
+(`nut_k8s_cluster_ip` in `ansible/roles/k8s/nut/defaults/main.yml`). Before that, daniel-box ran to battery end and lost power
 mid-write with etcd, the Longhorn primary replicas, Traefik and LAN DNS on it.
 
 ### Why the two poweroffs are not staggered
@@ -78,7 +83,7 @@ FSD, not to complete `SHUTDOWNCMD`, and both hosts observe it within one `POLLFR
 (5 s) of the pod's `upsmon -c fsd` — far ahead of daniel-server's poweroff reaching
 containerd. Staggering by `FINALDELAY` would additionally rest on that setting applying in
 secondary mode, which `upsmon.conf(5)` documents for **primary** mode only. Hence the
-`# DECIDED:` marker at `FINALDELAY` in `roles/setup/nut_host/templates/host-upsmon.conf.j2`.
+`# DECIDED:` marker at `FINALDELAY` in `ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2`.
 
 ### Timer vs. safety net
 `nut_onbatt_shutdown_delay` (300 s, `defaults/main.yml`) decides how long a blip is ridden out
@@ -88,34 +93,37 @@ lowbatt` raises FSD as soon as the UPS asserts LB (`battery.charge.low` 10,
 roughly 11 minutes for the poweroffs. `ansible/tests/setup/test_nut_host_secondary.py` asserts the
 delay stays inside that band while a host beyond `ups_host` is armed.
 
+**Pinned ClusterIP.** The Service pins `spec.clusterIP` (H7.33), because daniel-box's package
+renders the address literally into `upsmon.conf`. A Service recreate keeps the address. The
+package's copy is `nut_host_upsd_clusterip` in `hosts/components/nut-secondary/component.yml`,
+and `ansible/tests/setup/test_nut_host_secondary.py` pins the two together.
+
 **Manual shutdown drill** (actually powers BOTH nodes off now that daniel-box is armed — have
 console access to each): `kubectl -n homelab exec deploy/nut -- upsmon -c fsd` → host poweroff
 within ~15 s (HOSTSYNC).
 
-**The stale-ClusterIP gap is closed.** `nut_host_upsd_clusterip` is still a deploy-time
-snapshot — the role asserts upsd is reachable when it runs, and nothing re-checks that address
-afterwards — but `roles/setup/nut_host/templates/ups-secondary-health.sh.j2` now re-proves the link
-itself every `nut_host_watchdog_interval_minutes` (10 min), from the deployed
-`/etc/nut/upsmon.conf`, on **every** armed host (daniel-box and `ups_host`/daniel-server both,
-since 2026-09). Each host pushes its own Kuma tile —
+**A watchdog re-proves the link.** `ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2`
+checks it every `nut_host_watchdog_interval_minutes` (10 min), from the persisted
+`/var/lib/homelab-secrets/etc/nut/upsmon.conf`, on **every** armed host (daniel-box and
+`ups_host`/daniel-server both). A `homelab-ups-watchdog.timer` runs it. Each host pushes its own Kuma tile —
 `roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`'s `ups-secondary.json` (daniel-box,
 `ups_secondary_push_token`) and `ups-secondary-daniel-server.json` (daniel-server,
 `ups_secondary_daniel_server_push_token`) — deliberately never the same token: two hosts
 sharing one push token would let either host's `up` satisfy Kuma's deadline and mask the
-other's `down` (issue #952). `kuma-push.env.j2` picks the right token by `inventory_hostname`.
+other's `down` (issue #952). Each host's unit loads its own credential, `ups_secondary_push_token` on daniel-box.
 
 **Ordering matters when arming the watchdog on a new host.** The Kuma tile has to exist
-*before* `nut_host`'s cron starts pushing to it — deploy `uptime-kuma` first, then run
-`initial_setup.yml --tags nut_host` on the host. Running the cron install first just means its
+*before* the host's watchdog timer starts pushing to it — deploy `uptime-kuma` first, then
+install the host's package version. Running the timer first just means its
 first several pushes land on a tile that doesn't exist yet; it does not risk a shared token,
 because each host's token and tile are provisioned together, one leg at a time.
 
 ## Editing
 - Manifests/config: `templates/*.j2` (config-secret.yaml.j2 holds all six NUT files)
-- Host half (udev rule, secondary upsmon): `ansible/roles/setup/nut_host/`, via
-  `initial_setup.yml --tags nut_host` on **both** daniel-server and daniel-box. The role's
-  own `when:` (`initial_setup.yml`) is `inventory_hostname == ups_host or
-  nut_host_secondary_armed`, so daniel-box is in scope from the moment its secondary was
-  armed — running this on daniel-server alone re-arms the primary and silently skips the
-  secondary. This line said "on daniel-server" until 2026-08-29, three lines below the
-  section that already said both nodes are armed.
+- Host half, one owner: the `nut-secondary` component (`hosts/components/nut-secondary/`) in
+  `homelab-daniel-server` and `homelab-daniel-box`. It ships the APC udev rule (also on daniel-box,
+  where no UPS matches it), the `nut-monitor` drop-in that points
+  upsmon at the rendered `/var/lib/homelab-secrets/etc/nut/upsmon.conf`, and the
+  `homelab-ups-watchdog` timer. Edit the component, and the host picks the change up through
+  `homelab-updater`; no `initial_setup.yml` run applies it. The `nut_host` role is emptied (H7.33)
+  and still holds the two templates and the defaults the component renders, until H7.20a.

@@ -42,9 +42,9 @@ groups:
             No up{job="loki-homelab"} series exists, so the loki-homelab job is gone from
             prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
             metrics can fire until the series is back.
-      # SHADOW UNTIL M5's PR 4b. Each evaluation is a Loki query, so this also catches a Loki
-      # that answers its scrape but fails its queries. Kuma's Loki Reachable and Loki Log
-      # Ingestion tiles page that fault until M5's PR 4a deletes them. A one-off failure
+      # Each evaluation is a Loki query, so this also catches a Loki that answers its scrape
+      # but fails its queries. Kuma's Loki Reachable and Loki Log Ingestion tiles are gone
+      # (M5's PR 4a), so this rule is that fault's pager. A one-off failure
       # holds the 10m increase above zero for 10 minutes, less than the 15m hold, so only a
       # recurring failure fires.
       - alert: LokiRulerEvaluationFailing
@@ -55,14 +55,13 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: The homelab Loki ruler keeps failing to evaluate its log rules.
           description: >-
             The homelab-logs group has failed an evaluation in each of the last 15 minutes'
             10-minute windows, so its log rules are not being checked. Each evaluation is a
             Loki query: read the loki-homelab pod's log for the query error.
-      # SHADOW UNTIL M5's PR 4b. The `up == 1` conjunct leaves a Loki outage to
+      # The `up == 1` conjunct leaves a Loki outage to
       # LokiHomelabDown. The last-evaluation gauge reads 0 from a Loki start until the
       # group's first evaluation, which waits for the group's offset inside its 5m interval:
       # 291s after the pod started on 2026-10-13, and at most one interval plus startup. The
@@ -81,7 +80,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: The homelab Loki ruler has not evaluated its log rules in 10 minutes.
           description: >-
@@ -109,7 +107,7 @@ groups:
         annotations:
           summary: The homelab Loki ruler cannot deliver its alerts to Alertmanager.
           description: >-
-            {{ $value }} sends from the homelab Loki ruler to {{ $labels.alertmanager }} failed
+            {{ $value | printf "%.0f" }} sends from the homelab Loki ruler to {{ $labels.alertmanager }} failed
             in the last 15 minutes, so every firing log rule reaches no one. Read the
             loki-homelab pod's log for "Error sending alerts", and the alertmanager-callers
             NetworkPolicy in the observability namespace.

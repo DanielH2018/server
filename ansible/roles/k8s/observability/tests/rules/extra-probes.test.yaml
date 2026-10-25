@@ -1,0 +1,177 @@
+# promtool unit tests for files/rules/extra-probes.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# The probe series carry the labels the blackbox-extra and blackbox-pi-ports targets set:
+# `service`, `module` and, on blackbox-extra, `page_tier`, with the probed address as
+# `instance`. The per-target alerts take `service` from those labels, so every exp_alerts entry
+# for them lists it, and promtool's whole-label-set comparison fails an expression that drops it.
+rule_files:
+  - ../../files/rules/extra-probes.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so both scrape jobs are missing from the config.
+  # ExtraProbesMissing fires once per job after its 10m hold, and not before.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ExtraProbesMissing
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: ExtraProbesMissing
+        exp_alerts:
+          - exp_labels:
+              job: blackbox-extra
+              severity: warning
+              service: observability
+            exp_annotations:
+              summary: Prometheus has lost the blackbox-extra scrape job.
+              description: >-
+                No up{job="blackbox-extra"} series exists, so the job is gone from prometheus.yml
+                or renders no target. No probe in it can fire until the series is back.
+          - exp_labels:
+              job: blackbox-pi-ports
+              severity: warning
+              service: observability
+            exp_annotations:
+              summary: Prometheus has lost the blackbox-pi-ports scrape job.
+              description: >-
+                No up{job="blackbox-pi-ports"} series exists, so the job is gone from
+                prometheus.yml or renders no target. No probe in it can fire until the series is
+                back.
+
+  # A warning-tier probe fails from minute 3. ExtraProbeFailed fires once its 2m hold has
+  # passed, and the critical rule, which selects the other tier, stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-extra", instance="http://10.0.0.139:51821", service="wg-easy", module="http_2xx", page_tier="warning"}'
+        values: '1x2 0x10'
+      - series: 'up{job="blackbox-extra", instance="http://10.0.0.139:51821", service="wg-easy", module="http_2xx", page_tier="warning"}'
+        values: '1x12'
+      - series: 'up{job="blackbox-pi-ports", instance="10.0.0.139:51821", service="wg-easy", module="tcp_connect"}'
+        values: '1x12'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ExtraProbeFailed
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: ExtraProbeFailed
+        exp_alerts:
+          - exp_labels:
+              job: blackbox-extra
+              instance: http://10.0.0.139:51821
+              service: wg-easy
+              module: http_2xx
+              page_tier: warning
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: The probe of wg-easy is failing.
+              description: >-
+                blackbox_exporter's http_2xx probe of http://10.0.0.139:51821 has failed for 2
+                minutes. Read probe_http_status_code for this instance when the module is an http
+                one, then the workload's own log.
+      - eval_time: 6m
+        alertname: ExtraProbeFailedCritical
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: ExtraProbesMissing
+        exp_alerts: []
+
+  # The critical-tier edge all-clear fails from minute 3. ExtraProbeFailedCritical fires, and
+  # the warning rule stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-extra", instance="https://edge-selfcheck.local.example.com/.well-known/traefik-edge-selfcheck", service="traefik", module="http_body_OK", page_tier="critical"}'
+        values: '1x2 0x10'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ExtraProbeFailedCritical
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: ExtraProbeFailedCritical
+        exp_alerts:
+          - exp_labels:
+              job: blackbox-extra
+              instance: https://edge-selfcheck.local.example.com/.well-known/traefik-edge-selfcheck
+              service: traefik
+              module: http_body_OK
+              page_tier: critical
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: The probe of traefik is failing.
+              description: >-
+                blackbox_exporter's http_body_OK probe of
+                https://edge-selfcheck.local.example.com/.well-known/traefik-edge-selfcheck has
+                failed for 2 minutes. This is the replacement for a Kuma tile tagged critical.
+                Read probe_http_status_code or probe_dns_lookup_time_seconds for this instance,
+                then the workload's own log.
+      - eval_time: 6m
+        alertname: ExtraProbeFailed
+        exp_alerts: []
+
+  # A Pi port closes at minute 3 and stays closed. PiPortDead fires after its 10m hold, the
+  # streak the bridge's pi_pressure row held, and not before.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-pi-ports", instance="10.0.0.139:51821", service="wg-easy", module="tcp_connect"}'
+        values: '1x2 0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: PiPortDead
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: PiPortDead
+        exp_alerts:
+          - exp_labels:
+              job: blackbox-pi-ports
+              instance: 10.0.0.139:51821
+              service: wg-easy
+              module: tcp_connect
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: The Pi's published port for wg-easy is not listening.
+              description: >-
+                10.0.0.139:51821 refused a TCP connect for 10 minutes. A container that is up
+                with no port mapping after a Pi restart is detached and needs a RECREATE, not a
+                restart. `ssh daniel-pi docker ps` tells a stopped container from a detached one.
+
+  # A Pi port closed by a deploy's recreate reopens within the hold, so nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-pi-ports", instance="10.0.0.139:51821", service="wg-easy", module="tcp_connect"}'
+        values: '1x2 0x5 1x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: PiPortDead
+        exp_alerts: []
+
+  # The Pi's node_exporter scrape fails from minute 3. PiHostDown fires after its 2m hold.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node-pi", instance="10.0.0.139:9100", origin="daniel-pi"}'
+        values: '1x2 0x10'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PiHostDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: PiHostDown
+        exp_alerts:
+          - exp_labels:
+              job: node-pi
+              instance: 10.0.0.139:9100
+              origin: daniel-pi
+              service: daniel-pi
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus cannot scrape daniel-pi's node_exporter at 10.0.0.139:9100.
+              description: >-
+                The node-pi scrape has failed for 2 minutes, so the Pi is off the network or its
+                node_exporter unit is down. Kuma's Daniel Pi Host ping tile read the first of
+                those. Ping the host, then read the unit with `ssh daniel-pi systemctl status
+                node_exporter`.

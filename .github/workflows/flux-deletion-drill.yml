@@ -1,0 +1,281 @@
+name: Flux deletion drill
+
+# Proves on a throwaway kind cluster what kustomize-controller does when a tag leaves the
+# bundle, and that break-glass promotion verifies a key-signed bundle (target slice D6, PR
+# D6.11, docs/target-architecture/deploy/d6-delete-old-path.md). The bundles come from the
+# renderer's own writers (scripts/renderer/deletion_drill.py), so a green drill shows that the
+# form the renderer writes is one that Flux honours.
+#
+# Five cases run in every drill, each printing one `case=<name> verdict=<pass|fail>` line:
+#   revision-1       all three fixture tags reach Ready, so every fixture claim bound under
+#                    kind's WaitForFirstConsumer class
+#   as-rendered      prune-drill leaves the bundle. Under Orphan its Deployment stays, and
+#                    under the default policy it goes. Its claim and Namespace stay either way.
+#   red-half         prune-drill-red had its claim marker and its deletionPolicy stripped, so
+#                    its claim must be lost. A drill that cannot see a lost claim fails.
+#   inventory-prune  prune-drill-keep drops both claims: keep-marked survives, and
+#                    keep-unmarked, whose marker was stripped, is lost
+#   break-glass      a bundle signed with a throwaway key reaches Ready through the flux
+#                    role's break-glass source form
+#   break-glass-red  a bundle signed with a second key the cluster does not hold is refused
+#
+# The job holds no secret and no age key, never pushes to GHCR and reaches no homelab host.
+# The private keys are generated here and discarded with the runner; the kit's private half
+# never reaches CI. Not a required check (Open question 10 is the operator's decision). It runs
+# on every pull request and skips itself when no in-scope path changed, so a required context
+# would never stick at "Expected".
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flux-deletion-drill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drill:
+    name: flux-deletion-drill
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    env:
+      REGISTRY: kind-registry:5000
+      PUSH: 127.0.0.1:5001
+      SNAP: >-
+        kubectl get
+        kustomization.kustomize.toolkit.fluxcd.io,ocirepository.source.toolkit.fluxcd.io,deployment,persistentvolumeclaim,namespace,configmap
+        -A -o json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0  # the merge-base diff below needs history
+          persist-credentials: false
+
+      # A dispatch always runs the drill. A pull request runs it when the diff touches the
+      # renderer, the fixture tree, the flux role's defaults or sync objects, the break-glass
+      # page or this file, and prints `skipped` otherwise.
+      - name: Check whether this PR touches the drill's inputs
+        id: scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- \
+              scripts/renderer/ \
+              ansible/roles/k8s/flux/defaults/main.yml \
+              ansible/roles/k8s/flux/templates/sync.yaml.j2 \
+              ansible/roles/k8s/flux/templates/secret.yaml.j2 \
+              ansible/roles/k8s/flux/files/gotk-components.yaml \
+              docs/break-glass.md \
+              .github/workflows/flux-deletion-drill.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "skipped: no renderer, fixture, flux role, break-glass page or workflow change"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+
+      # The same CLI version as the bootstrap drill. It pushes each artifact.
+      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        with:
+          # renovate: datasource=github-releases depName=fluxcd/flux2
+          version: v2.9.6
+
+      # The release promote.yml signs with.
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        with:
+          cosign-release: v3.1.3
+
+      # kind and its node image come from the pins ci.yml's sops_manifest_type_proof job reads,
+      # so this file holds no copy that could drift.
+      - name: Install kind
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          kind_version=$(awk '/KIND_VERSION:/ {print $2; exit}' .github/workflows/ci.yml)
+          kind_sha256=$(awk '/KIND_SHA256:/ {print $2; exit}' .github/workflows/ci.yml)
+          [ -n "$kind_version" ] && [ -n "$kind_sha256" ]
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/kind" \
+            "https://github.com/kubernetes-sigs/kind/releases/download/$kind_version/kind-linux-amd64"
+          echo "$kind_sha256  $RUNNER_TEMP/bin/kind" | sha256sum -c --strict
+          chmod +x "$RUNNER_TEMP/bin/kind"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # The registry sits on kind's docker network, so source-controller reaches it by
+      # container name and the runner pushes through the published port.
+      - name: Create the kind cluster, the registry and the pinned Flux controllers
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          node_image=$(awk '/KIND_NODE_IMAGE: / {print $2; exit}' .github/workflows/ci.yml)
+          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          [ -n "$node_image" ] && [ -n "$registry_image" ]
+          kind create cluster --name drill --image "$node_image" --wait 120s
+          docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"
+          kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
+          for d in source-controller kustomize-controller notification-controller; do
+            kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
+          done
+
+      # Two throwaway key pairs. The private halves live in the runner's temp directory only.
+      - name: Generate the throwaway cosign keys and build the bundles
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        env:
+          COSIGN_PASSWORD: ""
+        run: |
+          set -euo pipefail
+          for name in green red; do
+            mkdir -p "$RUNNER_TEMP/keys/$name"
+            (cd "$RUNNER_TEMP/keys/$name" && cosign generate-key-pair)
+          done
+          uv run python scripts/renderer/deletion_drill.py build --registry "$REGISTRY" \
+            --bg-pubkey "$RUNNER_TEMP/keys/green/cosign.pub" \
+            --bg-red-pubkey "$RUNNER_TEMP/keys/red/cosign.pub" --out "$RUNNER_TEMP/drill"
+          # `judge <case> [args]` retries a case until it passes or the budget ends, and prints
+          # the verdict lines either way.
+          cat > "$RUNNER_TEMP/judge.sh" <<'JUDGE'
+          judge() {
+            local budget=${BUDGET:-60} out
+            for _ in $(seq "$budget"); do
+              if out=$($SNAP | uv run python scripts/renderer/deletion_drill.py check "$@"); then
+                echo "$out"
+                return 0
+              fi
+              sleep 3
+            done
+            echo "$out"
+            return 1
+          }
+          # Sets REVISION to the artifact revision of the OCIRepository `homelab`.
+          served() {
+            REVISION=$(kubectl -n flux-system get ocirepository homelab \
+              -o 'jsonpath={.status.artifact.revision}' 2>/dev/null || true)
+          }
+          JUDGE
+
+      # Revision 1: the bundle with all three tags, and the root in the shape the flux role
+      # renders it. The wait shows every tag Ready, which needs each claim Bound.
+      - name: Revision 1 - push the bundle, apply the source and the root, wait for all three tags
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/judge.sh"
+          d="$RUNNER_TEMP/drill"
+          flux push artifact "oci://$PUSH/drill:drill" --path="$d/rev1" \
+            --source=flux-deletion-drill --revision="drill@sha1:$GITHUB_SHA" --insecure-registry
+          kubectl apply -f "$d/hand/ocirepository.yaml"
+          kubectl -n flux-system wait ocirepository/homelab --for=condition=Ready --timeout=180s
+          kubectl apply -f "$d/hand/root.yaml"
+          for tag in prune-drill prune-drill-red prune-drill-keep; do
+            for _ in $(seq 60); do
+              kubectl -n flux-system get kustomization "$tag" > /dev/null 2>&1 && break
+              sleep 3
+            done
+          done
+          kubectl -n flux-system wait kustomization/prune-drill kustomization/prune-drill-red \
+            kustomization/prune-drill-keep --for=condition=Ready --timeout=300s
+          served
+          echo "revision 1 served: $REVISION"
+          BUDGET=20 judge revision-1
+
+      # Revision 2: prune-drill and prune-drill-red leave the bundle, and prune-drill-keep
+      # drops both claims. The drill deletes nothing by hand.
+      - name: Revision 2 - push the bundle without two tags and judge the three deletion cases
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/judge.sh"
+          d="$RUNNER_TEMP/drill"
+          served
+          before=$REVISION
+          flux push artifact "oci://$PUSH/drill:drill" --path="$d/rev2" \
+            --source=flux-deletion-drill --revision="drill@sha1:$GITHUB_SHA" --insecure-registry
+          for _ in $(seq 60); do
+            served
+            [ -n "$REVISION" ] && [ "$REVISION" != "$before" ] && break
+            sleep 3
+          done
+          echo "revision 2 served: $REVISION (was $before)"
+          [ "$REVISION" != "$before" ]
+          kubectl -n flux-system wait kustomization/prune-drill kustomization/prune-drill-red \
+            --for=delete --timeout=300s
+          policy=$(jq -r .policy "$d/expect.json")
+          echo "prune-drill renders deletionPolicy: $policy"
+          if [ "$policy" != Orphan ]; then
+            kubectl -n prune-drill wait deployment/holder --for=delete --timeout=300s
+          fi
+          for _ in $(seq 100); do
+            served
+            applied=$(kubectl -n flux-system get kustomization prune-drill-keep \
+              -o 'jsonpath={.status.lastAppliedRevision}')
+            [ "$applied" = "$REVISION" ] && break
+            sleep 3
+          done
+          rc=0
+          BUDGET=40 judge as-rendered --policy "$policy" || rc=1
+          BUDGET=40 judge red-half || rc=1
+          BUDGET=40 judge inventory-prune || rc=1
+          exit "$rc"
+
+      # Open question 16 lives here: source-controller verifies a key-signed artifact from a
+      # plain-HTTP registry, through `insecure: true`. The OCIRepository and its Secret come
+      # from the flux role's own templates with the break-glass lever on.
+      - name: Break-glass - a bundle signed with the key the cluster holds
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        env:
+          COSIGN_PASSWORD: ""
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/judge.sh"
+          d="$RUNNER_TEMP/drill"
+          digest=$(flux push artifact "oci://$PUSH/bg:bg" --path="$d/bg" \
+            --source=flux-deletion-drill --revision="bg@sha1:$GITHUB_SHA" --insecure-registry \
+            --output=json | jq -r .digest)
+          printf '%s' "$digest" | grep -Eqx 'sha256:[0-9a-f]{64}'
+          cosign sign --key "$RUNNER_TEMP/keys/green/cosign.key" --tlog-upload=false \
+            --use-signing-config=false --allow-http-registry --yes "$PUSH/bg@$digest"
+          kubectl apply -f "$d/hand/bg-secret.yaml"
+          kubectl apply -f "$d/hand/bg-ocirepository.yaml"
+          BUDGET=60 judge break-glass
+          kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
+
+      # The red half runs only after the green half passed, so a transport failure on both
+      # cannot read as a refusal. It pushes to its own repository path, because cosign v3
+      # stores a signature as a referrer of the digest and equal content would inherit the
+      # green signature (#4820).
+      - name: Break-glass - a bundle signed with a key the cluster does not hold
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        env:
+          COSIGN_PASSWORD: ""
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/judge.sh"
+          d="$RUNNER_TEMP/drill"
+          digest=$(flux push artifact "oci://$PUSH/bg-red:bg-red" --path="$d/bg-red" \
+            --source=flux-deletion-drill --revision="bg-red@sha1:$GITHUB_SHA" --insecure-registry \
+            --output=json | jq -r .digest)
+          printf '%s' "$digest" | grep -Eqx 'sha256:[0-9a-f]{64}'
+          cosign sign --key "$RUNNER_TEMP/keys/red/cosign.key" --tlog-upload=false \
+            --use-signing-config=false --allow-http-registry --yes "$PUSH/bg-red@$digest"
+          kubectl apply -f "$d/hand/bg-red-ocirepository.yaml"
+          BUDGET=40 judge break-glass-red
+          kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
+
+      - name: Dump the Flux objects and controller logs
+        if: failure() && (github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true')
+        run: |
+          kubectl -n flux-system get ocirepository,kustomization -o yaml || true
+          kubectl get deployment,pvc -A || true
+          kubectl -n flux-system logs deployment/source-controller --tail=150 || true
+          kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true

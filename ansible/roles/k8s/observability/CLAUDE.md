@@ -43,6 +43,13 @@ The working-out lives in `docs/observability-dashboards.md`.
 
 **`probe.py health observability` gates every workload in the role**, none of them named observability.
 
+**The `observability-prepull` Kustomization pulls Grafana's image before its `Recreate`**, so the
+dashboards serve through a 482 MB Docker Hub pull (`flux_prepull_timeout` in
+`defaults/main.yml`, #5867). `flux_prepull_workloads` scopes the Job to Grafana alone (#5875).
+The other Deployments pin no node, and the Loki, Tempo and kube-state-metrics images carry no
+`sh` for the Job's script. Grafana prefers `k8s_primary_node` so the Job has a node to copy. A
+pod the scheduler sends elsewhere after the Job ran pays the cold pull.
+
 ## Eviction tiers
 
 DECIDED: observability tiers — Prometheus and Alertmanager are `homelab-critical`; the other
@@ -102,6 +109,14 @@ this goes QUIET.
 
 ## Alert plane
 
+kube-state-metrics collects ConfigMaps for one annotation, `homelab/check-verdict`, and CronJobs
+for their last successful time (M6 B6b). The two health CronJobs of configarr and janitorr
+write the annotation, and the `pod-producers` rule group reads it. The pi-peer-backup CronJob
+writes it too (M6 B7), and the `pods` rule group reads it beside the autofix-bridge exporter and
+the cloudflare-ddns Deployments' availability. The Prometheus job drops
+every other ConfigMap and CronJob family. The ClusterRole's ConfigMap `list` grant cannot be
+narrowed by name, and no collector exports ConfigMap `data`.
+
 Prometheus sends alerts to the role's Alertmanager and scrapes it as job `alertmanager`, which
 carries no `origin` label, so Kuma's Cluster Scrape Targets tile pages a failed scrape.
 Its config, credentials included, is the `alertmanager-config` Secret, and every Go template
@@ -109,6 +124,13 @@ expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file
 `files/rules/` with a promtool test in `tests/rules/`, and ships only once
 `observability_rule_groups` names it. The routing tree, the receivers and the rule conventions
 are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
+
+**The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
+the Discord and email bodies, and `ansible/roles/k8s/observability/tests/alertmanager/` holds
+four alert groups with the text each body must render for them.
+`scripts/validate/notification_renders.py:render_problems` fails any difference. To change the
+text, edit the template, run `uv run python scripts/validate/alert_rules.py --write-renders`,
+and review the rewritten `.txt` files.
 
 **The weekly reboot mutes every paging route, never the Watchdog.** The `weekly-reboot` time
 interval derives from the reboot cron's `weekly_reboot_*` values and the mute's lead and
@@ -131,6 +153,39 @@ module holds that set to host_vars, so a node that pins a new link needs a rule 
 It also carries `FanoutSlotsIdleWithFreeWork`, in shadow until #5658 is ruled: free issues
 for an hour with no fan-out batch live on either node, read from the server lander's
 `findings_issues` gauge and the per-batch cgroup series.
+
+**`HostCheckOverdue` is the host checks' catch-all deadman, never a replacement for a pair.**
+One rule per host compares each check's timestamp with the
+`homelab_check_deadline_seconds` the check declares, so a new producer is covered before
+its own `Failed`/`NotReporting` pair exists (#6166). It cannot see a file that is gone,
+because only a check's name says which series should exist, and it fires beside every
+pair's stale arm. It stays shadow until an Alertmanager inhibit keyed on `check` and
+`origin` lets it page alone. The per-check literals and their pin tests stay, for the
+reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
+series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
+change from `homelab_host_reboot_pending_since_seconds`, which a later package change never
+moves, and requires that time to follow `node_boot_time_seconds`: the updater rewrites the
+reconcile file only when a package changes, so a stale `homelab_host_reboot_pending 1`
+survives the reboot that cleared it.
+
+**`ScrapeTargetDown` is one rule per owning role, and a new scrape job needs a line in one.**
+`files/rules/scrape-targets.yaml` gives each rule a literal `service`, because a static scrape
+job has no other source for it. The last rule catches a job that none of the others names, with
+`service="unmapped"`. `ansible/tests/services/test_scrape_target_rule_jobs.py` fails until every
+rendered job is in exactly one named rule. These rules and `files/rules/log-pipeline.yaml` carry
+`shadow` until M6's batch A3 cuts Kuma's scrape and log-shipper tiles over.
+`files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
+while its rule is still shadow, and the last M6 Phase A cutover deletes it.
+
+**`files/rules/hosts.yaml` holds the host rules, one copy per host.** Its disk, memory,
+temperature, UPS and Pi pressure rules replace monitor-bridge's `disk`, `memory`, `host_temp`,
+`ups` and `pi_pressure` checks and carry `shadow` until M6's batch A1 cuts them over (the Pi's
+until B8). A rule's `service` is a literal, so a host gets its own copy, and a fourth host needs
+rules added. Every rule keeps `job` and `instance`, because the inhibit that replaces
+`EXPORTER_DEPENDENT` matches `ScrapeTargetDown` on them. A missing-data arm starts from
+`up == 1`, so it fires only while the scrape succeeds and the series is absent. A dead exporter
+pages once, through `ScrapeTargetDown`. The two coverage-floor rules count hosts, so they carry
+neither label, and a dead exporter also pages through them.
 
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per tile the

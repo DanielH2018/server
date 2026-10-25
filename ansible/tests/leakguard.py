@@ -49,7 +49,8 @@ with `could not decrypt domain`. The exemption
 keys on the marker rather than on nodeids because that tier is parametrized:
 `test_grafana_dashboard_renders_its_panels` gains a nodeid every time a dashboard is enrolled,
 so a nodeid allowlist would go stale on an enrollment instead of on a rename. `addopts` carries
-`-m 'not ui'`, so CI never reaches this branch.
+`-m 'not ui and not image'`, so the `pytest` shards never reach this branch. The `image`
+marker takes the same exemption and is run by `image-leg.yml` alone.
 
 ## What is deliberately NOT shimmed
 
@@ -123,7 +124,6 @@ SHIMMED_BINARIES = (
 # They run with the real PATH: a stub would leave them green while checking nothing.
 _LIVE_API_TESTS = frozenset(
     {
-        "ansible/tests/deploy/test_cronjob_gate_decision.py::test_the_jsonpath_parses_against_the_live_api",
         "ansible/tests/longhorn/test_longhorn_api.py::test_the_resolve_returns_a_pod_ip_on_this_node",
         "ansible/tests/longhorn/test_volume_revert.py::test_the_listing_jsonpath_parses",
         "ansible/tests/longhorn/test_volume_snapshot.py::test_the_listing_fields_exist_on_a_real_snapshot",
@@ -147,12 +147,19 @@ _LIVE_API_TESTS = frozenset(
 # test can assert that module still carries it — see the module docstring.
 _LIVE_MARKER = "ui"
 
+# The marker on tests that run a script inside a pinned container image with `docker run`
+# (ansible/tests/longhorn/test_longhorn_restore_drill_image.py). They reach the Docker socket
+# and pull from a registry on purpose. `addopts` deselects them from the `pytest` shards,
+# which have no Docker daemon, and `.github/workflows/image-leg.yml` runs them.
+_IMAGE_MARKER = "image"
+
 
 def _runs_against_live_infra(item: pytest.Item) -> bool:
     """True for a test deliberately handed the real PATH — see the module docstring."""
     return (
         item.nodeid in _LIVE_API_TESTS
         or item.get_closest_marker(_LIVE_MARKER) is not None
+        or item.get_closest_marker(_IMAGE_MARKER) is not None
     )
 
 

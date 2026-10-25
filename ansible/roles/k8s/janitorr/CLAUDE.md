@@ -24,8 +24,8 @@ See repo-root `CLAUDE.md` for shared conventions.
   every 10 minutes. `files/janitorr_health.py` reads the running pod's container start time
   and, past a 10-minute startup grace, counts `Unexpected error occurred in scheduled task`
   lines in its log, through its own ServiceAccount (`templates/health-rbac.yaml.j2`). It pushes
-  the "Janitorr Errors" Kuma monitor. Not gated by `k8s/cronjob-gate`: `k8s_autodeploy` is
-  false here, so no batch gate is required.
+  the "Janitorr Errors" Kuma monitor. No gate Job runs it: the role's defaults
+  declare no `flux_cronjob_gates`, so `janitorr-verify` holds no copy of this CronJob.
 - **The health reader was a daniel-box host cron until H2.5c.** The absent arms for the cron,
   `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the `janitorr` drift fragment
   live in `ansible/roles/setup/k8s_host_files/tasks/janitorr.yml`, which the setup plane
@@ -36,6 +36,11 @@ See repo-root `CLAUDE.md` for shared conventions.
   `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. The reader's code ships in
   the `janitorr-health` ConfigMap, beside `host_lib.py` and `kuma_push.py` from `setup/common`,
   and no secret goes in it (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
+  `homelab/check-last-run` and `homelab/check-message` onto the `janitorr-health-verdict`
+  ConfigMap, which the role renders with no annotations so the reader is their only writer.
+  kube-state-metrics exports the verdict, and the `pod-producers` shadow rules read it. A
+  failed export makes the reader exit 1.
 - **The health pod carries `app: janitorr-health`, never `app: janitorr`.** The reader
   takes the first Running pod labelled `app=janitorr`, and a verify Job pod under that label
   could be the pod it reads. uptime-kuma's
@@ -105,6 +110,19 @@ fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfi
 `tasks/main.yml` keeps the `janitorr_dry_run` fact, because the renderer evaluates it from
 there (`scripts/renderer/renderer_lib/task_inputs.py`), and the `k8s/manifests` include the
 renderer reads `manifests_*` vars from.
+
+## Retention rungs
+
+`media-deletion` keys each expiration on free disk: a rung applies while free space is below
+its key. The rungs are 5, 10, 15, 20 and 25, and the 25 rung (movies 180d, seasons 240d) is the
+loosest.
+
+DECIDED: the loosest rung is 25 because `/srv/media` shares daniel-box's root LV with
+`/var/lib/longhorn`, and Longhorn stops scheduling on a disk below 25% available
+(`storage-minimal-available-percentage: 25`). A 20 rung would not act until the LV is 80% used,
+past that line. The LV cannot grow, because the VG has no free extents. Operator ruling
+2026-10-22, #5806. The `DiskHealthFailed` threshold of 75% used is Longhorn's floor too and
+stays. Media tagged `janitorr-keep` is exempt from every rung.
 
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)

@@ -56,6 +56,10 @@ MONITOR_INTERVAL_S = 7200
 HOURLY_S = 3600
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 REAL_ENV = "/etc/homelab/loki-route-kuma-push.env"
+CHECK_LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
+CHECK_LIB = (
+    ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+)
 
 
 def _timer_import() -> dict:
@@ -156,12 +160,13 @@ def test_a_host_dropped_from_the_list_loses_the_timer_and_the_cron():
     )
 
 
-def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
+def _run_witness(tmp_path, route_rc: int, token: str = "stubtoken") -> tuple[int, str]:
     """Render the witness and run it with the reader stubbed to exit `route_rc`.
 
     Only absolute paths are repointed: the push lib (a recording stub), the token env file,
     and the two `uv` binaries, whose stub answers the reader invocation with `route_rc` and
-    prints a body for anything else. Returns (exit code, pushed status).
+    prints a body for anything else. Returns (exit code, pushed status, or "" when nothing was
+    pushed). The run's textfile lands in `tmp_path / "textfile"`.
     """
     body = render_shell_script(
         *WITNESS,
@@ -175,6 +180,7 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
     )
     for needle in (
         REAL_LIB,
+        CHECK_LIB_PATH,
         REAL_ENV,
         "/home/ubuntu/.local/bin/uv",
         "/usr/local/bin/uv",
@@ -190,7 +196,7 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
         "boot_grace_active() { return 1; }\n"
     )
     env_file = tmp_path / "push.env"
-    env_file.write_text("LOKI_ROUTE_WITNESS_PUSH_TOKEN=stubtoken\n")
+    env_file.write_text(f"LOKI_ROUTE_WITNESS_PUSH_TOKEN={token}\n")
     uv = write_exec(
         tmp_path / "uv",
         "#!/usr/bin/env bash\n"
@@ -201,11 +207,13 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
 
     body = (
         body.replace(REAL_LIB, str(lib))
+        .replace(CHECK_LIB_PATH, str(CHECK_LIB))
         .replace(REAL_ENV, str(env_file))
         .replace("/home/ubuntu/.local/bin/uv", str(uv))
         .replace("/usr/local/bin/uv", str(uv))
     )
     script = write_exec(tmp_path / "loki-read-route-health.sh", body)
+    (tmp_path / "textfile").mkdir()
     result = run(
         [str(script)],
         env={
@@ -213,10 +221,11 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
             "PATH": path_with(binstub),
             "KUMA_PUSH_OUT": str(pushed),
             "STUB_ROUTE_RC": str(route_rc),
+            "TEXTFILE_DIR": str(tmp_path / "textfile"),
         },
         check=False,
     )
-    return result.returncode, pushed.read_text().strip()
+    return result.returncode, pushed.read_text().strip() if pushed.exists() else ""
 
 
 def test_a_down_verdict_exits_nonzero_so_the_timer_reruns_it(tmp_path):
@@ -230,6 +239,35 @@ def test_an_up_verdict_exits_zero_so_the_timer_rests(tmp_path):
     code, status = _run_witness(tmp_path, route_rc=0)
     assert status == "up"
     assert code == 0
+
+
+def _textfile_series(tmp_path) -> dict[str, str]:
+    prom = tmp_path / "textfile" / "loki-read-route-health.prom"
+    lines = prom.read_text().splitlines()
+    return dict(line.rsplit(" ", 1) for line in lines if not line.startswith("#"))
+
+
+def test_a_run_writes_its_verdict_as_a_textfile_with_the_deadline_the_rules_pin(
+    tmp_path,
+):
+    """M6 batch B2: success 1 for up and 0 for down, and the interval the Kuma tile keeps."""
+    check = 'check="loki-read-route-health"'
+    for case in ("up", "down"):
+        (tmp_path / case).mkdir()
+    _run_witness(tmp_path / "up", route_rc=0)
+    up = _textfile_series(tmp_path / "up")
+    assert up[f"homelab_check_success{{{check}}}"] == "1"
+    assert up[f"homelab_check_deadline_seconds{{{check}}}"] == str(MONITOR_INTERVAL_S)
+    _run_witness(tmp_path / "down", route_rc=1)
+    down = _textfile_series(tmp_path / "down")
+    assert down[f"homelab_check_success{{{check}}}"] == "0"
+
+
+def test_an_unset_token_skips_the_push_but_still_writes_the_textfile(tmp_path):
+    code, status = _run_witness(tmp_path, route_rc=0, token="")
+    assert (code, status) == (0, "")
+    series = _textfile_series(tmp_path)
+    assert series['homelab_check_success{check="loki-read-route-health"}'] == "1"
 
 
 def test_the_verdict_reads_the_body_rather_than_the_exit_code():

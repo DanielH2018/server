@@ -1,0 +1,18 @@
+# The fixture a package that carries `secrets-unit` takes until H4.2 adds the first real one
+# (H4.1c). It declares one output and one credential, both on a key `secrets.yml` carries, and
+# the case builds it with a ciphertext it encrypts to a throwaway age key.
+description: Fixture host package that carries secrets-unit, for the host_packages container cases
+components: [reconcile, secrets-unit]
+maintainer_scripts: [preinst, postinst, prerm]
+files:
+  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/homelab-fixture-kept.service}
+enable:
+  homelab-fixture-kept.service: multi-user.target
+credentials: [nut_monitor_password]
+outputs:
+  - src: templates/sealed.conf.j2
+    path: /etc/homelab-fixture/sealed.conf
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [nut_monitor_password]

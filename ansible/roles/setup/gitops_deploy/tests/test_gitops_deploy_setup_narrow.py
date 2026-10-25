@@ -300,7 +300,12 @@ def test_a_role_needing_no_tag_is_left_out_of_the_apply_and_the_hold(
     claude_code never read.
     """
     tick.paths = [INITIAL_SETUP_DEFAULTS]
-    tick.narrow_setup = {"claude_code": NOTHING, "initial_setup": (0, "prune")}
+    tick.narrow_setup = {
+        "claude_code": NOTHING,
+        "homelab_builder": NOTHING,
+        "renovate_agent": NOTHING,
+        "initial_setup": (0, "prune"),
+    }
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1] == "prune"
@@ -314,6 +319,8 @@ def test_exit_three_without_the_nothing_line_applies_the_whole_role_tag(
     tick.paths = [INITIAL_SETUP_DEFAULTS]
     tick.narrow_setup = {
         "claude_code": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
+        "homelab_builder": NOTHING,
+        "renovate_agent": NOTHING,
         "initial_setup": (0, "prune"),
     }
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0

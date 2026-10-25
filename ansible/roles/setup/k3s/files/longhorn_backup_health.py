@@ -17,11 +17,18 @@ Usage: longhorn_backup_health.py   (takes no arguments; -h/--help prints this te
 Not run by hand: /usr/local/bin/longhorn-backup-health (rendered from
 templates/longhorn-backup-health.sh.j2, a cron every 10 minutes) exports every setting and
 calls it. It refuses to start unless the shim exported all of them: LONGHORN_BACKUP_NAMESPACE,
-LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, LONGHORN_BACKUP_ARMED,
-LONGHORN_R2_ARMED, the LONGHORN_*_MAX_AGE_HOURS and LONGHORN_*_BACKUP_* thresholds,
-LONGHORN_RESTORE_DRILL_* (stamp dir, namespace and ages), LONGHORN_TRIM_CRON_* and
-LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired stamp), LONGHORN_JOURNALCTL,
-LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
+LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, the LONGHORN_*_MAX_AGE_HOURS and
+LONGHORN_DAILY_BACKUP_BUDGET thresholds, LONGHORN_RESTORE_DRILL_* (stamp dir, namespace and
+ages), LONGHORN_TRIM_CRON_* and LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired
+stamp), LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
+
+It takes no arm flag and no schedule from the shim. Each backup target's arm state comes from the
+cluster: a blank `spec.backupTargetURL` is a disarmed target (H1.7a). The daily and weekly run
+times, which size the first-run grace, come from the `spec.cron` of the live RecurringJobs. Both
+are one list call each, so the reader reports what the cluster holds, whichever tool wrote it:
+Flux, through the `longhorn-backup` tag, or an operator's break-glass. No baked copy of a flag or
+a schedule can disagree with it. A target that carries the reconcile-disabled annotation is a
+problem the reader reports, never a disarm (H1.7b).
 Prints `up<TAB>msg` or `down<TAB>msg` and exits 0.
 """
 
@@ -42,6 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import host_lib
 from longhorn_lib import longhorn_backup_health_logic as logic
 from longhorn_lib import longhorn_backups as backups
+from longhorn_lib import longhorn_cluster_state as cluster_state
 from longhorn_lib import longhorn_cron_evidence_logic as cron_evidence
 from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 from longhorn_lib import longhorn_skipped_volumes_logic as skipped
@@ -78,12 +86,11 @@ def _require_int_env(name: str) -> int:
 def _require_bool_env(name: str) -> bool:
     """Parses a Jinja `{{ var | bool }}` render, which Python's str() spells "True"/"False".
 
-    Refuses anything it doesn't recognize rather than defaulting to False. LONGHORN_BACKUP_ARMED
-    and LONGHORN_R2_ARMED both route through this, and False means DISARMED — a target's volumes
-    get suppressed from every check rather than watched. A typo'd or truncated export (a template
-    change that renders `Tru` instead of `True`, say) used to fold silently into "disarmed" here,
-    the same wrong-default direction `_require_env` above exists to close for a missing var
-    entirely.
+    Refuses anything it doesn't recognize rather than defaulting to False. The two
+    LONGHORN_*_CRON_EXPECTED flags route through this, and False means a cron is not expected,
+    so its absence goes unreported. A typo'd or truncated export (a template change that renders
+    `Tru` instead of `True`, say) used to fold silently into False here, the same wrong-default
+    direction `_require_env` above exists to close for a missing var entirely.
     """
     raw = _require_env(name).strip().lower()
     if raw in ("true", "1", "yes"):
@@ -93,39 +100,16 @@ def _require_bool_env(name: str) -> bool:
     raise SystemExit(f"env var {name}={raw!r} is not a recognized boolean")
 
 
-def _hhmm_from_two_field_cron(spec: str) -> str | None:
-    """`MINUTE HOUR ...` -> `H:MM`, matching the shell's `awk '{ print $2 ":" $1 }'`.
-
-    Works for both a full 5-field cron ("30 3 * * *") and the weekly minute-hour pair
-    ("30 4") — both put minute first and hour second. Returns None on fewer than two fields
-    rather than raising: awk's own `$2`/`$1` on a short line silently prints an empty field, no
-    exit, so the shell only ever lost the first-run grace projection on a malformed value —
-    never the whole heartbeat. Called from main(), not module scope: an IndexError here used to
-    fire before any of the other seven checks ran, taking the whole reader down over one bad
-    schedule string. logic.first_run_after() treats None the same way it treats any other
-    unparseable hhmm — the grace is disabled for that tier, not the reader.
-    """
-    fields = spec.split()
-    if len(fields) < 2:
-        return None
-    minute, hour = fields[0], fields[1]
-    return f"{hour}:{minute}"
-
-
 NAMESPACE = _require_env("LONGHORN_BACKUP_NAMESPACE")
 KUBECTL_BIN = _require_env("LONGHORN_BACKUP_KUBECTL")
 TIMEOUT = _require_int_env("LONGHORN_BACKUP_KUBECTL_TIMEOUT_S")
 
 kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, TIMEOUT)
 
-BACKUP_ARMED = _require_bool_env("LONGHORN_BACKUP_ARMED")
-R2_ARMED = _require_bool_env("LONGHORN_R2_ARMED")
 MAX_AGE_HOURS = _require_int_env("LONGHORN_BACKUP_MAX_AGE_HOURS")
 WEEKLY_MAX_AGE_HOURS = _require_int_env("LONGHORN_WEEKLY_BACKUP_MAX_AGE_HOURS")
 ERROR_MAX_AGE_HOURS = _require_int_env("LONGHORN_BACKUP_ERROR_MAX_AGE_HOURS")
 DAILY_BACKUP_BUDGET = _require_int_env("LONGHORN_DAILY_BACKUP_BUDGET")
-BACKUP_CRON = _require_env("LONGHORN_BACKUP_CRON")
-WEEKLY_BACKUP_MINUTE_HOUR = _require_env("LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR")
 DRILL_STAMP_DIR = _require_env("LONGHORN_RESTORE_DRILL_STAMP_DIR")
 # The drill's stamp ConfigMap lives in the drill's namespace, not Longhorn's, so it gets its own
 # runner rather than a second `-n` passed through the longhorn-system one.
@@ -181,27 +165,6 @@ def _parse_volume_rows(raw: str) -> list[tuple[str, str, str, str]]:
     return rows
 
 
-def _fetch_target(name: str) -> dict:
-    """{"raw": <.status.available, incl. any error text>, "reason": <conditions[0].message>}."""
-    # Mirrors `AVAILABLE=$(... 2>&1)`: the raw text is used whatever the exit code, since a
-    # kubectl failure IS the "unavailable" evidence here.
-    _availability_rc, raw = kubectl(
-        "get", "backuptarget", name, "-o", "jsonpath={.status.available}"
-    )
-    if raw == "true":
-        # Matches the original: the reason lookup only runs when the target is NOT reporting
-        # available. logic.check_target_availability() never reads "reason" on the available
-        # path, so fetching it there was a wasted kubectl call — halving this check's calls on a
-        # healthy tick (2 armed targets x 2 calls -> 2 targets x 1 call).
-        return {"raw": raw, "reason": ""}
-    # The reason lookup mirrors `2>/dev/null`: a failure here is discarded, not folded in.
-    reason_rc, reason = kubectl(
-        "get", "backuptarget", name, "-o", "jsonpath={.status.conditions[0].message}"
-    )
-    reason = reason[:160] if reason_rc == 0 else ""
-    return {"raw": raw, "reason": reason}
-
-
 # DECIDED: a kubectl fetch that fails is a DOWN with a reason, not an empty result. The bash
 # this was ported from sent every one of these reads to `2>/dev/null`
 # (`git show 62c488dd^:ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2`, lines
@@ -252,6 +215,29 @@ def _fetch_items(
         problems.append((1, f"{what} fetch returned an unparseable body: {detail}"))
         return None
     return items
+
+
+def _fetch_targets(problems: list[tuple[int, str]]) -> dict[str, dict] | None:
+    """Every BackupTarget by name, from one list call, or None having appended a problem.
+
+    DECIDED: a failed list, or a list that lacks a target, is a rank-1 problem and never a
+    disarm. A blank URL is the one deliberate disarm, and it can only be read off an object that
+    came back. This departs from `lib.longhorn_cluster.backup_target_url`, which returns "" for
+    a failed read as well: that reader declines to classify, and this one is the deadman for
+    the backup plane (failure class 3). ADR-0007, *Consequences*, has the monitor's side.
+    """
+    items = _fetch_items(
+        problems, "backup target list", "get", "backuptargets.longhorn.io", "-o", "json"
+    )
+    return None if items is None else cluster_state.targets_by_name(items)
+
+
+def _fetch_job_crons(problems: list[tuple[int, str]]) -> dict[str, str] | None:
+    """Every RecurringJob's `spec.cron` by name from one list call, or None with a problem."""
+    items = _fetch_items(
+        problems, "recurring job list", "get", "recurringjobs.longhorn.io", "-o", "json"
+    )
+    return None if items is None else cluster_state.job_crons_by_name(items)
 
 
 def _fetch_backups_json(problems: list[tuple[int, str]]) -> list[dict] | None:
@@ -369,32 +355,32 @@ def main(now: float | None = None) -> int:
     """
     now_s = time.time() if now is None else now
 
-    # Parsed here, not at module scope: a malformed value must degrade the first-run grace for
-    # the affected tier(s), not crash the reader before any of the other seven checks run (see
-    # _hhmm_from_two_field_cron's docstring — the 2026-09-04 review's finding #4).
-    daily_run_hhmm = _hhmm_from_two_field_cron(BACKUP_CRON)
-    if daily_run_hhmm is None:
-        _syslog(
-            f"malformed LONGHORN_BACKUP_CRON={BACKUP_CRON!r}; "
-            "disabling the daily tier's first-run grace"
-        )
-    weekly_run_hhmm = _hhmm_from_two_field_cron(WEEKLY_BACKUP_MINUTE_HOUR)
-    if weekly_run_hhmm is None:
-        _syslog(
-            f"malformed LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR={WEEKLY_BACKUP_MINUTE_HOUR!r}; "
-            "disabling the weekly tiers' first-run grace"
-        )
-
-    # ── targets (armed only) and disarmed set — same order Jinja renders BACKUP_TARGETS in.
-    backup_targets: list[str] = []
-    disarmed_targets: list[str] = []
-    (backup_targets if BACKUP_ARMED else disarmed_targets).append(backups.B2_TARGET)
-    (backup_targets if R2_ARMED else disarmed_targets).append(backups.R2_TARGET)
-
     problems: list[tuple[int, str]] = []
+
+    # ── targets (armed only) and disarmed set ─────────────────────────────────────────────
+    # The arm state is the live URL: blank is disarmed (`cluster_state.watch_plan` has the rule
+    # and why a target the list lacks stays watched).
+    targets = _fetch_targets(problems)
+    backup_targets, disarmed_targets, plan_problems = cluster_state.watch_plan(targets)
+    problems += plan_problems
+    listed = targets or {}
     problems += logic.check_target_availability(
-        {name: _fetch_target(name) for name in backup_targets}
+        {name: listed[name] for name in backup_targets if name in listed}
     )
+
+    # ── run times, for the first-run grace ────────────────────────────────────────────────
+    # From each tier's live RecurringJob. One whose cron is missing or malformed degrades the
+    # first-run grace for that tier, not the reader (the 2026-09-04 review's finding #4).
+    job_crons = _fetch_job_crons(problems)
+    run_hhmm = cluster_state.run_times(job_crons or {})
+    for job, hhmm in run_hhmm.items():
+        if hhmm is None and job_crons:
+            _syslog(
+                f"RecurringJob {job} has cron {job_crons.get(job)!r}, which has no minute "
+                "and hour; disabling that tier's first-run grace"
+            )
+    daily_run_hhmm = run_hhmm[backups.DAILY_JOB]
+    legacy_run_hhmm = cluster_state.legacy_run_time(run_hhmm)
 
     # One fetch feeds checks 2 to 5. On a failed fetch each of them is skipped rather than fed
     # an empty list, so the one fetch problem is the one thing reported.
@@ -432,7 +418,7 @@ def main(now: float | None = None) -> int:
             backups.group_label(backups.DEFAULT_GROUP) + "=enabled",
             MAX_AGE_S,
             "daily",
-            "daily-backup",
+            backups.DAILY_JOB,
             daily_run_hhmm,
             "*",
         ),
@@ -442,7 +428,7 @@ def main(now: float | None = None) -> int:
                 WEEKLY_MAX_AGE_S,
                 f"weekly-d{shard}",
                 backups.weekly_shard_group(shard),
-                weekly_run_hhmm,
+                run_hhmm[backups.weekly_shard_group(shard)],
                 str(shard),
             )
             for shard in range(backups.WEEKLY_SHARDS)
@@ -452,7 +438,7 @@ def main(now: float | None = None) -> int:
             WEEKLY_MAX_AGE_S,
             "weekly-legacy",
             "__no_job__",
-            weekly_run_hhmm,
+            legacy_run_hhmm,
             "*",
         ),
     ]

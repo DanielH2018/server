@@ -135,13 +135,18 @@ its arm is a no-op and it goes on to deploy. Arm it only on a PR you were asked 
 
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
 `docs/landing.md` owns the rule, and
-`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS` is the full
+`hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS` is the full
 list of conclusions it covers (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
 **Verify the change, not just the workload.** The `VERDICT:` line cannot see whether *your
 change* took effect, so exercise the thing you actually changed as well. `docs/landing.md` has
 the two incidents that made this a rule.
+
+**A PR that changes a host's package waits for that host.** After master CI, `land.sh` renders
+each host package at the merge commit and at its first parent. It then waits until the host
+applies the merge commit, and `scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts` ends
+the landing `deferred` for a host it cannot wait for. `docs/landing.md` says when.
 
 ### Working alongside other sessions
 
@@ -160,13 +165,15 @@ Say which of these applies, then stop:
 - A change in one of the bring-up playbooks — `bootstrap.yml`, `k3s-bringup.yml`,
   `initial_setup.yml`, the list
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
-  sits in the `local..origin` range. The deployer applies every other broad
-  change itself, but not the bring-up playbooks: those run by hand by construction. If it is
-  another session's, clearing it means applying their change; name it and stop.
+  sits in the `local..origin` range, and it is another session's. The deployer applies every
+  other broad change itself, but not the bring-up playbooks: those run by hand by
+  construction. Clearing it means applying their change; name it and stop.
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer
-  cannot apply. The role needs its playbook by hand, then `gitops_state.py clear-owed manual_plane
-  <role>`; the `land-after-merge` skill has the `--applied` form for a narrowed apply. Another
-  session's is theirs to clear.
+  cannot apply, and another session's PR created it. That line is theirs to clear. When your
+  own merged PR created the line, do not stop: run the playbook with exactly the tags the
+  line owes, from a tree whose `HEAD` is `origin/master`, then `gitops_state.py clear-owed
+  manual_plane <role>`. The operator granted that standing clearance on 2026-10-24. The
+  `land-after-merge` skill has the `--applied` form for a narrowed apply.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
@@ -296,7 +303,7 @@ before CI does, run `uv run pytest` yourself. A fan-out batch is the exception: 
 paths, and `.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run, because a
 local full run held 2.3 GiB and CI's run is the one the pipeline waits on. A pre-push hook that re-ran the suite was removed on 2026-10-02: it
 cost 89s on an idle daniel-box and 235s under load on every push, for a verdict CI repeats
-in about 61s.
+in parallel shards. The slowest of those took 4m29s on 2026-10-24 (run 40125170130).
 The `validate-compose-templates` hook shells out to `uv` (see **Python & Tests**), so uv must be
 installed for a full `prek run`. `mkdocs-strict` builds the docs site the way the cron does
 and fails on a broken `--8<--` include or a dead internal link; its site directory is covered

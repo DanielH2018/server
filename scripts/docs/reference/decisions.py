@@ -111,6 +111,9 @@ _PLANES: list[tuple[str, str]] = [
     ("ansible/roles/k8s/", "roles/k8s"),
     ("ansible/roles/setup/", "roles/setup"),
     ("ansible/roles/containers/", "roles/containers"),
+    # A Pi service that moved into the package (H5) keeps its markers in the plane it came from,
+    # so a move PR does not shuffle the page's rows between sections.
+    ("hosts/components/pi-compose/services/", "roles/containers"),
     ("scripts/", "scripts"),
     ("docs/", "docs"),
 ]
@@ -460,7 +463,8 @@ def render_markdown(rows: list[dict[str, str]], root: Path = REPO) -> str:
             parts.append(f"    * `{row['path']}:{row['line']}` → `{pointer}`")
         parts.append("")
 
-    for _plane_prefix, plane_name in [*_PLANES, ("", "other")]:
+    # Two prefixes can share a plane name, and a plane renders once.
+    for plane_name in dict.fromkeys(name for _, name in [*_PLANES, ("", "other")]):
         plane_rows = [r for r in rows if r["plane"] == plane_name]
         if not plane_rows:
             continue

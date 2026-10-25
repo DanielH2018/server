@@ -4,8 +4,10 @@
 file whose top level is a list reaches a ``.get`` several calls later.
 """
 
+import os
 from pathlib import Path
 
+import render_guard
 from render_guard import (
     HOST_VARS,
     HOST_VARS_IN_TREE,
@@ -138,6 +140,36 @@ def test_load_yaml_returns_empty_for_a_non_mapping(tmp_path):
     path = tmp_path / "list.yml"
     path.write_text("- one\n- two\n")
     assert load_yaml(path) == {}
+
+
+def test_load_yaml_parses_an_unchanged_file_once(tmp_path):
+    # A render reads all.yml, host_vars and role defaults once per render_context call, and
+    # parsing them again each time was 8% of the renderer round trip (#5592).
+    path = tmp_path / "a.yml"
+    path.write_text(f"path: {tmp_path}\n")
+    before = render_guard._parsed_mapping.cache_info()
+    assert load_yaml(path) == load_yaml(path) == {"path": str(tmp_path)}
+    after = render_guard._parsed_mapping.cache_info()
+    assert (after.misses - before.misses, after.hits - before.hits) == (1, 1)
+
+
+def test_load_yaml_sees_an_edit_that_keeps_the_size_and_mtime(tmp_path):
+    # Tests edit fixture trees between renders, so a cache keyed on (path, mtime, size) would
+    # hand the second render the first file's values.
+    path = tmp_path / "a.yml"
+    path.write_text(f"path: {tmp_path}\nvalue: before\n")
+    stat = path.stat()
+    assert load_yaml(path)["value"] == "before"
+    path.write_text(f"path: {tmp_path}\nvalue: after_\n")
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    assert load_yaml(path)["value"] == "after_"
+
+
+def test_load_yaml_hands_each_caller_its_own_copy(tmp_path):
+    path = tmp_path / "a.yml"
+    path.write_text(f"path: {tmp_path}\nnested: {{list: [1]}}\n")
+    load_yaml(path)["nested"]["list"].append(2)
+    assert load_yaml(path)["nested"] == {"list": [1]}
 
 
 def test_host_files_skips_the_example_template(tmp_path):

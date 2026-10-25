@@ -1,0 +1,177 @@
+# The cAdvisor arms of monitor-bridge's `restarts`, `oom` and `cpu` checks, as rules. Plain YAML,
+# never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is M6's batch A2
+# (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A") on M2's recipe.
+#
+# SHADOW UNTIL M6's A2 CUTOVER-b. Kuma's `k3s Container Restarts`, `k3s Container OOM` and
+# `k3s CPU Throttling` tiles page today, so each rule carries shadow="true" and routes to the
+# blackhole receiver. The census rule, CAdvisorCoverageShortfall, is shadow for the same
+# reason: the bridge's `_cadvisor_blind` pages through the same three tiles. Cutover-b drops the
+# label from all four.
+#
+# THE SELECTOR. Every query selects `container!="", container!="POD"`, the bridge's
+# `cadvisor_sel` shape. kubernetes-cadvisor series carry no `origin` label, so a rule that
+# pinned one would read an empty vector and stay green forever (the DECIDED marker on
+# `cadvisor_sel` in monitor-bridge's files/bridge/net.py has the 2026-08-24 incident).
+#
+# THE JOIN. A per-pod alert takes its C7 `service` label from homelab:pod_service:info, in the
+# shape files/rules/k8s-workloads.yaml explains: a pod outside the mapping's domain fires with
+# service="unmapped" and is never dropped.
+#
+# `for:` IS N x 300s for a bridge streak of N cycles (CPU_CONSECUTIVE=3, CADVISOR_CONSECUTIVE=2).
+# The restart and OOM arms had no streak: the bridge paged on one sample, and their 15m and 1h
+# windows already hold them. Every range window is at least four scrape intervals, because the
+# kubernetes-cadvisor job scrapes every 1m (see its comment in prometheus.yaml.j2).
+groups:
+  - name: container-checks
+    rules:
+      # The bridge's check_restarts: more than RESTART_MAX (3) container starts within
+      # RESTART_WINDOW (15m), summed over a pod's containers. K8sContainerCrashLooping counts
+      # the kubelet's restart counter; this arm counts container_start_time_seconds changing,
+      # which also sees a container that is recreated.
+      - alert: ContainerRestartLoop
+        expr: |
+          (
+              (
+                sum by (namespace, pod) (
+                  changes(container_start_time_seconds{container!="", container!="POD"}[15m])
+                ) > 3
+              )
+            * on(namespace, pod) group_left(service)
+              homelab:pod_service:info
+          )
+          or
+          label_replace(
+              (
+                sum by (namespace, pod) (
+                  changes(container_start_time_seconds{container!="", container!="POD"}[15m])
+                ) > 3
+              )
+            unless on(namespace, pod)
+              homelab:pod_service:info,
+            "service", "unmapped", "", ""
+          )
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: Pod {{ $labels.namespace }}/{{ $labels.pod }} restarted a container more than 3 times in 15 minutes.
+          description: >-
+            {{ $labels.pod }} had {{ $value | printf "%.0f" }} container starts in the last 15
+            minutes. Read `kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }}` for the last state.
+      # The bridge's check_oom: any OOM kill within OOM_WINDOW (1h). The alert resolves one hour
+      # after the kill, as the tile did, so read the notification rather than the resolved state
+      # for the evidence.
+      - alert: ContainerOOMKilled
+        expr: |
+          (
+              (
+                sum by (namespace, pod) (
+                  increase(container_oom_events_total{container!="", container!="POD"}[1h])
+                ) > 0
+              )
+            * on(namespace, pod) group_left(service)
+              homelab:pod_service:info
+          )
+          or
+          label_replace(
+              (
+                sum by (namespace, pod) (
+                  increase(container_oom_events_total{container!="", container!="POD"}[1h])
+                ) > 0
+              )
+            unless on(namespace, pod)
+              homelab:pod_service:info,
+            "service", "unmapped", "", ""
+          )
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: A container in {{ $labels.namespace }}/{{ $labels.pod }} was OOM-killed in the last hour.
+          description: >-
+            {{ $labels.pod }} had an OOM kill within the last hour. Raise the container's memory
+            limit in its role, or find the leak.
+      # The bridge's check_cpu_throttle, with BOTH of its gates: more than CPU_THROTTLE_PCT (25%)
+      # of the pod's CFS periods throttled, and more than CPU_MIN_THROTTLED_CORES (0.05) cores
+      # lost to throttling, over CPU_WINDOW (15m). The cores floor keeps a 0.1-cpu sidecar that
+      # bursts over its period slice from paging. A container with no cpu limit gives 0/0 = NaN,
+      # which no comparison matches. `for: 15m` is CPU_CONSECUTIVE (3) x 300s.
+      - alert: ContainerCPUThrottled
+        expr: |
+          (
+              (
+                  (
+                      sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!="", container!="POD"}[15m]))
+                    /
+                      sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!="", container!="POD"}[15m]))
+                  ) > 0.25
+                and
+                  sum by (namespace, pod) (rate(container_cpu_cfs_throttled_seconds_total{container!="", container!="POD"}[15m])) > 0.05
+              )
+            * on(namespace, pod) group_left(service)
+              homelab:pod_service:info
+          )
+          or
+          label_replace(
+              (
+                  (
+                      sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!="", container!="POD"}[15m]))
+                    /
+                      sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!="", container!="POD"}[15m]))
+                  ) > 0.25
+                and
+                  sum by (namespace, pod) (rate(container_cpu_cfs_throttled_seconds_total{container!="", container!="POD"}[15m])) > 0.05
+              )
+            unless on(namespace, pod)
+              homelab:pod_service:info,
+            "service", "unmapped", "", ""
+          )
+        for: 15m
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: Pod {{ $labels.namespace }}/{{ $labels.pod }} is pinned at its CPU limit.
+          description: >-
+            {{ $labels.pod }} had {{ $value | humanizePercentage }} of its CFS periods throttled
+            over 15 minutes, for 15 minutes running. Raise the limit in its role or accept it;
+            short bursts never reach this alert.
+      # The bridge's CADVISOR_PODS_MIN census (_cadvisor_blind), one arm per check because the
+      # three vectors differ in size: the cpu arm sees only pods that carry a cpu limit. The
+      # literal 20 equals CADVISOR_PODS_MIN in monitor-bridge's env.yaml.j2, which
+      # ansible/tests/services/test_container_checks_rule_literals.py holds. `or vector(0)` is
+      # the zero-series case: a vanished kubernetes-cadvisor job leaves every count() empty, and
+      # without it the arm would be silent exactly when blind. `for: 10m` is
+      # CADVISOR_CONSECUTIVE (2) x 300s, and it is no shorter than A3's ScrapeTargetDown 10m, so
+      # a dead scrape pages its own alert first (the missing-data floor in the A1 row of M6's
+      # Phase A table). A2 adds no inhibit. The `arm` label names which vector is thin.
+      - alert: CAdvisorCoverageShortfall
+        expr: |
+          label_replace(
+            (count(sum by (namespace, pod) (changes(container_start_time_seconds{container!="", container!="POD"}[15m]))) or vector(0)) < 20,
+            "arm", "restarts", "", "")
+          or
+          label_replace(
+            (count(sum by (namespace, pod) (increase(container_oom_events_total{container!="", container!="POD"}[1h]))) or vector(0)) < 20,
+            "arm", "oom", "", "")
+          or
+          label_replace(
+            (count(
+                sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!="", container!="POD"}[15m]))
+              /
+                sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!="", container!="POD"}[15m]))
+            ) or vector(0)) < 20,
+            "arm", "cpu", "", "")
+        for: 10m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: cAdvisor covers {{ $value | printf "%.0f" }} pods for the {{ $labels.arm }} check, under the floor of 20.
+          description: >-
+            The {{ $labels.arm }} check reads a per-pod cAdvisor vector, and this one holds
+            {{ $value | printf "%.0f" }} pods where the live estate holds about 70 to 100. Empty
+            is the healthy answer for an offender filter, so a thin vector means the
+            kubernetes-cadvisor job or a selector is broken, and the restart, OOM and CPU rules
+            read green while it lasts. Read the kubernetes-cadvisor targets on Prometheus.

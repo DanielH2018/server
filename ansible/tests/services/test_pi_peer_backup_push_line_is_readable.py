@@ -46,6 +46,7 @@ HOSTNAME={POD}
 GATE_RUN={gate_run}
 curl() {{ printf '%s' {shlex.quote(reply)}; exit {curl_rc}; }}
 {_function("report")}
+{_function("export_verdict")}
 {_function("push")}
 push {status} "pulled 2 peer file(s) from daniel-pi"
 """

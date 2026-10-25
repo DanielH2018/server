@@ -4,201 +4,63 @@
 `next_action` is the decision; `ci_verdict` feeds it the gate, reducing the check-runs that
 deploy_toolbox reads through host_lib.github_get; `is_diverged` and `behind_marker` are the two watchdog signals a parked host raises; the
 `dirty_*` helpers throttle the dirty-tree page.
+
+The CI gate itself, `ci_verdict` with its `jobs_verdict` and `ci_walk_candidates`, lives in
+`hosts/lib/ci_verdict.py` since H7.2e, because the host packages' builder and
+`homelab-checkout-sync` grade the same rule. The deployer ships that file beside its own modules
+(`tasks/code.yml`), so the bare import below resolves on the host. This module re-exports the
+names until H7.19a retires the deployer, so every importer of `deploy_git` and `deploy_logic`
+keeps working.
 """
 
 from __future__ import annotations
 
-# ── CI gate ───────────────────────────────────────────────────────────────────────────────────
-# A GitHub check-run conclusion that counts as "this commit is good". `skipped` and `neutral` are
-# passes on purpose: ci.yml's renovate-config job runs unconditionally but gates its real work on a
-# per-PR step condition, so it legitimately reports a non-`success` completion.
-_CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
-# Deliberately NOT failures — these mean "no verdict for this SHA", not "this SHA is bad".
-# ci.yml sets `concurrency: cancel-in-progress` keyed on github.ref, so two pushes to master in
-# quick succession CANCEL the first run. Mapping `cancelled` to a failure would page on an
-# ordinary back-to-back push; the tip's own run is the one that supplies the verdict.
-_CI_NO_VERDICT_CONCLUSIONS = frozenset(
-    {"cancelled", "stale", "skipped_by_concurrency", None}
+from collections.abc import Callable
+
+from ci_verdict import (  # noqa: F401
+    _CI_NO_VERDICT_CONCLUSIONS,
+    _CI_PASS_CONCLUSIONS,
+    CI_GATE_NAME,
+    CI_GATE_NEEDS_JOBS,
+    CI_PROVE_JOB,
+    cancellation_suspects,
+    ci_verdict,
+    ci_walk_candidates,
+    jobs_verdict,
 )
 
-# DECIDED: the verdict readers apply the gate job's own rule to the jobs' check-runs when the gate
-# job has not concluded (#5507). The gate aggregates its `needs` in about 3 seconds but needs a
-# runner of its own: master run 39074978426 finished every real job at 22:39:45Z, and the gate then
-# sat queued past 22:51, so two landings gave up with `ci-timeout`. GitHub has no queue priority,
-# so creating the gate job earlier would not help. The gate job stays, for branch protection, and
-# a concluded gate is always believed. The rule lives in THIS module because it is the one module
-# both runtimes import: the deployer ships only its role's `files/`, so a rule under `scripts/`
-# would not exist on the host, while `scripts/deploy_tools/await_ci.py` already imports this file.
-# ENFORCED: `ansible/tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
-# to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
-# `jobs_verdict`.
-CI_GATE_NAME = "prek (lint + validate + tests + secrets)"
-# The check-run name of the `prove` job, whose `proven` output the gate reads.
-CI_PROVE_JOB = "prove the pushed tree was tested"
-# The check-run name of every other job in the gate's `needs`. GitHub names a matrix leg's
-# check-run after the leg, so each leg is listed.
-CI_GATE_NEEDS_JOBS = frozenset(
-    {
-        "hooks (lint + validate + secrets + docs)",
-        "pytest (shard 1 of 6)",
-        "pytest (shard 2 of 6)",
-        "pytest (shard 3 of 6)",
-        "pytest (shard 4 of 6)",
-        "pytest (shard 5 of 6)",
-        "pytest (shard 6 of 6)",
-        "ansible-lint",
-        "deck mod (claude plugin validate + test)",
-        "flux round trip (placeholder render against stub render)",
-        "sops-manifest-type-proof (an all-digit stringData value stays a string)",
-        "host_packages (24.04, 3.12)",
-        "host_packages (26.04, 3.14)",
-    }
-)
+# A commit's check-runs and check-suites, 100 to a page. One page hid the runs past the 100th, so
+# a failing re-run on page 2 read as a pass (#5977); promote's forge reader pages the same way.
+CHECK_PAGE_SIZE, CHECK_PAGES_MAX = 100, 20
 
 
-def _run_state(run: dict) -> str:
-    """`pass` / `skipped` / `pending` / `fail` for one check-run."""
-    if run.get("status") != "completed":
-        return "pending"
-    conclusion = run.get("conclusion")
-    if conclusion == "success":
-        return "pass"
-    if conclusion == "skipped":
-        return "skipped"
-    if conclusion in _CI_NO_VERDICT_CONCLUSIONS:
-        return "pending"
-    return "fail"
+def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:
+    """Every entry of `key` across a check-runs or check-suites listing, page after page.
 
+    `fetch_page(query)` returns the parsed body of the listing's URL with `query` appended, a
+    `?per_page=...&page=...` string this walk builds. The walk stops on a short page or once it holds the body's `total_count`. A read short of
+    `total_count` is refused rather than returned as complete. A run created between two page
+    reads can push the count past `total_count`, so only a shortfall is refused.
 
-def jobs_verdict(check_runs: list[dict]) -> str:
-    """The gate job's own pass condition, applied to the check-runs of the jobs it aggregates.
-
-    Mirrors the `run:` script of the `prek` job in ci.yml. A job passes when it succeeded. A
-    skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
-    skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
-    `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
-    run that is not a push. A cancelled or failed `prove` (a runner fault) runs every dependent
-    whatever `proven` says, so they must all pass.
-    Fail-closed: any failure is `fail`, a missing or unfinished job is
-    `pending`, and a skipped job without that proof is `pending`, so the gate job's own
-    conclusion decides it.
+    Raises:
+        ValueError: a body without a `key` list or an integer `total_count`, a short read, or
+            more than CHECK_PAGES_MAX pages. Both callers read a ValueError as `pending`.
     """
-    states: dict[str, set[str]] = {}
-    for run in check_runs:
-        name = run.get("name")
-        if name == CI_PROVE_JOB or name in CI_GATE_NEEDS_JOBS:
-            # A cancelled or failed `prove` broke on the runner, and every dependent ran (#5783).
-            unproven = name == CI_PROVE_JOB and run.get("conclusion") in (
-                "cancelled",
-                "failure",
-            )
-            states.setdefault(name, set()).add(
-                "unproven" if unproven else _run_state(run)
-            )
-    if any("fail" in s for s in states.values()):
-        return "fail"
-    prove = states.get(CI_PROVE_JOB)
-    if prove is None or "pending" in prove:
-        return "pending"
-    skipped = 0
-    for name in CI_GATE_NEEDS_JOBS:
-        job = states.get(name)
-        if job is None or "pending" in job:
-            return "pending"
-        # A draft run's skip beside the ready run's pass on the same head is a pass (#5563).
-        if "skipped" in job and "pass" not in job:
-            skipped += 1
-    if not skipped:
-        return "pass"
-    # The proven path skips EVERY dependent. A lone skip beside a success is not a state the
-    # workflow produces, so it is not read as proof.
-    if prove == {"pass"} and skipped == len(CI_GATE_NEEDS_JOBS):
-        return "pass"
-    return "pending"
-
-
-def ci_verdict(check_runs: list[dict], required: frozenset[str] | set[str]) -> str:
-    """Reduce GitHub's check-runs for ONE commit to `pass` / `pending` / `fail`.
-
-    `required` is the set of check-run NAMES that must be green — the same strings GitHub reports
-    as branch-protection contexts (`prek (lint + validate + tests + secrets)`). An empty set means
-    the gate is disarmed, which returns `pass` so a host that hasn't re-templated config.env keeps
-    behaving exactly as it does today.
-
-    A name can carry SEVERAL runs (a re-run, or the same workflow triggered by both `push` and
-    `pull_request`), so each name is reduced over all of its runs and the worst outcome wins: any
-    outright failure makes the whole verdict `fail`, and a name that is missing, still running, or
-    has only no-verdict conclusions holds the verdict at `pending`. Pending is the safe direction —
-    the caller defers the tick and retries in 30 minutes.
-
-    The gate job's own name is the exception to "missing or still running is pending": while it
-    has not concluded, `jobs_verdict` decides from the jobs it aggregates (#5507). A skipped gate
-    has not concluded either: only a draft PR's run skips it (#5563).
-    """
-    if not required:
-        return "pass"
-    states: dict[str, set[str]] = {}
-    for run in check_runs:
-        name = run.get("name")
-        if name not in required:
-            continue
-        # The gate skips only on a draft PR (#5563), and a draft run tested nothing. Its gate is
-        # left out, so a head whose only gate is a draft's reads as the jobs decide: pending.
-        if name == CI_GATE_NAME and run.get("conclusion") == "skipped":
-            continue
-        if run.get("status") != "completed":
-            state = "pending"
-        elif run.get("conclusion") in _CI_PASS_CONCLUSIONS:
-            state = "pass"
-        elif run.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS:
-            state = "pending"
-        else:
-            state = "fail"
-        states.setdefault(name, set()).add(state)
-    gate = states.get(CI_GATE_NAME, {"pending"})
-    if CI_GATE_NAME in required and "fail" not in gate and "pending" in gate:
-        states[CI_GATE_NAME] = {jobs_verdict(check_runs)}
-    if any("fail" in s for s in states.values()):
-        return "fail"
-    # A name with no runs at all is a freshly-pushed SHA whose workflow hasn't registered yet.
-    if any("pending" in states.get(name, {"pending"}) for name in required):
-        return "pending"
-    return "pass"
-
-
-def ci_walk_candidates(
-    rev_list: list[str], hold_sha: str | None, max_walk: int
-) -> list[tuple[int, str]]:
-    """The ancestors below the tip the gate may spend a CI request on, newest first.
-
-    DECIDED: the gate chooses the NEWEST GREEN ANCESTOR, the walk is bounded, and a red
-    ancestor is never chosen. `rev_list` is `git rev-list --first-parent <local>..<origin>`,
-    newest first, so every SHA in it is `--ff-only` reachable from `local` and the deployer
-    can still only fast-forward. The tip is `rev_list[0]` and is NOT offered: its verdict is
-    already in hand, and re-querying it would spend a second request on an answer the caller
-    has. `max_walk` bounds GitHub requests per tick INCLUDING that one, so a walk of 10 is
-    ten requests in the worst case and the gate's share of the 5000/hour token limit stays
-    one bounded burst per tick. `hold_sha` is dropped: a SHA a previous deploy failed on is
-    not a tree to converge on, whether it arrives as the tip or as an ancestor of one.
-    The caller stops at the first `pass`, so a `fail` ancestor is skipped and never chosen.
-
-    Args:
-        rev_list: the incoming commits, newest first, tip included.
-        hold_sha: the SHA this host refuses to redeploy, or None.
-        max_walk: most CI verdicts one tick may fetch, the tip's included. 0 disarms the
-            walk, and so does a negative value — clamped here rather than trusted, because
-            `rev_list[:-1]` is "everything but the oldest commit", the opposite of a bound.
-
-    Returns:
-        `(distance below the tip, sha)` pairs — the distance is what the journal line prints
-        as `<n> behind the tip`, and it counts positions in `rev_list` rather than positions
-        in this list, so dropping the held SHA does not renumber the rest.
-    """
-    return [
-        (distance, sha)
-        for distance, sha in enumerate(rev_list[: max(0, max_walk)])
-        if distance > 0 and sha != hold_sha
-    ]
+    found: list[dict] = []
+    for page in range(1, CHECK_PAGES_MAX + 1):
+        body = fetch_page(f"?per_page={CHECK_PAGE_SIZE}&page={page}")
+        entries = body.get(key) if isinstance(body, dict) else None
+        total = body.get("total_count") if isinstance(body, dict) else None
+        if not isinstance(entries, list):
+            raise ValueError(f"{key} page {page}: the body has no {key} list")
+        if not isinstance(total, int) or isinstance(total, bool):
+            raise ValueError(f"{key} page {page}: the body has no total_count")
+        found.extend(entries)
+        if len(entries) < CHECK_PAGE_SIZE or len(found) >= total:
+            if len(found) < total:
+                raise ValueError(f"{key}: read {len(found)} of {total}")
+            return found
+    raise ValueError(f"{key}: more than {CHECK_PAGES_MAX} pages")
 
 
 def next_action(

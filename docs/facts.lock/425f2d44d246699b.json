@@ -1,0 +1,12 @@
+{
+  "checksum": "b5f1b7f425df12860d2022d6fe787d76ae2e48fcb09a1942bfb59e88a2fe238f",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/longhorn-backup/CLAUDE.md#What it writes (the autonomous-role contract)",
+  "row": {
+    "atoms": {
+      "docs/longhorn-backup-tiering.md": "97919c5667edefab2a0860d035f5a21fe668cc90d2f5534c99a26904ee17f9f7"
+    },
+    "python": "3.14",
+    "verified_sha": "65b1917f5"
+  }
+}

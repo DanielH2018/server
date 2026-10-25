@@ -165,15 +165,16 @@ def _host_layer(inventory: Inventory, host: str | None) -> dict:
 
 
 # The host_vars `hostvars` carries for each host, each only while its value holds no Jinja.
-_HOSTVARS_KEYS = ("server_ip", "containers_list")
+_HOSTVARS_KEYS = ("server_ip", "containers_list", "compose_services")
 
 
 def _hostvars(inventory: Inventory) -> dict[str, dict]:
-    """Each host's literal ``server_ip`` and ``containers_list``, as Ansible's ``hostvars`` has them.
+    """Each host's literal ``server_ip``, ``containers_list`` and ``compose_services``, as Ansible's ``hostvars`` has them.
 
     ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way (#3719), and
     observability's ``alloy-pi`` scrape job reads the Pi's ``alloy`` port from its
-    ``containers_list`` (#3860), so a strict render needs both. A value goes in only while it
+    ``containers_list`` (#3860), so a strict render needs both. Those readers and monitor-bridge's
+    and artifacts' read the Pi's ``compose_services`` beside it (H5.1). A value goes in only while it
     holds no Jinja: here it would resolve against the rendered host's context, so the Pi's
     ``ansible_host: "{{ server_ip }}"`` would come out as daniel-box's address. daniel-box's
     own ``containers_list`` templates its entries, so it stays out. A caller needing more
@@ -205,12 +206,12 @@ def _holds_jinja(value) -> bool:
 def _resolve(raw: dict, undefined_cls=StubUndefined) -> tuple[dict, dict[str, str]]:
     """`raw` expanded against itself, and each key dropped because its expansion raised.
 
-    Whole-dict first, which is the common case and one pass. Three setup defaults need the
+    Whole-dict first, which is the common case and one pass. Two setup defaults need the
     per-key fallback, each naming a filter `resolve_vars`' light-tier environment does not
     register (its `DECIDED:` marker says why it stays light):
-    `gitops_deploy_k8s_autodeploy_denylist` and `k3s_longhorn_r2_volumes` reach this repo's
-    `k8s_autodeploy_denylist` and `tier_backup_claims` plugins, and `k3s_host_coredns_tarball`
-    reaches ansible-core's `dirname`.
+    `gitops_deploy_k8s_autodeploy_denylist` reaches this repo's `k8s_autodeploy_denylist`
+    plugin, and `k3s_host_coredns_tarball` reaches ansible-core's `dirname`. The three Longhorn
+    tier lists call repo plugins too, and `resolve_vars` registers those lazily.
 
     A dropped key renders as `STUB` through `StubUndefined` rather than as literal braces,
     which is what a guard asserting on a render needs: braces in the output are the defect

@@ -21,9 +21,10 @@ The gates, in the order the runbook gives them:
   3. Every volume is accounted for: attached or detached, and healthy (an idle volume reports
      `unknown`). A volume mid-attach, `degraded` or `faulted` before the hop cannot be told
      apart from upgrade damage after it.
-  4. The engines run on one image. `concurrent-automatic-engine-upgrade-per-node-limit` is 0,
-     so engines do not follow the manager; a previous hop's image still holding references
-     means engine lag that compounds across hops. Every engine image must be `deployed`.
+  4. The engines run on one image. `concurrent-automatic-engine-upgrade-per-node-limit` is 3
+     here (upstream ships 0), so engines follow the manager on their own; a previous hop's image
+     still holding references means engine lag that compounds across hops. Every engine image
+     must be `deployed`.
 
 Every cluster read goes through `lib.kubectl` with the cluster named `prod`. While the drill
 writes only the host directory, the stamp exists only on daniel-box, the host that runs the
@@ -67,11 +68,11 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
 )
 from lib import yaml_fast
 from lib.kubectl import DEFAULT_TOOLS, Tools, kubectl
-from lib.repo_paths import HOST_LIB_FILES, K3S_DEFAULTS, K3S_FILES
+from lib.repo_paths import HOST_LIB_FILES, K3S_DEFAULTS
 
 # The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
-sys.path.insert(0, str(K3S_FILES))
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 

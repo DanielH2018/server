@@ -1,9 +1,35 @@
 # daniel-pi's host package (H3.6). It ships reconcile, the updater's schedule and, since H3.8b,
-# the three Pi heartbeats. It ships no enable link for homelab-updater.timer: the operator
-# starts the updater by hand until H3.9b ships the link (docs/target-architecture/host/
-# h3-pi-pilot.md, *Steps, as PRs*).
+# the three Pi heartbeats. Since H3.9b it also ships the enable link for homelab-updater.timer,
+# which arms the Pi's unattended updates. The first install of that link needs one hand start of
+# homelab-updater.service (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*).
+#
+# Since H4.5 it ships the secrets unit too. The unit decrypts the two push tokens into
+# /run/credstore, and the two token heartbeats load them from there. The interim files under
+# /etc/homelab/interim/ stay until H4.6. ansible/vars/hosts/daniel-pi.sops.yaml carries every key
+# this tree names, and `host_secrets.py sync daniel-pi` rewrites it (operator-only).
+#
+# Since H5.14 it ships crowdsec's edge probe timer. D5's first crowdsec conversion installed that
+# timer through setup/k8s_host_files. The probe reads no secret, so `credentials:` is unchanged.
+#
+# Since H5.2b it ships the Pi's Compose project (the pi-compose component) with its enable link and
+# the first service, `pi-canary`. The canary reads no secret, so `credentials:` is unchanged and
+# the Pi's SOPS file needs no new key.
+#
+# Since H7.27 it ships the first three subjects of initial_setup: apt's unattended upgrades, the
+# sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup skips each on
+# this host through `initial_setup_packaged_hosts`. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, pi-heartbeats]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux]
+credentials:
+  - pi_sd_health_push_token
+  - pi_recovery_push_token
+# H3.11: the Pi is the arm64 pilot of homelab-tools, which ships sops and chezmoi under
+# /usr/lib/homelab/bin. An unversioned Depends already satisfied never upgrades the dependency,
+# so homelab-updater's steps 4 and 5 cover every installed homelab-* package.
+depends:
+  - homelab-tools
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
+enable:
+  homelab-updater.timer: timers.target

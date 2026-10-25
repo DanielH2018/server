@@ -77,7 +77,7 @@ def test_a_role_that_renders_and_skips_the_include_is_flagged(tmp_path: Path):
     (role / "tasks").mkdir()
     (role / "templates" / "deployment.yaml.j2").write_text("kind: Deployment\n")
     (role / "tasks" / "main.yml").write_text(
-        "- name: Apply\n  ansible.builtin.include_role:\n    name: k8s/cronjob-gate\n"
+        "- name: Apply\n  ansible.builtin.include_role:\n    name: k8s/image-builder\n"
     )
     assert renders_manifests(role) and not includes_shared_render(role)
     (role / "tasks" / "main.yml").write_text(

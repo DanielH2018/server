@@ -19,9 +19,10 @@ which one holds the volume it wants. Routing is per-volume, via `spec.backupTarg
 
 The R2 set (`k3s_longhorn_r2_volumes`) is `homelab/traefik-acme`,
 `homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data`.
-The k3s role derives it from the `backup_claims` of every `home-critical` entry (tier
-`home-edge` or `home-automation`) in
-`containers_list`, so a change to the set is an edit to those entries. The four volumes are
+The `longhorn-reconcile` role derives it from the `backup_claims` of every `home-critical`
+entry (tier `home-edge` or `home-automation`) in
+`containers_list`, so a change to the set is an edit to those entries. Its hourly CronJob
+sets each Volume's `spec.backupTargetName` from the set. The four volumes are
 the TLS material every route depends on, the SSO store behind every authenticated route,
 and the two home-automation stores that are slow to rebuild by hand. They are on **both**
 targets' worth of protection in the sense that matters: a B2 account-level failure (cap,
@@ -34,9 +35,23 @@ kubectl -n longhorn-system get volumes.longhorn.io \
   -o custom-columns=VOL:.metadata.name,PVC:.status.kubernetesStatus.pvcName,TARGET:.spec.backupTargetName
 ```
 
-Arming is independent per target (`k3s_longhorn_backup_armed`, `k3s_longhorn_r2_armed`),
-and step 3's cap caveat applies to B2 only — R2's free tier has no transaction cap, and its
+Arming is independent per target (`k3s_longhorn_backup_armed`, `k3s_longhorn_r2_armed`, both in
+the `longhorn-backup` role's defaults and applied by Flux), and step 3's cap caveat applies to B2 only — R2's free tier has no transaction cap, and its
 own headroom is watched by monitor-bridge's **R2 Free Tier Headroom** monitor.
+
+A disarm does not turn the backup-health monitor red. The reader takes each target's arm
+state from its live `spec.backupTargetURL`, so a target blanked by the flag reads as disarmed.
+The verdict says `DISARMED: <target> (<n> volume(s) not checked)`, which names what the disarm
+suppresses. A failed read of the target list, or a list without `default` or `r2`, reads as a
+problem and never as a disarm.
+
+A URL blanked by hand while the flag says armed does not read as a disarm. Flux's next apply of
+the `longhorn-backup` tag restores the URL, so only a target that carries
+`kustomize.toolkit.fluxcd.io/reconcile=disabled` can stay blank against git. The reader reports a
+target that carries the annotation as a problem, and the monitor stays red until step 4 of the
+BackupTarget break-glass (`docs/break-glass.md`) removes it. `probe.py health longhorn-backup`
+reads each target's `status.available`, skips a disarmed target, and fails when no target is
+named `default`.
 
 ## The off-site recovery kit
 
@@ -104,60 +119,22 @@ the per-volume map and each exclusion's rationale:
    uv, run `ansible/bootstrap.yml` on the new host, add its age pubkey to
    `ansible/.sops.yaml`, `sops updatekeys` from a host that can decrypt (or use the
    off-box recovery key if no host survives), commit, pull.
-2. **Cluster bring-up**: `uv run ansible-playbook ansible/k3s-bringup.yml`. Set
-   `k3s_longhorn_backup_armed: true` so the B2 target arms (it renders the `longhorn-b2`
-   credential Secret from `longhorn_b2_key_id`/`longhorn_b2_application_key` and points the
-   target at the bucket), and `k3s_longhorn_r2_armed: true` for the R2 target — the four
-   volumes in the table above restore from *that* one, so a B2-only bring-up leaves them
-   with nothing to restore from.
-   **Order from H1.2.** `cluster-base` (the PriorityClasses and the read-only identity) is
-   Flux-owned, and two of its objects are needed before Flux can run. Flux's controllers name
-   `homelab-critical`, and `setup/k3s`'s `kubeconfig.yml` reads the token Secret. So step 2
-   runs in the order below on a new cluster, and the root `homelab` Kustomization stays
-   suspended until the volumes are restored (step 4). Once the root runs, every Flux-owned
-   stateful tag provisions fresh empty PVCs under the backed-up names. Steps (a), (c) and (g)
-   run playbooks or patches that need `become`, so the operator runs them.
-
-    - (a) `uv run ansible-playbook ansible/k3s-bringup.yml --skip-tags kubeconfig`. It installs
-      k3s, and k3s creates its bundled CoreDNS. The play skips the token wait, which would fail
-      here.
-    - (b) **Operator-only.** Render `cluster-base` and apply it under `kustomize-controller`'s own
-      field manager, so Flux's first apply finds its own fields:
-      `uv run python scripts/renderer/homelab_render.py cluster --out <out> --role cluster-base`,
-      then
-      `sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -k <out>/cluster/cluster-base`.
-      The directory substitutes nothing, so the placeholder-mode render applies as it stands.
-    - (c) `uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig`. The token Secret
-      exists, so the bounded wait passes.
-    - (d) Run the `flux` role with `flux_sync_suspend: true`, which renders `suspend: true` on
-      the `OCIRepository` `homelab` and on the root Kustomization. Its pods admit, because (b)
-      created `homelab-critical`. Then, **operator-only**, resume the `OCIRepository` alone so the
-      children have a source:
-      `sudo k3s kubectl -n flux-system patch ocirepository homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'`.
-      Do not run the `flux` role again before (g): a run with the role's defaults resumes the
-      root before the restores.
-    - (e) **Operator-only.** Create `flux-system/sops-age` from the password manager (item 10
-      of the recovery kit in `docs/break-glass.md`).
-    - (f) **Operator-only.** Hold promotions and fix the revision. Wait until no run of the
-      `promote` workflow is queued or in progress. Read `prod`'s commit from the
-      `org.opencontainers.image.revision` key of `prod`'s manifest in GHCR. When `DEPLOY_HOLD`
-      reads `none`, set `gh variable set DEPLOY_HOLD --body dr-restore -R DanielH2018/server`.
-      A merge during the restores would otherwise promote, time out in `verify` with the root
-      suspended, and reset `prod` to `last-good`. Then render the plumbing tags at that commit
-      and apply their `flux/<tag>.yaml` with
-      `sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -f <file>`.
-      That is the root's own field manager, so the root adopts them. Wait until each reads
-      `Ready`.
-    - (g) After the restores of step 4, **operator-only**, resume the root with the same patch
-      form:
-      `sudo k3s kubectl -n flux-system patch kustomization homelab --type merge --field-manager=homelab-operator -p '{"spec":{"suspend":false}}'`.
-      Once every status on `prod`'s commit reads `success`, clear the hold with
-      `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
-
-   Before H1.2 there is no step (b): k3s bring-up applies the PriorityClasses and the identity
-   itself. Steps 3 and 4 below sit between (f) and (g). D5's flux PR replaces this block with a
-   pointer to its own bootstrap section.
-3. **Wait for the backupstore sync** — `kubectl -n longhorn-system get backuptarget`
+2. **Cluster bring-up and Flux**: follow [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in
+   `docs/flux-deploy-plane.md`. That section owns the bring-up and DR order: k3s bring-up,
+   the Flux install, the plumbing tags, steps 3 and 4 below as its steps 7 and 8, and the root
+   Kustomization last, which provisions every PVC. The Flux-owned plumbing tags install what
+   the bring-up used to: the Kustomization `metallb` installs MetalLB and its address pool,
+   `coredns` takes CoreDNS over from k3s's bundled add-on, `longhorn` installs Longhorn with
+   its Settings and the `longhorn` StorageClass, and `longhorn-backup` creates both backup
+   targets, their credential Secrets (`longhorn-b2`, `longhorn-r2`, substituted from
+   `homelab-cluster-vars`) and the RecurringJobs. The arm flags `k3s_longhorn_backup_armed`
+   and `k3s_longhorn_r2_armed` are tracked in `longhorn-backup`'s defaults. Both must be
+   `true` in the render at `prod`: the four volumes in the table above restore from the R2
+   target, so a B2-only bring-up leaves them with nothing to restore from. The bootstrap
+   section's step 1 checks them.
+3. **Wait for the backupstore sync** — `uv run python scripts/diagnostics/probe.py health longhorn-backup`
+   reports both targets available (it skips a target disarmed on purpose and fails when no
+   target is named `default`), or `kubectl -n longhorn-system get backuptarget` shows
    `AVAILABLE true`, then Backup CRs appear. **The poll interval is `0`** — polling is
    OFF (`k3s_longhorn_backupstore_poll_interval` is 0, because even a 1h interval exhausted
    B2's Class-B cap), so the sync does not happen on its
@@ -171,9 +148,11 @@ the per-volume map and each exclusion's rationale:
    `cannot find volume.cfg in backupstore` — which reads exactly like the backup is
    missing, that is, like data loss, at the worst possible moment. That is what the first
    drill hit (below). If you see it, check the caps in the B2 console **before**
-   concluding anything about the backup: stop, blank the target
-   (`k3s_longhorn_backup_armed: false` + deploy), and resume after the 00:00 UTC reset.
-4. **Restore volumes BEFORE any deploy** — deploying first would provision fresh
+   concluding anything about the backup: stop, blank the target (a
+   `k3s_longhorn_backup_armed: false` PR, or the BackupTarget break-glass in
+   `docs/break-glass.md` when the PR cannot reach the cluster), and resume after the 00:00 UTC
+   reset.
+4. **Restore volumes BEFORE the root exists** — the root Kustomization would provision fresh
    empty PVCs under the same names. Before the first restore, run the gates: both targets
    armed and available, a `BackupVolume` on each (the sync happened), and no backed-up PVC
    name already bound to an empty volume. They run as one script, in order, and the exit code
@@ -212,8 +191,9 @@ the per-volume map and each exclusion's rationale:
 
    Use **Create PV/PVC** only for a volume whose objects the snapshot lacks. No drill has run
    this etcd-first order; the steps above are inferred from what the snapshot holds.
-5. **Deploy**: `./scripts/deploy.sh`. Workloads bind the existing
-   PVCs; no-backup volumes provision empty and rebuild per the list above.
+5. **Apply the root**: return to step 9 of [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster). The root
+   applies every Kustomization at `prod`. Workloads bind the existing PVCs; no-backup volumes
+   provision empty and rebuild per the list above.
 6. **Verify**: `uv run python scripts/diagnostics/probe.py targets` and `health <svc>` for the
    restored tier; `probe.py ha verify-automations` for HA; monitor-bridge's board goes
    green as services come up. Restore the Kuma admin + check tiles last (its DB was
@@ -370,8 +350,11 @@ data, and the cap surfaced as `cannot find volume.cfg in backupstore` (step 3). 
 against the volume's default target.
 
 **Scheduled since 2026-08-19; nightly and rotating since 2026-08-20.**
-`/usr/local/bin/longhorn-restore-drill.sh` (k3s role, `longhorn-restore-drill.sh.j2`) runs as root
-at 04:10 every night. Each run restores the newest backup of ONE volume into a throwaway volume,
+The CronJob `longhorn-restore-drill` in `homelab` (`ansible/roles/k8s/longhorn-restore-drill/`,
+script `longhorn-restore-drill.sh.j2`) is scheduled for 04:10 UTC every night, running since
+H2.3e, in place of the root cron and `/usr/local/bin/longhorn-restore-drill.sh` that ran it until
+H2.3d. Each run restores the
+newest backup of ONE volume into a throwaway volume,
 checks the restored filesystem has files and clears a byte floor, then tears everything down. It
 resolves the backup, volume and size from the cluster — the hand-run version pinned all three, and
 a pinned backup ID dies the day retention deletes it.
@@ -380,8 +363,9 @@ a pinned backup ID dies the day retention deletes it.
 `recurring-job-group.longhorn.io/*` label other than `no-backup` — the same selector check 4 uses,
 and the only one that cannot drift from what the RecurringJobs really select. Each night the
 least-recently-*attempted* candidate is drilled, so a full cycle takes one night per candidate.
-The drill writes the candidates to `/var/lib/longhorn-restore-drill/candidates`, one per line, so
-`wc -l` on that file gives the cycle length in nights. Ordering by attempt rather than by success
+The drill writes the candidates to the `candidates` key of the ConfigMap
+`longhorn-restore-drill-stamps`, one per line, so counting that key's lines gives the cycle length
+in nights. Ordering by attempt rather than by success
 is deliberate: a volume that fails every drill would otherwise stay the least-recently succeeded
 forever, be picked every night, and starve every other candidate.
 
@@ -396,17 +380,17 @@ month, zero egress), and the 16 MiB block change of 2026-08-19 cut B2's per-rest
 — a whole cycle now costs less than one day's measured baseline Class B spend.
 
 **Checks 7 and 8 of the backup heartbeat watch it**, and they answer different questions. Check 7
-is liveness: the drill writes `/var/lib/longhorn-restore-drill/last-success` only after its data
+is liveness: the drill writes the ConfigMap's `last-success` key only after its data
 assertions pass, and check 7 pages when that stamp is missing, unparseable, or older than
 `k3s_longhorn_restore_drill_max_age_days` (3 — two tolerated bad nights). It fails closed: a drill
 that has never run is reported, not skipped.
 
 Check 8 is coverage, and rotation is what made it necessary — a green check 7 now means one
-candidate volume restored. It reads the candidate list the drill publishes to
-`/var/lib/longhorn-restore-drill/candidates` and pages, by name, for any candidate whose
-`success/<pvc>` stamp is missing or older than one full cycle plus
+candidate volume restored. It reads the candidate list the drill publishes to the
+`candidates` key and pages, by name, for any candidate whose
+`success.<pvc>` key is missing or older than one full cycle plus
 `k3s_longhorn_restore_drill_coverage_slack_days`. The grace is measured **per volume**, from the
-`seen/<pvc>` marker the drill writes the first time that volume appears as a candidate — so a
+`seen.<pvc>` key the drill writes the first time that volume appears as a candidate — so a
 fresh deploy does not page for volumes whose turn has not come, and neither does a volume that
 joins the backup set later. A rotation-wide start date would flag every such volume the day it
 joined.
@@ -414,24 +398,28 @@ joined.
 The candidate list is written after the drill's `actualSize` cap
 (`k3s_longhorn_restore_drill_max_actual_bytes`), so a volume that grows past the cap would leave
 the rotation and check 8 together. The drill therefore also writes
-`/var/lib/longhorn-restore-drill/excluded_oversize`, one `<pvc>\t<actualSize>` line per backed-up
+the `excluded_oversize` key, one `<pvc>\t<actualSize>` line per backed-up
 volume the cap keeps out, and the heartbeat pages naming each one. The page clears on the next
 drill run after the cap is raised, the volume's snapshots are pruned and trimmed, or the volume
 moves to `no-backup`.
 
 The drill also restores into a PVC in the source volume's namespace, so it skips a backed-up
 volume whose `status.kubernetesStatus.pvcName` is empty, such as a released PVC whose volume is
-still in a backup group. It writes each one to `/var/lib/longhorn-restore-drill/excluded_nopvc`,
+still in a backup group. It writes each one to the `excluded_nopvc` key,
 one volume name per line, and the heartbeat pages naming it. A volume that is both over the cap
 and unbound is listed only in `excluded_oversize`. The page clears on the next drill run after a
 PVC is bound to the volume again, the volume is deleted, or it moves to `no-backup`.
 
-**The stamps have a second store, read first.** Checks 7 and 8, gate 2 of
-`docs/longhorn-upgrade.md` and the drill's row of `docs/reference/state.md` each read the
-ConfigMap `longhorn-restore-drill-stamps` in `k3s_longhorn_restore_drill_namespace` (`homelab`)
-before the directory. Each ConfigMap key stands for one file:
+**The drill's stamps live in a ConfigMap.** The drill, checks 7 and 8, gate 2 of
+`docs/longhorn-upgrade.md` and the drill's row of `docs/reference/state.md` each use the
+ConfigMap `longhorn-restore-drill-stamps` in `k3s_longhorn_restore_drill_namespace` (`homelab`).
+The drill reads it once per run with `get` and writes each stamp with a merge `patch`. A missing
+key is epoch 0. A failed patch fails the run, so a run that cannot stamp restores nothing, and a
+ConfigMap that does not exist fails the run with `stamp ConfigMap absent`. The H2.3c run that found
+no `imported-at` key converted the old host directory into keys in one patch, and the CronJob
+carries no import arm. Each ConfigMap key replaced one file of that directory:
 
-| ConfigMap key | File under `/var/lib/longhorn-restore-drill/` | Value |
+| ConfigMap key | File under `/var/lib/longhorn-restore-drill/` (read by the fallback only) | Value |
 |---|---|---|
 | `last-success` | `last-success` | the file's content, an epoch |
 | `candidates` | `candidates` | the file's content, one PVC per line |
@@ -447,8 +435,9 @@ gate exits 69, and the state page marks the row unreadable. Two rules apply only
 ConfigMap. A candidate with no `seen.<pvc>` key takes the ConfigMap's `creationTimestamp` as its
 seen time, so check 8 flags it once the coverage window passes instead of skipping it. Check 8
 also pages at once, in either store, when the candidate list is non-empty and no candidate has a
-seen entry, because that means the drill's state did not persist. Nothing writes the ConfigMap
-until the drill moves to it (H2.3c of `docs/target-architecture/host/h2-shrink-host-plane.md`).
+seen entry, because that means the drill's state did not persist. The directory fallback goes
+when the readers drop their file arm (H2.3f of
+`docs/target-architecture/host/h2-shrink-host-plane.md`).
 
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is

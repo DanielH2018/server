@@ -164,6 +164,9 @@ reader that D6 does not delete.
       `gitops_ledger.py` to the deploy_ui and renovate_agent installs.
     - `K8S_ROLES_IMPORTING_SETUP_FILES` and `k8s_lookup_readers` are k8s-only. Their
       readers are `deploy_changes.py`, `deploy_phases.py` and `scripts/deploy_tools/reach.py`.
+    - `K8S_BUILD_CONTEXT_FILES` is k8s-only too (#4840). Its readers are `deploy_changes.py`
+      and `reach.py` through `k8s_roles_holding`, and the release census's
+      `releases_consumers.py:role_paths_for`.
     - `k8s_lookup_map` stays. `scripts/secrets_mgmt/consumers.py:_census_corpus` calls it for
       the secret-consumer census, which Flux-rendered roles still need.
 - **Other deployer files that shrink.**
@@ -1349,6 +1352,7 @@ than writing a second.
                                                       k8s role path
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py
                                                     - K8S_ROLES_IMPORTING_SETUP_FILES,
+                                                      K8S_BUILD_CONTEXT_FILES,
                                                       k8s_lookup_readers
   ansible/roles/setup/gitops_deploy/files/{gitops_markers,gitops_ledger}.py
                                                     - the k8s ledger classes

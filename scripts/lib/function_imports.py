@@ -76,12 +76,8 @@ EXEMPTIONS: dict[tuple[str, str, str], str] = {
 # Function-local imports of a module that lives outside the repo, from a directory the function
 # itself puts on `sys.path` just before the import. No repo-side loading can resolve one, so
 # these are exempt in BOTH modes, with the same stale and unused reporting as `EXEMPTIONS`.
-OFF_TREE_IMPORTS: dict[tuple[str, str, str], str] = {
-    ("scripts/deploy_tools/deploy_lib/detach_notify.py", "notify", "host_lib"): (
-        "host_lib.py is the gitops_deploy role's file at /opt/gitops-deploy; notify() inserts "
-        "that directory first and returns before the import when the file is absent"
-    ),
-}
+# Empty since H7.2e, when `host_lib.py` moved into `hosts/lib/`, which the checkout can load.
+OFF_TREE_IMPORTS: dict[tuple[str, str, str], str] = {}
 
 
 @dataclass(frozen=True)

@@ -18,16 +18,19 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | Phase | Reads | Writes |
 |---|---|---|
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
-| `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, the PR head's and merge base's `owner`s (the handback refusal) | -- |
-| `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
+| `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the PR head's and merge base's `owner`s (the handback refusal) | -- |
+| `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.merged_at`, `ledger.t_merged`, `ledger.merge_sha` |
 | `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `classification` (frozen: the plane note, the self-applied half and their inputs), `resolved_tags`, `needs_diff`, `k8s_only` |
-| `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff` | -- |
+| `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
+| `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff`, `host_candidate` | -- |
 | `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
+| `host_wait.host_targets` (in step 3, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
 | `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
 | `classify.narrow_plane` (after step 4's tick, or in its place on the fast path) | `classification`, `merge_sha`, the `receipts` marker | `narrowed_plane` |
-| `deploy.deploy_phase` | `resolved_tags`, `k8s_only`, `needs_diff`, `classification`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `k8s_only`, `owned_tags`, `suspended_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
-| `health_verdict.health` | `resolved_tags`, `owned_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
+| `deploy.deploy_phase` | `resolved_tags`, `k8s_only`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `k8s_only`, `owned_tags`, `suspended_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
+| `host_wait.wait_for_hosts` (step 6) | `host_targets`, `merge_sha`, `ledger.merged_at`, `opts.pr`, `opts.primary` | -- |
+| `health_verdict.health` | `resolved_tags`, `host_targets`, `owned_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
 
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
 """
@@ -38,7 +41,15 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib import ci, classify, deploy, health_verdict, merge, tick
+from deploy_tools.land_lib import (
+    ci,
+    classify,
+    deploy,
+    health_verdict,
+    host_wait,
+    merge,
+    tick,
+)
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 
@@ -47,13 +58,36 @@ def _step_resolve(ln: Landing) -> None:
     """Step 1 and 1½: the merge commit, then what this PR reaches."""
     classify.resolve(ln)
     classify.classify(ln)
+    ln.host_candidate = classify.reaches_host_inputs(ln)
     classify.shortcut_if_nothing(ln)
 
 
 def _step_ci(ln: Landing) -> None:
-    """Wait for master CI on the merge commit, and stamp when it answered."""
+    """Wait for master CI on the merge commit, stamp when it answered, then name its hosts.
+
+    The host render waits for a green CI because it runs the merge commit's code, which the
+    resolve step must not (`classify.reaches_host_inputs`). The first parent is an earlier
+    master commit, so CI has passed on the code that renders the parent too.
+    """
     ci.wait_master_ci(ln, ln.merge_sha)
     ln.ledger.t_ci = ln.tools.clock()
+    if not ln.host_candidate:
+        return
+    render = ln.tools.host_targets or host_wait.host_targets
+    ln.host_targets = render(ln.opts.primary, ln.merge_sha)
+    if not ln.host_targets:
+        # The paths only looked like host inputs. Decide again, now that no host is a reason.
+        ln.host_candidate = False
+        classify.shortcut_if_nothing(ln)
+
+
+def _step_hosts(ln: Landing) -> None:
+    """Wait for every host this merge's package changes to apply it, or end the landing."""
+    if not ln.host_targets:
+        say("no host package changed; nothing to wait for")
+        return
+    wait = ln.tools.wait_for_hosts or host_wait.wait_for_hosts
+    wait(ln, ln.host_targets, ln.merge_sha, ln.ledger.merged_at)
 
 
 def _step_tick(ln: Landing) -> None:
@@ -76,7 +110,7 @@ def _step_tick(ln: Landing) -> None:
     # A landing the predicate catches awaits the tick here exactly as it did before the fast
     # path existed, and step 5 deploys from the primary checkout with no `--at`.
     #
-    # Because for that half the TICK is the apply, and step 6 grades it from the deployer's own
+    # Because for that half the TICK is the apply, and step 7 grades it from the deployer's own
     # markers (`tick_state`, `tick_applied`). Kicking a tick and reading those markers seconds
     # later grades a tick that has not run: no receipt covers the merge commit yet, so
     # `tick_applied` is False and the landing prints `needs-manual-apply` with
@@ -84,7 +118,7 @@ def _step_tick(ln: Landing) -> None:
     # a concurrent tick has left `behind_since` set. Neither is recoverable by re-reading: the
     # verdict has already been printed and the exit code returned.
     #
-    # The alternative -- keep the fast path and await the kicked tick inside step 6 -- buys the
+    # The alternative -- keep the fast path and await the kicked tick inside step 7 -- buys the
     # deploy's seconds back and costs the landing a second place that knows about tick timing,
     # in the phase whose whole job is to report. The latency this gives up is bounded to the
     # PRs that touch a service role and a setup role together.
@@ -105,7 +139,7 @@ def _step_tick(ln: Landing) -> None:
 
 
 # The numbered steps, in order. The label is formatted with `pr=`; the number and the
-# denominator both come from this list, so `== 3/6` cannot outlive a seventh step.
+# denominator both come from this list, so `== 3/7` cannot outlive a eighth step.
 # The callables are bound HERE at import: a test that monkeypatches `ci.preflight` on its
 # module does not reach the pipeline. Patch an entry of `_STEPS` instead.
 _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
@@ -114,6 +148,7 @@ _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
     ("waiting for master CI", _step_ci),
     ("GitOps tick (fetch, ff-merge, deploy what is eligible)", _step_tick),
     ("deploying what the tick deferred", deploy.deploy_phase),
+    ("waiting for hosts to apply", _step_hosts),
     ("health verdict", health_verdict.health),
 )
 

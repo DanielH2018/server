@@ -28,6 +28,7 @@ from _ruleset_drift import (
     fence_ruleset,
     ruleset_body,
     run,
+    textfile_series,
 )
 
 
@@ -42,6 +43,26 @@ def test_matching_ruleset_is_clean(tmp_path):
     assert (
         f"ruleset {FENCE_RULESET_ID} restricts every branch except "
         f"{', '.join(FENCE_EXCLUDE)}" in msg
+    )
+
+
+def test_a_clean_run_writes_an_up_textfile_with_the_tile_deadline(tmp_path):
+    """M6 batch B3: the verdict reaches the textfile collector beside the Kuma push."""
+    rc, status, _ = run(tmp_path, curl_body=ruleset_body(DECLARED))
+    series = textfile_series(tmp_path, "github-ruleset-drift")
+    assert (rc, status) == (0, "up")
+    assert series["homelab_check_success"] == "1"
+    assert series["homelab_check_deadline_seconds"] == "90000"
+    assert int(series["homelab_check_last_run_timestamp_seconds"]) > 0
+
+
+def test_a_drifted_ruleset_writes_a_down_textfile(tmp_path):
+    """The failing half: the same run with a context removed writes success 0."""
+    rc, status, _ = run(tmp_path, curl_body=ruleset_body(DECLARED[:-1]))
+    assert (rc, status) == (1, "down")
+    assert (
+        textfile_series(tmp_path, "github-ruleset-drift")["homelab_check_success"]
+        == "0"
     )
 
 

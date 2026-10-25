@@ -16,9 +16,8 @@ The census joins two sides per host:
   the role's context for that host (`lib.render_context`), its loop items included when the
   loop is a literal list or one variable. A value that still does not render is skipped: one
   reading a registered result, a `common` task file's caller `vars:` (`alert_unit.yml`,
-  `kuma_check_timer.yml`), or a loop over a registered list. On 2026-10-13 that skipped 147
-  of 1353 `dest:` and `path:` fields across the three hosts; most name a home directory or
-  `/etc/systemd/system/`, where no package installs.
+  `kuma_check_timer.yml`), or a loop over a registered list. Most skipped fields name a home
+  directory or `/etc/systemd/system/`, where no package installs.
 - **Packages.** Every host package under `hosts/<host>/` joins that host, and every shared
   package under `hosts/packages/` joins every host. Each contributes the paths it installs,
   and a host package also contributes its legacy entries, rendered as its manifest lists them.
@@ -27,14 +26,20 @@ The census joins two sides per host:
   `cron_file` as `/etc/cron.d/<name>`, a `unit` as `/etc/systemd/system/<unit>`, the file
   `homelab-reconcile:retire_unit` removes, and a `cron` as its `(user, name)`.
 
-A role reaches the hosts `land_reach.setup_role_hosts` names. A role that function cannot
-place, such as `common`, whose task files other roles import, reaches every host.
+A role reaches the hosts `land_reach.setup_role_hosts` names, less those its leading
+`meta: end_role` guard ends it on. A task, or its nearest enclosing block, naming a
+`delegate_to:` host writes on that host, not on the host its playbook entry runs on (H5.14). A task, its block or its import guarded by
+`<role>_packaged_hosts` writes nothing on a host the map lists
+(`setup_gates.packaged_guard_hosts`; `test_host_package_ufw_two_writers.py` holds the proof). A role that function cannot place, such as `common`,
+whose task files other roles import, reaches every host.
 
 Run: uv run pytest ansible/tests/setup/test_host_package_two_writers.py
 """
 
+import os
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from functools import cache
 from pathlib import Path, PurePosixPath
 
@@ -42,8 +47,9 @@ import jinja2
 import pytest
 from _helpers import load_tasks, walk_tasks
 from _role_census import task_files_by_role
+from _task_guards import delegated_tasks
 from deploy_tools.land_lib.land_reach import setup_role_hosts
-from deploy_tools.setup_lib.setup_gates import HOSTS
+from deploy_tools.setup_lib.setup_gates import HOSTS, packaged_guard_hosts
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 from lib.render_context import render_context
@@ -89,8 +95,11 @@ HEARTBEAT_CRONS = frozenset(
         "Pi container-recovery heartbeat",
     }
 )
-# The package-side members: the shared package, and the Pi's host package from PR H3.6.
-NAMED_PACKAGES = frozenset({"homelab-updater", "homelab-daniel-pi"})
+# The package-side members: the shared packages, and the Pi's host package from PR H3.6.
+NAMED_PACKAGES = frozenset({"homelab-updater", "homelab-daniel-pi", "homelab-tools"})
+# The paths homelab-tools installs (H3.11). They are not files in its render, so the census
+# reads them through `Package.installed_paths`, and a role writing one meets the join.
+TOOL_PATHS = frozenset({"/usr/lib/homelab/bin/sops", "/usr/lib/homelab/bin/chezmoi"})
 
 _ONE_VARIABLE = re.compile(r"^\{\{\s*([A-Za-z_][\w.]*)\s*\}\}$")
 
@@ -164,18 +173,24 @@ def task_writes(task: dict, ctx: dict) -> set[Key]:
 
 
 def ansible_writes(
-    roles: list[tuple[Path, Path]], hosts: tuple[str, ...]
+    roles: list[tuple[Path, Path]],
+    hosts: tuple[str, ...],
+    reach_of: Callable[[str], frozenset[str]] = setup_role_hosts,
 ) -> dict[str, dict[Key, set[str]]]:
     """Per host, each write the setup roles make there, mapped to the task files making it."""
     by_host: dict[str, dict[Key, set[str]]] = defaultdict(lambda: defaultdict(set))
     for role, task_file in roles:
-        reach = setup_role_hosts(role.name) or frozenset(hosts)
-        tasks = list(walk_tasks(load_tasks(task_file)))
+        reach = reach_of(role.name) or frozenset(hosts)
+        tasks = list(delegated_tasks(role, task_file))
         for host in sorted(reach & set(hosts)):
             ctx = _role_context(role, host)
-            for task in tasks:
-                for key in task_writes(task, ctx):
-                    by_host[host][key].add(str(task_file.relative_to(ANSIBLE.parent)))
+            for task, whens, delegate in tasks:
+                if packaged_guard_hosts(whens, [host], role):
+                    continue  # a `<role>_packaged_hosts` guard skips the task on this host
+                target = _render(delegate, ctx) if delegate else host
+                target = target if target in hosts else host  # localhost stays put
+                for key in task_writes(task, _role_context(role, target)):
+                    by_host[target][key].add(os.path.relpath(task_file, ANSIBLE.parent))
     return by_host
 
 
@@ -208,7 +223,7 @@ def package_writes(
         if (hosts_root / host / "package.yml").is_file():
             packages.append(host_mode.render_host(host, hosts_root=hosts_root))
         for package in packages:
-            for dst in package.files:
+            for dst in package.installed_paths():
                 by_host[host][("path", dst)].add(package.name)
             for entry in package.legacy:
                 by_host[host][legacy_key(entry)].add(f"{package.name} (legacy)")
@@ -250,6 +265,12 @@ def test_the_package_side_finds_the_retired_heartbeat_crons():
     _, packages = _tree()
     names = {key[2] for key in packages["daniel-pi"] if key[0] == "cron"}
     assert HEARTBEAT_CRONS <= names
+
+
+def test_the_package_side_finds_the_tools_homelab_tools_installs():
+    _, packages = _tree()
+    shipped = {key[1] for key in packages["daniel-pi"] if key[0] == "path"}
+    assert TOOL_PATHS <= shipped
 
 
 def test_the_package_side_finds_its_named_packages():
@@ -302,6 +323,32 @@ def test_a_role_still_writing_a_packaged_path_is_flagged(tmp_path):
     assert found == [
         f"daniel-pi: path {SD_HEALTH} is written by ['optimize_pi'] "
         "and shipped by ['homelab-daniel-pi']"
+    ]
+
+
+def test_a_role_writing_a_path_homelab_tools_installs_is_flagged(tmp_path):
+    # The tools are pins in the render, not files, so a census over `package.files` alone
+    # would miss this write.
+    task = (
+        "- name: Install sops by hand\n"
+        "  ansible.builtin.get_url:\n"
+        "    url: https://example.invalid/sops\n"
+        "    dest: /usr/lib/homelab/bin/sops\n"
+    )
+    ansible, _ = _fixture(tmp_path, task)
+    tools = tmp_path / "hosts" / "packages" / "homelab-tools"
+    tools.mkdir(parents=True)
+    pin = (
+        "{version: v1.0.0, sha256: '%s', url: 'https://example.invalid/{version}'}"
+        % ("a" * 64)
+    )
+    (tools / "package.yml").write_text(
+        f"tools:\n  sops: {{amd64: {pin}, arm64: {pin}}}\n"
+    )
+    packages = package_writes(tmp_path / "hosts", ("daniel-pi",))
+    assert collisions(ansible, packages) == [
+        "daniel-pi: path /usr/lib/homelab/bin/sops is written by ['optimize_pi'] "
+        "and shipped by ['homelab-tools']"
     ]
 
 
@@ -414,3 +461,40 @@ def test_a_cron_contributes_its_user_and_name_and_its_cron_file():
         ("cron", ctx["sys_user"], "Pi SD-card health heartbeat"),
         ("path", "/etc/cron.d/pi-health"),
     }
+
+
+END_ROLE = "- ansible.builtin.meta: end_role\n  when: inventory_hostname == ups_host\n"
+COPY = "- ansible.builtin.copy:\n    dest: /etc/demo.conf\n    content: x\n"
+
+
+@pytest.mark.parametrize(
+    ("tasks", "flagged"),
+    [
+        pytest.param(END_ROLE + COPY, [], id="leading-guard"),
+        pytest.param(COPY + END_ROLE, ["daniel-server"], id="guard-not-leading"),
+    ],
+)
+def test_a_role_that_ends_on_the_package_host_collides_with_nothing(
+    tmp_path, tasks, flagged
+):
+    roles = tmp_path / "roles"
+    (roles / "demo" / "tasks").mkdir(parents=True)
+    (task_file := roles / "demo" / "tasks" / "main.yml").write_text(tasks)
+    (playbook := tmp_path / "play.yml").write_text("- hosts: x\n  roles: [demo]\n")
+    (all_vars := tmp_path / "all.yml").write_text("ups_host: daniel-server\n")
+    (host_vars := tmp_path / "host_vars").mkdir()
+    server = tmp_path / "hosts" / "daniel-server"
+    (tmp_path / "hosts" / "packages").mkdir(parents=True)
+    server.mkdir()
+    (server / "demo.conf").write_text("x\n")
+    (server / "package.yml").write_text(
+        "files:\n  - {src: demo.conf, dst: /etc/demo.conf, mode: '0644'}\n"
+    )
+
+    def reach_of(name: str) -> frozenset[str]:
+        return setup_role_hosts(name, playbook, all_vars, host_vars, roles)
+
+    ansible = ansible_writes([(roles / "demo", task_file)], HOSTS, reach_of)
+    assert ("path", "/etc/demo.conf") in ansible["daniel-box"]
+    found = collisions(ansible, package_writes(tmp_path / "hosts", HOSTS))
+    assert [line.split(":")[0] for line in found] == flagged

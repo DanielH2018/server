@@ -30,21 +30,24 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill.py
 """
 
 import re
-import sys
 from pathlib import Path
 
 from _helpers import load_yaml
+from _k8s_render import render_role_template
+from _restore_drill import DRILL_DEFAULTS, DRILL_TEMPLATE
 from _shell_render import rendered_shell_text
-from lib.repo_paths import K3S_DEFAULTS, K3S_FILES, K3S_ROLE
+from lib import yaml_fast
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
 
-DRILL = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
+DRILL = DRILL_TEMPLATE
 CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 
-sys.path.insert(0, str(K3S_FILES))
 from longhorn_lib import longhorn_backup_health_logic as logic  # noqa: E402
 
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
+CRONJOB = ("longhorn-restore-drill", "cronjob.yaml.j2")
+RBAC = ("longhorn-restore-drill", "rbac.yaml.j2")
 
 
 # The drill as the host RUNS it, minus the comments that discuss the rejected idioms on purpose:
@@ -89,7 +92,7 @@ def test_drill_rotates_over_the_declared_backup_set() -> None:
     PVC's storageClassName is immutable and still reads `longhorn` on volumes dropped from the
     backup set on 2026-08-08, so filtering by class would drill volumes nothing backs up.
     """
-    defaults = load_yaml(K3S_DEFAULTS)
+    defaults = load_yaml(DRILL_DEFAULTS)
     assert defaults["k3s_longhorn_restore_drill_pvc"] == "", (
         "the drill is pinned to one volume — rotation is disabled and 24 volumes go unproven"
     )
@@ -112,15 +115,15 @@ def test_rotation_selects_by_attempt_not_by_success() -> None:
     loss of coverage. Stamping the attempt before the restore is what bounds a failing volume to
     one slot per cycle.
     """
-    assert 'at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}"' in CODE, (
+    assert 'at=$(stamp_epoch "attempts.${pvc}")' in CODE, (
         "rotation must order candidates by their attempt stamp"
     )
-    attempt_at = CODE.index('touch "${ATTEMPT_DIR}/${PVC}"')
+    attempt_at = CODE.index('"attempts.${PVC}" "$ATTEMPT_AT"')
     assert attempt_at < CODE.index("$KUBECTL apply -f"), (
         "the attempt stamp must be written BEFORE the restore, or a failing volume starves "
         "the rotation"
     )
-    assert CODE.index('>"${SUCCESS_DIR}/${PVC}"') > CODE.index(
+    assert CODE.index('"success.${PVC}" "$PASSED_AT"') > CODE.index(
         '"$BYTES" -ge "$MIN_BYTES"'
     ), "the per-volume success stamp must be written only after the assertions pass"
 
@@ -139,11 +142,8 @@ def test_drill_carries_the_source_block_size() -> None:
 
 def test_drill_publishes_its_candidate_list() -> None:
     """Check 8 has no cluster credential worth the name, and a second definition would drift."""
-    assert 'cut -f1 >"$CANDIDATES"' in CODE, (
+    assert 'stamp_set candidates "$CANDIDATE_LIST"' in CODE, (
         "the drill must publish the eligible set for the heartbeat's coverage check"
-    )
-    assert 'chmod 0644 "$CANDIDATES"' in CODE, (
-        "the heartbeat runs as a different user and must be able to read it"
     )
 
 
@@ -170,10 +170,10 @@ def test_drill_tears_down_on_every_exit_path() -> None:
 
 def test_drill_stamps_only_after_the_assertions_pass() -> None:
     """The stamp IS the proof check 7 reads. Stamping early makes a broken drill read healthy."""
-    assert CODE.count('date +%s >"$STAMP"') == 1, (
+    assert CODE.count('stamp_set last-success "$PASSED_AT"') == 1, (
         "the stamp must be written in exactly one place"
     )
-    stamp_at = CODE.index('date +%s >"$STAMP"')
+    stamp_at = CODE.index('stamp_set last-success "$PASSED_AT"')
     last_assert = max(CODE.index('"$FILES" -gt 0'), CODE.index('"$BYTES" -ge'))
     assert stamp_at > last_assert, (
         "the stamp is written before the data assertions, so a restored-but-empty volume "
@@ -221,51 +221,16 @@ def test_drill_reports_a_failed_probe_pod_distinctly() -> None:
     )
 
 
-def test_stamp_is_readable_by_the_user_that_checks_it() -> None:
-    """Writer and reader are different users, and root's umask here does not accommodate that.
+def test_the_drill_writes_no_host_file_for_the_checker_to_read() -> None:
+    """Writer and reader are different users, and a host file made them disagree once.
 
-    The drill runs as root; the heartbeat runs as sys_user under its own cron. Root's umask on
-    daniel-box is 027, so plain `mkdir -p` produced drwxr-x--- root:root and the stamp was
-    unreadable by the checker. Check 7 fails closed on an unreadable stamp, so the first GREEN
-    drill would have paged "no restore drill has ever succeeded" — permanently, and precisely
-    backwards. Observed 2026-08-19 on the first passing run.
+    The drill runs as root; the heartbeat runs as sys_user. Root's umask on daniel-box is 027,
+    so the old stamp directory was unreadable by the checker, and the first GREEN drill paged
+    "no restore drill has ever succeeded" (2026-08-19). The state is a ConfigMap the checker
+    reads through its own kubeconfig, so no file mode is left to get wrong.
     """
-    assert 'chmod 0755 "$STAMP_DIR"' in CODE, (
-        "the stamp directory mode must be explicit; root's umask makes it unreadable otherwise"
-    )
-    assert 'chmod 0644 "$STAMP"' in CODE, (
-        "the stamp file must be readable by the checker"
-    )
-
-
-def test_drill_and_heartbeat_deploy_under_a_shared_tag() -> None:
-    """Check 7 and the drill are one feature; shipping either alone pages for nothing.
-
-    Deploying `restore-drill` alone installs a drill nothing watches. Deploying `backup-health`
-    alone installs a check whose stamp no drill writes, which then pages forever. The two
-    scripts are rendered by the SAME looped task, tagged `backup-health`, so the pair can't be
-    split by a future edit the way separate tasks could be.
-    """
-    drill_task = _deploy_task_for("longhorn-restore-drill.sh.j2")
-    heartbeat_task = _deploy_task_for("longhorn-backup-health.sh.j2")
-    assert drill_task is not None and heartbeat_task is not None
-    # By name, not identity: every helper re-parses the YAML, so the same task is a different
-    # dict object on each call.
-    assert drill_task == heartbeat_task, (
-        "the restore drill and the backup-plane heartbeat are no longer deployed by the same "
-        "task, so a future edit could ship one without the other"
-    )
-    assert "backup-health" in drill_task.get("tags", []), (
-        "the shared deploy task must carry the backup-health tag so the drill and the check "
-        "that reads its stamp are never deployed apart"
-    )
-    schedule = next(
-        (t for t in _tasks() if t.get("name") == "Schedule the Longhorn restore drill"),
-        None,
-    )
-    assert schedule is not None and "backup-health" in schedule.get("tags", []), (
-        "Schedule the Longhorn restore drill must carry the backup-health tag so the drill and "
-        "the check that reads its stamp are never deployed apart"
+    assert "touch " not in CODE and "mkdir " not in CODE and "chmod " not in CODE, (
+        "the drill is writing a host file again, and the checker's user may not be able to read it"
     )
 
 
@@ -391,33 +356,53 @@ def _deploy_task_for(src_basename: str):
     return None
 
 
-def test_drill_is_scheduled_as_root() -> None:
+def test_drill_runs_as_its_own_serviceaccount_with_write_grants() -> None:
     """It creates and deletes cluster objects; the read-only SA is Forbidden on all of it."""
-    cron = next(
-        (t for t in _tasks() if t.get("name") == "Schedule the Longhorn restore drill"),
-        None,
-    )
-    assert cron is not None, (
-        "the drill must be scheduled, or it is a script nobody runs"
-    )
-    assert cron["ansible.builtin.cron"]["user"] == "root", (
-        "the drill needs cluster write access, which the heartbeat's read-only SA lacks"
+    cronjob = next(yaml_fast.safe_load_all(render_role_template(*CRONJOB)))
+    pod = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+    assert pod["serviceAccountName"] == "longhorn-restore-drill"
+    verbs = {
+        (rule["resources"][0], verb)
+        for doc in yaml_fast.safe_load_all(render_role_template(*RBAC))
+        if doc["kind"] in ("Role", "ClusterRole")
+        for rule in doc["rules"]
+        for verb in rule["verbs"]
+    }
+    assert ("volumes", "create") in verbs and (
+        "persistentvolumes",
+        "create",
+    ) in verbs, (
+        "the drill's ServiceAccount must be able to create the restore it proves"
     )
 
 
-def test_drill_is_deployed_wherever_the_heartbeat_is() -> None:
-    """Check 7 reads a stamp only the drill writes, so shipping one without the other pages."""
-    deploy = _deploy_task_for("longhorn-restore-drill.sh.j2")
-    assert deploy is not None
-    assert "backup-health" in deploy.get("tags", []), (
-        "deploying backup-health alone would add check 7 while leaving the drill absent, "
-        "so the monitor would page for a drill that was never installed"
+def test_the_host_cron_and_script_are_absent_arms_with_no_schedule() -> None:
+    """The host copies are retired by absent arms, and an absent arm names no schedule key."""
+    tasks = {t.get("name"): t for t in _tasks()}
+    cron = tasks["Retire the host Longhorn restore drill cron"]["ansible.builtin.cron"]
+    assert cron["state"] == "absent" and cron["cron_file"] == "longhorn-restore-drill"
+    assert not {"minute", "hour", "day", "job"} & set(cron), (
+        "an absent arm that names a schedule field reads a key that left this role's defaults"
+    )
+    script = tasks["Retire the host Longhorn restore drill script"][
+        "ansible.builtin.file"
+    ]
+    assert script == {
+        "path": "/usr/local/bin/longhorn-restore-drill.sh",
+        "state": "absent",
+    }
+
+
+def test_the_host_no_longer_deploys_the_drill_script() -> None:
+    """Check 7 reads the ConfigMap the CronJob writes, so no release group ships the script."""
+    assert _deploy_task_for("longhorn-restore-drill.sh.j2") is None, (
+        "a release group still deploys the host drill script that the CronJob replaced"
     )
 
 
 def test_drill_runs_daily() -> None:
     """A monthly drill leaves a broken restore path undetected for weeks."""
-    defaults = load_yaml(K3S_DEFAULTS)
+    defaults = load_yaml(DRILL_DEFAULTS)
     minute, hour, dom, month, dow = defaults["k3s_longhorn_restore_drill_cron"].split()
     assert (dom, month, dow) == ("*", "*", "*"), (
         "the drill must run every night for the rotation to cover the fleet"
@@ -481,10 +466,6 @@ def test_check_eight_graces_each_candidate_from_when_it_joined() -> None:
     assert "pvc-old" in problem[1] and "pvc-new" not in problem[1], (
         "the grace period must be measured per candidate, from when IT joined the rotation — "
         "a rotation-wide start date would page every newly added volume for a full cycle"
-    )
-    assert '! -e "${SEEN_DIR}/${cand}"' in CODE, (
-        "the join marker must be written once and never refreshed, or it decays into a second "
-        "attempt stamp and the grace never expires"
     )
 
 

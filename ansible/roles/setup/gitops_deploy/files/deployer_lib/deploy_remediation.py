@@ -28,6 +28,7 @@ from gitops_markers import (
     agent_join_cmds,
     PLAYBOOK_CMD,
     owed_clear_cmd,
+    server_tags,
     target_arg,
 )
 
@@ -256,12 +257,9 @@ def manual_plane_clear_for(
 # nothing, which is the silent-success failure `setup_tags_for` also guards against.
 _K3S_NARROWER_TAGS = (
     "kubeconfig",
-    "longhorn",
-    "longhorn_backup",
     "coredns",
     "node-dns",
     "backup-health",
-    "metallb",
 )
 
 # The gates that decide whether `--tags k3s` actually takes the control plane down. Each is a
@@ -281,7 +279,7 @@ _K3S_GATED_TASKS = (
 
 _MAXIMAL_ROLE_TAGS: dict[str, str] = {
     "k3s": (
-        "that tag is the WHOLE role. It reapplies MetalLB, Longhorn, the backup targets, the "
+        "that tag is the WHOLE role. It reapplies Longhorn, the backup targets, the "
         f"crons, CoreDNS and the node config, and arms {_K3S_GATED_TASKS}. Narrower tags, "
         "one per task file: "
         + ", ".join(f"`{t}`" for t in _K3S_NARROWER_TAGS)
@@ -362,27 +360,30 @@ def _setup_commands(
 def _role_command(
     role: str, playbook: str, narrow_tags: dict[str, frozenset[str]]
 ) -> str:
-    """The one command that applies a routed setup role, with its maximal-tag warning."""
+    """The commands that apply a routed setup role, with its maximal-tag warning.
+
+    The server-play command and then one join command per agent host, split through
+    `server_tags` and `agent_join_cmds` as the `DECIDED:` marker at `AGENT_JOIN_TAGS` says. A
+    row reaching only the agent half prints the join alone.
+    """
     role_tag = setup_role_tag(role)
     narrowed = _narrowed_tags(role, narrow_tags)
-    tags = ",".join(sorted(narrowed)) or role_tag
+    selected = narrowed or {role_tag}
+    server = server_tags(role, selected)
     target = target_arg(setup_role_host(role))
-    cmd = f"`{PLAYBOOK_CMD} {playbook} --tags {tags}{target}`"
+    cmd = f"`{PLAYBOOK_CMD} {playbook} --tags {','.join(sorted(server))}{target}`"
     if not narrowed:
         warning = maximal_tag_warning(role)
-    elif narrowed & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
+    elif server & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
         warning = _MAXIMAL_ROLE_GATED_WARNING[role]
     else:
         warning = ""
     # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
     # <clear command>" after this list, and an unbracketed warning made that clause read
     # as a continuation of the warning's own last sentence.
-    out = f"{cmd} (WARNING: {warning})" if warning else cmd
-    # Beside the whole-role tag only: the `DECIDED:` marker at `AGENT_JOIN_TAGS` has why.
-    agents = agent_join_cmds(
-        role, playbook, narrowed or {role_tag}, setup_role_agent_hosts(role)
-    )
-    return " and ".join([out, *(f"`{a}`" for a in agents)])
+    out = [f"{cmd} (WARNING: {warning})" if warning else cmd] if server else []
+    agents = agent_join_cmds(role, playbook, selected, setup_role_agent_hosts(role))
+    return " and ".join([*out, *(f"`{a}`" for a in agents)])
 
 
 def _consumers_command(role: str) -> str:
@@ -424,8 +425,8 @@ def k8s_remediation(
     never applied. `scripts/deploy_tools/deploy_tags.py` catches it downstream with exit 2, but the alert
     itself was pointing at a command that cannot work.
 
-    Seven roles are in that position (manifests, arr-notification, volume-snapshot,
-    volume-revert, image-builder, longhorn-api, cronjob-gate) and they are the
+    Six roles are in that position (manifests, arr-notification, volume-snapshot,
+    volume-revert, image-builder, longhorn-api) and they are the
     shared plane: `manifests` is the apply+rollout path for EVERY workload and `volume-revert` is
     the auto-deploy rollback path. They are not rare, either — 46 commits since 2026-06-01 touch
     only roles in that set.

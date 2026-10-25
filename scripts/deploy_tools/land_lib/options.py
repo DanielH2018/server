@@ -39,6 +39,13 @@ DEADLINE_ENV = "LAND_DEADLINE"
 # so a landing that merges into the window waits out the deferral (#5457). A lander sets it
 # only when its caller's kill leaves that much room past LAND_DEADLINE.
 WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
+# The unfinished master CI runs at which `pace.hold` holds a green merge; 0 turns pacing off.
+PACE_ENV = "LAND_PACE_MASTER_RUNS"
+# DECIDED: hold the merge while 2 or more master runs are unfinished. A full sweep is about 17
+# jobs against a 20-job runner cap, so one sweep nearly fills the runners and a second one
+# already queues behind it; PR runs need runners too. A cap of 3 still admits about 50
+# concurrent jobs, close to the six-run pile measured on 2026-10-24 (#5526).
+PACE_MASTER_RUNS = 2
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.
@@ -52,6 +59,7 @@ ENV_KNOBS = (
     HANDOFF_ENV,
     DEADLINE_ENV,
     WINDOW_GRACE_ENV,
+    PACE_ENV,
 )
 
 
@@ -108,6 +116,7 @@ class Options:
     # not being merged, and the session should look at why.
     merge_timeout: int = 2700
     merge_poll: int = MERGE_POLL_S
+    pace_master_runs: int = PACE_MASTER_RUNS
     lock_retries: int = 5
     lock_backoff: int = 60
     # A single retry covered one merge landing during the wait; a third merge landing during
@@ -225,6 +234,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         window_grace=int(os.environ.get(WINDOW_GRACE_ENV) or 0),
         verdict_file=ns.verdict_file,
         merge_poll=_merge_poll_from_env(),
+        pace_master_runs=int(os.environ.get(PACE_ENV) or PACE_MASTER_RUNS),
         primary=_primary_from_env(),
         detach=ns.detach,
         log_dir=ns.log_dir,

@@ -1,5 +1,5 @@
 {
-  "checksum": "ea6dc841aa8c90668ae1560c8fdf6e6a9adad77bffbb8afdb0b46a7501097fda",
+  "checksum": "12d616a60dfe2e1dc27daf61d254746a894b03ffb0c413ad7a6a6502f2c502e9",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/cluster-base/CLAUDE.md#At a glance",
   "row": {
@@ -7,11 +7,11 @@
       "ansible/filter_plugins/service_tier.py": "4f5e784e468e22de5c3736acba1c47934e1d5e2794af865159bdaeeff9171f1e",
       "ansible/tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py::test_each_mirrored_pair_is_equal": "b9a8fa5424544c14e665415c906caa5e164eb9b884488975270fa08a6a07542f",
       "ansible/tests/k8s/test_flux_priority_classes_come_from_cluster_base.py::test_every_flux_priority_class_is_built_in_or_rendered_here": "9978454c9f4b1d532f19eb49a6bfe841be950b3d4f0a0cd2a850ee67d358028d",
-      "ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune": "13148fe54de7a6a57aed316c454c36f48684c32f36cb512c70a53049cd7b6b75",
+      "ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune": "b5aa7a0b15e57ef1aaaef7b8e886e31e7c8813709d26cf6ee0eca3d0c0c20d0e",
       "docs/break-glass.md": "2823d12d9954147d9b7ad124362e31f2b81927d3aa6c036577400846c35a627c",
       "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3"
     },
     "python": "3.14",
-    "verified_sha": "09218d467"
+    "verified_sha": "14cf76620"
   }
 }

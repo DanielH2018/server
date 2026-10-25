@@ -36,7 +36,7 @@ every 10 minutes (`gitops_deploy_tick_interval`). One tick, in order:
    in `deploy_logic.py`).
 3. Walk back to the newest green ancestor, when that verdict is pending or red: the tick asks
    GitHub about each earlier commit in the incoming range, newest first, and deploys the first
-   one whose own CI is green (`ci_walk_candidates()` in `deploy_logic.py`, bounded by
+   one whose own CI is green (`ci_walk_candidates()` in `hosts/lib/ci_verdict.py`, bounded by
    `CI_ANCESTOR_WALK_MAX`). A red commit is skipped, never chosen. Merges arrive faster than the
    CI sweep finishes, so the tip is pending on most ticks that would deploy; gating on it alone
    parked a green commit behind the CI sweep of every later merge.
@@ -205,6 +205,13 @@ stage `kuma_push.py`. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.
 it stages changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
 and records a `k8s_unapplied` line. The same test holds that table to the k8s roles' tasks.
 
+A k8s role's image can embed a file from outside every role, as homelab-mcp's embeds
+`scripts/diagnostics/probe_lib/obs_api.py`. An edit to it moves the image's content tag, so
+`K8S_BUILD_CONTEXT_FILES` puts the embedding role in `ChangeSet.k8s` the same way (#4840).
+`probe.py releases` reads the same table, so it names the file as the cause of that role's
+drift. The same test holds it to each role's `image_builder_context_files` and
+`image_builder_context` keys.
+
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's own
 role, `roles/setup/gitops_deploy/`, is not one of them: it applies itself as `initial_setup.yml
 --tags gitops_deploy`. The role's handler is `state: started`, which Ansible skips for an
@@ -269,8 +276,9 @@ each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
   the setup plane beside the deploy plane. The tick applies an `initial_setup.yml` caller such as
   `gitops_deploy`, and records a `k3s-bringup.yml` caller such as `k3s` as a `manual_plane` line.
   `narrow_setup.plugin_tags` narrows each caller to the readers of the vars key whose value calls
-  one of the plugin's filters, so a `service_tier.py` change names `longhorn_backup,longhorn_r2`
-  rather than `--tags k3s`. An inventory value that calls a filter refuses, and so does a role
+  one of the plugin's filters, so a `longhorn_groups.py` change names the host crons' tags
+  (`backup-health`, `disk-health`, `etcd-snapshot` and the rest of the readers of
+  `longhorn_backup_name`) rather than `--tags k3s`. An inventory value that calls a filter refuses, and so does a role
   that names none of them. A refusal falls back to the whole-role tag.
 
 **Every deploy-plane tick also logs a render-digest shadow line.** The `narrow-shadow:` line names
@@ -429,7 +437,7 @@ A second role gated off the tick's host is derived the same way, with no table t
 
 #### The tag the remediation prints is derived, not the role tag
 
-`--tags k3s` is the whole `setup/k3s` role: it reapplies MetalLB, Longhorn, the backup targets,
+`--tags k3s` is the whole `setup/k3s` role: it reapplies Longhorn, the backup targets,
 the crons, CoreDNS and the node config, and arms three gated control-plane tasks. A three-line
 edit to `templates/readonly-kubeconfig.j2` needs only `--tags kubeconfig`. The printed command
 therefore names the narrowest tags the change reaches.
@@ -494,8 +502,8 @@ fire in practice:
 - a derived tag the remediation's playbook cannot reach. The role must sit in that playbook's
   `roles:`, and the task file must be statically imported from `tasks/main.yml`, or included
   from a file that is with an `apply.tags` value the `include_tasks` task itself carries. Such
-  an include narrows to the shared tags: `longhorn-weekly-shard.yml`, included in a loop from
-  `longhorn.yml`, narrows to `longhorn` (#4384). An include without `apply.tags`, with disjoint
+  an include narrows to the shared tags: `setup/k3s`'s weekly shard file, included in a loop,
+  narrowed to `longhorn` until H1.6 deleted it (#4384). An include without `apply.tags`, with disjoint
   tags, or with `never` on the include or on a task inside the file still refuses. `tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, so
   `k3s-bringup.yml --tags storage_smoke` selects only `always` tasks;
 - a template cycle that reaches no task file, or a template that is not UTF-8 text.
@@ -620,11 +628,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     `target.origin`, and the ff-merge, the changed-path diff, the declarations read and the
     narrowing all read it. A `fail` ancestor is skipped, and a held SHA is dropped from the
     candidates whether it arrives as the tip or below one. The walk runs ONLY on a tick that would
-    otherwise defer, and `CI_ANCESTOR_WALK_MAX` (`gitops_deploy_ci_ancestor_walk_max`, 10) bounds
+    otherwise defer, and `CI_ANCESTOR_WALK_MAX` (`ci_ancestor_walk_max` in `group_vars/all.yml`, 10) bounds
     it, counting the tip's own request. **An UNAUTHENTICATED host does not walk at all** and says
     so in the journal, because a ten-request burst per tick would exhaust the anonymous limit and
     every reader's next call would read `HTTP Error 403`, which this gate maps to `pending`. The
-    rule is `deploy_git.ci_walk_candidates`, which carries the `DECIDED:` marker. The property the
+    rule is `ci_verdict.ci_walk_candidates`, which carries the `DECIDED:` marker. The property the
     gate keeps is that **the tree the host runs always has its own green CI verdict.** One line
     names the choice: `ci: origin <tip8> is <pending|fail>; fast-forwarding to the newest green
     ancestor <sha8> (<n> behind the tip)`.
@@ -993,7 +1001,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       (`releases_retired.py`), because a retired role's record outlives the role and the commit
       that deleted it would read as drift no deploy tag can clear.
     - The entry-less roles holding only `tasks/` and `defaults/` (`volume-snapshot`,
-      `volume-revert`, `cronjob-gate`, `longhorn-api`) are OUT of the shared set. They change how a
+      `volume-revert`, `longhorn-api`) are OUT of the shared set. They change how a
       deploy runs, never what it applies, so no stamp goes stale. Sweeping them in would mark every
       service stale for a change that renders no manifest.
     - The deploy plane is in the census too. For each changed path under `ansible/inventory/` or
@@ -1543,10 +1551,12 @@ ceiling = claims x (volume_snapshot_timeout + 3 x volume_revert_state_timeout + 
 A role's own `tasks/` run before `k8s/manifests/tasks/drain.yml`, so anything they wait for adds
 to the drain instead of overlapping it. prowlarr waited 300 s for its flaresolverr isolation probe
 Job on top of a 780 s rollout, which made it the worst promoted service at 480 + 300 + 780 + 60
-= 1620 s, the value the budget keeps. prowlarr's flip deleted the probe (#5594), so it is still
-the worst, at 1320 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
+= 1620 s, the value the budget keeps. The derivation counts only Ansible-owned roles: a tag whose
+`containers_list` entry sets `owner` goes to `cs.flux`, and the deployer never rolls it back.
+Every promoted, claim-declaring role is flux-owned since the D5 flips, so nothing spends this
+budget until a role is handed back. prowlarr handed back would need 1320 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
 rollout the drain waits for.
-`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
+`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_k8s_rollback_budget.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
 computes the ceiling from role sources, so a rollout-timeout bump or a new promoted
 claim-declaring role fails it instead of silently under-sizing the budget.
 
@@ -1696,8 +1706,8 @@ whole ticks against the scripted `tick` fixture. Run
 
 The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
 (`k8s/volume-revert`), so `K8S_ROLLBACK_TIMEOUT_S` is sized for the worst SINGLE promoted,
-claim-declaring service. `test_k8s_rollback_budget_covers_the_worst_single_promoted_service` in
-`tests/test_gitops_deploy_timeout_budgets.py` computes it from role sources and fails when it is
+claim-declaring service that Ansible owns. `test_k8s_rollback_budget_covers_the_worst_single_promoted_service` in
+`tests/test_gitops_deploy_k8s_rollback_budget.py` computes it from role sources and fails when it is
 under-sized.
 
 - Two claim-declaring services in one batch stack additively, which

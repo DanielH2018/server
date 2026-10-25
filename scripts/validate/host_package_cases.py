@@ -22,17 +22,28 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
   * remove the host package, and the next run reinstalls it;
   * cold-install the head version on a fresh container;
   * install the real Pi package by hand on a fresh container, then change its drop-in on
-    homelab-updater.timer, and the timer, which has no enable link, stays inactive;
+    homelab-updater.timer, and the timer, which has an enable link (H3.9b), stays active;
   * install the real Pi package by hand on a fresh container, then upgrade to one rendered with
     optimize_pi_recovery_restart_enabled false, and homelab-pi-recovery.timer, which was
     active, is stopped with no reboot (H3.8b's recovery disarm).
+
+A last case installs a fixture package that carries `secrets-unit` with a ciphertext encrypted to
+a throwaway age key, and runs `homelab-secrets` (H4.1c; `validate_lib/secrets_case.py`). Another
+installs a package that owns a conffile, then the `conffile` fixture, whose line-arm edit lands in
+that conffile, and upgrades the owner twice under `--force-confold`: once with its conffile
+unchanged and once changed. Each upgrade records whether dpkg kept the local file or held the
+package back, and the line must survive to the next reconcile (#6088; `validate_lib/conffile_case.py`).
+The last case installs the three apt-source components over seeded copies of the files the roles
+wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
 repository and none named after daniel-box's address.
 
 The real homelab-updater comes from the job's base and head builds. The by-hand and disarm
-cases install the head build of the real homelab-daniel-pi, `hosts/daniel-pi/`. Every other case needs a unit,
+cases install the head build of the real homelab-daniel-pi, `hosts/daniel-pi/`, rebuilt with a
+ciphertext encrypted to a throwaway age key in the container (`secrets_case.seal_pi`), because the
+real one ships `secrets-unit` and only the Pi's own key decrypts the operator's file. Every other case needs a unit,
 a file and a payload the real package does not ship, so it installs a fixture homelab-daniel-pi:
 `hosts/lib/tests/container/fixture/`'s specs, rendered by the real renderer with the real
 reconcile component and maintainer scripts.
@@ -69,7 +80,10 @@ from validate.validate_lib.host_container import (
     CaseFailed,
     Container,
     expect,
+    list_problems,
+    release_fetched,
 )
+from validate.validate_lib import conffile_case, repos_case, secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -92,37 +106,13 @@ from validate.validate_lib.host_fixtures import (
     updater_variant,
 )
 
+TOOLS_BIN = "/usr/lib/homelab/bin"
+TOOLS = ("sops", "chezmoi", "nfpm")
 LOCK_HELD = "/run/test-lock.held"
 PKGCACHE = "/var/cache/apt/pkgcache.bin"
 RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
 # systemd's MESSAGE_ID for "Starting <unit>...", logged once per start job.
 UNIT_STARTING = "7d4958e842da4a758f6c1cdc7b36dcc5"
-# apt fetches the signed InRelease first, and Release only when that is missing.
-RELEASE_GETS = tuple(
-    f'"GET /dists/homelab/{name} HTTP/' for name in ("InRelease", "Release")
-)
-
-
-def release_fetched(log: str) -> bool:
-    """Whether an http.server log holds a GET of the suite's InRelease or Release file."""
-    return any(get in line for line in log.splitlines() for get in RELEASE_GETS)
-
-
-def list_problems(names: list[str], box: str) -> list[str]:
-    """What is wrong with the names in `/var/lib/apt/lists/`.
-
-    A list named after `box`, daniel-box's address, means a fetch read the shipped
-    homelab.sources rather than the test's. No list for the test repository means the check
-    above looked at nothing.
-    """
-    problems = [
-        f"/var/lib/apt/lists/{name} is named after daniel-box's address {box}"
-        for name in names
-        if name.split("_", 1)[0].split(":", 1)[0] == box
-    ]
-    if not any(name.startswith(f"127.0.0.1:{PORT}_") for name in names):
-        problems.append(f"/var/lib/apt/lists/ holds no list for 127.0.0.1:{PORT}")
-    return problems
 
 
 class Cases:
@@ -136,6 +126,8 @@ class Cases:
         self.failed: list[str] = []
         self.debs: dict[str, Path] = {}
         self.versions: dict[str, str] = {}
+        # The head homelab-tools build the real Pi package Depends on (H3.11), if any.
+        self.tools: tuple[str, ...] = ()
         self._prepare(args.render.resolve(), args.debs.resolve())
 
     def _prepare(self, render: Path, debs: Path) -> None:
@@ -145,11 +137,14 @@ class Cases:
             path.mkdir(parents=True)
         for side in ("base", "head"):
             (deb,) = (debs / side).glob(f"{UPDATER}_*.deb")
-            self._add(f"updater-{side}", deb)
+            self.add(f"updater-{side}", deb)
         # The base is master before H3.6 or after it, so only the head build is sure to hold
         # the real Pi package. The fixture's head build carries the same file name.
         (deb,) = (debs / "head").glob(f"{HOST_PKG}_*.deb")
-        self._add("pi-head", deb, name=f"real-{deb.name}")
+        self.add("pi-head", deb, name=f"real-{deb.name}")
+        for deb in sorted((debs / "head").glob("homelab-tools_*_amd64.deb")):
+            self.add("tools-head", deb)
+            self.tools = ("tools-head",)
         base, head = self.versions["updater-base"], self.versions["updater-head"]
         if not newer(head, base):
             raise CaseFailed(
@@ -164,26 +159,26 @@ class Cases:
         }
         for variant, version in fixture_versions.items():
             rendered = render_fixture(variant, build_root / variant)
-            self._add(
+            self.add(
                 f"host-{variant}",
                 build(rendered, version, build_root / f"{variant}-deb"),
             )
         rendered = updater_variant(render / "head", build_root / "updater-unit")
-        self._add(
+        self.add(
             "updater-unit",
             build(rendered, f"{head}.1", build_root / "updater-unit-deb"),
         )
         rendered = pi_dropin_variant(render / "head", build_root / "pi-dropin")
-        self._add(
+        self.add(
             "pi-dropin", build(rendered, f"{head}.3", build_root / "pi-dropin-deb")
         )
         rendered = pi_disarmed_variant(build_root / "pi-disarmed")
-        self._add(
+        self.add(
             "pi-disarmed",
             build(rendered, f"{head}.4", build_root / "pi-disarmed-deb"),
         )
 
-    def _add(self, label: str, deb: Path, name: str | None = None) -> None:
+    def add(self, label: str, deb: Path, name: str | None = None) -> None:
         target = self.work / "debs" / (name or deb.name)
         shutil.copy(deb, target)
         self.debs[label] = target
@@ -224,7 +219,7 @@ class Cases:
             print(f"[FAIL] {container.name}: {name}: {exc}", file=sys.stderr)
             journal = container.sh(
                 f"journalctl -u {UPDATER}.service -u homelab-reconcile.service"
-                " -n 60 --no-pager -o short-monotonic"
+                " -u homelab-compose.service -n 80 --no-pager -o short-monotonic"
             ).stdout
             print(
                 f"::group::journal after {name}\n{journal}::endgroup::", file=sys.stderr
@@ -470,9 +465,10 @@ class Cases:
         timer = f"{UPDATER}.timer"
 
         def body() -> None:
+            secrets_case.seal_pi(self, c)
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
-                for label in ("updater-head", "pi-head")
+                for label in ("updater-head", "pi-head", *self.tools)
             )
             # apt-get, as bootstrap-host.sh installs on a host. dpkg -i leaves a package whose
             # Depends is not installed unconfigured, so H3.7's `Depends: tree` would fail here.
@@ -481,8 +477,10 @@ class Cases:
             c.ok("systemctl start homelab-reconcile.service")
             self.expect_reconciled(c, "updater-head", "pi-head")
             state = c.active(timer)
-            expect(state == "inactive", f"{timer} is {state} after the install")
-            self.serving("updater-head", "pi-head", "pi-dropin")
+            expect(state == "active", f"{timer} is {state} after the install")
+            if self.tools:
+                self.expect_tools_run(c)
+            self.serving("updater-head", "pi-head", "pi-dropin", *self.tools)
             status = c.run_updater()
             expect(status == 0, f"the updater exited {status}")
             self.expect_installed(c, "updater-head", "pi-dropin")
@@ -490,7 +488,7 @@ class Cases:
                 DROPIN_CHANGED in c.read(DROPIN), "the changed drop-in is not installed"
             )
             state = c.active(timer)
-            expect(state == "inactive", f"{timer} is {state} after its drop-in changed")
+            expect(state == "active", f"{timer} is {state} after its drop-in changed")
 
         try:
             self.case(
@@ -498,6 +496,12 @@ class Cases:
             )
         finally:
             c.remove()
+
+    def expect_tools_run(self, c: Container) -> None:
+        for tool in TOOLS:
+            c.ok(f"{TOOLS_BIN}/{tool} --version")
+            on_path = c.sh(f"command -v {tool}").returncode
+            expect(on_path != 0, f"{tool} is on PATH; it installs at {TOOLS_BIN} only")
 
     def disarm(self) -> None:
         """Install the real Pi package by hand, then upgrade to one whose recovery timer is disarmed.
@@ -510,16 +514,17 @@ class Cases:
             return
 
         def body() -> None:
+            secrets_case.seal_pi(self, c)
             debs = " ".join(
                 f"/srv/debs/{self.debs[label].name}"
-                for label in ("updater-head", "pi-head")
+                for label in ("updater-head", "pi-head", *self.tools)
             )
             c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
             c.ok("systemctl start homelab-reconcile.service")
             self.expect_reconciled(c, "updater-head", "pi-head")
             state = c.active(RECOVERY_TIMER)
             expect(state == "active", f"{RECOVERY_TIMER} is {state} while armed")
-            self.serving("updater-head", "pi-head", "pi-disarmed")
+            self.serving("updater-head", "pi-head", "pi-disarmed", *self.tools)
             status = c.run_updater()
             expect(status == 0, f"the updater exited {status}")
             self.expect_installed(c, "updater-head", "pi-disarmed")
@@ -568,10 +573,11 @@ def main(argv: list[str] | None = None) -> int:
     except CaseFailed as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
-    cases.upgrade_path()
-    cases.cold_install()
-    cases.by_hand()
-    cases.disarm()
+    for run in (cases.upgrade_path, cases.cold_install, cases.by_hand, cases.disarm):
+        run()
+    secrets_case.run(cases)
+    conffile_case.run(cases)
+    repos_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

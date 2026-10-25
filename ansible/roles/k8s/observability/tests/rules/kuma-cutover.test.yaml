@@ -1,0 +1,2078 @@
+# promtool unit tests for files/rules/kuma-cutover.yaml, the temporary CheckWithoutPager guard.
+# Run with `scripts/validate/alert_tools.sh promtool test rules <this file>`. The rule has no
+# `for:`, so its two hours are the term's [2h] window: a tile that stops reporting fires once
+# its last sample is more than two hours old.
+rule_files:
+  - ../../files/rules/kuma-cutover.yaml
+evaluation_interval: 1m
+tests:
+  # Zero-series case: no series at all, so every term fires and the page names each tile
+  # through the label absent_over_time carries.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels: {monitor_name: k3s Container Restarts, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Container Restarts tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Container Restarts tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Container OOM, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Container OOM tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Container OOM tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s CPU Throttling, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s CPU Throttling tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s CPU Throttling tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Scrape Targets, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Scrape Targets tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Scrape Targets tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Cluster Scrape Targets, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Cluster Scrape Targets tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Cluster Scrape Targets tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Log Shipper Dropped Entries, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Log Shipper Dropped Entries tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Log Shipper Dropped Entries tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Docs Refresh, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Docs Refresh tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Docs Refresh tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Secret Rotation, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Secret Rotation tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Secret Rotation tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Setup Plane Drift (agent hosts), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Setup Plane Drift (agent hosts) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Setup Plane Drift (agent hosts) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Homelab Evals, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Homelab Evals tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Homelab Evals tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: AIDE Integrity (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's AIDE Integrity (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the AIDE Integrity (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: AIDE Integrity (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's AIDE Integrity (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the AIDE Integrity (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: AIDE Integrity (daniel-pi), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's AIDE Integrity (daniel-pi) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the AIDE Integrity (daniel-pi) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: rkhunter Scan (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's rkhunter Scan (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the rkhunter Scan (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: rkhunter Scan (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's rkhunter Scan (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the rkhunter Scan (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: rkhunter Scan (daniel-pi), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's rkhunter Scan (daniel-pi) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the rkhunter Scan (daniel-pi) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Loki Read Route (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Loki Read Route (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Loki Read Route (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Loki Read Route (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Loki Read Route (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Loki Read Route (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: UPS Secondary (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's UPS Secondary (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the UPS Secondary (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: UPS Secondary (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's UPS Secondary (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the UPS Secondary (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Fake Remux Scan, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Fake Remux Scan tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Fake Remux Scan tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Fake Remux Replace, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Fake Remux Replace tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Fake Remux Replace tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: MKV Attachment Repair, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's MKV Attachment Repair tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the MKV Attachment Repair tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Renovate Notifier — Alive, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Renovate Notifier — Alive tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Renovate Notifier — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Renovate Agent — Alive, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Renovate Agent — Alive tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Renovate Agent — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: TLS Cert Expiry, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's TLS Cert Expiry tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the TLS Cert Expiry tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Traefik 5xx, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Traefik 5xx tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Traefik 5xx tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Traefik Latency, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Traefik Latency tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Traefik Latency tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Traefik 404 Flood, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Traefik 404 Flood tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Traefik 404 Flood tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Traefik 421, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Traefik 421 tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Traefik 421 tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Longhorn Backup, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Longhorn Backup tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Longhorn Backup tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Off-box etcd Snapshot, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Off-box etcd Snapshot tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Off-box etcd Snapshot tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Manifest Prune Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Manifest Prune Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Manifest Prune Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Release Staleness Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Release Staleness Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Release Staleness Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Live Object Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Live Object Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Live Object Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Longhorn Volume Redundancy, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Longhorn Volume Redundancy tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Longhorn Volume Redundancy tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s PVC Fullness, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s PVC Fullness tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s PVC Fullness tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Longhorn Snapshot Headroom, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Longhorn Snapshot Headroom tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Longhorn Snapshot Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Kubelet CSI Mount Read-Only, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Kubelet CSI Mount Read-Only tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Kubelet CSI Mount Read-Only tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: etcd DB Size, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's etcd DB Size tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the etcd DB Size tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Root Disk, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Root Disk tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Root Disk tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Memory, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Memory tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Memory tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Host Temperature, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Host Temperature tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Host Temperature tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: UPS Battery Health, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's UPS Battery Health tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the UPS Battery Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Artifacts Peer Sync, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Artifacts Peer Sync tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Artifacts Peer Sync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Telemetry OTLP Door, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Telemetry OTLP Door tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Telemetry OTLP Door tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi Host, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi Host tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi Host tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi WG Easy, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi WG Easy tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi WG Easy tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi SD Health, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi SD Health tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi SD Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Daniel Pi Recovery, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Daniel Pi Recovery tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Daniel Pi Recovery tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Email-to-RSS (Worker), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Email-to-RSS (Worker) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Email-to-RSS (Worker) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: iCal Proxy k8s, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's iCal Proxy k8s tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the iCal Proxy k8s tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s LiveSync, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s LiveSync tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s LiveSync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Scrutiny, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Scrutiny tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Scrutiny tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Loki, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Loki tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Loki tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s homelab-mcp (edge gate), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s homelab-mcp (edge gate) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s homelab-mcp (edge gate) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Homelab Edge (all-clear), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Homelab Edge (all-clear) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Homelab Edge (all-clear) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Pi-hole k8s DNS, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Pi-hole k8s DNS tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Pi-hole k8s DNS tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Mosquitto (VIP), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Mosquitto (VIP) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Mosquitto (VIP) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Jellyfin (VIP), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Jellyfin (VIP) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Jellyfin (VIP) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: SLZB-06M Coordinator, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's SLZB-06M Coordinator tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the SLZB-06M Coordinator tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s nut (upsd), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s nut (upsd) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s nut (upsd) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Pi Pressure, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Pi Pressure tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Pi Pressure tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Workload Log Errors, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Workload Log Errors tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Workload Log Errors tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: GitHub Ruleset Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's GitHub Ruleset Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the GitHub Ruleset Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: GitHub Interaction Limit, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's GitHub Interaction Limit tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the GitHub Interaction Limit tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec Remote Allowlist, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec Remote Allowlist tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec Remote Allowlist tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec AppSec, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec AppSec tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec AppSec tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: CrowdSec Home Allowlist, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's CrowdSec Home Allowlist tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the CrowdSec Home Allowlist tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Configarr Sync, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Configarr Sync tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Configarr Sync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Janitorr Errors, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Janitorr Errors tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Janitorr Errors tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: n8n Prod Workflows, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's n8n Prod Workflows tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the n8n Prod Workflows tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Bazarr Health, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Bazarr Health tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Bazarr Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Prowlarr Indexers, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Prowlarr Indexers tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Prowlarr Indexers tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: SMART Data / Health, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's SMART Data / Health tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the SMART Data / Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: k3s Speedtest, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Speedtest tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Speedtest tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Swallowed Push Verdicts, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Swallowed Push Verdicts tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Swallowed Push Verdicts tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: WAN Reachable, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's WAN Reachable tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the WAN Reachable tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Discord Delivery, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Discord Delivery tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Discord Delivery tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: R2 Free Tier Headroom, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's R2 Free Tier Headroom tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the R2 Free Tier Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Cloudflare IP Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Cloudflare IP Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Cloudflare IP Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Healthchecks.io Console Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Healthchecks.io Console Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Healthchecks.io Console Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: B2 Reachable, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's B2 Reachable tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the B2 Reachable tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: B2 Free Tier Headroom, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's B2 Free Tier Headroom tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the B2 Free Tier Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Arr Queue Warnings, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Arr Queue Warnings tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Arr Queue Warnings tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: GitOps Deploy — Alive, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's GitOps Deploy — Alive tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the GitOps Deploy — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: GitOps Deploy — Status, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's GitOps Deploy — Status tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the GitOps Deploy — Status tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: etcd Restore Drill, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's etcd Restore Drill tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the etcd Restore Drill tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Home Assistant Automations, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Home Assistant Automations tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Home Assistant Automations tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Arr Auto-Block, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Arr Auto-Block tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Arr Auto-Block tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Cloudflare DDNS Direct, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Cloudflare DDNS Direct tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Cloudflare DDNS Direct tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Cloudflare DDNS Proxied, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Cloudflare DDNS Proxied tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Cloudflare DDNS Proxied tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: WG Pi Peer Backup, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's WG Pi Peer Backup tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the WG Pi Peer Backup tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # Every tile present: no term fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
+        values: '1x140'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 131m
+        exp_alerts: []
+  # One tile stops reporting at minute 9 (the batch's Cutover-a ran) while the others stay.
+  # Nothing fires inside the two hours, and only that tile is named after them.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x10 _x130'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
+        values: '1x140'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 128m
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 131m
+        exp_alerts:
+          - exp_labels: {monitor_name: k3s Container OOM, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's k3s Container OOM tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the k3s Container OOM tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # A daily tile's series is absent for 25h, as after a Kuma restart until its next push. The
+  # 50h10m range keeps its term quiet, where a 2h range would have fired at minute 130.
+  - interval: 10m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="<tile>", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x6 _x154'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
+        values: '1x160'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 25h
+        exp_alerts: []
+  # A long-cadence tile absent for less than its range stays quiet. Docs Refresh has a 46800s
+  # interval (13h), so its range is 2 x 13h + 10m: absent from minute 5, it is quiet at 26h and
+  # named after 26h10m. The two daily Renovate tiles are absent from minute 5 as well, and stay
+  # quiet through 26h20m: their ranges are 56h10m (agent) and 72h10m (notifier).
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x5 _x1700'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x5 _x1700'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x5 _x1700'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
+        values: '1x1700'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 24h
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 26h
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 26h20m
+        exp_alerts:
+          - exp_labels: {monitor_name: Docs Refresh, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Docs Refresh tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Docs Refresh tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # A tile with a 90000s interval absent for less than its range stays quiet. The two GitHub
+  # tiles and the five other 90000s tiles push daily with an hour of slack, so their range is
+  # 2 x 25h + 10m: absent from minute 5, they are quiet at 49h and named after 50h10m.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x5 _x3100'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x5 _x3100'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x5 _x3100'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x5 _x3100'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x5 _x3100'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
+        values: '1x5 _x3100'
+      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
+        values: '1x5 _x3100'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
+        values: '1x3100'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 49h
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 50h20m
+        exp_alerts:
+          - exp_labels: {monitor_name: GitHub Ruleset Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's GitHub Ruleset Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the GitHub Ruleset Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: GitHub Interaction Limit, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's GitHub Interaction Limit tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the GitHub Interaction Limit tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Secret Rotation, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Secret Rotation tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Secret Rotation tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Setup Plane Drift (agent hosts), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Setup Plane Drift (agent hosts) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Setup Plane Drift (agent hosts) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Manifest Prune Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Manifest Prune Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Manifest Prune Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Live Object Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Live Object Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Live Object Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Off-box etcd Snapshot, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Off-box etcd Snapshot tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Off-box etcd Snapshot tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # Tiles of the WAN, B2 and ungated bridge rows stop reporting at minute 9 while the others stay.
+  # Nothing fires inside the two hours, and only those tiles are named after them: each new
+  # term fires once its tile is gone longer than its [2h] range.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
+        values: '1x10 _x130'
+      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x10 _x130'
+      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
+        values: '1x10 _x130'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
+        values: '1x10 _x130'
+      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
+        values: '1x140'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 128m
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 131m
+        exp_alerts:
+          - exp_labels: {monitor_name: WAN Reachable, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's WAN Reachable tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the WAN Reachable tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: B2 Free Tier Headroom, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's B2 Free Tier Headroom tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the B2 Free Tier Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: GitOps Deploy — Alive, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's GitOps Deploy — Alive tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the GitOps Deploy — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: etcd Restore Drill, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's etcd Restore Drill tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the etcd Restore Drill tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # Tiles whose range is just over 2h stay quiet until it passes. Release Staleness Drift has a
+  # 3600s interval, so its range is 2h10m, and the two Loki Read Route tiles have 7200s, so theirs
+  # is 4h10m. Each is absent from minute 5: a 2h range would have named all three by minute 130.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x5 _x300'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x5 _x300'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x5 _x300'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="http"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
+        values: '1x300'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 2h12m
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 2h20m
+        exp_alerts:
+          - exp_labels: {monitor_name: Release Staleness Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Release Staleness Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Release Staleness Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+      - alertname: CheckWithoutPager
+        eval_time: 4h
+        exp_alerts:
+          - exp_labels: {monitor_name: Release Staleness Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Release Staleness Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Release Staleness Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+      - alertname: CheckWithoutPager
+        eval_time: 4h20m
+        exp_alerts:
+          - exp_labels: {monitor_name: Release Staleness Drift, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Release Staleness Drift tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Release Staleness Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Loki Read Route (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Loki Read Route (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Loki Read Route (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Loki Read Route (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Loki Read Route (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Loki Read Route (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # A 2.5-day tile absent for less than its range stays quiet. WG Pi Peer Backup has a 216000s
+  # interval, so its range is 2 x 60h + 10m: it reports for the first 2h and then goes quiet, as
+  # after a Kuma restart until its next push. It is quiet at 119h and named after 122h10m. A [2h]
+  # range would have named it at minute 130.
+  - interval: 10m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="<tile>", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s Container Restarts", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Manifest Prune Drift", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Daniel Pi Host", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Daniel Pi WG Easy", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Email-to-RSS (Worker)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="iCal Proxy k8s", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s LiveSync", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s Scrutiny", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Loki", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s homelab-mcp (edge gate)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Homelab Edge (all-clear)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Pi-hole k8s DNS", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s Mosquitto (VIP)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s Jellyfin (VIP)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="SLZB-06M Coordinator", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s nut (upsd)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Pi Pressure", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
+        values: '1x12 _x748'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 119h
+        exp_alerts: []
+      - alertname: CheckWithoutPager
+        eval_time: 125h
+        exp_alerts:
+          - exp_labels: {monitor_name: WG Pi Peer Backup, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's WG Pi Peer Backup tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the WG Pi Peer Backup tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+  # A Kuma outage (up == 0) fires no term; KumaDown's own pager covers it.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
+        values: '0x140'
+    alert_rule_test:
+      - alertname: CheckWithoutPager
+        eval_time: 131m
+        exp_alerts: []

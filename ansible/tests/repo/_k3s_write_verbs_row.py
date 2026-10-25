@@ -7,8 +7,9 @@ writers per task file. Its `allow` map starts with every file that holds one, ea
 that removes its writers, and each H1 PR drops its entry in the same commit. At the end of H1
 only `storage_smoke.yml` and `agent_verify.yml` keep an entry.
 
-The predicate is `ansible/tests/_k3s_cluster_writes.py`, which
-`ansible/tests/setup/test_k3s_stale_checkout_map.py` shares. The row sits in its own module
+The row is what refuses a new cluster writer in `setup/k3s`: a writer in any other file fails
+it, with no guard to register with (#5957 retired the stale-checkout guard). The predicate is
+`ansible/tests/_k3s_cluster_writes.py`. The row sits in its own module
 because `test_census_rows_roles.py`, which imports it into `ROWS`, is at the cap for a test
 module.
 """
@@ -27,26 +28,6 @@ K3S_WRITE_ALLOW = {
         "stays: the opt-in smoke test creates and deletes a throwaway PVC, which no Flux tag "
         "declares"
     ),
-    _TASKS + "cluster-addons.yml": (
-        "H1.3 hands MetalLB to `metallb` and deletes its writers; H1.2 already handed the "
-        "PriorityClasses to `cluster-base`"
-    ),
-    _TASKS + "coredns.yml": (
-        "H1.4 hands the Corefile key and the Deployment to `coredns`; the file keeps the read "
-        "and the marker task"
-    ),
-    _TASKS + "longhorn.yml": (
-        "H1.5a deletes the install, the manager patch and the StorageClass tasks, H1.5b the "
-        "Settings, `longhorn-nobackup` and the NetworkPolicy, and H1.6 the label and CSI tasks "
-        "with the rest of the file"
-    ),
-    _TASKS + "longhorn-weekly-shard.yml": (
-        "H1.6 deletes the file; `longhorn-reconcile` takes the shard labels over"
-    ),
-    _TASKS + "longhorn-backup.yml": (
-        "H1.7a deletes the volume routing, and H1.7b the credentials, targets and "
-        "RecurringJobs with the rest of the file"
-    ),
 }
 
 
@@ -61,8 +42,7 @@ K3S_WRITE_VERBS = Census(
         "that wrote them, in the same commit. A writer left behind fights Flux on every hand "
         "apply. A writer in a file that has no allow entry is new: hand its objects to a Flux "
         "tag rather than writing them from this role, or give the file an entry that names the "
-        "PR removing it. Each writer outside storage_smoke.yml and agent_verify.yml also needs a "
-        "row in tasks/stale-checkout-guard.yml (test_k3s_stale_checkout_map.py)."
+        "PR removing it."
     ),
     files=lambda: tracked(_TASKS + "*.yml"),
     offence=cluster_writes,

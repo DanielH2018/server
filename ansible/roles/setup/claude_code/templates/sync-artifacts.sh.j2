@@ -116,6 +116,35 @@ fi
 # set +e first: every other caller of the library runs without -e, and the sync's own outcome is
 # already in $status, so nothing in the push may end the script before `exit "$status"`.
 set +e
+# Taken at the verdict, so a slow push below cannot age it.
+verdict_ts=$(date +%s)
+
+# The textfile, written before the push so the file never waits on the network. node_exporter's
+# collector reads it, and host-checks.yaml pages it in shadow beside the Kuma tile (M6 batch B6).
+# deadline_s is the longest legitimate gap between two writes: two cron periods plus 300s. One
+# period is the normal gap, the second is a slot lost to the flock skip or a long run, and the
+# 300s covers cron start jitter, the 1m `node` scrape and the 1m rule evaluation. It renders
+# from the cron's own minute, read as `*/N`. Any other shape has no single period, so the render
+# fails rather than publish a deadline shorter than the real gap.
+# ansible/tests/services/test_b6a_rule_literals.py pins the NotReporting rule to it.
+{% set _every_n = claude_code_artifacts_sync_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if _every_n.isdigit() and '*/' ~ _every_n == claude_code_artifacts_sync_minute | string %}
+deadline_s={{ 2 * 60 * (_every_n | int) + 300 }}
+{% else %}
+{{ sync_artifacts_cron_minute_not_every_n | mandatory('claude_code_artifacts_sync_minute must be */N for sync-artifacts.sh to derive deadline_s, got ' ~ claude_code_artifacts_sync_minute) }}
+{% endif %}
+check_lib="${SYNC_ARTIFACTS_CHECK_LIB:-/usr/local/lib/homelab-check-lib.sh}"
+if [ -r "$check_lib" ]; then
+  # shellcheck source=/dev/null
+  source "$check_lib"
+  success=0
+  [ "$verdict" = up ] && success=1
+  write_check_textfile sync-artifacts "$success" "$verdict_ts" "$deadline_s" \
+    || logger -t sync-artifacts "textfile write failed (verdict=$verdict)"
+else
+  logger -t sync-artifacts "$check_lib missing, no textfile written; run initial_setup on this host"
+fi
+
 kuma_lib="${SYNC_ARTIFACTS_KUMA_LIB:-/usr/local/lib/kuma-push-lib.sh}"
 if [ -r "$kuma_lib" ]; then
   # shellcheck source=/dev/null

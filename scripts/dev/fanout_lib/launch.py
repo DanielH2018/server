@@ -15,6 +15,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from fanout_lib.manifest import Batch
 from fanout_lib.notify import stop_post
+from fanout_lib.prompt_tool import prompt_tool_flags, shim_guarded
 from fanout_lib.target import HEADLESS_PYTHON, SERVER_TARGET, Target, branch_name
 from fanout_lib.transport import REPO, Tools
 
@@ -231,23 +232,23 @@ def write_brief_command(batch: str, target: Target = SERVER_TARGET) -> str:
     return _step(f"mkdir -p {wt}/.fanout && cat > {wt}/.fanout/brief.md", "brief write")
 
 
-def claude_args(target: Target, worktree: str) -> str:
+def claude_args(target: Target, worktree: str, home: str | None = None) -> str:
     """The `claude -p` command line a batch in `target`, working in `worktree`, runs.
 
     The system prompt file is relative to the worktree for this repo, whose worktree always
     carries it. Another repo's worktree does not, so there it is read from the batch's
     snapshot of this repo (`snapshot_root`). Another repo's batch also gets the `fanout-stop`
     hook through `--settings`, because its worktree carries no `.claude/settings.json` to
-    register it.
+    register it. Both carry `fanout_lib.prompt_tool`'s flags for the user at `home`.
     """
     if target.is_server:
-        return CLAUDE_ARGS
+        return f"{CLAUDE_ARGS} {prompt_tool_flags(home)}"
     root = snapshot_root(worktree)
     prefix = CLAUDE_ARGS_PREFIX.format(
         budget=BUDGET_USD, prompt=f"{root}/{SYSTEM_PROMPT_FILE}"
     )
     settings = json.dumps(stop_hook_settings(root))
-    return f"{prefix} --settings {shlex.quote(settings)}"
+    return f"{prefix} --settings {shlex.quote(settings)} {prompt_tool_flags(home)}"
 
 
 def review_script(batch: str, target: Target = SERVER_TARGET) -> str:
@@ -284,26 +285,24 @@ def systemd_run_command(
     review: bool = False,
     red_green: bool = False,
 ) -> str:
-    """The `systemd-run` step; `home` defaults to the launching user's own HOME."""
+    """The shim check, then the `systemd-run` step; `home` defaults to the launcher's."""
     wt = worktree_path(batch, target)
     home = home or str(_Path.home())
-    command = claude_args(target, wt)
+    command = claude_args(target, wt, home)
     if review:
         command = review_command(batch, target, red_green)
     runtime = REVIEW_RUNTIME_MAX_S if review else RUNTIME_MAX_S
-    return _step(
-        (
-            f"env PATH={unit_path(home)} systemd-run --user --unit {unit_name(batch, target)} "
-            f"-p WorkingDirectory={wt} "
-            f"-p StandardInput=file:{wt}/.fanout/brief.md "
-            f"-p StandardOutput=file:{wt}/.fanout/report.json "
-            f"-p StandardError=file:{wt}/.fanout/stderr.log "
-            f"-p Environment=PATH={unit_path(home)} -p Environment=HOME={home} "
-            f"-p RuntimeMaxSec={runtime} -p {stop_post(batch, target)} "
-            f"{command}"
-        ),
-        "systemd-run",
+    run = (
+        f"env PATH={unit_path(home)} systemd-run --user --unit {unit_name(batch, target)} "
+        f"-p WorkingDirectory={wt} "
+        f"-p StandardInput=file:{wt}/.fanout/brief.md "
+        f"-p StandardOutput=file:{wt}/.fanout/report.json "
+        f"-p StandardError=file:{wt}/.fanout/stderr.log "
+        f"-p Environment=PATH={unit_path(home)} -p Environment=HOME={home} "
+        f"-p RuntimeMaxSec={runtime} -p {stop_post(batch, target)} "
+        f"{command}"
     )
+    return _step(shim_guarded(run, home), "systemd-run")
 
 
 def prepare_command(batch: str, target: Target) -> str:
@@ -336,14 +335,14 @@ def launch_command(batch: str, review: bool = False, red_green: bool = False) ->
 
 _STEP_SENTINEL_RE = re.compile(r"^fanout-step: (.+)$", re.MULTILINE)
 
-# Cleanup removes the worktree and its branch, so it only runs for a step that could have
-# left one half-made: `worktree add`/`worktree lock` do; a `fetch` failure
-# precedes both and created nothing (cleanup there would fail its own `worktree remove` with a
-# confusing "not a working tree"). A refused `systemd-run` started no unit and no manifest names
-# its tree, so it goes too (#4192); `brief write` leaves it. `exists` must never be here: it
-# fails BECAUSE a tree is there, and that tree belongs to an earlier batch, not this launch.
-# The snapshot step runs inside a tree this launch just made, before the claim, so a failed
-# fetch or archive removes that tree too: nothing has started in it.
+# Cleanup removes the worktree and its branch, so it only runs for a step that could have left
+# one half-made: `worktree add`/`worktree lock` do; a `fetch` failure precedes both and created
+# nothing (its cleanup would fail `worktree remove` with "not a working tree"). A refused
+# `systemd-run` started no unit and no manifest names its tree, so it goes too (#4192); `brief
+# write` leaves it. `exists` must never be here: it fails BECAUSE a tree is there, and that
+# tree belongs to an earlier batch, not this launch. The snapshot step runs inside a tree this
+# launch just made, before the claim, so a failed fetch or archive removes that tree too:
+# nothing has started in it. A missing claude-guard shim fails the `systemd-run` step.
 _SNAPSHOT_STEP = "server snapshot"
 _CLEANUP_STEPS = frozenset(
     {"worktree add", "worktree lock", "systemd-run", _SNAPSHOT_STEP}

@@ -13,9 +13,8 @@
 # file is never rendered. No annotation templates a log line's text, so no line content
 # reaches Discord or email.
 #
-# SHADOW UNTIL M5's PR 4b. monitor-bridge's Loki Log Ingestion and Kuma Notification Delivery
-# tiles page these conditions until M5's PR 4a deletes them, and M1 convention 5 allows one
-# pager, so each alert routes to the blackhole receiver.
+# Each alert pages through Alertmanager. monitor-bridge's Loki Log Ingestion and Kuma
+# Notification Delivery tiles are gone (M5's PR 4a), so M1 convention 5's one pager is this file.
 groups:
   - name: homelab-logs
     interval: 5m
@@ -28,7 +27,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: The cluster hosts' syslog and authlog have shipped nothing to loki-homelab in 3 hours.
           description: >-
@@ -42,7 +40,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: No pod log has reached loki-homelab in 30 minutes.
           description: >-
@@ -54,25 +51,154 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's containers have shipped nothing to loki-homelab in 3 hours.
           description: >-
             No container log line from daniel-pi reached loki-homelab in 3 hours. Read the
             alloy container on daniel-pi with `probe.py pi containers`.
       # Kuma logs one "Cannot send notification to <name>" line per dropped notification. Its
-      # reason lines carry no drop, so the filter keeps only the drop half of
-      # monitor-bridge's KUMA_NOTIFY_FAILURES_LOGQL. `sum` makes one alert of the streams
+      # reason lines carry no drop, so the filter keeps only the drop half of the pattern
+      # the deleted bridge check read. `sum` makes one alert of the streams
       # the window holds, which a pod restart inside 3h would otherwise split.
       - alert: KumaNotificationDropped
         expr: sum(count_over_time({container="uptime-kuma"} |= "Cannot send notification" [3h])) > 0
         labels:
           severity: critical
           service: uptime-kuma
-          shadow: "true"
         annotations:
           summary: Uptime Kuma dropped a notification in the last 3 hours.
           description: >-
             Uptime Kuma logged {{ $value }} "Cannot send notification" lines in the last 3
             hours, so a page it raised reached no one. Read the uptime-kuma pod's log in the
             homelab namespace for the reason line beside each drop.
+      # The log-pattern arm of the bridge's Workload Log Errors row, ported by M6's batch A7. It
+      # counts, per container, the lines that match `LOG_ERROR_PATTERN` over `LOG_ERROR_WINDOW` in
+      # the cluster pod and daniel-pi container streams, and fires when one container exceeds
+      # `LOG_ERROR_MAX`. `error` is deliberately absent from the pattern: it appears in ordinary
+      # output constantly, and an alert on it gets ignored. These four mean the process gave up.
+      # `for: 5m` replaces the row's `startup_grace`. The bridge's empty `LOG_ERROR_IGNORE`
+      # carries over, so no container is excluded. The rule is shadow beside the Kuma tile until
+      # Cutover-b drops the label.
+      #
+      # DECIDED: stays at 20, and home-assistant stays OUT of any ignore list. #1784 proposed
+      # raising this or ignoring that container, after `fatal log lines in 1h: home-assistant (23)`
+      # and `(26)` held k3s Workload Health red for 46 and 43 minutes. Both were declined on the
+      # measurement: over the 4 days to 2026-09-11 this selector and pattern matched home-assistant
+      # ZERO times, so the burst is episodic rather than chronic, and a permanent ignore would blind
+      # the arm on a container that is normally silent. The 7d query times out against Loki, so "no
+      # matches in 4d" cannot see the 09-02/03 burst itself; it establishes that HA is not
+      # chronically noisy, NOT that those lines were benign. Raise this only from a window that
+      # contains a burst and a reason to call it ordinary.
+      - alert: WorkloadLogErrors
+        expr: sum by (container) (count_over_time({job=~"k8s|pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [1h])) > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: k3s
+          shadow: "true"
+        annotations:
+          summary: '{{ $labels.container }} logged more than 20 fatal-pattern lines in an hour.'
+          description: >-
+            {{ $labels.container }} logged {{ $value }} lines matching panic, fatal, traceback
+            or out of memory in the last hour, so it may be failing at its job while its pod
+            reads Ready. Read that container's log in loki-homelab to see the lines.
+      # The host counterpart of WorkloadLogErrors (#6163): the same pattern over the cluster
+      # hosts' syslog, keyed by the rsyslog program tag that config.alloy.j2's
+      # `loki.process "host"` stage extracts into `program`.
+      #
+      # The window is 6h, not WorkloadLogErrors' 1h. A failing `uv run` cron writes one
+      # `Traceback` line per run, so an hourly cron that fails every run reaches 4 lines inside
+      # one window and pages, where a 1h window would hold it at 1 forever. `> 3` keeps a single
+      # transient failure quiet. Measured 2026-10-24 over the five rotated syslog files (from
+      # 2026-09-20) on both cluster hosts, the program-windows above 3 were:
+      #   - daniel-box `uv`, 2026-10-05 to 10-08: 49038 tracebacks, about 4200 per window;
+      #   - daniel-box `flock` and `release-staleness-check`: git's `fatal: unable to access`
+      #     during GitHub outages, a handful of windows;
+      #   - daniel-server `kernel`, 2026-09-24 and 09-28: 34 and 29 `Memory cgroup out of
+      #     memory` lines, a container OOM storm against its limits.
+      # `uv` merges every `uv run` cron into one key, so the line itself names the script.
+      #
+      # Only `syslog`, and only the cluster hosts. Authlog stays out because sudo's `COMMAND=`
+      # lines echo their arguments, so a `grep fatal` run under sudo would count. daniel-pi's
+      # `pi_health` stream also carries job="syslog" but never passes the stage, so it has no
+      # `program` and the `machine` matcher keeps it out.
+      #
+      # Not shadow: the label exists for a rule that runs beside a Kuma tile, and no Kuma tile
+      # covers host syslog. `service` is a literal, as on every rule here, because
+      # test_alertmanager_routing.py routes each rule by its own labels; the alert's `machine`
+      # label names the host.
+      - alert: HostLogErrors
+        expr: sum by (machine, program) (count_over_time({job="syslog", machine!="daniel-pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [6h])) > 3
+        labels:
+          severity: warning
+          service: host-syslog
+        annotations:
+          summary: '{{ $labels.program }} on {{ $labels.machine }} logged more than 3 fatal-pattern lines in 6 hours.'
+          description: >-
+            {{ $labels.program }} on {{ $labels.machine }} logged {{ $value }} syslog lines
+            matching panic, fatal, traceback or out of memory in the last 6 hours. Read
+            {job="syslog", program="{{ $labels.program }}"} in loki-homelab to see the lines.
+      # A host-wide OOM kill pages on the first one. The kernel writes one "Out of memory:
+      # Killed process" line per kill, which HostLogErrors' `> 3` would never reach. The match is
+      # case-sensitive on purpose: a container hitting its own limit logs "Memory cgroup out of
+      # memory: Killed process" in lower case, which HostLogErrors counts and the shadow
+      # ContainerOOMKilled covers. Measured 2026-10-24, neither cluster host logged a host-wide
+      # kill since 2026-09-20.
+      - alert: HostOutOfMemoryKill
+        expr: >-
+          sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Out of memory: Killed process" [1h])) > 0
+        labels:
+          severity: warning
+          service: host-syslog
+        annotations:
+          summary: The kernel on {{ $labels.machine }} OOM-killed a process in the last hour.
+          description: >-
+            The kernel on {{ $labels.machine }} logged {{ $value }} host-wide "Out of memory:
+            Killed process" lines in the last hour, so the node ran out of memory rather than a
+            container hitting its limit. Read {job="syslog", program="kernel"} in loki-homelab
+            for the killed process and the memory report above it.
+      # The update line of each cloudflare-ddns Deployment, ported by M6's batch B7. favonia's
+      # image serves no metrics, so the log is the only evidence an update cycle succeeded. Every
+      # 5m cycle logs, per domain, either "are already up to date" (a cached or a checked no-op)
+      # or, on a real change, "Updated an outdated" or "Added a new". A failed cycle logs "Could
+      # not confirm update" or "No valid IPv4 addresses were detected" and none of the three, so
+      # 15m (three cycles) without one is a dead or failing updater. The filter deliberately
+      # leaves out the "Successfully sent a ping to Uptime Kuma" line, which stops with the Kuma
+      # push at Cutover-2, and the "Checking the IP addresses in about" line, which prints
+      # whether or not the update worked. The Kuma tiles wait 6 minutes and page on one missed
+      # beat, so these rules are slower by design: a single failed cycle is a retry, not a page.
+      # The two Deployments share the `cloudflare-ddns` container name, so the pod name separates
+      # them; the `pod` regex is the Deployment name plus the ReplicaSet and pod suffixes.
+      #
+      # Three costs the rules carry (docs/target-architecture/monitoring/m6-retire-kuma.md, B7).
+      # Their alerts never reach Prometheus `ALERTS`, so `probe.py health cloudflare-ddns` cannot
+      # see them; CloudflareDdnsUnavailable in observability's `pods` group covers a dead pod
+      # instead. LogQL has no promtool test, so the red proof is a lokitool parse, the census
+      # entries in ansible/tests/services/test_loki_stream_labels.py and a live evaluation. Every
+      # edit of this file restarts Loki.
+      #
+      # Shadow beside the Kuma tiles until B7's Cutover-1b drops the label.
+      - alert: CloudflareDdnsDirectUpdateSilent
+        expr: absent_over_time({job="k8s", container="cloudflare-ddns", pod=~"cloudflare-ddns-direct-.*"} |~ `are already up to date|Updated an outdated|Added a new` [15m])
+        labels:
+          severity: warning
+          service: cloudflare-ddns
+          shadow: "true"
+        annotations:
+          summary: cloudflare-ddns-direct has logged no successful update in 15 minutes.
+          description: >-
+            The cloudflare-ddns-direct pod logged neither "already up to date" nor a record
+            change for 15 minutes, so the unproxied terraria and valheim records are not being
+            kept current. Read the cloudflare-ddns-direct pod's log in the homelab namespace.
+      - alert: CloudflareDdnsProxiedUpdateSilent
+        expr: absent_over_time({job="k8s", container="cloudflare-ddns", pod=~"cloudflare-ddns-proxied-.*"} |~ `are already up to date|Updated an outdated|Added a new` [15m])
+        labels:
+          severity: warning
+          service: cloudflare-ddns
+          shadow: "true"
+        annotations:
+          summary: cloudflare-ddns-proxied has logged no successful update in 15 minutes.
+          description: >-
+            The cloudflare-ddns-proxied pod logged neither "already up to date" nor a record
+            change for 15 minutes, so the proxied apex record is not being kept current. Read the
+            cloudflare-ddns-proxied pod's log in the homelab namespace.

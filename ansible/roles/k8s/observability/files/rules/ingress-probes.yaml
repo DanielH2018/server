@@ -1,5 +1,5 @@
-# The ingress probes: blackbox_exporter's probe of every ingress URL Kuma's generated tiles
-# probe, read from the `blackbox-ingress` scrape job. Plain YAML, never Jinja:
+# The ingress probes: blackbox_exporter's probe of every routed ingress URL, read from the
+# `blackbox-ingress` scrape job. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m4-blackbox-ingress.md, "The rules".
 #

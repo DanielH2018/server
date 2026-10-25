@@ -55,6 +55,28 @@ kubeconfig`, which read `ok=18 changed=0 failed=0`: the guard read the live Flux
 refusal skipped. The operator then cleared the line
 ([readings](https://github.com/DanielH2018/server/pull/5316#issuecomment-6224451468)).
 
+**Status, 2026-10-23: H1.1a to H1.8 are done, which unblocks H2, and H1.9 waits on R4 and D6.**
+Both exit checks are met. The last PRs moved the cluster content to Flux in this order. H1.6
+is [#5937](https://github.com/DanielH2018/server/pull/5937), H1.7a is
+[#5941](https://github.com/DanielH2018/server/pull/5941) and H1.7b is
+[#5943](https://github.com/DanielH2018/server/pull/5943). H1.8a needed no PR, because
+`K3S_WRITE_ALLOW` already holds only `agent_verify.yml` and `storage_smoke.yml`, which is the
+census exit check 2 asks for. H1.8b is [#5972](https://github.com/DanielH2018/server/pull/5972),
+and Longhorn v1.13.0 went live through it on 2026-10-23.
+[#5979](https://github.com/DanielH2018/server/pull/5979) retired the stale-checkout guard.
+
+The orchestrator verified H1.8b's exit evidence on 2026-10-23:
+
+- The longhorn-manager rollout finished at 12:40:54Z.
+- The old engine image held 0 refs at 12:42:43Z, so every engine had upgraded.
+- 41 volumes were attached and healthy, and 4 were detached.
+- The StorageClass matched its 8 parameters, and `default-replica-count` read 2.
+- `probe.py health longhorn` and `probe.py health longhorn-backup` read ok.
+- `/var/lib/gitops-deploy/owed.jsonl` held no `manual_plane` line afterwards.
+
+H1.9 stays open, because it waits on R4 and D6. Neither exit check names it, and H2 never
+needs it. H1's status changes to DONE when H1.9 lands.
+
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9
 
@@ -795,7 +817,8 @@ mirrored pair, two keys with different names that a test holds equal:
       `status.available` and the condition message, so it replaces the up to four
       per-target calls. It derives the daily and weekly run times from the first two fields
       of each tier's RecurringJob `spec.cron`, read in one more list call. The worst case
-      falls from 17 kubectl calls to 15.
+      falls from 18 kubectl calls to 16. The planning-time figure of 17 to 15 predates check
+      11's pod-log read, which the shim's header counts.
     - A disarmed target stays named. The verdict's `DISARMED: <targets> (<n> volume(s) not
       checked)` note, from `build_verdict`, carries it, which is the naming ADR-0007 asks
       for.
@@ -812,7 +835,10 @@ mirrored pair, two keys with different names that a test holds equal:
       arm flag, through the owed apply, writes a blank URL.
     - The b2-budget cron drops `--retain`. `probe.py b2-budget` then reads `spec.retain` from
       the live weekly RecurringJobs, and a failed read exits non-zero rather than falling back
-      to the parser's default of 2. `--retain` stays for a hand run.
+      to the parser's default of 2. `--retain` stays for a hand run. The read happens after
+      the prune snapshot is written, so a failure costs the report and never the prices
+      `b2-deletions` needs. `format_backup_budget` accepts `retain` and does not read it in
+      its present form, so the live read changes the exit status and not the report.
     - The health grace stays derived from the schedule, now the one the cluster runs.
 - **Read only by host crons:** they stay in `setup/k3s/defaults/main.yml` until H2.
 
@@ -821,6 +847,11 @@ one of the six Flux-born roles may appear in a task or template file under
 `ansible/roles/setup/`. Its named members are `k3s_longhorn_backup_armed` and
 `k3s_longhorn_backup_cron`, which it must find in `longhorn-backup`'s defaults. Every PR that
 moves a key runs `git grep -l <key>` for it and lists every reader it repoints in its body.
+
+The row exempts two keys by name, `k8s_autodeploy` and `k8s_autodeploy_reason`. Every k8s role
+defines them as a convention, and the release-staleness check and the Renovate prompt read the
+convention across all roles, not the value of one Flux-born role. A flip of either changes a
+stance and no host-visible state. H1.7b found this when the row first ran over the real tree.
 
 ### Longhorn objects that are not static
 
@@ -836,7 +867,9 @@ moves a key runs `git grep -l <key>` for it and lists every reader it repoints i
       ConfigMap's class and fails on a difference. The baseline shows that the manager
       creates the class, but not that it replaces a class whose parameters differ. If the
       check goes red after a parameter change, the fix is an **operator-only** delete of the
-      class, which the manager recreates from the ConfigMap.
+      class, which the manager recreates from the ConfigMap. The check is built ahead of
+      H1.5a, in `scripts/diagnostics/probe_lib/health_plumbing.py` (#5923), and runs once
+      the `longhorn` tag resolves to a k8s role.
 - **`longhorn-reconcile`.** This CronJob runs hourly, with `concurrencyPolicy: Forbid`. It
   takes over the live-state tasks.
     - **What it runs.** A stdlib Python script, mounted from a ConfigMap, in a digest-pinned
@@ -895,6 +928,11 @@ moves a key runs `git grep -l <key>` for it and lists every reader it repoints i
       `_is_clean` and `_is_flagged` pair, and its named member, the `default` BackupTarget
       in the `longhorn-backup` render, all land in H1.7b's change to `secret_checks.py`.
       H1.7b waits on D3, which waits on R2, so the file exists by then (*Open questions* 5).
+    - **The named member also holds for a blank URL.** A disarm PR renders
+      `backupTargetURL: ""`, so no placeholder is left to find, and a member that required one
+      would fail the render of the PR that applies the incident lever. The member passes when the
+      URL is blank, and fails a non-blank URL that names no `${longhorn_b2_bucket}`. The
+      `# DECIDED:` marker beside the member in `secret_checks.py` records the choice.
 - **Two endpoint values can now disagree.** The regex existed so that the region could not
   drift from `longhorn_b2_endpoint`. After H1.7b, nothing ties the two together. A wrong
   region makes the target unreachable, which the availability check below reports within
@@ -959,7 +997,9 @@ refreshes the templates by hand, and the test below ties them to the version.
 - **The ConfigMap carries only `Corefile`.** `NodeHosts` stays the field k3s's node
   controller writes, and Flux never declares it. A test asserts that the rendered ConfigMap
   has exactly one data key. `probe.py health coredns` fails when the live `NodeHosts` is
-  empty.
+  empty. This check and the resolution check below are built ahead of H1.4, in
+  `scripts/diagnostics/probe_lib/health_plumbing.py` (#5924), and run once the `coredns` tag
+  resolves to a k8s role.
 - **`clusterIP`** renders as the live `10.43.0.10`, because the field is immutable.
 - **The image** becomes a pin, `coredns_image`. The test that pins it is
   `test_coredns_image_follows_bundled_manifest.py`, retargeted. It keeps an excerpt of the
@@ -1359,6 +1399,11 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
   the guard-map rows of the writer tasks it deletes (H1.1h). The rows live in
   `tasks/stale-checkout-guard.yml`. A PR whose deletion leaves a guard instance with no row
   deletes that instance too.
+    - **After H1.7b.** H1.7b deleted the last row and left the guard as an empty list. #5957
+      then retired the guard: both task files, the `main.yml` import, their defaults and their
+      two test modules. The write-verb census refuses a new `setup/k3s` writer on its own,
+      because its allow map names only `storage_smoke.yml` and `agent_verify.yml`. The H1.1h
+      text below describes the guard as it was built.
 - **An added entry reaches readers of the list until D6.12.** H1.2, H1.3, H1.4, H1.5a,
   H1.6 and H1.7b each add one entry to `containers_list` in
   `ansible/inventory/host_vars/daniel-box.yml`, and the tick applies that file as a
@@ -1857,6 +1902,10 @@ gates on it. Each estimate counts hand-written lines, tests included.
       extra skips, and say that step 7 creates the targets through `longhorn-backup`.
     - The backup-health reader reports a target that carries the reconcile-disabled
       annotation. `probe.py landing` adds both BackupTargets to its annotation listing.
+      The listing (`RECONCILE_MEMBERS` in `scripts/diagnostics/probe_lib/promote_state.py`) is
+      H1.4's, so a stack whose base predates H1.4 adds the two members after its rebase onto
+      master. Until then, `probe.py landing` does not name an annotated BackupTarget, and the
+      backup-health monitor and `probe.py health longhorn-backup` still report it.
     - **Operator-only:** amend ADR-0007 again. Its new consequence gains the break-glass
       case: a target held by the annotation reads red until step 4 removes it.
     - Move the RecurringJob actuator's contract.
@@ -2756,7 +2805,9 @@ subject's tests.
     *Governs* names and changes how a disarm reads on the monitor. H1.7b adds the
     break-glass case. *Resolution:* each PR carries its amendment, and the operator approves
     each one in that PR's review (**operator-only**). If the operator prefers one superseding
-    ADR instead, it lands in H1.7a, and H1.7b amends it.
+    ADR instead, it lands in H1.7a, and H1.7b amends it. **Ruled 2026-10-22: two
+    amendments.** H1.7a carries its own amendment and the operator approves it in that PR's
+    review. H1.7b amends ADR-0007 again, and there is no superseding ADR.
 12. **A root-only suspend for bring-up.** Steps 4 to 11 of the bring-up order need the root
     `homelab` Kustomization suspended while the OCIRepository runs. D1's
     `flux_sync_suspend` suspends both. *Resolution:* no D1 variable. Step 4 runs D1's role

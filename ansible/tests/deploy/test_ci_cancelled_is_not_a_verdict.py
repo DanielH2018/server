@@ -5,11 +5,11 @@ immediately followed by another reads `completed cancelled` forever. The post-me
 the repo CLAUDE.md tells an operator to poll that commit's own check-runs, so without this the
 documented gate waits on a run that can never go green.
 
-`deploy_logic.py` already gets this right. What these guard is that it keeps getting it right,
+`hosts/lib/ci_verdict.py` already gets this right. What these guard is that it keeps getting it right,
 and that the doc keeps naming the constant an operator would go read.
 """
 
-from deployer_lib.deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
+from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
 from _helpers import REPO
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every role whose shipped scripts `import host_lib` must install it through the shared task.
 
-`roles/setup/common/files/host_lib.py` has no single home on a host. Each consumer is a
+`hosts/lib/host_lib.py` has no single home on a host. Each consumer is a
 directly-invoked script, so it gets its own directory on `sys.path` and nothing else, and the
 file has to be copied in beside it. Six roles do that, at seven sites, through
 `roles/setup/common/tasks/install_host_lib.yml`, which owns the source path, the `host_lib.py`
@@ -34,12 +34,12 @@ from _role_census import every_plane_role_dirs, role_task_files
 
 MODULE = "host_lib"
 SHARED_TASK = "common/tasks/install_host_lib.yml"
-HOST_LIB_SRC = "ansible/roles/setup/common/files/host_lib.py"
+HOST_LIB_SRC = "hosts/lib/host_lib.py"
 # The include copies these files together: host_lib re-exports the Kuma push from kuma_push.py
 # (#3745), so each needs its own stamp pair.
 INSTALLED_SRCS = {
     "host_lib.py": HOST_LIB_SRC,
-    "kuma_push.py": "ansible/roles/setup/common/files/kuma_push.py",
+    "kuma_push.py": "hosts/lib/kuma_push.py",
 }
 
 # The census's non-vacuity assertion. A scan that finds its own subject by glob returns an empty
@@ -209,7 +209,7 @@ def test_the_census_finds_exactly_the_known_consumers():
 def test_every_pod_staged_consumer_stages_host_lib_into_its_configmap():
     for role, template in POD_STAGED_CONSUMERS.items():
         text = (ROLES / template).read_text()
-        assert "/roles/setup/common/files/host_lib.py" in text, (
+        assert "/../hosts/lib/host_lib.py" in text, (
             f"{role} imports host_lib in a pod, but {template} no longer stages it"
         )
 

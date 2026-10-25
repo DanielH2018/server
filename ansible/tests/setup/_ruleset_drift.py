@@ -11,10 +11,17 @@ import os
 import subprocess
 
 from lib.proc_testing import fake_bin, path_with, write_exec
+from lib.repo_paths import REPO as REPO_ROOT
 from _shell_render import render_shell_script
 
 TEMPLATE = ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2")
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
+CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+# The role's copy of the check library, so a runner that never ran initial_setup still sources it
+# and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
+REAL_CHECK_LIB = (
+    REPO_ROOT / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
+)
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 # The declared set the script bakes in. Kept here as a literal rather than read from defaults:
@@ -32,10 +39,14 @@ LIB_STUB = """\
 kuma_push() {
   printf '%s\\n%s\\n' "$1" "$2" > "$KUMA_PUSH_OUT"
 }
-# `reachout_verdict` from the real library, stubbed to the WAN-reachable answer — which is what
-# every case here means: the source refused, so the tile must page. The skip path is covered by
-# ansible/tests/setup/test_kuma_push_wan_skip.py against the real function.
-reachout_verdict() { REACHOUT_STATUS=down; REACHOUT_NOTE=""; }
+"""
+# The check library the script sources, with `reachout_verdict` stubbed to the WAN-reachable
+# answer — which is what every case here means: the source refused, so the tile must page. The
+# stub follows the real library because that library defines the function too. The skip path is
+# covered by ansible/tests/setup/test_kuma_push_wan_skip.py against the real function.
+CHECK_LIB_STUB = f"""\
+. {REAL_CHECK_LIB}
+reachout_verdict() {{ REACHOUT_STATUS=down; REACHOUT_NOTE=""; }}
 """
 
 
@@ -168,6 +179,10 @@ def run(
     lib = tmp_path / "kuma-push-lib.sh"
     lib.write_text(LIB_STUB)
     body = body.replace(REAL_LIB, str(lib))
+    assert CHECK_LIB in body, "the script no longer sources homelab-check-lib.sh"
+    check_lib = tmp_path / "homelab-check-lib.sh"
+    check_lib.write_text(CHECK_LIB_STUB)
+    body = body.replace(CHECK_LIB, str(check_lib))
 
     # The script resets PATH for cron, which would drop the stub dir this harness puts in the
     # environment — so prepend it inside that same line. Asserted rather than best-effort: if the
@@ -223,11 +238,14 @@ def run(
     )
 
     out = tmp_path / "push.out"
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir(exist_ok=True)
     env = {
         **os.environ,
         "PATH": path_with(binstub),
         "KUMA_PUSH_OUT": str(out),
         "LOGGER_OUT": str(tmp_path / "journal.out"),
+        "TEXTFILE_DIR": str(textfile_dir),
     }
     proc = subprocess.run(
         ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
@@ -236,3 +254,10 @@ def run(
         return proc.returncode, None, None
     status, message = out.read_text().split("\n", 1)
     return proc.returncode, status, message.strip()
+
+
+def textfile_series(tmp_path, check):
+    """The `homelab_check_*` samples a run left in the case's textfile directory, by metric."""
+    lines = (tmp_path / "textfile" / f"{check}.prom").read_text().splitlines()
+    samples = (line.rsplit(" ", 1) for line in lines if not line.startswith("#"))
+    return {name.split("{")[0]: value for name, value in samples}

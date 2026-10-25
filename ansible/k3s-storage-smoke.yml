@@ -9,11 +9,14 @@
 # internal to that host, so daniel-box cannot route to it (docs/archive/staging-cluster.md,
 # Decision 2).
 #
-# On a rebuilt cluster this runs after the Flux-owned plumbing exists. The order since H1.2
-# (docs/longhorn-disaster-recovery.md, *Order from H1.2*): a first bring-up run that skips
-# `kubeconfig`, the operator's hand apply of `cluster-base`, the `kubeconfig` run, Flux with the
-# root Kustomization suspended, then the restores. The smoke test creates and deletes its claim
-# in `default`, so no backup carries its name.
+# On a rebuilt cluster this runs after the Flux-owned plumbing exists, at step 6 of
+# docs/flux-deploy-plane.md's *Bootstrapping Flux on a rebuilt cluster*: after the bring-up,
+# the hand-installed Flux and the plumbing Kustomizations, and before the restores and the
+# root. The smoke test creates and deletes its claim in `default`, so no backup carries its
+# name. The `longhorn` Kustomization installs Longhorn and its Settings at that step, the CSI
+# sidecar requests among them (#5958), the `longhorn-backup` Kustomization creates the backup
+# credentials, both targets and the RecurringJobs there too (H1.7b), and the label reconcile
+# is the `longhorn-reconcile` CronJob's. So the Settings are in place when the claim binds.
 #
 # ITS OWN PLAYBOOK, not a fourth play in k3s-bringup.yml.
 # That playbook's first play takes `hosts: {{ target | default(lookup('pipe','hostname')) }}`

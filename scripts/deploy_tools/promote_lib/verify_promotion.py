@@ -31,21 +31,33 @@ whose record is `success`, `error` or absent. `verify` makes no read of `prod`'s
 the record is what the cluster showed before T, not after.
 
 WHERE THE BUNDLES COME FROM. `decide` pulls both before `prod` moves and writes them under
-`--bundle-dir` (`write_handoff`), with the record of `prod`'s statuses, so a registry error
-promotes nothing. `verify` reads them back (`read_handoff`, `read_recorded`) and makes no
-registry call.
+`--bundle-dir`, with the record of `prod`'s statuses, so a registry error promotes nothing.
+`verify` reads them back and makes no registry call (`verify_handoff.py`).
+
+A SUPERSEDED RUN WRITES NOTHING (D7.2): `prod` naming another digest than T's ends the wait
+as `superseded`, which exits 0 (`superseded.py`).
 
 ONLY STATUSES FROM THIS PROMOTION COUNT. T may carry statuses from an earlier promotion of
 the same commit, such as the `failure` that held it before an operator cleared the hold and
 dispatched `promote` again. `verify` reads T's statuses from `--moved-at`, the time the `tag`
 job moved `prod`, less MOVED_AT_SKEW_S, so an older status reads as no status at all.
 
-THE VERDICT. Every expected status `success` is `good`. Any expected `failure` or `error` is
+THE VERDICT. Every expected status `success` is `good`, and `prod` naming another digest is
+`superseded`. Any expected `failure` or `error` is
 `failed`, naming those. At the timeout it is `failed`, naming every expected name that is not
-`success`. A missing status, or a `pending` one, keeps the wait going and never reads as
-success. A status read that fails is retried at the next poll. The timeout is derived from T's
+`success`. In a Longhorn hop another name's failure is provisional (THE STORAGE ROLLOUT). A
+missing status, or a `pending` one, keeps the wait going and never reads as success. A status
+read that fails is retried at the next poll. The timeout is derived from T's
 bundle and its changed set (`chained_timeout.promote_timeout`), and capped at
 `chained_timeout.VERIFY_CAP_S`.
+
+THE STORAGE ROLLOUT. While `longhorn` is expected, a failure of any other name is provisional
+until `flux/longhorn` has read `success` for a grace, or `longhorn` overruns its own timeout
+(`storage_rollout.py`, #5997).
+
+THE CONTROLLER ROLLOUT. While `flux` is expected, a failure of `flux` or `soak` is provisional:
+a later `success` on the same name ends it, and none inside a fixed grace turns it final
+(`controller_rollout.py`, #6013).
 
 THE OTHER TWO HALVES `decide` calls:
   - `wait_settled`, the wait on a verification in flight (the DECIDED marker below);
@@ -84,14 +96,14 @@ from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG
 from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
+from deploy_tools.promote_lib import controller_rollout, storage_rollout, superseded
+from deploy_tools.promote_lib.verify_handoff import read_handoff, read_recorded
+
+# Re-exported, as `verify.write_handoff`, for `promote.py`'s `hand_off`.
+from deploy_tools.promote_lib.verify_handoff import write_handoff as write_handoff
 from renderer.renderer_lib.ordering import split_kind
 
 DIGESTS_FILE = "digests.json"
-# The statuses `decide` recorded on `prod`'s commit, at the handoff's root beside `prod/` and
-# `target/`, so `read_handoff` never reads it as a bundle file.
-RECORDED_FILE = "prod-statuses.json"
-# The files `verify` reads from each bundle. Nothing else is handed on.
-_HANDOFF_FILE = re.compile(r"digests\.json|flux/[a-z0-9][a-z0-9.-]*\.yaml")
 KUSTOMIZATION_API = "kustomize.toolkit.fluxcd.io/v1"
 STATUS_PREFIX = "flux/"
 FAILED_STATES = frozenset({"failure", "error"})
@@ -112,7 +124,8 @@ POLL_S = 30
 # a newer one cancels it, so a pending `settle` could be evicted with its hold unwritten.
 # Unguarded, a second run could move `prod` past a T that `verify` still waits on, Flux would
 # never post T's statuses, and the timeout would write a false hold and reset `prod` under the
-# second run's verified commit. So `decide` waits while `prod` differs from `last-good`, which
+# second run's verified commit. So `decide` waits while `prod` differs from `last-good` (unless
+# `promote_lib/supersede.py` lets T supersede the run, D7), which
 # it does only between a run's `tag` and its `settle`, at two HEADs a poll. And `tag` moves
 # `prod` only while it still names the digest `decide` read, which closes the gap between one
 # run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that never settles stalls promotion as `current`, which D2.6d's
@@ -134,69 +147,6 @@ SOAK = "soak"
 
 
 # -- the bundles -----------------------------------------------------------------------------
-
-
-def write_handoff(
-    directory: Path,
-    prod: dict[str, bytes] | None,
-    target: dict[str, bytes],
-    recorded: dict[str, str] | None = None,
-) -> None:
-    """Write the files `verify` reads from `prod`'s bundle and T's under `directory`.
-
-    `prod` is None on the first run, which has no `prod`, and leaves `directory/prod` absent.
-    `recorded` is what `prior_statuses` read on `prod`'s commit, written as RECORDED_FILE.
-
-    Raises:
-        OSError: a write failed.
-    """
-    for side, files in (("prod", prod), ("target", target)):
-        for name, raw in (files or {}).items():
-            if _HANDOFF_FILE.fullmatch(name):
-                path = directory / side / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(raw)
-    (directory / "target").mkdir(parents=True, exist_ok=True)
-    (directory / RECORDED_FILE).write_text(
-        json.dumps(recorded or {}, sort_keys=True) + "\n", encoding="utf-8"
-    )
-
-
-def read_recorded(directory: Path) -> dict[str, str]:
-    """The statuses `decide` recorded on `prod`'s commit, by name.
-
-    A missing or unreadable file is no record, so every dependent stays expected: the safe
-    direction.
-    """
-    try:
-        found = json.loads((directory / RECORDED_FILE).read_text(encoding="utf-8"))
-    except OSError, ValueError:
-        return {}
-    if not isinstance(found, dict):
-        return {}
-    return {k: v for k, v in found.items() if isinstance(k, str) and isinstance(v, str)}
-
-
-def read_handoff(
-    directory: Path,
-) -> tuple[dict[str, bytes] | None, dict[str, bytes]]:
-    """`prod`'s files, or None when `decide` had no `prod`, and T's files.
-
-    Raises:
-        ValueError: `directory/target` does not exist, so `decide` wrote no handoff.
-    """
-
-    def files(side: Path) -> dict[str, bytes]:
-        return {
-            path.relative_to(side).as_posix(): path.read_bytes()
-            for path in side.rglob("*")
-            if path.is_file()
-        }
-
-    if not (directory / "target").is_dir():
-        raise ValueError(f"{directory} holds no target/ that decide wrote")
-    prod = directory / "prod"
-    return (files(prod) if prod.is_dir() else None), files(directory / "target")
 
 
 def bundle_digests(files: dict[str, bytes] | None) -> object | None:
@@ -253,12 +203,16 @@ class Expected:
             `failure`.
         widened: why every name counts as changed, or "" when the digests decided.
         timeout_s: how long to wait.
+        storage_grace_s: `storage_rollout.grace_s`, 0 when `longhorn` is not expected.
+        storage_rollout_s: `storage_rollout.rollout_s`, 0 when `longhorn` is not expected.
     """
 
     names: frozenset[str]
     dependents: frozenset[str]
     widened: str
     timeout_s: int
+    storage_grace_s: int = 0
+    storage_rollout_s: int = 0
 
 
 def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Expected:
@@ -276,11 +230,14 @@ def expected_set(target: dict[str, bytes], prod: dict[str, bytes] | None) -> Exp
     depends_on, suspended = bundle_graph(target, docs)
     old = bundle_digests(prod) if prod is not None else None
     found = changed_set(bundle_digests(target), old, depends_on, suspended)
+    grace = storage_rollout.grace_s(docs, found.names)
     return Expected(
         names=found.names | {ROOT},
         dependents=found.names - found.direct,
         widened=found.widened,
         timeout_s=promote_timeout(docs, found.names),
+        storage_grace_s=grace,
+        storage_rollout_s=storage_rollout.rollout_s(docs, grace),
     )
 
 
@@ -328,11 +285,14 @@ class StatusReads:
             With a time, it leaves out every status updated before it.
         sleep: waits the given seconds.
         clock: monotonic seconds.
+        prod: `prod`'s digest, None when the tag is absent, raising `forge.ForgeError`.
+            None in place of the callable reads no digest, so no run is ever superseded.
     """
 
     statuses: Callable[[str, datetime | None], dict[str, str]]
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+    prod: Callable[[], str | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -340,7 +300,7 @@ class Verdict:
     """How `verify` ended.
 
     Attributes:
-        verdict: `good` or `failed`.
+        verdict: `good`, `failed` or `superseded`.
         failed: the names `settle` writes into `<T> failed=<names>`, sorted.
         excused: the dependents left out because their recorded status on `prod`'s commit
             read `failure`.
@@ -369,6 +329,7 @@ def verify(
     since: datetime | None = None,
     poll_s: int = POLL_S,
     recorded: Mapping[str, str] | None = None,
+    digest: str = "",
 ) -> Verdict:
     """Wait on T's statuses for the expected names until one fails, all pass or time runs out.
 
@@ -382,6 +343,8 @@ def verify(
         poll_s: the seconds between reads.
         recorded: the statuses `decide` recorded on `prod`'s commit before the move, by
             name. None is no record, which excuses nothing.
+        digest: T's digest, which `prod` must still name for any verdict but
+            `superseded`. Empty reads no digest.
     """
     excused = already_failing(expected.dependents, recorded or {})
     names = sorted(expected.names - excused)
@@ -399,7 +362,19 @@ def verify(
     started = reads.clock()
     states: dict[str, str] = {}
     last = ""
+    controller = controller_rollout.Window()
+    window = storage_rollout.Window(
+        names, expected.storage_grace_s, expected.storage_rollout_s
+    )
+
+    def moved_past() -> Verdict | None:
+        if superseded.moved_past(reads.prod, digest) is None:
+            return None
+        return Verdict("superseded", excused=tuple(sorted(excused)))
+
     while True:
+        if moved := moved_past():
+            return moved
         try:
             states = reads.statuses(target, since)
             line = ", ".join(
@@ -408,8 +383,14 @@ def verify(
         except forge.ForgeError as err:
             line = f"the statuses could not be read: {err}"
         failed = [n for n in names if states.get(STATUS_PREFIX + n) in FAILED_STATES]
+        rolling = controller.provisional(names, failed, reads.clock())
+        final = [n for n in failed if n not in rolling]
+        if final and not window.provisional(final, states, reads.clock()):
+            return moved_past() or Verdict(
+                "failed", tuple(failed), tuple(sorted(excused))
+            )
         if failed:
-            return Verdict("failed", tuple(failed), tuple(sorted(excused)))
+            line += window.note() if final else controller.note()
         if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
             return Verdict("good", excused=tuple(sorted(excused)))
         if line != last:
@@ -417,7 +398,9 @@ def verify(
             last = line
         if reads.clock() - started >= expected.timeout_s:
             missing = [n for n in names if states.get(STATUS_PREFIX + n) != "success"]
-            return Verdict("failed", tuple(missing), tuple(sorted(excused)))
+            return moved_past() or Verdict(
+                "failed", tuple(missing), tuple(sorted(excused))
+            )
         reads.sleep(poll_s)
 
 
@@ -425,13 +408,14 @@ def report(target: str, verdict: Verdict, github_output: str | None) -> int:
     """Print the last line, append the step outputs, and return the exit code.
 
     A failed verdict exits 1 so the run reads red, after its outputs are written for `settle`.
+    A superseded one exits 0: the later run's verification owns the outcome.
     """
     failed = ",".join(verdict.failed)
     print(f"target={target} verdict={verdict.verdict} failed={failed}")
     if github_output:
         with open(github_output, "a", encoding="utf-8") as out:
             out.write(f"verdict={verdict.verdict}\nfailed={failed}\n")
-    return OK if verdict.verdict == "good" else FAILED
+    return OK if verdict.verdict in ("good", "superseded") else FAILED
 
 
 def add_parser(commands) -> None:
@@ -451,6 +435,11 @@ def add_parser(commands) -> None:
         "--prior",
         default="",
         help="prod's commit before the move; empty on a first run",
+    )
+    cmd.add_argument(
+        "--digest",
+        default="",
+        help="T's digest; prod naming another one ends the wait as superseded",
     )
     cmd.add_argument(
         "--moved-at",
@@ -483,8 +472,19 @@ def run(f: forge.Forge, args: argparse.Namespace, github_output: str | None) -> 
         error(f"verify: the bundles decide handed on: {err}")
         return FAILED
     since = moved_at - timedelta(seconds=MOVED_AT_SKEW_S)
-    reads = StatusReads(f.github.statuses)
-    verdict = verify(reads, args.target, args.prior, expected, since, recorded=recorded)
+    if args.digest and not re.fullmatch(r"sha256:[0-9a-f]{64}", args.digest):
+        error(f"verify: --digest {args.digest!r} is not sha256:<64 hex>")
+        return USAGE_ERROR
+    reads = StatusReads(f.github.statuses, prod=lambda: f.registry.digest(PROD_TAG))
+    verdict = verify(
+        reads,
+        args.target,
+        args.prior,
+        expected,
+        since,
+        recorded=recorded,
+        digest=args.digest,
+    )
     return report(args.target, verdict, github_output)
 
 
@@ -529,12 +529,16 @@ class Settled:
         held: the revertible hold as `(commit, names)`, or None when DEPLOY_HOLD is `none`.
         prod: `prod`'s digest, or None when the tag is absent.
         last_good: `last-good`'s digest, or None when the tag is absent.
+        hold: the DEPLOY_HOLD value read, which `tag` compares before it moves `prod`.
+        in_flight: `prod`'s run is still verifying, and `supersedable` let T take it over.
     """
 
     stop: tuple[str, str] | None = None
     held: tuple[str, frozenset[str]] | None = None
     prod: str | None = None
     last_good: str | None = None
+    hold: str = "none"
+    in_flight: bool = False
 
 
 # DECIDED: a hold without a reset (H1.1b) leaves `prod` on the failed T while `last-good` stays
@@ -549,6 +553,7 @@ def wait_settled(
     sleep: Callable[[float], None],
     clock: Callable[[], float],
     revert_rule: bool,
+    supersedable: Callable[[str], bool] | None = None,
 ) -> Settled:
     """Read DEPLOY_HOLD, then wait while `prod` and `last-good` name different digests.
 
@@ -561,6 +566,8 @@ def wait_settled(
         sleep: waits the given seconds.
         clock: monotonic seconds.
         revert_rule: whether a `failed=` hold may be passed.
+        supersedable: whether T may take over the run that `prod`'s digest names (D7). When
+            it answers True under a `none` hold, the wait ends at once with `in_flight`.
 
     Raises:
         Whatever `hold` and `digest` raise.
@@ -578,9 +585,11 @@ def wait_settled(
             return Settled(("held", f"{forge.HOLD_VARIABLE}={value}"))
         prod, last_good = digest(PROD_TAG), digest(LAST_GOOD_TAG)
         if last_good is None or prod is None or prod == last_good:
-            return Settled(None, held, prod, last_good)
+            return Settled(None, held, prod, last_good, value)
         if digest(HELD_TAG) == prod:
-            return Settled(None, held, prod, last_good)
+            return Settled(None, held, prod, last_good, value)
+        if supersedable is not None and value == "none" and supersedable(prod):
+            return Settled(None, held, prod, last_good, value, in_flight=True)
         waited = int(clock() - started)
         if waited >= IN_FLIGHT_WAIT_S:
             return Settled(

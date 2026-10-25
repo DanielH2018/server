@@ -103,7 +103,7 @@ tests:
               service: flux
               shadow: "true"
             exp_annotations:
-              summary: Prometheus cannot scrape a Flux controller.
+              summary: Prometheus cannot scrape the Flux controller source-controller.
               description: >-
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
@@ -120,7 +120,7 @@ tests:
               service: flux
               shadow: "true"
             exp_annotations:
-              summary: Prometheus cannot scrape a Flux controller.
+              summary: Prometheus cannot scrape the Flux controller source-controller.
               description: >-
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
@@ -181,7 +181,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations: &not_ready_kustomization
-              summary: A Flux object has not been Ready for 15 minutes.
+              summary: The Kustomization homelab has not been Ready for 15 minutes.
               description: >-
                 The Kustomization homelab in flux-system has had a Ready condition other than
                 True for 15 minutes. Its status conditions name the failing step.
@@ -260,7 +260,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: A Flux object has not been Ready for 15 minutes.
+              summary: The OCIRepository homelab has not been Ready for 15 minutes.
               description: >-
                 The OCIRepository homelab in flux-system has had a Ready condition other than
                 True for 15 minutes. Its status conditions name the failing step.
@@ -311,8 +311,8 @@ tests:
   # The root Kustomization suspended. It fires at 24h and not at 23h59m, one evaluation short.
   # A failed kube-state-metrics scrape at 11h55m stale-marks the series for one 5m sample, and
   # the hold runs across it.
-  # The OCIRepository, suspended beside it by flux_sync_suspend, never fires: the rule reads
-  # Kustomizations only. The input interval stays inside the 5m lookback, so the series never
+  # The OCIRepository, suspended beside it by the operator's hand suspend, never fires: the
+  # rule reads Kustomizations only. The input interval stays inside the 5m lookback, so the series never
   # reads absent between samples.
   - interval: 5m
     input_series:
@@ -334,11 +334,12 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: A Flux Kustomization has been suspended for more than 24 hours.
+              summary: The Kustomization homelab has been suspended for more than 24 hours.
               description: >-
                 The Kustomization homelab in flux-system has been suspended for 24 hours, so
-                Flux applies nothing it owns. If flux_sync_suspend is true, set it back and run
-                the flux role; otherwise the suspend was made by hand.
+                Flux applies nothing it owns. If its role sets flux_suspend, land the PR that
+                removes it; otherwise the suspend was made by hand, and its resume is in
+                docs/flux-deploy-plane.md.
 
   # Resumed: suspended for 23h56m, then resumed, which drops the `suspended` label. The 10m
   # window still holds the suspended series at 24h, so only the `unless` on the resumed

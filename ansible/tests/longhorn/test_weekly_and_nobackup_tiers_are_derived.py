@@ -13,7 +13,7 @@ Run: uv run pytest ansible/tests/longhorn/test_weekly_and_nobackup_tiers_are_der
 import pytest
 
 from _helpers import load_defaults
-from lib.repo_paths import K3S_ROLE
+from lib.repo_paths import LONGHORN_RECONCILE_ROLE
 import longhorn_groups
 from ansible.errors import AnsibleFilterError
 from lib.service_tiers import resolved_tier_lists
@@ -62,19 +62,19 @@ _REPLACED_NOBACKUP = frozenset(
     ],
 )
 def test_the_role_default_is_the_derivation_not_a_list(key, filter_name):
-    raw = load_defaults(K3S_ROLE)[key]
+    raw = load_defaults(LONGHORN_RECONCILE_ROLE)[key]
     assert isinstance(raw, str) and filter_name in raw, raw
 
 
 def test_no_weekly_volume_changed_its_weekday():
-    derived = resolved_tier_lists(load_defaults(K3S_ROLE))[
+    derived = resolved_tier_lists(load_defaults(LONGHORN_RECONCILE_ROLE))[
         "k3s_longhorn_weekly_volumes"
     ]
     assert derived == _REPLACED_WEEKLY
 
 
 def test_the_nobackup_set_is_the_list_it_replaced():
-    derived = resolved_tier_lists(load_defaults(K3S_ROLE))[
+    derived = resolved_tier_lists(load_defaults(LONGHORN_RECONCILE_ROLE))[
         "k3s_longhorn_nobackup_volumes"
     ]
     assert len(derived) == len(set(derived)), derived

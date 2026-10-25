@@ -7,7 +7,8 @@ writes back what an install or a reconcile changed, and appends its argv to
 
 state.json keys:
     host: what `hostname` prints.
-    installed: package -> [three-letter dpkg status, version].
+    installed: package -> [three-letter dpkg status, version]. `dpkg-query` matches its
+        arguments as shell patterns, so `homelab-*` lists every installed homelab package.
     repo: package -> versions the homelab repository publishes, or null for a fetch that
         writes no Packages list.
     update_exit, full_update_exit: the restricted and the full `apt-get update`'s exits.
@@ -15,12 +16,15 @@ state.json keys:
     install_output: what a failed `apt-get install` prints.
     audit, configure_exit, configure_output: `dpkg --audit` and `dpkg --configure -a`.
     reconcile: "ok" or "fail", the run `systemctl start homelab-reconcile.service` records.
+    reconcile_run: {"argv", "env", "record"}, optional. The start then runs the real reconcile
+        with that argv and environment and copies the record it wrote at `record`.
     verify: what `dpkg --verify` prints.
     hour, today, now: what `date +%H`, `+%F` and `+%s` print.
 
 `dpkg --compare-versions` runs the real dpkg, so the version order is Debian's.
 """
 
+import fnmatch
 import json
 import os
 import subprocess
@@ -53,13 +57,15 @@ def date(state: dict, args: list[str]) -> int:
 
 
 def dpkg_query(state: dict, args: list[str]) -> int:
+    """Print each installed package a name or a shell pattern matches, once per match."""
     code = 0
-    for package in args[3:]:
-        if package in state["installed"]:
+    for pattern in args[3:]:
+        matches = fnmatch.filter(sorted(state["installed"]), pattern)
+        for package in matches:
             status, version = state["installed"][package]
             print(f"{package} {status}{version}")
-        else:
-            print(f"dpkg-query: no packages found matching {package}", file=sys.stderr)
+        if not matches:
+            print(f"dpkg-query: no packages found matching {pattern}", file=sys.stderr)
             code = 1
     return code
 
@@ -112,6 +118,13 @@ def apt_helper(state: dict, args: list[str]) -> int:
 def systemctl(state: dict, args: list[str]) -> int:
     if args != ["start", "homelab-reconcile.service"]:
         raise SystemExit(f"stub systemctl: unexpected {args}")
+    if state.get("reconcile_run"):
+        # The real reconcile runs and writes its own record, which the updater then reads.
+        job = state["reconcile_run"]
+        subprocess.run(job["argv"], env=job["env"], capture_output=True, check=False)
+        RECORD.parent.mkdir(parents=True, exist_ok=True)
+        RECORD.write_text(Path(job["record"]).read_text())
+        return 0 if json.loads(RECORD.read_text())["result"]["ok"] else 1
     record = json.loads(RECORD.read_text()) if RECORD.exists() else {}
     run = {
         "versions": {pkg: version for pkg, (_, version) in state["installed"].items()},

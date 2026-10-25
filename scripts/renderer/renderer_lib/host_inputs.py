@@ -21,18 +21,25 @@ HOST_INPUTS = (
     "uv.lock",
     # Host mode removes its key names (`host.secret_names`).
     "ansible/vars/secrets.yml",
-    # One of `host_sources.SHARED_FILES`, which H3.8b copies into the Pi's package.
+    # The ciphertext a host package carries (`host_outputs.finish`): a change to a host's file
+    # changes that host's package (H4.2, H4.5).
+    "ansible/vars/hosts/",
+    # Two of `host_sources.SHARED_FILES`, which H3.8b and M6 B5 copy into the Pi's package.
     "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
+    "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    # What a component's `role:` renders (`host_sources.ROLE_SOURCES`): the role's defaults and
+    # the two templates daniel-server's package renders in place (H4.3a, H4.3c).
+    "ansible/roles/setup/nut_host/defaults/main.yml",
+    "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2",
+    "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
     # Past the plan's list, found by the audit test: ansible-core reads `ansible.cfg` from the
     # render's working directory, and `homelab_render.py` imports the other two at load, for
     # cluster mode.
     "ansible.cfg",
     "scripts/deploy_tools/render_targets.py",
     "scripts/secrets_mgmt/cluster_vars_check.py",
-    # Also past the plan's list, imported at load through `ansible/filter_plugins/` and
-    # `scripts/lib/`. A warm bytecode cache hid them, because the loader then opens only the
-    # untracked `.pyc`; the audit runs with none.
-    "ansible/roles/setup/common/files/host_lib.py",
-    "ansible/roles/setup/common/files/kuma_push.py",
-    "ansible/roles/setup/k3s/files/longhorn_lib/longhorn_backups.py",
+    "scripts/secrets_mgmt/pending_retirement.py",
+    # `host_lib.py`, `kuma_push.py` and `longhorn_lib/longhorn_backups.py`, which the filter
+    # plugins and `scripts/lib/` import at load, sit under `hosts/` and `scripts/lib/` since
+    # H7.2e, so the two directory members above already cover them.
 )

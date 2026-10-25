@@ -43,8 +43,8 @@ __all__ = [
 #
 # A k8s role declares a PVC in one of two shapes, and each names the claim AND its
 # StorageClass — the class is what decides whether Longhorn backs the volume up at all
-# (`longhorn` asks for backups, `longhorn-nobackup` does not; see the comment above "Find PVCs
-# whose StorageClass asks for backups" in ansible/roles/setup/k3s/tasks/longhorn.yml):
+# (`longhorn` asks for backups, `longhorn-nobackup` does not; see `desired_labels` in
+# ansible/roles/k8s/longhorn-reconcile/files/longhorn_reconcile.py):
 #
 #   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
 #      (no role's template carries one since media-volume moved to `k8s_claims`; the shape stays
@@ -104,7 +104,7 @@ class LonghornTiers:
 
     A volume in none of them and on a backup-asking StorageClass falls into the `default`
     RecurringJob group (daily, to B2) — see
-    ansible/roles/setup/k3s/templates/longhorn-recurringjob.yaml.j2.
+    ansible/roles/k8s/longhorn-backup/templates/longhorn-recurringjob.yaml.j2.
     """
 
     r2: frozenset[str] = field(default_factory=frozenset)
@@ -339,7 +339,7 @@ def _is_longhorn(storage_class: str) -> bool:
 def _classify(claim: ClaimDecl, full: str, tiers: LonghornTiers) -> str:
     """One claim's tier, from its StorageClass and the three lists.
 
-    The order is the one longhorn.yml's reconciliation applies: a class outside Longhorn's
+    The order is the one the longhorn-reconcile job applies: a class outside Longhorn's
     is never backed up by it; `longhorn-nobackup` and the no-backup list both exclude a
     volume (the list overrides the class for volumes bound before the distinction existed);
     the R2 and weekly lists pick a target for what remains, and the `default` RecurringJob

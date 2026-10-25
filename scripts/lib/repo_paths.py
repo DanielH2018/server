@@ -63,25 +63,37 @@ GITOPS_DEPLOY_FILES = ROLES / "setup" / "gitops_deploy" / "files"
 # `longhorn_robustness.py` ships in monitor-bridge's pod, so its one copy lives in that role's
 # `files/`; the runbook gates import it from here (#3668).
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
-# `host_lib.py` and the other helpers the common role installs beside a host script. Add it
-# only for a tool that imports one of the deployer's IMPURE modules (`deploy_state`,
-# `deploy_config`) — `gitops_state.py` is the one. A tool that imports `deploy_logic` must
-# not need it, which `test_deploy_logic_imports_without_the_common_files_path` enforces from
-# the other side.
-HOST_LIB_FILES = ROLES / "setup" / "common" / "files"
+# `host_lib.py`, `kuma_push.py` and `ci_verdict.py`, the modules the host packages and the setup
+# roles ship beside a host script (H7.2e moved them out of `setup/common/files/`). A tool that
+# imports one of the deployer's IMPURE modules (`deploy_state`, `deploy_config`) puts this on
+# `sys.path` for `host_lib`. A tool that imports `deploy_logic` puts it there for `ci_verdict`,
+# which `deploy_git` imports. `deploy_logic` itself must not load `host_lib`, which
+# `test_deploy_logic_imports_without_host_lib` enforces by `sys.modules`.
+HOST_LIB_FILES = REPO / "hosts" / "lib"
 SHARED_TPL = ANSIBLE / "templates"  # shared macros
 
 INVENTORY = ANSIBLE / "inventory"
 HOSTS_INI = INVENTORY / "hosts.ini"
 ALL_VARS = INVENTORY / "group_vars" / "all.yml"
 HOST_VARS = INVENTORY / "host_vars"
-# The k3s role's defaults: the Longhorn tier lists, the etcd snapshot retention and the
-# schema version the manifest validator pins all live here.
+# The k3s role's defaults: the host crons' schedules and thresholds, the etcd snapshot
+# retention and the schema version the manifest validator pins all live here. The Longhorn
+# backup schedule and arm flags are `LONGHORN_BACKUP_ROLE`'s.
 K3S_ROLE = ROLES / "setup" / "k3s"
+# The three Longhorn tier lists, `k3s_longhorn_{r2,weekly,nobackup}_volumes`, live in this
+# role's defaults since H1.7a. Python readers resolve them through `lib.service_tiers`.
+LONGHORN_RECONCILE_ROLE = K8S_ROLES / "longhorn-reconcile"
+# The Longhorn arm flags, backup schedules, retain counts and targets' prefixes live in this role's
+# defaults since H1.7b. The k3s role's defaults keep the host crons' keys.
+LONGHORN_BACKUP_ROLE = K8S_ROLES / "longhorn-backup"
 K3S_DEFAULTS = K3S_ROLE / "defaults" / "main.yml"
-# `longhorn_lib/longhorn_backups.py` lives here because the backup-health cron ships it; the
-# reapers, probe.py and the runbook gates, which run from the checkout, put this directory on
-# sys.path to import it as `longhorn_lib.longhorn_backups`.
+# The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) lives in the
+# Flux-owned `system-upgrade` role's defaults since H6.1b, so a pin change routes to that tag.
+# `K3S_DEFAULTS` keeps every other key, which did not move.
+SYSTEM_UPGRADE_DEFAULTS = K8S_ROLES / "system-upgrade" / "defaults" / "main.yml"
+# The k3s role's own Python, which the host crons run: `longhorn_backup_health.py`,
+# `live_drift_check.py` and `manifest_declares.py`. `longhorn_lib/`, which the first imports,
+# lives in `scripts/lib/` since H7.2e.
 K3S_FILES = K3S_ROLE / "files"
 # The suite's shared guard modules (`_ratchet.py`, `_helpers.py`), for a script that reuses one.
 ANSIBLE_TESTS = ANSIBLE / "tests"

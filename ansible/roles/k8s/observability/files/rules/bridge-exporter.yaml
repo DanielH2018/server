@@ -1,0 +1,331 @@
+# The monitor-bridge check exporter's own rules. Plain YAML, never Jinja: prometheus-rules.yaml.j2
+# carries this file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md,
+# "The bridge as an exporter" and "A6's PRs" (A6-2). The series come from the `monitor-bridge`
+# scrape job, port 9181, which monitor-bridge's files/verdict_export.py serves.
+#
+# Both rules are `for: 10m`, two INTERVALs of 300s. The pod has no readinessProbe, so a restart
+# reads `up == 0` for a scrape, and the first cycle after it has not yet set every row's gauge.
+# Without the hold, either rule would fire on every monitor-bridge deploy.
+groups:
+  - name: bridge-exporter
+    rules:
+      # DECIDED: `service` names the thing checked, not the bridge that evaluates it (operator,
+      # 2026-10-23). The seven row rules carry wan, discord, r2, cloudflare, healthchecks and b2
+      # (twice). Only MonitorBridgeDown and BridgeCheckStale keep `service: monitor-bridge`, since
+      # the bridge itself is what they report on. A page reading "B2Unreachable, service
+      # monitor-bridge" points the operator at the wrong component. No route or inhibit matches
+      # `service`; Alertmanager groups by [alertname, service], and alertname already separates
+      # these rules.
+      # THE WAN FAMILY (A6-3): the gate row and the four rows behind it. Each rule reads one
+      # row's `homelab_check_success` gauge, which the exporter sets to 0 when the row's verdict
+      # is down. A dependent whose gate reads down is skipped and exports 0 in the same cycle as
+      # the gate, so source and targets reach Alertmanager in one batch. None of these rules has
+      # a `for:`: monitor-bridge's WAN body already needs both providers to fail, and none of
+      # the four dependents is a `startup_grace` row. The gate shares this group with its
+      # dependents, so Prometheus evaluates them together. `requires: wan` marks a dependent
+      # for the inhibit rule in alertmanager-secret.yaml.j2, whose source is WANUnreachable.
+      # A row with no series stays quiet here: BridgeCheckStale owns a missing row.
+      # Every rule is SHADOW UNTIL A6-7b, while Kuma's tile for the row pages.
+      - alert: WANUnreachable
+        expr: homelab_check_success{job="monitor-bridge", check="wan_reachable"} == 0
+        labels:
+          severity: critical
+          service: wan
+          shadow: "true"
+        annotations:
+          summary: monitor-bridge cannot reach the public internet.
+          description: >-
+            Both WAN probe providers failed from monitor-bridge, so this house has no working link
+            or no DNS. The rows behind this gate (Discord delivery, R2 headroom, Cloudflare IP
+            drift and Healthchecks.io console drift) are held by the inhibit rule. Read the
+            probe's failure messages in the monitor-bridge log in the homelab namespace.
+      - alert: DiscordDeliveryFailing
+        expr: homelab_check_success{job="monitor-bridge", check="discord"} == 0
+        labels:
+          severity: critical
+          service: discord
+          requires: wan
+          shadow: "true"
+        annotations:
+          summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
+          description: >-
+            One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr, healthchecks)
+            no longer resolves, or the Gmail SMTP backstop login failed. Rotate the named webhook
+            in SOPS and redeploy its consumer. The monitor-bridge log names the failing webhook.
+      - alert: R2FreeTierHeadroomLow
+        expr: homelab_check_success{job="monitor-bridge", check="r2_usage"} == 0
+        labels:
+          severity: critical
+          service: r2
+          requires: wan
+          shadow: "true"
+        annotations:
+          summary: R2 usage is past 80% of the free tier on at least one arm.
+          description: >-
+            Month-to-date R2 storage, Class A operations, Class B operations or incomplete
+            multipart uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so this
+            is the only boundary. The runbook is longhorn-backup-tiering.
+      - alert: CloudflareIPRangesDrifted
+        expr: homelab_check_success{job="monitor-bridge", check="cloudflare_ips_drift"} == 0
+        labels:
+          severity: warning
+          service: cloudflare
+          requires: wan
+          shadow: "true"
+        annotations:
+          summary: Cloudflare's published IP ranges differ from the repo's cloudflare_ips list, or fetching them failed.
+          description: >-
+            cloudflare_ips in group_vars/all.yml sets Traefik's trustedIPs and the netpol
+            allow-list. Update it and redeploy traefik, netpol-baseline and monitor-bridge. A
+            failed fetch is retried every cycle; a match is re-checked daily.
+      - alert: HealthchecksConsoleDrifted
+        expr: homelab_check_success{job="monitor-bridge", check="healthchecks_drift"} == 0
+        labels:
+          severity: warning
+          service: healthchecks
+          requires: wan
+          shadow: "true"
+        annotations:
+          summary: A Healthchecks.io dead-man check differs from the documented schedule.
+          description: >-
+            The monitor-bridge log names each slug and field that differs, or a check missing from
+            the console. Fix the console, or change docs/healthchecks-io-deadman.md and
+            monitor_bridge_healthchecks_expected together and redeploy monitor-bridge.
+      # SHADOW UNTIL A6-7b. Kuma's Cluster Scrape Targets tile pages a failed scrape of this job
+      # today, because the job carries no `origin` label (M1 convention 5 allows one pager). The
+      # absent() arm is what that tile cannot see: a scrape job removed from prometheus.yml.
+      - alert: MonitorBridgeDown
+        expr: up{job="monitor-bridge"} == 0 or absent(up{job="monitor-bridge"})
+        for: 10m
+        labels:
+          severity: critical
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape monitor-bridge's check exporter.
+          description: >-
+            up{job="monitor-bridge"} has been 0 or missing for 10 minutes, so either the
+            monitor-bridge pod is down or the monitor-bridge scrape job is gone from
+            prometheus.yml. Read the pod's events and log in the homelab namespace.
+      # SHADOW UNTIL A6-7b, with the rule above. It is the class-3 guard of
+      # docs/failure-classes.md: a run loop that hangs behind a live HTTP thread keeps `up` at 1
+      # and serves stale gauges. It is one aggregate alert, so a hung loop pages once rather than
+      # once per row. The first arm finds any row whose timestamp is older than the row's own
+      # deadline. The second finds a row count below homelab_check_rows, which the exporter sets
+      # from the check table, so no literal here goes stale when a row is deleted. A dead
+      # exporter has neither series, and MonitorBridgeDown owns that case.
+      - alert: BridgeCheckStale
+        expr: |
+          count(
+            time() - homelab_check_last_run_timestamp_seconds{job="monitor-bridge"}
+            > homelab_check_deadline_seconds{job="monitor-bridge"}
+          )
+          or
+          (
+            count(homelab_check_success{job="monitor-bridge"})
+            < on() homelab_check_rows{job="monitor-bridge"}
+          )
+        for: 10m
+        labels:
+          severity: critical
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: monitor-bridge's run loop has stopped recording some check verdicts.
+          description: >-
+            For 10 minutes either a row's homelab_check_last_run_timestamp_seconds has aged past
+            its homelab_check_deadline_seconds, or fewer rows export homelab_check_success than
+            homelab_check_rows counts. The scrape works, so the run loop is hung or skipping
+            rows. Read the monitor-bridge pod's log in the homelab namespace.
+      # THE B2 FAMILY (A6-4): the gate row and the one row behind it. Neither rule has a `for:`,
+      # for the reasons the design gives (m6-retire-kuma.md, "Gates and grace"), and
+      # `B2Unreachable` sources the inhibit in alertmanager-secret.yaml.j2 for `requires: b2`.
+      # The gate row reports a cap denial as down, so a cap breach pages once, and the
+      # dependent's body is not called while the gate reads down, which keeps a billed listing
+      # off every 300s cycle. B2 is the WAN gate's peer, not behind it, so a WAN outage lights
+      # both. A row with no series stays quiet here: BridgeCheckStale owns a missing row.
+      # Both rules are SHADOW UNTIL A6-7b, while Kuma's tiles page.
+      - alert: B2Unreachable
+        expr: homelab_check_success{job="monitor-bridge", check="b2_reachable"} == 0
+        labels:
+          severity: critical
+          service: b2
+          shadow: "true"
+        annotations:
+          summary: Backblaze B2 refuses monitor-bridge's key, or the transaction cap is exceeded.
+          description: >-
+            monitor-bridge authenticates against B2 at most every 30 minutes. A cap denial looks
+            the same as data loss, so read the monitor-bridge log message before assuming either.
+            The runbook is longhorn-backup-tiering.
+      - alert: B2FreeTierHeadroomLow
+        expr: homelab_check_success{job="monitor-bridge", check="b2_storage"} == 0
+        labels:
+          severity: critical
+          service: b2
+          requires: b2
+          shadow: "true"
+        annotations:
+          summary: B2 bucket usage is past the free-tier threshold.
+          description: >-
+            A drain is nearly free, but a prune pays per deleted backup, so read
+            longhorn-backup-tiering before deleting anything.
+      # THE UNGATED FAMILY (A6-6): the five rows with no `gate` column value. None reads
+      # Prometheus, Loki or the WAN, and none is a `startup_grace` row, so no rule here carries
+      # a `requires` label or a `for:`. `arr_queue` and `ha_heartbeat` streak one arm inside the
+      # body (ARR_FETCH_CONSECUTIVE, HA_CONSECUTIVE) while their other arms page at once, and a
+      # `for:` would hold the whole row (m6-retire-kuma.md, "Gates and grace"). Each rule's
+      # `service` names the thing checked, per the DECIDED block above. A row with no series
+      # stays quiet here: BridgeCheckStale owns a missing row. Every rule is SHADOW UNTIL
+      # A6-7b, while Kuma's tile for the row pages.
+      - alert: ArrQueueNeedsReview
+        expr: homelab_check_success{job="monitor-bridge", check="arr_queue"} == 0
+        labels:
+          severity: warning
+          service: arr
+          shadow: "true"
+        annotations:
+          summary: A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
+          description: >-
+            A queue item is in warning, importBlocked, or importPending with a status message,
+            which is the shape of the 2026-07-01 fake-episode .exe. An arr API that stays
+            unreachable past ARR_FETCH_CONSECUTIVE cycles pages the same way. The monitor-bridge
+            log in the homelab namespace names the release and the app.
+      - alert: GitOpsDeployerNotTicking
+        expr: homelab_check_success{job="monitor-bridge", check="gitops_alive"} == 0
+        labels:
+          severity: warning
+          service: gitops-deploy
+          shadow: "true"
+        annotations:
+          summary: The pull-based deployer on daniel-box has stopped ticking.
+          description: >-
+            The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or
+            unparseable. Run systemctl status gitops-deploy.timer on daniel-box and read the
+            SessionStart banner's parked state.
+      - alert: GitOpsDeployerParked
+        expr: homelab_check_success{job="monitor-bridge", check="gitops_status"} == 0
+        labels:
+          severity: warning
+          service: gitops-deploy
+          shadow: "true"
+        annotations:
+          summary: The deployer is parked or owes an apply.
+          description: >-
+            One of these holds: a held SHA after a failed health gate, a diverged tree, a busy
+            service lock, a tree behind origin for 6h, a setup role only a hand can apply, or an
+            image bump a broad tick deferred for lack of budget. The monitor-bridge log names
+            which. gitops_state.py clears a marker once the cause is fixed.
+      - alert: EtcdRestoreDrillFailing
+        expr: homelab_check_success{job="monitor-bridge", check="etcd_restore_drill"} == 0
+        labels:
+          severity: warning
+          service: etcd
+          shadow: "true"
+        annotations:
+          summary: The weekly etcd restore drill has not passed within 8 days.
+          description: >-
+            No list-only drill has ever passed, the last-success-list-only stamp on daniel-box is
+            older than 8 days, or the pod cannot read the stamp. Run journalctl for
+            etcd-restore-drill on daniel-box and check the stamp's mode. The runbook is
+            k3s-etcd-restore.
+      - alert: HomeAssistantAutomationsStalled
+        expr: homelab_check_success{job="monitor-bridge", check="ha_heartbeat"} == 0
+        labels:
+          severity: warning
+          service: home-assistant
+          shadow: "true"
+        annotations:
+          summary: Home Assistant's scheduler heartbeat is stale, or HA banned an IP.
+          description: >-
+            Either HA is up with its automations not running, or HA banned an IP in the last
+            hour. A ban of a cluster gateway locks out everything behind it, so read
+            /config/ip_bans.yaml on a ban.
+      # THE STARTUP-GRACE FAMILY (A6-5): the six rows whose `gate` column reads `startup_grace`
+      # and whose rule lives here. `workload_log_errors` is the seventh such row, and A7's
+      # WorkloadLogErrors rule on loki-homelab replaces it, so no rule below selects it. Each
+      # rule is `for: 5m`, which is the grace: today `bridge.streaks.apply_startup_grace` holds a
+      # row `up` for GRACE_CYCLES - 1 = 1 cycle of 300s, and the exporter writes the gauge before
+      # that hold (m6-retire-kuma.md, "Gates and grace"). `for: 5m` therefore keeps today's
+      # timing and applies the grace once. `n8n` and `speedtest` keep their in-body streaks, on
+      # which the grace already stacks. No row here has a gate, so no rule carries `requires`
+      # and no inhibit rule reaches them. A row with no series stays quiet here:
+      # BridgeCheckStale owns a missing row.
+      # Every rule is SHADOW UNTIL A6-7b, while Kuma's tile for the row pages.
+      - alert: N8nWorkflowsFailing
+        expr: homelab_check_success{job="monitor-bridge", check="n8n"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: n8n
+          shadow: "true"
+        annotations:
+          summary: An active n8n workflow failed repeatedly, or several workflows are failing.
+          description: >-
+            An active workflow failed 3 times in a row, or 2 or more workflows are each failing
+            repeatedly. The monitor-bridge log names the workflow; open its last execution in n8n.
+      - alert: BazarrHealthDegraded
+        expr: homelab_check_success{job="monitor-bridge", check="bazarr"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: bazarr
+          shadow: "true"
+        annotations:
+          summary: Bazarr rejects its sonarr or radarr API key, or reports a health issue.
+          description: >-
+            Bazarr's own copy of the sonarr or radarr API key is rejected (an empty peer version
+            field), or Bazarr reports a health issue. Bazarr holds those keys in its UI, so a key
+            rotation misses it. The monitor-bridge log names which.
+      - alert: ProwlarrIndexersFailing
+        expr: homelab_check_success{job="monitor-bridge", check="prowlarr_indexers"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: prowlarr
+          shadow: "true"
+        annotations:
+          summary: A Prowlarr indexer has been failing for a week or more.
+          description: >-
+            Prowlarr's own initialFailure puts an indexer at a week or more of failures. The Pirate
+            Bay and 1337x are ignored as chronic flappers, and short outages never page. The
+            monitor-bridge log names the indexer.
+      - alert: SmartHealthFailing
+        expr: homelab_check_success{job="monitor-bridge", check="scrutiny"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: scrutiny
+          shadow: "true"
+        annotations:
+          summary: Scrutiny reports a failing drive, stale collector data or high NVMe wear.
+          description: >-
+            A drive's collector data is older than 26h, its SMART self-assessment or an attribute
+            threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured,
+            so this is the only drive-failure page. The monitor-bridge log names the drive.
+      - alert: SpeedtestDegraded
+        expr: homelab_check_success{job="monitor-bridge", check="speedtest"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: speedtest
+          shadow: "true"
+        annotations:
+          summary: The newest speedtest result is stale, incomplete or under 100 Mbps.
+          description: >-
+            The last speedtest-tracker run is older than 8 h, did not complete, or downloaded
+            under 100 Mbps. Open the speedtest UI and check its scheduler and last result.
+      # `swallowed_verdicts` reads loki-homelab, not Prometheus, and is not `critical`, so its
+      # rule is a warning. Its `service` stays `monitor-bridge`, the component that evaluates it
+      # until C-7 deletes the row. It names no `verify` label, so it gates no tag.
+      - alert: SwallowedPushVerdicts
+        expr: homelab_check_success{job="monitor-bridge", check="swallowed_verdicts"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: A host cron pushed a down verdict and the push failed while a sibling's landed.
+          description: >-
+            The verdict was lost rather than the network. The monitor-bridge log names the cron;
+            run it by hand and read its logger lines.

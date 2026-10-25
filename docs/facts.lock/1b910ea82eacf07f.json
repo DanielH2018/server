@@ -1,16 +1,18 @@
 {
-  "checksum": "6cf3c48ecb860ac4a6743e8bbd7c61dc0142378290561e530ee857894bc8d251",
+  "checksum": "9cf2e1452545477c264f5aaccfbdbeb2c6c962d867c8c0207932c4ef13639645",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Layout",
   "row": {
     "atoms": {
+      "ansible/roles/k8s/system-upgrade/defaults/main.yml": "6a9161c7d58b32905fbbeb44e5f0cd3d601bcc3a7da091a1815ac403665e0785",
       "docs/k3s-etcd-restore.md": "d5f0970c14cc58b5ca7e13a58c77608e62bffd4e1ad937fbf41871b05dbdd9ac",
       "docs/k3s-upgrade.md": "abe7da0cc701ec42641e56ba4f9e147f93f8f312875fdd283097746b434cde59",
       "docs/longhorn-backup-tiering.md": "97919c5667edefab2a0860d035f5a21fe668cc90d2f5534c99a26904ee17f9f7",
       "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3",
-      "docs/longhorn-upgrade.md": "04188a542f54902dfb346f19c33a5a9d6de82e0d3e627033ee56d1262c150b05"
+      "docs/longhorn-upgrade.md": "04188a542f54902dfb346f19c33a5a9d6de82e0d3e627033ee56d1262c150b05",
+      "scripts/lib/repo_paths.py": "c5243cd7430b6f03c1ef9bd7094346e19e2fb633bf826683fb4f787f234362f3"
     },
     "python": "3.14",
-    "verified_sha": "55862020d"
+    "verified_sha": "35a19551f"
   }
 }

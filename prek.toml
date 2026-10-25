@@ -70,7 +70,7 @@ exclude = "^ansible/roles/[^/]+/[^/]+/files/upstream/"
 # Ansible linting
 [[repos]]
 repo = "https://github.com/ansible/ansible-lint"
-rev = "v26.9.0"
+rev = "v26.10.1"
 
 [[repos.hooks]]
 id = "ansible-lint"
@@ -178,7 +178,7 @@ name = "Validate rendered docker-compose templates"
 entry = "uv run --frozen python scripts/validate/compose_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
 # duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
@@ -198,10 +198,10 @@ files = "^(ansible/roles/k8s/home-assistant/(templates/config|files)/.*|scripts/
 [[repos.hooks]]
 id = "validate-grafana-dashboards"
 name = "Validate Grafana dashboard datasource uids"
-entry = "uv run --frozen python scripts/validate/grafana_dashboards.py"
+entry = "uv run --frozen python scripts/validate/grafana_dashboard_uids.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
+files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboard_uids\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
 # Check the alert plane's inputs with the tools that load them. promtool checks the rendered
 # prometheus.yml, every rule file and every rule test; amtool checks the Alertmanager config;
@@ -227,7 +227,7 @@ name = "Validate the alert plane with promtool, amtool, pint and lokitool"
 entry = "uv run --frozen python scripts/validate/alert_rules.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/rules-configmap\\.yaml\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/rules-configmap\\.yaml\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Same render-then-parse guard as validate-compose-templates above, for the k8s manifests.
 # Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's
@@ -403,7 +403,7 @@ pass_filenames = false
 # `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
 # `rotate` writes the cluster file in process, which loads the renderer: `cluster_vars` imports
 # `scripts/renderer/` and, through it, the filter plugins and render helpers listed below.
-files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/.*\\.py|scripts/renderer/.*\\.py|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|estate|exit_codes|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|plain_scalar|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|hosts/lib/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/.*\\.py|scripts/renderer/.*\\.py|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|estate|exit_codes|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|plain_scalar|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # The cluster's SOPS files (target slice D3): the cluster file
 # ansible/vars/cluster-vars.sops.env, the manifests under ansible/vars/cluster-manifests/ and
@@ -425,7 +425,7 @@ name = "Cluster SOPS files are ciphertext written by cluster_vars.py"
 entry = "uv run --frozen python scripts/secrets_mgmt/cluster_vars.py check --no-render --base HEAD"
 language = "system"
 pass_filenames = false
-files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py$)"
+files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|hosts/lib/(host_lib|kuma_push)\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py$)"
 
 # Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
 # (gitops_deploy, secret-rotate, secret-rotation-audit) runs `uv run --frozen`, which installs
@@ -470,7 +470,7 @@ name = "Role At a glance blocks match their sources"
 entry = "uv run --frozen python scripts/docs/gen_role_glance.py --fix"
 language = "system"
 pass_filenames = false
-files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/(task_inputs|environment)\\.py)$"
+files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/(task_inputs|environment)\\.py|scripts/deploy_tools/setup_lib/setup_gates\\.py)$"
 
 # Rewrites a stale docs fragment (docs/assets/generated/fragments/) in the commit that moves
 # one of its tunables, and fails like a formatter so the author stages the fragment and commits
@@ -646,13 +646,19 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 # `-shell` 1.3s, `-renovate` 3.9s, against 27.6s for the hook above in the same run. The
 # gates keep a typical commit near budget: a `.py` commit outside scripts/lib/,
 # deploy_tools/ and renderer/, outside ansible/tests/_*.py and outside the k8s roles runs
-# `-python` and `-owners` alone, about 5.5s.
+# `-python` and `-owners` alone, about 5.5s on 2026-10-17. Those `-python` figures predate
+# xdist_width (below); on 2026-10-22 at load average 3.6-3.9, `-python` took 5.9-6.3s.
 #
 # `-n0` on the one-module hooks: pyproject.toml's `-n auto` spent longer bringing up xdist
 # workers than they take, and each worker repeats the module-scoped render (checksum 3.5s
 # against 4.3-5.0s, the Renovate pair 4.1-4.4s against 4.8-5.4s, back to back on 2026-10-17).
-# The `-python` hook keeps `-n auto`: its five modules spread across workers, 4.6s against
-# 12.3-13.6s with `-n0`.
+# The `-python` hook pins `-n 4` rather than taking pyproject.toml's `-n auto`, because
+# ansible/tests/xdist_width.py sizes `auto` at one worker per 15 modules, which put its five
+# modules on a single worker (#5917). Measured on daniel-server on 2026-10-22, three rounds
+# interleaved at load average 4.3-5.4: `-n 4` 6.7-8.5s, `-n auto` 13.3-16.6s. `-n 3`, `-n 5`
+# and `-n 4 --dist load` measured no faster than `-n 4`. Under `--dist loadscope` each module
+# stays on one worker, so the slowest module, test_prek_files_cover_entry_imports.py at about
+# 7s alone with `-n0` at that load, bounds the hook.
 # CI skips all of them on both `prek run` steps, as it skips the hook above, because its
 # `pytest` job runs the same files. To commit past one, `SKIP=<its id> git commit`.
 
@@ -662,7 +668,7 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 [[repos.hooks]]
 id = "static-ratchet-tests-python"
 name = "Static ratchet tests over the tracked Python (import direction, exit codes, prek files, hazards, probe health)"
-entry = "uv run --frozen pytest -q -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py ansible/tests/repo/test_tracked_python_hazards.py scripts/diagnostics/tests/test_probe_health_rolled.py"
+entry = "uv run --frozen pytest -q -n 4 -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py ansible/tests/repo/test_tracked_python_hazards.py scripts/diagnostics/tests/test_probe_health_rolled.py"
 language = "system"
 pass_filenames = false
 files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
@@ -682,45 +688,53 @@ files = "(\\.py$|^docs/target-architecture/deploy/d2-first-leaf\\.md$|^ansible/d
 # under scripts/. The k8s gate is every role's tasks, templates, defaults and files rather
 # than the soak's own inputs: the soak fixture renders every flux-owned role, and
 # test_no_published_tag_builds_an_image reads every role's tasks for an image-builder
-# include (`images.builder_roles`). So a k8s role edit pays this hook's ~5s.
+# include (`images.builder_roles`). So a k8s role edit pays this hook's ~5s. The test module
+# reaches the filter plugins, gitops_deploy's deployer_lib, common's host_lib and the
+# secrets_mgmt, validate and probe_lib/releases code through pytest's `pythonpath`, so the
+# gate covers those too (#5921).
 [[repos.hooks]]
 id = "static-ratchet-tests-lander"
 name = "Lander deadlines cover the soak"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/setup/test_lander_deadlines_cover_the_soak.py"
 language = "system"
 pass_filenames = false
-files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|scripts/(deploy_tools|renderer|lib)/.*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|ansible/roles/setup/gitops_deploy/files/.*\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/releases[^/]*\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
 
-# Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests.
+# Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests. The
+# render reaches scripts/validate/k8s_manifests.py and its validate_lib through pytest's
+# `pythonpath` (#5921).
 [[repos.hooks]]
 id = "static-ratchet-tests-checksum"
 name = "Documented checksum annotations exist in the manifests"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/k8s/test_checksum_annotations_documented.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/.*|CLAUDE\\.md|ansible/(templates|filter_plugins)/.*|ansible/tests/(_[^/]+|k8s/test_checksum_annotations_documented)\\.py|scripts/(lib|renderer)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(ansible/roles/k8s/.*|CLAUDE\\.md|ansible/(templates|filter_plugins)/.*|ansible/tests/(_[^/]+|k8s/test_checksum_annotations_documented)\\.py|scripts/(lib|renderer|validate)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
 
-# Every tracked `.sh` and rendered `*.sh.j2` answers `--help`.
+# Every tracked `.sh` and rendered `*.sh.j2` answers `--help`. The test module renders the
+# templates through scripts/lib, scripts/validate and the filter plugins, which it reaches
+# through pytest's `pythonpath` (#5921).
 [[repos.hooks]]
 id = "static-ratchet-tests-shell"
 name = "Shell entry points answer --help"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/repo/test_shell_entry_points_answer_help.py"
 language = "system"
 pass_filenames = false
-files = "(\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
+files = "(\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^(ansible/filter_plugins|scripts/(lib|validate))/.*\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The two Renovate-rule modules: renovate.json against the autodeploy denylist, which each
 # k8s role's `k8s_autodeploy` in its defaults and the filter plugin decide, and against who
 # owns each pin. Role defaults and the Dockerfile templates hold nearly every pin; a pin a
 # custom manager reads from a workflow, a task file or prek.toml reaches CI's `pytest` job
-# instead of this hook.
+# instead of this hook. The modules reach every filter plugin and scripts/validate through
+# pytest's `pythonpath`, so the gate covers those too (#5921).
 [[repos.hooks]]
 id = "static-ratchet-tests-renovate"
 name = "Renovate rules carry the autodeploy denylist marker"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py"
 language = "system"
 pass_filenames = false
-files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/k8s_autodeploy\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/lib/.*\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(lib|validate)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file

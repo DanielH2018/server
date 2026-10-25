@@ -381,7 +381,7 @@ loki_route_witness_hosts:
   - daniel-server
 
 # The endpoints the host crons probe to tell "this house's link is gone" from "the source I asked
-# refused me". Read by `wan_reachable` in kuma-push-lib.sh, which is the host-side
+# refused me". Read by `wan_reachable` in homelab-check-lib.sh, which is the host-side
 # peer of monitor-bridge's `wan_reachable` gate — that gate runs in the bridge's loop and cannot
 # reach a cron pushing its own tile from the host.
 #
@@ -399,7 +399,7 @@ wan_probe_urls:
   - https://www.google.com/generate_204
 
 # Seconds after boot in which the witness skips its run. Shorter than its hourly cron, so at most
-# one slot is ever skipped — the constraint kuma-push-lib.sh's boot_grace_active documents. After
+# one slot is ever skipped — the constraint homelab-check-lib.sh's boot_grace_active documents. After
 # a restart the last pod reached Ready 5m18s after boot, so a witness firing inside this window
 # would report the route down while Traefik was still starting.
 loki_route_witness_boot_grace_s: 600
@@ -441,8 +441,9 @@ setup_drift_tree_max_days: 14
 #
 # PSA evaluates at pod CREATE and UPDATE only, so adding these evicts nothing.
 #
-# ROLLBACK: set to {} and redeploy. Unlike the k3s server flags this is a real rollback —
-# `kubectl apply` owns these labels, so removing them from the manifest removes them live.
+# ROLLBACK: set to {} and let the change promote. Unlike the k3s server flags this is a real
+# rollback — the renderer's homelab-namespace kind and the observability role own these labels,
+# so removing them from the render removes them live.
 k8s_psa_labels:
   pod-security.kubernetes.io/warn: baseline
   pod-security.kubernetes.io/audit: baseline
@@ -469,13 +470,12 @@ k8s_psa_labels:
 # LimitRange evaluates at pod CREATE only, so adding this evicts nothing.
 #
 # NOT WATCHED BY manifest-prune-check. `limitrange` is absent from its kind list, and adding
-# it would make the check red on day one: homelab's copy is applied inline from deploy.yml
-# beside the namespace, so it appears in no staged manifest dir and reads as an orphan.
+# it would make the check red on day one: homelab's copy is rendered by the shared kind
+# homelab-namespace, beside the namespace, so it appears in no staged manifest dir and reads as
+# an orphan.
 #
-# ROLLBACK: set to {} and redeploy. That stops it being APPLIED; it does not remove the live
-# object (the same trap as kubectl-apply-leaves-orphaned-objects). To remove it live:
-#   kubectl delete limitrange default-container-limits -n homelab
-#   kubectl delete limitrange default-container-limits -n observability
+# ROLLBACK: set to {} and let the change promote. Neither copy then renders, and the
+# homelab-namespace and observability Kustomizations, both `prune: true`, delete them live.
 #
 # DECIDED: 40x CPU / 32x memory default-to-request, two namespaces only; do not tighten it, and
 # do not extend it to longhorn-system (instance-manager already peaks near a 2Gi limit).
@@ -732,14 +732,16 @@ ops_cron_host: daniel-box
 # the host the release records name, because the staleness reader refuses a render record
 # whose `host` differs, and the host whose primary checkout the GitOps deployer fetches.
 render_records_host: daniel-box
-# The way out: false runs the role's absent arm on render_records_host, which stops the timer
-# and removes the units, the worktree and the role's directories. To move the producer, apply
-# false on the old host first, then change render_records_host.
+# The role's defaults pin the producer absent whatever this says (`render_records_state` in
+# roles/setup/render_records/defaults/main.yml, D5's disarm PR), so true here arms nothing: since
+# D5 step 29 every k8s service is flux-owned and the producer would have no service to render.
+# R4 deletes the role. False still runs the role's absent arm on render_records_host, which
+# stops the timer and removes the units, the worktree and the role's directories. To move the
+# producer, apply false on the old host first, then change render_records_host.
 #
-# Arming presupposes that every host write in a role this renders is guarded on
-# `not k8s_dry_run | bool`; without that guard an hourly dry run would install that tree's host
-# scripts, crons and node-staged modules ahead of their landing. The uptime-kuma tile is gated
-# on this too, so setting it false leaves no tile red.
+# Re-arming, by restoring the derivation from this key, presupposes that every host write in a
+# role this renders is guarded on `not k8s_dry_run | bool`; without that guard an hourly dry run
+# would install that tree's host scripts, crons and node-staged modules ahead of their landing.
 render_records_enabled: true
 # The producer runs hourly at this minute. Here rather than in the role's defaults because the
 # uptime-kuma role derives the monitor's interval from the same cadence below.
@@ -882,6 +884,53 @@ claude_agent_ssh_key_host: daniel-box
 # The agent's key for the peers, generated on the key host as the agent
 # (claude_code/tasks/agent_peers.yml). A peer's play reads the `.pub` half over ssh.
 claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
+
+# --- The CI gate every deploy path grades by (H7.2e) ---
+#
+# Check-run names that must be green on a master commit before anything deploys it. These are
+# GitHub's check-run NAMES, which are also the strings branch protection calls contexts, so they
+# must match ci.yml's `name:` EXACTLY, and that file carries a comment saying as much.
+# `renovate config validator` is deliberately not required, but NOT because it skips: ci.yml's
+# guard is `if: github.event_name != 'pull_request' || steps.scope.outputs.changed == 'true'`,
+# whose left operand is true on a push, so it runs unconditionally on master. It is excluded
+# because a red renovate.json does not change what a deploy renders or applies: the config is
+# consumed by the hosted Mend app when it opens PRs, a plane no deploy path touches. Blocking the
+# gate on it would park every later image bump behind a dependency-management fault.
+#
+# Four readers outlive the deployer, so the list lives here and not in `gitops_deploy`'s role
+# defaults, which H7.20a deletes: `scripts/deploy_tools/promote.py decide`, the host packages'
+# builder, `homelab-checkout-sync` and `ansible/tests/repo/test_ci_contexts_match_workflows.py`.
+# `decide` reads this file by path, not through Ansible, and refuses anything but a non-empty
+# list of strings, so this key stays a literal list. The deployer's role default is a reference
+# to it until H7.19a, and `scripts/deploy_tools/await_ci.py` names it in a comment.
+#
+# A change to this key or to `ci_ancestor_walk_max` is a deploy-plane change, so the GitOps tick
+# re-renders neither the deployer's settings file nor the builder's. After one, the operator runs
+# `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy,homelab_builder` on
+# daniel-box (**operator-only**); until then a renamed CI job leaves both waiting on the old name.
+ci_required_contexts:
+  - prek (lint + validate + tests + secrets)
+
+# How many commits back from the tip the gate may ask GitHub about when the tip is not green.
+# The tip's own request counts, so 10 is at most ten requests on a run that would otherwise
+# defer, and zero on every other run. It bounds `hosts/lib/ci_verdict.py:ci_walk_candidates`'s
+# walk to the newest green ancestor: master takes about 124 merges a day (median gap 315s)
+# against a ~103s CI sweep, so the tip is pending on most runs that would deploy, and gating on
+# the tip alone parks a green commit behind every later merge's sweep.
+#
+# 10 rather than a larger number: it covers the measured p25 merge gap of 88s against a sweep
+# of ~103s several times over, and the walk is spent inside one run's wall clock while the tree
+# lock is held. A range longer than ten commits behind a red tail is a state for the
+# behind-origin watchdog to page on, not one to keep spending requests on.
+#
+# Worst case, authenticated: ten GETs on one run against 5000/hour per token. ANONYMOUS the walk
+# does not run at all in the deployer: `deploy_phases._newest_green_ancestor` asks
+# `tools.github_authenticated()` first and logs one line saying it skipped. The anonymous limit
+# is 60/hour per source IP, shared with every landing's await_ci.py poll (45 per 900s wait), so
+# a ten-request burst per run would exhaust it and every reader on the host would then read
+# `HTTP Error 403`, which the gate maps to `pending`. 0 (or any value below it) disarms the walk
+# on every host.
+ci_ancestor_walk_max: 10
 
 # Physical location, feeds the homepage weather widget.
 lat: 38.89
