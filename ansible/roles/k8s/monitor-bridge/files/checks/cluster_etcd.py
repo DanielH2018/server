@@ -24,18 +24,19 @@ def check_etcd_db_size(cfg: Config, src: Sources) -> tuple[bool, str]:
       src: The query source; a test hands in a `FakeSources` that states the reading it means.
 
     `max(...)` over the bare series, not a `by` grouping: k3s runs the apiserver and the
-    kubelet in one process, so `apiserver_storage_size_bytes` is scraped TWICE — once under
-    `job="kubernetes-apiserver"` and once under `job="kubernetes-kubelet"` — carrying the same
-    value. Measured 2026-09-25: both read 56,389,632 for `storage_cluster_id="etcd-0"`.
-    Handing two identical series to `prom_scalar` would make `result[0]` an arbitrary pick, and
-    selecting on `job` would tie this check to a scrape-job name instead of to the metric.
+    kubelet in one process, so until #6331 `apiserver_storage_size_bytes` was scraped TWICE,
+    under `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"`, with the same value
+    (measured 2026-09-25: both read 56,389,632 for `storage_cluster_id="etcd-0"`). The kubelet
+    job now drops the server node's `apiserver_` families, so one series is left, and `max`
+    keeps `result[0]` well defined if a second copy returns. Selecting on `job` would tie this
+    check to a scrape-job name instead of to the metric.
 
     An absent series is UP, which is the opposite of check_pvc_fullness's fail-closed arm, and
-    the discriminator is partial coverage. There, volume stats come from two jobs over 43
-    claims, so a dead kubelet job still answers for 27 of them and silence hides a real gap.
-    Here one series is carried by both jobs, so an empty vector means the apiserver is not
-    being scraped at all — and paging a second monitor for that one root cause is what the gate
-    sets exist to prevent. The compensating control was checked rather than assumed:
+    the discriminator is partial coverage. There, volume stats come from one kubelet target per
+    node over 43 claims, so one dead node target still leaves the other node's claims
+    answering, and silence hides a real gap. Here one series comes from the apiserver job alone,
+    so an empty vector means the apiserver is not being scraped at all — and paging a second
+    monitor for that one root cause is what the gate sets exist to prevent. The compensating control was checked rather than assumed:
     `verdicts.cluster.targets_verdict` pages on ANY series with `up == 0`, not on a count floor
     alone, and `check_cluster_targets` selects `up{origin!="daniel-server"}`, which matches the
     apiserver target (it carries no `origin` label, and PromQL reads an absent label as empty).
