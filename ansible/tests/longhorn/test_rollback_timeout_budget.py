@@ -202,7 +202,8 @@ def _worst_batch(
     # The cost key is the whole per-service cost, not the claim count alone. Every promoted
     # claim-declaring role declares exactly one claim, so a claims-only key leaves every
     # candidate tied and `sorted` picks the alphabetically first — bazarr, at the shared
-    # rollout default — while prowlarr costs 180s more.
+    # rollout default — while prowlarr costs 180s more. test_rollback_worst_batch_selection.py
+    # holds the red proof, on a fixture longer than the cap with distinct costs.
     def cost(role: str, claims: int) -> int:
         return claims * per_claim + in_role_s(role) + rollout_s(role)
 

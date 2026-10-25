@@ -481,6 +481,7 @@
  "ansible/tests/longhorn/test_pvc_sizes_match_block_size.py": 0.05,
  "ansible/tests/longhorn/test_r2_tier_is_derived.py": 0.05,
  "ansible/tests/longhorn/test_rollback_timeout_budget.py": 0.02,
+ "ansible/tests/longhorn/test_rollback_worst_batch_selection.py": 0.14,
  "ansible/tests/longhorn/test_seed_volume_backup.py": 0.0,
  "ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py": 0.0,
  "ansible/tests/longhorn/test_snapshot_name_length.py": 0.17,
