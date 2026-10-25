@@ -93,9 +93,12 @@ def test_setup_role_hosts_reads_the_when_gate_per_host(_synthetic_setup_inventor
         land_reach.setup_role_hosts("nut_host", playbook, all_vars, host_vars_dir)
         == frozenset()
     )
-    assert land_reach.setup_role_hosts(
-        "optimize_pi", playbook, all_vars, host_vars_dir
-    ) == frozenset({"daniel-pi"})
+    # optimize_pi: the play gate reaches daniel-pi alone, and the live role's unconditional
+    # `end_role` drops it, because the Pi package owns the work (H7.25).
+    assert (
+        land_reach.setup_role_hosts("optimize_pi", playbook, all_vars, host_vars_dir)
+        == frozenset()
+    )
 
 
 def test_setup_role_hosts_unknown_role_is_empty(_synthetic_setup_inventory):

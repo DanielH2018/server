@@ -5,7 +5,7 @@
 # of the wg-easy config directory, run through `sudo` because the files are root-owned. Before
 # this wrapper the key was authorized with no options, so any principal that could read the
 # `pi-peer-backup-ssh` Secret held an interactive shell as a NOPASSWD-sudo user on the Pi.
-# `restrict,command="<this> <dir>"` in authorized_keys (tasks/main.yml) makes sshd run this
+# `restrict,command="<this> <dir>"` in authorized_keys (the pi-peer-backup-target component) makes sshd run this
 # script instead of whatever the client asked for, with the client's request in
 # SSH_ORIGINAL_COMMAND.
 #

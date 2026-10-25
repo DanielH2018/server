@@ -1,0 +1,112 @@
+# The Pi's hardware and memory tuning, moved out of the optimize_pi role (H7.25, old step H7.3 and
+# the first half of H7.4; docs/target-architecture/host/h7-delete-ansible.md). Only daniel-pi
+# lists it. docs/pi-host-tuning-record.md has the measurements behind every number here.
+#
+# Owners, measured on the live Pi with `dpkg -S` and `dpkg-query -W -f='${Conffiles}'` on
+# 2026-10-25 (the PR body quotes the output). Each path takes the mechanism *In-place edits*
+# assigns it:
+#
+# - conffiles, so the line arm: /etc/sysctl.conf (procps), /etc/default/zramswap (zram-tools),
+#   /etc/watchdog.conf (watchdog), /etc/log2ram.conf (log2ram), /etc/sysstat/sysstat (sysstat),
+#   /etc/default/acct (acct), /etc/audit/auditd.conf (auditd);
+# - unowned, so the line arm: /boot/firmware/config.txt and /etc/hosts (the latter is in
+#   pi-resolver);
+# - owned and not a conffile: /usr/local/bin/log2ram (log2ram). It takes the homelab copy below.
+#   No path needs a divert, so H3's whitelist stays closed.
+# - /etc/default/earlyoom (earlyoom, a conffile) becomes a drop-in for earlyoom.service that
+#   clears EnvironmentFile= and sets EARLYOOM_ARGS, as the spec assigns.
+#
+# The Ansible-era edits stay in the files as harmless duplicates: the line arm adopts each line
+# by the regexp the lineinfile task used, and the arm never removes one.
+#
+# Activation. zram, Log2Ram, the watchdog and the GPU split take effect at boot, so each of those
+# files declares `reboot`; the weekly reboot applies them. The watchdog reads its file on start,
+# so `reboot` also stands for the old `Restart Watchdog` handler. Nothing here restarts
+# log2ram.service or zramswap.service live: a Log2Ram restart unmounts /var/log under whatever is
+# writing to it, and a zram restart swapoffs onto the SD swapfile and half-fails (see
+# docs/pi-host-tuning-record.md). log2ram.service carries `policy: manual` for that reason.
+#
+# What did not move, and why:
+#
+# - The package installs zram-tools, watchdog and earlyoom through `depends:`. It cannot depend
+#   on log2ram: Azlux's apt source arrives in the same package (apt-azlux), so a rebuilt Pi
+#   could not resolve the dependency on first install. The log2ram package stays a bootstrap
+#   install (H7.42), and it is installed on the live Pi.
+# - The debloat purge (Open vSwitch, snapd, fwupd), rsyslog's and wpa_supplicant's mask, and the
+#   one-off cleanups of stale rsyslog, AIDE and audit rotations are one-time state. They persist
+#   on the live Pi, and the bootstrap debloat step carries them for a rebuild (spec, *The
+#   bootstrap script*).
+# - The check that log2ram.conf's JOURNALD_AWARE lines agree was a read, not a write. A test in
+#   hosts/lib/tests/test_pi_tuning_component.py keeps the packaged log2ram copy honest instead.
+depends:
+  - zram-tools
+  - watchdog
+  - earlyoom
+units:
+  log2ram.service: {policy: manual}
+files:
+  # DECIDED: the patched copy drops `--sparse`, never `--inplace` and never USE_RSYNC=false (#2694,
+  # #2726). Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file
+  # --delete-after`, and that pair corrupts files whose content ends in NUL bytes: `--sparse`
+  # seeks over a run of NULs in the source, and `--inplace` makes the destination the live file,
+  # so whatever the previous file left at those offsets survives. Measured on daniel-pi
+  # 2026-09-26: 6 of 9 rotated /var/log/apt/history.log.*.gz failed `gzip -t` while their CRC32
+  # matched, because the gzip ISIZE field's trailing NULs carried stale bytes. Dropping `--sparse`
+  # alone made the transfer byte-identical under rsync 3.2.7, the Pi's version. Dropping
+  # `--inplace` instead writes a full temp copy of /var/log on every sync. USE_RSYNC=false takes
+  # the `cp -rfup --sparse=always` fallback, which has no `--delete`, so files deleted from the
+  # tmpfs would return at boot into the 128 MB /var/log. The cost this choice carries: every hole
+  # in a journald archive lands on the SD card as real zeros, which 60-homelab-pi.conf bounds
+  # with SystemMaxFiles= (#4583). Log2Ram 1.7.2 is the installed version. The script stays at
+  # /usr/lib/homelab/log2ram because the log2ram package owns /usr/local/bin/log2ram, and a
+  # package shipping an owned path makes dpkg refuse the unpack. vendor/log2ram-1.7.2 is the
+  # upstream script; test_pi_tuning_component.py holds the difference between the two to the two
+  # `--sparse` words. An `apt upgrade` of log2ram rewrites the upstream copy and not this one, so
+  # a new upstream version needs a new vendored file and a re-diff.
+  # config_files' survivor (spec, *Baseline*): the SOPS export. Its other dotfiles stay as the Pi
+  # holds them; a rebuilt Pi gets Ubuntu's own ~/.bashrc and no ~/.gitconfig.
+  - {src: templates/homelab-profile.sh, dst: /etc/profile.d/homelab.sh}
+  - {src: templates/log2ram, dst: /usr/lib/homelab/log2ram, mode: "0755"}
+  - {src: units/log2ram-dropin.conf, dst: /usr/lib/systemd/system/log2ram.service.d/50-homelab.conf}
+  - {src: units/earlyoom-dropin.conf, dst: /usr/lib/systemd/system/earlyoom.service.d/50-homelab.conf}
+  # Journald's cap for the 128 MB log2ram tmpfs. 60- sorts after host-tuning's 50-homelab.conf, so
+  # this wins where the two disagree.
+  - {src: templates/60-homelab-pi.conf, dst: /etc/systemd/journald.conf.d/60-homelab-pi.conf, activate: "try-restart:systemd-journald.service"}
+  # The apt timers, pinned to the quiet hour. Managed drop-ins, so reconcile restarts a timer when
+  # its drop-in changes and leaves a masked one alone. The Ansible-era copies under
+  # /etc/systemd/system/<timer>.d/quiet-hour.conf hold the same schedule and stay as harmless
+  # duplicates: `quiet-hour.conf` sorts after `50-homelab.conf`, so a future change here would lose
+  # to them until the operator removes the old files by hand (the PR body names them).
+  - {src: templates/apt-daily-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily.timer.d/50-homelab.conf}
+  - {src: templates/apt-daily-upgrade-quiet-hour.conf, dst: /usr/lib/systemd/system/apt-daily-upgrade.timer.d/50-homelab.conf}
+lines:
+  # The GPU split and the watchdog dtparam. Bookworm moved the file to /boot/firmware; the Pi runs
+  # Ubuntu 24.04, which has no /boot/config.txt.
+  - {path: /boot/firmware/config.txt, line: "gpu_mem=16", regexp: '^gpu_mem=', activate: reboot}
+  - {path: /boot/firmware/config.txt, line: "dtparam=watchdog=on", regexp: '^dtparam=watchdog=', activate: reboot}
+  # zram. PERCENT is the device's uncompressed capacity, not its RAM cost (4.61:1 measured).
+  - {path: /etc/default/zramswap, line: "PERCENT=100", regexp: '^PERCENT=', activate: reboot}
+  - {path: /etc/default/zramswap, line: "ALGO=zstd", regexp: '^#?ALGO=', activate: reboot}
+  # vm.swappiness above 100 is valid on kernel 5.8 and later: it tells reclaim that compressing an
+  # idle anonymous page is cheaper than re-reading a hot file page from the SD card. The cluster
+  # nodes run 10 for the opposite reason. vm.page-cluster=0 disables swap readahead, which wastes
+  # decompression on zram.
+  - {path: /etc/sysctl.conf, line: "vm.swappiness=130", regexp: '^\s*vm\.swappiness\s*=', activate: sysctl}
+  - {path: /etc/sysctl.conf, line: "vm.page-cluster=0", regexp: '^\s*vm\.page-cluster\s*=', activate: sysctl}
+  # Log2Ram's four declared values. The installed conffile already holds them, so the first run
+  # writes nothing. The `^#?` anchor matters: an unanchored `SIZE=` also matches LOG_DISK_SIZE=.
+  - {path: /etc/log2ram.conf, line: "SIZE=128M", regexp: '^#?SIZE=', activate: reboot}
+  - {path: /etc/log2ram.conf, line: "ZL2R=false", regexp: '^#?ZL2R=', activate: reboot}
+  - {path: /etc/log2ram.conf, line: "LOG_DISK_SIZE=256M", regexp: '^#?LOG_DISK_SIZE=', activate: reboot}
+  - {path: /etc/log2ram.conf, line: "COMP_ALG=lz4", regexp: '^#?COMP_ALG=', activate: reboot}
+  # The hardware watchdog.
+  - {path: /etc/watchdog.conf, line: "watchdog-device = /dev/watchdog", regexp: '^#?watchdog-device', activate: reboot}
+  - {path: /etc/watchdog.conf, line: "max-load-1 = 24", regexp: '^#?max-load-1\s=', activate: reboot}
+  # The three server-sized defaults in the log2ram tmpfs: a cap, never a disable. docs/security-tools.md
+  # gives `sar`, `lastcomm` and `ausearch` their own triage rows.
+  - {path: /etc/sysstat/sysstat, line: "HISTORY=2", regexp: '^#?HISTORY='}
+  - {path: /etc/default/acct, line: 'ACCT_LOGGING="3"', regexp: '^#?ACCT_LOGGING='}
+  # 4 MB x (1 live + 2 rotated) is a 12 MB ceiling, down from 40 MB. auditd reports CanReload=no,
+  # so the action is a restart.
+  - {path: /etc/audit/auditd.conf, line: "max_log_file = 4", regexp: '^max_log_file\s*=', activate: "try-restart:auditd.service"}
+  - {path: /etc/audit/auditd.conf, line: "num_logs = 3", regexp: '^num_logs\s*=', activate: "try-restart:auditd.service"}
