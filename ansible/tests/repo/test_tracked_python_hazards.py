@@ -170,11 +170,38 @@ def _owner_name(node: ast.AST) -> str | None:
     return None
 
 
+# A bare call reads the clock through a `from ... import` of one of these names. `time` counts
+# only from the `time` module, because `from datetime import time` imports a constructor. Any
+# module's `today`, `now` or `utcnow` counts, which is what catches a repo helper such as
+# `secrets_mgmt.rotation_tools.today`: the attribute form above never sees `today()`.
+_BARE_CLOCK_NAMES = frozenset({"today", "now", "utcnow"})
+
+
+def _bare_clock_names(tree: ast.AST) -> set[str]:
+    names = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        for alias in node.names:
+            if alias.name in _BARE_CLOCK_NAMES or (
+                alias.name == "time" and node.module == "time"
+            ):
+                names.add(alias.asname or alias.name)
+    return names
+
+
 def clock_reads(source: str) -> list[int]:
     """Line numbers of every `time.time()`, `datetime.now()`, `utcnow()` or `today()` call."""
+    tree = ast.parse(source)
+    bare = _bare_clock_names(tree)
     found = []
-    for node in ast.walk(ast.parse(source)):
-        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name) and node.func.id in bare:
+            found.append(node.lineno)
+            continue
+        if not isinstance(node.func, ast.Attribute):
             continue
         owner = _owner_name(node.func.value)
         if owner and (node.func.attr, owner) in _CLOCK_CALLS:
@@ -236,6 +263,28 @@ def test_a_live_clock_read_is_flagged():
 
 def test_a_fixed_epoch_is_clean():
     assert clock_reads(FIXED_EPOCH) == []
+
+
+BARE_CLOCK = """
+from secrets_mgmt.rotation_tools import today
+from time import time as wall
+res = audit(reg, today())
+stamp = wall() - 60
+"""
+
+BARE_CONSTRUCTOR = """
+from datetime import date, time
+window = time(3, 0)
+day = date(2026, 10, 25)
+"""
+
+
+def test_a_bare_imported_clock_call_is_flagged():
+    assert clock_reads(BARE_CLOCK) == [4, 5]
+
+
+def test_a_bare_datetime_time_constructor_is_clean():
+    assert clock_reads(BARE_CONSTRUCTOR) == []
 
 
 # ---- rule 3: no bare main() over an argparse entry point
