@@ -34,6 +34,7 @@ spec:
       containers:
         - name: uptime-kuma
           image: {{ uptime_kuma_k8s_image }}
+          imagePullPolicy: IfNotPresent
           # The entry's `port` sets the listener too, so the Service, the scrape target, the
           # CronJobs' URLs and the process all read one value (#3816). Kuma reads it in
           # server/config.js, ahead of its built-in default.
@@ -70,6 +71,7 @@ spec:
 {{ container_resources(cpu_limit=uptime_kuma_k8s_cpu_limit, mem_limit=uptime_kuma_k8s_mem_limit, cpu_request=uptime_kuma_k8s_cpu_request, mem_request=uptime_kuma_k8s_mem_request) }}
         - name: autokuma
           image: {{ uptime_kuma_k8s_autokuma_image }}
+          imagePullPolicy: IfNotPresent
           env:
             - name: AUTOKUMA__KUMA__URL
               value: http://localhost:{{ containers_list | entry_port('uptime-kuma') }}

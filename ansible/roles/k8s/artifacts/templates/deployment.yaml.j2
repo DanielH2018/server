@@ -33,6 +33,7 @@ spec:
       containers:
         - name: artifacts
           image: {{ artifacts_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command: ["python3", "/app/artifact_server.py"]
           env:
             - name: ARTIFACTS_ROOT

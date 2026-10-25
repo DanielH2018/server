@@ -33,6 +33,7 @@ import pytest
 from lib.ansible_jinja_env import make_ansible_env
 from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
 from _role_census import task_files
+from _shell_render import rendered_shell_text
 
 COMMON = SETUP_ROLES / "common"
 SERVICE = COMMON / "templates" / "kuma-check.service.j2"
@@ -49,7 +50,6 @@ KNOWN_CHECKS = frozenset(
         "manifest-prune",
         "live-drift",
         "setup-drift",
-        "secret-rotation-audit",
         "github-ruleset-drift",
         "github-interaction-limit",
         "render-records",
@@ -307,9 +307,26 @@ EXPLICIT_EXIT_PRODUCERS = {
     "github-ruleset-drift": "test_github_ruleset_drift.py",
     "github-interaction-limit": "test_github_interaction_limit.py",
 }
-# The audit script ends in `exec` of the Python CLI, whose `--push` exit is tested in
-# scripts/secrets_mgmt/tests; its own arms must never exit 0 after a down push.
-EXEC_PRODUCERS = frozenset({"secret-rotation-audit"})
+# The audit script runs the Python CLI, whose `--push` exit is tested in
+# scripts/secrets_mgmt/tests; its own arms must never exit 0 after a down push. Since H7.36 it
+# is a component's script (COMPONENT_CHECKS), not a wired import, so none is left here.
+EXEC_PRODUCERS: frozenset[str] = frozenset()
+
+# The checks H7.36 moved from this task file into host components. Each keeps the contract the
+# task file renders, written out as plain units: the service reruns on failure, keeps the down
+# marker, carries no alert unit, and has a boot unit gated on the marker and a persistent timer.
+# Named, so a component that drops one fails here by name.
+COMPONENTS = SETUP_ROLES.parents[2] / "hosts" / "components"
+COMPONENT_CHECKS = {
+    "homelab-secret-rotation-audit": (
+        "secret-rotation",
+        "secret-rotation-audit.sh.j2",
+    ),
+    "homelab-loki-route-witness": (
+        "loki-route-witness",
+        "loki-read-route-health.sh.j2",
+    ),
+}
 
 
 def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
@@ -337,7 +354,59 @@ def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
                 f"{name}: {template.name} must end on the exit contract, after the final push"
             )
         checked += 1
-    # Lower it only for a deliberate retirement.
-    assert checked >= 6, (
+    # Lower it only for a deliberate retirement. H7.36 moved the secret-rotation audit to a
+    # component (COMPONENT_CHECKS), which took the floor from 6 to 5.
+    assert checked >= 5, (
         f"only {checked} shell producers checked; the census has shrunk"
     )
+
+
+def _component_unit(component: str, unit: str, suffix: str) -> str:
+    units = COMPONENTS / component / "units"
+    hit = next(iter(units.glob(f"{unit}{suffix}*")), None)
+    assert hit, f"{component}: no {unit}{suffix} under {units}"
+    return hit.read_text()
+
+
+@pytest.mark.parametrize("unit", COMPONENT_CHECKS)
+def test_a_packaged_check_keeps_the_rerun_marker_boot_and_timer_contract(unit):
+    component, _ = COMPONENT_CHECKS[unit]
+    service = _component_unit(component, unit, ".service")
+    assert directive(service, "Type") == ["oneshot"]
+    assert directive(service, "Restart") == ["on-failure"]
+    assert not directive(service, "OnFailure")
+    [stop_post] = directive(service, "ExecStopPost")
+    assert stop_post.startswith("+") and '"$$SERVICE_RESULT" = success' in stop_post
+    touched = re.search(r"touch (\S+); fi", stop_post)
+    assert touched, stop_post
+    marker = touched.group(1)
+    boot = _component_unit(component, f"{unit}-boot", ".service")
+    assert directive(boot, "ConditionPathExists") == [marker]
+    assert directive(boot, "ExecStart") == [
+        f"/usr/bin/systemctl start --no-block {unit}.service"
+    ]
+    for key in ("Wants", "Requires", "BindsTo"):
+        assert not directive(boot, key)
+    timer = _component_unit(component, unit, ".timer")
+    assert directive(timer, "Persistent") == ["true"]
+
+
+@pytest.mark.parametrize("unit", COMPONENT_CHECKS)
+def test_a_packaged_check_script_never_exits_zero_after_a_down_push(unit):
+    component, template = COMPONENT_CHECKS[unit]
+    text = rendered_shell_text("components", component, template)
+    if template.startswith("secret-rotation-audit"):
+        assert not re.search(r"^\s*exit 0\b", text, re.M)
+        assert "audit --push" in text
+    else:
+        assert text.rstrip().endswith(EXIT_CONTRACT)
+
+
+def test_the_packaged_check_contract_is_flagged_when_the_rerun_is_dropped():
+    """Rejecting half: a service without Restart=on-failure reruns nothing."""
+    service = _component_unit(
+        "secret-rotation", "homelab-secret-rotation-audit", ".service"
+    )
+    broken = service.replace("Restart=on-failure\n", "")
+    assert directive(service, "Restart") == ["on-failure"]
+    assert directive(broken, "Restart") == []

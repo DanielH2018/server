@@ -1,0 +1,22 @@
+# Shipped by homelab-daniel-box. Started by homelab-infra-map.timer.
+[Unit]
+Description=Regenerate the homelab infrastructure map
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+# PATH and KUBECONFIG are set explicitly, as the cron set them, because each omission blinds the
+# k3s half of the map while the Docker half keeps working:
+#   PATH:       a unit's default PATH omits /usr/local/bin, where kubectl lives.
+#   KUBECONFIG: unset, k3s's kubectl falls back to /etc/rancher/k3s/k3s.yaml, which is root-owned
+#               0640, so the unattended run fails while an interactive shell works.
+# The script defends itself against both as well (find_tool / find_kubeconfig).
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=KUBECONFIG=/home/{{ sys_user }}/.kube/config
+ExecStart=/home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/infra_map/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html
+# stdout only is discarded: every run prints `Wrote ...homelab-infra-map.html`, and at a
+# 15-minute period that buries a real message. stderr stays in the journal, so a failing run
+# still shows.
+StandardOutput=null

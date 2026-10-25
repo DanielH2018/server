@@ -70,7 +70,6 @@ import re
 import subprocess
 import sys
 import syslog
-import tempfile
 import time
 
 # The k3s role installs host_lib here (tasks/health-crons.yml). The script runs through a
@@ -80,7 +79,7 @@ HOST_LIB_DIR = os.environ.get("HOST_LIB_DIR", "/opt/live-drift-check")
 if HOST_LIB_DIR not in sys.path:
     sys.path.insert(0, HOST_LIB_DIR)
 
-from host_lib import kuma_push  # noqa: E402
+from host_lib import kuma_push, write_textfile  # noqa: E402
 
 # Deliberately absent below: the read-only SA cannot read this kind (see the module
 # docstring). Named so the run can say so rather than leaving the gap unstated.
@@ -357,8 +356,7 @@ def write_check_textfile(
     homelab-check-lib.sh's `write_check_textfile` writes the same file for the shell checks and
     this is its Python twin. The HELP text matches it byte for byte, because node_exporter drops
     a family whose HELP differs between two files (test_iscsi_sessions.py holds the census).
-    mkstemp's random suffix never ends in `.prom`, so node_exporter skips a half-written file.
-    mkstemp creates 0600 and the collector reads as uid 65534, hence the chmod to 0644.
+    `host_lib.write_textfile` names the temp file so node_exporter skips it, at 0644.
     """
     body = (
         "# HELP homelab_check_success 1 when the check's last verdict was up, 0 when down.\n"
@@ -371,16 +369,7 @@ def write_check_textfile(
         "# TYPE homelab_check_deadline_seconds gauge\n"
         f'homelab_check_deadline_seconds{{check="{CHECK}"}} {deadline_s}\n'
     )
-    fd, tmp = tempfile.mkstemp(prefix=f"{CHECK}.prom.", dir=directory)
-    try:
-        with os.fdopen(fd, "w") as fh:
-            fh.write(body)
-        os.chmod(tmp, 0o644)
-        os.replace(tmp, os.path.join(directory, f"{CHECK}.prom"))
-    except OSError:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
+    write_textfile(os.path.join(directory, f"{CHECK}.prom"), body)
 
 
 def record_textfile(code: int, verdict_ts: int) -> None:

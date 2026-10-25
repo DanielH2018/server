@@ -53,6 +53,14 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   too. Three constraints hold it together — the entrypoint, the path and matching on a path
   rather than a Host — and `ansible/tests/services/test_traefik_edge_selfcheck.py` ENFORCES
   all three.
+- **A rejected bouncer key is refused before the roll by `traefik-precheck`** (#6095), once
+  `traefik_k8s_bouncer_key_precheck` is true. The startupProbe also catches a key the LAPI
+  rejects, through AppSec's 401, but only on the new pod, and the roll is `Recreate`. The Job
+  in `templates/precheck/bouncer-key.yaml.j2` runs after `crowdsec` and before `traefik`,
+  sends the key to the LAPI as a HEAD, and fails on a 403, so Flux holds `traefik` while the
+  old pod serves. The default ships false because the Job and its netpol-baseline fence peer
+  deadlock in one revision; the default's `DECIDED:` comment has the chain.
+  `tests/test_traefik_bouncer_key_precheck.py` pins the request and the render.
 - **Do not re-run the outage to see the red path — it is measured** (2026-09-10, #1345).
   Every container restart re-downloads the plugin, so the shared `/plugins-storage` emptyDir
   short-circuits nothing.

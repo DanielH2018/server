@@ -1,0 +1,51 @@
+# The generated-docs refresh on daniel-box (H7.10a, docs/target-architecture/host/h7-delete-ansible.md).
+# Until H7.36 initial_setup installed it as the "Refresh generated docs" cron. Now
+# homelab-docs-refresh.timer starts homelab-docs-refresh.service at 06:17 and 18:17, as sys_user.
+# The push token arrives through LoadCredential= from /run/credstore/docs_refresh_push_token,
+# which homelab-secrets.service fills from daniel-box's SOPS file.
+#
+# The tmpfiles.d file creates `docs_host_site_dir`, the docs pod's hostPath (`type: Directory`),
+# and the commit-failure stamp directory. The service runs `systemd-tmpfiles --create` on it in
+# ExecStartPre= with the `+` prefix, because the service itself runs as sys_user and dpkg never
+# owns a path under /home. systemd-tmpfiles-setup.service also applies it at boot, so a rebuilt
+# daniel-box has the directory before the pod starts.
+#
+# Autonomous-role contract — Generated docs refresh. Twice daily (06:17 and 18:17, daniel-box
+# only): docs-refresh regenerates the reference pages and the infra map, weights any unweighted
+# test module, re-measures one eighth of the recorded weights and rewrites those that drifted,
+# rebuilds the site, and publishes the diff through a PR that a detached landing merges (#3609).
+#
+# - Scope: three derived paths and nothing else — `docs/reference/`, `docs/assets/generated/`
+#   and `scripts/dev/pytest_shard_weights.json`; a write outside them parks every deploy on the
+#   box.
+# - Mode: degrade, never abort. A failing generator sets `GENERATORS_OK=0`, publishes what
+#   succeeded and reports DOWN. A red test suite still exits 1. The timer's enable link arms it,
+#   and dropping the link from a package version, or reverting this component, stops the timer
+#   on the install that drops it.
+# - Abort valves: the shared git-tree lock, the dirty-tree gate, the unlanded-branch guard, and
+#   the commit-failure stamp under `/var/lib/homelab/docs-refresh.d`.
+# - Authoritative sources: the primary checkout as the git-tree lock holds it, and origin's
+#   branch list for the unlanded-branch guard.
+# - Required evidence: `status=<up|down> <msg>` in the log, a push to "Docs Refresh", and
+#   `docs-refresh.prom` in the node_exporter textfile directory.
+# - Next-run review: before adding a fourth staged path, check no prek hook matching it can fail
+#   on generator output. `docs/host-baseline-record.md`'s *The generated-docs refresh cron, in
+#   detail* has why, the `PUSH_STATUS` default and the `vale` exception.
+#
+# ENFORCED: hosts/lib/tests/test_docs_refresh_component.py, and the failure-path tests in
+# ansible/tests/setup/test_docs_refresh_*.py, which read the rendered script.
+credentials:
+  - docs_refresh_push_token
+files:
+  - {src: templates/docs-refresh.sh.j2, dst: /usr/lib/homelab/docs-refresh, mode: "0755"}
+  - {src: tmpfiles.d/homelab-docs-site.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-docs-site.conf}
+  - {src: units/homelab-docs-refresh.service.j2, dst: /usr/lib/systemd/system/homelab-docs-refresh.service}
+  - {src: units/homelab-docs-refresh.timer, dst: /usr/lib/systemd/system/homelab-docs-refresh.timer}
+enable:
+  homelab-docs-refresh.timer: timers.target
+# What initial_setup installed before H7.36. Reconcile retires each once the timer above has
+# started, so the refresh never runs twice or not at all.
+legacy:
+  - {cron_file: docs-refresh}
+  - {path: /usr/local/bin/docs-refresh.sh}
+  - {path: /var/lib/homelab/setup-render-manifest.d/docs-refresh}

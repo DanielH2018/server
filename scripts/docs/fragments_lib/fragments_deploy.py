@@ -31,6 +31,8 @@ LAND_OUTCOME = "scripts/deploy_tools/land_lib/outcome.py"
 EXIT_CODES = "scripts/lib/exit_codes.py"
 
 INITIAL_SETUP_TEMPLATES = "ansible/roles/setup/initial_setup/templates"
+# H7.10 moved the checkout timers' scripts into host components; they take the lock there.
+HOST_COMPONENTS = "hosts/components"
 SETUP_ROLES = "ansible/roles/setup"
 DEPLOY_UNDER_LOCKS = "scripts/deploy_tools/deploy_lib/under_locks.py"
 
@@ -149,7 +151,11 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
                     "source": unit.relative_to(repo).as_posix(),
                 }
             )
-    for template in sorted((repo / INITIAL_SETUP_TEMPLATES).glob("*.j2")):
+    cron_scripts = [
+        *sorted((repo / INITIAL_SETUP_TEMPLATES).glob("*.j2")),
+        *sorted((repo / HOST_COMPONENTS).glob("*/templates/*.j2")),
+    ]
+    for template in cron_scripts:
         text = template.read_text()
         if not _LOCK_IMPORT.search(text):
             continue

@@ -27,7 +27,7 @@
           "refId": "DeployAnno"
         },
         "textFormat": "{{services}}",
-        "titleFormat": "deploy"
+        "titleFormat": "deploy {{result}}"
       }
     ]
   },

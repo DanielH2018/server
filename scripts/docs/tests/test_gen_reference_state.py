@@ -285,8 +285,6 @@ def test_live_crons_still_carry_the_jobs_state_matches_by_name():
     """
     names = {row["name"] for row in crons.build_rows()}
     required = {
-        "Refresh generated docs",
-        "Weekly secret rotation (auto tier)",
         "etcd restore drill",
     }
     assert required <= names

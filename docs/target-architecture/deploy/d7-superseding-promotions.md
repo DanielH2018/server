@@ -1,8 +1,9 @@
 # D7 — Superseding promotions
 
 Status: PLANNED. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in #6145, D7.4 in
-#6156, the refactor D7.5 needed in #6159, D7.5 in #6193, and D7.7. `SUPERSEDE` stays
-`False` until the operator rules on D7.6.
+#6156, the refactor D7.5 needed in #6159, D7.5 in #6193, D7.7 in #6200, and the hold
+attribution #6199 asked for in #6204. The operator turned `SUPERSEDE` on in D7.6 on
+2026-10-24; the live pair in *Verification* is the drill that follows it.
 
 Depends on: D5, through #5704's soak fix (the soak Job exits once `homelab` no longer
 holds its revision). D2.5's in-flight guard and D5.2b1's hold without a reset are the
@@ -298,7 +299,9 @@ supersedes another.
 1. **D7.5 — `supersedable` behind `SUPERSEDE = False`, and the base.** The eight
    conditions and the case table's pairs. `expected_set` and `prior_statuses` take the
    base, which is `prod` unless T supersedes. `decide` prints the superseded commit as
-   `supersedes=<P>`. The `post` job's hold message does not name P yet (#6199).
+   `supersedes=<P>`. The `post` job posts only snapshot-role holds, which a superseding T
+   never writes, so #6199 names P in `settle`'s log and says in `land-wait`'s
+   `promote-held` line whether a failed name is the landing PR's own.
 1. **D7.7 — `tag` compares what `decide` read.** `decide` outputs the DEPLOY_HOLD value
    it read, and `tag` moves `prod` only while DEPLOY_HOLD still reads it. D7.1's re-read
    accepted only `none`, which would refuse every revert-rule promotion. A superseding
@@ -339,8 +342,8 @@ supersedes another.
   failure, and condition 5 refuses an overlap. A failure P causes after T's move still
   holds as `<T> failed=<names>`. The hold names P's service, and the reset returns to
   the `last-good` from before P, so the cluster state is right and only the SHA in the
-  hold is the later one. `decide`'s log names P as `supersedes=<P>`; the hold post does
-  not yet (#6199).
+  hold is the later one. `decide`'s and `settle`'s logs name P, and `land-wait` says
+  whether a failed name is the landing PR's own (#6199).
 - **`verify` reads the wrong `prod`.** A failed registry read keeps the wait going and
   never reads as superseded, the same rule as a failed status read. Class 3, *empty is
   read as clean*: an empty read must not turn into a verdict.

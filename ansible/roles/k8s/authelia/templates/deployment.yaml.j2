@@ -71,6 +71,7 @@ spec:
         # names the step that failed.
         - name: seed-claude-totp
           image: {{ authelia_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -160,6 +161,7 @@ spec:
         # does today, so it can only improve on the current behaviour, never mask a dead redis.
         - name: wait-for-redis
           image: {{ authelia_k8s_redis_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -188,6 +190,7 @@ spec:
       containers:
         - name: authelia
           image: {{ authelia_k8s_image }}
+          imagePullPolicy: IfNotPresent
           args:
             - --config
             - /secrets/configuration.yml

@@ -87,6 +87,23 @@ the call until its checks pass. A refused merge is printed once and the wait con
 merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both flags in one
 run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
+**A master CI backlog holds a green PR's merge.** Before the direct merge, `land_lib/pace.py`
+counts the master push runs of `ci.yml` that are not completed. At 2 or more it prints
+`pacing the merge: …` and waits for the next poll. A full sweep is about 17 jobs against the
+account's 20-job runner cap, so a second unfinished sweep already queues. On 2026-10-24, eight
+concurrent landings left six master runs unfinished, their jobs waited 8-17 minutes for a
+runner, and each landing waited 29-61 minutes for its merge commit's verdict (#5526).
+
+- The count is a read, not a lock. Two landings that read at the same poll can both merge.
+  Pacing lowers the average queue depth; it does not close the race that makes the `prove`
+  job's tested-tree skip miss.
+- A run unfinished more than 2 hours after its creation is wedged and not counted.
+- The wait counts against `merge_timeout`. A backlog that never drains ends at
+  `merge-timeout`, whose message names the pacing; re-run the same command.
+- A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
+- `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
+- A PR armed by hand with `gh pr merge --auto` merges without this check.
+
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
@@ -202,8 +219,8 @@ SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `hosts/lib/ci_verdict.py` is the
 merge was immediately followed by another reads `cancelled` permanently. The rule covers the
 gate job too: ci.yml runs `prek` under `always()`, so a cancelled run still runs the gate, which
 fails on its cancelled needs. `ci_verdict.ci_verdict` leaves that gate out unless a need in the
-same run failed outright (#5931). `await_ci.py` follows
-the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
+same run failed outright (#5931), and the deployer's tick reads it the same way (#6007).
+`await_ci.py` follows the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
 no verdict (cancelled/stale) — following the tip <tip>`, and it is normal. It also fires when
 the cancellation came before the `prek` job registered a check-run at all: the check-runs list
 then never carries the required name, so `await_ci.py` reads the SHA's check-suites (a
@@ -347,7 +364,10 @@ Instead it reads the cluster every 30 seconds:
   soak, which exits once `homelab` leaves R (#5704), and the wait reads that revision's soak
   instead (D7.2).
 - **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
-  line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
+  line names the held SHA and, for a `failed=` hold, the failed names, and says whether any
+  of them is one of this PR's services. The held SHA is the newest commit the promotion
+  carried, which may be another PR's, so a hold naming none of this PR's services was most
+  likely caused by another merge in it, or by a run it superseded (D7, #6199). Clearing the hold is
   the operator's decision, approved through the permission prompt the agent's clear raises. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
   its verification (`docs/flux-deploy-plane.md`, *Verification*).
 - **`nothing-to-deploy`, from land-wait's `suspended`, exit 0.** Every tag Flux applies for
@@ -731,7 +751,8 @@ It ends `deferred` in three cases:
   that arrives in this merge arms nothing until an updater run installs it. The operator starts
   the updater by hand with `systemctl start homelab-updater.service` as root on that host, once
   the agent's Prometheus shows `homelab_repo_published_info` at the merge commit. They then
-  re-run the same `land.sh` command.
+  re-run the same `land.sh` command. daniel-box, daniel-server and the Pi ship the link, so
+  this case reaches only the merge that first adds a link (#6218 added daniel-box's).
 - The host's deadline is more than 45 minutes away. The deadline is the second updater fire
   after the merge plus 10 minutes, read from the first parent's rendered drop-in.
 - The host is still unsettled past its deadline. The line gives the host's last success

@@ -47,7 +47,12 @@ from lib.exit_codes import (
     DEPLOY_SNAPSHOT_FAILED,
 )
 from deploy_tools.deploy_lib.messages import say, say_error
-from deploy_tools.deploy_lib.playbook import annotate, discharge_owed_k8s, run_playbook
+from deploy_tools.deploy_lib.playbook import (
+    annotate,
+    annotate_failure,
+    discharge_owed_k8s,
+    run_playbook,
+)
 from lib.git import git, git_stdout
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -507,6 +512,7 @@ def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
             if not tags:
                 full_run_tags = enumerate_full_run_tags(state)
         take_service_locks(state, full_run_tags)
+        started = time.monotonic()
         status = run_playbook(state)
     except Refused as refused:
         return refused.code
@@ -526,6 +532,7 @@ def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
             "  pattern that matched nothing. Fix that, then retry; no task ran.",
         )
         return DEPLOY_NO_HOSTS
+    annotate_failure(state, time.monotonic() - started)
     # ansible's own 2/3/4 collide with the wrapper's tag-miss, broad and stale codes, so its
     # number is reported and 20 returned.
     say_error(

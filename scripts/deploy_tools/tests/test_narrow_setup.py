@@ -31,6 +31,7 @@ from _setup_role_fixtures import (
     Tree,
     build,
     narrow,
+    touched,
 )
 
 
@@ -59,13 +60,36 @@ def test_a_template_no_task_file_names_is_flagged(tree):
 
 
 def test_a_tagged_task_file_change_narrows_to_its_tags(tree):
-    tree.write(f"{ROLE}/tasks/beta.yml", BETA + "  # touched\n")
+    tree.write(f"{ROLE}/tasks/beta.yml", touched(BETA))
     assert narrow(tree, *_refs(tree)) == frozenset({"beta"})
 
 
 def test_an_untagged_task_file_change_is_flagged(tree):
-    tree.write(f"{ROLE}/tasks/main.yml", MAIN + "# touched\n")
+    tree.write(
+        f"{ROLE}/tasks/main.yml",
+        MAIN.replace("alpha.yml", "x")
+        .replace("beta.yml", "alpha.yml")
+        .replace("x", "beta.yml"),
+    )
     with pytest.raises(narrow_setup.CannotNarrow, match="carries no tags of its own"):
+        narrow(tree, *_refs(tree))
+
+
+def test_an_import_rename_in_an_untagged_task_file_needs_nothing(tree):
+    """A static import runs no task of its own, so its `name:` reaches no host (#5930).
+
+    H1.4 renamed the coredns.yml import in the k3s role's untagged `tasks/main.yml`, and the
+    refusal above fired on it. Reordering the imports, above, still refuses.
+    """
+    tree.write(f"{ROLE}/tasks/main.yml", MAIN.replace("The first topic", "Topic one"))
+    with pytest.raises(narrow_setup.NothingToApply, match="reaches no host"):
+        narrow(tree, *_refs(tree))
+
+
+def test_a_comment_edit_to_a_task_file_needs_nothing(tree):
+    """Ansible reads a task file only through its parsed values, as with `defaults/` (#4384)."""
+    tree.write(f"{ROLE}/tasks/beta.yml", BETA + "  # a comment an operator reads\n")
+    with pytest.raises(narrow_setup.NothingToApply, match="reaches no host"):
         narrow(tree, *_refs(tree))
 
 
@@ -103,7 +127,7 @@ def test_a_handlers_change_is_flagged(tree):
 
 def test_a_range_touching_two_topics_names_both_tags(tree):
     tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
-    tree.write(f"{ROLE}/tasks/beta.yml", BETA + "  # touched\n")
+    tree.write(f"{ROLE}/tasks/beta.yml", touched(BETA))
     assert narrow(tree, *_refs(tree)) == frozenset({"alpha", "beta"})
 
 
@@ -332,7 +356,7 @@ def test_a_task_file_main_yml_imports_inside_a_block_is_clean(tree):
     )
     tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA)
     old = tree.commit("import gamma")
-    tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA + "# touched\n")
+    tree.write(f"{ROLE}/tasks/gamma.yml", touched(GAMMA))
     assert narrow(tree, old, tree.commit("touch gamma")) == frozenset({"gamma"})
 
 
@@ -354,7 +378,7 @@ def test_a_task_file_reached_only_by_include_tasks_is_flagged(tree):
     )
     tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA)
     old = tree.commit("include gamma")
-    tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA + "# touched\n")
+    tree.write(f"{ROLE}/tasks/gamma.yml", touched(GAMMA))
     with pytest.raises(narrow_setup.CannotNarrow, match=r"without apply\.tags"):
         narrow(tree, old, tree.commit("touch gamma"))
 

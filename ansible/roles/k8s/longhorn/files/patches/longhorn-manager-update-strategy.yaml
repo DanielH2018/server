@@ -1,0 +1,29 @@
+---
+# Rolls longhorn-manager one pod at a time instead of upstream's `maxUnavailable: 100%` (#6009).
+# The manager pods serve Longhorn's admission webhook (`validator.longhorn.io`), which every
+# PersistentVolumeClaim's dry run calls. With both pods replaced at once, a claim-holding tag
+# that reconciled in that window failed its dry run, posted `failure` to Discord, and
+# `crowdsec`'s failure held `traefik` not-Ready for two minutes. With one pod down at a time,
+# the other pod keeps serving the webhook.
+# DECIDED: upstream's 100% is a default, not a requirement of the upgrade path.
+#   - The v1.13.0 chart's `longhornManager.updateStrategy` comment calls 100% the default and
+#     says to override it for a rolling update. longhorn/longhorn#12240 made it configurable,
+#     and upstream QA passed version upgrades at `maxUnavailable: 20%`.
+#   - A new manager's `upgrade.Upgrade` waits for every old manager pod to be gone before it
+#     migrates anything, so two versions never write CRs at once. That wait runs after
+#     `startWebhooksByLeaderElection` in longhorn-manager's `app/daemon.go`, and the readiness
+#     probe reads the admission webhook port, so the new pod turns Ready first and the
+#     DaemonSet goes on to replace the old one. One pod down at a time cannot deadlock a hop.
+#   - The cost: a roll takes two pod starts in sequence instead of one, and on a version hop
+#     the two versions' webhooks run side by side for one pod's start. The `longhorn` role's
+#     `manifests_rollout_timeout` comment has the budget.
+# The patch changes `updateStrategy` only, not the pod template, so landing it rolls no pod.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: longhorn-manager
+  namespace: longhorn-system
+spec:
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1

@@ -34,6 +34,7 @@ spec:
       containers:
         - name: chrome
           image: {{ karakeep_k8s_chrome_image }}
+          imagePullPolicy: IfNotPresent
           # These are APPENDED to what the image's own entrypoint already passes, not a full
           # command line. /headless-shell/run.sh runs headless-shell on 127.0.0.1:9223 with
           # --no-sandbox, --use-gl=angle, --use-angle=swiftshader and

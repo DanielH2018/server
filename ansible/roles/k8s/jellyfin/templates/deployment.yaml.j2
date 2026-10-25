@@ -53,6 +53,7 @@ spec:
       initContainers:
         - name: convert-encoding-settings
           image: {{ jellyfin_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -120,6 +121,7 @@ spec:
           # kept.
         - name: sweep-unlisted-plugins
           image: {{ jellyfin_k8s_plugin_init_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - python3
             - -c
@@ -169,6 +171,7 @@ spec:
           # install runs as the owning uid and installs nothing at runtime.
         - name: install-ani-sync
           image: {{ jellyfin_k8s_plugin_init_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - python3
             - -c
@@ -299,6 +302,7 @@ spec:
           # deliberately unmanaged, exactly as ani-sync's are.
         - name: install-intro-skipper
           image: {{ jellyfin_k8s_plugin_init_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - python3
             - -c
@@ -427,6 +431,7 @@ spec:
           # touches that directory.
         - name: install-webhook
           image: {{ jellyfin_k8s_plugin_init_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - python3
             - -c
@@ -533,6 +538,7 @@ spec:
           # in /config/data/plugins/configurations/ and nothing here touches that directory.
         - name: install-merge-versions
           image: {{ jellyfin_k8s_plugin_init_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - python3
             - -c
@@ -663,6 +669,7 @@ spec:
           # plugin directory, so removing a differently-named directory loses no rules.
         - name: install-media-cleaner
           image: {{ jellyfin_k8s_plugin_init_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - python3
             - -c
@@ -765,6 +772,7 @@ spec:
       containers:
         - name: jellyfin
           image: {{ jellyfin_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
           # The s6 privilege-drop set MINUS FOWNER and DAC_OVERRIDE. Those two existed only

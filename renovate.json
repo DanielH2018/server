@@ -181,12 +181,25 @@
       "customType": "regex",
       "description": "The upstream binaries the `homelab-tools` host package ships (target slice H3, PR H3.11): sops and chezmoi, each pinned by version and by the sha256 of the file its URL serves, once per architecture. This manager follows the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `version:` line and the `sha256:` line of one architecture's block, so currentValue and currentDigest come from one match, and the github-release-attachments datasource computes the new digest from the same asset of the new release. Each tool therefore has two matches, one per architecture, and the `{{depName}}` group puts both in one PR. The `url:` line holds `{version}` and `{bare}` placeholders the renderer expands, so a bump moves only the version and the digest. The builder downloads each file and refuses one whose digest differs from its pin (reason `tools`), and CI's `host_packages` job fetches and checks the same pins on every run, so a wrong digest or a 404 URL cannot reach master green. ENFORCED by scripts/renderer/tests/test_renderer_host_tools.py.",
       "managerFilePatterns": [
-        "/(^|/)hosts/packages/homelab-tools/package\\.yml$/"
+        "/(^|/)hosts/packages/homelab-tools/package\\.yml$/",
+        "/(^|/)hosts/bootstrap-host\\.sh$/"
       ],
       "matchStrings": [
-        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=(?<depName>[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)[ \\t]*\\n[ \\t]+version:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+sha256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
+        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=(?<depName>[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)[ \\t]*\\n[ \\t]+version:[ \\t]*(?<currentValue>v?\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+sha256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
       ],
       "datasourceTemplate": "github-release-attachments"
+    },
+    {
+      "customType": "regex",
+      "description": "The k3s version `hosts/bootstrap-host.sh` embeds (H7.42), the second copy of `k3s_version` in roles/k8s/system-upgrade/defaults. The script runs on a rebuilt node with no clone to read the pin from, and hosts/lib/tests/test_bootstrap_host_pins.py holds all three embedded k3s values equal to that file, so a bump of one side alone fails CI. The `k3s-io/k3s` packageRule groups this bump with the defaults file's. The install.sh URL and its sha256 are the same manual finish as in the defaults file.",
+      "managerFilePatterns": [
+        "/(^|/)hosts/bootstrap-host\\.sh$/"
+      ],
+      "matchStrings": [
+        "#[ \\t]*renovate:[ \\t]*datasource=github-releases[ \\t]+depName=k3s-io/k3s[ \\t]*\\nK3S_VERSION=(?<currentValue>\\S+)"
+      ],
+      "depNameTemplate": "k3s-io/k3s",
+      "datasourceTemplate": "github-releases"
     },
     {
       "customType": "regex",
@@ -514,7 +527,8 @@
         ".vale.ini",
         "ansible/roles/setup/initial_setup/tasks/host-basics.yml",
         "ansible/roles/setup/homelab_builder/defaults/main.yml",
-        "hosts/packages/homelab-tools/package.yml"
+        "hosts/packages/homelab-tools/package.yml",
+        "hosts/bootstrap-host.sh"
       ],
       "groupName": "{{depName}}"
     },

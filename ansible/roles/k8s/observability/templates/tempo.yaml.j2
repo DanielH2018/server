@@ -97,6 +97,7 @@ spec:
       containers:
         - name: tempo
           image: {{ observability_k8s_tempo_image }}
+          imagePullPolicy: IfNotPresent
           args: ["-config.file=/etc/tempo/config.yaml"]
 {{ hardened_security_context(non_root=true) }}
           ports:

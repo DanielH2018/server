@@ -30,6 +30,7 @@ spec:
       containers:
         - name: docs
           image: {{ docs_k8s_image }}
+          imagePullPolicy: IfNotPresent
           env:
             - name: TZ
               value: {{ tz }}
