@@ -475,7 +475,11 @@ the tags of the tasks that read it:
   `k3s_render_stamp_groups` and hands the group to `common/tasks/release_bin.yml`), so a name found
   only there maps to the tags of whatever reads that KEY.
 - `defaults/main.yml` or `vars/<f>.yml` maps to the top-level keys whose value changed between the
-  two refs, then the tags of every task file and template naming one of those keys.
+  two refs, then the tags of every task file and template naming one of those keys. A key the
+  range deletes together with its last reader maps to the tags its readers carried at the old
+  ref (#5930), and refuses if any of those tags selects no task at the new ref. H1.4 deleted
+  `k3s_cluster_dns_ip` with the `tasks/coredns.yml` tasks that read it. Before this rule, the
+  deployer refused that range and recorded `"tags": []` where `--tags coredns` was enough.
 
 A path that reaches no host is SKIPPED, not refused: a `.md` outside `files/` and `templates/`
 (one inside them can be copied or rendered onto a host, so it narrows), and a role-local `tests/`

@@ -15,7 +15,16 @@ import narrow_setup
 from lib.repo_paths import REPO
 
 from _narrow_fixtures import _refs
-from _setup_role_fixtures import BETA, DEFAULTS, PLAYBOOK, ROLE, Tree, build, narrow
+from _setup_role_fixtures import (
+    ALPHA,
+    BETA,
+    DEFAULTS,
+    PLAYBOOK,
+    ROLE,
+    Tree,
+    build,
+    narrow,
+)
 
 
 @pytest.fixture
@@ -360,3 +369,43 @@ def test_the_real_uv_pin_reaches_every_role_copying_the_operators_uv(role, tags)
     two, and all three copies stayed on the old version."""
     index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
     assert index.key_readers("initial_setup_uv_version") == frozenset(tags)
+
+
+# ── a key the range deletes together with its last reader (#5930) ───────────────────────
+
+
+def test_a_key_deleted_with_its_last_reader_narrows_to_that_readers_tag(tree):
+    """H1.4 deleted `k3s_cluster_dns_ip` with the coredns.yml tasks that read it.
+
+    Nothing reads the key at the new commit, so the walk refused and the role fell back to
+    `--tags k3s`. The old readers' tag is what the deletion changed.
+    """
+    tree.write(
+        f"{ROLE}/defaults/main.yml", DEFAULTS.replace("demo_beta_mode: slow\n", "")
+    )
+    tree.write(f"{ROLE}/templates/beta.conf.j2", "mode = slow\n")
+    assert narrow(tree, *_refs(tree)) == frozenset({"beta"})
+
+
+def test_a_key_deleted_with_the_last_task_carrying_its_readers_tag_is_flagged(tree):
+    """The old reader's tag selects nothing at the new commit, so it cannot be printed."""
+    tree.write(
+        f"{ROLE}/defaults/main.yml", DEFAULTS.replace("demo_alpha_mode: fast\n", "")
+    )
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "mode = fast\n")
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA.replace("[alpha]", "[alpha_v2]"))
+    with pytest.raises(narrow_setup.CannotNarrow, match="which no task carries"):
+        narrow(tree, *_refs(tree))
+
+
+def test_the_real_h1_4_defaults_change_narrows_to_coredns():
+    """The range that wrote `"tags": []` for k3s, read from the repo's history."""
+    playbook = "ansible/k3s-bringup.yml"
+    new = "225de93f5"
+    index = narrow_setup.RoleIndex(
+        "k3s", new, str(REPO), narrow_setup.show_at(new, playbook, str(REPO))
+    )
+    got = narrow_setup.path_tags(
+        "defaults/main.yml", index, f"{new}^", new, str(REPO), playbook
+    )
+    assert got == frozenset({"coredns"})

@@ -16,7 +16,8 @@ to the tags of the tasks that read it:
     template that another template includes or imports.
   - `defaults/main.yml` or `vars/<f>.yml`: the top-level keys whose value changed, then the
     tags of every task file and template naming one of those keys, following another vars
-    key that interpolates one.
+    key that interpolates one. A key the range DELETES along with its last reader is asked
+    of the role at `old` instead, so it maps to the tags its readers had (#5930).
   - a filter plugin `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS` lists for the role:
     each of its filters the role mentions is walked like a changed key (#3878).
 
@@ -172,8 +173,45 @@ def changed_keys(path: str, old: str, new: str, repo: str) -> set[str]:
     return changed_mapping_keys(mapping_at(before, path), mapping_at(after, path), path)
 
 
+def removed_key_tags(
+    key: str, index: RoleIndex, old: str, repo: str, playbook: str
+) -> frozenset[str]:
+    """The tags a key the range deleted with its last reader reaches, or a refusal (#5930).
+
+    H1.4 (#5925) moved CoreDNS to Flux. It deleted `k3s_cluster_dns_ip` from `defaults/`
+    together with the tasks in `tasks/coredns.yml` that read it, so at `new` nothing reads
+    the key and `key_readers` refused. The `manual_plane` line then recorded no tags, and
+    every surface printed `--tags k3s`, which arms the control-plane restart. The change
+    needed `--tags coredns`.
+
+    The readers at `old` are the work the deletion changed, so their tags are the answer.
+    Every such tag must still select a task at `new`. A tag whose last task the range also
+    deleted would make Ansible exit 0 having applied nothing, so it refuses instead.
+
+    Raises:
+        CannotNarrow: nothing reads the key at `old` either, the role does not index at
+            `old`, or a tag the old readers carry selects nothing at `new`.
+    """
+    role = index.prefix[len(SETUP_TREE) + 1 :].rstrip("/")
+    before = RoleIndex(role, old, repo, show_at(old, playbook, repo))
+    tags = before.key_readers(key)
+    live: set[str] = set()
+    for rel in index.tags:
+        try:
+            live |= index.tags_of(rel)
+        except CannotNarrow:
+            continue
+    gone = tags - live
+    if gone:
+        raise CannotNarrow(
+            f"{key} was read at {old} under {', '.join(sorted(gone))}, which no task "
+            f"carries at the new commit"
+        )
+    return tags
+
+
 def path_tags(
-    rel: str, index: RoleIndex, old: str, new: str, repo: str
+    rel: str, index: RoleIndex, old: str, new: str, repo: str, playbook: str
 ) -> frozenset[str]:
     """The tags one changed path below a role reaches, or a refusal."""
     if rel.startswith("tasks/"):
@@ -190,7 +228,14 @@ def path_tags(
         return tags
     if rel.startswith(("defaults/", "vars/")):
         tags: set[str] = set()
-        for key in sorted(changed_keys(f"{index.prefix}{rel}", old, new, repo)):
+        path = f"{index.prefix}{rel}"
+        changed = changed_keys(path, old, new, repo)
+        # `changed_keys` has already refused a file absent at `new`.
+        after = mapping_at(show_at(new, path, repo) or "", path)
+        for key in sorted(changed):
+            if key not in after and not index.mentions(key):
+                tags |= removed_key_tags(key, index, old, repo, playbook)
+                continue
             got = index.key_readers(key)
             if not got:
                 # Per key, not over the union: a key whose only readers are keys naming it
@@ -376,7 +421,7 @@ def role_tags(
             rel = path[len(prefix) :]
             if _reaches_no_host(rel):
                 continue
-            got = path_tags(rel, index, old, new, repo)
+            got = path_tags(rel, index, old, new, repo, playbook)
         elif path in plugins:
             rel = path
             got = plugin_tags(path, index, old, new, repo)
