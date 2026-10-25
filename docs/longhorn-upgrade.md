@@ -94,11 +94,19 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    kubectl -n longhorn-system rollout status deploy/longhorn-driver-deployer --timeout=600s
    ```
    A new StorageClass parameter changes a field that Kubernetes treats as immutable. The manager
-   does not necessarily replace a class whose ConfigMap changed, so compare the live class with the
-   ConfigMap's before the next step: `kubectl get storageclass longhorn -o jsonpath={.parameters}`.
-   If they differ, the fix is an **operator-only** delete of the class, which the manager
-   recreates from the ConfigMap. Deleting a class is safe, because parameters are read at
-   provision time only.
+   does not necessarily replace a class whose ConfigMap changed. Before the next step, run the
+   health gate on daniel-box:
+   ```bash
+   uv run python scripts/diagnostics/probe.py health longhorn
+   ```
+   After a healthy rollout, the gate compares the live `longhorn` class's parameters with the
+   class in ConfigMap `longhorn-system/longhorn-storageclass`
+   (`scripts/diagnostics/probe_lib/health_plumbing.py:longhorn_storageclass`). Exit 0 prints
+   `StorageClass longhorn matches`. Exit 1 prints a `FAILED:` line that names each parameter
+   whose live and ConfigMap values differ. Exit 75 means a read failed, which is no verdict.
+   When the parameters differ, the fix is an **operator-only** delete of the class, which the
+   manager recreates from the ConfigMap. Deleting a class is safe, because parameters are read
+   at provision time only.
 4. **Wait for the engines to follow the manager.** Upstream ships
    `concurrent-automatic-engine-upgrade-per-node-limit` at `0`, which leaves engines on the old
    image. This repo sets it to `3` (`k3s_longhorn_concurrent_engine_upgrade` in the `longhorn`
