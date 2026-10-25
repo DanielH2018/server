@@ -1,4 +1,4 @@
-"""Size `-n auto` to the run: one xdist worker per `MODULES_PER_WORKER` test modules selected.
+"""Size `-n auto` to the run: one xdist worker per heaviest module's worth of recorded seconds.
 
 Registered as a plugin from `addopts` in pyproject.toml, beside `-n auto`, so it reaches
 every run that does not pass its own `-n`.
@@ -22,34 +22,61 @@ workers the session ceiling below allows, where most needed one. A run outside a
 session, such as a hand-typed one on daniel-box, got all 16. That is what this plugin narrows
 (#5667's follow-up).
 
+The first rule counted modules, one worker per 15, so a few heavy modules ran on one worker
+(#5967). The five modules of the `static-ratchet-tests-python` prek hook took 13.3-16.6s under
+`-n auto` and 6.7-8.5s under `-n 4` (#5917). Re-measured on daniel-server (8 cores) on
+2026-10-25, two rounds interleaved at load average 8.5-11.8, wall seconds per run:
+
+| Selection                       | Modules | Recorded | Heaviest | 1       | 2       | 3     | 4     | 5  | 8     |
+|---------------------------------|---------|----------|----------|---------|---------|-------|-------|----|-------|
+| the `-python` hook's five       | 5       | 5.7s     | 2.22s    | 16-20   | 15-18   | 10-11 |       | 12 |       |
+| `scripts/lib/tests`             | 66      | 32.1s    | 8.07s    |         | 52-54   |       | 41-49 |    | 49-50 |
+| four light `tests/` files       | 4       | 0.3s     | 0.27s    | 2.3-4.5 | 2.0-2.1 |       |       |    |       |
+
 ## The rule
 
-`workers = min(ceiling, ceil(modules / MODULES_PER_WORKER))`, at least 1. A run that names no
-path (the whole suite, from `testpaths`) is left to xdist, which gives it every core. The whole
-suite holds about 1,337 modules, so the rule would give it every core anyway. A CI shard holds
-about 220 modules on a 4-core runner, so it keeps 4.
+Under `--dist loadscope` a module's tests stay on one worker, so no width finishes the run
+before its heaviest module does. Workers beyond `recorded seconds / heaviest module` only idle,
+and fewer leave the heaviest module waiting behind others. So:
+
+`workers = min(ceiling, ceil(total / max(heaviest, MIN_SECONDS_PER_WORKER)))`, at least 1.
+
+That gives the first two rows above 3 and 4, the fastest width measured for each. It gives the
+third 1, where a second worker saved under half a second in one round of two. The seconds
+come from `scripts/dev/pytest_shard_weights.json`, which the shard split already keeps current.
+A module the table does not hold is charged the table's mean. A run that names no path (the
+whole suite, from `testpaths`) is left to xdist, which gives it every core. Each of CI's six
+shards holds about 254 modules and 157-180 recorded seconds, its heaviest module 13.5-30.4s, on
+a 4-core runner, so each keeps 4.
 
 `PYTEST_XDIST_AUTO_NUM_WORKERS`, when set, replaces the core count as the ceiling rather than
 being the answer. The user-level Claude Code settings set it to 4 for every session, fan-out
 batches included, so a batch's one-file run still drops to one worker and its guard set keeps 4.
 
-Two cases leave xdist's own choice alone, by returning None:
+Three cases leave xdist's own choice alone, by returning None:
 
 - An argument names no file or directory this can see, such as a `--pyargs` module name.
 - An argument is the repository root, whose walk would reach `.venv`.
+- The weight table is missing or unreadable.
 
 `-n <N>` and `-n0` never reach this hook: xdist asks it only for `auto`.
 """
 
+import json
 import math
 import os
+import statistics
 from pathlib import Path
 
 import pytest
 
-# The guard set's 114 modules ran as fast at 4 workers as at 16, and four files ran fastest on
-# one. 15 modules per worker gives those 8 and 1, and `scripts/lib/tests`' 59 modules 4.
-MODULES_PER_WORKER = 15
+# Below this many recorded seconds a worker costs more to start than it saves. Four
+# `scripts/dev/tests` files ran in 1.4s serial and 1.7s on four workers (the 2026-10-18 table),
+# and four files recorded at 0.3s saved under half a second on two (the 2026-10-25 table). It
+# sits under the 2.22s heaviest module of the `-python` hook's five, which run fastest on 3.
+MIN_SECONDS_PER_WORKER = 2.0
+
+WEIGHTS_TABLE = Path("scripts/dev/pytest_shard_weights.json")
 
 
 def ceiling() -> int:
@@ -60,33 +87,60 @@ def ceiling() -> int:
     return os.process_cpu_count() or os.cpu_count() or 1
 
 
-def selected_modules(args: list[str], base: Path, root: Path) -> int | None:
-    """How many test modules `args` select, or None when one of them cannot be counted.
+def selected_modules(args: list[str], base: Path, root: Path) -> list[Path] | None:
+    """The test modules `args` select, resolved and deduplicated, or None when one cannot be.
 
     Args:
         args: the run's positional arguments, as `config.args` holds them.
         base: the directory relative arguments resolve against.
         root: the repository root, which this refuses to walk.
     """
-    count = 0
+    found: set[Path] = set()
     for arg in args:
         path = Path(arg.split("::", 1)[0])
         if not path.is_absolute():
             path = base / path
         if path.is_file():
-            count += 1
+            found.add(path.resolve())
         elif path.is_dir():
             if path.resolve() == root.resolve():
                 return None
-            count += sum(1 for _ in path.rglob("test_*.py"))
+            found.update(p.resolve() for p in path.rglob("test_*.py"))
         else:
             return None
-    return count
+    return sorted(found)
 
 
-def workers_for(modules: int, cap: int) -> int:
-    """The worker count for a run selecting `modules` test modules, at most `cap`."""
-    return max(1, min(cap, math.ceil(modules / MODULES_PER_WORKER)))
+def load_weights(root: Path) -> dict[str, float] | None:
+    """The recorded seconds per module under `root`, or None when the table cannot be read."""
+    try:
+        table = json.loads((root / WEIGHTS_TABLE).read_text())
+        return {str(k): float(v) for k, v in table.items()}
+    except OSError, ValueError, AttributeError:
+        return None
+
+
+def module_seconds(
+    modules: list[Path], root: Path, weights: dict[str, float]
+) -> list[float]:
+    """Each module's recorded seconds, keyed by its path under `root`; unrecorded get the mean."""
+    unrecorded = statistics.fmean(weights.values()) if weights else 0.0
+    seconds = []
+    for module in modules:
+        try:
+            key = module.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            key = None
+        seconds.append(weights.get(key, unrecorded) if key else unrecorded)
+    return seconds
+
+
+def workers_for(seconds: list[float], cap: int) -> int:
+    """The worker count for a run whose modules record `seconds`, at most `cap`."""
+    if not seconds:
+        return 1
+    per_worker = max(max(seconds), MIN_SECONDS_PER_WORKER)
+    return max(1, min(cap, math.ceil(sum(seconds) / per_worker)))
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -94,9 +148,9 @@ def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
     """The `-n auto` width for this run, or None to leave xdist's own choice."""
     if config.args_source != pytest.Config.ArgsSource.ARGS:
         return None
-    modules = selected_modules(
-        list(config.args), config.invocation_params.dir, config.rootpath
-    )
-    if modules is None:
+    root = config.rootpath
+    modules = selected_modules(list(config.args), config.invocation_params.dir, root)
+    weights = load_weights(root)
+    if modules is None or weights is None:
         return None
-    return workers_for(modules, ceiling())
+    return workers_for(module_seconds(modules, root, weights), ceiling())
