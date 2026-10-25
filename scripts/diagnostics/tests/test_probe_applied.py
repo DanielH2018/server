@@ -1,0 +1,213 @@
+"""Tests for `probe.py applied` (`probe_lib/applied.py` and `probe_lib/applied_tasks.py`).
+
+Most tests walk a small role written to `tmp_path`, one task per shape the walk reads or
+skips. One walks the real `claude_code` role, so a walk that stopped finding the role's units
+fails by name.
+"""
+
+import hashlib
+import os
+import sys
+from types import SimpleNamespace
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pytest
+from diagnostics.probe_lib import applied, applied_tasks
+from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
+
+TASKS = """\
+- name: Install the script
+  ansible.builtin.template: {src: x.sh.j2, dest: /usr/local/bin/x.sh, mode: "0755", owner: root, group: root}
+- name: Install the secret file
+  template: {src: secret.j2, dest: /etc/x/secret, mode: 0600}
+- name: Copy the library
+  ansible.builtin.copy: {src: lib.py, dest: /usr/local/lib/x/lib.py, mode: "0644"}
+- name: Remove the retired script
+  ansible.builtin.file: {path: /usr/local/bin/old.sh, state: absent}
+- name: Schedule it
+  ansible.builtin.cron: {name: x, cron_file: x, minute: "5", job: /usr/local/bin/x.sh, user: root}
+- name: Only on the Pi
+  when: inventory_hostname == 'daniel-pi'
+  ansible.builtin.copy: {content: "pi\\n", dest: /etc/pi-only}
+- name: Gated on a registered result
+  when: probe_result.rc == 0
+  ansible.builtin.copy: {content: "x", dest: /etc/registered}
+- name: Make the literal directories
+  ansible.builtin.file: {path: "/var/lib/x/{{ item }}", state: directory, mode: "0750"}
+  loop: [a, b]
+- name: Make the configured directories
+  ansible.builtin.file: {path: "/var/lib/{{ item }}", state: directory}
+  loop: "{{ dirs }}"
+- ansible.builtin.import_tasks: extra.yml
+"""
+EXTRA = """\
+- name: The box's block
+  when: inventory_hostname == 'daniel-box'
+  block:
+    - name: Write the box marker
+      ansible.builtin.copy: {content: "box {{ port }}\\n", dest: /etc/x/box}
+"""
+CTX = {"port": 8080}
+SCRIPT = "#!/bin/sh\nexec x --port {{ port }}\n"
+
+
+def _role(tmp_path):
+    role = tmp_path / "x"
+    for sub, name, text in (
+        ("tasks", "main.yml", TASKS),
+        ("tasks", "extra.yml", EXTRA),
+        ("templates", "x.sh.j2", SCRIPT),
+        ("templates", "secret.j2", "token={{ x_api_token }}\n"),
+        ("files", "lib.py", "print('x')\n"),
+    ):
+        (role / sub).mkdir(parents=True, exist_ok=True)
+        (role / sub / name).write_text(text)
+    return role
+
+
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def test_the_walk_reads_each_file_task_and_follows_imports_and_blocks(tmp_path):
+    wants, _ = applied_tasks.expected(_role(tmp_path), "daniel-box", CTX)
+    by_path = {w.path: w for w in wants}
+    script = by_path["/usr/local/bin/x.sh"]
+    assert script.sha256 == _sha("#!/bin/sh\nexec x --port 8080\n")
+    assert (script.mode, script.owner, script.group) == ("0755", "root", "root")
+    assert by_path["/usr/local/lib/x/lib.py"].sha256 == _sha("print('x')\n")
+    assert by_path["/usr/local/bin/old.sh"].present is False
+    assert by_path["/etc/cron.d/x"].sha256 is None
+    assert by_path["/etc/x/box"].sha256 == _sha("box 8080\n")
+    assert {"/var/lib/x/a", "/var/lib/x/b"} <= set(by_path)
+    assert by_path["/var/lib/x/a"].mode == "0750"
+
+
+def test_a_render_holding_a_secret_is_compared_by_metadata_only(tmp_path):
+    wants, _ = applied_tasks.expected(_role(tmp_path), "daniel-box", CTX)
+    secret = next(w for w in wants if w.path == "/etc/x/secret")
+    assert secret.sha256 is None and "STUB" in secret.why_no_content
+    assert secret.mode == "0600"  # YAML read the unquoted 0600 as an octal int
+
+
+def test_a_false_gate_drops_the_task_and_an_unreadable_one_is_skipped(tmp_path):
+    wants, skips = applied_tasks.expected(_role(tmp_path), "daniel-box", CTX)
+    paths = {w.path for w in wants}
+    assert "/etc/pi-only" not in paths and "/etc/registered" not in paths
+    reasons = {s.task: s.reason for s in skips}
+    assert "its when: cannot be read" in reasons["Gated on a registered result"]
+    assert "not literal" in reasons["Make the configured directories"]
+    pi_wants, _ = applied_tasks.expected(_role(tmp_path), "daniel-pi", CTX)
+    assert "/etc/pi-only" in {w.path for w in pi_wants}
+    assert "/etc/x/box" not in {w.path for w in pi_wants}
+
+
+def test_the_real_claude_code_role_yields_its_units_with_content():
+    role = applied.SETUP / "claude_code"
+    wants, _ = applied_tasks.expected(
+        role, "daniel-box", applied.context(role, "daniel-box")
+    )
+    by_path = {w.path: w for w in wants}
+    for unit in ("claude-rc.service", "claude-clone-sync.timer"):
+        want = by_path[f"/etc/systemd/system/{unit}"]
+        assert want.sha256 is not None and want.mode == "0644"
+
+
+def _live(want, **changes):
+    row = {
+        "status": "ok",
+        "mode": want.mode,
+        "owner": want.owner,
+        "group": want.group,
+        "sha256": want.sha256,
+    }
+    return {**row, **changes}
+
+
+WANT = applied_tasks.Want("/usr/local/bin/x.sh", "t", sha256="a" * 64, mode="0755", owner="root", group="root")  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("live", "status", "detail"),
+    [
+        (_live(WANT), "ok", "content matches"),
+        (_live(WANT, sha256="b" * 64), "DRIFT", "content differs"),
+        (_live(WANT, mode="0644"), "DRIFT", "mode 0644 (want 0755)"),
+        ({"status": "absent"}, "DRIFT", "missing"),
+        (_live(WANT, sha256=None), "ok-meta", "content unreadable as ubuntu"),
+        (
+            {"status": "unreadable", "error": "denied"},
+            "unread",
+            "cannot stat as ubuntu",
+        ),
+    ],
+    ids=["match", "content", "mode", "missing", "root-only", "unstattable"],
+)
+def test_compare_names_each_outcome(live, status, detail):
+    got_status, got_detail = applied.compare(WANT, live, "ubuntu")
+    assert got_status == status and detail in got_detail
+
+
+def test_an_absent_arm_drifts_only_when_the_path_exists():
+    gone = applied_tasks.Want("/usr/local/bin/old.sh", "t", present=False)
+    assert applied.compare(gone, {"status": "absent"}, "u")[0] == "ok"
+    assert applied.compare(gone, _live(WANT), "u")[0] == "DRIFT"
+
+
+def _run(tmp_path, rows):
+    _role(tmp_path)
+    wants, _ = applied_tasks.expected(tmp_path / "x", "daniel-box", CTX)
+
+    def read(plan, host):
+        live = {w.path: rows(w) for w in wants}
+        return {
+            "host": host,
+            "user": "ubuntu",
+            "stat": {p: live[p] for p in plan["stat"]},
+        }
+
+    ns = SimpleNamespace(role="x", host="daniel-box", dry_run=False)
+    return applied.run_applied(
+        ns, read=read, setup=tmp_path, render_ctx=lambda role_dir, host: CTX
+    )
+
+
+def _as_wanted(want):
+    return {"status": "absent"} if not want.present else _live(want)
+
+
+def test_every_path_as_rendered_is_the_ok_verdict(tmp_path):
+    assert _run(tmp_path, _as_wanted) == PROBE_OK
+
+
+def test_one_differing_file_is_the_fail_verdict(tmp_path, capsys):
+    def one_edited(want):
+        row = _as_wanted(want)
+        return (
+            {**row, "sha256": "f" * 64} if want.path == "/usr/local/bin/x.sh" else row
+        )
+
+    assert _run(tmp_path, one_edited) == PROBE_FAILED
+    assert "DRIFT    /usr/local/bin/x.sh  content differs" in capsys.readouterr().out
+
+
+def test_a_path_this_user_cannot_stat_is_unreadable_not_ok(tmp_path):
+    def cron_hidden(want):
+        if want.path.startswith("/etc/cron.d/"):
+            return {"status": "unreadable", "error": "[Errno 13] Permission denied"}
+        return _as_wanted(want)
+
+    assert _run(tmp_path, cron_hidden) == PROBE_UNREADABLE
+
+
+def test_a_role_no_playbook_lists_is_a_usage_error(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        applied.entry_when("no_such_role", tmp_path)
+    assert exc.value.code == 64
+
+
+def test_a_daniel_box_only_role_runs_on_daniel_box_alone():
+    """initial_setup.yml gates it on `inventory_hostname == 'daniel-box'`."""
+    role = applied.SETUP / "k8s_host_files"
+    assert applied.hosts_for("k8s_host_files", role) == ["daniel-box"]

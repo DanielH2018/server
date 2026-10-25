@@ -61,7 +61,7 @@ GITOPS_STATE_HELP = (
 )
 
 
-def run_ceiling_s(template: Path = UNIT_TEMPLATE) -> int:
+def tick_ceiling_s(template: Path = UNIT_TEMPLATE) -> int:
     """The longest one tick may run, the unit's `TimeoutStartSec`."""
     return unit_span_s(template.read_text(), "TimeoutStartSec")
 
@@ -100,7 +100,7 @@ def explain(snap: dict, *, read=read_host, ceiling_s: int | None = None) -> dict
         held_at = hold.stat().st_mtime
     except OSError as exc:
         raise core.Unreadable(f"gitops-state --why: cannot stat {hold}: {exc}") from exc
-    ceiling_s = run_ceiling_s() if ceiling_s is None else ceiling_s
+    ceiling_s = tick_ceiling_s() if ceiling_s is None else ceiling_s
     request = {
         "journal": {
             "deployer": [
