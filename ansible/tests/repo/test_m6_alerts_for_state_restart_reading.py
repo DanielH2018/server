@@ -60,3 +60,43 @@ def test_question_records_a_before_and_an_after_reading():
         f"Open question {QUESTION} records {len(readings)} reading(s) at or after B-1's "
         f"ALERTS_FOR_STATE {B1_ALERTS_FOR_STATE}; a before/after pair needs two"
     )
+
+
+# One labelled reading of the pair: the alert's activation and Prometheus's start at that time.
+_READING = re.compile(
+    r"- (Before|After) the restart: `ALERTS_FOR_STATE` `(\d+(?:\.\d+)?)`,\s+"
+    r"`process_start_time_seconds`\s+`(\d+(?:\.\d+)?)`"
+)
+
+
+def _pair() -> dict[str, tuple[float, float]]:
+    pair = {
+        m.group(1): (float(m.group(2)), float(m.group(3)))
+        for m in _READING.finditer(_question())
+    }
+    assert set(pair) == {"Before", "After"}, (
+        f"Open question {QUESTION} records no labelled before/after ALERTS_FOR_STATE pair; "
+        f"found {sorted(pair)}"
+    )
+    return pair
+
+
+def test_the_pair_straddles_a_restart_after_b1():
+    pair = _pair()
+    before_active, before_start = pair["Before"]
+    after_active, after_start = pair["After"]
+    assert B1_ALERTS_FOR_STATE <= before_start < after_start, (
+        "the before and after readings must come from two Prometheus processes started after B-1"
+    )
+    assert before_start <= before_active < after_start <= after_active, (
+        "each ALERTS_FOR_STATE value must fall inside the process it was read from"
+    )
+
+
+def test_the_recorded_verdict_matches_the_pair():
+    pair = _pair()
+    before, after = pair["Before"][0], pair["After"][0]
+    verdict = "the value moves" if after != before else "the value does not move"
+    assert verdict in _question(), (
+        f"the pair reads {before} then {after}, so Open question {QUESTION} must say {verdict!r}"
+    )

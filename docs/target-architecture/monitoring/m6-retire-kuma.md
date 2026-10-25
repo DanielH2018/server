@@ -2487,7 +2487,11 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    that fired across the restart reset the same way, the Watchdog from `1792858485` to
    `1792914225`. None of those rules carries a `for:`. So the reading shows the reset for a
    short-`for:` rule and says nothing about restoration for a `for:` longer than the grace
-   period.
+   period. The pair for `AideCheckNotReporting{origin="daniel-box"}`:
+    - Before the restart: `ALERTS_FOR_STATE` `1792885066`, `process_start_time_seconds`
+      `1792858430.65`.
+    - After the restart: `ALERTS_FOR_STATE` `1792914226`, `process_start_time_seconds`
+      `1792914160.96`.
 10. **Owner of the `workload_log_errors` port** (M2 Open question 6). M5's text keeps
     `with_log_errors` and does not retire the row's token, and M2 names M6 as the fallback
     owner. Resolution: M6 owns it as A7. If M5's text adopts the port before A7's shadow PR,
