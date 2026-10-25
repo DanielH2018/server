@@ -93,6 +93,27 @@ def test_the_census_credits_a_role_rendering_the_secret_out_of_another_roles_fil
     }
 
 
+def test_the_census_names_the_pi_package_as_a_consumer_of_autoheals_webhook():
+    """H5.7 moved the first consumer out of `ansible/`; a corpus walk that skips `hosts/components/`
+    drops `daniel-pi` here, and the operator would never be told to run `host_secrets.py sync`."""
+    consumers = tree_consumers("monitor_discord_webhook_url")
+
+    assert consumers["daniel-pi"] == "host"
+    assert {"monitor-bridge", "observability", "uptime-kuma"} <= set(consumers)
+
+
+def test_the_repair_commands_give_the_operator_only_sync_and_the_package_path():
+    commands = consumer_commands("monitor_discord_webhook_url")
+
+    (sync,) = [c for c in commands if "host_secrets.py sync" in c]
+    assert sync.startswith(
+        "`uv run python scripts/secrets_mgmt/host_secrets.py sync daniel-pi`"
+    )
+    assert "operator-only" in sync
+    assert "`hosts/daniel-pi/package.yml`" in sync
+    assert not any("deploy.sh" in c and "daniel-pi" in c for c in commands)
+
+
 def test_the_census_separates_the_plane_deploy_sh_cannot_reach():
     consumers = tree_consumers("sonarr_api_key")
 

@@ -86,13 +86,6 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-  # Needs docker-proxy-lifecycle, which the package's `homelab` project runs (compose_services
-  # below). H5.7 moves this entry and adds depends_on.
-  - name: autoheal
-    use_authelia: false
-    networks:
-      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
-      - lifecycle
   # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
   # host unit from roles/setup/optimize_pi (section 10), on the LAN IP and port 9100 the
   # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
@@ -119,7 +112,7 @@ containers_list:
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
 # A service lives in exactly one of this key and containers_list: Ansible's Docker play
 # deploys containers_list, and the package deploys this key. Entries keep containers_list's
-# field names. It holds the canary and docker-proxy (H5.6). Every reader of the
+# field names. It holds the canary, docker-proxy (H5.6) and autoheal (H5.7). Every reader of the
 # Pi's services reads both keys and fails on a missing one, so keep the key even when it is
 # empty. The cluster templates that read it are named in
 # docs/target-architecture/host/h5-pi-compose.md (The service list).
@@ -136,3 +129,11 @@ compose_services:
     use_authelia: false
     networks:
       - proxy
+  # Restarts unhealthy containers through docker-proxy-lifecycle, which the docker-proxy service
+  # file declares, so its service file carries `depends_on: docker-proxy-lifecycle`. Legacy entry:
+  # /home/ubuntu/server/containers/autoheal/docker-compose.yml (project `autoheal`).
+  - name: autoheal
+    use_authelia: false
+    networks:
+      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
+      - lifecycle
