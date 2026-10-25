@@ -159,6 +159,7 @@ template:
         imagePullPolicy: Always
 {% else %}
         image: {{ flux_job_image }}
+        imagePullPolicy: IfNotPresent
 {% endif %}
         command:
           - python3
