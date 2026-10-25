@@ -2338,6 +2338,22 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           offline case with its two red fixtures) need the `host_packages` job's image, and the
           fake-root suite replaces them for this PR. H7.44's guest drill still owns the
           end-to-end proof.
+      **Amended 2026-10-25 ([#6231](https://github.com/DanielH2018/server/issues/6231)):** the
+      container cases landed in `scripts/validate/validate_lib/bootstrap_case.py`, which the
+      `host_packages` job runs. They found that `--local-build` looked for homelab-tools'
+      `nfpm.yaml` above the per-architecture directory the renderer writes, so every local
+      build died at step 5. Four premises changed:
+        - *One case per host.* `--local-build` runs on a container named after each host, as
+          far as `apt-get install --simulate`. The path that installs from the repository has no
+          case, because a test repository cannot be signed with the archive key the script pins.
+        - *The anchor.* Each case's scratch clone commits a stub in place of
+          `hosts/lib/bootstrap_anchor.py`, because a pull request's head is on no first-parent
+          chain of master. The anchor's unit tests hold its decision.
+        - *Offline.* The offline container has no network at all, which is stricter than
+          unresolvable GitHub and GHCR hostnames. Its kit's `k3s` is a stand-in that answers
+          `--version`, because the script checks it against the kit's own checksum list.
+        - *No local-build `Depends` red.* The red fixture that gives `homelab-daniel-box` a
+          `Depends` only the repository carries is not in the cases.
     - **H7.15b** The Pi runbook, then the Pi rebuild, which is exit observation 2. The
       operator keeps the old SD card as the rollback. The cluster's wg-easy on 51820 is
       proven first, as in H5.5.
