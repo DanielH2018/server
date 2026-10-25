@@ -130,8 +130,11 @@ def land_through_unit(
     state_root: _Path = STATE_ROOT,
     follow: Callable[[str, float], subprocess.Popen[str]] | None = None,
     wall_clock: Callable[[], float] = time.time,
-) -> int:
-    """Start `<unit>@<pr>.service`, wait for it, and report its landing; land.sh's exit code.
+) -> tuple[int, str]:
+    """Start `<unit>@<pr>.service`, wait for it, and report its landing.
+
+    Returns land.sh's exit code and the one line `Outcome.file_line` gives the landing, which
+    `land.py` records in this user's `verdict_log`.
 
     Prints the unit's `VERDICT:` line to stdout. When the landing stopped without one, prints
     `land: <why>` to stderr and a `VERDICT:` line of its own for an exit 1 or 75, as a landing
@@ -179,10 +182,11 @@ def land_through_unit(
     print(line)
     recorded = _status(systemctl, instance).get("ExecMainStatus", "")
     rc = int(recorded) if recorded.isdigit() else 1
-    return rc if rc in LAND_CODES else 1
+    return (rc if rc in LAND_CODES else 1), line
 
 
-def _stopped(pr: str, rc: int, msg: str, verdict: str | None = None) -> int:
+def _stopped(pr: str, rc: int, msg: str, verdict: str | None = None) -> tuple[int, str]:
     """Print `land: <msg>` and the VERDICT line `Outcome` gives `rc`, as `Landing.die` does."""
-    Outcome(rc, f"PR #{pr} — {msg}", verdict, error=msg).emit()
-    return rc
+    outcome = Outcome(rc, f"PR #{pr} — {msg}", verdict, error=msg)
+    outcome.emit()
+    return rc, outcome.file_line()

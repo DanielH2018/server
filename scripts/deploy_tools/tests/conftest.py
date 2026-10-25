@@ -17,7 +17,7 @@ import pytest
 
 from _helpers import stub_logger_on_path
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
-from deploy_tools.land_lib import options, tools
+from deploy_tools.land_lib import options, tools, verdict_log
 
 # Read off the modules that consume them rather than retyped, so a knob added there is cleared
 # here without anyone remembering to.
@@ -67,6 +67,20 @@ def _no_syslog(tmp_path_factory, monkeypatch):
     `test_land_annotation_is_intercepted` is the proof the stub is on PATH.
     """
     return stub_logger_on_path(tmp_path_factory, monkeypatch)
+
+
+@pytest.fixture(autouse=True)
+def verdict_record(tmp_path_factory, monkeypatch) -> Path:
+    """Aim every landing's verdict record at a file of this test's own, and return its path.
+
+    A landing appends to the per-user `verdict_log` on every exit, and `Tools()` defaults to the
+    real writer, so without this a test run fills the operator's record with `pr=999` rows that
+    `probe.py landing-verdicts` then reports as landings. Autouse for the reason `_no_syslog`
+    gives; the env var reaches the modules that run the real `land.sh` too.
+    """
+    path = tmp_path_factory.mktemp("verdicts") / "landing-verdicts.jsonl"
+    monkeypatch.setenv(verdict_log.PATH_ENV, str(path))
+    return path
 
 
 @pytest.fixture(autouse=True)

@@ -36,6 +36,7 @@ from diagnostics.probe_lib.ha import run_ha, run_ha_state
 from diagnostics.probe_lib.flux import run_flux
 from diagnostics.probe_lib.gitops_view import run_gitops_state
 from diagnostics.probe_lib.landing_blockers import run_landing
+from diagnostics.probe_lib.landing_verdicts import run_landing_verdicts
 from diagnostics.probe_lib.health import run_health
 from diagnostics.probe_lib.longhorn import (
     run_b2_budget,
@@ -173,6 +174,13 @@ SUBCOMMANDS = [
         "claims (exit 1 when something blocks)",
         "landing_blockers",
         run_landing,
+    ),
+    (
+        "landing-verdicts",
+        "the newest recorded VERDICT line of each landed PR, without grepping task output "
+        "(exit 1 when the named PR has none)",
+        "landing_verdicts",
+        run_landing_verdicts,
     ),
     (
         "gitops-state",

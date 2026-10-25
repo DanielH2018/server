@@ -118,7 +118,6 @@ update stops the landing with rc 1 and asks for a rebase. `land_lib/merge.py` ha
 """
 
 import contextlib
-import functools
 import io
 from collections.abc import Callable
 import dataclasses
@@ -232,13 +231,20 @@ def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
             file=sys.stderr,
         )
         return LAND_BAD_ARGS
-    land = functools.partial(
-        handoff.land_through_unit,
-        opts.pr,
-        unit,
-        tools.systemctl,
-        follow=tools.follow_journal,
-    )
+
+    def land() -> int:
+        rc, line = handoff.land_through_unit(
+            opts.pr,
+            unit,
+            tools.systemctl,
+            follow=tools.follow_journal,
+        )
+        # The unit records the landing in the operator's file, which this user cannot
+        # read, so the reported line is recorded here too.
+        with contextlib.suppress(OSError):
+            tools.record_verdict(opts.pr, rc, line)
+        return rc
+
     return _detached(opts, land) if opts.detach else land()
 
 
@@ -308,6 +314,9 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         if opts.verdict_file:
             with contextlib.suppress(OSError):
                 write_verdict_file(opts.verdict_file, line)
+        # `probe.py landing-verdicts` reads this, so a caller never greps a task's output.
+        with contextlib.suppress(OSError):
+            tools.record_verdict(opts.pr, rc, line)
         # Fire-and-forget: a landing that succeeded must never report failure because
         # logging it did not. An unexpected exception still annotates, as `aborted`.
         with contextlib.suppress(Exception):
