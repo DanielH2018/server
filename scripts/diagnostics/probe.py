@@ -46,6 +46,8 @@ Subcommands:
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
     shed-set                 untiered k8s workloads to scale down when one node is lost,
                              derived from the containers_list `tier` field (no kubectl)
+    flux [tag...]            Flux Kustomizations: Ready + reason, applied commit vs the
+                             source's, suspended; a tag adds its -verify etc. and soak
     takeover <tag>           field paths Flux's first apply of the tag strips (paths only;
                              exit 75 when a read fails or nothing rendered is live)
     health <service>         k8s rollout + recent-restart rollup (exit 0 = healthy)

@@ -20,6 +20,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
+from diagnostics.probe_lib.flux import FLUX_HELP, FLUX_TAGS_HELP
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE, contract
 from lib.kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
@@ -50,6 +51,11 @@ def _verdict_help(summary, ok, fail):
     """
     text = f"{summary} ({exits(ok, fail)})"
     return {"help": text, "description": text}
+
+
+def _dry_run(parser, help_text):
+    """Give a subcommand that reads a live source its own `--dry-run`."""
+    parser.add_argument("--dry-run", action="store_true", help=help_text)
 
 
 def _epilog():
@@ -331,11 +337,7 @@ def _build_parser():
     rb.add_argument(
         "--namespace", help="namespace to ask about (default: the workload one)"
     )
-    rb.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print the can-i calls without making them",
-    )
+    _dry_run(rb, "print the can-i calls without making them")
     vp = sub.add_parser(
         "vip-placement",
         **_verdict_help(
@@ -347,11 +349,10 @@ def _build_parser():
             "a VIP is stranded",
         ),
     )
-    vp.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print the kubectl calls without making them",
-    )
+    _dry_run(vp, "print the kubectl calls without making them")
+    fx = sub.add_parser("flux", **_verdict_help(*FLUX_HELP))
+    fx.add_argument("tags", nargs="*", help=FLUX_TAGS_HELP)
+    _dry_run(fx, "print the kubectl call without making it")
     sub.add_parser(
         "shed-set",
         help="the untiered k8s workloads to scale down when one node is lost, derived from "
@@ -368,11 +369,7 @@ def _build_parser():
     tk.add_argument(
         "tag", help="the deploy tag, as `./scripts/deploy.sh --tags` takes it"
     )
-    tk.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="render the tag and print the kubectl reads without making them",
-    )
+    _dry_run(tk, "render the tag and print the kubectl reads without making them")
     pi = sub.add_parser(
         "pi",
         **_verdict_help(
