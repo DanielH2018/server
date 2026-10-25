@@ -16,6 +16,7 @@ skips.
 |---|---|
 | every target's applied SHA is the merge or descends from it, with reconcile at 1 | returns |
 | a target's `homelab_host_reconcile_ok` at 0 | `deploy-failed`, exit 1 |
+| a target whose compose files change has no passing `homelab_compose_up_result` at that SHA | keeps waiting |
 | a target's first-parent package ships no enable link for the updater's timer | `deferred`, exit 75 |
 | a target's deadline is more than 45 minutes away | `deferred`, exit 75 |
 | a target is still unsettled past its deadline | `deferred`, exit 75 |
@@ -42,8 +43,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -51,12 +51,21 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib.compose_wait import compose_settled, touches_compose
+from deploy_tools.land_lib.host_schedule import (  # noqa: F401
+    BOOT_ONLY,
+    DEADLINE_SLACK_S,
+    calendar_after,
+    deadline,
+    next_fire,
+    utc,
+)
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
 from deploy_tools.land_lib.tools import gate_snapshot
 from lib.git import git as run_git
 from lib.repo_paths import ANSIBLE, REPO
-from lib.systemd_timer import DAY_S, calendar_fires, span_s, timer_settings
+from lib.systemd_timer import timer_settings
 
 # The renderer's host mode, run from a gate snapshot's root. A daniel-pi render takes about
 # 2s; the bound stops a wedged one, which `host_targets` reads as a failed render.
@@ -102,11 +111,8 @@ SHARED_TIMER = Path("hosts/packages/homelab-updater/units") / UPDATER_TIMER
 # DECIDED: the schedule is read in UTC. OnCalendar fires on the host's local clock, and every
 # host runs Etc/UTC (`weekly_reboot_timezone` in group_vars/all.yml records the same fact for
 # the reboot cron).
-DEADLINE_SLACK_S = 10 * 60
 MAX_WAIT_S = 45 * 60
 POLL_S = 30
-# Triggers that fire once after boot, so they add no fire to a host that is up.
-BOOT_ONLY = frozenset({"OnBootSec", "OnStartupSec"})
 
 START_UPDATER = "sudo systemctl start homelab-updater.service"
 CLEAR_HOLD = "sudo /usr/lib/homelab/homelab-updater --clear-hold"
@@ -123,12 +129,15 @@ class HostTarget:
         triggers: The timer's triggers with the host's drop-in applied, as
             `systemd_timer.timer_settings` returns them. None when unknown.
         delay: The timer's `RandomizedDelaySec`, in seconds.
+        compose: Whether the merge changes the files the package installs under
+            `/usr/lib/homelab/compose/`, so the wait also needs `compose_wait`'s condition.
     """
 
     host: str
     armed: bool | None = None
     triggers: dict[str, list[str]] | None = None
     delay: int = 0
+    compose: bool = False
 
 
 def render_host_tree(snapshot: Path, host: str) -> HostTree | None:
@@ -228,7 +237,8 @@ def host_targets(
                 say(f"host targets: the render of {host} failed; waiting on every host")
                 return _every_host(primary, merge, reads)
             if new != old:
-                targets.append(_target(host, old, at_parent))
+                target = _target(host, old, at_parent)
+                targets.append(replace(target, compose=touches_compose(old, new)))
         return targets
 
 
@@ -288,58 +298,6 @@ def _target(host: str, old: HostTree, at_parent: Path) -> HostTarget:
 
 
 # -- the schedule ------------------------------------------------------------------------
-
-
-def calendar_after(expressions: list[str], after: float, count: int) -> list[float]:
-    """The first `count` fires after `after` of daily `OnCalendar=` expressions, read in UTC."""
-    daily = sorted({t for e in expressions for t in calendar_fires(e)})
-    if not daily:
-        return []
-    day = after - after % DAY_S
-    fires: list[float] = []
-    while len(fires) < count:
-        fires.extend(day + t for t in daily if day + t > after)
-        day += DAY_S
-    return fires[:count]
-
-
-def deadline(target: HostTarget, merged_at: float) -> float | None:
-    """When `target` should have applied the merge: its second updater fire after, plus slack.
-
-    With several triggers, each bounds the second fire on its own, so the nearest bound wins.
-
-    Returns:
-        The deadline as a Unix time, or None when the schedule is unknown or unreadable.
-    """
-    if not target.triggers:
-        return None
-    bounds = []
-    try:
-        for key, values in target.triggers.items():
-            if key == "OnCalendar":
-                bounds.append(calendar_after(values, merged_at, 2)[1])
-            elif key == "OnUnitActiveSec":
-                bounds.append(merged_at + 2 * min(span_s(v) for v in values))
-            elif key not in BOOT_ONLY:
-                return None
-    except ValueError, IndexError:
-        return None
-    if not bounds:
-        return None
-    return min(bounds) + target.delay + DEADLINE_SLACK_S
-
-
-def next_fire(target: HostTarget, now: float) -> float | None:
-    """The target's next calendar fire after `now`, or None when it has none this can name."""
-    try:
-        fires = calendar_after((target.triggers or {}).get("OnCalendar", []), now, 1)
-    except ValueError:
-        return None
-    return fires[0] if fires else None
-
-
-def utc(ts: float) -> str:
-    return datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%d %H:%M UTC")
 
 
 # -- the transport -----------------------------------------------------------------------
@@ -513,7 +471,10 @@ def wait_for_hosts(
             pending = [
                 t
                 for t in pending
-                if not settled(states.get(t.host), merge, primary, reads)
+                if not (
+                    settled(states.get(t.host), merge, primary, reads)
+                    and _compose_ok(t, merge, primary, reads)
+                )
             ]
         if not pending:
             say(f"hosts applied: {', '.join(t.host for t in targets)}")
@@ -529,6 +490,17 @@ def wait_for_hosts(
             )
         say(f"waiting for hosts to apply: {', '.join(t.host for t in pending)}")
         reads.sleep(POLL_S)
+
+
+def _compose_ok(t: HostTarget, merge: str, primary: Path, reads: HostReads) -> bool:
+    """True for a target without the compose condition; else whether its last run passed."""
+    if not t.compose:
+        return True
+    try:
+        return compose_settled(t.host, merge, primary, reads, covers, query)
+    except PrometheusUnreachable, OSError, ValueError, KeyError, IndexError, TypeError:
+        say(f"{t.host}: the compose result could not be read; not settled")
+        return False
 
 
 def _poll(pending: list[HostTarget], reads: HostReads) -> dict[str, HostState] | None:
