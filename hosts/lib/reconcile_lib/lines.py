@@ -10,8 +10,10 @@ does not hold*. A host package's manifest lists "lines" in `reconcilers` and car
 A line edit has the contract of Ansible's `lineinfile` with a `regexp`, and a block edit that of
 `blockinfile`. The regexp and the markers equal the Ansible task's, so the first run adopts the
 line or block Ansible wrote and adds no second copy. An edit may carry `mode`, the octal mode of a
-file the arm has to create. Rewriting an existing file keeps its owner and mode, because sshd's
-`StrictModes` rejects an authorized_keys file the arm left with the wrong ones.
+file the arm has to create. A file the arm creates takes the owner of its directory, and a missing
+directory above it is created 0700 with that owner. Rewriting an existing file keeps its owner and
+mode. Both rules exist because sshd's `StrictModes` rejects an authorized_keys file or a `~/.ssh`
+the arm left with the wrong ones.
 
 Before it writes, the arm runs `dpkg -S` on the path. It accepts an unowned file, and an owned file
 only when every owner lists the path among its conffiles. It refuses any other owned file, so it
@@ -113,15 +115,41 @@ def with_block(text: str, edit: dict) -> str:
     return text + ("\n" if text and not text.endswith("\n") else "") + block
 
 
+def make_parents(directory: Path) -> os.stat_result:
+    """Create the missing directories above a new file, 0700, and return their owner reference.
+
+    The reference is the first directory that already exists. A directory the arm creates takes
+    that owner, because sshd's StrictModes rejects a `~/.ssh` the arm left owned by root.
+    """
+    missing = []
+    while not directory.exists():
+        missing.append(directory)
+        directory = directory.parent
+    anchor = directory.stat()
+    for made in reversed(missing):
+        made.mkdir(mode=0o700)
+        chown_like(made, anchor)
+    return anchor
+
+
+def chown_like(path: Path, reference: os.stat_result) -> None:
+    if (reference.st_uid, reference.st_gid) != (os.getuid(), os.getgid()):
+        os.chown(path, reference.st_uid, reference.st_gid)
+
+
 def write(target: Path, text: str, mode: str) -> None:
-    """Replace `target` atomically, keeping an existing file's owner and mode."""
+    """Replace `target` atomically, keeping an existing file's owner and mode.
+
+    A new file takes `mode` and the owner of its directory, and a missing directory above it is
+    created 0700 with that owner (`make_parents`).
+    """
     existing = target.stat() if target.exists() else None
+    owner = existing or make_parents(target.parent)
     fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.")
     with os.fdopen(fd, "w") as handle:
         handle.write(text)
     os.chmod(tmp, existing.st_mode & 0o7777 if existing else int(mode, 8))
-    if existing and (existing.st_uid, existing.st_gid) != (os.getuid(), os.getgid()):
-        os.chown(tmp, existing.st_uid, existing.st_gid)
+    chown_like(Path(tmp), owner if existing else target.parent.stat())
     os.replace(tmp, target)
 
 

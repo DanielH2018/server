@@ -263,7 +263,7 @@ def _roles() -> list[Path]:
 # role that stops registering anything — or is renamed — fails by name instead of shrinking
 # the census to nothing and passing.
 ROLES_WITH_A_PRODUCER = frozenset(
-    {"docker_install", "initial_setup", "k3s", "optimize_pi", "sops_setup"}
+    {"docker_install", "initial_setup", "k3s", "sops_setup"}
 )
 
 

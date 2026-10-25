@@ -330,15 +330,17 @@ not rotated again by the weekly cron. Examples:
   only with a new Google project.
 - `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
   `sops set`, and commit the public half over
-  `ansible/roles/setup/k8s_host_files/files/pi-peer-backup.pub`. The private key is multi-line,
-  so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
+  `hosts/components/pi-peer-backup-target/pi-peer-backup.pub` and into the `line:` of that
+  component's `component.yml`, which `hosts/lib/tests/test_pi_tuning_component.py` and
+  `ansible/tests/services/test_pi_peer_backup_forced_command.py` hold equal. The private key is
+  multi-line, so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
   `ansible/roles/k8s/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. Flux owns pi-peer-backup,
   so that Secret reaches the cluster as the SOPS manifest `cluster_vars.py write` regenerates
-  (operator-run), which `promote` applies once the change merges. The public half is in the
-  setup plane: the GitOps tick applies `initial_setup.yml --tags k8s_host_files`, whose
-  `authorized_key` task authorizes it on the Pi. That task adds the new line and leaves the
-  old one, so remove the old key from the Pi's `authorized_keys` after the next nightly run
-  succeeds.
+  (operator-run), which `promote` applies once the change merges. The public half reaches the
+  Pi as a new `homelab-daniel-pi` version: the reconcile line arm replaces the line anchored on
+  the key comment `pi-peer-backup-cronjob` in the Pi user's `authorized_keys` and never
+  removes a line, so the old key is gone as soon as the new version installs. The nightly run
+  after the install is the proof.
 - `authelia_oidc_rsa_key_content`: generate a new RSA private key in PEM form, such as with
   `openssl genrsa 4096`, and store it with `sops set`. The value is multi-line, so it has a
   Secret of its own, `authelia-oidc-jwk`, rendered from

@@ -29,7 +29,8 @@ ENV container=docker
 # Dir::Cache::pkgcache, so the common-path case would compare a pkgcache.bin that never
 # exists. The Ubuntu lists stay, so `tree`, which the Depends case's fixture needs, resolves
 # with no fetch. Its deb is downloaded here too, because snapshot.ubuntu.com answers 5xx
-# often enough to fail a case that fetches from it. `age` generates the throwaway key the
+# often enough to fail a case that fetches from it. The Pi package Depends on zram-tools,
+# watchdog and earlyoom (H7.25), so their debs and recommends are downloaded the same way. `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
 # install, and bootstrap-host.sh calls each before it installs anything (H7.15a).
 RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runner-ca.crt \
@@ -47,7 +48,7 @@ RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runn
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt update; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt install -y --no-install-recommends \
         systemd systemd-sysv python3 ca-certificates age git gnupg curl; \
-    apt-get install -y --no-install-recommends --download-only tree
+    apt-get install -y --download-only tree zram-tools watchdog earlyoom
 
 # Units that would take dpkg's lock mid-case, or reach the runner's devices through
 # --privileged, never start. The updater's own timer is left alone: neither the fixture nor the
@@ -60,8 +61,18 @@ RUN systemctl mask \
         getty@tty1.service console-getty.service systemd-modules-load.service \
     && systemctl set-default multi-user.target
 
-# The textfile directory with M3's owner and mode, which optimize_pi creates on the Pi
-# (sys_user is ubuntu).
+# The live Pi already holds node_exporter at uid 999 (hosts/components/pi-node-exporter), and the
+# users arm compares uids rather than moving a user. systemd-sysusers allocates the dynamic
+# system users downward from 999 on the container's first boot, and a fixed uid it finds taken
+# falls back to a dynamic one, so the Pi package's `u node_exporter 999` line landed on 997 and
+# the arm held the host. The image carries the account first, as the live Pi does, and useradd
+# fails the build if 999 is already taken.
+RUN useradd --system --uid 999 --home-dir /home/node_exporter --no-create-home \
+        --shell /usr/sbin/nologin --comment 'Prometheus node exporter' node_exporter
+
+# The textfile directory with M3's owner and mode, which the Pi package's tmpfiles.d line creates
+# when node_exporter.service starts (sys_user is ubuntu). The image holds it so the updater's
+# first run finds it before that unit has started.
 RUN install -d -o root -g ubuntu -m 2775 /var/lib/node-exporter-textfile
 
 # dpkg unpacks the homelab.sources homelab-updater ships at the diverted path, outside

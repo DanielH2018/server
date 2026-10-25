@@ -32,13 +32,15 @@ guard checks a file with `{{ ... }}` still in it (#3202).
 import re
 
 from _helpers import ROLES as _ROLES
-from _setup_render import render_setup_text, rendered_setup_text, role_context
+from _setup_render import rendered_setup_text, role_context
 from lib.repo_paths import K3S_ROLE
+from renderer.renderer_lib import host as host_mode
 
 _TEMPLATE = "resolv.conf.j2"
 
-# Every host that resolves DIRECTLY from the shared template, and the variable each one
-# passes. All are checked: the template is shared, so a correct file plus one bad caller is
+# Every host that resolves DIRECTLY from the shared template, read from the file its host
+# package ships. daniel-pi's `pi-resolver` component renders the template through `role: common`
+# (H7.25). All are checked: the template is shared, so a correct file plus one bad caller is
 # still a host resolving through Cloudflare.
 #
 # daniel-box IS NOT HERE, and that is deliberate. Its resolv.conf names one
@@ -46,13 +48,7 @@ _TEMPLATE = "resolv.conf.j2"
 # is checked at the bottom of this file instead. Adding it back here would fail on the
 # sole-entry rule; LOOSENING THAT RULE TO ACCOMMODATE IT would delete the check that catches a
 # missing fallback on the host that still needs one.
-_CALLERS = {
-    "daniel-pi": (
-        "optimize_pi",
-        "optimize_pi_dns_servers",
-        "optimize_pi_dns_options",
-    ),
-}
+_PACKAGED_HOSTS = ("daniel-pi",)
 
 
 def _vip() -> str:
@@ -98,28 +94,20 @@ def order_problems(nameservers: list[str], options: str, vip: str) -> list[str]:
     return problems
 
 
-def test_the_live_defaults_and_template_keep_pihole_first() -> None:
-    # fact: ansible/roles/setup/optimize_pi/CLAUDE.md#What it does (`tasks/main.yml`)
+def test_the_shipped_resolv_conf_keeps_pihole_first() -> None:
     vip = _vip()
-    for host, (caller, servers_var, options_var) in _CALLERS.items():
-        caller_vars = role_context(_ROLES / "setup" / caller)
-        # The caller's own variables, resolved, passed to the SHARED template the way the
-        # caller's tasks pass them. A template that stopped interpolating either one renders no
-        # nameserver lines, which `order_problems` reports rather than passing over.
-        rendered = render_setup_text(
-            "common",
-            _TEMPLATE,
-            {
-                "common_resolver_nameservers": caller_vars[servers_var],
-                "common_resolver_options": caller_vars[options_var],
-            },
-        )
+    for host in _PACKAGED_HOSTS:
+        # The RENDERED file the package installs, so a template that stopped interpolating the
+        # list renders no nameserver lines, which `order_problems` reports rather than passing
+        # over.
+        rendered = host_mode.render_host(host).files["/etc/resolv.conf"][0].decode()
         problems = order_problems(
             nameserver_lines(rendered), options_line(rendered), vip
         )
         assert not problems, (
             f"{host}'s resolv.conf order is the whole failover mechanism (see "
-            f"{_TEMPLATE}, {servers_var}). Problems: " + "; ".join(problems)
+            f"{_TEMPLATE}, hosts/components/pi-resolver). Problems: "
+            + "; ".join(problems)
         )
 
 

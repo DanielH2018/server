@@ -875,6 +875,7 @@
  "evals/tests/test_review_outcomes.py": 0.0,
  "evals/tests/test_trend.py": 0.0,
  "hosts/lib/tests/test_bootstrap_host.py": 0.15,
+ "hosts/lib/tests/test_component_retired_stamp_fragments.py": 0.09,
  "hosts/lib/tests/test_homelab_reconcile.py": 5.07,
  "hosts/lib/tests/test_homelab_reconcile_restart.py": 7.11,
  "hosts/lib/tests/test_homelab_secrets.py": 0.12,

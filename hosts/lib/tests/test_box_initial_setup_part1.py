@@ -9,12 +9,15 @@ Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part1.py
 
 import pytest
 
+from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
+from lib.repo_paths import REPO
 from lib.render_context import render_context
 from renderer.renderer_lib import host as host_mode
 
 SSHD_D = "/etc/ssh/sshd_config.d"
 SYSCTL = "/etc/sysctl.conf"
+PI_TUNING = REPO / "hosts" / "components" / "pi-tuning" / "component.yml"
 
 
 @pytest.fixture(scope="module")
@@ -39,8 +42,14 @@ def test_the_sysctl_edits_equal_the_pis_twenty_keys():
     def lines(pkg):
         return {e["line"] for e in pkg.lines if e["path"] == SYSCTL}
 
+    # The Pi also ships its zram tuning (vm.swappiness, vm.page-cluster) from pi-tuning, which
+    # daniel-box must not share, so the hardening keys are the Pi's set without that component's.
+    tuning = yaml_fast.safe_load(PI_TUNING.read_text())["lines"]
+    pi_tuning = {e["line"] for e in tuning if e["path"] == SYSCTL}
+
+    assert len(pi_tuning) == 2
     assert len(lines(server)) == 20
-    assert lines(server) == lines(pi)
+    assert lines(server) == lines(pi) - pi_tuning
 
 
 def test_the_apt_origin_patterns_include_the_servers_github_cli_origin(package):

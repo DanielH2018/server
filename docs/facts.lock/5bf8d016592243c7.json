@@ -1,0 +1,13 @@
+{
+  "checksum": "7bb1e1376f01f1d585af60de546f08277e23c8cbadeb22f48b913cc632bbfdfc",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/config_files/CLAUDE.md#config_files — emptied; the Pi package owns the SOPS export",
+  "row": {
+    "atoms": {
+      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439",
+      "ansible/roles/setup/config_files/tasks/main.yml": "2c95ccda6dc45599736effbc50943a6b14aa134f989111f29be7b995abac258e"
+    },
+    "python": "3.14",
+    "verified_sha": "7ed18d48f"
+  }
+}

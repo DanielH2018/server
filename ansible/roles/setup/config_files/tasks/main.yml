@@ -1,40 +1,14 @@
 ---
-# The play (initial_setup.yml) runs become:true, so `$HOME` would ship these dotfiles to /root.
-# The deploy user's home is hardcoded as /home/{{ sys_user }} (as in sops_setup's .bashrc
-# path).
-# chezmoi owns .bashrc and .gitconfig on the hosts that have its source directory (daniel-box
-# and daniel-server; `chezmoi source-path` resolves both there), and neither file here is
-# chezmoi's version. Copying over them would replace the dotfiles' .bashrc and the templated
-# .gitconfig that carries commit signing. Only daniel-pi, which has no chezmoi, takes
-# these files. The stat carries both sub-tags so a `--tags bash` or `--tags git` run sets it.
-- name: Check whether chezmoi manages this host's dotfiles
-  ansible.builtin.stat:
-    path: "/home/{{ sys_user }}/.local/share/chezmoi"
-  register: config_files_chezmoi_source
-  tags: [git, bash]
+# The Pi's dotfiles were this role's only work. The SOPS export moved to /etc/profile.d/homelab.sh
+# in hosts/components/pi-tuning, and the Pi's tracked ~/.bashrc and ~/.gitconfig stay as the live
+# Pi holds them. A rebuilt Pi gets Ubuntu's own ~/.bashrc, and chezmoi owns the other two hosts'
+# dotfiles. docs/target-architecture/host/h7-delete-ansible.md, H7.25.
 
-- name: Copy .gitconfig to home directory
-  ansible.builtin.copy:
-    src: .gitconfig
-    dest: "/home/{{ sys_user }}/.gitconfig"
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0644"
-    backup: true
-  when: not config_files_chezmoi_source.stat.exists
-  tags: git
-
-- name: Copy .bashrc to home directory
-  ansible.builtin.copy:
-    src: .bashrc
-    dest: "/home/{{ sys_user }}/.bashrc"
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0644"
-    backup: true
-  when: not config_files_chezmoi_source.stat.exists
-  tags: bash
-
-- name: Display completion message
-  ansible.builtin.debug:
-    msg: "Configuration files have been deployed successfully"
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role
+# keeps the playbook line, and the tick applies the role on daniel-box as a no-op.
+# setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count
+# the role as empty on every host.
+- name: End the role, whose work the host package owns
+  ansible.builtin.meta: end_role

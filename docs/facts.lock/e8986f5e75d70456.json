@@ -1,0 +1,12 @@
+{
+  "checksum": "5c14790f556f4256402749c23adc83a156b58ee5cd2254071c557347bbbd61f6",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/config_files/CLAUDE.md#Where the work went",
+  "row": {
+    "atoms": {
+      "hosts/components/pi-tuning/": "e039f06216b1028ca0efbe3840daeacb17ac726a3f4d665fc9ff59e87b680ad9"
+    },
+    "python": "3.14",
+    "verified_sha": "7ed18d48f"
+  }
+}
