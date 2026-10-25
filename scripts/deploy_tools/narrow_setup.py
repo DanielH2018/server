@@ -173,8 +173,31 @@ def changed_keys(path: str, old: str, new: str, repo: str) -> set[str]:
     return changed_mapping_keys(mapping_at(before, path), mapping_at(after, path), path)
 
 
+class RemovedKeys:
+    """The role at `old` and the tags live at `new`, read once per vars file (#5930)."""
+
+    def __init__(self, index: RoleIndex, old: str, repo: str, playbook: str) -> None:
+        self.index, self.old, self.repo, self.playbook = index, old, repo, playbook
+        self._read: tuple[RoleIndex, set[str]] | None = None
+
+    def tags(self, key: str) -> frozenset[str]:
+        """`removed_key_tags` for `key`, reusing the old index and the live tag set."""
+        if self._read is None:
+            role = self.index.prefix[len(SETUP_TREE) + 1 :].rstrip("/")
+            playbook_text = show_at(self.old, self.playbook, self.repo)
+            live: set[str] = set()
+            for rel in self.index.tags:
+                try:
+                    live |= self.index.tags_of(rel)
+                except CannotNarrow:
+                    continue
+            self._read = (RoleIndex(role, self.old, self.repo, playbook_text), live)
+        before, live = self._read
+        return removed_key_tags(key, before, live, self.old)
+
+
 def removed_key_tags(
-    key: str, index: RoleIndex, old: str, repo: str, playbook: str
+    key: str, before: RoleIndex, live: set[str], old: str
 ) -> frozenset[str]:
     """The tags a key the range deleted with its last reader reaches, or a refusal (#5930).
 
@@ -188,19 +211,17 @@ def removed_key_tags(
     Every such tag must still select a task at `new`. A tag whose last task the range also
     deleted would make Ansible exit 0 having applied nothing, so it refuses instead.
 
+    Args:
+        key: the deleted key.
+        before: the role indexed at `old`.
+        live: every tag some task file of the role carries at `new`.
+        old: the commit the checkout was on, for the refusal's text.
+
     Raises:
-        CannotNarrow: nothing reads the key at `old` either, the role does not index at
-            `old`, or a tag the old readers carry selects nothing at `new`.
+        CannotNarrow: nothing reads the key at `old` either, or a tag the old readers carry
+            selects nothing at `new`.
     """
-    role = index.prefix[len(SETUP_TREE) + 1 :].rstrip("/")
-    before = RoleIndex(role, old, repo, show_at(old, playbook, repo))
     tags = before.key_readers(key)
-    live: set[str] = set()
-    for rel in index.tags:
-        try:
-            live |= index.tags_of(rel)
-        except CannotNarrow:
-            continue
     gone = tags - live
     if gone:
         raise CannotNarrow(
@@ -232,9 +253,10 @@ def path_tags(
         changed = changed_keys(path, old, new, repo)
         # `changed_keys` has already refused a file absent at `new`.
         after = mapping_at(show_at(new, path, repo) or "", path)
+        removed = RemovedKeys(index, old, repo, playbook)
         for key in sorted(changed):
             if key not in after and not index.mentions(key):
-                tags |= removed_key_tags(key, index, old, repo, playbook)
+                tags |= removed.tags(key)
                 continue
             got = index.key_readers(key)
             if not got:
