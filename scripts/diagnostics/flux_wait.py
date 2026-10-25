@@ -15,9 +15,11 @@ WHICH COMMIT. `--revision` takes a commit or a prefix of one. Without it, the co
 one the Kustomization's OCIRepository serves at each read, so the wait follows a promotion
 that lands while it runs.
 
-THE STATES. `ready` (exit 0): Ready=True with `lastAppliedOriginRevision` at that commit or
-at a descendant of it, by this checkout's git history. A later promotion that lands before
-Flux applies the commit still carries it.
+THE STATES. `ready` (exit 0): Ready=True with `lastAppliedOriginRevision` at that commit.
+With `--revision`, a descendant of it by this checkout's git history also counts, because a
+later promotion that lands before Flux applies the commit still carries it. Without it, only
+the served commit counts: after a reset to an older commit, the stale applied commit still
+descends from the served one.
 `failed` (exit 1): Ready=False for a reason other than a pending dependency, after an attempt
 at the artifact the source serves, and the source serves that commit. `suspended` (exit 3):
 `spec.suspend` is set, so nothing will apply. Every other reading keeps the wait open:

@@ -19,7 +19,10 @@ other than the one its source serves, and when a named tag has no Kustomization.
 A row that is not Ready for a reason in `NOT_YET_REASONS` is mid-reconcile, not failed
 (#6337). Examples are `<tag>` at Ready=Unknown/Progressing, and its `-verify` sibling at
 Ready=False/DependencyNotReady while it waits on `<tag>`. Such a row prints under PENDING and
-does not by itself fail the probe, whatever commit it has applied so far. A caller that needs
+does not by itself fail the probe, whatever commit it has applied so far. The exception is a
+DependencyNotReady row whose `spec.dependsOn` names a Kustomization that failed. Flux holds
+that row until someone fixes the dependency, so it fails even when the dependency is not
+printed (#6340). A caller that needs
 the row settled waits on it with `cc-wait flux <name>`. Any other not-Ready row exits 1,
 including one with no Ready condition at all, which is what a stopped kustomize-controller
 leaves on an object it never reconciled.
@@ -110,6 +113,7 @@ class Row:
             revision, so a Ready=False is about the commit the source serves.
         suspended: `spec.suspend` is true.
         observed: `status.observedGeneration` has caught up with `metadata.generation`.
+        depends_on: the names `spec.dependsOn` lists.
     """
 
     name: str
@@ -122,6 +126,7 @@ class Row:
     attempted_served: bool
     suspended: bool
     observed: bool
+    depends_on: tuple[str, ...] = ()
 
     @property
     def settled(self) -> bool:
@@ -172,6 +177,12 @@ def row(item: dict, sources: dict[str, dict]) -> Row:
     source = name if isinstance(name, str) else ""
     commit, revision = served(sources.get(source))
     attempted = status.get("lastAttemptedRevision")
+    depends = spec.get("dependsOn")
+    depends_on = tuple(
+        d["name"]
+        for d in (depends if isinstance(depends, list) else [])
+        if isinstance(d, dict) and isinstance(d.get("name"), str)
+    )
     return Row(
         name=kustomization_name(item),
         ready="True" if is_ready(item) else str(condition.get("status") or "Unknown"),
@@ -183,6 +194,7 @@ def row(item: dict, sources: dict[str, dict]) -> Row:
         attempted_served=bool(revision) and attempted == revision,
         suspended=spec.get("suspend") is True,
         observed=status.get("observedGeneration") == metadata.get("generation"),
+        depends_on=depends_on,
     )
 
 
@@ -249,6 +261,26 @@ def _short(commit: str | None) -> str:
     return commit[:8] if commit else "-"
 
 
+def failed_dependency(rows: dict[str, Row], name: str, seen=frozenset()) -> str | None:
+    """The dependency that holds `name` at DependencyNotReady for good, or None.
+
+    A dependency has failed when it is not Ready for a reason outside `NOT_YET_REASONS`, or
+    when a failed dependency of its own holds it. A dependency the listing lacks does not
+    count, nor does one already seen on a cycle.
+    """
+    for dep in rows[name].depends_on:
+        d = rows.get(dep)
+        if d is None or dep in seen or d.ready == "True":
+            continue
+        if d.reason not in NOT_YET_REASONS:
+            return dep
+        if d.reason == "DependencyNotReady" and failed_dependency(
+            rows, dep, seen | {name}
+        ):
+            return dep
+    return None
+
+
 def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
     """The table and the verdict for `flux <tags>`, as (text, exit code)."""
     kustomizations, sources = split(items)
@@ -273,6 +305,12 @@ def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
             continue
         if r.suspended:
             problems.append(f"{name}: suspended")
+        elif r.reason == "DependencyNotReady" and (
+            dep := failed_dependency(rows, name)
+        ):
+            problems.append(
+                f"{name}: Ready={r.ready} {r.reason}: dependency {dep} failed"
+            )
         elif r.ready != "True" and r.reason in NOT_YET_REASONS:
             pending.append(f"{name}: Ready={r.ready} {r.reason}: {r.message[:200]}")
         elif r.ready != "True":
@@ -333,8 +371,11 @@ def wait_state(
     """One cc-wait reading of Kustomization `name`: `{"state", "detail"}`.
 
     `expected` is a commit or a prefix of one; None means the commit the source serves.
-    `ready` holds when the applied commit is `expected` or descends from it, because a later
-    promotion can land before Flux applies `expected` and carry its change. `failed`
+    With no `expected`, `ready` needs the applied commit to equal the served one. After master
+    is reset to an older commit, the applied commit still descends from it but is stale
+    (#6336). An explicit `expected` is `ready` once the applied commit is it or descends from
+    it, because a later promotion can land before Flux applies `expected` and carry its
+    change. `failed`
     requires the source to serve `expected` itself, so a failure at another commit keeps the
     wait open rather than ending it.
 
@@ -360,9 +401,12 @@ def wait_state(
             "state": "waiting",
             "detail": f"{r.source or 'the source'} serves no commit yet",
         }
-    at_want = r.applied is not None and (
-        r.applied.startswith(want) or contains(r.applied, want)
-    )
+    if expected is None:
+        at_want = r.applied is not None and r.applied == r.served
+    else:
+        at_want = r.applied is not None and (
+            r.applied.startswith(want) or contains(r.applied, want)
+        )
     if r.observed and r.ready == "True" and at_want:
         return {
             "state": "ready",

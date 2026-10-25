@@ -47,6 +47,9 @@ VERDICT_SUBCOMMANDS = (
     ("b2-deletions",),
     ("landing",),
     ("gitops-state",),
+    ("lander",),
+    ("builder",),
+    ("applied",),
     ("ha", "verify-automations"),
     ("ha", "verify-entities"),
 )
