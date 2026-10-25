@@ -407,6 +407,24 @@ swapoff was killed half-way, the device stayed active at the old size, the start
 with the device still in use, the unit read `failed`, and 150 MB of swap sat on the SD card at
 memory PSI `full avg60` 42% until a reboot. The task comment carries the numbers.
 
+## Unattended compose pull (H5.4)
+
+Measured on 2026-10-25, when the Pi's unattended updater pulled the `pi-canary` image bumped in #6233. The run ended at 1792897045 (02:57:25 UTC, `homelab_compose_up_timestamp_seconds`) and lasted 51 s (`homelab_compose_up_duration_seconds`). It started at 1792896994, so the query window is 6m. Every figure comes from Prometheus on the `node-pi` job.
+
+| Figure | Value | Query |
+|---|---|---|
+| Highest 5-minute memory PSI `full` over the run | 0.1112 (11.1%) | `max_over_time(rate(node_pressure_memory_stalled_seconds_total{job="node-pi"}[5m])[6m:1m] @ 1792897045)` |
+| Lowest `MemAvailable` over the run | 129097728 B | `min_over_time(node_memory_MemAvailable_bytes{job="node-pi"}[6m] @ 1792897045)` |
+| Lowest `MemAvailable` over the 24 h before the start | 98906112 B | `min_over_time(node_memory_MemAvailable_bytes{job="node-pi"}[24h] @ 1792896994)` |
+| Highest 5-minute swap-in rate over the run | 447.2/s | `max_over_time(rate(node_vmstat_pswpin{job="node-pi"}[5m])[6m:1m] @ 1792897045)` |
+| Run duration | 51 s | `homelab_compose_up_duration_seconds{host="daniel-pi"}` |
+
+The swap-in rate sits beside the 136-181/s daily rate that alloy's compose template records.
+
+**Verdict:** the PSI `full` is below the 20% threshold, and the run minimum of `MemAvailable` stays above the 24 h minimum. The Pi's updater timer is unchanged.
+
+Query each figure on its own. PromQL `or` drops a series whose labels match one already returned, and the timestamp and duration series carry identical labels, so a combined query returns only one of them.
+
 ## See also
 
 - `ansible/roles/setup/optimize_pi/CLAUDE.md` — the rules, the granular tags and the

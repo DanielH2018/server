@@ -15,7 +15,17 @@ import narrow_setup
 from lib.repo_paths import REPO
 
 from _narrow_fixtures import _refs
-from _setup_role_fixtures import BETA, DEFAULTS, PLAYBOOK, ROLE, Tree, build, narrow
+from _setup_role_fixtures import (
+    ALPHA,
+    BETA,
+    DEFAULTS,
+    PLAYBOOK,
+    ROLE,
+    Tree,
+    build,
+    narrow,
+    touched,
+)
 
 
 @pytest.fixture
@@ -237,7 +247,7 @@ def test_a_foreign_defaults_key_the_role_reads_narrows_to_its_readers(reads):
 
 def test_a_foreign_defaults_key_the_role_never_reads_adds_no_tag(reads):
     reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("unread", "changed"))
-    reads.write(f"{ROLE}/tasks/beta.yml", BETA + "  # touched\n")
+    reads.write(f"{ROLE}/tasks/beta.yml", touched(BETA))
     assert narrow(reads, *_refs(reads)) == frozenset({"beta"})
 
 
@@ -360,3 +370,71 @@ def test_the_real_uv_pin_reaches_every_role_copying_the_operators_uv(role, tags)
     two, and all three copies stayed on the old version."""
     index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
     assert index.key_readers("initial_setup_uv_version") == frozenset(tags)
+
+
+# ── a key or path the range deletes together with its last reader (#5930) ──────────────
+#
+# Each clean test reads the deleted path's own line from stderr. The range's union cannot show
+# where a tag came from: the reader the range edits contributes the same tag, so skipping the
+# deleted path outright would return the same set.
+
+
+def test_a_key_deleted_with_its_last_reader_narrows_to_that_readers_tag(tree, capsys):
+    """H1.4 deleted `k3s_cluster_dns_ip` with the coredns.yml tasks that read it."""
+    tree.write(
+        f"{ROLE}/defaults/main.yml", DEFAULTS.replace("demo_beta_mode: slow\n", "")
+    )
+    tree.write(f"{ROLE}/templates/beta.conf.j2", "mode = slow\n")
+    assert narrow(tree, *_refs(tree)) == frozenset({"beta"})
+    assert "narrow-setup: defaults/main.yml -> beta\n" in capsys.readouterr().err
+
+
+def test_a_key_deleted_with_the_last_task_carrying_its_readers_tag_is_flagged(tree):
+    """The old reader's tag selects nothing at the new commit, so it cannot be printed."""
+    tree.write(
+        f"{ROLE}/defaults/main.yml", DEFAULTS.replace("demo_alpha_mode: fast\n", "")
+    )
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "mode = fast\n")
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA.replace("[alpha]", "[alpha_v2]"))
+    with pytest.raises(narrow_setup.CannotNarrow, match="which no task carries"):
+        narrow(tree, *_refs(tree))
+
+
+def test_a_template_deleted_with_its_last_reader_narrows_to_that_readers_tag(
+    tree, capsys
+):
+    """H1.4 deleted `templates/coredns-corefile.j2`, which nothing names at the new commit."""
+    (tree.root / ROLE / "templates/beta.conf.j2").unlink()
+    tree.write(
+        f"{ROLE}/tasks/beta.yml",
+        BETA.replace("template:\n    src: beta.conf.j2", "copy:\n    content: slow"),
+    )
+    assert narrow(tree, *_refs(tree)) == frozenset({"beta"})
+    assert "narrow-setup: templates/beta.conf.j2 -> beta\n" in capsys.readouterr().err
+
+
+def test_a_template_deleted_with_the_last_task_carrying_its_readers_tag_is_flagged(
+    tree,
+):
+    (tree.root / ROLE / "templates/alpha.conf.j2").unlink()
+    tree.write(
+        f"{ROLE}/tasks/alpha.yml",
+        ALPHA.replace("[alpha]", "[alpha_v2]").replace("alpha.conf.j2", "other.j2"),
+    )
+    with pytest.raises(narrow_setup.CannotNarrow, match="which no task carries"):
+        narrow(tree, *_refs(tree))
+
+
+def test_the_real_h1_4_range_narrows_below_the_k3s_role_tag(capsys):
+    """The range whose `manual_plane` line recorded `"tags": []` (#5930), from history.
+
+    The Longhorn tags come from `stale-checkout-guard.yml`, whose `coredns` instance the range
+    deleted: a per-file answer cannot tell the deleted task from the file's other tasks.
+    """
+    got = narrow_setup.role_tags(
+        "k3s", "k3s", "225de93f5^", "225de93f5", str(REPO), "ansible/k3s-bringup.yml"
+    )
+    assert got == frozenset({"coredns", "longhorn", "longhorn_backup", "longhorn_r2"})
+    err = capsys.readouterr().err
+    assert "narrow-setup: defaults/main.yml -> coredns\n" in err
+    assert "narrow-setup: templates/coredns-corefile.j2 -> coredns\n" in err

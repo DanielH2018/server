@@ -1,0 +1,146 @@
+{#
+  traefik's bouncer-key precheck: refuse a key the CrowdSec LAPI rejects, before Traefik rolls
+  (#6095).
+
+  A rotation that skips `cscli bouncers delete k8straefik` leaves the LAPI holding the old
+  key's hash. The new pod's startupProbe catches that through AppSec's 401, but traefik rolls
+  `Recreate`, so by then no old pod serves. This directory renders into `traefik-precheck`,
+  which `traefik` depends on and which copies traefik's edges, `crowdsec` among them. So the
+  Job runs once the LAPI is Ready, and while it fails, Flux holds `traefik` and the old pod
+  keeps serving. `backoffLimit: 0` keeps a failed check failed.
+
+  It runs `files/traefik_bouncer_key_precheck.py`, whose docstring says why the request is a
+  HEAD: a GET would add a `k8straefik@<pod IP>` row with a fresh `last_pull`, which
+  `bouncer_prune.py` would read as the edge pulling.
+
+  The key comes from the `traefik-precheck` Secret below, not from `traefik-crowdsec`: that
+  Secret is in `traefik`, which has not applied when this Job runs. The Secret's placeholder
+  makes `traefik-precheck` substitute from the cluster file. The spec embeds the key's
+  `cluster-vars.source` digest, a digest of its ciphertext, so a rotation renames the Job and
+  Flux runs it again. A Job that kept its name would satisfy `dependsOn` with the previous
+  key's pass.
+
+  DECIDED: the Job ships off, behind `traefik_k8s_bouncer_key_precheck`, and a second PR turns
+  it on. Switched on in one PR with its fence peer, it deadlocks. The Job dials the LAPI
+  through netpol-baseline's `networkpolicy-crowdsec.yaml.j2`, and netpol-baseline applies
+  last, after `traefik`. Before the peer applies, the fence refuses the Job, the refused Job
+  holds `traefik`, and a held `traefik` keeps netpol-baseline, and with it the peer, from
+  applying. So the peer landed first, with the Job switched off (#6095). Setting the default
+  to true is safe once netpol-baseline has applied the peer.
+
+  The caller census (D5, *A fence admits every Job that dials through it*). The pod is
+  `app: traefik-precheck` in `k8s_namespace`. It execs into nothing and dials one Service:
+    - crowdsec:{{ crowdsec_k8s_lapi_port }}, the LAPI, through the LAPI fence in
+      netpol-baseline's `networkpolicy-crowdsec.yaml.j2`, which lists `traefik-precheck` on
+      the LAPI port alone. netpol-baseline's crowdsec row (`expect: refused`) shows that fence
+      refuses an unlisted pod.
+  Without the peer, the helper's 60 seconds of refused connects run out and the Job fails
+  closed, naming the connect.
+#}
+{% set script_name = 'traefik_bouncer_key_precheck.py' %}
+{% set script_dir = '/precheck' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/traefik/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'traefik-precheck-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{#- The key's ciphertext digest, read from the cluster file's source; no value enters the
+    spec. -#}
+{% set key = namespace(digest='') %}
+{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and line.split()[0] == 'crowdsec_k8s_bouncer_api_key' %}
+{% set key.digest = line.split()[1] %}
+{% endfor %}
+{% set spec_text %}
+# No retry. A check that fails must not pass on its second try.
+backoffLimit: 0
+# One HEAD of 10s, plus the helper's 60s of connect retries, with slack.
+activeDeadlineSeconds: 120
+template:
+  metadata:
+    labels:
+      app: traefik-precheck
+  spec:
+    serviceAccountName: traefik-precheck
+    # The Job reads no Kubernetes API, so its pod holds no token.
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: precheck
+        image: {{ flux_job_image }}
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: LAPI_URL
+            value: "http://crowdsec.{{ k8s_namespace }}.svc.cluster.local:{{ crowdsec_k8s_lapi_port }}"
+          - name: BOUNCER_KEY
+            valueFrom:
+              secretKeyRef:
+                name: traefik-precheck
+                key: lapi_key
+          # Renames the Job whenever the key rotates; see the note above.
+          - name: BOUNCER_KEY_DIGEST
+            value: "{{ key.digest }}"
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+{% if traefik_k8s_bouncer_key_precheck | bool and traefik_k8s_manage_crowdsec | bool %}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: traefik-precheck
+  namespace: {{ k8s_namespace }}
+type: Opaque
+stringData:
+  lapi_key: "{{ crowdsec_k8s_bouncer_api_key }}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for name, text in data | dictsort %}
+  {{ name }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: traefik-precheck-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+    # A read-only check that runs before `traefik` applies, the kind `traefik-precheck` admits.
+    homelab/job-kind: precheck
+spec:
+{{ spec_text | indent(2, true) }}
+{% endif %}
