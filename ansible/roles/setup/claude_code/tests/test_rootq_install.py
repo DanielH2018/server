@@ -3,13 +3,16 @@
 Run: uv run pytest ansible/roles/setup/claude_code/tests/test_rootq_install.py
 """
 
+import hashlib
 import shutil
 
 import pytest
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
+from lib.git_testing import init_repo, scrubbed_env
 from lib.proc_testing import run as run_proc
+from lib.proc_testing import write_exec
 from lib.repo_paths import HOST_VARS
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
@@ -43,10 +46,67 @@ def test_the_rendered_sudoers_file_passes_visudo(tmp_path) -> None:
 
 def test_the_shim_runs_only_the_granted_script_through_sudo() -> None:
     lines = (ROLE / "files" / "rootq.sh").read_text().splitlines()
-    assert [x for x in lines if "sudo " in x and not x.startswith("#")] == [
-        f'exec /usr/bin/sudo -n {SCRIPT} "$@" < /dev/null'
+    assert [x.strip() for x in lines if "$sudo" in x and not x.startswith("#")] == [
+        'exec "$sudo" -n "$script" matches "$2" "${hash%% *}" < /dev/null',
+        'exec "$sudo" -n "$script" "$@" < /dev/null',
     ]
+    assert "sudo=${HOMELAB_ROOTQ_SUDO:-/usr/bin/sudo}" in lines
+    assert f"script={SCRIPT}" in lines
     assert lines[-1].startswith("exec ")
+
+
+@pytest.fixture
+def shim(tmp_path):
+    """The shim run inside a scratch checkout, with sudo replaced by a recorder of its argv."""
+    repo = init_repo(tmp_path / "repo")
+    (repo / "conf").mkdir()
+    (repo / "conf" / "a.yaml").write_text("network:\n  version: 2\n")
+    (repo / "out.yaml").symlink_to("/etc/hostname")
+    log = tmp_path / "sudo.argv"
+    sudo = write_exec(tmp_path / "sudo", f'#!/bin/sh\nprintf "%s\\n" "$@" > {log}\n')
+
+    def run(*args: str):
+        result = run_proc(
+            ["sh", str(ROLE / "files" / "rootq.sh"), *args],
+            cwd=repo,
+            env=scrubbed_env(HOMELAB_ROOTQ_SUDO=str(sudo)),
+        )
+        return result, log.read_text().splitlines() if log.exists() else None
+
+    return run
+
+
+def test_matches_hands_root_only_the_hash_of_the_repo_file(shim) -> None:
+    result, argv = shim("matches", "/etc/netplan/a.yaml", "conf/a.yaml")
+    assert result.returncode == 0, result.stderr
+    digest = hashlib.sha256(b"network:\n  version: 2\n").hexdigest()
+    assert argv == ["-n", SCRIPT, "matches", "/etc/netplan/a.yaml", digest]
+
+
+def test_every_other_verb_passes_its_arguments_through_unchanged(shim) -> None:
+    _, argv = shim("cat", "/etc/netplan/a.yaml")
+    assert argv == ["-n", SCRIPT, "cat", "/etc/netplan/a.yaml"]
+
+
+@pytest.mark.parametrize(
+    "repo_file, reason",
+    [
+        ("/etc/hostname", "relative"),
+        ("../repo/conf/a.yaml", "relative"),
+        ("conf/../conf/a.yaml", "relative"),
+        ("..", "relative"),
+        ("conf/missing.yaml", "does not exist"),
+        ("conf", "not a regular file"),
+        ("out.yaml", "outside the checkout"),
+    ],
+)
+def test_matches_refuses_a_repo_file_it_cannot_vouch_for(
+    shim, repo_file, reason
+) -> None:
+    result, argv = shim("matches", "/etc/netplan/a.yaml", repo_file)
+    assert result.returncode == 2
+    assert reason in result.stderr
+    assert argv is None
 
 
 def tasks() -> list[dict]:

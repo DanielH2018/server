@@ -210,9 +210,9 @@ denies prints its own reason.
   <id-or-alias>` resolves the alias-slug≠id trap.
 - **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a
   service's UI — the half `probe.py health` structurally cannot cover.
-- **`rootq`** — reads root-only host state (nftables, ufw, `sshd -T`, root's crontab, and
-  allowlisted paths such as `/etc/netplan`) through one read-only sudoers grant to the
-  operator's account, on daniel-box and daniel-server. A session gets no other sudo, and the
+- **`rootq`** — reads root-only host state through one read-only sudoers grant to the
+  operator's account, on daniel-box and daniel-server: redacted nftables, ufw, `sshd -T`,
+  root's crontab and netplan, and the `stat`, SHA-256 or repo match of an allowlisted file. A session gets no other sudo, and the
   agent user gets none at all, so never probe with `sudo -n true`.
 
 ## Review & Memory Hygiene (making judgment cumulative)
