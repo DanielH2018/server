@@ -13,7 +13,7 @@ The registry carries names, descriptions, each subcommand's backing `probe_lib` 
 the `probe_lib` modules agree.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
-still reports the same seventeen subcommand backends — the `run_*` names below are imported, and
+still reports the same nineteen subcommand backends — the `run_*` names below are imported, and
 that function counts only what a module defines.
 """
 
@@ -32,9 +32,11 @@ from diagnostics.probe_lib.b2_ledger import (
     run_b2_deletions,
     run_b2_spend,
 )
+from diagnostics.probe_lib.builder import run_builder
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
 from diagnostics.probe_lib.flux import run_flux
 from diagnostics.probe_lib.gitops_view import run_gitops_state
+from diagnostics.probe_lib.lander import run_lander
 from diagnostics.probe_lib.landing_blockers import run_landing
 from diagnostics.probe_lib.landing_verdicts import run_landing_verdicts
 from diagnostics.probe_lib.health import run_health
@@ -196,6 +198,20 @@ SUBCOMMANDS = [
         "push_rules",
         run_push_rules,
     ),
+    (
+        "lander",
+        "the daniel-server batch lander's newest pass, the landings it started with their "
+        "VERDICT, and the PRs it named (exit 1 when the lander is failing or stale)",
+        "lander",
+        run_lander,
+    ),
+    (
+        "builder",
+        "the host-package builder's reason, published versions, newest builds and failures "
+        "(exit 1 when it is not publishing)",
+        "builder",
+        run_builder,
+    ),
 ]
 
 # The subcommands with a callable that `main()` routes by hand instead of through `handlers`,
@@ -226,6 +242,8 @@ VERDICT_SUBCOMMANDS = frozenset(
         "landing",
         "gitops-state",
         "push-rules",
+        "lander",
+        "builder",
     }
 )
 VERDICT_HA_SUBCOMMANDS = frozenset({"verify-automations", "verify-entities"})
