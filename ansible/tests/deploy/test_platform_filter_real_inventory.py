@@ -13,13 +13,14 @@ gaining `platform: k8s`, which is exactly what the assertions check for.
 Run: uv run pytest ansible/tests/deploy/test_platform_filter_real_inventory.py
 """
 
-import re
+import functools
 
 import pytest
 from lib import yaml_fast
 
+from renderer.renderer_lib import host as host_mode
 from toposort import filter_by_platform
-from _helpers import HOST_VARS, REPO
+from _helpers import HOST_VARS
 
 
 def _host_var_files():
@@ -79,7 +80,7 @@ def test_daniel_server_is_fully_drained():
 PI_ORDERING = [("docker-proxy", "autoheal"), ("docker-proxy", "alloy")]
 # What a packaged downstream's `depends_on` must name.
 PI_DEPENDS_ON = {"autoheal": "docker-proxy-lifecycle", "alloy": "docker-proxy"}
-SERVICES = REPO / "hosts" / "components" / "pi-compose" / "services"
+COMPOSE = "/usr/lib/homelab/compose"
 
 
 def _order_violations(listed, packaged, edges, depends_on=None):
@@ -114,13 +115,21 @@ def _pi_lists():
     return listed, [c["name"] for c in pi.get("compose_services") or []]
 
 
+@functools.cache
+def _packaged_services():
+    """Every service of the Pi's rendered Compose project, by name."""
+    package = host_mode.render_host("daniel-pi")
+    top = yaml_fast.safe_load(package.files[f"{COMPOSE}/compose.yaml"][0].decode())
+    services = {}
+    for include in top["include"]:
+        body = yaml_fast.safe_load(package.files[include["path"]][0].decode())
+        services |= body["services"]
+    return services
+
+
 def _service_depends_on(name):
-    # Template lines (`{% ... %}` and `{# ... #}` blocks) are dropped; the rest is plain YAML
-    # for these services.
-    text = (SERVICES / name / "compose.yaml.j2").read_text()
-    body = re.sub(r"\{#.*?#\}", "", text, flags=re.S)
-    body = "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("{%"))
-    return yaml_fast.safe_load(body)["services"][name].get("depends_on") or []
+    # A list or a mapping keyed by service name; iterating either yields the names.
+    return list(_packaged_services()[name].get("depends_on") or [])
 
 
 def test_daniel_pi_moves_every_upstream_no_later_than_its_downstream():
