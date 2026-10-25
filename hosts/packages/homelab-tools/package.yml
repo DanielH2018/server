@@ -29,14 +29,14 @@ tools:
   chezmoi:
     amd64:
       # renovate: datasource=github-release-attachments depName=twpayne/chezmoi
-      version: v2.73.1
-      sha256: a3f958acb7d0e5d53fa43c2eec9bc8ae3b4fba8bcbfdce29a8881ca3ffc20a53
+      version: v2.73.2
+      sha256: 4d7bd8072f15373d5f5c801209bac218527452c8e54f9ae46ba6c5bd4a6eca41
       url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_amd64.tar.gz
       member: chezmoi
     arm64:
       # renovate: datasource=github-release-attachments depName=twpayne/chezmoi
-      version: v2.73.1
-      sha256: e60275b27f505ae2086bfb87b144eacf7377a89803120f6bd933d1852a93b0c6
+      version: v2.73.2
+      sha256: db92b343a32cade0b1d4ff5e30da54c5156f7a580349281e583a5402c57c7bcf
       url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_arm64.tar.gz
       member: chezmoi
   # H7.24a: daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
