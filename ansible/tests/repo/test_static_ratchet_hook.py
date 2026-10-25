@@ -243,9 +243,10 @@ def test_the_lander_gate_skips_a_k8s_role_doc():
 # The session ceiling `PYTEST_XDIST_AUTO_NUM_WORKERS` sets for every Claude session.
 SESSION_CEILING = 4
 
-# A multi-module pytest hook that still takes `-n auto`, with the PR that pins it. #5919 pins
-# `static-ratchet-tests` at `-n 4`; delete its row once that lands.
-UNPINNED = {"static-ratchet-tests": "#5919"}
+# A multi-module pytest hook that `-n auto` still runs on one worker, with the PR that pins it.
+# `static-ratchet-tests` sat here for #5919 until the width came from recorded seconds (#5967),
+# which gives it 4.
+UNPINNED: dict[str, str] = {}
 
 
 def _pytest_hooks() -> list[dict]:
@@ -276,12 +277,20 @@ def _left_to_auto(hooks: list[dict]) -> list[str]:
         for h in hooks
         if len(_modules(h)) > 1
         and _pinned_width(h["entry"]) is None
-        and xdist_width.workers_for(len(_modules(h)), SESSION_CEILING) <= 1
+        and xdist_width.workers_for(_recorded_seconds(h), SESSION_CEILING) <= 1
     ]
 
 
+def _recorded_seconds(hook: dict) -> list[float]:
+    """What `xdist_width` charges each module the entry names."""
+    modules = [REPO / m for m in sorted(_modules(hook))]
+    return xdist_width.module_seconds(
+        modules, REPO, xdist_width.load_weights(REPO) or {}
+    )
+
+
 def test_no_multi_module_pytest_hook_leaves_its_width_to_auto():
-    """xdist_width gives `-n auto` one worker per 15 modules, which serialised five (#5917).
+    """`-n auto` once gave one worker per 15 modules, which serialised five (#5917).
 
     An explicit `-n`, `-n0` included, is a measured choice; the defect is the silent fallback.
     """
