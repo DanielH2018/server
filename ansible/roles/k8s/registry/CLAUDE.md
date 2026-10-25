@@ -1,10 +1,11 @@
 # registry — in-cluster Docker image cache
 
-A local `registry` (`registry_k8s_image`) that stores images `k8s/image-builder` builds in-cluster, so
-n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup, code-server, terraria, valheim and
-karakeep pull
-without a public
-registry round trip. See repo-root `CLAUDE.md` for shared conventions.
+A local `registry` (`registry_k8s_image`), the push store, that holds images
+`k8s/image-builder` builds in-cluster for an Ansible-owned consumer. Every consumer is
+flux-owned and pulls from GHCR, so the store serves only the verify Job's seed, and break-glass
+pushes its artifact there. It still holds the images it served n8n, homelab-mcp, ical-proxy, nut,
+pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. See repo-root
+`CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->

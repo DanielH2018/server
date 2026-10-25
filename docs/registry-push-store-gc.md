@@ -25,7 +25,11 @@ that a new manifest references. Hence the order below. Delete the tags while the
 stop it, collect, and start it again.
 
 This procedure runs plain `garbage-collect`, without `--delete-untagged`. Step 3 deletes each
-unwanted manifest explicitly, so the GC has nothing untagged to find. The flag would also delete
+unwanted manifest explicitly. Every manifest the store held on 2026-10-25 was a single OCI
+image manifest, not an index, so deleting a tag's manifest leaves no child manifest behind
+to keep its layers marked. An index would need each child in its `manifests[]` deleted too.
+The tagged manifests named 3.91 GB of the claim's 3.98 GB, so the untagged revisions that
+plain `garbage-collect` keeps hold well under 0.1 GB. The flag would also delete
 any manifest the store holds by digest alone, such as a signature stored as an OCI referrer, and
 the store keeps the break-glass artifact and its signature (`docs/break-glass.md`).
 
@@ -50,8 +54,9 @@ On 2026-10-25 the claim held 3.98 GB. `registry-selftest` held one seed tag
 (`python-f6a589d43c42`), `verify`, and `probe`, which the retired Ansible self-test wrote. Ten
 legacy repositories held the rest: `code-server`, `homelab-mcp`, `ical-proxy`, `karakeep`,
 `n8n`, `n8n-runners`, `nut`, `pi-peer-backup`, `terraria` and `valheim`. Each carried
-`latest`, `buildcache` and up to three `sha-<12 hex>` content tags. Those legacy images, not
-the seeds, are what a first collection reclaims.
+`latest`, `buildcache` and up to three `sha-<12 hex>` content tags. Summing the distinct
+blobs their tags name gave 3.91 GB, `code-server` alone 2.38 GB, against 0.02 GB for
+`registry-selftest`. Those legacy images, not the seeds, are what a first collection reclaims.
 
 ## 2. Write down the keep set
 
@@ -68,13 +73,17 @@ Keep every manifest in this list. Delete nothing else in step 3 without a reason
 - **The whole `homelab-manifests` repository, if it exists.** Break-glass pushes its artifact
   and cosign signature there (`docs/break-glass.md`, *GitHub, GHCR or Sigstore is
   unreachable*). The store held no such repository on 2026-10-25.
-- **Every repository a running workload still pulls from the push store.** The renderer
-  rewrites a flux-owned role's `localhost:5000/<name>` to GHCR, so this list normally names
-  only the current seed. On 2026-10-25 it printed `registry-selftest:python-f6a589d43c42`
-  and nothing else. Prove it, rather than assume it:
+- **Every repository a workload still names.** The renderer rewrites a flux-owned role's
+  `localhost:5000/<name>` to GHCR, so this list normally names only the current seed. Read the
+  pod templates, not the pods: a CronJob between runs and a Deployment scaled to zero have
+  no pod to report an image. On 2026-10-25 this printed
+  `localhost:5000/registry-selftest:python-f6a589d43c42` and nothing else:
 
     ```bash
-    kubectl get pods -A -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.image}{"\n"}{end}{range .spec.initContainers[*]}{.image}{"\n"}{end}{end}' | grep '^localhost:5000/' | sort -u
+    kubectl get deploy,sts,ds,cronjob,job -A -o json | jq -r '.items[]
+      | (.spec.template.spec // .spec.jobTemplate.spec.template.spec) as $s
+      | (($s.containers // []) + ($s.initContainers // []))[] | .image' \
+      | grep '^localhost:5000/' | sort -u
     ```
 
 ## 3. Delete what is not kept, while the registry serves
@@ -182,7 +191,11 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            runAsNonRoot: true
             capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: "1", memory: 512Mi}
           volumeMounts:
             - name: registry-data
               mountPath: /var/lib/registry
