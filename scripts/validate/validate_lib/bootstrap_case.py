@@ -419,9 +419,11 @@ def plan(work: Path, green: Path) -> list[Planned]:
     for name, data, reason in reds:
         kit = red_kit(green, work / "bootstrap-kit" / f"red-{name}", name, data)
         label = f"red-{name.split('_')[0]}"
+        # The name says which fixture failed: a dropped file and a changed one are different reds.
+        defect = "is missing" if data is None else "does not match its pin"
         cases.append(
             Planned(
-                f"refuse a kit whose {name} is wrong",
+                f"refuse a kit whose {name} {defect}",
                 label,
                 "daniel-box",
                 kit,

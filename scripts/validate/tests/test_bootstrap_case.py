@@ -64,6 +64,10 @@ def test_the_plan_runs_every_host_online_then_offline_with_two_reds(tmp_path):
         ("red-nfpm_2.48.0_Linux_x86_64.tar.gz", False),
     ]
     assert not (offline[1][1] / "k3s").exists()
+    assert [p.name for p, _ in offline[1:]] == [
+        "refuse a kit whose k3s is missing",
+        "refuse a kit whose nfpm_2.48.0_Linux_x86_64.tar.gz does not match its pin",
+    ]
 
 
 def test_a_green_run_that_prints_its_marker_and_exits_0_is_clean():
