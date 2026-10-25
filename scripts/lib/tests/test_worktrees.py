@@ -21,11 +21,18 @@ from _worktree_proc import _unreadable_proc
 from lib.worktrees import (
     KEEP,
     REMOVABLE,
+    VERDICT_CACHE,
     Worktree,
     classify,
+    local_landed_layer,
+    merged_layer,
     primary_checkout,
     processes_using,
+    read_verdicts,
+    record_verdict,
     remove,
+    verdict_cache_path,
+    verdict_key,
     worktree_facts,
 )
 
@@ -367,3 +374,68 @@ def test_primary_checkout_of_a_separated_git_dir_is_flagged_as_none(tmp_path):
         str(checkout),
     )
     assert primary_checkout(str(checkout)) is None
+
+
+def _unmerged_branch(tmp_path: Path) -> tuple[Path, str]:
+    """A repo whose `feature` branch holds a commit master lacks, and that commit's SHA."""
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    git(repo, "checkout", "-q", "-b", "feature")
+    head = commit(repo, "feature work", **{"b.txt": "two\n"})
+    git(repo, "checkout", "-q", "master")
+    return repo, head
+
+
+def _never_asked(*_args) -> bool:
+    raise AssertionError("the forge was asked for a verdict the cache holds")
+
+
+def test_a_recorded_verdict_answers_the_next_call_without_recomputing(tmp_path):
+    repo, head = _unmerged_branch(tmp_path)
+    assert merged_layer(str(repo), head, base="master", forge=lambda *_: False) is None
+    key = verdict_key(str(repo), head, "master")
+    assert key is not None
+    assert read_verdicts(str(repo))[key] == ""
+    # A value git would never compute for this pair, so the answer can only come from the file.
+    record_verdict(str(repo), key, "content")
+    assert local_landed_layer(str(repo), head, base="master") == "content"
+
+
+def test_a_forge_merged_answer_is_recorded_and_not_asked_again(tmp_path):
+    repo, head = _unmerged_branch(tmp_path)
+    assert (
+        merged_layer(str(repo), head, base="master", forge=lambda *_: True) == "forge"
+    )
+    assert merged_layer(str(repo), head, base="master", forge=_never_asked) == "forge"
+    # The local layers still say no for this pair, which is what "forge" stands over.
+    assert local_landed_layer(str(repo), head, base="master") is None
+
+
+def test_a_forge_not_merged_answer_is_trusted_only_until_it_expires(tmp_path):
+    repo, head = _unmerged_branch(tmp_path)
+    assert merged_layer(str(repo), head, "feature", "master", lambda *_: False) is None
+    assert merged_layer(str(repo), head, "feature", "master", _never_asked) is None
+    # Epoch 0 is far past FORGE_NO_TTL_S, so the forge must be asked again, and now says merged.
+    record_verdict(str(repo), f"forge-no:{head}:feature", "0")
+    assert (
+        merged_layer(str(repo), head, "feature", "master", lambda *_: True) == "forge"
+    )
+
+
+def test_a_corrupt_cache_file_reads_as_empty_and_is_replaced(tmp_path):
+    repo, head = _unmerged_branch(tmp_path)
+    path, key = verdict_cache_path(str(repo)), verdict_key(str(repo), head, "master")
+    assert path is not None and key is not None
+    path.write_text("{not json")
+    assert merged_layer(str(repo), head, base="master", forge=lambda *_: False) is None
+    assert read_verdicts(str(repo))[key] == ""
+
+
+def test_the_cache_lives_in_the_git_common_dir_not_a_worktree(tmp_path):
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    wt = tmp_path / "wt"
+    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
+    expected = repo.resolve() / ".git" / VERDICT_CACHE
+    assert verdict_cache_path(str(wt)) == expected
+    assert verdict_cache_path(str(repo)) == expected
