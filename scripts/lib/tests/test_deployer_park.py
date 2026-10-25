@@ -247,15 +247,18 @@ def test_a_whole_role_k3s_line_names_the_agent_join_before_the_clear(tmp_path):
         line_text,
         "ansible/k3s-bringup.yml --tags k3s",
         "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent",
+        "ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address",
         "clear-owed manual_plane k3s",
     )
 
 
 _JOIN = "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent"
+_PIN = "ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address"
 
 # A narrowed k3s row splits: `k3s_agent` goes on the join command, the rest on the server
-# command, and a row of `k3s_agent` alone prints no server command at all (#5628). The clear
-# names the whole row either way.
+# command, and a row of `k3s_agent` alone prints no server command at all (#5628). A row of
+# `node-address` keeps the server command and adds the pin play, run on the agent (#5918). The
+# clear names the whole row either way.
 _SPLIT_ROWS = [
     pytest.param(
         ["k3s_agent"],
@@ -272,6 +275,17 @@ _SPLIT_ROWS = [
         ),
         "--tags k3s_agent,",
         id="both-halves",
+    ),
+    pytest.param(
+        ["node-address"],
+        (
+            "ansible/k3s-bringup.yml --tags node-address",
+            _PIN,
+            "(run on daniel-server)",
+            "clear-owed manual_plane k3s --applied node-address",
+        ),
+        "join_agent",
+        id="pin-play",
     ),
 ]
 

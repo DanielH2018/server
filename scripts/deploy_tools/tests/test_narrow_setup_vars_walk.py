@@ -424,16 +424,79 @@ def test_a_template_deleted_with_the_last_task_carrying_its_readers_tag_is_flagg
         narrow(tree, *_refs(tree))
 
 
+# A task file holding a second tag's task beside its own, the shape `stale-checkout-guard.yml`
+# has: one import per writer tag. `beta` stays live in `beta.yml` (#6234).
+BETA_IN_ALPHA = """\
+- name: Restart beta
+  ansible.builtin.systemd:
+    name: beta
+    state: restarted
+  tags: [beta]
+"""
+
+
+def _mixed(tree: Tree, extra: str = "") -> None:
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA + BETA_IN_ALPHA + extra)
+    tree.commit("mixed")
+
+
+def test_a_task_deleted_beside_survivors_narrows_to_its_own_tag(tree, capsys):
+    """H1.4 deleted the `coredns` guard instance and left the Longhorn ones."""
+    _mixed(tree)
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA)
+    assert narrow(tree, *_refs(tree)) == frozenset({"beta"})
+    assert "narrow-setup: tasks/alpha.yml -> beta\n" in capsys.readouterr().err
+
+
+def test_a_task_edited_beside_unchanged_ones_narrows_to_its_own_tag(tree):
+    _mixed(tree)
+    tree.write(
+        f"{ROLE}/tasks/alpha.yml",
+        ALPHA + BETA_IN_ALPHA.replace("restarted", "reloaded"),
+    )
+    assert narrow(tree, *_refs(tree)) == frozenset({"beta"})
+
+
+def test_a_deleted_task_whose_tag_no_task_carries_any_more_is_flagged(tree):
+    _mixed(tree)
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA)
+    tree.write(f"{ROLE}/tasks/beta.yml", BETA.replace("[beta]", "[beta_v2]"))
+    with pytest.raises(narrow_setup.CannotNarrow, match="which no task carries"):
+        narrow(tree, *_refs(tree))
+
+
+@pytest.mark.parametrize(
+    "loader",
+    [
+        "  ansible.builtin.set_fact:\n    demo_fact: 1\n",
+        "  ansible.builtin.include_vars:\n    file: extra.yml\n",
+        "  ansible.builtin.command: /bin/true\n  register: demo_probe\n",
+    ],
+    ids=["set_fact", "include_vars", "register"],
+)
+def test_a_file_that_sets_variables_keeps_every_tasks_tag(tree, loader):
+    """An edited task may read what an unchanged one sets under another tag."""
+    _mixed(tree, f"- name: Load the demo variables\n{loader}  tags: [alpha]\n")
+    tree.write(
+        f"{ROLE}/tasks/alpha.yml",
+        ALPHA
+        + BETA_IN_ALPHA.replace("restarted", "reloaded")
+        + f"- name: Load the demo variables\n{loader}  tags: [alpha]\n",
+    )
+    assert narrow(tree, *_refs(tree)) == frozenset({"alpha", "beta"})
+
+
 def test_the_real_h1_4_range_narrows_below_the_k3s_role_tag(capsys):
     """The range whose `manual_plane` line recorded `"tags": []` (#5930), from history.
 
-    The Longhorn tags come from `stale-checkout-guard.yml`, whose `coredns` instance the range
-    deleted: a per-file answer cannot tell the deleted task from the file's other tasks.
+    The range deleted only the `coredns` instance from `stale-checkout-guard.yml`. Before the
+    per-task diff (#6234) the surviving Longhorn instances' tags stood in for it.
     """
     got = narrow_setup.role_tags(
         "k3s", "k3s", "225de93f5^", "225de93f5", str(REPO), "ansible/k3s-bringup.yml"
     )
-    assert got == frozenset({"coredns", "longhorn", "longhorn_backup", "longhorn_r2"})
+    assert got == frozenset({"coredns"})
     err = capsys.readouterr().err
+    assert "narrow-setup: tasks/stale-checkout-guard.yml -> coredns\n" in err
     assert "narrow-setup: defaults/main.yml -> coredns\n" in err
     assert "narrow-setup: templates/coredns-corefile.j2 -> coredns\n" in err
