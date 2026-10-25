@@ -57,8 +57,7 @@ reachout_verdict() {
 # write_check_textfile CHECK SUCCESS VERDICT_TS DEADLINE_S [LINE...]
 # M3's producer metric contract (docs/target-architecture/monitoring/m3-textfile-timer.md): writes
 # $TEXTFILE_DIR/CHECK.prom with the four homelab_check_* series, then each LINE verbatim as a
-# detail series. TEXTFILE_DIR defaults to the real path; a test points it at a temp directory,
-# which ansible/tests/leakguard.py does for every child that inherits pytest's environment.
+# detail series. TEXTFILE_DIR defaults to the real path, so a test needs no root.
 # homelab_check_duration_seconds is CHECK_DURATION_S when the caller sets it, else bash's $SECONDS,
 # which counts from the start of the sourcing script: a cron or timer script's run time up to its
 # verdict, with no change to the caller (#6166). Atomic: mktemp's
