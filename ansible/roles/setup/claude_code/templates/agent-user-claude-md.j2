@@ -5,6 +5,17 @@
 You run as `{{ claude_code_agent_user }}`, a Unix user with no sudo, and you push to GitHub as
 `{{ claude_code_agent_github_login }}`. Only this user's sessions read this file; the operator's
 sessions do not.
+{% if claude_code_rootq_enabled %}
+
+## Read root-only host state with `rootq`, and never probe sudo
+
+Your one sudo grant is `rootq`, a read-only inspector. `rootq --help` lists its verbs: the
+nftables ruleset, `ufw status`, `sshd -T`, root's crontab, and `ls`, `stat` or `cat` of a path
+under an allowlisted directory such as `/etc/netplan` or `/usr/local/sbin`. It redacts
+assignments and withholds a file that holds a credential. You have no other sudo, so do not
+probe with `sudo -n true`, and do not hand the operator a `sudo` command to read a file that
+`rootq` can read.
+{% endif %}
 
 ## Name every worktree `{{ claude_code_agent_worktree_prefix }}/<slug>`
 

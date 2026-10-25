@@ -641,3 +641,16 @@ claude_code_takeover_check_flux_url: >-
   }}/flux_{{ claude_code_takeover_check_flux_version | replace('v', '', 1)
   }}_linux_amd64.tar.gz
 claude_code_takeover_check_flux_sha256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
+
+# ── The root inspector, `rootq` (issue #6323) ──────────────────────────────────────────────
+# A root-owned, read-only script that reads root-only host state (nft, ufw, sshd -T, root's
+# crontab, and ls, stat and cat of an allowlisted path set), granted to the users below through
+# one NOPASSWD sudoers line, with an unprivileged shim on PATH. True in daniel-box.yml and
+# daniel-server.yml. False removes the grant, the shim and the script, in that order. CLAUDE.md,
+# "The root inspector", has the grant and its limits.
+claude_code_rootq_enabled: false
+# The operator's account, and the agent user where this host builds one.
+claude_code_rootq_users: >-
+  {{ [sys_user] + ([claude_code_agent_user] if claude_code_agent_user_enabled else []) }}
+claude_code_rootq_script: /usr/local/sbin/homelab-rootq
+claude_code_rootq_shim: /usr/local/bin/rootq

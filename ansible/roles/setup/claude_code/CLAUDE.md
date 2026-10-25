@@ -324,3 +324,27 @@ only, where `claude_code_takeover_check_enabled` is true.
   role removes the sudoers file, the wrapper, the flux copy and the state directory, in that
   order.
 - **To widen who holds it,** add to `claude_code_takeover_check_users`; one line per user.
+
+## The root inspector
+
+`rootq` reads root-only host state for a session that has no general sudo. It runs
+`/usr/local/sbin/homelab-rootq` (`files/homelab_rootq.py`) as root, behind one `NOPASSWD`
+line in `/etc/sudoers.d/claude-rootq` (issue #6323). The operator approved the shape on
+2026-10-25 and reviews the grant before it lands. It exists where `claude_code_rootq_enabled`
+is true: daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
+and, where the host builds one, the agent user.
+
+- **What root runs:** `nft list ruleset`, `ufw status verbose`, `sshd -T`,
+  `crontab -l -u root`, and `ls -la --` or `stat --` of a checked path. `cat` reads the file
+  in-process. Every argv is written in `ansible/roles/setup/claude_code/files/homelab_rootq.py:COMMANDS`
+  and `ansible/roles/setup/claude_code/files/homelab_rootq.py:PATH_COMMANDS`, and no caller
+  flag reaches any of them.
+- **Which paths:** a path must resolve to itself, so a symlink, `..` or `//` is refused. It
+  must sit under a root in `ALLOW`, every directory above it must be root-owned and writable by
+  root alone, and it must miss every pattern in `DENY`. `cat` also refuses a file with a second
+  hard link. `/var/lib/gitops-deploy` is not a root, because `sys_user` owns it.
+- **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a
+  webhook URL, is withheld whole. In the rest, each `NAME=value` keeps its value only when the
+  value is a number, a duration, a boolean or an absolute path. Output stops at 256 KiB.
+- **To take it back:** set `claude_code_rootq_enabled: false` and apply the role. The role
+  removes the sudoers file, the shim and the script, in that order.

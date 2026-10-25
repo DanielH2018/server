@@ -570,6 +570,17 @@ The two_factor session also gets its own state file and is never a fallback for 
 `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as the repo user
 (code-server) and volume deletion (longhorn) behind every page load.
 
+## `rootq` — root-only host state, read-only
+
+`rootq VERB [PATH]` answers the questions a session without sudo used to guess at: the
+nftables ruleset, `ufw status verbose`, `sshd -T`, root's crontab, and `ls`, `stat` or `cat`
+of a path under a directory on its allowlist, such as `/etc/netplan`, `/etc/cron.d` or
+`/usr/local/sbin`. It runs a root-owned script through one `NOPASSWD` sudoers line. The
+script refuses a symlink, a path outside its allowlist and a hard-denied path, withholds output
+that holds a credential, and redacts assignment values. `rootq --help` lists the verbs.
+`ansible/roles/setup/claude_code/CLAUDE.md` (*The root inspector*) has the grant, its limits
+and how to take it back.
+
 ## `promtool`, `amtool`, `pint` and `lokitool` (`scripts/validate/alert_tools.sh`)
 
 The `validate-alert-rules` prek hook (`scripts/validate/alert_rules.py`) checks the alert

@@ -1,0 +1,13 @@
+{
+  "checksum": "e58f7a5a1c67bb0a089b5bdb04aeaba52faa3ac89ec91a96ddfef5038fbac5f5",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The root inspector",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/claude_code/files/homelab_rootq.py:COMMANDS": "1fe52bd37215fbe7d113af8deb75fc73b087c5c8d2e058907fd82b65b8fbf106",
+      "ansible/roles/setup/claude_code/files/homelab_rootq.py:PATH_COMMANDS": "37ba30b5df711d5dbcea2641fa17e5cfadb8bf5cc60a26a2a3ff19dae3cb6a17"
+    },
+    "python": "3.14",
+    "verified_sha": "4a1f8caa9"
+  }
+}
