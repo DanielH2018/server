@@ -814,15 +814,18 @@ has no cron. The slug rests on five pieces. PR 2 adds the first, and PR 4 adds t
 ### The series budget (C7)
 
 C7 has M1 set one series budget for the fleet. Each slice that adds a scrape job, a probe
-target or a label states its delta against it.
+target or a label states its delta against it. **The budget is stated in samples a second**
+(the operator's ruling on [#4756](https://github.com/DanielH2018/server/issues/4756),
+2026-10-25), because the bytes the 7 GB size cap limits follow samples, not head series.
 
-- **The budget reads a 7-day average, never an instant value.** `prometheus_tsdb_head_series`
-  counts every series in the head block, including the series that churned out since the
-  last head compaction. On 2026-10-12 its `min_over_time` and `max_over_time` over `[1d]` read
-  132,561 and 149,136, a swing of about 16,500 within one day. That swing is wider than any
-  slice's delta and wider than the headroom, so an instant read lands on either side of the
-  budget depending on the hour. The budget therefore reads
-  `avg_over_time(prometheus_tsdb_head_series[7d])`, which read 139,171 on 2026-10-12.
+- **The budget reads a 7-day rate, never an instant value.** It reads
+  `sum(rate(prometheus_tsdb_head_samples_appended_total[7d]))`. A shorter window swings with
+  a restart and a scrape-interval change, and an instant head-series count swings more:
+  `prometheus_tsdb_head_series` counts every series in the head block, including the series
+  that churned out since the last head compaction. On 2026-10-12 its `min_over_time` and
+  `max_over_time` over `[1d]` read 132,561 and 149,136, a swing of about 16,500 within one
+  day, wider than any slice's delta. Over the same days the head count rose while the sample
+  rate fell, which is why the head count stopped being the budget's unit.
 - **The reading.** On 2026-10-12 `prometheus_tsdb_storage_blocks_bytes` read 6.38 GB, and the
   store reached back 27.7 days. Over those days the head averaged 116,709 series
   (`avg_over_time(prometheus_tsdb_head_series[27d])`). The 2026-10-12 pillar review read
@@ -833,27 +836,31 @@ target or a label states its delta against it.
   got 1.66 kB, which understates the cost of a series. The model in the observability
   defaults' comment on the size cap predicts 219 MB a day, within 5%. Bytes scale with
   samples per second, so a series scraped every 15 seconds costs four times a 1-minute one.
-- **The budget is 140,000 head series.** Above the count the cap holds for 30 days, the
-  `observability_prometheus_retention` the role sets, the size cap binds before the time cap.
-  Retention then shrinks with nothing reporting it, as the `DECIDED` comment on the size cap
-  warns. That comment holds the cap near 58% of the 12 Gi claim, so raising the cap alone
-  does not raise the budget. At the 1.98 kB rate, the cap holds 30 days only up to about
-  125,000 average series, below the budget. That figure takes the cap in base-2 bytes, as
-  Prometheus reads `7GB` (7.52 × 10⁹ bytes), less the WAL's 0.18 GB. *Open questions* 9 carries that conflict to the
-  operator. The 2026-10-25 read there found that the size cap binds, and until the ruling the
-  budget stays 140,000.
-- **The headroom is about 800 series**, 140,000 less the 7-day average of 139,171 on
-  2026-10-12. The longest window a monitoring slice reads is convention 6's 168-hour soak,
-  which the cap covers at any count the plan reaches. The budget therefore protects the
+- **The budget is 2,000 samples a second.** Above that rate the size cap binds before the
+  30-day time cap, the `observability_prometheus_retention` the role sets. Retention then
+  shrinks with nothing reporting it, as the `DECIDED` comment on the size cap warns. The
+  figure is the samples model of *Open questions* 9: the store wrote about 1.44 bytes a
+  sample over 27 days, and at that cost the cap holds 30 days up to about 2,000 samples a
+  second, with the cap in base-2 bytes, as Prometheus reads `7GB` (7.52 × 10⁹ bytes), less the
+  WAL. The `DECIDED` comment holds the cap near 58% of the 12 Gi claim, so raising the cap
+  alone does not raise the budget. Until 2026-10-25 the budget was 140,000 head series, read
+  as a 7-day average.
+- **The headroom was about zero on 2026-10-25.** After #6332 and #6346 took the live
+  series from 148,552 to 103,664, `sum(rate(prometheus_tsdb_head_samples_appended_total[5m]))` read 2,033 a second,
+  down from 2,663 three hours earlier. The 7-day rate reaches the new level only once the
+  week before the cuts ages out, so the budget read in *Verification* stays red until about
+  2026-11-01. The longest window a monitoring slice reads is convention 6's 168-hour soak,
+  which the cap covers at any rate the plan reaches. The budget therefore protects the
   dashboards' 30-day history, not the soaks.
-- **How a slice states its delta.** Its *Complexity delta* gives the head series it adds, as
-  targets times series per target, with the scrape interval when it is not 1 minute. After
-  its deploy, its PR records a count of its own series, by a selector that matches only them:
-  `count({job="<job>"})` for a new scrape job, or `count(<family>)` before and after for a
-  label added to an existing family. The head-series total cannot resolve a delta, because
-  its daily swing is wider than any slice's. A delta that would cross the budget names its
+- **How a slice states its delta.** Its *Complexity delta* gives the samples a second it
+  adds: targets times series per target, divided by the scrape interval in seconds. A series
+  scraped every 15 seconds costs four times a 1-minute one. After its deploy, its PR records
+  a count of its own series, by a selector that matches only them: `count({job="<job>"})` for
+  a new scrape job, or `count(<family>)` before and after for a label added to an existing
+  family, and states the rate that count implies. The fleet total cannot resolve a delta,
+  because its swing is wider than any slice's. A delta that would cross the budget names its
   offset in the same slice: a dropped family, as `prometheus.yaml.j2` drops the `_bucket`
-  families, or a shorter label set.
+  families, a longer interval, or a shorter label set.
 - **M1's own delta.** PR 2's `alertmanager` scrape job adds one target's Go runtime,
   process and `alertmanager_*` families. `count({job="alertmanager"})` read 521 on
   2026-10-12, after PR 2's deploy. The rules add `ALERTS` series only while they fire, and
@@ -1149,15 +1156,15 @@ uv run python scripts/diagnostics/probe.py health observability
 uv run python scripts/diagnostics/probe.py metric 'kube_pod_start_time{namespace="observability"}'
 uv run python scripts/diagnostics/probe.py releases
 # The series budget (C7), and how far back the store reaches, in days
-uv run python scripts/diagnostics/probe.py metric 'avg_over_time(prometheus_tsdb_head_series[7d]) > 140000'
+uv run python scripts/diagnostics/probe.py metric 'sum(rate(prometheus_tsdb_head_samples_appended_total[7d])) > 2000'
 uv run python scripts/diagnostics/probe.py metric '(time() - prometheus_tsdb_lowest_timestamp_seconds) / 86400'
 ```
 
 The `AlertmanagerMetricsMissing` read must return nothing: the scrape works, so the alert is
-quiet. The series-budget read must return nothing too. The headroom is about 800 series, so
-fleet growth that is not M1's can turn that read red. A red read routes to *Open questions* 9
-and [#4756](https://github.com/DanielH2018/server/issues/4756), not to M1: M1's own delta is
-the `count({job="alertmanager"})` read. After PR 5's deploy, `probe.py releases` shows the `observability` record's
+quiet. The series-budget read must return nothing too. Fleet growth that is not M1's can
+turn that read red, and so can the week after a cut, until the 7-day window covers only the
+new rate. A red read routes to *Open questions* 9, not to M1: M1's own delta is the
+`count({job="alertmanager"})` read. After PR 5's deploy, `probe.py releases` shows the `observability` record's
 `rollouts[]` with `restart: true` for Alertmanager alone.
 
 **The scale-to-zero drill (operator-only, and it pages for real).** It runs after PR 4 deploys.
@@ -1250,8 +1257,8 @@ M2 depends on all of M1, so it runs before any family cuts over, while Kuma owns
   dropped.
 - The Watchdog's deadman row: the `every <N>s` pair in `cron_mismatches`, whose flagged half
   is `every 600s` against `timeout: 600`.
-- The series budget: the same `probe.py metric` read, 7-day average included, with a
-  threshold below the live reading, such as `> 100000`, returns the `prometheus` series. If that read returns nothing, the
+- The series budget: the same `probe.py metric` read, 7-day rate included, with a
+  threshold below the live reading, such as `> 1000`, returns a value. If that read returns nothing, the
   metric name has moved, and the budget read proves nothing until it is fixed.
 
 ## Rollback
@@ -1468,8 +1475,8 @@ Each risk names its class from `docs/failure-classes.md`.
   stabilise entries, `restart_secrets`. One fact,
   `observability_changed_secret_files`, read by three tasks. A seventh argument to
   `deadman_crons` and one branch in `cron_mismatches`. One test for the netpol probe table.
-  A series budget of 140,000 head series, read as a 7-day average, with two reads in
-  *Verification*. M1's own series delta is 521, from the `alertmanager` scrape job.
+  A series budget of 2,000 samples a second, read as a 7-day rate (140,000 head series until
+  #4756), with two reads in *Verification*. M1's own series delta is 521, from the `alertmanager` scrape job.
 - **Removed:** nothing yet. M1 is the foundation the removals in M2 to M6 stand on. PR 5
   removes a coupling: a Secret rotation restarts only the workloads that read that Secret. At
   `70591c307`, a rotation of Grafana's admin password also restarts Prometheus, and any Secret
@@ -1577,9 +1584,11 @@ Each risk names its class from `docs/failure-classes.md`.
       kubelet job drops those two on the control-plane node. After the bucket cut that removes
       25,130 series, about 420 samples a second at the 1-minute interval.
 
-   The operator also rules whether C7 restates the budget in samples a second
-   ([#4756](https://github.com/DanielH2018/server/issues/4756)). Both models predict that the
-   size cap binds, so this read does not settle that unit.
+   **Ruled on 2026-10-25: C7's budget is stated in samples a second**
+   ([#4756](https://github.com/DanielH2018/server/issues/4756)). It is 2,000 a second, read
+   as `sum(rate(prometheus_tsdb_head_samples_appended_total[7d]))`, the rate at which the
+   samples model above holds 30 days. *The series budget (C7)* states it, and the slices'
+   earlier head-series deltas stand as recorded.
 10. **A down Alertmanager pages 30 minutes in.** Kuma paged it 10 to 15 minutes in, and the
     Watchdog check's 600s period and 1200s grace page it up to 30 minutes in (RA-8).
     Recommendation: accept the 30 minutes, because a shorter check would page on most weekly
