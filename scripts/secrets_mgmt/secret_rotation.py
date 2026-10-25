@@ -132,9 +132,10 @@ def cmd_consumers(args) -> int:
     print("%s — %d consuming role(s):" % (args.name, len(consumers)))
     for role in sorted(consumers):
         plane = consumers[role]
-        note = (
-            "" if plane == "deploy" else "   [setup plane — deploy.sh cannot reach it]"
-        )
+        note = {
+            "deploy": "",
+            "host": "   [host package — operator-only host_secrets.py sync]",
+        }.get(plane, "   [setup plane — deploy.sh cannot reach it]")
         print("  %-22s %s%s" % (role, plane, note))
     print("\nTo make a rotation take effect:")
     for command in consumer_commands(args.name):

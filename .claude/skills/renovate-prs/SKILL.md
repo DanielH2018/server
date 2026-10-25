@@ -346,6 +346,8 @@ and an orphan branch appears in neither. Nothing else reports it, so census it h
 uv run python scripts/dev/renovate_branch_sweep.py            # the orphan list, report only
 ```
 
+The report ends with the exact `--prune` command for the branches it listed.
+
 Both of its readings are deliberately wider than the markers and authors seen on any one day
 (#1629). The dashboard match is `[a-z-]+-branch=` rather than the three verbs issue #3 happened
 to carry, because Renovate emits other section markers with their own `<verb>-branch=` prefix
@@ -377,8 +379,12 @@ branch writes — then read that key's value **on master**, because a three-dot 
 
 **Report the list; never delete a branch.** A branch with no PR is not proof the work on it is
 gone, and a sweep is the operator's call. When the operator asks for one,
-`renovate_branch_sweep.py --prune` runs `git push origin --delete <branch>` per orphan, and
-that is the whole of it. Do not reach for a config
+`renovate_branch_sweep.py --prune <branch> [<branch> ...]` runs `git push origin --delete
+<branch>` for each branch you name, and that is the whole of it. Name only the branches you
+classified: `--prune` re-runs the census and deletes a named branch only while it is still an
+orphan, so a branch that gained a PR or dashboard entry since the report is skipped with a line
+saying so (exit 0), and a branch orphaned since the report is never deleted unseen. A bare
+`--prune` is a usage error (exit 64). Do not reach for a config
 fix instead: Renovate's own `pruneStaleBranches` defaults to true and should already remove an
 orphan branch it created, and why it has not here is undetermined — the Mend hosted run log is
 not readable from a session, the same limit §0 names. Name the orphan list in the run's

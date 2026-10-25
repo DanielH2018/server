@@ -60,7 +60,7 @@ def test_the_real_project_passes_every_census_with_docker_proxy_in_it(package):
     assert memory_problems(project) == []
     assert bind_problems(project, listed)[0] == []
     assert "/home/ubuntu/server/containers/docker-proxy" in listed
-    assert not any("env_file" in i for i in project["includes"])
+    assert all("env_file" in i for i in project["includes"])
 
 
 def test_the_proxies_join_the_networks_the_ansible_era_containers_use(package):
