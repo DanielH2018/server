@@ -77,10 +77,10 @@ jobs:
           kind_sha256=$(awk '/KIND_SHA256:/ {print $2; exit}' .github/workflows/ci.yml)
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ] && [ -n "$kind_version" ] && [ -n "$kind_sha256" ]
           mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/sops" \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/sops" \
             "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
           echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict
-          curl --retry 3 -fsSLo "$RUNNER_TEMP/bin/kind" \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/kind" \
             "https://github.com/kubernetes-sigs/kind/releases/download/$kind_version/kind-linux-amd64"
           echo "$kind_sha256  $RUNNER_TEMP/bin/kind" | sha256sum -c --strict
           chmod +x "$RUNNER_TEMP/bin/sops" "$RUNNER_TEMP/bin/kind"
