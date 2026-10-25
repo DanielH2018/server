@@ -584,7 +584,7 @@
  "ansible/tests/repo/test_xdist_width.py": 0.0,
  "ansible/tests/services/test_alert_history_board_parses_the_bridge_down_line.py": 0.0,
  "ansible/tests/services/test_alertmanager_reboot_mute.py": 0.42,
- "ansible/tests/services/test_alertmanager_routing.py": 1.16,
+ "ansible/tests/services/test_alertmanager_routing.py": 8.7,
  "ansible/tests/services/test_alloy_pi_config_labels.py": 0.0,
  "ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py": 0.0,
  "ansible/tests/services/test_alloy_pi_http_surface.py": 0.0,
