@@ -1,8 +1,8 @@
 """The real Pi package runs the canary through the Compose project (H5.2b).
 
 The censuses in `test_pi_compose_census.py` run over fixture services. This file runs them over
-the real render of `hosts/daniel-pi/package.yml`, whose only service is `pi-canary`: the first
-service the package runs. The canary reads no secret, so the package declares no `compose.env`
+the real render of `hosts/daniel-pi/package.yml`, which runs `pi-canary` (H5.2b) and, since H5.6,
+`docker-proxy`. The canary reads no secret, so the package declares no `compose.env`
 output and the include names no `env_file:` (operator ruling 2026-10-24, h5-pi-compose.md
 *Open questions* 7).
 
@@ -66,7 +66,10 @@ def test_every_packaged_compose_file_asks_the_daemon_for_at_least_6_mib(package)
 
 def test_the_canary_reads_no_secret_and_gets_the_domain_at_build_time(package):
     includes = project_of(package)["includes"]
-    assert [i["path"] for i in includes] == [f"{COMPOSE}/pi-canary/compose.yaml"]
+    assert [i["path"] for i in includes] == [
+        f"{COMPOSE}/docker-proxy/compose.yaml",
+        f"{COMPOSE}/pi-canary/compose.yaml",
+    ]
     assert not any("env_file" in i for i in includes)
     assert not [o for o in package.outputs if o["destination"].endswith("compose.env")]
     body = text(package, f"{COMPOSE}/pi-canary/compose.yaml")

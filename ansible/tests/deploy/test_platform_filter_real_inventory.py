@@ -13,9 +13,12 @@ gaining `platform: k8s`, which is exactly what the assertions check for.
 Run: uv run pytest ansible/tests/deploy/test_platform_filter_real_inventory.py
 """
 
+import functools
+
 import pytest
 from lib import yaml_fast
 
+from renderer.renderer_lib import host as host_mode
 from toposort import filter_by_platform
 from _helpers import HOST_VARS
 
@@ -66,29 +69,100 @@ def test_daniel_server_is_fully_drained():
     assert filter_by_platform(containers, "k8s") == []
 
 
-# The Docker play deploys in containers_list order, with no dependency resolution, so the Pi's
-# list order IS its deploy order. Each pair is (upstream, downstream): autoheal restarts
-# containers through docker-proxy-lifecycle, and alloy discovers logs through docker-proxy.
+# The Docker play deploys containers_list in order, and the package's Compose project (H5) runs
+# `compose_services` through homelab-compose.service, independent of the play. Each pair is
+# (upstream, downstream): autoheal restarts containers through docker-proxy-lifecycle, and alloy
+# discovers logs through docker-proxy. From H5.6 an upstream moves no later than its downstream:
+#   - both in containers_list: the upstream is listed first (the play's order);
+#   - the upstream in compose_services: the downstream is in either key, and a downstream that is
+#     also in compose_services carries `depends_on` on the service it reaches;
+#   - the upstream in containers_list and the downstream in compose_services is a violation.
 PI_ORDERING = [("docker-proxy", "autoheal"), ("docker-proxy", "alloy")]
+# What a packaged downstream's `depends_on` must name.
+PI_DEPENDS_ON = {"autoheal": "docker-proxy-lifecycle", "alloy": "docker-proxy"}
+COMPOSE = "/usr/lib/homelab/compose"
 
 
-def _order_violations(names, edges):
-    return [
-        (up, down)
-        for up, down in edges
-        if up not in names or down not in names or names.index(up) > names.index(down)
-    ]
+def _order_violations(listed, packaged, edges, depends_on=None):
+    """Edges whose upstream is absent, later than its downstream, or in the wrong key.
+
+    Args:
+        listed: Names in the Pi's `containers_list`, in play order.
+        packaged: Names in its `compose_services`.
+        edges: (upstream, downstream) pairs.
+        depends_on: Maps a downstream in `packaged` to the `depends_on` names its service file
+            declares; None skips that check.
+    """
+    out = []
+    for up, down in edges:
+        if up in packaged:
+            if down not in listed and down not in packaged:
+                out.append((up, down))
+            elif down in packaged and depends_on is not None:
+                if PI_DEPENDS_ON[down] not in depends_on.get(down, ()):
+                    out.append((up, down))
+        elif up in listed and down in listed:
+            if listed.index(up) > listed.index(down):
+                out.append((up, down))
+        else:
+            out.append((up, down))
+    return out
 
 
-def test_daniel_pi_lists_every_upstream_before_its_downstream():
-    names = [
-        c["name"] for c in filter_by_platform(_containers(HOST_VARS / "daniel-pi.yml"))
-    ]
+def _pi_lists():
+    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    listed = [c["name"] for c in filter_by_platform(pi.get("containers_list") or [])]
+    return listed, [c["name"] for c in pi.get("compose_services") or []]
 
-    assert _order_violations(names, PI_ORDERING) == []
+
+@functools.cache
+def _packaged_services():
+    """Every service of the Pi's rendered Compose project, by name."""
+    package = host_mode.render_host("daniel-pi")
+    top = yaml_fast.safe_load(package.files[f"{COMPOSE}/compose.yaml"][0].decode())
+    services = {}
+    for include in top["include"]:
+        body = yaml_fast.safe_load(package.files[include["path"]][0].decode())
+        services |= body["services"]
+    return services
+
+
+def _service_depends_on(name):
+    # A list or a mapping keyed by service name; iterating either yields the names.
+    return list(_packaged_services()[name].get("depends_on") or [])
+
+
+def test_daniel_pi_moves_every_upstream_no_later_than_its_downstream():
+    listed, packaged = _pi_lists()
+    depends = {n: _service_depends_on(n) for n in packaged if n in PI_DEPENDS_ON}
+
+    assert _order_violations(listed, packaged, PI_ORDERING, depends) == []
+
+
+def test_the_census_finds_docker_proxy_packaged_and_its_downstreams_listed():
+    listed, packaged = _pi_lists()
+
+    assert "docker-proxy" in packaged
+    assert {"autoheal", "alloy"} <= set(listed)
 
 
 def test_an_upstream_listed_after_its_downstream_is_a_violation():
     names = ["autoheal", "docker-proxy", "alloy"]
 
-    assert _order_violations(names, PI_ORDERING) == [("docker-proxy", "autoheal")]
+    assert _order_violations(names, [], PI_ORDERING) == [("docker-proxy", "autoheal")]
+
+
+def test_an_upstream_left_in_the_list_while_its_downstream_moves_is_a_violation():
+    assert _order_violations(["docker-proxy"], ["autoheal", "alloy"], PI_ORDERING) == [
+        ("docker-proxy", "autoheal"),
+        ("docker-proxy", "alloy"),
+    ]
+
+
+def test_a_packaged_downstream_without_depends_on_its_upstream_is_a_violation():
+    packaged = ["docker-proxy", "autoheal"]
+    edge = PI_ORDERING[:1]
+
+    assert _order_violations([], packaged, edge, {"autoheal": []}) == edge
+    wired = {"autoheal": ["docker-proxy-lifecycle"]}
+    assert _order_violations([], packaged, edge, wired) == []
