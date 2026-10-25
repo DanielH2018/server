@@ -133,7 +133,7 @@ def _volume_shards() -> tuple[str, list[str]]:
         tiers["k3s_longhorn_nobackup_volumes"],
         estate.group_vars["k8s_namespace"],
     ), [
-        "ansible/roles/setup/k3s/defaults/main.yml",
+        "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml",
         "ansible/inventory/host_vars/daniel-box.yml",
     ]
 

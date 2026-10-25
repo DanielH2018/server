@@ -14,6 +14,7 @@ Run: uv run pytest scripts/dev/tests/test_new_k8s_service.py
 
 import pytest
 
+import gen_role_glance
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 from lib.k8s_roles import (
@@ -158,6 +159,12 @@ def test_the_doc_leaves_the_glance_facts_to_the_generator(args):
     assert "ingressroute-default.yaml.j2" in prose
     unrouted = scaffold.role_doc(args.name, route=False)
     assert "ingressroute-default.yaml.j2" not in unrouted
+
+
+def test_the_doc_opens_its_block_with_the_generators_banner(args):
+    """A banner the generator would rewrite fails the role's first commit once."""
+    doc = scaffold.role_doc(args.name, route=True)
+    assert gen_role_glance.BEGIN in doc.splitlines()
 
 
 def test_the_entry_earns_the_shared_defaults_without_a_template(args, tmp_path):
