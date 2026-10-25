@@ -407,6 +407,15 @@ swapoff was killed half-way, the device stayed active at the old size, the start
 with the device still in use, the unit read `failed`, and 150 MB of swap sat on the SD card at
 memory PSI `full avg60` 42% until a reboot. The task comment carries the numbers.
 
+## Unattended compose pull (H5.4)
+
+Measured when the Pi's unattended updater pulls the `pi-canary` image bumped in the H5.4 PR. The values are filled in after that run (`docs/target-architecture/host/h5-pi-compose.md`, H5.4). The four figures:
+
+- Highest 5-minute memory PSI `full` over the run: not yet measured.
+- Lowest `MemAvailable` over the run, and the lowest over the 24 hours before its start: not yet measured.
+- Highest 5-minute swap-in rate over the run, beside alloy's 136-181/s daily rate: not yet measured.
+- The run's duration: not yet measured.
+
 ## See also
 
 - `ansible/roles/setup/optimize_pi/CLAUDE.md` — the rules, the granular tags and the
