@@ -20,6 +20,7 @@ from diagnostics.probe_lib import health, health_alerts
 from diagnostics.probe_lib.health_cronjob import declared_suspended, format_suspended
 from diagnostics.probe_lib.health_render import rendered_docs
 from lib.kubectl import Tools
+from _probe_health_fixtures import current_checkout
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
 NAME = "homelab/longhorn-restore-drill"
@@ -111,6 +112,7 @@ def _run(cronjob):
         served="prod",
         tools=_tools(cronjob),
         prom=_QUIET,
+        stale_reason=current_checkout,
     )
 
 
