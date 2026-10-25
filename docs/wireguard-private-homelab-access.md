@@ -40,8 +40,9 @@ Pi-hole's `local.<domain>` wildcard answers the cluster ingress VIP for everythi
   every `.local` name.
 - The hosts-file option in A3 and the `AllowedIPs` narrowing in A2 (the two places that name IPs by
   hand) need **`10.0.0.240`**, plus `10.0.0.243` if you point at Pi-hole.
-- `daniel-pi` runs a second, **LAN-only** wg-easy on `51822/udp`. It is deliberately not forwarded
-  and is not the endpoint above, so don't point a remote client at it.
+- `daniel-pi` runs a second wg-easy on `51822/udp`, and the router forwards that port to the Pi.
+  It is the backup way in when the cluster's endpoint above is down, not the endpoint to give
+  a client by default. Its admin UI on `51821/tcp` stays LAN-only.
 
 ---
 
@@ -296,20 +297,16 @@ from a LAN session and are **operator-only**. An agent does not run them.
     - The `sha256sum` of step 2 prints the same two hashes, and the peer count is unchanged.
     - `systemctl is-active homelab-updater.timer` prints `active`.
 5. **Connect a client through the Pi's endpoint.** Use a client config that the Pi's instance
-   generated before the move.
-    - If the router forwards `51822/udp` to the Pi, connect from outside the LAN, such as a
-      phone on cellular data.
-    - If the router does not forward it, connect from a LAN client and set the config's
-      `Endpoint` to the Pi's LAN address and port `51822`. The client then proves only the
-      handshake, so step 6 reads the handshake on the Pi.
+   generated before the move, and connect from outside the LAN, such as a phone on cellular
+   data. The router forwards `51822/udp` to the Pi, so this proves the path a remote client
+   takes.
 6. **Read the handshake on the Pi.** Run `docker exec wg-easy wg show wg0`. The peer in use
    shows a `latest handshake` of seconds ago and non-zero `transfer` counters. Record those two
    lines only, and redact the keys.
 7. **Reach a LAN-only service through the tunnel.** With the client from step 5 connected from
    outside the LAN, open a service that only the LAN reaches, such as the Pi's admin UI at
    the Pi's LAN address on port `51821`, or `https://<name>.local.<domain>` if the config's
-   DNS and `AllowedIPs` cover it. The page loads. On a LAN client this step proves nothing,
-   so record it as skipped.
+   DNS and `AllowedIPs` cover it. The page loads.
 8. **Record the output** of steps 4, 6 and 7 in the PR body or the landing note.
 
 If a step fails, restore the old project from the LAN: revert the move PR, wait for the Pi to
