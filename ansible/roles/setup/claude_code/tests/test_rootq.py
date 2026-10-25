@@ -359,6 +359,23 @@ def test_every_listed_path_is_admitted(rig, capsys, live) -> None:
     assert (rc, out) == (0, hashlib.sha256(b"hello\n").hexdigest() + "\n")
 
 
+# The root-only files `probe.py applied claude_code` read as `unread` on 2026-10-25 that
+# PATHS does not yet admit (#6357). The neighbour is a polkit rule the role does not install.
+POLKIT_RULES = [
+    "/etc/polkit-1/rules.d/50-claude-fanout-alert.rules",
+    "/etc/polkit-1/rules.d/50-claude-land.rules",
+    "/etc/polkit-1/rules.d/50-claude-triage.rules",
+]
+
+
+@pytest.mark.parametrize("live", POLKIT_RULES)
+def test_a_claude_polkit_rule_is_admitted_and_its_neighbour_is_not(rig, capsys, live):
+    rc, out, _ = run(rig, capsys, "sha256", rig.file(live))
+    assert (rc, out) == (0, hashlib.sha256(b"hello\n").hexdigest() + "\n")
+    neighbour = rig.file("/etc/polkit-1/rules.d/49-ubuntu-admin.rules")
+    assert_refused(run(rig, capsys, "sha256", neighbour), rig, "not on the allowlist")
+
+
 @pytest.mark.parametrize(
     "verb, output, logged",
     [
