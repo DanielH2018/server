@@ -1027,6 +1027,8 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       controller's `SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT` is 99 (*Open questions* 16), so a
       failing pod retries until the Job deadline, and the red would otherwise arrive at 3600
       seconds. The rehearsal measured 5m5s to red, which matches the 300-second deadline.
+    - **Production drill run 2026-10-25, merged 00:37 UTC; results recorded in the
+      follow-up.**
     - **Blast radius.**
         - Objects: the drill Plan, and its Job and pods in `system-upgrade` on daniel-box.
           The pod runs privileged with the host's root mounted, and exits 1 without

@@ -14,7 +14,6 @@ import re
 import shutil
 
 import pytest
-from _k8s_render import render_role_template
 from _mini_cel import CelError, evaluate
 
 from lib import yaml_fast
@@ -155,10 +154,16 @@ OBSERVED_MESSAGE = (
 )
 
 
+# The drill Plan as it ran on 2026-10-25, reduced to what the tests below read. It is a fixture
+# because the Plan was reverted after the drill, so no template renders it.
+DRILL_PLAN = {
+    "metadata": {"name": "k3s-redproof", "namespace": "system-upgrade"},
+    "spec": {"jobActiveDeadlineSecs": 300},
+}
+
+
 def _drill() -> dict:
-    return yaml_fast.safe_load(
-        render_role_template("system-upgrade", "plan-k3s-redproof.yaml.j2")
-    )
+    return DRILL_PLAN
 
 
 def test_the_observed_red_names_the_drill_plan_and_the_failed_expression():
