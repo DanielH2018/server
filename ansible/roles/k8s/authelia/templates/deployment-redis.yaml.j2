@@ -43,6 +43,7 @@ spec:
       containers:
         - name: redis
           image: {{ authelia_k8s_redis_image }}
+          imagePullPolicy: IfNotPresent
           # The password reaches redis through the config FILE, never through argv — a
           # `--requirepass` here would be readable in `ps` from inside the pod and in any
           # `kubectl describe` of it. That file carries the memory bounds too; the role

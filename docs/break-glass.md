@@ -98,6 +98,21 @@ otherwise; none of the values below are secrets themselves, only names and locat
    saved as image archives and refreshed with the bundle, for a rebuilt cluster that cannot
    reach GHCR.
    Source: `docs/longhorn-disaster-recovery.md` ("The off-site recovery kit").
+    - **The offline bootstrap files.** `sudo hosts/bootstrap-host.sh <host> --offline <kit-dir>`
+      reads every fetch from one directory and checks each file against the pin the download
+      path checks. A file that is missing or differs from its pin stops the script and names
+      the file. The directory holds, for the node's architecture:
+        - `install.sh` at `K3S_VERSION`, whose sha256 is `K3S_INSTALL_SHA256` in the script;
+        - the `k3s` binary (`k3s-arm64` on arm64) and the release's `sha256sum-<arch>.txt`;
+        - the `nfpm` and `uv` archives that the script's pins name:
+          `nfpm_<version>_Linux_x86_64.tar.gz` and `uv-x86_64-unknown-linux-gnu.tar.gz` on
+          amd64, or the arm64 files the same pins name;
+        - `tools-cache/`, the files that `homelab-tools`' `tools.json` pins, each named by its
+          sha256, which the build reads instead of downloading;
+        - `uv-cache/` and `uv-python/`, uv's package cache and the interpreter at
+          `host_python_version`, which `uv run --offline` reads.
+      Refresh these files whenever the pins move. With `--local-build`, the script prints that
+      the clone is unchecked, because it makes neither GitHub read.
 
 9. **The host-package archive signing key.** The `homelab_builder` role generated it once on
    daniel-box (H3), and the `builder` component has run the builder since H7.41b. The key sits in

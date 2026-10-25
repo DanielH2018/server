@@ -7,6 +7,7 @@ render, so the fixtures below stand in for both; the operator adds the real ones
 
 import json
 import re
+import shutil
 
 import jinja2
 import pytest
@@ -182,3 +183,35 @@ def test_a_top_level_module_is_a_valid_lib_entry(name):
 def test_a_lib_entry_outside_the_grammar_is_refused(name):
     with pytest.raises(RenderRefused):
         lib_source(REPO / "hosts/lib", name)
+
+
+UPDATER_LINK = f"{SYSTEM}timers.target.wants/homelab-updater.timer"
+
+
+def test_daniel_box_arms_the_updater_timer(package):
+    # #6218: without the link, every daniel-box package change waits for a hand start.
+    assert package.links[UPDATER_LINK] == "../homelab-updater.timer"
+
+
+def test_a_daniel_box_package_without_the_link_leaves_the_updater_unarmed(tmp_path):
+    hosts = tmp_path / "hosts"
+    shutil.copytree(REPO / "hosts", hosts)
+    # Sources outside hosts/ resolve against the root's parent.
+    for name in ("ansible", "scripts", "docs"):
+        (tmp_path / name).symlink_to(REPO / name)
+    spec_path = hosts / "daniel-box/package.yml"
+    spec = yaml.safe_load(spec_path.read_text())
+    del spec["enable"]["homelab-updater.timer"]
+    spec_path.write_text(yaml.safe_dump(spec))
+    (tmp_path / "secrets.yml").write_text(_KEYS)
+    (tmp_path / "sops").mkdir()
+    (tmp_path / "sops/daniel-box.sops.yaml").write_text(_KEYS)
+
+    unarmed = host_mode.render_host(
+        "daniel-box",
+        hosts,
+        secrets=tmp_path / "secrets.yml",
+        sops_dir=tmp_path / "sops",
+    )
+
+    assert UPDATER_LINK not in unarmed.links

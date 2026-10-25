@@ -220,9 +220,10 @@ kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recove
 # It goes to a FILE rather than to `logger`, because daniel-pi ships no journal: rsyslog is
 # masked here on purpose (see the debloat section of optimize_pi's tasks — journald is the log
 # of record, and a second text logger would write into the RAM-backed /var/log), and the
-# Pi's promtail scrapes only container logs. `logger` would reach the local journal and stop.
-# The Pi's promtail tails this path under `job="syslog"` instead, matching the label the
-# server's own syslog stream carries so one parser reads both estates.
+# Pi's Alloy (roles/containers/alloy/) ships container logs and /var/log/pi-health/*.log, never
+# the journal. `logger` would reach the local journal and stop. Alloy tails this path under
+# `job="syslog"` instead, matching the label the server's own syslog stream carries so one
+# parser reads both estates.
 #
 # The LINE SHAPE is load-bearing: `_SYSLOG_LINE_RE` wants exactly two whitespace-free tokens
 # before the tag. `date -Is` is one token; traditional syslog format ("Aug 29 19:12:26 host")

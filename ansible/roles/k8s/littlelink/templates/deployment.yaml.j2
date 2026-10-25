@@ -28,6 +28,7 @@ spec:
       containers:
         - name: littlelink
           image: {{ littlelink_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true) }}

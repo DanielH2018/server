@@ -9,6 +9,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_await_ci.py
 """
 
 import await_ci
+import pytest
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 
@@ -243,6 +244,56 @@ def _wait_on_dropped(suites, descendant_runs, late_runs=None):
         fetch_suites=lambda _s: suites,
         descendants=lambda _s: ["next"],
     )
+
+
+def _requests_for_a_wait(interval, walk_descendants, suites=()):
+    """(exit code, GitHub requests) for land.sh's 1200s wait on a SHA that never goes green.
+
+    With no `suites` GitHub never ran CI for the SHA. Ten descendants stay pending throughout,
+    the worst case for the descendant walk. A queued Actions suite is instead a run that
+    never registers, the worst case for a wait that walks nothing.
+    """
+    now = [0]
+    requests = [0]
+
+    def read(_sha):
+        requests[0] += 1
+        return []
+
+    def read_suites(_sha):
+        requests[0] += 1
+        return list(suites)
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    code, _msg = await_ci.wait(
+        "old",
+        1200,
+        interval,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=read,
+        fetch_suites=read_suites,
+        descendants=lambda _s: [f"d{i}" for i in range(await_ci.DESCENDANT_LIMIT)],
+        fetch_tip=lambda: "d9",
+        walk_descendants=walk_descendants,
+    )
+    return code, requests[0]
+
+
+@pytest.mark.parametrize("suites", [(), (_actions_suite("queued"),)])
+def test_an_anonymous_wait_stays_well_under_the_hourly_quota(suites):
+    """#6148: an anonymous host shares 60 requests an hour with the deployer's gate."""
+    code, requests = _requests_for_a_wait(await_ci.ANONYMOUS_INTERVAL_S, False, suites)
+    assert code == 75
+    assert requests <= 30
+
+
+def test_the_descendant_walk_alone_spends_the_anonymous_quota():
+    """The reject half: at the same interval, walking descendants costs more than 60."""
+    _code, requests = _requests_for_a_wait(await_ci.ANONYMOUS_INTERVAL_S, True)
+    assert requests > 60
 
 
 def test_wait_takes_a_green_descendant_of_a_dropped_push():

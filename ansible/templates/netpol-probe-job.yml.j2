@@ -45,6 +45,7 @@ spec:
       containers:
         - name: probe
           image: {{ image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c

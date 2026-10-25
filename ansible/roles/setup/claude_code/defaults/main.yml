@@ -572,10 +572,10 @@ claude_code_artifacts_node: "{{ k8s_primary_node }}"
 # pull direction, on a timer. A session on daniel-box mounts its own tree and never waits.
 claude_code_artifacts_sync_minute: "*/5"
 
-# Consecutive failed runs before sync-artifacts.sh writes to stderr, which is what cron mails.
-# 12 runs at the interval above is an hour of a peer being unreachable. Below it the failure goes
-# to the journal alone (`journalctl -t sync-artifacts`), because daniel-server being off is the
-# ordinary case and mailing each run would bury the spool.
+# Consecutive failed runs before sync-artifacts.sh writes its once-per-outage line to stderr,
+# which the cron pipes to the journal under the same tag. 12 runs at the interval above is an
+# hour of a peer being unreachable. Below it each failure writes only its per-run journal line
+# (`journalctl -t sync-artifacts`), because daniel-server being off is the ordinary case.
 claude_code_artifacts_sync_alert_after_failures: 12
 
 # Hosts whose artifacts are PULLED onto the artifacts node, because it is the only side that can

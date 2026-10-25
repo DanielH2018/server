@@ -37,6 +37,10 @@ credentials:
   - k3s_readonly_token
   - ups_secondary_push_token
 maintainer_scripts: [preinst, postinst, prerm]
+# #6218: arms the shared updater schedule here, as daniel-server and the Pi do. daniel-box ships
+# no drop-in on the timer. See docs/target-architecture/host/h6-k3s-suc.md, H6.2's amendment.
+enable:
+  homelab-updater.timer: timers.target
 # H7.24a: nfpm, for the builder this host runs.
 depends:
   - homelab-tools

@@ -25,6 +25,7 @@ spec:
       containers:
         - name: janitorr
           image: {{ janitorr_k8s_image }}
+          imagePullPolicy: IfNotPresent
           env:
             - name: TZ
               value: "{{ tz }}"

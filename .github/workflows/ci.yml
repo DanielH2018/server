@@ -466,6 +466,13 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/cluster_pins.py --base HEAD^1
 
+      # The k3s version and its binary sum move together (H6.3e). The `binary` gate mode
+      # compares each node's binary with the sum, so a bump that keeps the old one is refused.
+      - name: k3s binary sum co-change
+        if: github.event_name == 'pull_request'
+        timeout-minutes: 2
+        run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
+
   # ansible-lint alone. It is the biggest single piece of the hook sweep — 106s against 26s for
   # all twenty other hooks together, measured on daniel-server — so it gets the job
   # and `hooks` gets the remainder. The reasoning and the numbers are in the DECIDED block
@@ -670,7 +677,9 @@ jobs:
       # The gate below fails a pull request only for a module the PR's diff adds or changes
       # (#5480). The diff is read here, before the suite runs, because the suite's tests write
       # git state of their own. Only `changed.txt` is read: a deletion's full-sweep rule is
-      # about which files a hook checks, not about who can re-record a weight.
+      # about which files a hook checks, not about who can re-record a weight. The weight table
+      # at the merge base is read here for the same reason: it lets the gate tell a table edit
+      # that only drops retired modules' rows from one that wrote a row (#5989).
       - name: Collect this PR's changed files
         if: github.event_name == 'pull_request'
         env:
@@ -679,6 +688,8 @@ jobs:
         run: |
           set -euo pipefail
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
+          base=$(git merge-base "origin/$BASE_REF" HEAD)
+          git show "$base:scripts/dev/pytest_shard_weights.json" > "$RUNNER_TEMP/base_weights.json"
 
       - name: Run the test suite
         run: |
@@ -718,8 +729,10 @@ jobs:
       # (`--changed-files`). A module outside the diff annotates, because its author is not the
       # one reading the run and the docs-refresh cron re-records it: 4 of 16 gate failures in
       # two days named such a module (#5480). A PR that changes the weight table or the gate's
-      # code fails on every module, because it wrote every row the gate reads. A dispatch has
-      # no base to diff, so it fails on every module too.
+      # code fails on every module, because it wrote every row the gate reads. A table change
+      # that only drops the rows of modules the tree no longer holds is the exception: every PR
+      # that retires a module makes one, and it wrote no row (#5989). A dispatch has no base to
+      # diff, so it fails on every module too.
       - name: Check every heavy module's recorded weight
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
@@ -728,6 +741,7 @@ jobs:
           mode=()
           if [ "$EVENT" = push ] || [ "$EVENT" = merge_group ]; then mode=(--warn-only); fi
           if [ "$EVENT" = pull_request ]; then mode=(--changed-files "$RUNNER_TEMP/changed.txt"); fi
+          if [ "$EVENT" = pull_request ]; then mode+=(--base-weights "$RUNNER_TEMP/base_weights.json"); fi
           uv run python scripts/dev/pytest_shard.py "${mode[@]}" \
             --check-durations "$RUNNER_TEMP/durations.log"
 
@@ -1160,10 +1174,12 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
           CASE_INPUTS: |
+            hosts/bootstrap-host.sh
             hosts/lib/tests/container/
             scripts/validate/host_package_cases.py
             scripts/validate/host_packages.py
             scripts/validate/validate_lib/host_container.py
+            scripts/validate/validate_lib/bootstrap_case.py
             scripts/validate/validate_lib/conffile_case.py
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/package_roots.py
@@ -1361,8 +1377,9 @@ jobs:
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
     runs-on: ubuntu-26.04
     # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
-    # apt's retries can take minutes, and the cases boot three containers per leg.
-    timeout-minutes: 30
+    # apt's retries can take minutes. Each leg boots a container per case, and four of the
+    # bootstrap cases render and build the host packages from a clone (H7.15a).
+    timeout-minutes: 45
     strategy:
       # Each leg reports its own conclusion, so one release's failure does not hide the other's.
       fail-fast: false

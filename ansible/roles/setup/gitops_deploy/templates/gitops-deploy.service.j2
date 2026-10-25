@@ -127,10 +127,11 @@ ExecStart=/usr/bin/flock -w 180 -E 75 {{ server_git_tree_lock }} /usr/local/bin/
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
 
 # 2026-08-23b review M12. SuccessExitStatus=75 above is the right call, but it also removed the
-# last on-host trace of contention: a 75 tick logs only "Deactivated successfully" at info, and
-# initial_setup/tasks/system-tuning.yml:27-28 sets MaxLevelStore=notice AND MaxLevelSyslog=notice
-# — so that line reaches neither the journal nor /var/log/syslog, and therefore never reaches
-# Loki's job="syslog" stream either. ExecStopPost= is the only hook that sees $EXIT_STATUS
+# last on-host trace of contention: a 75 tick logs only "Deactivated successfully" at info.
+# initial_setup/tasks/system-tuning.yml sets MaxLevelStore=notice, so the journal drops it.
+# It sets MaxLevelSyslog=info, but its rsyslog info filter (49-homelab-info-filter.conf) stops
+# every info line outside auth, authpriv, kern and mail. So that line reaches neither the
+# journal nor /var/log/syslog, and therefore never reaches Loki's job="syslog" stream either. ExecStopPost= is the only hook that sees $EXIT_STATUS
 # (ExecStartPost= genuinely cannot), and SyslogLevel=notice above puts this line at PRIORITY=5,
 # above both caps. This restores the forensic record without re-arming the false OnFailure pages
 # the DECIDED block above rejects — the unit still succeeds and OnFailure still cannot fire.

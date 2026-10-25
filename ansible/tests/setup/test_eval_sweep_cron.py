@@ -86,9 +86,14 @@ def _run_script(tmp_path, key_text: str | None):
 
     The caller's environment carries another key, so the credential file is the ONLY place a key
     can come from. A script that kept an inherited key gets past the gate with no credential.
+
+    `TEXTFILE_DIR` points the exit hook's textfile at `tmp_path`. The child's environment is
+    built here rather than inherited, so leakguard's default does not reach it, and without
+    this the write lands in the host's real node_exporter directory (#6191).
     """
     creds = tmp_path / "creds"
     creds.mkdir()
+    (tmp_path / "textfile").mkdir()
     if key_text is not None:
         (creds / KEY_VAR).write_text(key_text)
     script = tmp_path / "eval-run.sh"
@@ -110,6 +115,7 @@ def _run_script(tmp_path, key_text: str | None):
             "HOME": str(tmp_path),
             "CREDENTIALS_DIRECTORY": str(creds),
             "ANTHROPIC_API_KEY": "inherited-from-the-caller",
+            "TEXTFILE_DIR": str(tmp_path / "textfile"),
         },
         stub_bin=fake_bin(tmp_path / "bin", logger='printf "%s\\n" "$*"\n'),
     )
@@ -122,6 +128,8 @@ def test_a_run_with_no_credential_is_a_no_op_reporting_up(tmp_path):
         "status=up eval-run: skipped, no anthropic_api_key secret configured"
         in result.stdout
     ), result.stdout
+    prom = (tmp_path / "textfile" / "eval-run.prom").read_text()
+    assert 'homelab_check_success{check="eval-run"} 1' in prom, prom
 
 
 def test_a_run_with_an_empty_credential_is_a_no_op_reporting_up(tmp_path):

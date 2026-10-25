@@ -198,7 +198,8 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
                 "minute": "{{ registry_k8s_gc_cron_minute }}",
                 "hour": "{{ registry_k8s_gc_cron_hour }}",
                 "user": "root",
-                "job": "/usr/local/bin/registry-gc.sh",
+                # The journal pipe is #6162's, added after the move.
+                "job": "/usr/local/bin/registry-gc.sh 2>&1 | logger -t registry-gc",
                 "cron_file": "registry-gc",
             },
         ),
