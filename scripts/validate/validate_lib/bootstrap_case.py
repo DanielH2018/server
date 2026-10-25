@@ -37,6 +37,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import functools
 import hashlib
 import os
 import re
@@ -46,6 +47,7 @@ import sys
 import tarfile
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 from lib.git import git, git_process
 from lib.repo_paths import REPO
@@ -310,18 +312,36 @@ def _report(cases, name: str, label: str, body) -> None:
         print(f"[PASS] {label}: {name}", file=sys.stderr)
 
 
-def _expect_green(run: Bootstrap, marker: str) -> None:
+def output_problems(
+    returncode: int, stdout: str, stderr: str, marker: str, absent: str | None
+) -> list[str]:
+    """What is wrong with a green run's exit status and output.
+
+    Args:
+        returncode: The script's exit status.
+        stdout: Its standard output.
+        stderr: Its standard error.
+        marker: A line the run must print.
+        absent: A line the run must not print, or None.
+    """
+    tail = (stdout + stderr)[-3000:]
+    problems = [] if returncode == 0 else [f"the script exited {returncode}:\n{tail}"]
+    if marker not in stdout:
+        problems.append(f"the output holds no {marker!r}:\n{tail}")
+    if absent is not None and absent in stdout + stderr:
+        problems.append(f"the output holds {absent!r}")
+    if "bootstrap-case-token" in stdout + stderr:
+        problems.append("the output holds the agent's token")
+    return problems
+
+
+def _expect_green(run: Bootstrap, marker: str, absent: str | None = None) -> None:
     try:
         result = run.run()
-        out = result.stdout + result.stderr
-        expect(
-            result.returncode == 0,
-            f"the script exited {result.returncode}:\n{out[-3000:]}",
+        problems = output_problems(
+            result.returncode, result.stdout, result.stderr, marker, absent
         )
-        expect(
-            marker in result.stdout, f"the output holds no {marker!r}:\n{out[-3000:]}"
-        )
-        expect("bootstrap-case-token" not in out, "the output holds the agent's token")
+        expect(not problems, "; ".join(problems))
         calls = run.container.read(APT_CALLS)
         problems = apt_problems(run.host, calls, result.stdout) + run.unit_problems()
         expect(not problems, "; ".join(problems))
@@ -347,6 +367,71 @@ def _expect_refused(run: Bootstrap, reason: str) -> None:
         run.container.remove()
 
 
+class Planned(NamedTuple):
+    """One bootstrap case: the host and kit it runs with, and the verdict it expects.
+
+    Attributes:
+        name: The case's name, as the job log prints it.
+        label: The container's label.
+        host: The host the script runs for.
+        kit: The offline kit, or None for an online run.
+        marker: A line a green run must print; None for a red one.
+        refusal: The refusal a red run must print; None for a green one.
+    """
+
+    name: str
+    label: str
+    host: str
+    kit: Path | None
+    marker: str | None
+    refusal: str | None
+
+
+def plan(work: Path, green: Path) -> list[Planned]:
+    """Every bootstrap case, in order, writing each red kit beside the green one."""
+    script = SCRIPT.read_text()
+    cases = [
+        Planned(
+            f"bootstrap {host} with --local-build",
+            host,
+            host,
+            None,
+            ANCHOR_ACCEPTS,
+            None,
+        )
+        for host in script_value(script, "HOSTS").split()
+    ]
+    cases.append(
+        Planned(
+            "bootstrap daniel-box offline from the kit",
+            "offline",
+            "daniel-box",
+            green,
+            UNCHECKED,
+            None,
+        )
+    )
+    nfpm = next(name for name in kit_pins(script) if name.startswith("nfpm"))
+    reds = (
+        ("k3s", None, "the offline kit has no k3s"),
+        (nfpm, b"not the pinned nfpm", f"{nfpm} does not match its pinned sha256"),
+    )
+    for name, data, reason in reds:
+        kit = red_kit(green, work / "bootstrap-kit" / f"red-{name}", name, data)
+        label = f"red-{name.split('_')[0]}"
+        cases.append(
+            Planned(
+                f"refuse a kit whose {name} is wrong",
+                label,
+                "daniel-box",
+                kit,
+                None,
+                reason,
+            )
+        )
+    return cases
+
+
 def run(cases) -> None:
     """Run every bootstrap case, and record each verdict on `cases`."""
     clone = cases.work / "bootstrap-clone"
@@ -354,38 +439,19 @@ def run(cases) -> None:
     try:
         scratch_clone(clone)
         stock_kit(cases, clone, green)
+        planned = plan(cases.work, green)
     except (CaseFailed, OSError, subprocess.SubprocessError, StopIteration) as exc:
         cases.failed.append("prepare the bootstrap cases")
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
         return
-    for host in script_value(SCRIPT.read_text(), "HOSTS").split():
-        online = Bootstrap(cases, host, clone, None, host)
-        _report(
-            cases,
-            f"bootstrap {host} with --local-build",
-            host,
-            lambda r=online: _expect_green(r, ANCHOR_ACCEPTS),
-        )
-    offline = Bootstrap(cases, "daniel-box", clone, green, "offline")
-    _report(
-        cases,
-        "bootstrap daniel-box offline from the kit",
-        "offline",
-        lambda: _expect_green(offline, UNCHECKED),
-    )
-    nfpm = next(
-        name for name in kit_pins(SCRIPT.read_text()) if name.startswith("nfpm")
-    )
-    reds = (
-        ("k3s", None, "the offline kit has no k3s"),
-        (nfpm, b"not the pinned nfpm", f"{nfpm} does not match its pinned sha256"),
-    )
-    for name, data, reason in reds:
-        kit = red_kit(green, cases.work / "bootstrap-kit" / f"red-{name}", name, data)
-        red = Bootstrap(cases, "daniel-box", clone, kit, f"red-{name.split('_')[0]}")
-        _report(
-            cases,
-            f"refuse a kit whose {name} is wrong",
-            f"red-{name}",
-            lambda r=red, why=reason: _expect_refused(r, why),
-        )
+    for item in planned:
+        bootstrap = Bootstrap(cases, item.host, clone, item.kit, item.label)
+        if item.refusal is not None:
+            body = functools.partial(_expect_refused, bootstrap, item.refusal)
+        else:
+            # Offline the script makes neither GitHub read, so the anchor stub must not run.
+            absent = ANCHOR_ACCEPTS if item.kit is not None else None
+            body = functools.partial(
+                _expect_green, bootstrap, item.marker or "", absent
+            )
+        _report(cases, item.name, item.label, body)

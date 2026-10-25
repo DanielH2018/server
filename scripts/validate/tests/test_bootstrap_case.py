@@ -46,9 +46,37 @@ def test_a_script_whose_pins_moved_is_refused_rather_than_read_as_no_pin():
         case.kit_pins(SCRIPT.replace("K3S_INSTALL_URL=", "K3S_URL_OF_INSTALLER="))
 
 
-def test_the_online_cases_cover_every_host_the_script_knows():
-    hosts = case.script_value(SCRIPT, "HOSTS").split()
-    assert {"daniel-box", "daniel-server", "daniel-pi"} <= set(hosts)
+def test_the_plan_runs_every_host_online_then_offline_with_two_reds(tmp_path):
+    green = tmp_path / "bootstrap-kit" / "green"
+    green.mkdir(parents=True)
+    (green / "k3s").write_text("k3s")
+
+    planned = case.plan(tmp_path, green)
+
+    online = [p.host for p in planned if p.kit is None]
+    assert {"daniel-box", "daniel-server", "daniel-pi"} <= set(online)
+    assert online == case.script_value(SCRIPT, "HOSTS").split()
+    assert all(p.marker == case.ANCHOR_ACCEPTS for p in planned if p.kit is None)
+    offline = [(p, p.kit) for p in planned if p.kit is not None]
+    assert [(kit.name, p.refusal is None) for p, kit in offline] == [
+        ("green", True),
+        ("red-k3s", False),
+        ("red-nfpm_2.48.0_Linux_x86_64.tar.gz", False),
+    ]
+    assert not (offline[1][1] / "k3s").exists()
+
+
+def test_a_green_run_that_prints_its_marker_and_exits_0_is_clean():
+    assert case.output_problems(0, case.UNCHECKED, "", case.UNCHECKED, None) == []
+
+
+def test_an_offline_run_that_called_the_anchor_is_flagged():
+    stdout = f"{case.ANCHOR_ACCEPTS} abc\n{case.UNCHECKED}\n"
+    assert case.output_problems(0, stdout, "", case.UNCHECKED, case.ANCHOR_ACCEPTS) == [
+        f"the output holds {case.ANCHOR_ACCEPTS!r}"
+    ]
+    (problem,) = case.output_problems(1, case.UNCHECKED, "boom", case.UNCHECKED, None)
+    assert problem.startswith("the script exited 1")
 
 
 def test_one_install_of_the_three_debs_that_apt_simulates_is_clean():
