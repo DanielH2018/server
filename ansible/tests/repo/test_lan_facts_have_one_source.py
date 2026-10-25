@@ -245,9 +245,7 @@ def test_the_census_actually_scanned_the_files_this_change_touched():
 BOOTSTRAP = REPO / "hosts" / "bootstrap-host.sh"
 ARCHIVE_KEYRING = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
 DANIEL_BOX = HOST_VARS / "daniel-box.yml"
-BUILDER_DEFAULTS = (
-    REPO / "ansible" / "roles" / "setup" / "homelab_builder" / "defaults" / "main.yml"
-)
+BUILDER_COMPONENT = REPO / "hosts" / "components" / "builder" / "component.yml"
 
 
 def script_value(script: str, name: str) -> str | None:
@@ -291,8 +289,8 @@ def pin_problem(script: str, fingerprints: list[str]) -> str | None:
 
 def test_the_bootstrap_url_is_daniel_boxs_repository():
     server_ip = yaml_fast.safe_load(DANIEL_BOX.read_text())["server_ip"]
-    port = yaml_fast.safe_load(BUILDER_DEFAULTS.read_text())[
-        "homelab_builder_repo_port"
+    port = yaml_fast.safe_load(BUILDER_COMPONENT.read_text())["defaults"][
+        "builder_repo_port"
     ]
     url = script_value(BOOTSTRAP.read_text(), "REPO_URL")
     assert url == f"http://{server_ip}:{port}"

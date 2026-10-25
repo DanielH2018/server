@@ -40,7 +40,8 @@
 # sonarr-verify is the pod label of the Jobs in templates/verify/ (its verify Job and arr-notification's seed Job).
 # The renderer emits them into the `sonarr-verify` Kustomization, and they dial sonarr's API over
 # the ClusterIP, so without this entry the fence would refuse them. The entry landed ahead of the
-# Flux flip (#5535), so the Jobs were admitted on their first run.
+# Flux flip (#5535), so the Jobs were admitted on their first run. The `sonarr-air-date-guard`
+# CronJob's pod carries the same label, so this entry admits it too; its template says why.
 #
 # janitorr-verify is the pod label of janitorr's verify Job in roles/k8s/janitorr/templates/verify-inert/.
 # Nothing renders that directory while Ansible owns janitorr, so no pod carries the label yet and

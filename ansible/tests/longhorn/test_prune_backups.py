@@ -162,6 +162,8 @@ def _drain_argv(**overrides) -> list[str]:
     context = {
         "prune_drain_argv": _play()["vars"]["prune_drain_argv"],
         "prune_drain_live_file": "/tmp/live.txt",
+        "prune_drain_listing_file": "/tmp/listing.json",
+        "prune_fresh_listing": False,
         "prune_volumes": "pvc-aaa",
         "prune_apply": False,
         **overrides,
@@ -175,6 +177,10 @@ def test_b2_drain_always_hands_the_script_the_live_volume_list() -> None:
     assert dry[dry.index("--live-volumes-file") + 1] == "/tmp/live.txt"
     assert "--apply" not in dry
     assert "--apply" in _drain_argv(prune_apply="true")
+    assert dry[dry.index("--listing-file") + 1] == "/tmp/listing.json"
+    assert "--fresh-listing" not in dry
+    forced = _drain_argv(prune_apply="true", prune_fresh_listing="true")
+    assert "--fresh-listing" in forced
     from_file = _drain_argv(prune_volumes_file="/tmp/vols.txt")
     assert "--live-volumes-file" in from_file and "--volumes-file" in from_file
 

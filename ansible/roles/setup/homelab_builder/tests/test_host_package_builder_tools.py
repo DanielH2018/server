@@ -182,7 +182,7 @@ def test_pinned_tools_are_built_once_per_architecture_from_a_scratch_copy(lab):
 
 
 def test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools(lab):
-    # fact: ansible/roles/setup/homelab_builder/CLAUDE.md#The `homelab-tools` step (H3.11)
+    # fact: hosts/components/builder/CLAUDE.md#The `homelab-tools` step (H3.11)
     origin, state, _, _, record = lab
     pinned = good_files()
     served = {**pinned, URLS["sops", "arm64"]: b"tampered"}

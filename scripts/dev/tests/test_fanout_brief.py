@@ -259,7 +259,9 @@ def _static_ratchet_hook_files() -> list[str]:
         for h in r.get("hooks", [])
     ]
     entries = [h["entry"] for h in hooks if h["id"].startswith("static-ratchet-tests")]
-    return [w for entry in entries for w in entry.split() if w.endswith(".py")]
+    # A hook may run one node (`path.py::test_x`), which the brief must then name or contain.
+    words = (w for entry in entries for w in entry.split())
+    return [w for w in words if w.split("::", 1)[0].endswith(".py")]
 
 
 def test_a_server_brief_runs_the_repo_wide_guards_before_the_pr_and_a_dotfiles_brief_does_not():
@@ -277,7 +279,7 @@ def test_a_server_brief_runs_the_repo_wide_guards_before_the_pr_and_a_dotfiles_b
         run = re.search(r"^uv run pytest -q -n auto (.+)$", brief, re.M)
         assert run, f"{host}: the brief names no repo-guard run"
         paths = run.group(1).split()
-        assert [p for p in paths if not (REPO / p).exists()] == []
+        assert [p for p in paths if not (REPO / p.split("::", 1)[0]).exists()] == []
         assert "scripts/lib/tests/test_exit_codes.py" in paths
         uncovered = [f for f in hook_files if not any(f.startswith(p) for p in paths)]
         assert uncovered == [], f"the brief's guard run misses hook files {uncovered}"

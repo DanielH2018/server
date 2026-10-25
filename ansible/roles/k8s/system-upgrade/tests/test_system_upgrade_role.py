@@ -76,13 +76,12 @@ def test_every_plan_renders_the_pin_and_names_the_gate_account(template):
 
 @pytest.mark.parametrize("template", PLANS)
 def test_an_empty_node_list_selects_no_node_and_a_named_node_selects_it(template):
-    assert _clause(_plan(template), "kubernetes.io/hostname")["values"] == [NO_NODE]
+    assert _clause(_plan(template, []), "kubernetes.io/hostname")["values"] == [NO_NODE]
     assert _clause(_plan(template, ["daniel-box"]), "kubernetes.io/hostname")[
         "values"
     ] == ["daniel-box"]
-    assert DEFAULTS["system_upgrade_nodes"] == [], (
-        "the role ships with no node selected"
-    )
+    # H6.3c widened the list to the server node; H6.3d adds daniel-server.
+    assert DEFAULTS["system_upgrade_nodes"] == ["daniel-box"]
 
 
 @pytest.mark.parametrize("template", PLANS)
@@ -111,6 +110,14 @@ def test_prepare_mounts_nothing_and_runs_from_the_host_package(template):
 def test_the_two_plans_run_the_gate_in_their_own_mode():
     modes = [_plan(t)["spec"]["prepare"]["args"][1] for t in PLANS]
     assert modes == ["server", "agent"]
+
+
+def test_the_backoff_limit_patch_equals_its_default():
+    env = _patch("system-upgrade-controller-env.yaml")["data"]
+    assert (
+        int(env["SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT"])
+        == (DEFAULTS["system_upgrade_job_backoff_limit"])
+    )
 
 
 def test_the_agent_deadline_covers_the_server_plus_longhorns_recovery():

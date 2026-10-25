@@ -434,8 +434,6 @@
  "ansible/tests/services/test_authelia_config_schema.py": 0.01,
  "ansible/tests/services/test_authelia_oidc_jwk_secret.py": 0.39,
  "ansible/tests/services/test_autofix_bridge_modules.py": 0.01,
- "ansible/tests/services/test_autoheal_does_not_watch_itself.py": 0.05,
- "ansible/tests/services/test_autoheal_webhook_payload_key.py": 0.04,
  "ansible/tests/services/test_b1_rule_literals.py": 0.46,
  "ansible/tests/services/test_b6a_rule_literals.py": 0.61,
  "ansible/tests/services/test_blackbox_exporter_host_aliases.py": 0.18,

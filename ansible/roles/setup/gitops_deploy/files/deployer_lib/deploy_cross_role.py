@@ -33,7 +33,6 @@ _HOST_LIB = frozenset(
     {
         "fake_remux",
         "gitops_deploy",
-        "homelab_builder",
         "k3s",
         "renovate_agent",
         "renovate_notify",
@@ -47,7 +46,6 @@ _ALERT_UNIT = frozenset(
     {
         "claude_code",
         "gitops_deploy",
-        "homelab_builder",
         "renovate_agent",
         "renovate_notify",
     }
@@ -92,11 +90,11 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # moved the socket away from every agent. A change to that key applies the whole
     # claude_code tag: its reader, `tasks/agent_access.yml`, runs only inside the agent
     # include, whose tasks all carry that one tag. A change to keys claude_code never reads
-    # drops claude_code from the tick's run (#4361). claude_code, renovate_agent and
-    # homelab_builder each copy the uv binary `initial_setup_uv_version` pins, and name that key
-    # where they check the copy, so a uv bump re-applies all three after initial_setup (#5945).
+    # drops claude_code from the tick's run (#4361). claude_code and renovate_agent each copy
+    # the uv binary `initial_setup_uv_version` pins, and name that key where they check the
+    # copy, so a uv bump re-applies both after initial_setup (#5945).
     "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
-        {"claude_code", "homelab_builder", "renovate_agent"}
+        {"claude_code", "renovate_agent"}
     ),
     # initial_setup's worktree-holder crons read the agent list, the agent user, its primary
     # profile and the operator checkout from claude_code's defaults (#4357).
@@ -104,12 +102,6 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
     # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
     "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),
-    # The host-package builder's settings file renders the deployer's CI gate, walk bound and
-    # repo from these defaults (H3.5a), so a change to any of them re-renders the builder's copy.
-    # H7.2e moves the CI keys into inventory and owes this row's replacement.
-    "ansible/roles/setup/gitops_deploy/defaults/main.yml": frozenset(
-        {"homelab_builder"}
-    ),
 }
 
 

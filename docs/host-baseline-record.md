@@ -71,10 +71,10 @@ the name:
   `AllowTcpForwarding` alone, so `local` refuses every remote forward before
   `AllowStreamLocalForwarding` is read. The comment above the block in `tasks/access.yml`
   carries the derivation and the log line that tells the two refusals apart.
-- **On daniel-pi (H7.27) and daniel-server (H7.28), sshd reads the package's two drop-ins instead of the tasks.**
+- **On daniel-pi (H7.27), daniel-server (H7.28) and daniel-box (H7.29), sshd reads the package's two drop-ins instead of the tasks.**
   `10-homelab.conf` holds the 17 settings and `90-homelab-match.conf` holds the `Match` block.
   sshd keeps the first value it reads, and `10-` sorts before cloud-init's `50-cloud-init.conf`,
-  where the Ansible tasks wrote the same lines (`ssh_config_path` on the Pi). On daniel-server the tasks wrote `/etc/ssh/sshd_config`, whose
+  where the Ansible tasks wrote the same lines (`ssh_config_path` on the Pi and on daniel-box). On daniel-server the tasks wrote `/etc/ssh/sshd_config`, whose
   Ubuntu `Include` line is read first, so the `10-` drop-in wins there too. Those lines stay
   there as harmless duplicates. The `Match` file sorts last so its block cannot reach another
   drop-in. `reload:ssh.service` runs `sshd -t` first, and
@@ -334,6 +334,9 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
 - **A REGRESSED case still gets committed** — the data is real — but reports the push DOWN with
   the regression named, matching autofix-bridge's "act, but do not launder the result" pattern
   rather than silently dropping the regression or silently blocking the commit.
+  `evals/trend.py:classify` decides what counts: a miss after a stable run, or a second miss in
+  a row. A single miss after a mixed window is FLAKY, lands in the PR body, and keeps the tile UP,
+  because at k=3 one unlucky trial misses a 2/3 threshold (#5796).
 - **Before widening scope** (grading `run-live.mjs`, changing cadence, adding a case directory
   the loop should skip), read the last few PRs this cron opened (`evals-history/*`,
   squash-merged) for what actually regressed or flaked.

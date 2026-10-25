@@ -59,7 +59,7 @@ initial_setup_worktree_holders_group: worktree-holders
 #   loki_route_witness: daniel-box's witness is the loki-route-witness component since H7.36;
 #           daniel-server keeps the Ansible-era timer until its package moves it.
 initial_setup_packaged_hosts:
-  apt: [daniel-pi, daniel-server]
-  sshd: [daniel-pi, daniel-server]
-  sysctl: [daniel-pi, daniel-server]
+  apt: [daniel-pi, daniel-server, daniel-box]
+  sshd: [daniel-pi, daniel-server, daniel-box]
+  sysctl: [daniel-pi, daniel-server, daniel-box]
   loki_route_witness: [daniel-box]

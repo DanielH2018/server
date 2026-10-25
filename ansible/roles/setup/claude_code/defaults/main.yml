@@ -184,6 +184,19 @@ claude_code_rc_disable_bg_shell_pressure_reap: true
 # started with. systemd OnCalendar syntax.
 claude_code_rc_restart_schedule: weekly
 
+# ── Background-session resume at boot ──────────────────────────────────────────────────
+# claude-bg-resume.service respawns, once at boot, the background sessions (`claude agents`,
+# `claude --bg`) the shutdown killed, so their Remote Control links come back without anyone
+# opening agent view first. True enables the unit for the next boot; false disables it and
+# leaves running sessions alone. This role's CLAUDE.md has what it does and does not restore.
+claude_code_bg_resume_enabled: true
+
+# Whose background sessions to resume. The operator dispatches them; claude-rc.service's
+# sessions are a different feature and come back through that unit's own Restart=always.
+claude_code_bg_resume_user: "{{ sys_user }}"
+claude_code_bg_resume_home: "/home/{{ claude_code_bg_resume_user }}"
+claude_code_bg_resume_dir: /usr/local/lib/claude-bg-resume
+
 # ── Login-session caps ──────────────────────────────────────────────────────────────────
 # claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only
 # that unit's own cgroup. A session started with `claude agents` (or a bare `claude`) from

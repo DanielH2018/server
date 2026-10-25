@@ -219,6 +219,9 @@ def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
     (node.root / "usr/lib/homelab/secrets.json").write_bytes(secrets)
     for key in json.loads(secrets)["credentials"]:
         node.credential(key)
+    # H5.7: the Compose env file is an output the secrets unit renders.
+    for output in json.loads(secrets)["outputs"]:
+        node.output_file(output["destination"], persist=output["persist"])
     for name in node.manifest["units"]:
         node.state["units"][name] = {
             "load": "loaded",

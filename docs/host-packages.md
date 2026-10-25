@@ -2,9 +2,10 @@
 
 The host-package pipeline builds `homelab-*` Debian packages from master on daniel-box, signs
 them, and serves them as an apt repository at `http://<daniel-box server_ip>:8791`. The
-Ansible role `homelab_builder` installs the builder half on daniel-box; its rules are in
-`ansible/roles/setup/homelab_builder/CLAUDE.md`, and its design is in
-[the H3 plan](target-architecture/host/h3-pi-pilot.md).
+`builder` component of `homelab-daniel-box` installs the builder half on daniel-box; its
+rules are in `hosts/components/builder/CLAUDE.md`, and its design is in
+[the H3 plan](target-architecture/host/h3-pi-pilot.md). Until H7.41b the Ansible role
+`homelab_builder` installed it.
 
 This page holds the procedures an operator runs when the pipeline stops or must be stopped:
 
@@ -155,6 +156,36 @@ Reconcile enables UFW only when `ufw status` reads `Status: inactive`, and only 
 rules `ssh-limit` and `lan-ssh` are declared and present. A rebuilt host is the case it exists
 for. The live hosts are active, so there the step does nothing.
 
+### A default policy is set only when it differs
+
+On an active firewall, `ufw default <policy> <direction>` stops and starts the whole ruleset,
+even when the policy is unchanged. `frontend.py` `set_default_policy` calls `stop_firewall()`
+and then `start_firewall()`, and `ufw enable` on an active firewall calls `start_firewall()`
+too. The start flushes every UFW chain before it reloads them from `/etc/ufw`. On a k3s node,
+kube-router's network-policy sync saves the filter table and restores all of it. A restore of
+a snapshot taken inside that window writes the flushed chains back.
+
+That happened on daniel-box on 2026-10-25. The first install of a package whose `builder`
+component declares `ufw:` ran the arm, which then issued two `ufw default` calls. kube-router
+logged a sync at 14:14:43.722, and the first `[UFW BLOCK] IN=lo` came at 14:14:43.8.
+`ufw-before-input` was left holding only `-j ufw-user-input`, which is the last line
+`ufw_start` appends. Loopback traffic was dropped, so host DNS on 127.0.0.1 and k3s's own API
+failed. k3s lost its lease and exited at 14:14:54. `/etc/ufw/before.rules` was intact
+throughout, and a manual `ufw reload` at about 14:28 restored the chain.
+
+So the arm reads `ufw status verbose` and sets only a policy that differs. A steady-state run
+issues no command that reloads the firewall. An inactive UFW prints no policies, so there the
+arm sets both, which reloads nothing. Last, on an active UFW, the arm reads
+`iptables -S ufw-before-input`. When the chain lacks `-A ufw-before-input -i lo -j ACCEPT`,
+the run fails, and the failure holds the host. The check only reads and restarts nothing. The
+repair is an operator's `ufw reload`, which opens the same window again. The check reads once,
+straight after the arm's commands, so it misses a restore that lands later. initial_setup's
+`Enable UFW firewall` task has the same gate and the same check
+(`ansible/roles/setup/initial_setup/tasks/network.yml`).
+
+A rule add, relabel or delete on an active firewall still reloads the user chains. Those
+chains sit below the before chains, so loopback and established traffic survive that window.
+
 ## The users, libvirt and line arms
 
 Three more arms of reconcile keep state that `dpkg` does not hold. Each has the same early exit
@@ -221,8 +252,9 @@ reboot. A failed call exits 1 and leaves the old hash, so the next run retries i
 
 ## Clearing a deployer hold that a failed `homelab_builder` or `gitops_deploy` apply wrote
 
-The GitOps tick applies `homelab_builder` on daniel-box through the setup plane. From PR H3.5a
-the same tick applies `gitops_deploy` as well. Every broad arm of the deployer is
+The GitOps tick applies `gitops_deploy` on daniel-box through the setup plane. Until H7.41b it
+applied `homelab_builder` the same way, and that role now ends without a task, so a hold that
+names it was written before H7.41b. Every broad arm of the deployer is
 forward-only, so a failed apply leaves the tree merged and writes two records:
 
 - `hold_sha` in `/var/lib/gitops-deploy/`, which names the SHA that failed;
@@ -235,9 +267,7 @@ window for that reason.
 
 To clear the hold:
 
-1. **Merge a fix, or the disarm, as its own PR.** The disarm is
-   `homelab_builder_enabled: false` in `ansible/roles/setup/homelab_builder/defaults/main.yml`.
-   The tick applies the role. An apply that covers every held plane clears `hold_sha` with no
+1. **Merge a fix, or the disarm, as its own PR.** The tick applies the role. An apply that covers every held plane clears `hold_sha` with no
    further step.
 2. **If that apply fails too, list what the hold names.** On daniel-box, read the held SHA
    and every `hold_plane` line:
@@ -391,12 +421,12 @@ The next builder run builds the newest green commit and stages again any set the
 The signer then publishes it. The "Host Packages — Status" tile pages once a hold has left a
 commit waiting to be built for 2 hours.
 
-To stop the pipeline for longer than an incident, disarm it instead. Set
-`homelab_builder_enabled: false` in `ansible/roles/setup/homelab_builder/defaults/main.yml` and
-merge that. The tick applies the teardown, which removes the units, the code, the settings and
-`/var/lib/homelab-builder/`. It keeps the signer's GnuPG home and the published tree. The
-repository is unreachable while disarmed, so each host's updater fails its fetch, and
-`HostUpdateStale` fires once the host's limit passes.
+To stop the pipeline for longer than an incident, pause the timer instead. Run
+`sudo systemctl mask --now homelab-builder.timer`, and `sudo systemctl unmask homelab-builder.timer
+&& sudo systemctl start homelab-builder.timer` to resume. The repository keeps serving the last
+published tree while the timer is paused, and `HostUpdateStale` fires once a host's limit passes
+with nothing new. To take the repository down too, stop `homelab-apt-repo.service`; each host's
+updater then fails its fetch.
 
 ## Releasing the other hosts before the canary reports: the rollout gate
 
@@ -500,13 +530,10 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
     Until the apply in the step after next, the signer has no key to sign with. A re-sign
     that falls due before then fails, and pages once with `sign`.
 1. Merge the PR. The tick applies nothing for a change under `hosts/`.
-1. Rewrite `/etc/homelab-builder/archive-key.fpr` with a hand apply of the role. Run it from
-   the primary checkout on daniel-box once that checkout holds the merge:
-
-    ```bash
-    uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
-    ```
-
+1. Let the builder rewrite `/etc/homelab-builder/archive-key.fpr`. Its `ExecStartPre=+` script
+   `builder-fingerprint` writes the file from the signer's GnuPG home on every run, so no
+   Ansible apply is needed. A held builder still runs it. To write it now, run
+   `sudo /usr/lib/homelab/builder-fingerprint`.
 1. Release the builder hold (`sudo rm /etc/homelab-builder/hold`). The builder's keyring check
    now accepts the render, so the builder publishes a `homelab-updater` that ships the new
    keyring. The signer's recorded key no longer matches `archive-key.fpr`, so it re-signs the
@@ -524,7 +551,8 @@ A host whose `HostUpdateStale` still fires after the last step has not recovered
 
 ## Clearing a park caused by the role's `initial_setup.yml` entry
 
-`initial_setup.yml` is a bring-up playbook, so adding or removing its `homelab_builder` entry
+This applies to the `gitops_deploy` entry, and to a `homelab_builder` entry restored by a revert
+of H7.41b. `initial_setup.yml` is a bring-up playbook, so adding or removing its `homelab_builder` entry
 parks the GitOps deployer. The clear is **operator-only**, because the play's `load_secrets`
 `pre_task` decrypts. On daniel-box, in the primary checkout:
 
@@ -543,7 +571,7 @@ parks the GitOps deployer. The clear is **operator-only**, because the play's `l
 ## The signer's page
 
 `homelab-repo-sign.service` pages once per new failure through
-`homelab-repo-sign-alert.service`. A repeat of the same failure exits 0, so the page does not
+`homelab-alert@homelab-repo-sign.service`. A repeat of the same failure exits 0, so the page does not
 repeat every 2 minutes. Read `journalctl -u homelab-repo-sign` for the reason:
 
 - **`refused staged/`.** A staged entry broke the refusal rule. It was a package not named
@@ -553,8 +581,8 @@ repeat every 2 minutes. Read `journalctl -u homelab-repo-sign` for the reason:
   or as a render that tried to get something signed. Read the refused set and the builder's
   journal for that run before anything else. Once master carries the fix, reset the builder's
   published record, below, so the builder rebuilds the refused packages.
-- **`key`.** `/etc/homelab-builder/archive-key.fpr` is missing or malformed. A hand apply of
-  the role rewrites it.
+- **`key`.** `/etc/homelab-builder/archive-key.fpr` is missing or malformed. The next builder
+  run rewrites it, or run `sudo /usr/lib/homelab/builder-fingerprint`.
 - **`sign`.** `gpg` could not sign with the key `archive-key.fpr` names, usually because the
   signer's home no longer holds it. Compare `sudo -u homelab-signer gpg --homedir
   /var/lib/homelab-signer/gnupg --list-keys` with the file. The break-glass doc restores the
@@ -573,7 +601,7 @@ such as a full disk while writing the metric, keeps them, because the live index
 
 ## The builder's pages
 
-The builder pages once per new failure through `homelab-builder-alert.service`. The Uptime
+The builder pages once per new failure through `homelab-alert@homelab-builder.service`. The Uptime
 Kuma tile "Host Packages — Status" (monitor-bridge's `host_packages` row, in "Automation &
 Drift") pages on a condition that persists, in two cases:
 
@@ -631,11 +659,12 @@ The builder grades each commit over `CI_CONTEXTS`, which the role renders from
 `ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
 commit is ever green. Change `ci_required_contexts` in `ansible/inventory/group_vars/all.yml` to
 the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The key is a deploy-plane
-change, so the tick re-renders neither settings file. Re-apply both roles by hand on daniel-box
-(**operator-only**):
+change, so the tick re-renders neither settings file. Re-apply the deployer by hand on
+daniel-box (**operator-only**), and let the host package carry the builder's copy, which the
+updater installs once the builder builds `homelab-daniel-box` with the new list:
 
 ```bash
-cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy,homelab_builder
+cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy
 ```
 
 ### `reason="keyring"`

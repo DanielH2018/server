@@ -58,6 +58,18 @@ ADDED_BY_5481 = {
     "scripts/diagnostics/tests/test_probe_health_rolled.py": "scripts/diagnostics/probe.py",
 }
 
+# Six more that failed 2 to 4 PR branches each between 2026-10-18 and 2026-10-25, with the edit
+# that turned a branch red. Two run a single node: the module's other cases cost 5-11s.
+# `test_cluster_vars_tree.py` failed four branches too and stays out (prek.toml says why).
+ADDED_2026_10_25 = {
+    "evals/tests/test_eval_cases.py": "CLAUDE.md",
+    "ansible/tests/setup/test_k8s_host_files_pairs.py": "ansible/roles/k8s/registry/defaults/main.yml",
+    "ansible/tests/deploy/test_landing_annotations.py": "scripts/deploy_tools/land_lib/ledger.py",
+    "ansible/tests/deploy/test_gitops_deploy_imports.py": "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py",
+    "scripts/validate/tests/test_validate_alert_rules.py": "ansible/roles/k8s/observability/files/rules/ingress-probes.yaml",
+    "scripts/validate/tests/test_validate_unit_templates.py": "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
+}
+
 NUMBER_WORDS = {
     word: n
     for n, word in enumerate(
@@ -99,7 +111,7 @@ def _ratchet_hooks() -> list[dict]:
 
 def test_the_hook_runs_every_expected_module_and_each_exists():
     named = set().union(*(_modules(hook) for hook in _ratchet_hooks()))
-    assert named == EXPECTED_MODULES | set(ADDED_BY_5481)
+    assert named == EXPECTED_MODULES | set(ADDED_BY_5481) | set(ADDED_2026_10_25)
     missing = sorted(m for m in named if not (REPO / m).is_file())
     assert not missing, f"{HOOK_ID} names modules that do not exist: {missing}"
 
@@ -129,7 +141,9 @@ def test_the_gate_matches_an_edit_the_tests_react_to(path):
     assert re.search(_hook()["files"], path)
 
 
-@pytest.mark.parametrize(("module", "trigger"), sorted(ADDED_BY_5481.items()))
+@pytest.mark.parametrize(
+    ("module", "trigger"), sorted((ADDED_BY_5481 | ADDED_2026_10_25).items())
+)
 def test_a_commit_reintroducing_a_listed_failure_runs_its_test(module, trigger):
     """The edit that turned a PR red now selects a ratchet hook whose entry runs the test."""
     running = [hook for hook in _ratchet_hooks() if module in _modules(hook)]
@@ -149,7 +163,7 @@ def test_claude_md_states_how_many_files_the_hook_runs():
     )
     word = match.group(1).lower()
     stated = int(word) if word.isdigit() else NUMBER_WORDS.get(word)
-    assert stated == len(EXPECTED_MODULES | set(ADDED_BY_5481))
+    assert stated == len(EXPECTED_MODULES | set(ADDED_BY_5481) | set(ADDED_2026_10_25))
 
 
 @pytest.mark.parametrize(
