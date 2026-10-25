@@ -39,6 +39,24 @@ tools:
       sha256: db92b343a32cade0b1d4ff5e30da54c5156f7a580349281e583a5402c57c7bcf
       url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_arm64.tar.gz
       member: chezmoi
+  # H7.25: the Pi's node exporter, the version the cluster DaemonSet's image pins
+  # (ansible/tests/setup/test_pi_node_exporter_host_unit.py holds the two equal). The tarball names
+  # its directory after the release, so `member` carries {bare}. Both digests come from the
+  # release's sha256sums.txt:
+  # https://github.com/prometheus/node_exporter/releases/download/v1.12.1/sha256sums.txt
+  node-exporter:
+    amd64:
+      # renovate: datasource=github-release-attachments depName=prometheus/node_exporter
+      version: 1.12.1
+      sha256: b51d8a76aa2a9156a55d501aca6276fae09e262259a5e4e831d2c2222f084e63
+      url: https://github.com/prometheus/node_exporter/releases/download/v{bare}/node_exporter-{bare}.linux-amd64.tar.gz
+      member: node_exporter-{bare}.linux-amd64/node_exporter
+    arm64:
+      # renovate: datasource=github-release-attachments depName=prometheus/node_exporter
+      version: 1.12.1
+      sha256: ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7
+      url: https://github.com/prometheus/node_exporter/releases/download/v{bare}/node_exporter-{bare}.linux-arm64.tar.gz
+      member: node_exporter-{bare}.linux-arm64/node_exporter
   # H7.24a: daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
   # Both digests come from the release's checksums.txt:
   # https://github.com/goreleaser/nfpm/releases/download/v2.48.0/checksums.txt
@@ -71,21 +89,3 @@ tools:
       sha256: 1ae72b4718729e2ccc4f1ae2c6d1e531ca8467800e0546e9130b3886023a60ab
       url: https://github.com/astral-sh/uv/releases/download/{version}/uv-aarch64-unknown-linux-gnu.tar.gz
       member: uv-aarch64-unknown-linux-gnu/uv
-  # H7.25: the Pi's node exporter, the version the cluster DaemonSet's image pins
-  # (ansible/tests/setup/test_pi_node_exporter_host_unit.py holds the two equal). The tarball names
-  # its directory after the release, so `member` carries {bare}. Both digests come from the
-  # release's sha256sums.txt:
-  # https://github.com/prometheus/node_exporter/releases/download/v1.12.1/sha256sums.txt
-  node-exporter:
-    amd64:
-      # renovate: datasource=github-release-attachments depName=prometheus/node_exporter
-      version: 1.12.1
-      sha256: b51d8a76aa2a9156a55d501aca6276fae09e262259a5e4e831d2c2222f084e63
-      url: https://github.com/prometheus/node_exporter/releases/download/v{bare}/node_exporter-{bare}.linux-amd64.tar.gz
-      member: node_exporter-{bare}.linux-amd64/node_exporter
-    arm64:
-      # renovate: datasource=github-release-attachments depName=prometheus/node_exporter
-      version: 1.12.1
-      sha256: ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7
-      url: https://github.com/prometheus/node_exporter/releases/download/v{bare}/node_exporter-{bare}.linux-arm64.tar.gz
-      member: node_exporter-{bare}.linux-arm64/node_exporter
