@@ -6,7 +6,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_pipeline.py
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_tools
-from deploy_tools.land_lib import verdict_log
 from deploy_tools.land_lib.tools import Classifier
 
 
@@ -71,6 +70,8 @@ def test_an_unexpected_exception_still_prints_and_records_a_verdict(tmp_path, ca
     tools.gh_json = lambda *a, **k: 1 / 0
     with pytest.raises(ZeroDivisionError):
         land._land(opts, tools, None)
+    from deploy_tools.land_lib import verdict_log
+
     expected = "VERDICT: refused (PR #7 — the landing raised ZeroDivisionError: division by zero)"
     assert capsys.readouterr().out.splitlines()[-1] == expected
     assert verdict_file.read_text() == expected + "\n"
@@ -81,6 +82,8 @@ def test_an_unexpected_exception_still_prints_and_records_a_verdict(tmp_path, ca
 
 def test_a_verdict_is_recorded_for_probe_landing_verdicts(land_run, verdict_record):
     """The per-user record is what replaces grepping a background task's output file."""
+    from deploy_tools.land_lib import verdict_log
+
     rc, out, _, _, _ = land_run([], Fakes(await_ci=[(75, "no verdict")]))
     line = out.rstrip().splitlines()[-1]
     assert rc == 75 and line.startswith("VERDICT: ci-timeout")

@@ -36,6 +36,8 @@ def test_the_file_is_trimmed_to_the_newest_records(tmp_path):
 
 
 def test_the_env_var_overrides_the_default_path(tmp_path, monkeypatch):
+    # The deploy-tools conftest sets this name literally to keep landings out of the real file.
+    assert verdict_log.PATH_ENV == "LAND_VERDICT_LOG"
     monkeypatch.setenv(verdict_log.PATH_ENV, str(tmp_path / "x.jsonl"))
     assert verdict_log.default_path() == tmp_path / "x.jsonl"
     monkeypatch.delenv(verdict_log.PATH_ENV)

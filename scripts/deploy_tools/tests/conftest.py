@@ -17,7 +17,7 @@ import pytest
 
 from _helpers import stub_logger_on_path
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
-from deploy_tools.land_lib import options, tools, verdict_log
+from deploy_tools.land_lib import options, tools
 
 # Read off the modules that consume them rather than retyped, so a knob added there is cleared
 # here without anyone remembering to.
@@ -79,7 +79,9 @@ def verdict_record(tmp_path_factory, monkeypatch) -> Path:
     gives; the env var reaches the modules that run the real `land.sh` too.
     """
     path = tmp_path_factory.mktemp("verdicts") / "landing-verdicts.jsonl"
-    monkeypatch.setenv(verdict_log.PATH_ENV, str(path))
+    # `verdict_log.PATH_ENV`, spelled out so this directory still collects without the
+    # module; `test_the_env_var_overrides_the_default_path` pins the name.
+    monkeypatch.setenv("LAND_VERDICT_LOG", str(path))
     return path
 
 

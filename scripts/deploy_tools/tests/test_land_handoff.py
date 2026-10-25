@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import land
-from deploy_tools.land_lib import handoff, verdict_log
+from deploy_tools.land_lib import handoff
 from deploy_tools.land_lib.options import HANDOFF_ENV, PRIMARY_ENV
 from deploy_tools.land_lib.outcome import VERDICTS
 from deploy_tools.land_lib.tools import Tools
@@ -256,6 +256,8 @@ def test_a_handed_off_landing_is_recorded_in_this_users_verdict_log(
     monkeypatch, tmp_path, capsys
 ):
     """The unit records in the operator's file, which the handing-off user cannot read."""
+    from deploy_tools.land_lib import verdict_log
+
     monkeypatch.setenv(HANDOFF_ENV, UNIT)
     systemctl = FakeSystemctl(tmp_path / "unused", stderr="Access denied")
     assert land.main(["--pr", PR], tools=Tools(systemctl=systemctl)) == 1
