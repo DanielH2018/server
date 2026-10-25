@@ -6,8 +6,8 @@ more than one host package stages the canary's alone and opens a gate at that co
 gate is open the builder builds no other host package. The gate closes when the operator's
 root-owned `release` file names the gate's commit or a descendant, or when Prometheus reports
 the canary at that commit or a descendant with `homelab_host_reconcile_ok` at 1. Prometheus
-unreachable or silent leaves the gate open, which fails closed. Stdlib only, as the builder
-ships beside it with nothing else.
+unreachable or silent leaves the gate open, which fails closed. Stdlib only, plus the
+`host_lib` the builder already ships beside it.
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+
+from host_lib import log as host_log
 
 RELEASE = "/etc/homelab-builder/release"
 # The canary order (*Staged rollout*): daniel-box runs the builder, so it always comes last.
@@ -30,7 +32,7 @@ _HOST = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
 def log(message: str) -> None:
-    print(f"homelab-builder: {message}", flush=True)
+    host_log(message, tag="homelab-builder")
 
 
 def host_of(package: str) -> str | None:

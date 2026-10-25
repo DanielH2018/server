@@ -37,6 +37,7 @@ if [ -n "${{FAKE_{upper}_FAIL:-}}" ] && [[ "$*" == *"$FAKE_{upper}_FAIL"* ]]; th
   exit 1
 fi
 if [ "{tool}" = gh ] && [ "$1" = api ]; then printf '%s\\n' "${{FAKE_GREEN:-}}"; fi
+if [ "{tool}" = gh ] && [ "$1 $2" = "variable get" ]; then printf '%s\\n' "${{FAKE_HOLD-none}}"; fi
 """
 
 
@@ -45,7 +46,8 @@ def _fake(tool: str) -> str:
 
 
 # GHCR for the move step: a pull token, then `prod`'s HEAD, which answers FAKE_PROD_STATUS
-# (200 by default) with FAKE_PROD_DIGEST as its Docker-Content-Digest.
+# (200 by default) with FAKE_PROD_DIGEST as its Docker-Content-Digest, or with
+# FAKE_PROD_DIGEST_LATER from the second read on when that is set.
 FAKE_CURL = r"""#!/usr/bin/env bash
 cat > /dev/null
 out= url=
@@ -60,9 +62,14 @@ done
 case "$url" in
   *"/token?"*) printf '{"token":"t"}' ;;
   *"/manifests/prod")
-    status=${FAKE_PROD_STATUS:-200}
-    printf 'HTTP/2 %s\r\nDocker-Content-Digest: %s\r\n\r\n' "$status" "$FAKE_PROD_DIGEST" > "$out"
+    status=${FAKE_PROD_STATUS:-200} digest=$FAKE_PROD_DIGEST
+    [ -e "$RUNNER_TEMP/prod-read" ] && digest=${FAKE_PROD_DIGEST_LATER:-$digest}
+    touch "$RUNNER_TEMP/prod-read"
+    printf 'HTTP/2 %s\r\nDocker-Content-Digest: %s\r\n\r\n' "$status" "$digest" > "$out"
     printf '%s' "$status" ;;
+  *"/manifests/last-good")
+    printf 'HTTP/2 200\r\nDocker-Content-Digest: %s\r\n\r\n' "${FAKE_LAST_GOOD_DIGEST-$RESET_DIGEST}" > "$out"
+    printf 200 ;;
   *) echo "fake curl: unexpected $url" >&2; exit 2 ;;
 esac
 """
@@ -101,13 +108,15 @@ def _run(tmp_path, script: str, **env: str):
     }
     result = proc_run(["bash", "-c", script], env={**base, **env}, stub_bin=stub)
     lines = [line for line in calls.read_text().splitlines() if line]
-    return result, [line for line in lines if not line.startswith("docker")]
+    return result, [l for l in lines if not l.startswith(("docker", "gh variable get"))]
 
 
 def _settle(tmp_path, jobs, **env: str):
     script = _step(jobs["settle"], "Apply the verdict")["run"]
     defaults = {
         "TARGET": T,
+        "DIGEST": DIGEST,
+        "FAKE_PROD_DIGEST": DIGEST,
         "RESET_DIGEST": RESET,
         "CLEARS_HOLD": "false",
         "NO_RESET": "",
@@ -411,6 +420,7 @@ def _move(tmp_path, jobs, **env: str):
         "DIGEST": DIGEST,
         "SEED": "false",
         "PRIOR_DIGEST": RESET,
+        "RESET_DIGEST": RESET,
         "FAKE_PROD_DIGEST": RESET,
     }
     result, calls = _run(tmp_path, script, **{**defaults, **env})

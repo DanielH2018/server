@@ -1,0 +1,43 @@
+# The weekly homelab eval sweep on daniel-box (H7.10b, docs/target-architecture/host/h7-delete-ansible.md).
+# Until H7.36 initial_setup installed it as the "Homelab eval sweep" cron (`/etc/cron.d/eval-run`).
+# Now homelab-eval-sweep.timer starts homelab-eval-sweep.service on Sunday at 02:00, as sys_user.
+# Both secrets arrive through LoadCredential= from /run/credstore, which homelab-secrets.service
+# fills from daniel-box's SOPS file: anthropic_api_key arms the paid sweep, and
+# homelab_eval_push_token is the "Homelab Evals" Kuma push token. The rendered script holds neither.
+#
+# Autonomous-role contract — Homelab eval sweep. Weekly (Sunday 02:00, daniel-box only): grades
+# every case under `evals/cases/`, rolls the result into `evals/history.json`, then publishes it.
+#
+# - Scope: run the existing cases and commit the trended result; never edits a case, an agent or a
+#   skill definition, and never runs the `run-live.mjs` live-smoke path.
+# - Mode: binary, no dial — hermetic when the API key exists, else a no-op reporting UP. The
+#   timer's enable link arms the unit, and dropping the link from a package version, or reverting
+#   this component, stops the timer on the install that drops it.
+# - Authoritative source: the chezmoi eval engine's own grading, never a cached report.
+# - Abort valves: the shared git-tree lock; the unlanded-branch guard; the empty-key gate.
+# - Required evidence: `status=<up|down> <msg>` in the log, `eval-run.prom` in the node_exporter
+#   textfile directory and, when armed, a push to "Homelab Evals".
+# - Next-run review: before widening scope, read the last few `evals-history/*` PRs this unit
+#   opened for what regressed or flaked. `docs/host-baseline-record.md`'s *The eval sweep, in
+#   detail* has the REGRESSED-case commit rule and why there is no non-hermetic fallback.
+#
+# ENFORCED: hosts/lib/tests/test_eval_sweep_component.py, and the tests in
+# ansible/tests/setup/test_eval_sweep_cron.py and test_eval_run_failure_path.py, which read the
+# rendered script.
+credentials:
+  - anthropic_api_key
+  - homelab_eval_push_token
+files:
+  - {src: templates/eval-run.sh.j2, dst: /usr/lib/homelab/eval-run, mode: "0755"}
+  - {src: tmpfiles.d/homelab-eval-sweep.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-eval-sweep.conf}
+  - {src: units/homelab-eval-sweep.service.j2, dst: /usr/lib/systemd/system/homelab-eval-sweep.service}
+  - {src: units/homelab-eval-sweep.timer, dst: /usr/lib/systemd/system/homelab-eval-sweep.timer}
+enable:
+  homelab-eval-sweep.timer: timers.target
+# What initial_setup installed before H7.36. Reconcile retires each once the timer above has
+# started, so the sweep never runs twice or not at all.
+legacy:
+  - {cron_file: eval-run}
+  - {path: /usr/local/bin/eval-run.sh}
+  - {path: /etc/homelab/eval-run.env}
+  - {path: /var/lib/homelab/setup-render-manifest.d/eval-run}

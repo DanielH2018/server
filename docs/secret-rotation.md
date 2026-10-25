@@ -2,7 +2,8 @@
 
 Secrets in `ansible/vars/secrets.yml` are tracked for rotation by a plaintext registry
 (`ansible/secret_rotation.yml`) and the tool `scripts/secrets_mgmt/secret_rotation.py`. A daily server
-timer (`secret-rotation-audit.sh`, initial_setup) pushes the **"Secret Rotation"** Uptime
+timer (`homelab-secret-rotation-audit.timer`, the `secret-rotation` component of the
+`homelab-daniel-box` package) pushes the **"Secret Rotation"** Uptime
 Kuma monitor — it goes **down** when any secret is past its per-tier window, or when a
 secret exists in `secrets.yml` but not the registry.
 
@@ -234,6 +235,13 @@ not rotated again by the weekly cron. Examples:
   Missing this on 2026-08-29 left Bazarr reconnecting in a loop that leaked 173 MiB → its 1Gi cap
   in 90 minutes and OOM-killed it; the only visible signal was the "k3s Container OOM" monitor,
   which self-clears one hour after the kill while subtitle fetching stays silently broken.
+- `k3s_readonly_token` (H6.3b): the token of the cluster's read-only ServiceAccount
+  (`homelab-readonly` in `kube-system`), which `homelab-k3s-restart` loads to read the API. It is
+  non-expiring, so rotating it means deleting the ServiceAccount's token Secret and reading the
+  recreated value with `sudo k3s kubectl -n kube-system get secret homelab-readonly-token -o
+  jsonpath='{.data.token}' | base64 -d`, which is **operator-only**. Then `sops set` the new
+  value, run `host_secrets.py sync daniel-box` (and each other host that carries the key), and
+  commit. The unit reads the credential at its next window.
 - `mqtt_password_hash`: `mosquitto_passwd` writes a `username:hash` line. Store only the part
   after the first `:`, because the template prepends `mqtt_username` itself. The mosquitto
   deploy refuses a stored hash that holds a colon, before the apply.

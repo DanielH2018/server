@@ -1,0 +1,4 @@
+CRITICAL: daniel-server's homelab package reconcile failed, so it installs no newer package.
+homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes. Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-server.
+Started 2026-10-24 14:03 UTC
+Runbook: https://docs.local.example.com/host-packages/

@@ -1,6 +1,7 @@
 # H6 — system-upgrade-controller for k3s
 
-Status: PLANNED
+Status: IN PROGRESS. Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)) and H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)).
+In flight: H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)) is open and held until Monday 2026-10-26.
 Depends on: D2, H1.1a to H1.8, H4, M1 (the contracts.md row; *Open questions* 2 says why
 each edge exists).
 Unblocks: H7
@@ -1003,6 +1004,17 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - **Operator-only:** run the rehearsal twice, against H6.1c's drill Plan and against a
       server Plan one release above the guest's version. Both must pass before H6.1c
       starts.
+    - **Recorded 2026-10-24:** both runs passed on daniel-server, after the guest-script
+      fixes in #6130 and #6133.
+        - Run 1, `--expect red --plan k3s-redproof`, run `20261024T193003Z`: the Plan failed,
+          and the Kustomization read `Ready=False reason=HealthCheckFailed` with the message
+          `health check failed after 5m5.044785708s: failed early due to stalled resources:
+          [Plan/system-upgrade/k3s-redproof status: 'Failed']`.
+        - Run 2, `--expect upgrade --guest-version v1.37.0+k3s1`, run `20261024T193748Z`: the
+          guest node ran `v1.37.1+k3s1`, carried the Plan's `latestHash` as its label, and the
+          Kustomization read Ready.
+        - The reason string that H6.1b2's spec left unmeasured is now measured:
+          `HealthCheckFailed`. H6.1c's expression test pins it.
 4. **H6.1c Red-path drill (about 30 lines, then a revert). Operator-only.** This mirrors
    D2's hold drill, and C8 requires an operator-only drill to state its blast radius.
     - **Gate:** H6.1b2's rehearsal of this Plan passed in the guest, and this PR's body
@@ -1012,6 +1024,38 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       `version`, so the expressions can leave InProgress. It declares no `prepare`, because
       no host ships `k3s_gates.py` before H6.3b. Its `upgrade` container is the gate image
       with `command: [python3, -c, "raise SystemExit(1)"]`, so it touches nothing.
+    - **Amended 2026-10-24:** the Plan also sets `jobActiveDeadlineSecs: 300`. The
+      controller's `SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT` is 99 (*Open questions* 16), so a
+      failing pod retries until the Job deadline, and the red would otherwise arrive at 3600
+      seconds. The rehearsal measured 5m5s to red, which matches the 300-second deadline.
+    - **Production drill, run and rolled back 2026-10-25 (H6.1c done).** Times are UTC.
+        - 00:37: [#6120](https://github.com/DanielH2018/server/pull/6120) merged, as squash
+          commit `a41b8b1bd`. The land.sh verdict for #6120 was `deploy-failed`, with the
+          reason "DEPLOY_HOLD holds promotion, so system-upgrade is not applied".
+        - 00:48:35: `promote` applied the commit. The Plan `k3s-redproof` existed, and the Job
+          `apply-k3s-redproof-on-daniel-box-…` started.
+        - 00:53:41: `flux/system-upgrade` read `Ready=False`, reason `HealthCheckFailed`,
+          message "health check failed after 5m0.079095792s: failed early due to stalled
+          resources: [Plan/system-upgrade/k3s-redproof status: 'Failed']". That is 5m06s from
+          the Plan appearing. The 300-second `jobActiveDeadlineSecs` set it, not the
+          100-minute Kustomization timeout.
+        - 00:54:11: `DEPLOY_HOLD` was set to `a41b8b1bd1cf7d49abf2c38359d84e49262d8914`, 30
+          seconds after the red. `prod` was not reset, because the tag is forward-only.
+        - 00:54:42: `K3sUpgradeJobFailed` was firing in `ALERTS`, 31 seconds after the hold.
+        - Rollback: the operator labelled daniel-box `homelab/k3s-upgrade-paused=true`.
+          Revert [#6219](https://github.com/DanielH2018/server/pull/6219) merged at 01:05 as
+          `7ed18d48f`, after the cross-plane order gate required the trailer `Removes-Object:
+          Plan/system-upgrade/k3s-redproof`. The operator cleared `DEPLOY_HOLD` after master CI
+          passed at the revert. `promote` run 40149298603 moved `prod` to the revert at 01:13
+          with `system-upgrade` Ready. The operator deleted the Plan by hand (`prune: false`)
+          and removed the label.
+        - After the rollback only `k3s-agent` and `k3s-server` remain, there are no Jobs, and
+          89 of 90 monitors are up. That count is unchanged by the drill: Homelab Evals has
+          been down since 2026-10-20.
+        - **Order matters for the revert.** Do not merge the revert before `DEPLOY_HOLD` is
+          set, or `promote` applies the newer master and the drill never runs. Clear the hold
+          only after master CI passes at the revert, or `promote` can re-apply the drill
+          commit.
     - **Blast radius.**
         - Objects: the drill Plan, and its Job and pods in `system-upgrade` on daniel-box.
           The pod runs privileged with the host's root mounted, and exits 1 without
@@ -1082,6 +1126,20 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       Add the `secrets` component to daniel-box's package, and daniel-box to the hosts
       `host_secrets.py check` must find. Declare `k3s_readonly_token` as a credential in
       both `package.yml` files.
+    - **Amended 2026-10-24:** `k3s_readonly_token` was absent from SOPS when H6.3b was written,
+      so H6.3b ships daniel-box only. daniel-box's package gains `secrets-unit`, the credential
+      and `k3s-restart`, and `host_secrets.py check` finds daniel-box through its `package.yml`.
+      daniel-server's package stays as it is, so its k3s-agent restart stays a hand step until
+      a follow-up adds `k3s-restart`, the credential and its sync (*Open questions* 7). The
+      `windowed` mark for `k3s-agent.service` joins that follow-up or H6.5a, whichever ships the
+      first `k3s-agent.service` drop-in, for the reason H6.2's amendment gives. H6.4a's gate on
+      `probe.py metric` therefore lists daniel-box alone until the follow-up lands.
+    - **Amended 2026-10-24:** a component's `lib:` entry may name a top-level module such as
+      `k3s_gates.py`, which `homelab-k3s-restart` imports from its own directory. A host sets
+      `k3s_restart_window` in its `host_vars`, because a package-level `defaults:` map reaches
+      only the package's own files. The unit hashes the manifest `activations` entries whose
+      action is `manual:<unit>`, so H6.4a's files declare that action, and an empty set is a
+      valid hash.
     - **Operator-only**, before merging: `sudo ls -l` the server CA file on both nodes
       (`/var/lib/rancher/k3s/agent/server-ca.crt` is the expected path) and fix the
       component's CA path to what it shows.
@@ -1105,7 +1163,18 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       file's `tmpfiles.d` entry. Each `package.yml` sets its own `k3s_restart_window`. Add
       the `windowed` mark for `k3s-agent.service` to daniel-server's `package.yml`.
     - Add the other three alert rules and their promtool tests.
+    - **Amended 2026-10-24:** H6.3b adds `K3sConfigRestartFailed` and `K3sConfigRestartPending`,
+      each with a literal `service: daniel-box` and its promtool test. `K3sConfigRestartMetricsAbsent`
+      stays in H6.4a (its own step), and `K3sNodeVersionSkew` already landed in H6.1b.
     - Add the window-derivation test.
+    - **Amended 2026-10-24:** the window's span is `AccuracySec` plus `TimeoutStartSec`, 7
+      minutes and 1 second, so no start time avoids a `*/5` schedule. Two exist on daniel-box:
+      the `Sync peer Claude artifacts` cron and the `crowdsec-home-ips` CronJob. The derivation
+      test lists both in `EXEMPT`, with the reason that a missed run is not made up and that
+      neither reads cluster state the restart disturbs. It also lists `homelab-builder.timer`,
+      `claude-triage-poll.timer` and `claude-fanout-server-lander.timer`, the monotonic timers
+      this list did not name. The operator confirms or narrows these in H6.3b's review
+      (*Open questions* 3).
     - The first run on each host records the hash, writes the three series and restarts
       nothing. It runs at the next window, or sooner when the operator runs `sudo
       systemctl start homelab-k3s-restart.service`, which on a first run only records.
@@ -1808,6 +1877,11 @@ which journald does not store on these hosts, so it reads zero on every run.
 3. **The window.** `k3s_restart_window` is weekdays from the 2nd to the 31st, at 11:32 on
    daniel-box and at 11:52 on daniel-server. Resolution: the operator confirms or moves
    them in H6.3b's review, and the derivation test re-checks any move.
+   Ruled 2026-10-24: the operator confirmed 11:32 for daniel-box and the five derivation-test
+   exemptions: the `Sync peer Claude artifacts` cron, the `crowdsec-home-ips` CronJob,
+   `homelab-builder.timer`, `claude-triage-poll.timer` and `claude-fanout-server-lander.timer`.
+   A collision needs a k3s config change in the same window, and each job reruns within its
+   own period.
 4. **The join token.** H6 moves no token, because the agent's token is the server token
    (Baseline). Putting it in SOPS would hold the credential that `docs/break-glass.md` item 2
    keeps out of band. Resolution: H7's fresh join decides. The k3s docs allow adding an

@@ -87,6 +87,23 @@ the call until its checks pass. A refused merge is printed once and the wait con
 merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both flags in one
 run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
+**A master CI backlog holds a green PR's merge.** Before the direct merge, `land_lib/pace.py`
+counts the master push runs of `ci.yml` that are not completed. At 2 or more it prints
+`pacing the merge: …` and waits for the next poll. A full sweep is about 17 jobs against the
+account's 20-job runner cap, so a second unfinished sweep already queues. On 2026-10-24, eight
+concurrent landings left six master runs unfinished, their jobs waited 8-17 minutes for a
+runner, and each landing waited 29-61 minutes for its merge commit's verdict (#5526).
+
+- The count is a read, not a lock. Two landings that read at the same poll can both merge.
+  Pacing lowers the average queue depth; it does not close the race that makes the `prove`
+  job's tested-tree skip miss.
+- A run unfinished more than 2 hours after its creation is wedged and not counted.
+- The wait counts against `merge_timeout`. A backlog that never drains ends at
+  `merge-timeout`, whose message names the pacing; re-run the same command.
+- A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
+- `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
+- A PR armed by hand with `gh pr merge --auto` merges without this check.
+
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
@@ -342,9 +359,15 @@ Instead it reads the cluster every 30 seconds:
   prints the read-only command that names the services the soak failed:
   `kubectl -n flux-system get pods -l app=soak -o jsonpath='{.items[*].status.containerStatuses[0].state.terminated.message}'`.
   `verify` holds the same revision, and for a revision with no snapshot role resets `prod`
-  (`docs/volume-snapshot-drills.md`, *Choosing the branch*).
+  (`docs/volume-snapshot-drills.md`, *Choosing the branch*). A failure read once `homelab`
+  has moved to a descendant of R does not end the wait: a later revision superseded R's
+  soak, which exits once `homelab` leaves R (#5704), and the wait reads that revision's soak
+  instead (D7.2).
 - **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
-  line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
+  line names the held SHA and, for a `failed=` hold, the failed names, and says whether any
+  of them is one of this PR's services. The held SHA is the newest commit the promotion
+  carried, which may be another PR's, so a hold naming none of this PR's services was most
+  likely caused by another merge in it, or by a run it superseded (D7, #6199). Clearing the hold is
   the operator's decision, approved through the permission prompt the agent's clear raises. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
   its verification (`docs/flux-deploy-plane.md`, *Verification*).
 - **`nothing-to-deploy`, from land-wait's `suspended`, exit 0.** Every tag Flux applies for
@@ -431,7 +454,7 @@ and the deploy the exit-4 fallback runs.
 Until slice D5 ends, nothing orders an edge between a flux-owned role and an Ansible-owned one.
 `land.sh` applies the Ansible half after the merge, and `promote` applies the Flux half after
 CI. A PR that changes both halves lands them in whichever order the two pipelines finish.
-CI's **Cross-plane order gate** step, in the `hooks` job on pull requests only, refuses such a
+CI's **Cross-plane order gate** step, in the `pr_gates` job on pull requests only, refuses such a
 PR. It runs `scripts/validate/cross_plane_order.py --base HEAD^1`, which renders the cluster
 at the base and at the merge commit with `homelab-render cluster`. Each side renders with its
 own tree's renderer. The gate refuses two shapes:
@@ -499,7 +522,7 @@ fails without a verdict. Slice D6 deletes the gate once every role is flux-owned
 ### A cluster pin moves forward, one step, alone in its PR
 
 Merging `k3s_longhorn_version` or `k3s_metallb_version` is the upgrade, and neither upgrade
-runs backwards. CI's **Cluster pin checks** step, in the `hooks` job on pull requests only,
+runs backwards. CI's **Cluster pin checks** step, in the `pr_gates` job on pull requests only,
 runs `scripts/validate/cluster_pins.py --base HEAD^1`. It reads each pin from whichever role
 YAML file holds the key at the base and at the merge commit, and refuses five shapes:
 
@@ -573,6 +596,14 @@ in, so gating a brand-new role from a primary that has not pulled it yet enumera
 reads `skipped` — green, on the landing that most needs a gate. That worktree takes no lock. If
 it cannot be made at all, the landing reports `unhealthy` rather than gating the primary — the
 one exception being a primary that already contains the commit.
+
+A gate run by hand has the same exposure. An orchestrator worktree locked hours behind master
+holds old role templates, owners and alert tables, and a `probe.py health` run from it grades
+the live workload against them (#5912). The `block-footguns` hook denies `probe.py health` and
+`probe.py takeover` from a linked worktree that holds an older copy of an `ansible/` or
+`scripts/` file `origin/master` has changed. The denial names the same command run from the
+primary checkout. Rebasing the worktree onto `origin/master` also clears it. `land.sh` runs the probe as a subprocess, so the
+hook never sees the gate above.
 
 A gate that could not read is not a failed gate. `probe.py health` exits 75
 (`PROBE_UNREADABLE`) when it cannot reach the store it reads, such as Traefik answering `no

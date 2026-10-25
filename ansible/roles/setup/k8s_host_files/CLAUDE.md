@@ -32,8 +32,9 @@ The redirect is what a shell with non-blocking stdio needs.
 Each conversion PR adds one task file per source role, named after that role, and imports it
 from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static so the play's
 `k8s_host_files` tag reaches every task in the file. docs' conversion PR wrote the first,
-`tasks/docs.yml`, which creates the site directory docs' Deployment mounts as a hostPath of
-`type: Directory`. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
+`tasks/docs.yml`, which created the site directory docs' Deployment mounts as a hostPath of
+`type: Directory`. H7.10a moved that directory into the docs-refresh component's `tmpfiles.d`
+file (`hosts/components/docs-refresh/`) and deleted the task file. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
 artifacts' Deployment mounts the same way. media-volume's PR wrote `tasks/media-volume.yml`,
 which creates the directory media-volume's static PersistentVolume names and its `media/` and
 `torrents/` subdirectories, with no mode. configarr's PR wrote `tasks/configarr.yml`, the
@@ -91,13 +92,11 @@ Two tests in `ansible/tests/setup/` hold those rules:
   the registry GC templates.
 - `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults or
   imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
-  that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`, and
-  artifacts' PR added `artifacts_host_dir`, `artifacts_peer_dir`, `artifacts_peer_sources`
+  that each copy equals its source. artifacts' PR added `artifacts_host_dir`, `artifacts_peer_dir`, `artifacts_peer_sources`
   and `artifacts_stars_dir`. media-volume's PR added `media_volume_host_path` and the
   `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
   when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, the one
-  directory the wrapper lets the key read. It also holds
-  `docs-refresh.sh.j2`'s `SITE_DIR` equal to docs' default, the third copy of that path.
+  directory the wrapper lets the key read.
 
 A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or
@@ -139,6 +138,8 @@ crowdsec's retired crons and pi-peer-backup's two daniel-pi writes.
 - **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes a `Registry GC`
   Kuma push and a `registry-gc` healthchecks.io ping, and the `registry-gc` journal
   (`journalctl -t registry-gc`) shows the mirror phase. A conversion apply leaves the cron
-  file and the script's hash unchanged.
+  file and the script's hash unchanged. After the restore the run warms the mirror: it GETs
+  blobs through the mirror's loopback hostPort and writes nothing to the cluster. The push
+  message ends with the warm counts, such as `warmed 354 blob(s), 6207 MB in 133s`.
 - **Next-run review:** before moving a new row in, run `--list-tasks` with
   `--tags k8s_host_files` and read the recap of the last apply.

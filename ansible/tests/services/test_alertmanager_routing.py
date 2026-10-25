@@ -145,9 +145,8 @@ def loki_sets(shadow: bool) -> dict[str, dict[str, str]]:
     """The labels each M5 rule reaches Alertmanager with, keyed by alert name.
 
     The log rules live in loki-homelab's `homelab-logs.yaml` and the ruler-watching alerts in
-    observability's `loki-homelab.yaml`. Every rule carries a literal `service`, so the rule's
-    own labels are the whole set, and a rule that gains or drops `shadow`, or changes
-    `severity`, moves to another route and fails its expected outcome.
+    observability's `loki-homelab.yaml`. Every rule carries a literal `service`, so its own
+    labels are the whole set, and a changed `shadow` or `severity` moves it to another route.
 
     Args:
         shadow: Whether to return the rules that carry `shadow`, or those that do not.
@@ -369,42 +368,42 @@ def test_every_deploy_pipeline_rule_has_an_expected_outcome():
 
 
 def test_host_sets_names_every_host_check_rule():
-    """Non-vacuity for `host_sets`: M3's two shadow collector rules, #5672's fan-out idle rule,
-    M6's B1 pairs for the five k3s crons with `KumaDown`, and the paging host-plane rules, M3's
-    two disk-health rules among them since its PR 5."""
-    assert set(host_sets(shadow=True)) == {
-        "TextfileCollectorError/daniel-box",
-        "TextfileCollectorError/daniel-server",
-        "FanoutSlotsIdleWithFreeWork/daniel-box",
-        "ArtifactsSyncFailed/daniel-box",
-        "ArtifactsSyncNotReporting/daniel-box",
-        "OtlpDoorClosed/daniel-box",
-        "OtlpDoorNotReporting/daniel-box",
-        "KumaDown/uptime-kuma",
-        "LonghornBackupHealthFailed/daniel-box",
-        "LonghornBackupHealthNotReporting/daniel-box",
-        "EtcdSnapshotOffboxFailed/daniel-box",
-        "EtcdSnapshotOffboxNotReporting/daniel-box",
-        "ManifestPruneCheckFailed/daniel-box",
-        "ManifestPruneCheckNotReporting/daniel-box",
-        "ReleaseStalenessCheckFailed/daniel-box",
-        "ReleaseStalenessCheckNotReporting/daniel-box",
-        "LiveDriftCheckFailed/daniel-box",
-        "LiveDriftCheckNotReporting/daniel-box",
-    }
+    """Non-vacuity for `host_sets`: every shadow rule of the group, per host for the rules each
+    host carries (#6166, #6168), and the paging host-plane rules, M3's two disk-health rules
+    among them since its PR 5."""
+    hosts = ("daniel-box", "daniel-server", "daniel-pi")
+    every_host = (
+        "TextfileCollectorError AideCheckFailed AideCheckNotReporting RkhunterScanFailed "
+        "RkhunterScanNotReporting HostCheckOverdue"
+    ).split()
+    box_only = (
+        "FanoutSlotsIdleWithFreeWork ArtifactsSyncFailed ArtifactsSyncNotReporting "
+        "OtlpDoorClosed OtlpDoorNotReporting LonghornBackupHealthFailed "
+        "LonghornBackupHealthNotReporting EtcdSnapshotOffboxFailed "
+        "EtcdSnapshotOffboxNotReporting ManifestPruneCheckFailed "
+        "ManifestPruneCheckNotReporting ReleaseStalenessCheckFailed "
+        "ReleaseStalenessCheckNotReporting LiveDriftCheckFailed LiveDriftCheckNotReporting"
+    ).split()
+    assert set(host_sets(shadow=True)) == (
+        {f"{alert}/{host}" for alert in every_host for host in hosts}
+        | {f"{alert}/daniel-box" for alert in box_only}
+        | {"ComposeUpFailed/daniel-pi", "KumaDown/uptime-kuma"}
+    )
     assert set(host_sets(shadow=False)) >= {
         "DiskHealthFailed/daniel-box",
         "DiskHealthNotReporting/daniel-box",
-        "HostReconcileFailed/daniel-box",
-        "HostReconcileFailed/daniel-server",
-        "HostReconcileFailed/daniel-pi",
+    } | {
+        f"{alert}/{host}"
+        for alert in ("HostReconcileFailed", "HostRebootOverdue")
+        for host in hosts
     }
 
 
 def test_loki_sets_name_every_m5_rule():
-    """Non-vacuity for `loki_sets`: the eight M5 alerts that page from PR 4b, the one
-    that stays shadow until M6's batch A3, and A7's shadow WorkloadLogErrors."""
+    """Non-vacuity for `loki_sets`: each paging Loki rule, and two that must stay shadow."""
     assert set(loki_sets(shadow=False)) == {
+        "HostLogErrors",
+        "HostOutOfMemoryKill",
         "LokiHostLogsSilent",
         "LokiPodLogsSilent",
         "LokiPiLogsSilent",

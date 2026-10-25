@@ -190,7 +190,7 @@ extend-exclude = [
 # hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar. The
 # repository signer runs under daniel-box's /usr/bin/python3 for the same reason, and
 # ansible/roles/setup/homelab_builder/tests/test_repo_signer.py holds it to the same grammar.
-per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py" = "py312" }
+per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),

@@ -87,11 +87,12 @@ def test_setup_role_hosts_reads_the_when_gate_per_host(_synthetic_setup_inventor
     ) == frozenset({"daniel-box"})
     # nut_host: `inventory_hostname == ups_host or nut_host_secondary_armed | bool` -- the
     # play gate reaches daniel-server (first clause) and daniel-box (second, armed there), and
-    # daniel-pi neither. The live role's leading `end_role` guard then drops daniel-server,
-    # whose half the homelab-daniel-server package owns (H4.3c).
-    assert land_reach.setup_role_hosts(
-        "nut_host", playbook, all_vars, host_vars_dir
-    ) == frozenset({"daniel-box"})
+    # daniel-pi neither. The live role's unconditional `end_role` then drops both, whose
+    # halves their packages own (H4.3c, H7.33).
+    assert (
+        land_reach.setup_role_hosts("nut_host", playbook, all_vars, host_vars_dir)
+        == frozenset()
+    )
     assert land_reach.setup_role_hosts(
         "optimize_pi", playbook, all_vars, host_vars_dir
     ) == frozenset({"daniel-pi"})
@@ -452,10 +453,10 @@ def test_remaining_setup_hosts_note_stays_empty_for_pr_1241():
     two playbook runs that change nothing -- 7 of the 18 such verdicts in the two days to
     2026-09-05 had this shape."""
     files = [
-        "ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2",
-        "ansible/roles/setup/initial_setup/templates/eval-run.sh.j2",
+        "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
+        "ansible/roles/setup/initial_setup/templates/setup-drift-kuma-push.env.j2",
     ]
-    assert land_reach.remaining_setup_hosts_note(files, "daniel-box") == ""
+    assert land_reach.remaining_setup_hosts_note(files, "daniel-server") == ""
 
 
 def test_setup_file_hosts_reads_a_role_markdown_as_shipped_nowhere(

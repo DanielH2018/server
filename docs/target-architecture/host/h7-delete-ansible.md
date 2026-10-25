@@ -26,7 +26,7 @@ secrets follow H4.
 
 Afterwards, no Ansible playbook, role task or collection remains in the tree. `ansible-core`
 is out of `pyproject.toml` and `uv.lock`. Each host is configured by `homelab-<hostname>`,
-`homelab-updater`, `homelab-repos` and `homelab-tools`. The operator's user-level tooling is
+`homelab-updater` and `homelab-tools`. The operator's user-level tooling is
 configured by chezmoi. The GitOps deployer is gone, and a package timer fast-forwards the
 primary checkout on daniel-box.
 
@@ -69,7 +69,7 @@ The exit criterion is seven observations:
 4. **The cluster-node bring-up.** Two proofs, because no single guest can carry both.
     - *The host half, in a drill guest.* A transient guest on daniel-server plays
       daniel-box. `bootstrap-host.sh daniel-box --local-build <clone>` builds and installs
-      `homelab-repos`, `homelab-tools`, `homelab-updater` and `homelab-daniel-box` with no
+      `homelab-tools`, `homelab-updater` and `homelab-daniel-box` with no
       homelab repo reachable. Exactly one k3s unit exists, `k3s.service`, and
       `k3s kubectl get node daniel-box` reads Ready. `k3s --version` reports the script's
       embedded `k3s_version`, which the *Bootstrap pins* test holds equal to H6's
@@ -461,7 +461,7 @@ The exit criterion is seven observations:
 |---|---|---|---|---|
 | `initial_setup` | apt and unattended-upgrades config, sshd drop-ins, sysctl keys in `/etc/sysctl.conf` through the line arm, fail2ban, journald caps, rkhunter, AIDE, postfix, accounting, the weekly reboot and maintenance timers, ufw | same | same, plus the checkout timers (docs refresh, eval sweep, infra map, secret rotation, git repair) and two kuma-check timers | `Clear ansible log file` and `kuma-check-setup-drift` are deleted |
 | `optimize_pi` | zram, Log2Ram, watchdog, earlyoom, apt-timer drop-ins, node exporter unit, resolver and hosts files | — | — | the debloat `apt purge` becomes a one-time bootstrap step |
-| `docker_install` | Docker source in `homelab-repos`; `homelab-docker-engine.service` with the pins; `daemon.json`; Go-runtime drop-ins; the Compose unit creates the external `proxy` and `lifecycle` networks | — | — | the networks stay `external: true` (H7.5) |
+| `docker_install` | Docker source in the `apt-docker` component; `homelab-docker-engine.service` with the pins; `daemon.json`; Go-runtime drop-ins; the Compose unit creates the external `proxy` and `lifecycle` networks | — | — | the networks stay `external: true` (H7.5) |
 | `sops_setup` | `homelab-tools` (sops), `Depends: age` | same | same | key generation is bootstrap step 3; collections are deleted |
 | `hypervisor` | — | libvirt `Depends`, network and nwfilter XML, drill timer, libvirt arm | — | — |
 | `k3s` (host halves) | — | `agent.yml`, `agent_verify.yml`, `static-address.yml`, the node files and the agent ufw rules | node files, netplan, `coredns-host.service`, disk health, etcd list drill, kubeconfig oneshot, the join-firewall rules | install moves to bootstrap step 4 |
@@ -866,7 +866,7 @@ The engine never moves through the updater. `homelab-daniel-pi` declares no vers
 `Depends` on `docker-ce`, `containerd.io` or the plugins, and ships no apt preferences pin
 for them, because a pin above priority 1000 forces a version change on the next apt run.
 
-- `homelab-repos` ships Docker's source and key.
+- The `apt-docker` component of `homelab-daniel-pi` ships Docker's source and key.
 - `homelab-daniel-pi` ships `/usr/lib/homelab/docker-engine.pins`, rendered from
   `docker_install_package_specs`, and `homelab-docker-engine.service`, a oneshot the
   manifest marks `manual`. Reconcile never starts it.
@@ -1273,9 +1273,9 @@ steps are:
 
 1. Refuse if `hostname` differs from `<hostname>`.
 2. Install the homelab keyring, verified against the pinned fingerprint. Without
-   `--local-build`, also write `homelab.sources` and install `homelab-repos` from the repo.
+   `--local-build`, also write `homelab.sources`.
    With `--local-build`, write only the keyring, because the repo is not running yet; step 5
-   installs `homelab-repos` and `homelab.sources` from the local build.
+   installs `homelab.sources` from the local build.
 3. Create `/etc/homelab/age.key` if it is missing, and print the public key. If the key
    comes from the break-glass kit, the public key is unchanged, so no recipient commit is
    needed.
@@ -1318,13 +1318,12 @@ steps are:
       that the clone is unchecked, and the operator who chose the clone is its trust root,
       as for any hand-run bring-up.
     - It fetches nfpm and uv at the versions pinned in the script and checks each sha256.
-    - It renders and builds `homelab-repos`, `homelab-tools`, `homelab-updater` and
+    - It renders and builds `homelab-tools`, `homelab-updater` and
       `homelab-daniel-box` from the clone, with `uv run --frozen` and
       `host_python_version`, as the builder does.
-    - It installs `./homelab-repos_*.deb` and runs `apt-get update`, which reads the
-      third-party sources that package ships. It then installs the other three in one
-      `apt-get install ./<a>.deb ./<b>.deb ./<c>.deb`, so apt resolves their `Depends`
-      among themselves and against Ubuntu's and the third-party archives.
+    - It installs the three in one `apt-get install ./<a>.deb ./<b>.deb ./<c>.deb`, so apt
+      resolves their `Depends` among themselves and against Ubuntu's archive. The host
+      package's own apt sources take effect from the next `apt-get update`.
     - The local `homelab-updater` ships `homelab.sources`, and `homelab-daniel-box` starts
       the signer, the builder and the repo. The next updater run moves the host onto the
       signed repo, at the same version or a newer one.
@@ -1419,7 +1418,7 @@ fetch from the break-glass kit instead, and each step stays **operator-only**:
 
 `bootstrap-host.sh` takes `--offline <kit-dir>`. It reads each file from that directory,
 checks it against the same sha256 pin the download path checks, and refuses on a missing
-file or a mismatch, naming the file. `homelab-repos` ships the GitHub CLI apt source, which
+file or a mismatch, naming the file. `homelab-daniel-box` ships the GitHub CLI apt source (the `apt-github-cli` component), which
 is a GitHub host, so in step 5 `--offline` runs `apt-get update` without that one source.
 The next online updater run reads it again. `docs/break-glass.md` lists the kit's offline files,
 and the *Bootstrap pins* test holds each listed pin equal to the script's.
@@ -1612,7 +1611,7 @@ any of those named sets or has no creation rule, and it names the set.
 ### Tree diff
 
 ```diff
-+ hosts/packages/homelab-repos/
++ hosts/components/apt-{docker,azlux,github-cli}/              (the apt sources and keys)
 + hosts/packages/homelab-tools/
 + hosts/lib/{host_lib,kuma_push,ci_verdict}.py                (moved from roles/setup)
 + hosts/lib/homelab-reconcile                                  (+ activation, ufw, libvirt,
@@ -1755,7 +1754,8 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.21 Activation, drift and the ufw arm | H7.2a, H7.2b | yes; B is measured at H3.2b's merge commit | H3.2b, H4.3b2 |
 | H7.22 The libvirt, users and line arms | H7.2c, H7.2d | yes | H7.21 |
 | H7.23 Shared modules leave the setup tree; the setup census | H7.2e, H7.2f | yes | H3's builder, D1's `promote.py`, D5.1h |
-| H7.24 `homelab-repos`, and `sops_setup` retires | H7.1 | yes | H3, H4, H6.2 |
+| H7.24a The apt-source components, and nfpm in `homelab-tools` | H7.1, first half | yes | H3, H4, H6.2 |
+| H7.24b `sops_setup` retires | H7.1, second half | no: it waits for the callers to reach the packaged `sops` (item 4) | H7.24a, H7.42 (old step H7.15a) |
 | H7.25 Pi: `optimize_pi`, `config_files` and the Pi rows of `k8s_host_files` | H7.3, H7.4 | yes; the owner measurement is a read-only call on the live Pi | H7.22, H3.6, D5.1h |
 | H7.26 Pi: `docker_install` | H7.5 | yes, against H5's Compose unit | H7.22, H5.12 |
 | H7.27 Pi: `initial_setup`, part 1 | H7.6a, H7.6d, H7.6g | yes | H7.22 |
@@ -1772,8 +1772,9 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.38 Per-user tooling in `DanielH2018/dotfiles` | H7.12a | yes | none |
 | H7.39 The agent users and daniel-server's `claude_code` | H7.12b, H7.12c's daniel-server PR | yes | H7.38, H7.22, H4, H6.2, the H6 PR that lands the window test |
 | H7.40 daniel-box: `claude_code` | H7.12c's daniel-box PR | yes, with H7.39 | H7.39 live, D5's artifacts row |
-| H7.41 daniel-box: the builder hosts itself | H7.14 | yes | H3, H6.2 |
-| H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24, H6.1b, H6.2 |
+| H7.41a daniel-box: the builder's tooling | H7.14, first half | yes | H3, H6.2, H7.24a |
+| H7.41b daniel-box: the builder hosts itself | H7.14, second half | no: it waits for H7.41a live on daniel-box | H7.41a live, H3, H6.2, H7.24a |
+| H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24a, H6.1b, H6.2 |
 | H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H5, all live |
 | H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6 |
 | H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | yes | R4 |
@@ -1783,8 +1784,8 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.49 monitor-bridge's gitops checks go, and land.sh stops running the tick | H7.19a's first and third PRs | yes | H7.41, D6 |
 | H7.50 deploy_ui retires | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
-| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49, H7.51 live, H7.24, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H6 |
-| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24 to H7.41, H7.48, H7.50 |
+| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H6 |
+| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.48, H7.50 |
 | H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43, H7.44, H7.45 |
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
@@ -1811,10 +1812,37 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
    carries H7.2e's four derivation greps, the key grep, the routing test and the empty
    cluster `diff -r`, the moved-CI-key, shared-module-routing and setup-census proofs, the
    `manual_plane` line for `k3s` that the `host_lib.py` move records, and H7.2e's revert note.
-4. **H7.24** stays alone. It is the one PR that writes all three host packages at once, and
-   its body quotes `command -v sops` on each host. It carries the age-key decision in
-   `docs/break-glass.md`. The removal of daniel-server's user-home age key waits for the
-   operator's confirmation that nothing reads it (**operator-only**).
+4. **H7.24 splits in two, ruled on 2026-10-24.** H7.24a moves the apt sources and keys into
+   per-host components and adds nfpm to `homelab-tools`. H7.24b retires `sops_setup`.
+    - **The old step's premise about `sops` was false.** It reads the packaged `sops` as the
+      binary callers reach through `PATH`. `hosts/packages/homelab-tools/package.yml:2`
+      installs each tool at `/usr/lib/homelab/bin/<tool>`, "never on PATH", and only
+      `hosts/lib/homelab-secrets:68` names that absolute path. `command -v sops` prints
+      `/usr/local/bin/sops` on all three hosts. Retiring that binary now would remove `sops`
+      from the deployer, from `deploy.sh`'s `community.sops` lookups, from the operator's edits
+      and from the rotation cron.
+    - **H7.24a** writes the components `apt-docker`, `apt-azlux` and `apt-github-cli`, with the
+      sources and keys at the paths the roles wrote, so dpkg takes them over. It deletes the
+      moved tasks of `docker_install`, `github_cli` and `optimize_pi`. daniel-pi's package lists
+      the first two, and the packages of daniel-box and daniel-server list the third.
+      daniel-box also depends on `homelab-tools` for nfpm. daniel-server's package retires the
+      hand-installed `github-cli.list`, which names the repository that `github-cli.sources`
+      now ships. `sops_setup` stays untouched.
+    - **The operator ruled on 2026-10-24 that each host ships only the sources it uses.** An
+      earlier draft shipped all three from one shared `homelab-repos` package, which gave every
+      host two indexes it never reads and tied each updater run to three third-party hosts.
+      The hosts that use each source are: Docker and Azlux on daniel-pi, which alone runs
+      `docker_install` and `optimize_pi`; the GitHub CLI on daniel-box, which runs `github_cli`,
+      and on daniel-server, where `dpkg-query -W gh` reports 2.103.2 from a hand install. No
+      source is common to all three hosts, so there is no `homelab-repos` package.
+      `scripts/renderer/tests/test_apt_source_components.py` fails a host package that ships a
+      source its host does not use. A fresh host that runs `initial_setup.yml` before its
+      packages are installed lacks these sources; the operator accepted that gap until H7.42.
+    - **H7.24b** retires `sops_setup` and lists `/usr/local/bin/sops` as a legacy entry in all
+      three host packages. It waits on H7.15a, which is H7.42 in the table. Its body quotes
+      `command -v sops` on each host. It also carries the age-key decision in
+      `docs/break-glass.md`. The removal of daniel-server's user-home age key waits for the
+      operator's confirmation that nothing reads it (**operator-only**).
 5. **H7.25.** Both steps move `optimize_pi`, and H7.4 empties the role that H7.3 starts.
    zram's keys and the Pi's other sysctl keys share one line arm on `/etc/sysctl.conf`. It
    carries H7.3's owner measurement and its divert contingency, H7.4's textfile-directory
@@ -1860,8 +1888,62 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
     H7.40 each land in a window the operator picks (**operator-only**).
 16. **H7.40** stays alone as the second canary host. It carries the artifacts directories'
     `tmpfiles.d` lines and empties `claude_code`.
-17. **H7.41** stays alone. It carries the fingerprint-file proof and the break-glass procedure
-    for a broken builder.
+17. **H7.41 splits in two, ruled on 2026-10-24.** Wherever another row or entry names H7.41
+    as a dependency, it means H7.41b. H7.41a is tooling and spec amendments and moves no
+    builder unit or task. H7.41b is the builder move, and it waits for H7.41a live on
+    daniel-box. The pair carries the fingerprint-file proof, the break-glass procedure
+    for a broken builder, and the builder's three tools and its alert unit, which H7.14
+    names (nfpm, uv, the interpreter and `homelab-alert@.service`). It waits on H7.24a
+    because nfpm arrives in `homelab-tools` with H7.24a. A builder that rebuilds its own
+    package can publish a broken `homelab-daniel-box`, so H7.41b's PR body states the
+    recovery: `apt-get install homelab-daniel-box=<previous>`, or the by-hand build of one
+    package (*Rollback*).
+    - **H7.41a** carries rulings 2 and 3 below as code, with their tests, and rulings 1, 4 and
+      5 as spec text. It needs no SOPS key.
+    - **H7.41b** carries the builder move and the five facts listed after the rulings.
+    - **Ruling 1, 2026-10-24: the `users:` arm declares uid only.**
+      `scripts/renderer/renderer_lib/host_arms.py:USER_KEYS` is `{name, uid, home, shell,
+      comment}` and `hosts/lib/reconcile_lib/users.py` has no gid. The package declares uid
+      995 and 994. The install adopts the live accounts by uid, and a rebuilt host's groups
+      get gid equal to uid. A grep for the live gids 983 and 982 under `ansible/`, `hosts/`
+      and `scripts/` finds no reader of them.
+    - **Ruling 2, 2026-10-24: uv's archive member is one directory down.** uv 0.13.4 ships
+      tarballs only, with the binary at `uv-x86_64-unknown-linux-gnu/uv` and
+      `uv-aarch64-unknown-linux-gnu/uv`. The member grammar of both twins
+      (`ansible/roles/setup/homelab_builder/files/homelab_tool_fetch.py:_MEMBER` and
+      `scripts/renderer/renderer_lib/host_tools.py:_MEMBER`) accepts exactly one directory
+      segment. `homelab-tools` pins uv 0.13.4, the version of `initial_setup_uv_version`.
+    - **Ruling 3, 2026-10-24: reconcile hands a shadowed unit to the package.** The builder's
+      units are already named `homelab-*`, so the package ships the names of the Ansible
+      copies in `/etc/systemd/system`, and those copies win over `/usr/lib/systemd/system`.
+      `h3-pi-pilot.md`'s assumption that package units are renamed does not hold here. A
+      `{path:}` legacy entry under `/etc/systemd/system/`, either a unit file or a `*.wants/`
+      link, whose basename the package ships as a unit gets this handoff: reconcile removes
+      the file, runs one `daemon-reload` after all such removals, and restarts each packaged
+      unit whose file differed, in step 3's order. A `{unit:}` entry that names a packaged
+      unit takes the same path and is never counted as running drift. A `{path:}` entry
+      under that directory with no packaged unit of that name stays in place and counts as
+      drift. A wants link carries no bytes, so removing one restarts nothing. H7.41b
+      checks that the package's own enable link survives the removal.
+    - **Ruling 4, 2026-10-24: credstore paths.** The builder unit writes
+      `LoadCredential=github_token:/run/credstore/homelab_builder_github_token` and the alert
+      unit writes `LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook`.
+      The builder reads `$CREDENTIALS_DIRECTORY/github_token`, so `config.env` holds no
+      secret. `hosts/lib/homelab-secrets` writes `/run/credstore/<sops key>`.
+    - **Ruling 5, 2026-10-24: `UV_PYTHON_DOWNLOADS` is set on `ExecStart=` only.** The
+      interpreter-install `ExecStartPre=` does not inherit `UV_PYTHON_DOWNLOADS=never`. The
+      variable moves onto `ExecStart=` through `env`.
+    - **Facts for H7.41b, measured on 2026-10-24 and not acted on in H7.41a:**
+        - `ansible/roles/setup/homelab_builder/files/host_package_builder.py` is 596 of 600
+          lines. The token change adds 4 lines at most, or moves code into a sibling module.
+        - Both units need `StateDirectoryMode=0711`.
+        - The alert can use `curl --variable 'webhook@%d/...' --expand-url '{{webhook:trim}}'`
+          with no shell wrapper.
+        - The `UFW_SPEC` grammar rejects quotes, so the commented ufw rules need legacy
+          entries with `replaced_by`.
+        - H7.41b needs `homelab_builder_github_token` and `gitops_deploy_discord_webhook` in
+          daniel-box's host SOPS file, through an operator sync
+          (**operator-only**: `host_secrets.py sync daniel-box`).
 18. **H7.42** stays alone. It carries the bootstrap, offline and bootstrap-pins proofs.
 19. **H7.43** stays alone, because the operator's rebuild is exit observation 2. The operator
     rebuilds at the Pi's console and keeps the old SD card as the rollback
@@ -2000,7 +2082,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       rotated `pi_peer_backup_ssh_key` then reaches the Pi as a new `homelab-daniel-pi`
       version. The PR repoints the redeploy that D5 names for that key, the
       `k8s_host_files` apply, at the Pi package.
-5. **H7.5 Pi: `docker_install`.** The Docker source moves to `homelab-repos`. The pins,
+5. **H7.5 Pi: `docker_install`.** The Docker source moves to the `apt-docker` component. The pins,
    `homelab-docker-engine.service`, `daemon.json`, the Go drop-ins, and the containerd
    config block through the line arm move to the package, all `manual`. The hold stays.
     - **The networks stay external.** The PR first measures, in the CI container, what
@@ -2168,6 +2250,58 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `/var/lib/homelab-builder/`, which the package's unit keeps as its state
           directory, so an upgrade does not reset it and `OnFailure=` still posts once per
           condition.
+    - **The builder's three tools come from packages.** The role fetches nfpm with `get_url`,
+      copies the operator's `~/.local/bin/uv` and runs `uv python install` as the builder
+      (`homelab_builder/tasks/builder.yml`). The package replaces all three. Ruled
+      2026-10-24:
+        - **nfpm** comes from `homelab-tools`, which H7.24a (#6138) extends. The unit's
+          `HOMELAB_NFPM` names its path under `/usr/lib/homelab/bin/`.
+        - **uv** joins `homelab-tools`, pinned by version and sha256 as sops and chezmoi are
+          (`hosts/packages/homelab-tools/package.yml`, one Renovate annotation per
+          architecture block). The unit's `HOMELAB_UV` and `ExecStart=` name its fixed path
+          under `/usr/lib/homelab/bin/`. The builder stops copying the operator's uv, so the
+          role's assert against `initial_setup_uv_version` goes with the copy.
+        - **The pinned interpreter** is installed by the builder unit itself. An
+          `ExecStartPre=` runs the packaged uv's `uv python install --no-bin <version>` into
+          a directory under the unit's `StateDirectory=`, which `UV_PYTHON_INSTALL_DIR`
+          names. The version pin lives in the package, so rebuilding the host needs no
+          Ansible apply. The run keeps `UV_PYTHON_DOWNLOADS=never` (on `ExecStart=` only, per
+          item 17's ruling 5) and `--no-python-downloads`, so only the `ExecStartPre=` downloads, and it does nothing once the version is
+          present.
+    - **The failure alerts become one packaged template unit.** The role renders
+      `homelab-builder-alert.service` and `homelab-repo-sign-alert.service` through
+      `roles/setup/common/tasks/alert_unit.yml`, with an `alert-webhook.env` in
+      `/etc/homelab-builder`. A new shared component, `failure-alert`, ships
+      `homelab-alert@.service` instead. Ruled 2026-10-24:
+        - The builder and repo-sign units name it with `OnFailure=homelab-alert@%n.service`.
+          The page opens with the instance name, which replaces the per-service message that
+          `alert_unit.yml` renders. That file's instanced form (`alert_unit_instanced`) is
+          the model. The component keeps the retry-until-delivered behaviour and the
+          once-per-failure `Failed at <UTC time>` record.
+        - The webhook arrives through `LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook`,
+          the form `k3s-restart` and checkout-sync use. The credential is the SOPS key
+          `gitops_deploy_discord_webhook`, the key `alert_unit.yml` renders today.
+          daniel-box's `package.yml` lists it under `credentials:`, and the operator runs
+          `host_secrets.py sync daniel-box` to copy it into the host's SOPS file
+          (**operator-only**). The role's teardown stops owning the env file.
+        - Other roles' alert units can reuse `homelab-alert@.service` later. H7.41 leaves
+          them out.
+        - This reverses #3694's choice of per-service alert units over one `alert@.service`.
+          The reasons in `alert_unit.yml`'s header (four renamed units, and a shared env
+          file with no owner) do not apply once a package owns the credential. The PR moves
+          the two builder entries out of `ansible/tests/setup/test_alert_unit.py`'s
+          `KNOWN_ALERTS` and into the component's own test.
+    - **The `users:` arm declares the live ids.** Measured with `id` on daniel-box on
+      2026-10-24: `homelab-builder` uid 995 gid 983, and `homelab-signer` uid 994 gid 982.
+      The package declares the uids only (item 17's ruling 1), so the install adopts the
+      existing accounts and the files they own keep their owners.
+    - The packaged builder unit keeps `SyslogLevel=notice`, which this host's journald needs
+      (`MaxLevelStore=notice`) for a failed run's traceback to reach the journal, and the
+      sandboxing directives that `homelab_builder/tests/test_builder_units.py` holds.
+    - **Self-rebuild failure.** The builder builds the package that installs the builder, so
+      a broken `homelab-daniel-box` breaks the repair path. The repository keeps the
+      previous version, so `apt-get install homelab-daniel-box=<previous>` restores it.
+      Otherwise the break-glass procedure below builds one package by hand.
     - Write a break-glass procedure for a broken builder: render, build and sign one
       package by hand as `homelab-builder`, then run `apt install ./pkg.deb`.
 15. **H7.15 Bootstrap and the rebuild proofs.**
@@ -2178,6 +2312,32 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       gains the script as a second file. It also adds `--offline <kit-dir>` and the kit's
       file list in `docs/break-glass.md`, with the offline container case, about 100 more
       lines (*The cluster-node bring-up*).
+      **Amended 2026-10-25 (H7.42):** the script landed with fake-root tests, written against the
+      live tree. Nine premises did not hold:
+        - *No LVM step.* No task, role or doc creates daniel-server's LVM volumes. Only
+          `ansible/README.md` records a one-time `lvextend` of the root volume. The script
+          therefore writes no volume, and an inventor's layout would be destructive.
+        - *No `homelab-repos` package.* H7.24a replaced it with the per-host `apt-docker`,
+          `apt-azlux` and `apt-github-cli` components, so `--offline` leaves out the
+          `github-cli` source file only.
+        - *nfpm and uv pins.* Both are the blocks of `hosts/packages/homelab-tools/package.yml`
+          (H7.24a, H7.41a), embedded byte for byte. The builder's own role no longer holds
+          the uv pin.
+        - *Three packages, not four.* `--local-build` builds `homelab-tools`,
+          `homelab-updater` and `homelab-<host>`.
+        - *Step 6.* `homelab-docker-engine.service` is not in the tree until H7.25 lands. The
+          script starts it when the unit exists and prints that it starts nothing otherwise.
+        - *The k3s Renovate manager.* The `k3s-io/k3s` rule is a package rule, not a manager.
+          `renovate.json` gains a small custom manager for the script's `K3S_VERSION` line, and
+          the `homelab-tools` manager gains the script as a second file.
+        - *`preflight.yml`'s host-var checks.* They have no counterpart: the script embeds the
+          three host names and refuses any other.
+        - *The anchor check.* It runs as `hosts/lib/bootstrap_anchor.py` from the archived
+          tree, not inside the script, so its decision has unit tests.
+        - *Not in this PR.* The systemd container cases (`apt-get install --simulate` and the
+          offline case with its two red fixtures) need the `host_packages` job's image, and the
+          fake-root suite replaces them for this PR. H7.44's guest drill still owns the
+          end-to-end proof.
     - **H7.15b** The Pi runbook, then the Pi rebuild, which is exit observation 2. The
       operator keeps the old SD card as the rollback. The cluster's wg-easy on 51820 is
       proven first, as in H5.5.
@@ -2394,7 +2554,7 @@ curl -s http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=homelab_host_
 ssh daniel-server 'sudo grep -c "^K3S_TOKEN=" /etc/systemd/system/k3s-agent.service.env; systemctl start homelab-etcd-restore-drill.service; journalctl -u homelab-etcd-restore-drill -n 20 --no-pager'
 
 # Exit 4, host half, inside the drill guest, with the guest's own admin kubeconfig.
-dpkg-query -W homelab-repos homelab-tools homelab-updater homelab-daniel-box
+dpkg-query -W homelab-tools homelab-updater homelab-daniel-box
 systemctl list-unit-files 'k3s*.service' --no-legend
 k3s kubectl get node daniel-box
 ufw status | head -n 1
@@ -3079,7 +3239,7 @@ progress.
       the host, or drift, which does not. H3's updater is unchanged. The alternative, a
       third "pending" result that makes H3's updater rerun reconcile on every fire, would
       amend H3's record and updater for the one case the two-version retirement removes;
-    - `homelab-repos`, and nfpm in H3's `homelab-tools`;
+    - the apt-source components, and nfpm in H3's `homelab-tools`;
     - the reconcile-size census and its ceiling, and the host census;
     - `--offline` in `bootstrap-host.sh`, with the kit's offline file list;
     - two docs-only procedures: adding a host and upgrading a host's Ubuntu release;
@@ -3110,7 +3270,7 @@ progress.
 - The design's net for Area 3 holds with two changes: a fourth reconciler, the line arm, and
   `homelab-tools`, which C5 assigns to H3.
   The rest stays as the design lists it: one CI workflow, 4 package specs,
-  5 shared units, a version monitor, SUC with 2 Plans, `bootstrap-host.sh`, `homelab-repos`,
+  5 shared units, a version monitor, SUC with 2 Plans, `bootstrap-host.sh`,
   a LAN builder and its key, and the CI package tests.
 
 ## Open questions

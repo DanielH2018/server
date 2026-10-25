@@ -42,6 +42,8 @@ PROMOTE_LIB_MEMBERS = frozenset(
 CHECKOUT_ONLY = frozenset(
     {
         "controller_rollout.py",
+        "decision.py",
+        "supersede.py",
         "reboot_window.py",
         "storage_rollout.py",
         "verify_handoff.py",

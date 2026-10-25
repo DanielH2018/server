@@ -1,0 +1,10 @@
+# The eval sweep's state directory (H7.10b).
+# homelab-eval-sweep.service runs `systemd-tmpfiles --create` on this file in ExecStartPre= with
+# the `+` prefix, which runs that one command as root while the service itself runs as
+# {{ sys_user }}. systemd-tmpfiles-setup.service also creates it at boot.
+#
+# eval-run keeps a failed commit's log here, the sweep it could not publish beside it, and the
+# per-run reports of its last few sweeps under sweeps/ (#4019). It sits outside the checkout
+# because an untracked file inside it parks the deployer. /var/lib/homelab is root-owned 0755.
+#Type Path                         Mode User          Group         Age
+d /var/lib/homelab/eval-run.d      0755 {{ sys_user }} {{ sys_user }} -

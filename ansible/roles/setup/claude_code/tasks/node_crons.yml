@@ -47,7 +47,7 @@
     name: "Sync peer Claude artifacts"
     minute: "{{ claude_code_artifacts_sync_minute }}"
     user: "{{ sys_user }}"
-    job: "/usr/local/bin/sync-artifacts.sh"
+    job: "/usr/local/bin/sync-artifacts.sh 2>&1 | logger -t sync-artifacts"
     cron_file: sync-artifacts
   become: true
 
@@ -84,7 +84,7 @@
     name: "Claude Code telemetry health"
     minute: "{{ claude_code_telemetry_health_minute }}"
     user: "{{ sys_user }}"
-    job: "/usr/local/bin/claude-otel-health.sh"
+    job: "/usr/local/bin/claude-otel-health.sh 2>&1 | logger -t claude-otel-health"
     cron_file: claude-otel-health
   become: true
 

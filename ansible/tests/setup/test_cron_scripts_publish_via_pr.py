@@ -6,8 +6,8 @@ sent to /dev/null leaves an alert that says it failed and nothing that says why,
 stays invisible until the rejected command is run by hand.
 
 secret-rotate is the more consequential of the two: it changes a live credential and
-redeploys its consumer BEFORE publishing, so an unpublished rotation leaves the running value
-and origin disagreeing, and the next deploy from origin re-applies the superseded one.
+redeploys its consumer BEFORE publishing, so an unpublished rotation leaves the running
+value and origin disagreeing, and the next deploy from origin re-applies the old one.
 
 The publish sequence itself -- branch, push, reset master, `gh pr create`, `gh pr merge
 --auto` -- lives in scripts/deploy_tools/publish_pr.py, which the three crons call, and is
@@ -15,9 +15,8 @@ EXECUTED by scripts/deploy_tools/tests/test_publish_pr.py. What stays here is te
 assertions over the templates, the weaker kind of guard, kept because the regression they
 cover is someone reinstating an inline direct write, and that is a literal line of shell.
 
-The second half of this file is a different invariant on the same crons: no Kuma push token
-reaches curl's argv. It carries its own header above `ROLES`, including why its corpus is
-derived rather than listed.
+The second half is a different invariant on the same crons: no Kuma push token reaches
+curl's argv. Its header above `ROLES` says why its corpus is derived rather than listed.
 """
 
 import re
@@ -29,11 +28,11 @@ from _helpers import REPO
 from _shell_render import rendered_or_source_text, rendered_shell_text
 
 TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
-
-DOCS_REFRESH = TEMPLATES / "docs-refresh.sh.j2"
-SECRET_ROTATE = TEMPLATES / "secret-rotate.sh.j2"
-ROTATION_AUDIT = TEMPLATES / "secret-rotation-audit.sh.j2"
-EVAL_RUN = TEMPLATES / "eval-run.sh.j2"
+COMPONENTS = REPO / "hosts/components"
+DOCS_REFRESH = COMPONENTS / "docs-refresh/templates/docs-refresh.sh.j2"
+SECRET_ROTATE = COMPONENTS / "secret-rotation/templates/secret-rotate.sh.j2"
+ROTATION_AUDIT = COMPONENTS / "secret-rotation/templates/secret-rotation-audit.sh.j2"
+EVAL_RUN = COMPONENTS / "eval-sweep/templates/eval-run.sh.j2"
 PUBLISH_PR = REPO / "scripts/deploy_tools/publish_pr.py"
 
 # (path, the commit invocation as it appears in that script). secret-rotate splits its commit
@@ -46,7 +45,11 @@ SCRIPTS = [
 
 
 def read(path: Path) -> str:
-    text = rendered_shell_text("setup", "initial_setup", path.name)
+    in_component = COMPONENTS in path.parents
+    role = path.parent.parent.name if in_component else "initial_setup"
+    text = rendered_shell_text(
+        "components" if in_component else "setup", role, path.name
+    )
     assert len(text) > 2000, f"{path.name} is only {len(text)} bytes — has it moved?"
     return text
 
@@ -230,24 +233,19 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
 # --- Every variable a cron reads is one it can see ------------------------------------------
 #
 # All four scripts run under `set -uo pipefail`, so reading an unset variable aborts the script
-# at that line. That is normally the right behaviour, but it is invisible to every check the
-# repo has: the templates render, ansible-lint passes, and the abort only happens on the branch
-# that reads the variable -- for example the branch that reports a DEGRADED run, which a
-# healthy run never touches.
+# at that line. Every other check misses it: the templates render, ansible-lint passes, and the
+# abort only happens on the branch that reads the variable, such as the DEGRADED-run branch.
 #
 # A read is satisfied when the same template assigns it, when kuma-push-lib.sh does (every one
 # of these sources it), or when it is in _CRON_ENV below. Forms that survive `set -u` --
 # ${VAR:-}, ${VAR-}, ${VAR:+}, ${VAR+}, ${VAR:=}, ${VAR=} -- are not reads. Nothing else is
 # exempt: ${VAR#...}, ${VAR//...} and ${#VAR} all abort on an unset VAR just as `$VAR` does.
 
-# Environment the cron wrapper supplies, with the line that supplies it. Each entry widens the
-# guard, so each carries its provenance and test_the_cron_env_allowlist_is_still_exported
-# checks that provenance still exists.
+# Environment the unit supplies, with provenance (test_the_cron_env_allowlist_is_still_exported).
 _CRON_ENV = {
-    "PATH": "set on the cron job line (crons.yml:481 docs-refresh, :531 eval-run) and "
-    "exported by secret-rotate.sh.j2 itself",
-    "KUBECONFIG": "set on the docs-refresh cron job line (crons.yml:481)",
-    "HOME": "set on the eval-run cron job line (crons.yml:531)",
+    "PATH": "Environment= of the component services, exported by secret-rotate.sh.j2",
+    "KUBECONFIG": "Environment= of homelab-docs-refresh.service",
+    "HOME": "Environment= of homelab-eval-sweep.service",
 }
 
 KUMA_PUSH_LIB = REPO / "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"
@@ -372,10 +370,11 @@ def test_the_cron_env_allowlist_is_still_exported():
     """An entry whose provenance is gone silently widens the guard for everything else."""
     crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
     templates = "".join(read(path) for path in _READ_CENSUS_MUST_FIND)
+    units = "".join(p.read_text() for p in sorted(COMPONENTS.glob("*/units/*")))
     stale = [
         name
         for name in _CRON_ENV
-        if f"{name}=" not in crons and f"export {name}=" not in templates
+        if f"{name}=" not in crons + units and f"export {name}=" not in templates
     ]
     assert not stale, (
         "these _CRON_ENV entries are no longer set by any cron job line in crons.yml or "
@@ -436,8 +435,8 @@ _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/claude_code/templates/telemetry-health.sh.j2",
     "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
     "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
-    "ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2",
-    "ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2",
+    "hosts/components/secret-rotation/templates/secret-rotate.sh.j2",
+    "hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2",
     "ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2",
     "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
     "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
@@ -596,10 +595,11 @@ def test_the_audit_grace_is_shorter_than_the_gap_to_the_first_audit():
     23h30m later. A 24h grace would let it push UP -- green on the operator's Monday morning, with
     the sticky DOWN not appearing until Tuesday.
     """
-    crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
-    assert (
-        'kuma_check_on_calendar: "*-*-* 08:30:00"' in crons and 'hour: "9"' in crons
-    ), "the schedule moved; re-derive the grace period against the new times"
+    units = COMPONENTS / "secret-rotation/units/homelab-secret-rotation"
+    assert "OnCalendar=*-*-* 08:30:00" in Path(f"{units}-audit.timer").read_text()
+    assert "OnCalendar=Sun *-*-* 09:00:00" in Path(f"{units}.timer").read_text(), (
+        "the schedule moved; re-derive the grace period against the new times"
+    )
     text = read(ROTATION_AUDIT)
     seconds = [int(m) for m in re.findall(r"-gt (\d{4,})", text)]
     assert seconds, "no age threshold found in the stray-branch arm"

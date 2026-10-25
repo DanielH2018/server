@@ -1,0 +1,14 @@
+# The host-check library the checkout timers source (H7.36). Several daniel-box components ship
+# scripts that `source /usr/lib/homelab/homelab-check-lib.sh` to write their verdict as a
+# node_exporter textfile: secret-rotation, loki-route-witness and the other checkout timers. A
+# package that lists this component installs the one copy, so no other component of that package
+# ships the path. The renderer refuses a package in which two components install the same path.
+#
+# The file stays single at its Ansible path, ansible/roles/setup/initial_setup/files/, where
+# initial_setup still installs it for the hosts that have no package (renderer_lib/host_sources.py:
+# SHARED_FILES). daniel-pi's pi-heartbeats component ships its own copy of the same bytes.
+files:
+  - {shared: homelab-check-lib.sh, dst: /usr/lib/homelab/homelab-check-lib.sh}
+# No legacy entry for /usr/local/lib/homelab-check-lib.sh: initial_setup still installs it for
+# the Ansible-era consumers on daniel-box (aide, rkhunter, the k3s checks, the GitHub timers), so
+# retiring it here would make reconcile and Ansible fight over the path.

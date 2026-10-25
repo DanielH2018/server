@@ -4,6 +4,10 @@
 # k8s_registry_cluster_ip in group_vars/all.yml.
 nut_k8s_image: "{{ k8s_registry_pull_host }}/nut:{{ k8s_built_image_tags.get('nut', 'latest') }}"
 
+# The nut Service's pinned ClusterIP (templates/service.yaml.j2). daniel-box's host package renders
+# the same address into upsmon.conf, so a change here is a change to hosts/components/nut-secondary.
+nut_k8s_cluster_ip: 10.43.171.124
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # NOT probe-less — verified against templates/deployment.yaml.j2, this Deployment DOES render
 # a readinessProbe (and a livenessProbe). The denylist comment block groups this role under

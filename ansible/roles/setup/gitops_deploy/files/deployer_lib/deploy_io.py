@@ -32,6 +32,7 @@ import signal
 import subprocess
 from collections.abc import Callable
 
+from host_lib import deploy_event
 from deployer_lib.deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
     WARNING,
     Config,
@@ -222,7 +223,9 @@ def host_vars_text(repo: str, hostname: str) -> str | None:
     try:
         with open(path) as fh:
             return fh.read()
-    except OSError:
+    except OSError as exc:
+        # Both callers read None as "no host_vars", which is a gate's answer, so say why (#6161).
+        log(f"host_vars: cannot read {path}, read as absent: {exc}", level=WARNING)
         return None
 
 
@@ -400,8 +403,17 @@ def deploy_broad(
         run(cmd, cwd=repo, timeout=budget)
 
 
-def emit_deploy_annotation(services: set[str], sha: str) -> None:
-    """Record a successful auto-deploy where Grafana can draw it as a dashboard annotation.
+def emit_deploy_annotation(
+    services: set[str],
+    sha: str,
+    result: str = "ok",
+    duration_s: float | None = None,
+) -> None:
+    """Record an auto-deploy where Grafana can draw it as a dashboard annotation.
+
+    `result` is `ok` for a deploy that passed its gate, `rollback` for one that failed and was
+    rolled back, and `fail` for one that failed with nothing rolled back. A failure carries
+    the deploy's `duration_s`; the line is `host_lib.deploy_event`'s (#6164).
 
     A LOG LINE, not a POST to Grafana's /api/annotations, and the peer of `annotate` in
     scripts/deploy_tools/deploy_lib/playbook.py (bash's for `--detach`) — the deploy paths must
@@ -410,7 +422,7 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
     address or routing through Traefik with a standing write credential. Neither is needed: the
     Alloy shipper tails /var/log/syslog into loki-homelab, and Grafana reads that Loki by DNS.
 
-    Only the k8s auto-deploy path and the broad arm call this.
+    Only the k8s auto-deploy path, its rollback and the broad arm call this.
 
     Fire-and-forget: any failure is logged and swallowed. An annotation is a convenience, and a
     deploy that succeeded must not be reported as failed because recording it did not.
@@ -421,8 +433,13 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
                 "logger",
                 "-t",
                 "deploy-annotation",
-                f"event=deploy services={','.join(sorted(services))} "
-                f"sha={sha[:8]} result=ok source=gitops",
+                deploy_event(
+                    ",".join(sorted(services)),
+                    sha[:8],
+                    result,
+                    duration_s=duration_s,
+                    source="gitops",
+                ),
             ],
             check=True,
             capture_output=True,
@@ -430,6 +447,6 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
         )
     except Exception as exc:
         log(
-            f"k8s-deploy: annotation failed (deploy itself succeeded): {exc}",
+            f"k8s-deploy: annotation failed (the deploy's own result stands): {exc}",
             level=WARNING,
         )

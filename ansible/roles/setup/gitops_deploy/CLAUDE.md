@@ -51,7 +51,11 @@ cluster, and roll the tree and service back on a failed health gate.
   rollbacks that fired; the record page lists what an earlier widening cost.
   `increase(gitops_tick_runs_total[7d])` counts the same week by outcome, lock skips and
   parks included. `files/gitops_tick_metrics.py` writes it each tick, and the unit's second
-  `ExecStopPost=` writes it for a tick `flock` skipped.
+  `ExecStopPost=` writes it for a tick `flock` skipped. Two shadow rules in
+  `ansible/roles/k8s/observability/files/rules/gitops-checks.yaml` read the file:
+  `GitOpsTickStale` and `GitOpsTickOutcomeRepeating`. The "Containers and system monitoring"
+  board plots the duration and the outcomes. A k8s deploy that fails writes a
+  `result=rollback` or `result=fail` deploy annotation beside its Discord post (`files/deployer_lib/deploy_io.py:emit_deploy_annotation`).
 
 **The two GitHub timers write a textfile beside their Kuma push (M6 batch B3).** The ruleset-drift
 and interaction-limit scripts call `write_check_textfile` from

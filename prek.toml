@@ -227,7 +227,7 @@ name = "Validate the alert plane with promtool, amtool, pint and lokitool"
 entry = "uv run --frozen python scripts/validate/alert_rules.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/rules-configmap\\.yaml\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/rules-configmap\\.yaml\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Same render-then-parse guard as validate-compose-templates above, for the k8s manifests.
 # Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's
@@ -494,7 +494,7 @@ name = "Docs fragments match their sources"
 entry = "uv run --frozen python scripts/docs/gen_doc_fragments.py --fix"
 language = "system"
 pass_filenames = false
-files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|ansible/[^/]+\\.ya?ml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
+files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|hosts/components/.*|ansible/[^/]+\\.ya?ml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
 
 # Re-hashes a verified section whose citation SET an edit changed, in the commit making the
 # edit, and fails like a formatter so the author stages what it wrote. It refuses any section

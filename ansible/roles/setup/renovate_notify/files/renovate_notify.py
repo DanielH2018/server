@@ -42,6 +42,7 @@ from notify_logic import (
     find_dashboard_problems,
     fingerprint,
     parse_automerge,
+    read_check_pages,
     problems_fingerprint,
     render_autoclosed,
     render_digest,
@@ -68,6 +69,7 @@ from host_lib import (
     discord_post,
     github_get,
     github_token,
+    log,
     parse_env_file,
 )
 
@@ -86,10 +88,6 @@ DASHBOARD_STALE_MSG = (
 
 def cfg() -> dict[str, str]:
     return parse_env_file(CONFIG)
-
-
-def log(msg: str) -> None:
-    print(msg, flush=True)
 
 
 def get(path: str):
@@ -120,8 +118,15 @@ def build_pr(repo: str, pr: dict) -> PR:
         detail.get("mergeable_state") == "dirty" or detail.get("mergeable") is False
     )
     sha = pr["head"]["sha"]
-    runs = get("repos/%s/commits/%s/check-runs" % (repo, sha)).get("check_runs", [])
-    statuses = get("repos/%s/commits/%s/status" % (repo, sha)).get("statuses", [])
+    runs = read_check_pages(
+        lambda query: get("repos/%s/commits/%s/check-runs%s" % (repo, sha, query)),
+        "check_runs",
+    )
+    # The combined status pages its `statuses` the same way, at a default of 30 contexts.
+    statuses = read_check_pages(
+        lambda query: get("repos/%s/commits/%s/status%s" % (repo, sha, query)),
+        "statuses",
+    )
     return PR(
         number=n,
         title=pr.get("title", "").strip(),

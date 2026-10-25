@@ -14,9 +14,13 @@ function that logs each call and answers from canned output.
     again, and a run that finds it restores the mirror first.
   * the run holds the lock from before its scale-down until after its restore (#5736). The
     deploy-time restore that took the same lock was deleted with registry's Ansible tasks.
+  * `warm_mirror()` GETs each distinct amd64 blob of every ghcr.io ref through the mirror,
+    only after the restore succeeded, and a blob that fails to warm leaves the run up (#5654).
 """
 
+import json
 import os
+import re
 import shlex
 from pathlib import Path
 
@@ -72,6 +76,28 @@ def test_tag_only_ghcr_refs_are_written_beside_the_digests(tmp_path):
     assert note == ""
     written = "\n".join(calls)
     assert f"--from-literal=digests={LIVE}\ndanielh2018/nut:abc123" in written, calls
+
+
+def test_warm_refs_keep_the_digest_and_drop_a_bare_repository(tmp_path):
+    script = f"""
+KUBECTL="k3s kubectl -n homelab"
+MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
+MIRROR_NOTE=""
+WARM_REFS=""
+k3s() {{ [[ "$*" == *" get "* ]] && printf '%s' "$GET_BODY"; return 0; }}
+{KEEP_SET}
+write_mirror_keep_set
+printf '%s' "$WARM_REFS"
+"""
+    body = (
+        f'{{"items": [{{"image": "ghcr.io/y:latest@{PINNED}"}},'
+        f' {{"image": "ghcr.io/danielh2018/nut:abc123"}},'
+        f' {{"imageID": "ghcr.io/x@{LIVE}"}}, {{"note": "see ghcr.io/bare for docs"}}]}}'
+    )
+    env = {**os.environ, "GET_BODY": body}
+    refs = run(["bash", "-c", script], env=env, check=True).stdout.splitlines()
+
+    assert refs == ["danielh2018/nut:abc123", f"x@{LIVE}", f"y@{PINNED}"], refs
 
 
 def test_an_unreadable_cluster_writes_no_keep_set(tmp_path):
@@ -133,6 +159,10 @@ MIRROR_DONE=0
 MIRROR_DOWN=0
 MIRROR_NOTE=""
 MIRROR_MSG=""
+MIRROR_URL=http://127.0.0.1:5002
+ACCEPT=x
+WARM_BUDGET_S=60
+WARM_REFS=""
 """
 
 
@@ -190,7 +220,7 @@ def test_a_finished_mirror_job_is_journaled_and_kept_for_its_log(tmp_path):
     assert not any("delete job" in c for c in calls), calls
 
 
-def _phase(tmp_path: Path, function: str) -> list[str]:
+def _phase(tmp_path: Path, function: str, rollout_rc: int = 0) -> list[str]:
     """Run the mirror's whole GC phase against a cluster where every call succeeds.
 
     Each call is logged with whether the GC lock was held and whether the stamp existed
@@ -210,9 +240,12 @@ k3s() {{
     *" get job "*) ;;
     *" get "*) printf '%s' "$GET_BODY" ;;
     *" logs "*" prune"*) printf '%s\\n' "$PRUNED_LINE" ;;
+    *" rollout status "*) return "${{ROLLOUT_RC:-0}}" ;;
   esac
 }}
 logger() {{ cat > /dev/null; }}
+{_curl_stub(calls)}
+{WARM}
 {KEEP_SET}
 {STOP}
 {START}
@@ -224,7 +257,12 @@ logger() {{ cat > /dev/null; }}
 {TAKE_LOCK}
 {function}
 """
-    env = {**os.environ, "GET_BODY": body, "PRUNED_LINE": PRUNED_LINE}
+    env = {
+        **os.environ,
+        "GET_BODY": body,
+        "PRUNED_LINE": PRUNED_LINE,
+        "ROLLOUT_RC": str(rollout_rc),
+    }
     run(["bash", "-c", script], env=env, check=True)
     return calls.read_text().splitlines() if calls.exists() else []
 
@@ -259,6 +297,21 @@ def test_the_run_holds_the_lock_from_the_scale_down_to_the_restore(tmp_path):
     up = calls[_index(calls, "scale deploy/ghcr-mirror --replicas=1")]
     assert " lock=1 " in down, calls
     assert " lock=1 " in up, calls
+
+
+def test_the_run_warms_the_mirror_only_after_it_serves_again(tmp_path):
+    calls = _phase(tmp_path, MAIN)
+
+    up = _index(calls, "scale deploy/ghcr-mirror --replicas=1")
+    warm = _index(calls, f"curl http://127.0.0.1:5002/v2/x/manifests/{LIVE}")
+    assert up < warm, calls
+
+
+def test_a_mirror_that_did_not_come_back_is_not_warmed(tmp_path):
+    calls = _phase(tmp_path, MAIN, rollout_rc=1)
+
+    assert any("--replicas=1" in c for c in calls), calls
+    assert not any(c.startswith("curl ") for c in calls), calls
 
 
 def test_a_run_that_finds_the_stamp_restores_the_mirror_first(tmp_path):
@@ -307,3 +360,116 @@ def test_a_skipped_prune_reports_the_run_down(tmp_path):
 
     assert rc == 1, msg
     assert note in msg, msg
+
+
+WARM = "\n".join(
+    rendered_shell_function("setup", "k8s_host_files", "registry-gc.sh.j2", name)
+    for name in ("mirror_manifest", "mirror_blob_digests", "warm_mirror")
+)
+CHILD, ARM, CONFIG, SHARED, OWN = ("sha256:" + c * 64 for c in "cdefg")
+# The script's own Accept assignment, so the stub sees the header the script really sends.
+(_ACCEPT,) = [line for line in _SCRIPT.splitlines() if line.startswith("ACCEPT=")]
+_MANIFESTS = {
+    "idx/manifests/1": {
+        "manifests": [
+            {"digest": ARM, "platform": {"os": "linux", "architecture": "arm64"}},
+            {"digest": CHILD, "platform": {"os": "linux", "architecture": "amd64"}},
+        ]
+    },
+    f"idx/manifests/{CHILD}": {
+        "config": {"digest": CONFIG},
+        "layers": [{"digest": SHARED}],
+    },
+    "plain/manifests/2": {
+        "config": {"digest": CONFIG},
+        "layers": [{"digest": SHARED}, {"digest": OWN}],
+    },
+}
+
+
+def _curl_stub(calls: Path) -> str:
+    """A `curl` that logs each URL, answers _MANIFESTS, and fails a blob named in FAIL_BLOB.
+
+    A manifest is served only to a request that accepts an OCI index, as a registry serves an
+    index only to a client that names its type, so a dropped Accept header fails the test.
+    """
+    arms = "\n".join(
+        f"    */v2/{path}) printf '%s' {shlex.quote(json.dumps(body))} ;;"
+        for path, body in _MANIFESTS.items()
+    )
+    return f"""
+curl() {{
+  local url=${{@: -1}} accept="" arg
+  for arg; do [[ "$arg" == Accept:* ]] && accept=$arg; done
+  printf 'curl %s\\n' "$url" >> {shlex.quote(str(calls))}
+  [[ "$url" != */manifests/* || "$accept" == *image.index.v1+json* ]] || return 22
+  case "$url" in
+{arms}
+    */manifests/*) return 22 ;;
+    *"${{FAIL_BLOB:-none}}") return 22 ;;
+    */blobs/*) printf 1000000 ;;
+  esac
+}}
+"""
+
+
+def _warm(
+    tmp_path: Path, refs: str, fail_blob: str = "", budget: int = 60
+) -> tuple[list[str], str]:
+    """Run warm_mirror over `refs`; return the URLs curl was asked for and MIRROR_MSG."""
+    calls = tmp_path / "calls"
+    script = f"""
+MIRROR_URL=http://127.0.0.1:5002
+{_ACCEPT}
+WARM_BUDGET_S={budget}
+WARM_REFS="$REFS"
+MIRROR_MSG="ghcr-mirror: 0 revision(s) pruned"
+logger() {{ printf 'logger %s\\n' "$*" >> {shlex.quote(str(calls))}; }}
+{_curl_stub(calls)}
+{WARM}
+warm_mirror
+printf '%s' "$MIRROR_MSG"
+"""
+    env = {**os.environ, "REFS": refs, "FAIL_BLOB": fail_blob}
+    msg = run(["bash", "-c", script], env=env, check=True).stdout
+    return calls.read_text().splitlines() if calls.exists() else [], msg
+
+
+def test_warm_gets_each_distinct_amd64_blob_once_through_the_mirror(tmp_path):
+    calls, msg = _warm(tmp_path, "idx:1\nplain@2")
+
+    blobs = [c.removeprefix("curl ") for c in calls if "/blobs/" in c]
+    assert blobs == [
+        f"http://127.0.0.1:5002/v2/idx/blobs/{CONFIG}",
+        f"http://127.0.0.1:5002/v2/idx/blobs/{SHARED}",
+        f"http://127.0.0.1:5002/v2/plain/blobs/{OWN}",
+    ], calls
+    assert not any(ARM in c for c in calls), calls
+    assert re.fullmatch(
+        r"ghcr-mirror: 0 revision\(s\) pruned; warmed 3 blob\(s\), 3 MB in \d+s", msg
+    ), msg
+
+
+def test_a_blob_that_fails_to_warm_is_named_and_the_rest_still_warm(tmp_path):
+    calls, msg = _warm(tmp_path, "idx:1\nplain@2\nmissing:9", fail_blob=OWN)
+
+    journal = [c for c in calls if c.startswith("logger ")]
+    assert any(f"plain@{OWN}" in c for c in journal), journal
+    assert any("missing 9" in c for c in journal), journal
+    assert "warmed 2 blob(s)" in msg, msg
+    assert ", 2 failed (journalctl -t registry-gc)" in msg, msg
+
+
+def test_warm_starts_no_blob_once_the_budget_is_spent(tmp_path):
+    calls, msg = _warm(tmp_path, "plain@2", budget=0)
+
+    assert not any("/blobs/" in c for c in calls), calls
+    assert "warmed 0 blob(s)" in msg, msg
+    assert "3 skipped past the 0s budget" in msg, msg
+
+
+def test_no_ref_warms_nothing_and_says_so(tmp_path):
+    calls, msg = _warm(tmp_path, "")
+
+    assert calls == [], calls
+    assert msg.endswith("; mirror not warmed, no ghcr.io ref read"), msg

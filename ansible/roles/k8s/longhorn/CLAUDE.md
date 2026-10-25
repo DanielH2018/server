@@ -25,12 +25,25 @@ host probes stay green.
 - **Merging a bump of `k3s_longhorn_version` is the upgrade** (H1 Open question 6). `land.sh`
   runs the `longhorn-upgrade` gates before it merges, Longhorn supports no downgrade and one
   minor per hop, so read `docs/longhorn-upgrade.md` before you bump the pin.
-- **Four patches change upstream objects**, all under `files/patches/`. The renderer lists them
+- **Six patches change upstream objects**, all under `files/patches/`. The renderer lists them
   as the Kustomization's `patches:`, and each names its target by kind, name and namespace.
     - `longhorn-manager.yaml` adds a memory request and no limit to the manager container.
       A kustomize patch is copied verbatim and cannot read a variable, so
       `ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_manager_patch_holds_the_value_of_the_defaults_key`
       holds the literal equal to `k3s_longhorn_manager_memory_request`.
+    - `longhorn-global-manager.yaml` gives the Deployment v1.13 added a memory request, no
+      limit, and two replicas instead of upstream's three (#5968). The replicas elect one
+      leader, so on two nodes a third adds no failover.
+      `ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_global_manager_patch_requests_the_defaults_value_and_no_limit`
+      and `::test_global_manager_patch_holds_the_replicas_of_the_defaults_key` hold the
+      literals equal to `k3s_longhorn_global_manager_memory_request` and
+      `k3s_longhorn_global_manager_replicas`.
+    - `longhorn-manager-update-strategy.yaml` rolls the manager DaemonSet one pod at a time
+      instead of upstream's `maxUnavailable: 100%` (#6009). The manager pods serve the
+      admission webhook every claim's dry run calls, so one pod keeps serving it through a
+      roll. The patch header has why 100% is not load-bearing for an upgrade.
+      `ansible/tests/longhorn/test_longhorn_control_plane_resources.py::test_the_manager_daemonset_rolls_one_pod_at_a_time`
+      fails a render in which the DaemonSet keeps upstream's strategy.
     - `longhorn-storageclass.yaml` replaces the class inside upstream's `longhorn-storageclass`
       ConfigMap, which longhorn-manager reads to create the `longhorn` class. The class omits
       `numberOfReplicas`, because a StorageClass parameter beats the `default-replica-count`
@@ -91,9 +104,9 @@ host probes stay green.
   are immutable, and the Ansible task that deleted the class when its parameters differed is
   gone. If the manager does not replace a class whose ConfigMap changed, the fix is an
   **operator-only** delete of the class, which the manager recreates from the ConfigMap.
-- **`manifests_rollout_timeout` is `10m`** (`defaults/main.yml`). The DaemonSet rolls with
-  `maxUnavailable: 100%`, so both manager pods are replaced at once, and a cached restart
-  measured 36s on 2026-10-22 (#5922). A version bump also cold-pulls the image on every node,
+- **`manifests_rollout_timeout` is `10m`** (`defaults/main.yml`). The DaemonSet rolls one
+  pod at a time, so a roll is two pod starts in sequence. Both pods restarting at once with the
+  image cached measured 36s on 2026-10-22 (#5922), which is one pod's start. A version bump also cold-pulls the image on each node in turn,
   and the Kustomization's `wait: true` waits for the driver deployer and both Deployments too.
   A timeout on this forward-only tag writes `DEPLOY_HOLD`, so the value carries that headroom.
 - **`NEVER_SHED` names the tag** in `ansible/filter_plugins/service_tier.py`. The role is

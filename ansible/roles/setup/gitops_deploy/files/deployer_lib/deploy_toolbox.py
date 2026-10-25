@@ -203,9 +203,8 @@ class DeployTools:
     secret_k8s_readers: Callable[[str, str, str], tuple[int, str]] = (
         deploy_setup_roles.secret_k8s_readers
     )
-    emit_deploy_annotation: Callable[[set[str], str], None] = (
-        deploy_io.emit_deploy_annotation
-    )
+    # `(services, sha, result="ok", duration_s=None)`; see `deploy_io.emit_deploy_annotation`.
+    emit_deploy_annotation: Callable[..., None] = deploy_io.emit_deploy_annotation
     # `datetime.now`, NOT a zero-argument clock: `deploy_handlers.handle_dirty` calls it with
     # `CHICAGO`, so a `lambda: datetime.now()` adapter would change what that call receives.
     now: Callable[..., datetime] = datetime.now

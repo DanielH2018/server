@@ -19,6 +19,14 @@
 # Each deadline is the DEADLINE_S its producer renders, which equals the interval of the Kuma tile
 # it shadows. Both literals of a NotReporting rule are pinned to it by
 # ansible/tests/services/test_gitops_check_rule_literals.py (M1 convention 1).
+#
+# The last two rules read the deployer's own `gitops_tick.prom`, which
+# roles/setup/gitops_deploy/files/gitops_tick_metrics.py rewrites at the end of every tick (#6164).
+# They carry `service: gitops-deploy`, as bridge-exporter.yaml's GitOpsDeployerNotTicking does, and
+# stay shadow beside it and the Kuma "GitOps Deploy — Alive" tile until the operator promotes them.
+# GitOpsTickStale's 5400s is the unit's TimeoutStartSec (70min) plus one timer interval (10min)
+# plus 10min of slack, the longest gap between two writes a healthy deployer leaves. The same test
+# file pins it to both values.
 groups:
   - name: gitops-checks
     rules:
@@ -52,7 +60,7 @@ groups:
         annotations:
           summary: daniel-box's GitHub ruleset drift check has stopped reporting.
           description: >-
-            No github-ruleset-drift verdict newer than 90000s reached Prometheus from daniel-box's
+            No github-ruleset-drift verdict newer than 25 hours reached Prometheus from daniel-box's
             textfile collector, so nothing confirms the merge gate matches the repo. Read
             `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
             /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
@@ -85,8 +93,47 @@ groups:
         annotations:
           summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
           description: >-
-            No github-interaction-limit verdict newer than 90000s reached Prometheus from
+            No github-interaction-limit verdict newer than 25 hours reached Prometheus from
             daniel-box's textfile collector, so nothing confirms the limit is being re-armed
             before GitHub lets it lapse. Read `systemctl status
             kuma-check-github-interaction-limit` on daniel-box, then
             /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
+      # The deployer's textfile, not its last_run marker: both go stale together when the timer
+      # stops, and only this one is in Prometheus.
+      - alert: GitOpsTickStale
+        expr: |
+          (
+              time() - gitops_tick_last_timestamp_seconds{origin="daniel-box"} > 5400
+            or
+              absent_over_time(gitops_tick_last_timestamp_seconds{origin="daniel-box"}[5400s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: gitops-deploy
+          shadow: "true"
+        annotations:
+          summary: The GitOps deployer on daniel-box has not recorded a tick for 90 minutes.
+          description: >-
+            gitops_tick.prom on daniel-box was last rewritten more than 90 minutes ago, longer
+            than the longest tick the unit allows plus one timer interval. Every tick rewrites
+            it, a lock-contention skip included, so the timer stopped or the unit cannot start.
+            Run systemctl status gitops-deploy.timer gitops-deploy.service on daniel-box.
+      # Four of the last hour's six ticks ended the same bad way: master CI red, or the tree lock
+      # held for each tick's whole 180s flock wait. Either way nothing deployed in that hour.
+      - alert: GitOpsTickOutcomeRepeating
+        expr: |
+          sum by (origin, outcome) (
+            increase(gitops_tick_runs_total{outcome=~"ci-failed|skipped-lock",origin="daniel-box"}[1h])
+          ) >= 4
+        labels:
+          severity: warning
+          service: gitops-deploy
+          shadow: "true"
+        annotations:
+          summary: "Most of the last hour's GitOps ticks on daniel-box ended {{ $labels.outcome }}."
+          description: >-
+            {{ $value | printf "%.0f" }} ticks in the last hour ended {{ $labels.outcome }}, so the
+            deployer applied nothing. ci-failed means origin/master's CI is red: read the
+            commit's checks. skipped-lock means another process held the git-tree lock through
+            each tick's flock wait: read `fuser` on the tree lock and the SessionStart banner.

@@ -45,7 +45,7 @@ from agent_logic import (
 )
 from agent_toolbox import TOOLS, AgentTools, log, read_file
 from gitops_markers import STATE_DIR
-from host_lib import atomic_write, parse_env_file
+from host_lib import atomic_write, install_excepthook, parse_env_file
 from run_worktree import prepare_worktree, worktree_is_reusable
 
 # The env override exists so the I/O shell can be exercised end-to-end against a throwaway
@@ -370,6 +370,8 @@ if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
         print(__doc__.strip())
         sys.exit(0)
+    # `report_crash` re-raises; the hook files that traceback at err, not the unit's notice.
+    install_excepthook()
     try:
         sys.exit(main())
     except Exception as e:

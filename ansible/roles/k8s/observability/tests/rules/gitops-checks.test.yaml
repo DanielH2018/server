@@ -28,7 +28,7 @@ tests:
             exp_annotations:
               summary: daniel-box's GitHub ruleset drift check has stopped reporting.
               description: >-
-                No github-ruleset-drift verdict newer than 90000s reached Prometheus from
+                No github-ruleset-drift verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the merge gate matches the
                 repo. Read `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
@@ -42,13 +42,27 @@ tests:
             exp_annotations:
               summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
               description: >-
-                No github-interaction-limit verdict newer than 90000s reached Prometheus from
+                No github-interaction-limit verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the limit is being re-armed
                 before GitHub lets it lapse. Read `systemctl status
                 kuma-check-github-interaction-limit` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
       - eval_time: 30h
         alertname: GitHubInteractionLimitNotArmed
+        exp_alerts: []
+      - eval_time: 30h
+        alertname: GitOpsTickStale
+        exp_alerts:
+          - exp_labels: {origin: daniel-box, severity: warning, service: gitops-deploy, shadow: "true"}
+            exp_annotations:
+              summary: The GitOps deployer on daniel-box has not recorded a tick for 90 minutes.
+              description: >-
+                gitops_tick.prom on daniel-box was last rewritten more than 90 minutes ago, longer
+                than the longest tick the unit allows plus one timer interval. Every tick rewrites
+                it, a lock-contention skip included, so the timer stopped or the unit cannot start.
+                Run systemctl status gitops-deploy.timer gitops-deploy.service on daniel-box.
+      - eval_time: 30h
+        alertname: GitOpsTickOutcomeRepeating
         exp_alerts: []
 
   # Each Failed rule: a verdict of 0 fires it, and a verdict of 1 does not. The first half of the
@@ -114,7 +128,7 @@ tests:
             exp_annotations:
               summary: daniel-box's GitHub ruleset drift check has stopped reporting.
               description: >-
-                No github-ruleset-drift verdict newer than 90000s reached Prometheus from
+                No github-ruleset-drift verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the merge gate matches the
                 repo. Read `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
@@ -135,7 +149,7 @@ tests:
             exp_annotations:
               summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
               description: >-
-                No github-interaction-limit verdict newer than 90000s reached Prometheus from
+                No github-interaction-limit verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the limit is being re-armed
                 before GitHub lets it lapse. Read `systemctl status
                 kuma-check-github-interaction-limit` on daniel-box, then
@@ -173,3 +187,74 @@ tests:
       - eval_time: 28h
         alertname: GitHubInteractionLimitNotReporting
         exp_alerts: []
+
+  # gitops_tick.prom frozen at 0: quiet at 1h, inside the 5400s deadline, and firing at 2h.
+  - interval: 1h
+    input_series:
+      - series: 'gitops_tick_last_timestamp_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x4'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x4'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: GitOpsTickStale
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: GitOpsTickStale
+        exp_alerts:
+          - exp_labels: {instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: gitops-deploy, shadow: "true"}
+            exp_annotations:
+              summary: The GitOps deployer on daniel-box has not recorded a tick for 90 minutes.
+              description: >-
+                gitops_tick.prom on daniel-box was last rewritten more than 90 minutes ago, longer
+                than the longest tick the unit allows plus one timer interval. Every tick rewrites
+                it, a lock-contention skip included, so the timer stopped or the unit cannot start.
+                Run systemctl status gitops-deploy.timer gitops-deploy.service on daniel-box.
+  # A tick rewriting the file every 10 minutes keeps it quiet, and so does a node_exporter that
+  # is down, which the `targets` check pages instead.
+  - interval: 10m
+    input_series:
+      - series: 'gitops_tick_last_timestamp_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+600x24'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x24'
+    alert_rule_test:
+      - eval_time: 4h
+        alertname: GitOpsTickStale
+        exp_alerts: []
+  - interval: 10m
+    input_series:
+      - series: 'gitops_tick_last_timestamp_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x24'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x24'
+    alert_rule_test:
+      - eval_time: 4h
+        alertname: GitOpsTickStale
+        exp_alerts: []
+
+  # Ticks every 10 minutes. In the first hour every tick merges; in the second every tick ends
+  # ci-failed, and skipped-lock gains one tick, under the threshold of four.
+  - interval: 10m
+    input_series:
+      - series: 'gitops_tick_runs_total{instance="daniel-box", job="node", origin="daniel-box", outcome="merged"}'
+        values: '0+1x6 6x6'
+      - series: 'gitops_tick_runs_total{instance="daniel-box", job="node", origin="daniel-box", outcome="ci-failed"}'
+        values: '0x6 1+1x6'
+      - series: 'gitops_tick_runs_total{instance="daniel-box", job="node", origin="daniel-box", outcome="skipped-lock"}'
+        values: '0x6 1x6'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: GitOpsTickOutcomeRepeating
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: GitOpsTickOutcomeRepeating
+        exp_alerts:
+          - exp_labels: {origin: daniel-box, outcome: ci-failed, severity: warning, service: gitops-deploy, shadow: "true"}
+            exp_annotations:
+              summary: "Most of the last hour's GitOps ticks on daniel-box ended ci-failed."
+              description: >-
+                6 ticks in the last hour ended ci-failed, so the deployer applied nothing.
+                ci-failed means origin/master's CI is red: read the commit's checks. skipped-lock
+                means another process held the git-tree lock through each tick's flock wait: read
+                `fuser` on the tree lock and the SessionStart banner.

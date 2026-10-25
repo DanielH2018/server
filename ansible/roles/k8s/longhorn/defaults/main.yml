@@ -32,6 +32,21 @@ longhorn_vendored_manifests:
 # that real pressure elsewhere goes unschedulable.
 k3s_longhorn_manager_memory_request: 256Mi  # noqa var-naming[no-role-prefix]
 
+# Memory REQUEST only (no limit) for longhorn-global-manager, the Deployment v1.13 added to run the
+# cluster-wide pod and PV controllers. Upstream ships it with no `resources` (BestEffort), so it
+# needs the request for the manager's reasons above. Applied by files/patches/
+# longhorn-global-manager.yaml, which a test holds equal to this key. Measured 2026-10-24, 31h
+# after the v1.13.0 bump: the leader held a 37Mi working set and the two standbys 33-34Mi. 64Mi
+# is about 1.7x the leader, rounded to a power of two.
+k3s_longhorn_global_manager_memory_request: 64Mi  # noqa var-naming[no-role-prefix]
+
+# Replicas of longhorn-global-manager. Upstream ships 3; the replicas elect one leader through
+# the `longhorn-global-manager` lease and the rest stand by. Its anti-affinity is only
+# preferred, so on this two-node cluster the third replica lands beside another and adds no
+# failover a second one lacks. Two puts one standby on each node. Applied by the same patch,
+# which a test holds equal to this key.
+k3s_longhorn_global_manager_replicas: 2  # noqa var-naming[no-role-prefix]
+
 # Memory REQUEST only (no limit) for the four csi-* sidecar Deployments (csi-attacher,
 # csi-provisioner, csi-resizer, csi-snapshotter), applied through the
 # `system-managed-csi-components-resource-limits` Setting (templates/settings.yaml.j2).
@@ -146,14 +161,15 @@ k3s_longhorn_concurrent_engine_upgrade: 3  # noqa var-naming[no-role-prefix]
 # when a third node or a fencing mechanism exists.
 k3s_longhorn_node_down_pod_deletion_policy: do-nothing  # noqa var-naming[no-role-prefix]
 
-# The longest the tag's Kustomization waits for longhorn-manager to roll. The DaemonSet rolls with
-# maxUnavailable 100%, so both pods are replaced at once and the wait is one pod's start time, not
-# two. The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
-# timeout from that key.
+# The longest the tag's Kustomization waits for longhorn-manager to roll. The DaemonSet rolls
+# with maxUnavailable 1 (files/patches/longhorn-manager-update-strategy.yaml, #6009), so the
+# pods are replaced one after the other and the wait is two pods' start times. The literal is
+# `manifests_rollout_timeout` because the renderer reads a role's Flux timeout from that key.
 # Measured 2026-10-22: 36s from deleting both manager pods to both replacements Ready (30s of it
-# termination grace). Cited in #5922. That was a restart with the image cached. A version bump
-# is slower: every node cold-pulls the new manager image, the manager runs its upgrade path, and
-# the Kustomization renders `wait: true`, so the timeout also covers longhorn-driver-deployer
+# termination grace), so about 72s for two in sequence. Cited in #5922. That was a restart with
+# the image cached. A version bump is slower: each node cold-pulls the new manager image in
+# turn, the manager runs its upgrade path, and the Kustomization renders `wait: true`, so the
+# timeout also covers longhorn-driver-deployer
 # (which the old play waited on for 600s), longhorn-ui and longhorn-global-manager. A timeout on
 # a forward-only tag writes DEPLOY_HOLD, so the value is the manifests default of 600s, not 2m.
 manifests_rollout_timeout: 10m  # noqa var-naming[no-role-prefix]

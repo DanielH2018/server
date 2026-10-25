@@ -39,6 +39,8 @@ _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_i
 _PROMOTE = _REPO / "scripts/deploy_tools/promote_lib/wait.py"
 _FLUX_HOST = _REPO / "scripts/deploy_tools/flux_host.py"
 _EMITTERS = (_DEPLOY_PLAYBOOK, _GITOPS, _PROMOTE)
+# The three host emitters build the line with `host_lib.deploy_event` (#6164), so the literal the
+# query filters on is that function's, and each emitter must call it.
 # The soak Job prints the cluster's line, which a second query reads from its pod log.
 _SOAK = _REPO / "ansible/roles/k8s/manifests/files/flux_soak.py"
 
@@ -55,13 +57,18 @@ def test_the_query_matches_what_the_deployers_actually_log():
     literals = re.findall(r'\|=\s*"([^"]+)"', expr)
     assert literals, f"the expr must carry a line filter to match on: {expr}"
 
+    import host_lib
+
+    line = host_lib.deploy_event("sonarr", "abcd1234")
+    for literal in literals:
+        assert literal in line, (
+            f"deploy_event never writes {literal!r}, which the annotation query filters "
+            f"on — the query would match nothing and the boards would show no deploys"
+        )
     for emitter in _EMITTERS:
-        text = emitter.read_text()
-        for literal in literals:
-            assert literal in text, (
-                f"{emitter.name} never logs {literal!r}, which the annotation query filters "
-                f"on — the query would match nothing and the boards would show no deploys"
-            )
+        assert "deploy_event(" in emitter.read_text(), (
+            f"{emitter.name} no longer builds its line with host_lib.deploy_event"
+        )
 
 
 def test_the_expr_parses_the_fields_the_annotation_renders():
@@ -82,12 +89,13 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
         "textFormat reads a parsed label, so the expr needs `| logfmt`"
     )
 
+    import host_lib
+
     key = field.group(1)
-    for emitter in _EMITTERS:
-        assert f"{key}=" in emitter.read_text(), (
-            f"{emitter.name} does not emit a `{key}=` field, so the annotation text would be "
-            f"blank on every marker"
-        )
+    assert f" {key}=sonarr " in host_lib.deploy_event("sonarr", "abcd1234"), (
+        f"deploy_event does not emit a `{key}=` field, so the annotation text would be "
+        f"blank on every marker"
+    )
 
 
 def test_the_datasource_uid_matches_the_provisioned_one():
@@ -125,7 +133,7 @@ def test_both_deploy_paths_annotate():
     assert "def annotate(" in _DEPLOY_PLAYBOOK.read_text()
     assert "emit_deploy_annotation" in _GITOPS.read_text()
     promote = _PROMOTE.read_text()
-    assert "def annotate_promotion(" in promote and "source=promote" in promote
+    assert "def annotate_promotion(" in promote and 'source="promote"' in promote
     assert '"deploy-annotation"' in promote
 
 

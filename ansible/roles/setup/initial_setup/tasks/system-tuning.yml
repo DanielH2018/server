@@ -3,6 +3,7 @@
 # snap removal, and the repo's git hooks.
 
 - name: Create journald drop-in directory
+  when: inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   ansible.builtin.file:
     path: /etc/systemd/journald.conf.d
     state: directory
@@ -11,6 +12,7 @@
   tags: [journald]
 
 - name: Cap systemd-journal disk usage and log level
+  when: inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   # Unmanaged, journald's default cap is 10% of / bounded at 4G, which lets the journal fill
   # with low-value history. Container logs are already rotated by the
   # Docker daemon (10m × 3) and shipped to Loki, so 1G is plenty for host forensics.
@@ -57,7 +59,7 @@
   when: has_rsyslog
   # The other half of MaxLevelSyslog=info above, and it must exist wherever that does.
   # Without it every info line on the host — k3s alone was 53% of pre-cap syslog — lands in
-  # /var/log/syslog, which promtail ships to Loki as {job="syslog"}. Measured floor for that:
+  # /var/log/syslog, which Alloy ships to Loki as {job="syslog"}. Measured floor for that:
   # +7 MB/day/host against 1.33 MB/day with the filter.
   #
   # 49- so it sorts before 50-default.conf: `stop` only prevents a message reaching the rules

@@ -75,7 +75,19 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   - A cold blob that takes over about 8 minutes to fetch never completes through the
     mirror. ghcr.io's signed blob URL expires mid-transfer on HTTP/1.1 and HTTP/2 alike,
     and the proxy never resumes (#5654). The measurement is in the comment above
-    `REGISTRY_PROXY_REMOTEURL` in `templates/ghcr-mirror.yaml.j2`.
+    `REGISTRY_PROXY_REMOTEURL` in `templates/ghcr-mirror.yaml.j2`. The cap binds only while
+    GHCR is slow: it served 0.15-0.45 MB/s from 2026-10-17 to 2026-10-19, and 44-98 MB/s on
+    2026-10-24.
+  - **`registry-gc.sh` warms the store after each weekly GC.** Once the mirror serves again,
+    it GETs every linux/amd64 blob of every `ghcr.io` ref it read for the keep set, through
+    the mirror. That caches images a node pulled before the mirror existed, and pulls that fell
+    back to `ghcr.io` during a GC, while GHCR is at its normal rate rather than when a cold
+    start needs them. A cached blob streams from the store and costs no WAN. On 2026-10-24 a
+    cold warm fetched 354 blobs (6.2 GB) in 133s, and a second pass took 49s.
+    `k8s_host_files_ghcr_mirror_warm_budget_s` (1800s) bounds the phase. A blob that fails to
+    warm is named in the `registry-gc` journal and the run's message, and leaves the run up.
+    `ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2:DECIDED: a blob that fails to warm`
+    has why.
   - containerd falls back to `ghcr.io` while the GC scales the mirror to zero. No build writes
     the mirror's store, so the GC does not wait for builds.
   - **Nothing but `registry-gc.sh` writes the mirror's `spec.replicas`**, so the operator

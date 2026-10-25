@@ -8,6 +8,8 @@ this suite asserts is the interface the timer reads.
 Run: uv run pytest hosts/lib/tests/test_reconcile_activation.py
 """
 
+import os
+
 import pytest
 from _reconcile_arms import PROM, base, live_unit, metrics, red, ship, verbs
 from _reconcile_host import Node
@@ -83,6 +85,23 @@ def test_a_reboot_action_marks_the_host_reboot_pending_and_the_metric_says_so(no
     assert (node.root / "run/homelab/reboot-pending").exists()
     assert verbs(node) == [], "a reboot-class change changes nothing live"
     assert 'homelab_host_reboot_pending{host="daniel-pi"} 1' in metrics(node)
+
+
+def test_a_later_reboot_class_change_keeps_the_time_the_reboot_was_first_owed(node):
+    """HostRebootOverdue ages the owed reboot from this series, so a second change must not
+    reset it (#6166)."""
+    ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=1\n", "reboot")
+    settled(node)
+    flag = node.root / "run/homelab/reboot-pending"
+    os.utime(flag, (1_000_000, 1_000_000))
+
+    ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=2\n", "reboot")
+    settled(node)
+
+    assert (
+        'homelab_host_reboot_pending_since_seconds{host="daniel-pi"} 1000000'
+        in metrics(node)
+    )
 
 
 def test_a_host_with_nothing_pending_reads_reboot_pending_zero_not_absent(node):

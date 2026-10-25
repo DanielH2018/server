@@ -1,6 +1,8 @@
 ---
-# Host crons: secret-rotation audit + rotation, the weekly restart, image
-# pruning, ansible.log truncation, and the infrastructure-map refresh.
+# Host crons: the weekly restart, image pruning, the ansible.log cron's removal, the setup-drift
+# check and the Loki witness on the hosts whose package does not own it yet. The checkout timers
+# (secret rotation, docs refresh, infra map, eval sweep, git repair) are host-package components
+# since H7.36.
 
 - name: Deploy the shared Kuma-push helper
   # DECIDED: `always`, not `crons` — this is a dependency of tasks in OTHER roles under other
@@ -57,91 +59,11 @@
     mode: "0644"
   become: true
 
-- name: Deploy the daily secret-rotation audit wrapper (gitops host only)
-  tags: [crons, secret-rotation]
-  # Gated on has_gitops, not a hostname: this reads ansible/secret_rotation.yml and the key
-  # list of ansible/vars/secrets.yml straight off the working tree (no SOPS decrypt, no live
-  # source), so it's only trustworthy on a host whose tree self-refreshes — gitops-deploy.service
-  # pulls origin on every timer tick. daniel-server carries neither has_gitops nor an
-  # auto-pulling tree; its checkout can silently sit weeks behind origin while this cron keeps
-  # reading its stale copy and reporting a green monitor on a secret the registry never saw. Follow has_gitops if it moves to a different host later.
-  when: has_gitops
-  ansible.builtin.template:
-    src: secret-rotation-audit.sh.j2
-    dest: /usr/local/bin/secret-rotation-audit.sh
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0700"
-  become: true
-  no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
-
-- name: Schedule the daily secret-rotation audit (gitops host only)
-  tags: [crons, secret-rotation]
-  # 08:30 — after the Sunday reboot's Kuma maintenance window (07:25-08:15, #2802) closes. Kuma
-  # records a push inside that window as MAINTENANCE and discards its verdict, so an 08:00 slot
-  # left the tile MAINTENANCE for a day every Sunday (#4540). Clear of the 06:xx redeploy window.
-  # Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role). ENFORCED:
-  # ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py::test_no_kuma_check_timer_fires_inside_the_window
-  #
-  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
-  # verdict reruns every 30 min until it clears rather than sitting on the tile for a day. The
-  # state follows has_gitops so a host that loses the flag loses the timer and the old cron.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
-  vars:
-    kuma_check_state: "{{ 'present' if has_gitops else 'absent' }}"
-    kuma_check_name: secret-rotation-audit
-    kuma_check_description: Daily secret rotation audit (Kuma push)
-    kuma_check_exec: /usr/local/bin/secret-rotation-audit.sh
-    kuma_check_user: "{{ sys_user }}"
-    kuma_check_on_calendar: "*-*-* 08:30:00"
-    kuma_check_restart_sec: 30min
-    kuma_check_cron_name: "Daily secret rotation audit"
-
-- name: Deploy the weekly secret-rotation wrapper (gitops host only)
-  tags: [crons, secret-rotation]
-  # Unattended rotation of coming-due auto-tier push tokens (rotate --commit --deploy +
-  # git push; anything due within ROTATE_LEAD_DAYS rotates BEFORE it goes overdue).
-  # Reverts on failure; cross-host tokens stay manual. See scripts/secrets_mgmt/secret_rotation.py +
-  # docs/secret-rotation.md. Same has_gitops gate as the daily audit above — the tree this
-  # script commits/pushes from must be the one origin (and CI) actually see.
-  when: has_gitops
-  ansible.builtin.template:
-    src: secret-rotate.sh.j2
-    dest: /usr/local/bin/secret-rotate.sh
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0700"
-  become: true
-  no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
-
-- name: Schedule the weekly secret rotation (gitops host only)
-  tags: [crons, secret-rotation]
-  # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:30 daily audit
-  # have all settled; quiet window minimises any clash with a concurrent operator session.
-  #
-  # `2>&1 | logger -t secret-rotate` FOR THE REASON EVERY CRON BELOW CARRIES ONE. cron
-  # mails whatever a job writes into /var/mail/ubuntu, and nothing opens that spool — so a
-  # per-run success line is not a record, it is one more message a real failure has to be found
-  # among. The journal is a record: Promtail ships it to Loki, `journalctl -t secret-rotate`
-  # reads it, and it ages out on its own. This drops NO alert, because the mail was never the
-  # alert — a failed rotation reverts the tree and shows up on the "Secret Rotation" Kuma tile
-  # that the daily audit pushes. Both streams go, not stdout alone: this script's own output is
-  # a full ansible-playbook run on a rotating week, and splitting it across two sinks by stream
-  # would leave half a run in each.
-  when: has_gitops
-  ansible.builtin.cron:
-    name: "Weekly secret rotation (auto tier)"
-    minute: "0"
-    hour: "9"
-    weekday: "0"
-    job: "/usr/local/bin/secret-rotate.sh 2>&1 | logger -t secret-rotate"
-    user: "{{ sys_user }}"
-  become: true
-
-# Reverse of the has_gitops gate above. A skipped cron task leaves an already-installed entry
-# running, so gating alone would leave a non-gitops host's crons in place reading its stale
-# tree — two hosts pushing one Kuma monitor. These run everywhere the gate is false, so the crons follow
-# has_gitops in both directions.
+# The way out for a host that once ran the secret-rotation crons. Since H7.36 the secret-rotation
+# component of homelab-daniel-box ships both timers, and has_gitops is true on daniel-box alone.
+# A non-gitops host that still carried an Ansible-era cron would read a stale tree and push the
+# same Kuma monitor, so these run everywhere the flag is false. Reconcile retires daniel-box's
+# own legacy entries.
 - name: Remove the secret-rotation crons from any non-gitops host
   tags: [crons, secret-rotation]
   when: not has_gitops
@@ -304,23 +226,17 @@
   tags: [prune, crons]
 
 
-- name: Create cron job to clear ansible.log weekly
-  # ansible.cfg sets `log_path = ./ansible.log`, which resolves relative to the CWD
-  # the playbook is run from (the repo root) — i.e. server/ansible.log, NOT
-  # server/ansible/ansible.log. Truncate the file that actually grows.
+- name: Remove the weekly ansible.log truncation cron
+  # H7.36 deletes the job, and the census allowlists the item `Clear ansible log file` as
+  # deleted. The task stays as an absent arm until H7.20a, because daniel-server and daniel-pi
+  # carry the entry the removed task installed. It sits in root's crontab: `become` with no
+  # `user:` names the current user, which is root. Reconcile retires daniel-box's copy only
+  # if a package lists it, and none does, so this arm is what removes it there.
   ansible.builtin.cron:
     name: "Clear ansible log file"
-    minute: "0"
-    hour: "6"
-    weekday: "0" # 0 is Sunday
-    job: "truncate -s 0 /home/{{ sys_user }}/server/ansible.log"
+    state: absent
   become: true
   tags: [crons, ansible-log]
-  # The gate matters MORE here than on a task that fails. `ansible.builtin.cron` only writes a
-  # crontab line, so on a host with no checkout this task SUCCEEDS and the deploy reads green —
-  # the failure is deferred to 06:00 every Sunday, on stderr nothing reads. A task that installs
-  # a broken thing successfully is invisible to every check that watches the deploy.
-  when: has_repo_checkout
 
 - name: Create the directory the worktree holder scan installs into
   tags: [crons, worktree-sweep]
@@ -549,87 +465,6 @@
     state: absent
   become: true
 
-- name: Schedule the weekly worktree sweep and git object-store repair (box only)
-  tags: [crons, worktree-sweep]
-  # Several Claude sessions branch, commit and retire worktrees in this checkout every day, and
-  # each removal leaves that branch's objects unreachable. `prune_worktrees.py --prune --brief`
-  # removes the merged worktrees, deletes the orphan `worktree-*` branches whose content is on
-  # origin/master, deletes the unregistered directories under .claude/worktrees/ whose every
-  # file a ref already reaches (dev/worktree_orphans.py, #4425), then drops the unreachable objects older than a day and clears a stale
-  # gc.log — see repair_object_store for why the grace period is not `now`.
-  #
-  # THIS IS THE ARM THAT REMOVES; the SessionStart banner only reports. The reasoning is the
-  # `# DECIDED:` marker in `prune_worktrees.py`'s brief() — a hook budgeted at 5s must not run
-  # an unbounded `git gc`, and N concurrent sessions racing to delete the same branch buys
-  # nothing this one weekly run does not. The repair still runs on a week with nothing to
-  # remove: prune_all ends in it unconditionally.
-  #
-  # A CRON RUNS IT BECAUSE THE SESSIONS THAT SEE THE SYMPTOM CANNOT FIX IT. A
-  # worktree-isolated session's git commands are refused against the primary checkout, so the
-  # warning `git fetch` prints reaches only the agents structurally unable to act on it.
-  #
-  # daniel-box only: the primary checkout and every worktree under it live there.
-  #
-  # IT PINGS HEALTHCHECKS.IO WITH ITS EXIT CODE (#4482). `prune_worktrees.py` exits 1 when a
-  # removal or a branch deletion failed (#4445), but the pipe into `logger` makes the job's
-  # exit status logger's, so nothing read it. `$rc` on the ping URL is Healthchecks.io's
-  # exit-status endpoint: 0 is a success ping and anything else is a failure, so a failed
-  # sweep pages at once and a cron that never ran pages on silence. The key is sourced as the
-  # reboot's is, `[ -r ] &&` guarding the `.`.
-  #
-  # Keep the cron `name:`: `cron_file` entries are tracked by that comment, so renaming one
-  # adds a second entry beside the first rather than replacing it.
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.cron:
-    name: "Weekly git object-store repair"
-    minute: "{{ initial_setup_worktree_sweep_cron_minute }}"
-    hour: "{{ initial_setup_worktree_sweep_cron_hour }}"
-    weekday: "{{ initial_setup_worktree_sweep_cron_weekday }}"
-    # PATH explicitly: cron inherits neither /usr/local/bin nor the user's ~/.local/bin, so a
-    # bare `uv` is not found and the job fails silently on stderr nothing reads.
-    #
-    # `2>&1 | logger -t worktree-sweep` for the journal reason on the secret-rotation cron
-    # above: a week that removes anything prints a line per removal, and mailing those
-    # is the spool problem. Braced, because `|` binds
-    # tighter than the `&&` before it.
-    job: "{ cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief; rc=$?; [ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env; [ -n \"$HC_PING_KEY\" ] && curl -fs -m 10 --retry 3 \"https://hc-ping.com/$HC_PING_KEY/{{ inventory_hostname }}-worktree-sweep/$rc\" >/dev/null 2>&1; } 2>&1 | logger -t worktree-sweep"
-    user: "{{ sys_user }}"
-    cron_file: git-object-store-repair
-  become: true
-
-- name: Schedule the infrastructure-map refresh (box only)
-  tags: [crons, infra-map]
-  # Regenerates the architecture diagram + declared-vs-live map (scripts/infra_map/gen_infra_map.py).
-  # Runs on daniel-box because that is where kubectl is local — both cluster nodes are read
-  # from the cluster, not host by host. Only daniel-pi is polled remotely, over ONE ssh call
-  # per run, well clear of the `ufw limit ssh` 6-connections-per-30s reject threshold.
-  #
-  # No Healthchecks ping, unlike the crons above: a failed run leaves the previous page in
-  # place rather than corrupting anything, and the page prints the timestamp it was generated
-  # at — so a run that stops working shows up as a visibly stale date on the artifact itself.
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.cron:
-    name: "Refresh homelab infrastructure map"
-    minute: "*/15"
-    # PATH and KUBECONFIG are both set explicitly, because cron inherits neither and each
-    # omission blinds the k3s half of the map while the Docker half keeps working — a page
-    # that renders fine and quietly reports declared-only for every k8s service.
-    #   PATH:       cron's default `/usr/bin:/bin` omits /usr/local/bin, where kubectl lives.
-    #   KUBECONFIG: unset, k3s's kubectl falls back to /etc/rancher/k3s/k3s.yaml, which is
-    #               root-owned 0640. An interactive shell exports the user copy, so this
-    #               only ever fails unattended.
-    # The script defends itself against both as well (find_tool / find_kubeconfig); these
-    # are the second layer, kept because they are also the documentation.
-    #
-    # STDOUT ONLY is discarded, and not via `MAILTO=""`. This job lands in the sys user's
-    # crontab rather than a file of its own, so a MAILTO there would also silence the weekly
-    # secret rotation beside it. Every run of this one prints `Wrote …homelab-infra-map.html`,
-    # and at */15 that buries any real message in /var/mail/ubuntu. stderr is left
-    # alone so a failing run still mails, which is the whole value of the mbox.
-    job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/infra_map/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html >/dev/null"
-    user: "{{ sys_user }}"
-  become: true
-
 - name: Retire the TLS cert-expiry watch
   tags: [crons, cert-expiry]
   # Reaps the retired TLS cert-expiry watcher. Traefik serves ONE certificate -- a wildcard
@@ -654,24 +489,6 @@
       ansible.builtin.file:
         path: /etc/homelab/cert-expiry-webhook.env
         state: absent
-
-# Render provenance for manifest-prune-check.sh's stale-script arm.
-# secret-rotate.sh matters most of the render stamps: it is a
-# weekly STATE-CHANGING cron that commits and pushes, so a stale render runs old rotation logic
-# against live secrets with every repo-side check reading green.
-#
-# Same has_gitops gate and same [crons, secret-rotation] tags as the two wrappers above — a stamp that ran where
-# the wrappers do not would claim coverage this host never renders.
-- name: Stamp the rendered secret-rotation wrappers (gitops host only)
-  tags: [crons, secret-rotation]
-  when: has_gitops
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
-  vars:
-    stamp_render_name: secret-rotation
-    stamp_render_templates:
-      - ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2
-      - ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2
-      - ansible/roles/setup/initial_setup/templates/git-tree-lock.j2
 
 # kuma-push-lib.sh is sourced by EVERY health cron on every host, with a `|| exit 1` guard — so a
 # stale copy silently changes how every heartbeat pushes. `tags: [always]`, matching the copy task it records: this fragment must
@@ -784,9 +601,13 @@
 # The route's only caller is a host process and nothing else watches it. See
 # templates/loki-read-route-health.sh.j2 for why a pod cannot be the witness and why one host is
 # not enough.
+# daniel-box's witness is the loki-route-witness component of homelab-daniel-box since H7.36, so
+# every task here skips the hosts in initial_setup_packaged_hosts['loki_route_witness'].
 - name: Create the Loki read-route witness credentials directory
   tags: [crons, loki_route_witness]
-  when: inventory_hostname in loki_route_witness_hosts
+  when:
+    - inventory_hostname in loki_route_witness_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   ansible.builtin.file:
     path: /etc/homelab
     state: directory
@@ -797,7 +618,9 @@
 
 - name: Deploy the Loki read-route witness push credentials
   tags: [crons, loki_route_witness]
-  when: inventory_hostname in loki_route_witness_hosts
+  when:
+    - inventory_hostname in loki_route_witness_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   # 0640 root:{{ sys_user }}: the cron runs as {{ sys_user }} (it needs that user's uv and age
   # key), and nothing else on the host may read a token that can suppress this heartbeat.
   ansible.builtin.template:
@@ -818,7 +641,9 @@
   # the group gets write access, and setgid keeps it on new files. Files are written 0644, which
   # node_exporter (uid 65534) reads. Gated on the witness hosts like the rest of this block, which
   # is both k3s nodes; the Pi's directory belongs to optimize_pi.
-  when: inventory_hostname in loki_route_witness_hosts
+  when:
+    - inventory_hostname in loki_route_witness_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   ansible.builtin.file:
     path: /var/lib/node-exporter-textfile
     state: directory
@@ -829,7 +654,9 @@
 
 - name: Create the Loki read-route verdict reader directory
   tags: [crons, loki_route_witness]
-  when: inventory_hostname in loki_route_witness_hosts
+  when:
+    - inventory_hostname in loki_route_witness_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   ansible.builtin.file:
     path: /opt/loki-route-health
     state: directory
@@ -840,7 +667,9 @@
 
 - name: Install the Loki read-route verdict reader
   tags: [crons, loki_route_witness]
-  when: inventory_hostname in loki_route_witness_hosts
+  when:
+    - inventory_hostname in loki_route_witness_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   # Before the script that calls it, not after: the cron invokes the reader by absolute path, so
   # a window where the script exists and the reader does not is a spurious DOWN on a first install
   # — the same hazard the Longhorn backup-health reader documents in the k3s role.
@@ -854,7 +683,9 @@
 
 - name: Deploy the Loki read-route witness
   tags: [crons, loki_route_witness]
-  when: inventory_hostname in loki_route_witness_hosts
+  when:
+    - inventory_hostname in loki_route_witness_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   ansible.builtin.template:
     src: loki-read-route-health.sh.j2
     dest: /usr/local/bin/loki-read-route-health.sh
@@ -865,6 +696,7 @@
 
 - name: Schedule the Loki read-route witness
   tags: [crons, loki_route_witness]
+  when: inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   # Hourly, and as {{ sys_user }} rather than root: probe.py resolves the domain through that
   # user's age key and runs from that user's uv. Minute 23 keeps it off the :00 and :30 slots the
   # */10 and */30 health crons already crowd.
@@ -889,7 +721,9 @@
 
 - name: Record the rendered Loki read-route witness
   tags: [crons, loki_route_witness]
-  when: inventory_hostname in loki_route_witness_hosts
+  when:
+    - inventory_hostname in loki_route_witness_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
     stamp_render_name: loki-route-witness
@@ -901,7 +735,9 @@
 
 - name: Record the deployed Loki read-route verdict reader
   tags: [crons, loki_route_witness]
-  when: inventory_hostname in loki_route_witness_hosts
+  when:
+    - inventory_hostname in loki_route_witness_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   # `copy:`-deployed, so the render arm cannot see it — this is what puts it under the
   # deployed-code arm, which compares live bytes against the repo.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
@@ -928,191 +764,3 @@
         - /etc/homelab/loki-route-kuma-push.env
         - /opt/loki-route-health
       become: true
-
-- name: Create the docs-refresh state directory (box only)
-  tags: [crons, docs]
-  # docs-refresh records a failed commit here so its NEXT run can tell its own leftover dirt from
-  # a human's mid-edit. It is outside the checkout on purpose: a stamp written under
-  # /home/{{ sys_user }}/server would be untracked dirt, which parks gitops-deploy exactly as the
-  # dirt it is recording does. Owned by the cron user because that cron runs without become; the
-  # parent /var/lib/homelab stays root-owned 0755, created by the k3s role's health crons.
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.file:
-    path: /var/lib/homelab/docs-refresh.d
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-
-- name: Install the docs refresh script (box only)
-  tags: [crons, docs]
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.template:
-    src: docs-refresh.sh.j2
-    dest: /usr/local/bin/docs-refresh.sh
-    # DECIDED: 0700 owned by sys_user, not 0755 root — embeds a live Kuma push token, and the
-    # cron below runs as sys_user, so root:root 0700 would lock out its own caller. Same marker
-    # as roles/k8s/configarr/tasks/main.yml; test_secret_bearing_host_scripts_are_not_world_
-    # readable.py holds every such script to it.
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0700"
-  no_log: true  # renders docs_refresh_push_token
-  become: true
-
-- name: Schedule the generated-docs refresh (box only)
-  tags: [crons, docs]
-  # Regenerates docs/reference/, rebuilds the MkDocs site into the hostPath the docs pod
-  # serves, and commits any change (scripts/docs/build_docs.py, under the git-tree lock).
-  # Runs on daniel-box because the primary checkout, uv and the served site directory are
-  # all there — and because gen_infra_map, one of the generators, needs a local kubectl.
-  #
-  # No Healthchecks ping, matching the infra-map cron above: every generated page carries
-  # the timestamp its content was last built from, and the served site carries
-  # build-info.json saying when this last ran, so a run that stops working shows up on the
-  # page rather than needing its own alert channel.
-  #
-  # Twice daily, not every 15 minutes like the infra map. That one writes an artifact
-  # nothing commits; this one commits and pushes, so each run that finds a change costs a
-  # master CI run. The inputs are repo files, which only move when a PR merges.
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.cron:
-    name: "Refresh generated docs"
-    minute: "17"
-    hour: "6,18"
-    # Same PATH/KUBECONFIG reasoning as the infra-map cron above: cron inherits neither,
-    # and gen_infra_map runs inside build_docs.py. Without them the topology SVG silently
-    # renders declared-only while everything else looks healthy.
-    #
-    # `2>&1 | logger -t docs-refresh` for the journal reason on the secret-rotation cron above:
-    # a successful run prints `build_docs: <script> ok -> <page>`, one line per generator,
-    # twice a day. The redirect belongs here rather
-    # than at `scripts/docs/build_docs.py`'s print, which an operator and CI both read
-    # interactively.
-    job: "PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /usr/local/bin/docs-refresh.sh 2>&1 | logger -t docs-refresh"
-    user: "{{ sys_user }}"
-    cron_file: docs-refresh
-  become: true
-
-# Render provenance for manifest-prune-check.sh's stale-script arm. docs-refresh.sh belongs
-# here for secret-rotate.sh's reason: it is a STATE-CHANGING cron that commits and pushes,
-# so a stale render would keep committing generated pages from old generator wiring while
-# every repo-side check reads green.
-- name: Stamp the rendered docs-refresh wrapper (box only)
-  tags: [crons, docs]
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
-  vars:
-    stamp_render_name: docs-refresh
-    stamp_render_templates:
-      - ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2
-      - ansible/roles/setup/initial_setup/templates/git-tree-lock.j2
-
-- name: Create the eval-run state directory (box only)
-  tags: [crons, evals]
-  # eval-run keeps a failed commit's log here, the sweep it could not publish beside it, and
-  # the per-run reports of its last few sweeps under sweeps/ (#4019).
-  # Outside the checkout for the same reason as the docs-refresh directory above: a file written
-  # under /home/{{ sys_user }}/server would be untracked dirt, parking gitops-deploy exactly as
-  # the dirt it records does. Owned by the cron user because that cron runs without become.
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.file:
-    path: /var/lib/homelab/eval-run.d
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-
-- name: Create the eval-run credentials directory (box only)
-  tags: [crons, evals]
-  # Same owner and mode as the AIDE, setup-drift and Loki-witness tasks that also create it, so
-  # they never fight over it. Created here too so a `--tags evals` run on a fresh host has it.
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.file:
-    path: /etc/homelab
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-- name: Deploy the eval sweep's Anthropic API key (box only)
-  tags: [crons, evals]
-  # A file the script sources rather than a value rendered into the script, so reading the
-  # script never prints the key (#4607). 0600 sys_user: the cron runs as sys_user and nothing
-  # else reads it.
-  when: inventory_hostname == ops_cron_host and (anthropic_api_key | default('')) | length > 0
-  ansible.builtin.template:
-    src: eval-run.env.j2
-    dest: "{{ initial_setup_eval_run_env_file }}"
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0600"
-  no_log: true  # renders anthropic_api_key
-  become: true
-
-- name: Remove the eval sweep's Anthropic API key when none is configured (box only)
-  tags: [crons, evals]
-  # The way out of the task above: a key dropped from SOPS must not stay armed on disk. With the
-  # file gone, eval-run.sh's empty-key gate makes the run a no-op that reports UP.
-  when: inventory_hostname == ops_cron_host and (anthropic_api_key | default('')) | length == 0
-  ansible.builtin.file:
-    path: "{{ initial_setup_eval_run_env_file }}"
-    state: absent
-  become: true
-
-- name: Install the homelab eval sweep script (box only)
-  tags: [crons, evals]
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.template:
-    src: eval-run.sh.j2
-    dest: /usr/local/bin/eval-run.sh
-    # DECIDED: 0700 owned by sys_user, not 0755 root — embeds a Kuma push token, and the
-    # cron below runs as sys_user. See the docs-refresh marker above.
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0700"
-  no_log: true  # renders homelab_eval_push_token; the API key lives in the env file above
-  become: true
-
-- name: Schedule the weekly homelab eval sweep (box only)
-  tags: [crons, evals]
-  # Grades every homelab-agent/skill eval case and rolls the result into
-  # evals/history.json (evals/trend.py) so a regression shows up across runs instead of
-  # looking like a one-off flake. Sunday 02:00 -- well ahead of the 07:00/07:30 firmware
-  # and restart crons above, so a slow multi-agent sweep is never killed mid-run by the
-  # reboot.
-  #
-  # Installed and scheduled unconditionally: the wrapper self-gates on an empty
-  # anthropic_api_key (see eval-run.sh.j2's header) and reports UP either way, so this
-  # cron runs disarmed until that SOPS secret exists rather than needing a second deploy
-  # to arm it.
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.cron:
-    name: "Homelab eval sweep"
-    minute: "0"
-    hour: "2"
-    weekday: "0"
-    # PATH/HOME set explicitly: cron inherits neither, and node (via fnm) plus uv, git and
-    # gh must all resolve without a login shell. eval-run.sh itself narrows PATH further
-    # (fnm's node bin dir first) once it starts.
-    job: "PATH=/usr/local/bin:/usr/bin:/bin HOME=/home/{{ sys_user }} /usr/local/bin/eval-run.sh"
-    user: "{{ sys_user }}"
-    cron_file: eval-run
-  become: true
-
-# Render provenance for manifest-prune-check.sh's stale-script arm, for the same reason as
-# docs-refresh.sh above: this is a STATE-CHANGING cron that commits and pushes, so a stale
-# render would keep committing eval history from old wiring while every repo-side check
-# reads green.
-- name: Stamp the rendered eval-run wrapper (box only)
-  tags: [crons, evals]
-  when: inventory_hostname == ops_cron_host
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
-  vars:
-    stamp_render_name: eval-run
-    stamp_render_templates:
-      - ansible/roles/setup/initial_setup/templates/eval-run.sh.j2
-      - ansible/roles/setup/initial_setup/templates/git-tree-lock.j2
