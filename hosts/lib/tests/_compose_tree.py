@@ -167,11 +167,14 @@ class ComposeTree:
             else self.listing
         )
         path = host_vars / "daniel-pi.yml"
-        lines = [
-            line
-            for line in path.read_text().splitlines()
-            if not line.startswith("compose_services:")
-        ]
+        lines, in_key = [], False
+        for line in path.read_text().splitlines():
+            if line.startswith("compose_services:"):
+                in_key = True
+            elif in_key and not (line[:1] in (" ", "#", "") or line.startswith("- ")):
+                in_key = False
+            if not in_key:
+                lines.append(line)
         if listing is not MISSING:
             lines.append(f"compose_services: {json.dumps(listing)}")
         path.write_text("\n".join(lines) + "\n")

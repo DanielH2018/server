@@ -43,8 +43,8 @@ tests:
               summary: The kubelet reports fewer than 32 claims.
               description: >-
                 Only 0 claims report kubelet_volume_stats, below the floor
-                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet and
-                kubernetes-apiserver targets.
+                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
+                per node.
 
   # The scrape works and the volume series are gone. LonghornVolumesMissing fires through its
   # second arm. A failed scrape (up 0) leaves it quiet: ScrapeTargetDown owns that page.
@@ -220,8 +220,8 @@ tests:
               summary: The kubelet reports fewer than 32 claims.
               description: >-
                 Only 4 claims report kubelet_volume_stats, below the floor
-                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet and
-                kubernetes-apiserver targets.
+                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
+                per node.
 
   # The free-bytes floor's claim stops reporting while others do: PVCFreeFloorUnmonitored fires.
   - interval: 1m
@@ -264,8 +264,8 @@ tests:
               summary: The kubelet reports fewer than 32 claims.
               description: >-
                 Only 1 claims report kubelet_volume_stats, below the floor
-                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet and
-                kubernetes-apiserver targets.
+                of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
+                per node.
 
   # Snapshot headroom. jellyfin-config has a 16 GiB cap. Two snapshots of 8 GiB and 7 GiB sum to
   # 15 GiB, over 90% (14.4 GiB). A snapshot both managers report counts once. Another claim's

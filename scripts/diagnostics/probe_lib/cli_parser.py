@@ -20,6 +20,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
+from diagnostics.probe_lib import applied, builder, gitops_why, lander
+from diagnostics.probe_lib.flux import FLUX_HELP, FLUX_TAGS_HELP
+from diagnostics.probe_lib.landing_verdicts import VERDICTS_HELP, add_verdicts_args
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE, contract
 from lib.kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
@@ -50,6 +53,16 @@ def _verdict_help(summary, ok, fail):
     """
     text = f"{summary} ({exits(ok, fail)})"
     return {"help": text, "description": text}
+
+
+def _dry_run(parser, help_text):
+    """Give a subcommand that reads a live source its own `--dry-run`."""
+    parser.add_argument("--dry-run", action="store_true", help=help_text)
+
+
+def _flag(parser, name, help):
+    """Add a `store_true` option, the shape most of the subcommands' switches take."""
+    parser.add_argument(name, action="store_true", help=help)
 
 
 def _epilog():
@@ -104,13 +117,11 @@ def _build_parser():
     p = ArgumentParser(
         prog="probe.py", description="read-only homelab diagnostics", epilog=_epilog()
     )
-    p.add_argument(
-        "--dry-run", action="store_true", help="print the command(s) instead of running"
-    )
-    p.add_argument(
+    _flag(p, "--dry-run", "print the command(s) instead of running")
+    _flag(
+        p,
         "--list",
-        action="store_true",
-        help="list every subcommand with its description and exit "
+        "list every subcommand with its description and exit "
         "(handled before subcommand parsing, so it needs no subcommand)",
     )
     p.add_argument(
@@ -125,11 +136,7 @@ def _build_parser():
 
     m = sub.add_parser("metric", help="Prometheus instant query")
     m.add_argument("promql")
-    m.add_argument(
-        "--json",
-        action="store_true",
-        help="print raw JSON instead of the formatted view",
-    )
+    _flag(m, "--json", "print raw JSON instead of the formatted view")
     tg = sub.add_parser("targets", help="Prometheus scrape-target health")
     tg.add_argument(
         "--pi",
@@ -158,16 +165,16 @@ def _build_parser():
             "drift",
         ),
     )
-    kd.add_argument(
+    _flag(
+        kd,
         "--no-secrets",
-        action="store_true",
-        help="skip the SOPS reads that resolve why a gated monitor is absent; those gates "
+        "skip the SOPS reads that resolve why a gated monitor is absent; those gates "
         "report as unverified instead of gated/ungated",
     )
-    kd.add_argument(
+    _flag(
+        kd,
         "--pi",
-        action="store_true",
-        help="scope to daniel-pi's declared monitors (by their static-monitors.yaml.j2 key) "
+        "scope to daniel-pi's declared monitors (by their static-monitors.yaml.j2 key) "
         "instead of the whole cluster's",
     )
     ll = sub.add_parser("loki-labels", help="Loki label names")
@@ -215,9 +222,7 @@ def _build_parser():
         help="evaluation step of a metric query, e.g. 5m. Unset, Loki picks range/250, so "
         "--since 7d samples once every 2419s and steps over anything shorter.",
     )
-    lq.add_argument(
-        "--json", action="store_true", help="print raw JSON instead of the log lines"
-    )
+    _flag(lq, "--json", "print raw JSON instead of the log lines")
     al = sub.add_parser(
         "alerts",
         **_verdict_help(
@@ -230,10 +235,10 @@ def _build_parser():
         "--days", type=float, default=7, help="lookback window in days (default 7)"
     )
     al.add_argument("--check", help="filter to check names containing this substring")
-    al.add_argument(
+    _flag(
+        al,
         "--pi",
-        action="store_true",
-        help="scope to alerts attributable to daniel-pi: the syslog stream's own host token, "
+        "scope to alerts attributable to daniel-pi: the syslog stream's own host token, "
         "or monitor-bridge's pi_pressure check (the only one that watches the Pi remotely)",
     )
     al.add_argument(
@@ -244,12 +249,8 @@ def _build_parser():
         "*/30 crons exactly and split every continuous outage into one episode per tick",
     )
     al.add_argument("--limit", type=int, default=5000)
-    al.add_argument(
-        "--raw", action="store_true", help="print the matching log lines, not episodes"
-    )
-    al.add_argument(
-        "--json", action="store_true", help="print episodes as JSON (epoch-ns times)"
-    )
+    _flag(al, "--raw", "print the matching log lines, not episodes")
+    _flag(al, "--json", "print episodes as JSON (epoch-ns times)")
     sub.add_parser("scrutiny", help="disk SMART summary")
     b2l = sub.add_parser(
         "b2-longhorn",
@@ -331,11 +332,7 @@ def _build_parser():
     rb.add_argument(
         "--namespace", help="namespace to ask about (default: the workload one)"
     )
-    rb.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print the can-i calls without making them",
-    )
+    _dry_run(rb, "print the can-i calls without making them")
     vp = sub.add_parser(
         "vip-placement",
         **_verdict_help(
@@ -347,11 +344,10 @@ def _build_parser():
             "a VIP is stranded",
         ),
     )
-    vp.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print the kubectl calls without making them",
-    )
+    _dry_run(vp, "print the kubectl calls without making them")
+    fx = sub.add_parser("flux", **_verdict_help(*FLUX_HELP))
+    fx.add_argument("tags", nargs="*", help=FLUX_TAGS_HELP)
+    _dry_run(fx, "print the kubectl call without making it")
     sub.add_parser(
         "shed-set",
         help="the untiered k8s workloads to scale down when one node is lost, derived from "
@@ -368,11 +364,7 @@ def _build_parser():
     tk.add_argument(
         "tag", help="the deploy tag, as `./scripts/deploy.sh --tags` takes it"
     )
-    tk.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="render the tag and print the kubectl reads without making them",
-    )
+    _dry_run(tk, "render the tag and print the kubectl reads without making them")
     pi = sub.add_parser(
         "pi",
         **_verdict_help(
@@ -401,10 +393,8 @@ def _build_parser():
         ),
     )
     hl.add_argument("container", help="service name, e.g. jellyfin")
-    hl.add_argument(
-        "--docker",
-        action="store_true",
-        help="inspect the Pi's Docker container instead of a k8s Deployment",
+    _flag(
+        hl, "--docker", "inspect the Pi's Docker container instead of a k8s Deployment"
     )
     hl.add_argument(
         "--cluster",
@@ -421,29 +411,25 @@ def _build_parser():
     )
     ar.add_argument("app", choices=sorted(ARR_PORTS))
     ar.add_argument("path", help="api path, e.g. health, indexerstatus, notification")
-    ar.add_argument(
-        "--json",
-        action="store_true",
-        help="print one-line JSON instead of pretty-printed",
-    )
-    ar.add_argument(
+    _flag(ar, "--json", "print one-line JSON instead of pretty-printed")
+    _flag(
+        ar,
         "--show-secrets",
-        action="store_true",
-        help="print credential-bearing field values instead of <redacted> "
+        "print credential-bearing field values instead of <redacted> "
         "(they land in the transcript — see issue #1388)",
     )
     ha = sub.add_parser("ha", help="Home Assistant live state (read-only, GET)")
     hasub = ha.add_subparsers(dest="ha_cmd", required=True)
     hs = hasub.add_parser("state", help="GET /api/states/<entity_id>")
     hs.add_argument("entity_id", help="e.g. fan.tower_fan")
-    hs.add_argument("--json", action="store_true", help="print raw JSON")
+    _flag(hs, "--json", "print raw JSON")
     hauto = hasub.add_parser(
         "automation", help="one automation by id, alias-slug, or entity_id"
     )
     hauto.add_argument(
         "query", help="automation id, alias-slug, or full automation.<slug>"
     )
-    hauto.add_argument("--json", action="store_true", help="print raw JSON")
+    _flag(hauto, "--json", "print raw JSON")
     hg = hasub.add_parser("get", help="raw GET /api/<path>, e.g. error_log")
     hg.add_argument("path")
     htr = hasub.add_parser(
@@ -471,11 +457,7 @@ def _build_parser():
         ),
     )
     hst = sub.add_parser("ha-state", help="live view of the derived state model")
-    hst.add_argument(
-        "--inventory",
-        action="store_true",
-        help="also dump every live entity grouped by domain",
-    )
+    _flag(hst, "--inventory", "also dump every live entity grouped by domain")
     rel = sub.add_parser(
         "releases",
         help="which commit produced each k8s service's applied manifests",
@@ -485,12 +467,8 @@ def _build_parser():
         nargs="?",
         help="show the full record for one service instead of the table",
     )
-    rel.add_argument(
-        "--previous",
-        action="store_true",
-        help="read the record kept from before the last deploy",
-    )
-    rel.add_argument("--json", action="store_true", help="raw records, unformatted")
+    _flag(rel, "--previous", "read the record kept from before the last deploy")
+    _flag(rel, "--json", "raw records, unformatted")
     rel.add_argument(
         "--stale-only",
         action="store_true",
@@ -535,22 +513,29 @@ def _build_parser():
             "something blocks",
         ),
     )
-    landing.add_argument(
-        "--json",
-        action="store_true",
-        help="one JSON document, the shape the deck mod in .claude/plugins/deck/ reads",
-    )
-    gitops_state = sub.add_parser(
-        "gitops-state",
+    _flag(landing, "--json", "the JSON document the deck mod reads")
+    # The add_parser literal stays here because test_setup_wiring.py scans this file for it.
+    add_verdicts_args(sub.add_parser("landing-verdicts", help=VERDICTS_HELP))
+    push_rules = sub.add_parser(
+        "push-rules",
         **_verdict_help(
-            "every GitOps deployer marker and owed-ledger line with its clear command, "
-            "read-only",
-            "every marker was read",
-            "never: the view reports the markers and judges none; an unreadable marker or "
-            "an absent state directory is 75",
+            "which GitHub ruleset rule a push of a revision to a branch meets, and whether "
+            "the gh login bypasses it",
+            "no rule refuses the push (bypassed rules are still listed)",
+            "at least one rule refuses it",
         ),
     )
-    gitops_state.add_argument(
-        "--json", action="store_true", help="one JSON document instead of the text view"
+    push_rules.add_argument(
+        "branch", help="the branch the push targets, without refs/heads/"
     )
+    push_rules.add_argument(
+        "--rev", default="HEAD", help="the revision pushed (default HEAD)"
+    )
+    push_rules.add_argument(
+        "--remote",
+        default="origin",
+        help="the GitHub remote pushed to (default origin)",
+    )
+    for module in (gitops_why, lander, builder, applied):
+        module.add_parser(sub, _verdict_help)
     return p

@@ -22,9 +22,9 @@
 # longhorn_robustness.py, so a state Longhorn adds or renames pages instead of passing (#3668).
 # `unknown` is a detached volume, such as a game server scaled to zero on purpose.
 #
-# DOUBLE SCRAPES. The kubelet's series arrive under two jobs (`kubernetes-kubelet` and
-# `kubernetes-apiserver`), and the two longhorn-manager pods report disjoint volume subsets. Each
-# rule groups with `max by` so a series seen twice is one reading.
+# DOUBLE SCRAPES. The two longhorn-manager pods report disjoint volume subsets, and until #6331
+# the kubelet's series also arrived under both `kubernetes-kubelet` and `kubernetes-apiserver`.
+# Each rule groups with `max by` so a series seen twice is one reading.
 groups:
   - name: storage
     rules:
@@ -136,8 +136,8 @@ groups:
           summary: The kubelet reports fewer than 32 claims.
           description: >-
             Only {{ $value | printf "%.0f" }} claims report kubelet_volume_stats, below the floor
-            of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet and
-            kubernetes-apiserver targets.
+            of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
+            per node.
       # monitor-bridge's `snapshot_headroom` (#1627): snapshot bytes against the declared
       # spec.snapshotMaxSize, at SNAPSHOT_CAP_WARN_RATIO (0.9) of the cap. Longhorn refuses new
       # snapshots at the cap, which fails every deploy of the service. SNAPSHOT_CAPS declares

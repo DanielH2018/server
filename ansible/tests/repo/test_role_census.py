@@ -60,4 +60,5 @@ def test_the_default_census_finds_the_real_k8s_roles():
 def test_the_census_finds_the_real_setup_and_pi_roles():
     """Non-vacuity for the setup and Pi trees, each named by a role."""
     assert {"common", "gitops_deploy"} <= {p.name for p in role_dirs(SETUP_ROLES)}
-    assert {"wg-easy", "alloy"} <= {p.name for p in role_dirs(CONTAINER_ROLES)}
+    # H5.9 moved wg-easy, the last Pi service, into the package; `common` is what remains.
+    assert {"common"} <= {p.name for p in role_dirs(CONTAINER_ROLES)}

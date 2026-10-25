@@ -11,8 +11,7 @@ restart: `config` admits its ConfigMaps and `secret` its Secrets.
 Every `manifests_self_rollouts` entry is a target too (D5.1e): pihole and observability
 restart those workloads in their own tasks, which a flux-owned tag never runs. Such an entry
 admits both kinds whatever its `restart_on` says, because there `restart_on` describes the
-Ansible release record (observability declares `[]` on every entry), and `rolled_by_role`
-does not exempt it.
+Ansible release record (observability declares `[]` on every entry).
 
 A target's value is one SHA-256 over:
 

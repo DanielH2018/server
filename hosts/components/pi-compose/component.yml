@@ -29,8 +29,9 @@
 # `compose_services` in the Pi's host_vars.
 #
 # The `outputs:` entry below is the Compose env file. Since H5.7, autoheal's webhook is the first
-# secret a compose file reads, so the includes carry `env_file:` and `keys:` lists exactly the
-# secrets the compose files read (operator ruling 2026-10-24, h5-pi-compose.md *Open questions* 7).
+# secret a compose file reads, and since H5.8 alloy's HTTP password is the second. The includes
+# carry `env_file:` and `keys:` lists exactly the secrets the compose files read (operator ruling
+# 2026-10-24, h5-pi-compose.md *Open questions* 7).
 # The Pi's SOPS file must hold each key: the operator runs `host_secrets.py sync daniel-pi`.
 compose: services
 outputs:
@@ -39,7 +40,7 @@ outputs:
     owner: root
     group: root
     mode: "0600"
-    keys: [monitor_discord_webhook_url]
+    keys: [alloy_pi_http_password, monitor_discord_webhook_url]
     dependents: [homelab-compose.service]
     format: dotenv   # homelab-secrets refuses a `'` or a newline in a value
 # The boot path, reconcile's step 2 and H4's restart set all need this link.
@@ -68,3 +69,9 @@ files:
 legacy:
   - {path: /home/ubuntu/server/containers/docker-proxy/docker-compose.yml}
   - {path: /home/ubuntu/server/containers/autoheal/docker-compose.yml}
+  # alloy's role rendered its config at 0640 beside the compose file. Its password now reaches the
+  # container through the Compose env file, and the package installs a config without it.
+  - {path: /home/ubuntu/server/containers/alloy/docker-compose.yml}
+  - {path: /home/ubuntu/server/containers/alloy/config/config.alloy}
+  # wg-easy's role rendered only its compose file. The peer keys in ./config are data, not legacy.
+  - {path: /home/ubuntu/server/containers/wg-easy/docker-compose.yml}

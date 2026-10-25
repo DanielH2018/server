@@ -210,6 +210,10 @@ denies prints its own reason.
   <id-or-alias>` resolves the alias-slug≠id trap.
 - **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a
   service's UI — the half `probe.py health` structurally cannot cover.
+- **`rootq`** — reads root-only host state through one read-only sudoers grant to the
+  operator's account, on daniel-box and daniel-server: redacted nftables, ufw, `sshd -T`,
+  root's crontab and netplan, and the `stat`, SHA-256 or repo match of an allowlisted file. A session gets no other sudo, and the
+  agent user gets none at all, so never probe with `sudo -n true`.
 
 ## Review & Memory Hygiene (making judgment cumulative)
 The rules for promoting a review learning into memory live in the `memory-consolidation` and
@@ -249,6 +253,8 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   the worktree name (prefixing `worktree-`), so `containers-role-cleanup` gets a readable
   branch and `cleanup` doesn't. Accept the prefix; renaming the branch afterwards only
   detaches it from the worktree git has registered.
+- **In an isolated session or agent, start every compound Bash command with `cd <your
+  worktree> &&`**, or the Claude Code binary refuses it as too complex to verify.
 - **The SessionStart banner lists the other live sessions** and the paths each has changed
   vs `origin/master`. It's derived from `git worktree list` and `/proc`, not from anything a
   session declares, so check it before editing a file several sessions are near (`CLAUDE.md`,

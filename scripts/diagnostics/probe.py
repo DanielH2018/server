@@ -46,6 +46,8 @@ Subcommands:
     cert <host[:port]>       Served TLS cert subj/dates [--sni NAME]
     shed-set                 untiered k8s workloads to scale down when one node is lost,
                              derived from the containers_list `tier` field (no kubectl)
+    flux [tag...]            Flux Kustomizations: Ready + reason, applied commit vs the
+                             source's, suspended; a tag adds its -verify etc. and soak
     takeover <tag>           field paths Flux's first apply of the tag strips (paths only;
                              exit 75 when a read fails or nothing rendered is live)
     health <service>         k8s rollout + recent-restart rollup (exit 0 = healthy)
@@ -62,7 +64,18 @@ Subcommands:
     ha verify-entities       Assert every entity in external_entities.yml still exists live
     ha-state [--inventory]   Live view of the derived HA state model
     landing [--json]         What would stop a landing now, runs in flight, worktrees + claims
+    landing-verdicts [<pr>]  Newest recorded VERDICT line per landed PR [--json --limit N]
+                             (exit 1 when <pr> has none; this user, this host)
     gitops-state [--json]    Every deployer marker + owed-ledger line with its clear command
+                             [--why adds the failure lines of the tick that wrote hold_sha]
+    push-rules <branch>      Which ruleset rule a push to the branch meets and whether the gh
+                             login bypasses it [--rev HEAD] [--remote origin]
+    lander [--pr N]          daniel-box's server-batch lander: newest pass, the landings it
+                             started with their VERDICT, the PRs it named [--since 6h]
+    builder [-n N]           daniel-box's host-package builder: reason, published versions,
+                             newest builds, failures [--since 24h]
+    applied <role>           a setup role's files on each of its hosts against the tree's
+                             render: existence, mode, owner, content hash [--host H]
 
 Exit codes: every verdict subcommand exits 0 or 1 for what it observed, and 75 when it could
 not read its source, with the failed read on stderr. Its last stdout line is

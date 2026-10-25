@@ -55,6 +55,10 @@ wake the session, run the command with `run_in_background: true`. A headless `cl
 cannot be woken once its turn ends, so it runs the command in the foreground with
 `timeout: 600000` and does not end its turn on it.
 
+**To read a verdict after the wait, run `probe.py landing-verdicts <n>`**, never a grep of a
+task's output file. Every landing records its `VERDICT:` line there as it exits, and the
+record outlives the session.
+
 The landing runs outside the caller's process tree, so a Bash call killed at its time limit does
 not kill it. Started from a systemd user unit, such as a
 fan-out batch, the landing also moves into its own `land<pr>-<pid>.scope`, so stopping the unit

@@ -50,6 +50,7 @@ from gitops_markers import MARKERS
 from deploy_tools import await_ci, shared_role_reach
 from deploy_tools.land_lib import land_platform, land_reach, land_rerolls
 from deploy_tools.land_lib import land_flux, land_shared, land_tags, land_tested_base
+from deploy_tools.land_lib import verdict_log
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
@@ -382,6 +383,30 @@ def systemctl(*args: str, timeout: float) -> subprocess.CompletedProcess[str]:
     )
 
 
+def follow_journal(unit: str, since: float) -> subprocess.Popen[str]:
+    """`journalctl -f` on `unit` from `since` (epoch seconds), one message per line on stdout.
+
+    `-o cat` prints the message alone, so a relayed `== ` phase line reads as the unit wrote it.
+    `-f` reads only the current boot, which holds every unit this landing starts.
+    """
+    return subprocess.Popen(
+        [
+            "journalctl",
+            "-u",
+            unit,
+            "-f",
+            "-o",
+            "cat",
+            "--no-pager",
+            f"--since=@{int(since)}",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+
+
 def lock_holder() -> str:
     """The tree lock's holder as `pid <pid> (etimes, command): <etimes> <command>`, or ''.
 
@@ -569,8 +594,12 @@ class Tools:
     lock_holder: Callable[[], str] = lock_holder
     # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
+    # Its other boundary: follows the unit's journal, so its phase lines reach the handoff's log.
+    follow_journal: Callable[[str, float], subprocess.Popen[str]] = follow_journal
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog
+    # Appends `(pr, rc, line)` to the per-user record `probe.py landing-verdicts` reads.
+    record_verdict: Callable[[str, int, str], None] = verdict_log.record
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
     # Wall-clock seconds, for comparing with a release record's `applied_at`.

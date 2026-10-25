@@ -254,7 +254,7 @@ def test_retired_container_role_is_flagged():
 
 def test_live_pi_role_and_renovate_glob_are_not_flagged():
     case = {
-        "input": "ansible/roles/containers/wg-easy/tasks/main.yml",
+        "input": "ansible/roles/containers/common/tasks/docker_deploy.yml",
         "rubric": "Renovate must not track `roles/containers/**`.",
     }
     assert retired_container_roles(case) == set()
@@ -264,10 +264,11 @@ def test_no_case_cites_a_retired_container_role():
     cited: dict[Path, set[str]] = {
         f: cited_container_roles(json.loads(f.read_text())) for f in _all_case_files()
     }
-    # A scan that matches nothing would pass vacuously; skeptic/001 quotes the live wg-easy role.
-    skeptic = CASES_DIR / "skeptic/001-refuted-with-evidence.json"
-    assert "wg-easy" in cited[skeptic], (
-        "the role-path scan no longer finds wg-easy in skeptic/001"
+    # A scan that matches nothing would pass vacuously. H5.9 moved wg-easy, the last Pi service,
+    # into the host package, so the shared `common` role is the one live container role to find.
+    reviewer = CASES_DIR / "homelab-cicd-reviewer/001-config-not-registered.json"
+    assert "common" in cited[reviewer], (
+        "the role-path scan no longer finds common in homelab-cicd-reviewer/001"
     )
     live = live_pi_roles()
     stale = {
@@ -312,12 +313,12 @@ def test_marker_on_a_role_that_exists_exempts_nothing():
 
 def test_no_case_cites_a_missing_role_path():
     cited = {f: json.loads(f.read_text()) for f in _all_case_files()}
-    # A scan that matches nothing would pass vacuously. skeptic/001 quotes a live wg-easy file,
-    # and homelab-container-reviewer/001 marks notesdb as a new role.
+    # A scan that matches nothing would pass vacuously. homelab-cicd-reviewer/001 quotes a live
+    # `common` file, and homelab-container-reviewer/001 marks notesdb as a new role.
     paths, _ = cited_role_paths(
-        cited[CASES_DIR / "skeptic/001-refuted-with-evidence.json"]
+        cited[CASES_DIR / "homelab-cicd-reviewer/001-config-not-registered.json"]
     )
-    assert "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2" in paths
+    assert "ansible/roles/containers/common/tasks/docker_deploy.yml" in paths
     _, marked = cited_role_paths(
         cited[CASES_DIR / "homelab-container-reviewer/001-named-volume-unbacked.json"]
     )

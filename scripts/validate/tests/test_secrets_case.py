@@ -128,13 +128,13 @@ def test_seal_pi_rebuilds_the_real_pi_package_and_both_variants_with_the_sealed_
         for _, name in cases.added.values()
     )
     # Every build, at the real build's version, ships the sealed ciphertext for the two tokens and
-    # the Compose env file's key (H5.7).
+    # the Compose env file's keys (H5.7, H5.8).
     assert set(built) == {"1.0", "1.0.3", "1.0.4"}
     for directory in built.values():
         shipped = directory / "root/usr/lib/homelab/secrets/daniel-pi.sops.yaml"
         assert shipped.read_text() == (
-            "sealed:['monitor_discord_webhook_url', 'pi_recovery_push_token', "
-            "'pi_sd_health_push_token']\n"
+            "sealed:['alloy_pi_http_password', 'monitor_discord_webhook_url', "
+            "'pi_recovery_push_token', 'pi_sd_health_push_token']\n"
         )
 
 

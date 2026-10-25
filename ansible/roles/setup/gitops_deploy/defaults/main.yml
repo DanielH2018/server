@@ -37,7 +37,8 @@ gitops_deploy_tick_interval: 10min
 # before a PR can merge at all, and it is a superset: `renovate config validator` gates merges
 # while deliberately not gating deploys (see the reasoning above), and `pull + boot changed
 # images` is required for merges but has no `push:` trigger, so it never produces a check run on
-# master and could never be waited on by a tick.
+# master and could never be waited on by a tick. `flux-deletion-drill` is the same shape: it runs
+# on `pull_request` only, skips itself when no deletion path changed, and always reports (#6042).
 #
 # Declared here so github-ruleset-drift.sh can compare it against the live ruleset daily. That
 # comparison is the whole point: this list is a hand-copy of remote state that can silently go
@@ -48,6 +49,7 @@ gitops_deploy_expected_ruleset_contexts:
   - prek (lint + validate + tests + secrets)
   - pull + boot changed images
   - renovate config validator
+  - flux-deletion-drill
 # Nobody merges past the CI gate. A bypass actor added here could merge an un-CI'd PR, through
 # land.sh's REST merge or any other merge call it makes. Each entry is
 # `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them.

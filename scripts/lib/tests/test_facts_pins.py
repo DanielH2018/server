@@ -56,7 +56,7 @@ def test_the_real_tree_names_the_image_pins_it_must_find():
     )
     assert (
         "image:",
-        "ansible/roles/containers/alloy/templates/docker-compose.yml.j2",
+        "hosts/components/pi-compose/services/alloy/compose.yaml.j2",
     ) in {p[1:] for p in pins["grafana/alloy"]}
     # The package component's canary (H5.2b), the first pin read from the second compose tree.
     assert (

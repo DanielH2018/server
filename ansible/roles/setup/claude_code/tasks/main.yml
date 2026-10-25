@@ -574,6 +574,12 @@
   tags: [claude_code]
   ansible.builtin.import_tasks: takeover_check.yml
 
+# ── The root inspector ──────────────────────────────────────────────────────────────────
+# A sudoers-granted, read-only reader of root-only host state: `rootq`.
+- name: Install the root inspector, or take it back
+  tags: [claude_code]
+  ansible.builtin.import_tasks: rootq.yml
+
 # ── Alert-triggered triage ──────────────────────────────────────────────────────────────
 # In its own file, because that file is on the lander's approval list and pins the run's caps
 # against an inventory override (tasks/triage.yml).

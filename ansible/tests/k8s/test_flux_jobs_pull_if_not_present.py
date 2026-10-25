@@ -20,10 +20,8 @@ from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
 
-# 21 digest-pinned containers render across these Jobs; the floor is the count. traefik's
-# `precheck/bouncer-key.yaml.j2` is not among them: it renders nothing while
-# `traefik_k8s_bouncer_key_precheck` keeps its default of false.
-_FLOOR = 21
+# 22 digest-pinned containers render across these Jobs; the floor is the count.
+_FLOOR = 22
 
 # A verify Job, a precheck Job, and registry's `flux_job_image` branch, which sits beside an
 # `Always` in the other arm of an `{% if %}`.
@@ -32,6 +30,7 @@ _MUST_FIND = frozenset(
         "crowdsec/job.yaml:verify",
         "pihole/guard.yaml:guard",
         "registry/job.yaml:verify",
+        "traefik/bouncer-key.yaml:precheck",
     }
 )
 

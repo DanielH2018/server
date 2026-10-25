@@ -320,22 +320,39 @@ def test_hosts_prints_one_tab_separated_line_per_host(capsys, monkeypatch, host_
     assert capsys.readouterr().out == "host_a\tjellyfin,sonarr\nhost_b\tdozzle\n"
 
 
-def test_hosts_routes_a_k8s_only_tag_to_its_k8s_host_alone(capsys):
-    """`--k8s-only` against the live inventory: `wg-easy` is a k8s
-    entry on daniel-box and a Compose entry on daniel-pi, and a caller-expanded change reaches
-    only the first. Reading the real inventory is also this pair's non-vacuity -- a fixture
-    would keep passing the day the repo stopped declaring one tag on two platforms."""
-    assert deploy_tags.main(["hosts", "wg-easy", "--k8s-only=wg-easy"]) == 0
-    assert capsys.readouterr().out == "daniel-box\twg-easy\n"
-    # REJECTING half: without the flag the same tag still reaches both hosts.
-    assert deploy_tags.main(["hosts", "wg-easy"]) == 0
-    assert capsys.readouterr().out == "daniel-box\twg-easy\ndaniel-pi\twg-easy\n"
+def test_hosts_routes_a_k8s_only_tag_to_its_k8s_host_alone(tmp_path):
+    """`--k8s-only`: a tag that is a k8s entry on one host and a Compose entry on another, and a
+    caller-expanded change reaches only the first.
+
+    The tree is synthetic. `wg-easy` was the one live tag on two platforms until H5.9 moved the
+    Pi's copy into the host package, so no live tag has this shape any more.
+    """
+    (tmp_path / "box.yml").write_text(
+        "containers_list:\n  - name: wg-easy\n    platform: k8s\n"
+    )
+    (tmp_path / "pi.yml").write_text("containers_list:\n  - name: wg-easy\n")
+    assert deploy_tags.landing_hosts(["wg-easy"], tmp_path, ("wg-easy",)) == {
+        "box": ["wg-easy"]
+    }
+    # REJECTING half: without the restriction the same tag still reaches both hosts.
+    assert deploy_tags.landing_hosts(["wg-easy"], tmp_path) == {
+        "box": ["wg-easy"],
+        "pi": ["wg-easy"],
+    }
 
 
-def test_real_inventory_routes_the_pi_log_shipper_to_the_pi():
-    """Non-vacuity against the live inventory: `alloy` resolves to daniel-pi."""
-    assert deploy_tags.tags_by_host(["alloy"]) == {"daniel-pi": ["alloy"]}
-    assert deploy_tags.tag_platforms("alloy") == {"docker"}
+def test_real_inventory_gives_the_packaged_pi_services_no_deploy_tag():
+    """Non-vacuity against the live inventory: `alloy` left `containers_list` in H5.8, and
+    `wg-easy` left the Pi's in H5.9.
+
+    The Pi's package deploys both, so the Pi declares neither tag and `deploy.sh --tags alloy`
+    selects nothing. The cluster's `wg-easy` still resolves, to daniel-box alone, which proves
+    the lookup reads the real files.
+    """
+    assert deploy_tags.tags_by_host(["alloy"]) == {}
+    assert deploy_tags.tag_platforms("alloy") == set()
+    assert deploy_tags.tags_by_host(["wg-easy"]) == {"daniel-box": ["wg-easy"]}
+    assert deploy_tags.tag_platforms("wg-easy") == {"k8s"}
 
 
 def test_landing_hosts_drops_an_undeployable_host_but_keeps_the_pi(tmp_path):
@@ -382,8 +399,7 @@ def test_no_undeployable_host_reaches_the_landing_loop(capsys):
     )
     assert deploy_tags.main(["hosts", "wg-easy,traefik,authelia"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("daniel-box\t")
-    assert "daniel-pi\twg-easy\n" in out
+    assert out == "daniel-box\tauthelia,traefik,wg-easy\n"
 
 
 def test_deploy_logic_importers_do_not_grow_sys_path_per_call():

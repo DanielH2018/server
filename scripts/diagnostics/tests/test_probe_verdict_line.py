@@ -39,6 +39,7 @@ VERDICT_SUBCOMMANDS = (
     ("health",),
     ("pi",),
     ("vip-placement",),
+    ("flux",),
     ("readonly-rbac",),
     ("alerts",),
     ("b2-longhorn",),
@@ -46,6 +47,9 @@ VERDICT_SUBCOMMANDS = (
     ("b2-deletions",),
     ("landing",),
     ("gitops-state",),
+    ("lander",),
+    ("builder",),
+    ("applied",),
     ("ha", "verify-automations"),
     ("ha", "verify-entities"),
 )

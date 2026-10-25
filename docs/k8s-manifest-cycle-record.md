@@ -320,11 +320,11 @@ answer; `ansible/tests/k8s/test_release_stamp_rollout_expectation.py` pins the o
 The write is 0644 and keyed by service, so nothing here may run under `k8s_dry_run`: that mode
 writes no release record, and an amended one would name a release that does not exist.
 
-### Self rollouts, and the entry that disclaims its own verdict
+### Self rollouts
 
 A role that sets `manifests_rollout: ''` and restarts its workloads through a private task after
-this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?, namespace?,
-rolled_by_role?}]`), and the record carries them with the same `restart` decision (#1902).
+this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?,
+namespace?}]`), and the record carries them with the same `restart` decision (#1902).
 observability passes `observability_stabilise_workloads` with `namespace:
 k8s_observability_namespace` on each entry; pihole names both instances with `image: pihole`,
 since `roll_one.yml` also fires on `manifests_image_changed`, which keys on the service name. The
@@ -336,20 +336,11 @@ cannot work, because the record is written before that task runs.
 the loop its private restart iterates, and holds each private restart to the
 `manifests_rolled_by_apply` skip.
 
-**`rolled_by_role: true` on an entry says this role may not decide its `restart`, and the owner
-amends the record afterwards** (#2902). One entry needs it: `pihole-2`, whose own Deployment the
-pihole role applies after the stamp has run. The stamp would read `restart: true` for it — the
-render changed and the shared apply did not roll it — and then that later apply rolls it by
-changing its pod template, stamping no `restartedAt` for `probe.py health` to find, so the gate
-would fail a roll that did happen on every image bump. Such an entry is recorded `restart:
-false`, kept out of the pod-template fingerprints (which could only read "not rolled" for it),
-and carries the marker into `rollouts[]` so a reader can tell a `restart: false` this apply
-decided from one it disclaimed. `ansible/roles/k8s/manifests/tasks/rollout_amend.yml` is what
-raises it: the owner passes the workload and whether it issued `kubectl rollout restart`, and
-that file rewrites the one `rollouts[]` entry. Only a `rollout restart` may claim `restart:
-true`, because it is the only roll that stamps a `restartedAt`. `applied_at` is left as the apply
-wrote it — the owner's restart is strictly later, so the comparison still holds. A skipped or
-failed amend leaves `restart: false`, which is no expectation rather than a false one.
+**HISTORY —** an entry once carried `rolled_by_role: true` to disclaim its `restart` verdict, for a workload
+whose own Deployment the owning role applied after the stamp ran (pihole-2, #2902). The owner
+then raised the expectation through `tasks/rollout_amend.yml`. Both were retired once pihole and
+observability flipped to Flux and no Ansible-owned role used them (#5819). A return to Ansible
+that needs them again restores both from the commit before that retirement.
 
 ### Why secret manifests are digested under a host-local key
 
