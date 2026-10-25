@@ -46,10 +46,12 @@ TASKS = """\
     alert_name: x
 - name: Copy the binary the host already has
   ansible.builtin.copy: {src: /usr/local/bin/x, dest: /opt/x/x, remote_src: true, mode: "0755"}
-- name: Import a path nothing resolves
-  ansible.builtin.import_tasks: "{{ some_dir }}/y.yml"
 - name: Bring in another role
   ansible.builtin.include_role: {name: other}
+"""
+UNRESOLVED = """\
+- name: Import a path nothing resolves
+  ansible.builtin.import_tasks: "{{ some_dir }}/y.yml"
 """
 SHARED = """\
 - name: Install the alert unit for {{ alert_name }}
@@ -69,10 +71,10 @@ CTX = {"port": 8080}
 SCRIPT = "#!/bin/sh\nexec x --port {{ port }}\n"
 
 
-def _role(tmp_path):
+def _role(tmp_path, tasks=TASKS):
     role = tmp_path / "x"
     for sub, name, text in (
-        ("tasks", "main.yml", TASKS),
+        ("tasks", "main.yml", tasks),
         ("tasks", "extra.yml", EXTRA),
         ("templates", "x.sh.j2", SCRIPT),
         ("templates", "secret.j2", "token={{ x_api_token }}\n"),
@@ -180,8 +182,8 @@ def test_an_absent_arm_drifts_only_when_the_path_exists():
     assert applied.compare(gone, _live(WANT), "u")[0] == "DRIFT"
 
 
-def _run(tmp_path, rows):
-    _role(tmp_path)
+def _run(tmp_path, rows, tasks=TASKS):
+    _role(tmp_path, tasks)
     wants, _ = applied_tasks.expected(tmp_path / "x", "daniel-box", CTX)
 
     def read(plan, host):
@@ -244,11 +246,40 @@ def test_a_shared_import_through_role_path_is_walked_with_its_vars(tmp_path):
     assert alert.sha256 == _sha("[Unit]\nDescription=x\n") and alert.mode == "0644"
 
 
-def test_an_import_or_role_include_it_cannot_follow_is_listed_as_skipped(tmp_path):
-    _, skips = applied_tasks.expected(_role(tmp_path), "daniel-box", CTX)
-    reasons = {s.task: s.reason for s in skips}
-    assert "does not resolve" in reasons["import {{ some_dir }}/y.yml"]
-    assert "another role" in reasons["Bring in another role"]
+def test_an_import_it_cannot_resolve_is_unchecked_and_a_role_include_skipped(tmp_path):
+    _, skips = applied_tasks.expected(
+        _role(tmp_path, TASKS + UNRESOLVED), "daniel-box", CTX
+    )
+    by_task = {s.task: s for s in skips}
+    lost = by_task["tasks/main.yml: import {{ some_dir }}/y.yml"]
+    assert lost.unchecked and "'{{ some_dir }}/y.yml'" in lost.reason
+    role_include = by_task["Bring in another role"]
+    assert "another role" in role_include.reason and not role_include.unchecked
+
+
+def test_an_unchecked_import_makes_an_otherwise_clean_role_partial(tmp_path, capsys):
+    assert _run(tmp_path, _as_wanted, TASKS + UNRESOLVED) == PROBE_UNREADABLE
+    out, err = capsys.readouterr()
+    assert (
+        "UNCHECKED tasks/main.yml: import {{ some_dir }}/y.yml: '{{ some_dir }}" in out
+    )
+    assert "coverage partial" in err
+
+
+def test_every_jinja_import_in_the_real_setup_roles_resolves():
+    """A census: an import the walk cannot find hides its tasks, so none may exist today.
+
+    `claude_code` reaching `common/tasks/alert_unit.yml` through `{{ role_path }}` is the
+    member `test_the_real_claude_code_role_walks_its_shared_alert_import` pins.
+    """
+    walked, lost = [], []
+    for role in sorted(p for p in applied.SETUP.iterdir() if (p / "tasks" / "main.yml").is_file()):  # fmt: skip
+        for host in ("daniel-box", "daniel-server"):
+            _, skips = applied_tasks.expected(role, host, applied.context(role, host))
+            lost += [f"{role.name}@{host}: {s.task}" for s in skips if s.unchecked]
+        walked.append(role.name)
+    assert "claude_code" in walked and len(walked) > 10
+    assert lost == []
 
 
 def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):

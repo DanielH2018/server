@@ -16,8 +16,9 @@ imports, through `block`, `rescue` and `always`, and turns each file-writing tas
 A task is SKIPPED, with the reason, rather than guessed at: its `when:` (its own, or a
 block's) cannot be read for the host; it loops over a list that is not literal; a field still
 holds Jinja or a `STUB` after the render; or it writes from a variable the light render cannot
-resolve. An import whose path does not render to a file, and an `import_role` or
-`include_role`, are skipped the same way. A `copy` with `remote_src` is compared by metadata
+resolve. An `import_role` or `include_role` is skipped the same way. An import whose path
+does not render to a file in the tree is UNCHECKED rather than skipped: the file it names may
+install anything, so the probe cannot call the role clean, and `applied` exits 75 for it. A `copy` with `remote_src` is compared by metadata
 only, because its source is on the host. A `when:` that reads false for the host drops the task, as Ansible would.
 """
 
@@ -78,10 +79,15 @@ class Want:
 
 @dataclass(frozen=True)
 class Skip:
-    """A file-writing task this probe does not compare, and why."""
+    """A file-writing task this probe does not compare, and why.
+
+    `unchecked` marks an import whose file the walk could not find, so every task in it went
+    unread: `applied` reports it as UNCHECKED and its verdict as partial coverage.
+    """
 
     task: str
     reason: str
+    unchecked: bool = False
 
 
 def octal_mode(value) -> str | None:
@@ -136,6 +142,8 @@ class _Walk:
         self.defaults = role_dir / "defaults" / "main.yml"
         self.wants: list[Want] = []
         self.skips: list[Skip] = []
+        # The task file being walked, for an UNCHECKED line.
+        self.file = "tasks/main.yml"
         self.text_env = make_ansible_env([role_dir / "templates"])
 
     def gate(self, whens: list) -> str | None:
@@ -162,9 +170,13 @@ class _Walk:
         return None if STUB in text or "{{" in text else text
 
     def tasks(self, path: Path, whens: list) -> None:
-        for task in yaml_fast.safe_load(path.read_text()) or []:
-            if isinstance(task, dict):
-                self.task(task, whens)
+        outer, self.file = self.file, _shown(path, self.role_dir)
+        try:
+            for task in yaml_fast.safe_load(path.read_text()) or []:
+                if isinstance(task, dict):
+                    self.task(task, whens)
+        finally:
+            self.file = outer
 
     def task(self, task: dict, whens: list) -> None:
         own = task.get("when")
@@ -224,9 +236,14 @@ class _Walk:
         resolved = self.render(target)
         path = None if resolved is None else self.role_dir / "tasks" / resolved
         if path is None or not path.is_file():
-            self.skips.append(
-                Skip(label, "its file does not resolve to one in the tree")
+            # DECIDED: an import the walk cannot find is UNCHECKED, never a quiet skip. Every
+            # task in it went unread, so a role reading clean would claim coverage it lacks.
+            why = (
+                f"{target!r} does not render to a literal path"
+                if resolved is None
+                else f"{target!r} renders to {resolved!r}, which is not a file"
             )
+            self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
             return
         if (why := self.gate(whens)) is not None:
             if why != "no":
@@ -334,6 +351,15 @@ class _Walk:
                 "the render left a STUB (a secret, or a value only a play resolves)",
             )
         return hashlib.sha256(rendered.encode()).hexdigest(), ""
+
+
+def _shown(path: Path, role_dir: Path) -> str:
+    """`path` relative to the role, or to `ansible/` for a shared file outside it."""
+    resolved = path.resolve()
+    for base in (role_dir.resolve(), ANSIBLE.resolve(), role_dir.resolve().parent):
+        if resolved.is_relative_to(base):
+            return str(resolved.relative_to(base))
+    return str(path)
 
 
 def expected(role_dir: Path, host: str, ctx: dict) -> tuple[list[Want], list[Skip]]:
