@@ -1,0 +1,34 @@
+# The Pi's resolver and its own hostname (H7.25, old step H7.4; docs/target-architecture/host/
+# h7-delete-ansible.md). Both replace optimize_pi's `pi-dns` tasks.
+#
+# - /etc/resolv.conf is the shared setup/common template, the file daniel-box renders through the
+#   k3s role. `role: common` loads it in place, so the two hosts cannot fork. The nameserver
+#   ORDER is the whole failover mechanism: Pi-hole first, a public resolver behind it, and
+#   `rotate` stays unset. This is the break-glass host, and its wg-easy tunnel is the documented
+#   way in when the cluster's own is unreachable, so it must never depend on the cluster for DNS.
+#   ansible/tests/setup/test_node_resolv_order.py holds the order.
+# - The `127.0.1.1 <hostname>` line in /etc/hosts. sudo resolves the local hostname on every
+#   invocation and this file is the first hop; without the line each sudo on the Pi waits on
+#   the resolver, which is the cluster's Pi-hole VIP, exactly when an operator needs this host.
+#   The regexp anchors on the ADDRESS, not the name, so an existing 127.0.1.1 line with a stale
+#   hostname is rewritten, not duplicated. cloud-init does not own /etc/hosts here
+#   (`manage_etc_hosts` is unset), and no package owns it.
+#
+# The file lands in /etc/resolv.conf as a regular file. A rebuilt Pi starts with the systemd-resolved
+# stub symlink; dpkg replaces the link with the file, and the bootstrap debloat step stops and
+# disables systemd-resolved (spec, *The bootstrap script*). The live Pi already has resolved
+# disabled. Docker pins its upstream resolvers when a container starts, so a later change to this
+# file leaves running containers on the old ones until they restart. The Ansible role restarted
+# every container after a change. The package does not, so the operator restarts the containers
+# by hand after such a change (docs/pi-host-tuning-record.md has the 2026-09-01 incident).
+role: common
+defaults:
+  common_resolver_nameservers:
+    - "{{ dns_k8s_vip }}"
+    - 1.1.1.1
+  common_resolver_timeout: 2
+  common_resolver_options: "timeout:2 attempts:1"
+files:
+  - {src: "role:resolv.conf.j2", dst: /etc/resolv.conf}
+lines:
+  - {path: /etc/hosts, line: "127.0.1.1 {{ inventory_hostname }}", regexp: '^127\.0\.1\.1\s', mode: "0644"}

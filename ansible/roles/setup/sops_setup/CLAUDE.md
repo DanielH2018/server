@@ -42,8 +42,8 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
 This role does **not** write `SOPS_AGE_KEY_FILE` into `~/.bashrc`. Until #2319 it appended
 the export with `lineinfile`, which landed after the dotfiles' `ble-attach` line and was undone
 by every `chezmoi apply`. The export now belongs to whatever owns the host's `.bashrc`: the
-dotfiles repo's `home/dot_bashrc` on the chezmoi hosts, and [[config_files]]' tracked
-`files/.bashrc` on daniel-pi.
+dotfiles repo's `home/dot_bashrc` on the chezmoi hosts, and `/etc/profile.d/homelab.sh` from the
+`pi-tuning` component of `homelab-daniel-pi` on daniel-pi.
 
 ## Notable
 - **DR:** host keys at `~/.config/sops/age/keys.txt` are in **no automated backup** (nothing

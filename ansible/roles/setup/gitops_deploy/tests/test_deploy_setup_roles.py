@@ -312,7 +312,19 @@ def test_commons_consumer_commands_follow_the_routing_not_literals():
     routes, _ = checkout_routing()
     moved = routes["optimize_pi"]._replace(host="daniel-elsewhere")
     deploy_setup_roles.use_routing({**routes, "optimize_pi": moved})
-    cmd = broad_remediation(False, True, {"common"})
+    # optimize_pi stopped rendering the resolver in H7.25, so the adopted table names it again.
+    path = "ansible/roles/setup/common/templates/resolv.conf.j2"
+    saved = deploy_cross_role.current_tables()
+    deploy_cross_role.use_tables(
+        {
+            **saved,
+            "SETUP_FILES_ROUTED_TO_OWNER": {path: frozenset({"k3s", "optimize_pi"})},
+        }
+    )
+    try:
+        cmd = broad_remediation(False, True, {"common"})
+    finally:
+        deploy_cross_role.use_tables(saved)
     assert "--tags optimize_pi -e target=daniel-elsewhere`" in cmd
     assert "daniel-pi" not in cmd
 

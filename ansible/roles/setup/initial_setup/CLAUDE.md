@@ -65,8 +65,8 @@ are in the record page.
 - **The `journald` tag's two files are one change** — the journal cap and the rsyslog info
   filter, gated `when: has_rsyslog` (false on the Pi). ENFORCED:
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`.
-- **Handlers live in `handlers/main.yml`**, including two optimize_pi notifies; its header
-  says why, and why the order there matters. ENFORCED:
+- **Handlers live in `handlers/main.yml`**; its header says why the order there matters. The
+  two optimize_pi notifies went with that role's tasks in H7.25. ENFORCED:
   `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`.
 
 ## Autonomous-role contract — the host crons that remain (`crons` tag)
