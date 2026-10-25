@@ -101,10 +101,12 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    ```
    After a healthy rollout, the gate compares the live `longhorn` class's parameters with the
    class in ConfigMap `longhorn-system/longhorn-storageclass`
-   (`scripts/diagnostics/probe_lib/health_plumbing.py:longhorn_storageclass`). Exit 0 prints
-   `StorageClass longhorn matches`. Exit 1 prints a `FAILED:` line that names each parameter
-   whose live and ConfigMap values differ. Exit 75 means a read failed, which is no verdict.
-   When the parameters differ, the fix is an **operator-only** delete of the class, which the
+   (`scripts/diagnostics/probe_lib/health_plumbing.py:longhorn_storageclass`). A match prints
+   `StorageClass longhorn matches`. A mismatch exits 1 with the head line `longhorn: the
+   plumbing check FAILED the gate after a healthy rollout` and a `FAILED:` line that names
+   each parameter whose live and ConfigMap values differ. An exit 1 without that head line
+   comes from the rollout or the alert plane, and the comparison may not have run. Exit 75
+   means a read failed, which is no verdict. When the parameters differ, the fix is an **operator-only** delete of the class, which the
    manager recreates from the ConfigMap. Deleting a class is safe, because parameters are read
    at provision time only.
 4. **Wait for the engines to follow the manager.** Upstream ships
