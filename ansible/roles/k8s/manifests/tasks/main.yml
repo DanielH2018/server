@@ -33,7 +33,7 @@
 #                           ansible/templates/claim-default.yaml.j2 to `claim-<name>.yaml` in the
 #                           caller's own directory, so it is in the prune keep-set, the
 #                           `manifests_digest` and the `--dry-run=server` apply.
-#   manifests_self_rollouts [{name, kind, image?, namespace?, rolled_by_role?}] a role with
+#   manifests_self_rollouts [{name, kind, image?, namespace?}] a role with
 #                           `manifests_rollout: ''` restarts through its OWN task after this
 #                           role returns. Reaches the release record's `rollouts[]`
 #                           (release_stamp.yml), so `probe.py health` holds the same roll
@@ -44,13 +44,6 @@
 #                           role opted out of. `namespace` defaults to k8s_namespace; a role
 #                           whose workloads live elsewhere (observability) names it, or the
 #                           fingerprints read nothing and it restarts twice.
-#                           `rolled_by_role: true` (present only when true) says THIS role
-#                           cannot decide the entry's `restart`: the owning role applies the
-#                           workload's own manifest after the record is written, so the record
-#                           is stamped `restart: false` and the owner raises it through
-#                           tasks/rollout_amend.yml once it knows. Such an entry is also left
-#                           out of the fingerprints below, which would read "not rolled" for it
-#                           by construction.
 #
 # Derived here, not passed in:
 #   manifests_image_changed  true when k8s/image-builder rebuilt this service's image to a new
@@ -139,20 +132,13 @@
   # record as manifests_self_rollouts), so it needs the same constraint the primary rollout
   # gets. A self rollout's kind picks the `created` prefix the record checks, so it is held to
   # the same two literals.
-  #
-  # The second `that:` holds `rolled_by_role`'s shape rather than its meaning. The fingerprint
-  # list below selects on the key being DEFINED, because Jinja's `rejectattr` cannot read an
-  # attribute an entry omits — so `rolled_by_role: false` would read as true there and silently
-  # drop the entry from the fingerprints. Write the key only when it is true.
   ansible.builtin.assert:
     that:
       - item.kind | default('deploy') in ['deploy', 'daemonset']
-      - item.rolled_by_role | default(true) | bool
     fail_msg: >-
       rollout entry '{{ item.name }}' has kind '{{ item.kind | default('deploy') }}',
       which must be 'deploy' or 'daemonset'. kubectl aliases like 'ds' or 'DaemonSet' are
-      rejected here on purpose — see the manifests_rollout_kind assert above. A
-      `rolled_by_role` key must be a bare `true` or be omitted, never `false`.
+      rejected here on purpose — see the manifests_rollout_kind assert above.
     quiet: true
   loop: "{{ (manifests_extra_rollouts | default([])) + (manifests_self_rollouts | default([])) }}"
   loop_control:
@@ -666,7 +652,7 @@
           | ternary([{'name': manifests_rollout | default(manifests_service),
                       'kind': manifests_rollout_kind | default('deploy')}], []))
          + (manifests_extra_rollouts | default([]))
-         + (manifests_self_rollouts | default([]) | rejectattr('rolled_by_role', 'defined') | list) }}
+         + (manifests_self_rollouts | default([])) }}
 
 # Fingerprint each target's pod template on both sides of the apply. The apply below rolls a
 # workload exactly when it changes `.spec.template` -- the Deployment controller creates a new

@@ -1,6 +1,6 @@
 # H4 — Secrets unit; NUT on daniel-server first
 
-Status: IN PROGRESS
+Status: DONE
 Depends on: H3
 Unblocks: H5, H6
 
@@ -18,6 +18,7 @@ PR H4.3b1, the `kuma-push` component and reconcile's udev arm: [#6089](https://g
 PR H4.3c, NUT on daniel-server: [#6096](https://github.com/DanielH2018/server/pull/6096). It republishes `homelab-daniel-server` and ends the `nut_host` role on `ups_host`. A component file entry now takes `src: role:<template>`, as an output does, and `HOST_INPUTS` gained the watchdog template. The rollout text's step 2 is inexact: the output's new dependent changes `secrets.json`, so `secrets_inputs_sha256` moves and reconcile restarts `homelab-secrets` once before it restarts `nut-monitor`. The NUT container cases of *Verification* have no PR, so the environ read stands in for them.
 PR H4.4, the Pi's SOPS creation rule: [#6092](https://github.com/DanielH2018/server/pull/6092). It carries only the rule and `docs/break-glass.md` item 12. The Pi's file, `credentials:`, `LIVE_HOST_FILES` entry and `check` member moved to H4.5, because `host_outputs.py:finish` refuses a credential without a `secrets-unit`. The Pi's bootstrap step 3 ran on 2026-10-24.
 PR H4.5, the Pi switches to `/run/credstore`: [#6107](https://github.com/DanielH2018/server/pull/6107). It adds the `secrets-unit` component, the two `credentials:` and the `LIVE_HOST_FILES` entry to the Pi, and repoints both token heartbeats at `/run/credstore`. The Pi's file came from the operator's `host_secrets.py sync daniel-pi` commit on the PR's branch. `HOST_INPUTS` gained `ansible/vars/hosts/`, because a host render opens that file. It keeps the interim files, which H4.6 retires.
+PR H4.6, the interim files retired: the two token files left with H7.25 ([#6242](https://github.com/DanielH2018/server/pull/6242)), which deleted `optimize_pi`'s interim tasks and listed both files as legacy entries. Reconcile removed them on the Pi at 18:10 UTC on 2026-10-25, after both Pi heartbeat tiles had read UP for a day on the H4.5 version and `homelab-secrets` read `active`. The empty `/etc/homelab/interim/` stayed, because reconcile only unlinked. The closing PR teaches reconcile to `rmdir` an empty legacy directory and lists the directory after its files.
 
 This slice adds `homelab-secrets.service`, which decrypts a per-host SOPS file on the host
 with the host's own age key. It proves the unit on the UPS shutdown chain of daniel-server,
