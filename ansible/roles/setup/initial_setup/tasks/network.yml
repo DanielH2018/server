@@ -254,4 +254,4 @@
       /etc/ufw/before.rules and loopback traffic, host DNS on 127.0.0.1 included, is dropped.
       Run `sudo ufw reload`, then `sudo iptables -S ufw-before-input`.
     quiet: true
-  when: initial_setup_ufw_before_input is not skipped
+  when: "not (ansible_check_mode and initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True))"
