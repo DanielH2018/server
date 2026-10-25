@@ -31,7 +31,6 @@ ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 409
 ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 450
 ansible/tests/k8s/_workload_property_rows.py 401
 ansible/tests/repo/test_census_rows_roles.py 414
-ansible/tests/repo/test_census_rows_text.py 416
 evals/ablate.py 456
 hosts/lib/k3s_gates.py 477  # conjoined: the host-side checks, the cluster checks and the modes share ReadError, Getter and the API path constants, and the script ships as the single stdlib file /usr/lib/homelab/k3s_gates.py, so a second module would be a second file every Plan's prepare and the restart unit must find
 scripts/backup/tests/test_longhorn_reap_logic.py 441
