@@ -63,7 +63,7 @@ def test_question_records_a_before_and_an_after_reading():
 
 
 # One labelled reading of the pair: the alert's activation and Prometheus's start at that time.
-_READING = re.compile(
+_READING = (
     r"- (Before|After) the restart: `ALERTS_FOR_STATE` `(\d+(?:\.\d+)?)`,\s+"
     r"`process_start_time_seconds`\s+`(\d+(?:\.\d+)?)`"
 )
@@ -72,7 +72,7 @@ _READING = re.compile(
 def _pair() -> dict[str, tuple[float, float]]:
     pair = {
         m.group(1): (float(m.group(2)), float(m.group(3)))
-        for m in _READING.finditer(_question())
+        for m in re.finditer(_READING, _question())
     }
     assert set(pair) == {"Before", "After"}, (
         f"Open question {QUESTION} records no labelled before/after ALERTS_FOR_STATE pair; "
