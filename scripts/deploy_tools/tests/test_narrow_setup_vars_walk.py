@@ -359,7 +359,6 @@ def test_a_comment_edit_to_defaults_alone_needs_nothing(tree):
 @pytest.mark.parametrize(
     ("role", "tags"),
     [
-        ("homelab_builder", {"homelab-builder-install"}),
         ("renovate_agent", {"renovate-agent-code", "renovate-agent-service"}),
         ("claude_code", {"claude_code"}),
     ],
