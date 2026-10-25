@@ -1569,11 +1569,13 @@ Each risk names its class from `docs/failure-classes.md`.
     - Both control-plane jobs scrape every minute, so the cut removes about 350 samples a
       second. That leaves the rate near 2,400 a second, still above the samples model's
       2,000. The read after the deploy says whether the store reaches 30 days.
-    - The larger lever is a duplicate. On daniel-box the `kubernetes-kubelet` scrape returns
+    - The larger lever was a duplicate. On daniel-box the `kubernetes-kubelet` scrape returned
       the same 35,686 series as the `kubernetes-apiserver` scrape, because k3s serves both
-      from one registry. Removing the copy changes which job label some readers see, so it is
-      a separate operator ruling
-      ([#6331](https://github.com/DanielH2018/server/issues/6331)).
+      from one registry. The operator ruled on 2026-10-25
+      ([#6331](https://github.com/DanielH2018/server/issues/6331)) that each family keeps one
+      copy under the job it had. The apiserver job keeps only `apiserver_` and `etcd_`, and the
+      kubelet job drops those two on the control-plane node. After the bucket cut that removes
+      25,130 series, about 420 samples a second at the 1-minute interval.
 
    The operator also rules whether C7 restates the budget in samples a second
    ([#4756](https://github.com/DanielH2018/server/issues/4756)). Both models predict that the
