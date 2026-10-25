@@ -20,13 +20,14 @@
   Flux runs it again. A Job that kept its name would satisfy `dependsOn` with the previous
   key's pass.
 
-  DECIDED: the Job ships off, behind `traefik_k8s_bouncer_key_precheck`, and a second PR turns
-  it on. Switched on in one PR with its fence peer, it deadlocks. The Job dials the LAPI
-  through netpol-baseline's `networkpolicy-crowdsec.yaml.j2`, and netpol-baseline applies
-  last, after `traefik`. Before the peer applies, the fence refuses the Job, the refused Job
-  holds `traefik`, and a held `traefik` keeps netpol-baseline, and with it the peer, from
-  applying. So the peer landed first, with the Job switched off (#6095). Setting the default
-  to true is safe once netpol-baseline has applied the peer.
+  DECIDED: the Job, behind `traefik_k8s_bouncer_key_precheck`, and its fence peer land in
+  separate revisions, the peer first. Switched on in one PR with its fence peer, it
+  deadlocks. The Job dials the LAPI through netpol-baseline's `networkpolicy-crowdsec.yaml.j2`,
+  and netpol-baseline applies last, after `traefik`. Before the peer applies, the fence
+  refuses the Job, the refused Job holds `traefik`, and a held `traefik` keeps
+  netpol-baseline, and with it the peer, from applying. So the peer landed first, with the
+  Job switched off (#6095), and the switch turned on once the live policy listed the peer
+  (#6157). A change that removes or renames the peer switches the Job off first.
 
   The caller census (D5, *A fence admits every Job that dials through it*). The pod is
   `app: traefik-precheck` in `k8s_namespace`. It execs into nothing and dials one Service:

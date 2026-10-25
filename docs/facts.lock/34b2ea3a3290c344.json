@@ -1,5 +1,5 @@
 {
-  "checksum": "7a8d485954fc54bb205910331539908942d8d2ce07b795be911d932f9e54a6bd",
+  "checksum": "99b7d53a20750b62cecb389d817679996c15b4fb00555e75041bda68ff9533d8",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/traefik/CLAUDE.md#Plugins and the startupProbe",
   "row": {
@@ -9,6 +9,6 @@
       "ansible/tests/services/test_traefik_edge_selfcheck.py": "047427a3b7de3e97ef00c781bfa63b6ebb31d4bb52ae4ab7e54623de2d1cf936"
     },
     "python": "3.14",
-    "verified_sha": "454da7c98"
+    "verified_sha": "346ef6ae8"
   }
 }
