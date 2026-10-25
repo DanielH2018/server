@@ -8,7 +8,7 @@ five installed plugins is, what blocks the Jellyfin 12 image line, the census of
 the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=jellyfin` with exit 5
 - **Images:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), `python`

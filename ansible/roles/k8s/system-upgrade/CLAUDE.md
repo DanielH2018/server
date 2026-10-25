@@ -7,7 +7,7 @@ else upgrades k3s once H6.3c and H6.3d land. The slice plan is
 `docs/adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=system-upgrade` with exit 5
 - **Images:** `rancher/system-upgrade-controller` (`system_upgrade_controller_image`), `python`
