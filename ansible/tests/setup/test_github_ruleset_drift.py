@@ -82,13 +82,14 @@ def test_a_required_review_is_flagged(tmp_path):
 
 def test_a_removed_context_is_flagged(tmp_path):
     """The dangerous direction: a required check dropped in the UI stops gating merges."""
+    dropped = DECLARED[-1]
     rc, status, msg = run(tmp_path, curl_body=ruleset_body(DECLARED[:-1]))
     assert rc == 1
     assert status == "down"
     assert "DRIFTED" in msg
-    assert "renovate config validator" in msg
+    assert dropped in msg
     # Named in the no-longer-required half, not the newly-required one.
-    assert msg.index("no-longer-required") < msg.index("renovate config validator")
+    assert msg.index("no-longer-required") < msg.index(dropped)
 
 
 def test_an_added_context_is_flagged(tmp_path):
