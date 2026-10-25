@@ -72,6 +72,13 @@ same convention in plain text. Both read `heartbeatJSON.msg`, `monitorJSON.descr
   guards on the declarations stand between a typo and a fleet wipe.
 - **A monitor names a tag by the entity's AutoKuma id** — `tag-severity`, the filename minus
   `.json` — never the display name. Removing one takes two deploys: references first.
+- **The notification posts to the `discord-relay` sidecar on the pod's loopback, not to
+  Discord** (#5657). Kuma posts once and drops a 429, so a mass flip lost alerts. The relay
+  answers at once, queues the body and forwards it inside Discord's rate limit; it answers
+  before Discord does because Kuma awaits the send inside the push route, and pushers time out
+  at 10 s. A message it gives up on is logged as `Cannot send notification to Homelab Alerts`,
+  which `KumaNotificationDropped` reads from both containers. The design is in
+  this role's `files/discord_relay.py`.
 - **`webhookAdditionalHeaders` carries `Content-Type: application/json`**, the id stays `discord`,
   and the name stays `Homelab Alerts`, which Kuma prints in its failure line. The loki-homelab rule `KumaNotificationDropped` filters on that line's text and names no notification.
 
