@@ -11,7 +11,7 @@
 # fewer faults, and GOGC alone cannot get below the ~0.5 cycles a minute the runtime's
 # forced two-minute cycle imposes; `GOGC=off` skips that timer, and then the limit is the
 # only trigger. The whole argument, with the measurements, is the `DECIDED:` marker at the
-# GOGC line of roles/containers/alloy/templates/docker-compose.yml.j2; the sizing for these
+# GOGC line of hosts/components/pi-compose/services/alloy/compose.yaml.j2; the sizing for these
 # two daemons is at `docker_install_gomemlimit_<daemon>` in defaults/main.yml.
 #
 # THE ENVIRONMENT IS INHERITED BY EVERY CHILD PROCESS, and a child with `GOGC=off` grows its

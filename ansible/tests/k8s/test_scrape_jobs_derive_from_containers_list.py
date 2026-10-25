@@ -144,8 +144,9 @@ def test_the_alloy_pi_job_reads_its_port_from_the_pis_entry():
     """daniel-box's containers_list holds no Pi entry, so the job reads the Pi's through hostvars."""
     ctx = host_context()
     hostvars = copy.deepcopy(ctx["hostvars"])
+    # Since H5.8 the Pi's alloy entry sits in `compose_services`, which the job reads as well.
     entry = next(
-        e for e in hostvars["daniel-pi"]["containers_list"] if e["name"] == "alloy"
+        e for e in hostvars["daniel-pi"]["compose_services"] if e["name"] == "alloy"
     )
     assert entry["port"] != 9999
     entry["port"] = 9999

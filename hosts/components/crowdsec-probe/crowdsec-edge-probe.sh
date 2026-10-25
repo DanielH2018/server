@@ -7,7 +7,7 @@
 # against the connecting address, so only a host the cluster bans can prove the edge enforces
 # it. The `crowdsec-verify` Job bans this Pi for a bounded window and reads the 403s this probe
 # records. The Pi's Alloy counts each line by status (`stage.metrics` in
-# roles/containers/alloy/templates/config.alloy.j2), and Prometheus scrapes that counter
+# hosts/components/pi-compose/services/alloy/config.alloy.j2), and Prometheus scrapes that counter
 # directly as `alloy-pi`. That path never crosses Traefik, which refuses the Pi for the whole
 # ban.
 #
