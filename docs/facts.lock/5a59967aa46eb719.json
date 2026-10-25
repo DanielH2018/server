@@ -1,5 +1,5 @@
 {
-  "checksum": "8e96d68efbb56f3d0a6ec839101baa7cada296756fe8d18e7ea28ef359bd267c",
+  "checksum": "edd8f8b5a45fa21af19d761ae16b6481760e06f668a5e1dcfdf48212e2b3ed12",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/uptime-kuma/CLAUDE.md#One Discord template for every monitor, fed by `description` and tags",
   "row": {
@@ -7,6 +7,6 @@
       "ansible/tests/services/test_kuma_entities_parse_for_autokuma.py": "81f201efac0eb8be12299075b6ab556b7e0709cd53a58d425b2c3224b695553a"
     },
     "python": "3.14",
-    "verified_sha": "b35628e92"
+    "verified_sha": "46b74d629"
   }
 }

@@ -52,6 +52,12 @@ stringData:
   # `Cannot send notification to <name>` line. The loki-homelab rule KumaNotificationDropped
   # filters on that text and names no notification, so the name is kept for readability.
   #
+  # The webhookURL is the discord-relay sidecar on the pod's loopback, not Discord, since #5657.
+  # Kuma posts once and drops a 429, so a mass flip lost alerts; the relay queues each body and
+  # forwards it to monitor_discord_webhook_url inside Discord's rate limit
+  # (files/discord_relay.py). A message it cannot deliver it logs with the same
+  # `Cannot send notification to Homelab Alerts` text, so KumaNotificationDropped still sees it.
+  #
   # The Liquid body is wrapped in Tera's raw block. AutoKuma runs EVERY entity through Tera
   # before it parses it (autokuma/src/entity.rs, get_entity_from_settings — unconditional,
   # `files.preprocess` gates only an earlier pass), and Tera reads Liquid's comment tag and
@@ -68,7 +74,7 @@ stringData:
       "type": "notification",
       "name": "Homelab Alerts",
       "active": true,
-      "config": {"type": "webhook", "applyExisting": false, "webhookURL": "{{ monitor_discord_webhook_url }}", "webhookContentType": "custom", "webhookAdditionalHeaders": "{\"Content-Type\": \"application/json\"}", "webhookCustomBody": {{ (tera_raw ~ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/discord-message.liquid') ~ tera_endraw) | to_json }}}
+      "config": {"type": "webhook", "applyExisting": false, "webhookURL": "http://127.0.0.1:{{ uptime_kuma_k8s_discord_relay_port }}/", "webhookContentType": "custom", "webhookAdditionalHeaders": "{\"Content-Type\": \"application/json\"}", "webhookCustomBody": {{ (tera_raw ~ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/discord-message.liquid') ~ tera_endraw) | to_json }}}
     }
   # Fans out to BOTH channels: the Discord dead-man's-switch below, plus the critical tier
   # (both backup targets, disks, SMART, SD, cert expiry, UPS, and the home-critical services' own
@@ -532,6 +538,9 @@ stringData:
   # the per-webhook bucket refilling, not a ban — but Kuma 2.5.3's discord.js posts once with
   # no retry and no `retry_after` handling (server/notification-providers/discord.js), so those
   # five were simply lost. The operator saw ~33 DOWN messages and then silence.
+  # Since #5657 the notification posts to the discord-relay sidecar, which retries a 429 after
+  # its `retry_after`, so a burst like that one is delayed rather than lost. This tile stays:
+  # a relay that gives up still drops messages, and SMTP is the leg that cannot share the bucket.
   #
   # The clustering is not a one-off: a Kuma pod recreate starts every monitor's schedule at the
   # same instant, and essentially every tile here is `interval: 60`, so they stay aligned until

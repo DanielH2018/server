@@ -40,7 +40,7 @@ approved: the update would void the approval, so `land.sh` refuses it and names 
 which is to rebase onto origin/master, push and get the new head approved.
 `land_lib/merge.py`'s module docstring owns the rule.
 
-**A master CI backlog holds the merge.** While 2 or more master `ci.yml` runs are unfinished,
+**A master CI backlog holds the merge.** While any master `ci.yml` run is unfinished,
 a green PR waits to merge and `land.sh` prints `pacing the merge: …`. Merging faster than
 master CI clears only deepens the runner queue every landing waits on (#5526). The wait counts
 against the merge budget, so a backlog that never drains ends at `merge-timeout`, a resume
