@@ -415,6 +415,53 @@ def test_strip_env_removes_only_the_hook_variables() -> None:
     assert leakguard.strip_env(environ, leakguard.GIT_HOOK_VARS) == []
 
 
+# The host path node_exporter scrapes, exported to the child as a careless caller would. The
+# child runs the real check library's writer and asserts the file landed anywhere but there
+# (#6191). A child without the plugin is the red half: the exported path reaches it, and the
+# child's first assert fails before the writer runs, so the red half writes nothing there.
+_REAL_TEXTFILE_DIR = "/var/lib/node-exporter-textfile"
+_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
+
+_WRITES_A_TEXTFILE = f"""
+import os
+import subprocess
+from pathlib import Path
+
+
+def test_the_check_library_writes_into_a_temp_textfile_dir():
+    textfile_dir = Path(os.environ.get("TEXTFILE_DIR", "{_REAL_TEXTFILE_DIR}"))
+    assert textfile_dir != Path("{_REAL_TEXTFILE_DIR}")
+    subprocess.run(
+        ["bash", "-c", 'source {_CHECK_LIB} && write_check_textfile leakguard-probe 1 0 60'],
+        check=True,
+    )
+    assert (textfile_dir / "leakguard-probe.prom").is_file()
+"""
+
+
+def test_the_plugin_points_the_textfile_dir_at_a_temp_directory(tmp_path: Path) -> None:
+    proc = _run_child(
+        tmp_path, _WRITES_A_TEXTFILE, extra_env={"TEXTFILE_DIR": _REAL_TEXTFILE_DIR}
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_without_the_plugin_the_exported_textfile_dir_reaches_the_test(
+    tmp_path: Path,
+) -> None:
+    """The red half: the child's assertion is real, and only the plugin satisfies it."""
+    proc = _run_child(
+        tmp_path,
+        _WRITES_A_TEXTFILE,
+        plugin=False,
+        extra_env={"TEXTFILE_DIR": _REAL_TEXTFILE_DIR},
+    )
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "assert PosixPath('/var/lib/node-exporter-textfile') != " in proc.stdout, (
+        proc.stdout
+    )
+
+
 # The agent user's profile value, which `fanout_lib.target` reads into SERVER_CHECKOUT.
 # Not the agent's real clone, /var/lib/claude/server: run as `claude`, PRIMARY_CHECKOUT is that
 # clone already, so the profile would move nothing and the red half below would pass (#4108).

@@ -52,6 +52,16 @@ so a nodeid allowlist would go stale on an enrollment instead of on a rename. `a
 `-m 'not ui and not image'`, so the `pytest` shards never reach this branch. The `image`
 marker takes the same exemption and is run by `image-leg.yml` alone.
 
+## The textfile directory points at a temp directory
+
+`homelab-check-lib.sh`'s `write_check_textfile` writes `$TEXTFILE_DIR/<check>.prom` and
+defaults to `/var/lib/node-exporter-textfile`, which node_exporter scrapes. On daniel-server
+the deploy user can write there, so a test that ran a check script published its fake verdict
+as a production metric (#6191). `pytest_configure` sets `TEXTFILE_DIR` to a directory under the
+stub directory, overriding any exported value, so every child that inherits this process's
+environment writes there. A child given an environment built from scratch inherits nothing,
+and its test passes `TEXTFILE_DIR` itself, as `test_eval_sweep_cron.py` does.
+
 ## What is deliberately NOT shimmed
 
 `git` — too central to intercept safely. Every write verb targets a `tmp_path` repo through `git -C`, no child environment
@@ -247,6 +257,9 @@ def pytest_configure(config: pytest.Config) -> None:
     _state["real_path"] = os.environ.get("PATH", "")
 
     os.environ["LEAKGUARD_CALLS"] = str(calls)
+    textfile_dir = stub_dir / "textfile"
+    textfile_dir.mkdir()
+    os.environ["TEXTFILE_DIR"] = str(textfile_dir)
 
     real_connect = socket.socket.connect
     real_connect_ex = socket.socket.connect_ex
