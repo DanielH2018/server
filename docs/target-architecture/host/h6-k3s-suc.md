@@ -1100,6 +1100,24 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - The `secrets` component, daniel-box's SOPS file and its `host_secrets.py check` entry
       arrive in H6.3b with the first daniel-box key. H4's check compares the file's keys
       with the credentials the host uses, and before H6.3b daniel-box uses none.
+    - **Amended 2026-10-25 ([#6218](https://github.com/DanielH2018/server/issues/6218)):**
+      daniel-box's package ships the enable link for `homelab-updater.timer`
+      (`enable: {homelab-updater.timer: timers.target}`), the form daniel-server and the Pi
+      use. No step armed the timer before this, so each daniel-box landing (#6142, #6190,
+      #6201) ended `deferred` until the operator ran `systemctl start homelab-updater.service`.
+      The timer keeps the shared schedule, with no drop-in. `land.sh`'s deferral for a first
+      parent without the link stays as the general rule; it stops firing for daniel-box once
+      the first parent carries the link.
+      - **H6-R1-22, now live.** The updater's install takes the dpkg lock for seconds, and
+        Ansible's `apt` waits 60 s (`lock_timeout`), so a collision with the tick resolves by
+        the wait. A collision that outlasts it fails the tick's apply and writes `hold_sha`.
+      - **H6.4a consequence.** Once the timer is armed, H6.4a's k3s restart
+        ([#6198](https://github.com/DanielH2018/server/pull/6198)) happens unattended, in the
+        first 11:32 UTC window after its package installs. That is the design.
+      - **Operator-only**, after the merge: the first parent's package carries no link, so
+        the landing ends `deferred`. Run `sudo systemctl start homelab-updater.service` on
+        daniel-box once, then confirm `systemctl list-timers homelab-updater.timer` lists
+        the timer.
     - The builder, the repository and every daniel-box timer stay with Ansible until H7.
     - Two-writer check: none, because no path moves.
 6. **H6.3a The gate script (about 220 lines with tests).**
@@ -1508,9 +1526,8 @@ which journald does not store on these hosts, so it reads zero on every run.
           The exclusion is the `windowed` mark: reconcile never restarts `k3s` or
           `k3s-agent` (H3, *The reconcile unit*, step 3). An install that lands during a
           run can change a hashed file after step 1. The run then records the older hash,
-          and the next window restarts once more, behind the same gates. A host that
-          arms no updater yet has nothing to exempt, and the scan checks the timer once
-          a package arms it;
+          and the next window restarts once more, behind the same gates. daniel-box
+          arms the timer from #6218 (H6.2's amendment), so the scan covers it there;
         - `claude-cgroup-metrics.timer`, `claude-clone-sync.timer`,
           `claude-dotfiles-sync.timer` and `claude-memory-sync.timer`. Three sync a git
           clone, the dotfiles or the memory store (the claude_code role's contracts), and
@@ -1721,7 +1738,7 @@ which journald does not store on these hosts, so it reads zero on every run.
 - **dpkg lock contention on daniel-box.** The updater's install takes the dpkg lock for
   seconds, because it writes plain files and its postinst starts reconcile with
   `--no-block`. Ansible's `apt` module waits 60 seconds by default (`lock_timeout`).
-  H6.2's verification times one install on daniel-box. A collision that outlasts the wait
+  H6.2's verification times one install on daniel-box, and its #6218 amendment arms the timer. A collision that outlasts the wait
   fails the tick's apply and writes `hold_sha`, as any apt failure does there.
 - **Failure class 2, a check that observes a proxy.** A completed Job proves the binary was
   replaced, not that the cluster is healthy. Verification compares volume robustness with

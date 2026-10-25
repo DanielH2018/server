@@ -79,6 +79,17 @@ traefik_k8s_manage_acme: true
 # and produces the failed-login lines the scenarios read.
 traefik_k8s_manage_crowdsec: true
 
+# The `traefik-precheck` Job, which refuses a bouncer key the LAPI rejects before Traefik rolls
+# (`templates/precheck/bouncer-key.yaml.j2`, #6095). Off renders no Job, ConfigMap or Secret,
+# and `traefik-precheck` keeps only the ServiceAccount. It renders nothing either while
+# `traefik_k8s_manage_crowdsec` is false.
+#
+# DECIDED: it ships false, and a second PR sets it true once netpol-baseline has applied the
+# `traefik-precheck` peer in `networkpolicy-crowdsec.yaml.j2`. Both in one revision deadlock:
+# the fence refuses the Job, the failed Job holds `traefik`, and netpol-baseline, which applies
+# after `traefik`, never applies the peer. The template's header has the full chain.
+traefik_k8s_bouncer_key_precheck: false
+
 # The file-provider token gate (livesync-gate-secret.yaml.j2) and the file provider that
 # reads it. False for a cluster that runs neither CouchDB nor homelab-mcp, which is what
 # every router in that file routes to.
