@@ -55,14 +55,17 @@ def test_extra_keys_in_current_are_ignored() -> None:
         ("VisionQuest S01E05 Firewall 1080p WEB H264-EZTV.7z", True),
         ("[SubsPlease] Kimetsu no Yaiba - 05 (1080p) [57D14100].iso", True),
         ("Setup.EXE", True),
+        # RAR volumes: nothing in the stack unpacks them, so they cannot be imported.
+        ("show.s01e05.rar", True),
+        ("show.s01e05.r00", True),
+        ("show.s01e05.r17", True),
         # What a real release carries must still download.
+        ("Show.S01E05.rmvb", False),
         ("Show.S01E05.1080p.WEB.H264-GRP.mkv", False),
         ("Show.S01E05.1080p.WEB.H264-GRP.mp4", False),
         ("[shincaps] Show - 12 (AT-X 1440x1080 MPEG2 AAC).ts", False),
         ("Show.S01E05.en.srt", False),
         ("Show.S01E05.ass", False),
-        ("show.s01e05.rar", False),
-        ("show.s01e05.r00", False),
         ("show.s01e05.nfo", False),
     ],
 )

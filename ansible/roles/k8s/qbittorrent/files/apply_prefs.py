@@ -75,6 +75,8 @@ EXCLUDED_FILE_NAMES = (
     "*.zipx",
     "*.arj",
     "*.iso",
+    "*.rar",
+    "*.r[0-9][0-9]",
 )
 
 # The desired values, keyed by the qBittorrent WebUI API v2 preference names.
@@ -135,8 +137,9 @@ DESIRED: dict[str, bool | int | str] = {
     # `.exe`, and (2023) a `.iso` inside a folder named `.mkv`. Sonarr still flags the empty
     # download, so the Arr Queue Warnings monitor still pages and a human still removes it.
     # `.iso` is safe to exclude because the BR-DISK custom format already scores full-disc
-    # releases out of every profile. `.rar` stays downloadable: scene TV ships as multi-part
-    # RAR, so excluding it would break real releases rather than fakes.
+    # releases out of every profile. RAR volumes (`.rar`, `.r00`...) are excluded because
+    # nothing in this stack unpacks them, so Sonarr cannot import a RAR release whether or
+    # not it downloads. The operator had `*.rar` set in the WebUI before this list existed.
     "excluded_file_names_enabled": True,
     # The WebUI API joins and splits this list on "\n" (appcontroller.cpp).
     "excluded_file_names": "\n".join(EXCLUDED_FILE_NAMES),
