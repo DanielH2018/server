@@ -35,7 +35,10 @@ def _repeated(entries: list[dict]) -> list[str]:
 def test_the_census_reads_both_deploying_hosts():
     """An empty glob or a moved key would pass the uniqueness test below with nothing read."""
     lists = _lists()
-    assert lists.get("daniel-box") and lists.get("daniel-pi")
+    # The Pi's containers_list is empty since H5.9, but its key must still be present: every
+    # reader of the Pi's services fails on a missing one.
+    assert lists.get("daniel-box")
+    assert lists.get("daniel-pi") == []
 
 
 @pytest.mark.parametrize(("host", "entries"), sorted(_lists().items()))

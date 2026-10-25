@@ -41,9 +41,10 @@ from lib import yaml_fast
 from lib.render_guard import containers_entries_in, entry_platform
 from validate.shell_templates import discover_templates
 
-# The Pi's roles whose templates the accessor must render. Derived from `containers_list` below
-# as well, so this names what must still be deployed there rather than only what is.
-KNOWN_PI_ROLES = frozenset({"wg-easy"})
+# The Pi's Docker roles are gone: H5.9 moved wg-easy, the last one, into the host package, which
+# tests read through `render_host`. The accessor stays until H5.12 deletes `roles/containers`, so
+# these tests run it over a tmp-tree role (`_pi_role_rendering` below) and over the real census,
+# which must now be empty.
 
 
 def _pi_docker_roles() -> set[str]:
@@ -56,27 +57,24 @@ def _pi_docker_roles() -> set[str]:
 
 def test_every_pi_docker_role_is_rendered() -> None:
     rendered = {role for role, _, _ in rendered_texts()}
-    assert KNOWN_PI_ROLES <= rendered, (
-        f"accessor lost {sorted(KNOWN_PI_ROLES - rendered)}"
-    )
-    assert rendered == _pi_docker_roles()
+    assert rendered == _pi_docker_roles() == set()
 
 
-def test_every_pi_template_is_rendered() -> None:
+def test_every_pi_template_is_rendered(tmp_path) -> None:
     """The accessor renders each `templates/*.j2` of a Pi role, compose and config alike (#3175).
 
-    alloy's River config was the artifact #3175 was filed for. H5.8 moved it into the Pi's
-    package, which tests read through `render_host`, so the named member is wg-easy's compose.
+    alloy's River config was the artifact #3175 was filed for, so the tmp-tree role carries a
+    compose file and a config.
     """
-    assert ("wg-easy", "docker-compose.yml.j2") in {
-        (r, t) for r, t, _ in rendered_texts()
-    }
-
-
-def test_a_rendered_pi_template_has_its_jinja_expanded() -> None:
-    compose = rendered_text("wg-easy", "docker-compose.yml.j2")
-    assert "{{" not in compose
-    assert "container_name: wg-easy" in compose
+    role = tmp_path / "probe_role"
+    (role / "templates").mkdir(parents=True)
+    (role / "templates" / "docker-compose.yml.j2").write_text("a=1\n")
+    (role / "templates" / "config.river.j2").write_text("b=2\n")
+    found = render_texts({"containers_list": [{"name": "probe_role"}]}, roles=tmp_path)
+    assert [(r, t) for r, t, _ in found] == [
+        ("probe_role", "config.river.j2"),
+        ("probe_role", "docker-compose.yml.j2"),
+    ]
 
 
 def test_an_unrendered_pi_template_is_named_rather_than_missed() -> None:
@@ -84,9 +82,15 @@ def test_an_unrendered_pi_template_is_named_rather_than_missed() -> None:
         rendered_text("wg-easy", "config.river.j2")
 
 
-def test_a_pi_template_that_will_not_render_fails_the_caller() -> None:
+def test_a_pi_template_that_will_not_render_fails_the_caller(tmp_path) -> None:
+    (tmp_path / "probe_role" / "templates").mkdir(parents=True)
     with pytest.raises(AssertionError, match="render error"):
-        render_role_template("wg-easy", "no-such-template.j2")
+        render_role_template(
+            "probe_role",
+            "no-such-template.j2",
+            {"containers_list": [{"name": "probe_role"}]},
+            roles=tmp_path,
+        )
 
 
 def _pi_role_rendering(tmp_path, default: str, host: dict | None = None) -> str:

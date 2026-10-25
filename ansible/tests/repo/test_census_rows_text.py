@@ -179,7 +179,7 @@ ROWS = (
         green=(Subject("a.md", '- Deploy: `./scripts/deploy.sh --tags "sonarr"`'),),
         must_find=frozenset(
             f"ansible/roles/{role}/CLAUDE.md"
-            for role in ("k8s/sonarr", "k8s/traefik", "containers/wg-easy", "setup/k3s")
+            for role in ("k8s/sonarr", "k8s/traefik", "k8s/authelia", "setup/k3s")
         ),
     ),
     Census(

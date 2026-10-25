@@ -840,7 +840,8 @@ target or a label states its delta against it.
   does not raise the budget. At the 1.98 kB rate, the cap holds 30 days only up to about
   125,000 average series, below the budget. That figure takes the cap in base-2 bytes, as
   Prometheus reads `7GB` (7.52 × 10⁹ bytes), less the WAL's 0.18 GB. *Open questions* 9 carries that conflict to the
-  operator, and until the ruling the budget stays 140,000.
+  operator. The 2026-10-25 read there found that the size cap binds, and until the ruling the
+  budget stays 140,000.
 - **The headroom is about 800 series**, 140,000 less the 7-day average of 139,171 on
   2026-10-12. The longest window a monitoring slice reads is convention 6's 168-hour soak,
   which the cap covers at any count the plan reaches. The budget therefore protects the
@@ -1544,14 +1545,41 @@ Each risk names its class from `docs/failure-classes.md`.
       take no new samples, and bytes follow samples. The observability defaults' cost model
       counts samples a second too.
 
-   Resolution: the retention read in
-   *Verification* runs once a day for seven days from PR 1's merge, and PR 5's body quotes
-   the seven values. A value that climbs past 30
-   means the time cap binds, and the budget stands. A value that never passes 30 means the
-   size cap binds. Then the operator chooses among a lower budget with a cardinality cut, a
-   larger claim with the cap at the same ratio, and a shorter retention (**operator-only**).
-   Either way, the operator also rules whether C7 restates the budget in samples a second.
-   Until that ruling, the budget stays 140,000.
+   **Resolved on 2026-10-25: the size cap binds.** [#4750](https://github.com/DanielH2018/server/issues/4750)
+   took the retention read in *Verification* for the week after PR 1's merge. A value that
+   climbed past 30 would have meant the time cap binds. The daily values at 00:00 UTC, from
+   2026-10-12 to 2026-10-19, read 29.00, 27.75, 28.75, 27.50, 28.50, 25.00, 26.00 and 27.00
+   ([the read](https://github.com/DanielH2018/server/issues/4750#issuecomment-6401457725)).
+    - The hourly max over that week was 29.46, so the store never reached 30 days.
+    - Prometheus's own counters name the cause. Over that week
+      `prometheus_tsdb_size_retentions_total` rose by 4 and
+      `prometheus_tsdb_time_retentions_total` by 0.
+    - The load grew past both models above. On 2026-10-25 the 7-day averages read 163,525
+      head series and 2,766 samples a second. The series-budget read in *Verification* is
+      therefore red.
+
+   **Ruled on 2026-10-25: a cardinality cut, and the budget stays 140,000**
+   ([#6311](https://github.com/DanielH2018/server/issues/6311)). The operator chose it over a
+   larger claim and a shorter retention.
+    - The cut adds three apiserver histogram families to `control_plane_bucket_drop()` in
+      `prometheus.yaml.j2`: `apiserver_watch_events_dispatch_duration_seconds`,
+      `apiserver_storage_list_duration_seconds` and
+      `apiserver_watch_cache_initialization_duration_seconds`. Their `_bucket` series held
+      21,206 of 148,552 live series, and nothing in the repo read them.
+    - Both control-plane jobs scrape every minute, so the cut removes about 350 samples a
+      second. That leaves the rate near 2,400 a second, still above the samples model's
+      2,000. The read after the deploy says whether the store reaches 30 days.
+    - The larger lever was a duplicate. On daniel-box the `kubernetes-kubelet` scrape returned
+      the same 35,686 series as the `kubernetes-apiserver` scrape, because k3s serves both
+      from one registry. The operator ruled on 2026-10-25
+      ([#6331](https://github.com/DanielH2018/server/issues/6331)) that each family keeps one
+      copy under the job it had. The apiserver job keeps only `apiserver_` and `etcd_`, and the
+      kubelet job drops those two on the control-plane node. After the bucket cut that removes
+      25,130 series, about 420 samples a second at the 1-minute interval.
+
+   The operator also rules whether C7 restates the budget in samples a second
+   ([#4756](https://github.com/DanielH2018/server/issues/4756)). Both models predict that the
+   size cap binds, so this read does not settle that unit.
 10. **A down Alertmanager pages 30 minutes in.** Kuma paged it 10 to 15 minutes in, and the
     Watchdog check's 600s period and 1200s grace page it up to 30 minutes in (RA-8).
     Recommendation: accept the 30 minutes, because a shorter check would page on most weekly

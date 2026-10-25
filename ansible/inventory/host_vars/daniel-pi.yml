@@ -74,18 +74,10 @@ container_healthcheck_interval: 60s
 # once, the healthcheck only covers a wedged-but-running one.
 container_healthcheck_timeout: 60s
 container_healthcheck_retries: 5
-containers_list:
-  - name: wg-easy
-    port: 51821
-    udp_port: 51822
-    # DECIDED: no Authelia and no PASSWORD_HASH on the Pi's wg-easy UI (accepted risk
-    # 2026-06-23); the UI binds the LAN IP. See ansible/roles/containers/wg-easy/CLAUDE.md.
-    # LAN-only host, so the admin UI is open to anyone on the Pi's LAN (it's bound to the LAN
-    # IP, never internet-exposed or on the tunnel). To gate it, add a PASSWORD_HASH env from
-    # SOPS.
-    use_authelia: false
-    networks:
-      - proxy
+# Empty since H5.9: every service moved to compose_services. The key stays, because every reader
+# of the Pi's services reads both keys and fails on a missing one (h5-pi-compose.md, *The service
+# list*). H5.12 drops the Ansible Compose path that read it.
+containers_list: []
   # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
   # host unit from roles/setup/optimize_pi (section 10), on the LAN IP and port 9100 the
   # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
@@ -98,7 +90,7 @@ containers_list:
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
 # A service lives in exactly one of this key and containers_list: Ansible's Docker play
 # deploys containers_list, and the package deploys this key. Entries keep containers_list's
-# field names. It holds the canary, docker-proxy (H5.6), autoheal (H5.7) and alloy (H5.8). Every
+# field names. It holds the canary, docker-proxy (H5.6), autoheal (H5.7), alloy (H5.8) and wg-easy (H5.9). Every
 # reader of the Pi's services reads both keys and fails on a missing one, so keep the key even
 # when it is empty. The cluster templates that read it are named in
 # docs/target-architecture/host/h5-pi-compose.md (The service list).
@@ -135,6 +127,20 @@ compose_services:
   # not a bigger limit. Host logs are deliberately NOT shipped: rsyslog is inactive here.
   - name: alloy
     port: 12345
+    use_authelia: false
+    networks:
+      - proxy
+  # The Pi's backup WireGuard endpoint and its admin UI. Legacy entry:
+  # /home/ubuntu/server/containers/wg-easy/docker-compose.yml (project `wg-easy`). The peer keys
+  # live in ./config under that directory, which the pi-peer-backup CronJob pulls nightly.
+  - name: wg-easy
+    port: 51821
+    udp_port: 51822
+    # DECIDED: no Authelia and no PASSWORD_HASH on the Pi's wg-easy UI (accepted risk
+    # 2026-06-23); the UI binds the LAN IP. See hosts/components/pi-compose/services/wg-easy/compose.yaml.j2.
+    # LAN-only host, so the admin UI is open to anyone on the Pi's LAN (it's bound to the LAN
+    # IP, never internet-exposed or on the tunnel). To gate it, add a PASSWORD_HASH env from
+    # SOPS.
     use_authelia: false
     networks:
       - proxy

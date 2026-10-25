@@ -93,22 +93,22 @@ def test_the_tree_prefix_is_the_one_land_tags_matches_on():
     assert land_tags.role_for(_DOCKER_TEMPLATE) == "wg-easy"
 
 
-def test_the_live_tree_declares_wg_easy_on_two_platforms():
-    """The fixture is real, not synthetic: if the repo held `wg-easy` on one platform only,
-    every case above would pass while covering a shape nothing here has.
+def test_the_live_tree_has_no_two_platform_tag_since_h5_9():
+    """H5.9 moved the Pi's wg-easy out of containers_list, so no live tag is on two platforms.
 
-    It is the only such tag, so this fails the day the Pi's wg-easy retires. Repoint the
-    fixture at whatever tag is two-platform by then; if none is, the restriction covers
-    nothing live and these tests go with it.
+    The cases above run against a synthetic Docker template path, which the tree no longer
+    holds. They stay until H5.13 deletes the `roles/containers` arm of `land_platform.py` and
+    these tests with it. This one fails if a tag returns to two platforms, so the fixture is
+    repointed at it rather than left synthetic.
     """
     platforms = {
         platform
         for _host, platform, tag in service_records(HOST_VARS)
         if tag == "wg-easy"
     }
-    assert platforms == {"k8s", "docker"}
-    for path in (_K8S_TEMPLATE, _DOCKER_TEMPLATE):
-        assert (REPO / path).exists(), path
+    assert platforms == {"k8s"}
+    assert (REPO / _K8S_TEMPLATE).exists(), _K8S_TEMPLATE
+    assert not (REPO / _DOCKER_TEMPLATE).exists(), _DOCKER_TEMPLATE
 
 
 def test_diff_range_is_the_range_deploy_tags_changed_reads(tmp_path):

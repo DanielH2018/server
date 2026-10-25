@@ -39,6 +39,7 @@ VERDICT_SUBCOMMANDS = (
     ("health",),
     ("pi",),
     ("vip-placement",),
+    ("flux",),
     ("readonly-rbac",),
     ("alerts",),
     ("b2-longhorn",),

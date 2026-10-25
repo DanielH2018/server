@@ -249,6 +249,8 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   the worktree name (prefixing `worktree-`), so `containers-role-cleanup` gets a readable
   branch and `cleanup` doesn't. Accept the prefix; renaming the branch afterwards only
   detaches it from the worktree git has registered.
+- **In an isolated session or agent, start every compound Bash command with `cd <your
+  worktree> &&`**, or the Claude Code binary refuses it as too complex to verify.
 - **The SessionStart banner lists the other live sessions** and the paths each has changed
   vs `origin/master`. It's derived from `git worktree list` and `/proc`, not from anything a
   session declares, so check it before editing a file several sessions are near (`CLAUDE.md`,

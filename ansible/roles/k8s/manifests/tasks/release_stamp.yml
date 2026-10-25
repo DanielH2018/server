@@ -87,28 +87,16 @@
   # ConfigMap is hashed into its own pod template needs none of the three — the apply rolls it
   # and `manifests_rolled_by_apply` already zeroes the expectation.
   #
-  # AN ENTRY MAY DISCLAIM THE DECISION ENTIRELY, with `rolled_by_role: true`. The
-  # record is written here, before the owning role's private apply and restart run, so for a
-  # workload whose OWN manifest that later apply carries this task cannot decide `restart` at
-  # all: the render changed and this apply did not roll it, which reads `true`, and then the
-  # owner's apply rolls it by changing its pod template — stamping no `restartedAt` for
-  # `probe.py health` to find. Such an entry is stamped `restart: false` and the owner raises it
-  # afterwards through tasks/rollout_amend.yml, which knows whether a `rollout restart` was
-  # actually issued. A skipped amend therefore leaves NO expectation rather than a false one,
-  # which is the direction probe_lib/health.py:release_expected_restarts calls safe.
-  #
   # `manifests_self_rollouts` is the third source: the workloads a role with
-  # `manifests_rollout: ''` restarts through a PRIVATE task after this role returns
-  # (observability's loop, pihole's roll_one.yml). Where that task gates on the same three facts,
-  # as pihole's restart of its first instance does, the record can hold the expectation for it;
-  # appending from the private task itself is too late, since the record is written here, before
-  # that task runs. Where it gates on something this task cannot read, the entry is stamped
-  # `restart: false` and the role raises it afterwards through tasks/rollout_amend.yml.
-  # Observability's restart gates on the per-file `observability_changed_secret_files`, so every
-  # one of its entries declares `restart_on: []`; pihole marks pihole-2 `rolled_by_role: true`,
-  # above. Flux's entries declare `restart_on: []` too, because nothing restarts them. An entry
-  # here reaches `rollouts[]` and nothing else -- not the shared restart, not the batch drain --
-  # which is exactly what those roles opted out of.
+  # `manifests_rollout: ''` restarts through a PRIVATE task after this role returns. Where that
+  # task gates on the same three facts the record can hold the expectation for it; appending
+  # from the private task itself is too late, since the record is written here, before that
+  # task runs. An entry whose restart gates on something this task cannot read declares
+  # `restart_on: []` and is stamped `restart: false`, as observability's entries do (its
+  # restart gated on the per-file `observability_changed_secret_files`). Flux's entries declare
+  # `restart_on: []` too, because nothing restarts them. An entry here reaches `rollouts[]` and
+  # nothing else -- not the shared restart, not the batch drain -- which is exactly what those
+  # roles opted out of.
   ansible.builtin.set_fact:
     manifests_release_rollouts: >-
       {{ manifests_release_rollouts + [{
@@ -125,12 +113,8 @@
              (manifests_release_target.kind | default(manifests_rollout_kind | default('deploy')) == 'daemonset')
              | ternary('daemonset.apps/', 'deployment.apps/')
              ~ manifests_release_target.name ~ ' created')
-           and not manifests_rolled_by_apply.get(manifests_release_target.name, false)
-           and not manifests_release_target.get('rolled_by_role', false),
-         } | combine(
-             manifests_release_target.get('rolled_by_role', false)
-             | ternary({'rolled_by_role': true}, {})
-           )] }}
+           and not manifests_rolled_by_apply.get(manifests_release_target.name, false),
+         }] }}
   loop: >-
     {{ ((manifests_rollout | default(manifests_service) | length > 0)
         | ternary([{'name': manifests_rollout | default(manifests_service),
@@ -219,8 +203,5 @@
       # DECIDED marker in release_digest.yml. '' when the host key was unreadable, which a
       # reader treats as absent. A record written before this field has none at all.
       secret_digest: "{{ manifests_release_secret_digest }}"
-      # [{name, kind, restart, rolled_by_role?}] -- see the task that builds it above. The
-      # marker is recorded rather than dropped so a reader can tell a `restart: false` this
-      # apply DECIDED from one it disclaimed: the second says the owning role rolls that
-      # workload and tasks/rollout_amend.yml is what raises the expectation.
+      # [{name, kind, restart}] -- see the task that builds it above.
       rollouts: "{{ manifests_release_rollouts }}"

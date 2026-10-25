@@ -410,14 +410,20 @@ def test_repo_docs_lists_every_tracked_claude_md(tmp_path):
     ]
 
 
-def test_the_real_wg_easy_history_bullet_is_masked_and_its_neighbours_are_not():
-    """The bullet that set the convention. Its continuation lines go with it; the next stays."""
-    text = (REPO / "ansible/roles/containers/wg-easy/CLAUDE.md").read_text()
+def test_a_real_history_bullet_is_masked_and_its_neighbours_are_not():
+    """A bullet from a live doc. Its continuation lines go with it; the next bullet stays.
+
+    The convention was set by wg-easy's role doc, which H5.9 deleted, so this reads
+    media-volume's two history bullets.
+    """
+    text = (REPO / "ansible/roles/k8s/media-volume/CLAUDE.md").read_text()
     assert "\n- " + HISTORY_MARKER in text
     masked = mask_history(text)
-    assert "wg_easy_password_hash` no longer exists" not in masked
-    assert "Exposure is LAN-bound" in masked
-    assert "Pi UI is unauthenticated" in masked
+    assert "seeded once, at the 2026-08 migration" not in masked
+    assert "tasks/sync.yml" not in masked
+    assert "media-volume-probe" not in masked
+    assert "Flux applies it, not Ansible" in masked
+    assert "Directory `mode:` is deliberately unset" in masked
     assert masked.count("\n") == text.count("\n")
 
 

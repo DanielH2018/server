@@ -224,8 +224,9 @@ The exit criterion is three observations:
   scrape usually holds one sample, and `rate()` over it returns nothing. alloy's compose
   template records the Pi's swap-in rate as `rate(node_vmstat_pswpin{job="node-pi"}[1d])` at
   136-181/s for 2026-09-03 to 09-17.
-- **The Pi is the backup WireGuard endpoint.** `ansible/roles/containers/wg-easy/CLAUDE.md`
-  records the Pi's UDP 51822 as the fallback entry when the cluster's wg-easy, in
+- **The Pi is the backup WireGuard endpoint.** The header of
+  `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2` (the deleted role's
+  `CLAUDE.md` before H5.9) records the Pi's UDP 51822 as the fallback entry when the cluster's wg-easy, in
   `ansible/roles/k8s/wg-easy/` on 51820, is unreachable.
 - **ADR-0013 names the deploy path H5 replaces.** `docs/adr/0013-daniel-pi-stays-on-docker.md`
   decides that the Pi "is driven remotely over SSH with `-e target=daniel-pi`". Its *Governs*

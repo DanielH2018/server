@@ -43,6 +43,7 @@ MODULES = frozenset(
         "land_tested_base",
         "pin_gate",
         "pin_reads",
+        "verdict_log",
     }
 )
 ALLOWED = {
@@ -59,7 +60,11 @@ ALLOWED = {
         "land_shared",
         "land_tags",
         "land_tested_base",
+        # The per-user verdict record `Tools.record_verdict` writes by default.
+        "verdict_log",
     },
+    # The record `probe.py landing-verdicts` reads; a leaf, written through `Tools`.
+    "verdict_log": set(),
     # The PR JSON types are a leaf: `Landing.view` returns them and the policy reads them.
     "pr_json": set(),
     # The retry around a read-only gh call: `Landing.view` uses it, and it prints with `say`.
