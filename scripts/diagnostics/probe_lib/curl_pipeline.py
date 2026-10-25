@@ -40,6 +40,7 @@ from diagnostics.probe_lib.core import (
     loki_labels_url,
     loki_query_url,
     prom_query_url,
+    redact_log_secrets,
     prom_targets_url,
     scrutiny_url,
     since_window_ns,
@@ -96,8 +97,21 @@ def plan(
     raise SystemExit(f"unknown command: {cmd}")  # pragma: no cover
 
 
-def stream_pipeline(stages):
-    """Run argv stages piped together (stdin of the first is closed)."""
+def output_redaction(cmd):
+    """The filter `stream_pipeline` applies to `cmd`'s raw output, or None to stream it as is.
+
+    Only `loki-query` returns log lines, and the raw Loki body carries every credential the apps
+    logged before Alloy redacted them.
+    """
+    return redact_log_secrets if cmd == "loki-query" else None
+
+
+def stream_pipeline(stages, redact=None):
+    """Run argv stages piped together (stdin of the first is closed).
+
+    With `redact`, the last stage's stdout is read whole and printed as `redact(text)` instead
+    of reaching the terminal directly; `output_redaction` names the filter for a subcommand.
+    """
     prev_stdout = None
     procs = []
     for i, stage in enumerate(stages):
@@ -105,11 +119,16 @@ def stream_pipeline(stages):
         proc = subprocess.Popen(
             stage,
             stdin=prev_stdout if prev_stdout is not None else subprocess.DEVNULL,
-            stdout=None if last else subprocess.PIPE,
+            stdout=subprocess.PIPE if not last or redact else None,
             stderr=subprocess.DEVNULL if not last else None,
+            text=bool(last and redact),
         )
         if prev_stdout is not None:
             prev_stdout.close()
         prev_stdout = proc.stdout
         procs.append(proc)
+    if redact:
+        out, _ = procs[-1].communicate()
+        _sys.stdout.write(redact(out))
+        return procs[-1].returncode
     return procs[-1].wait()

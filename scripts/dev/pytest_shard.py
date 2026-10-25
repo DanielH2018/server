@@ -73,8 +73,9 @@ the same variance lands a module near the bound on either side of it from run to
 unweighted module between the two bounds annotates there too (#4010). A pull request's author
 can repair only a module the PR's diff adds or changes, so CI passes the diff as
 `--changed-files` and every other module's complaint annotates there as well (#5480). A change
-to the table widens that to every module, unless it only drops rows of deleted modules, which
-`--base-weights` lets the gate see (#5989).
+to the table widens that to the rows it adds, changes or drops, which `--base-weights` lets
+the gate read, and no further: a row the PR did not write is not its author's (#6266). A
+change to the gate's own code widens it to every module.
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -488,7 +489,7 @@ def main(argv=None) -> int:
         "--base-weights",
         type=Path,
         metavar="JSON",
-        help="the weight table at the PR's merge base: dropping retired rows keeps the scope",
+        help="the weight table at the PR's merge base: only the rows a table edit wrote fail",
     )
     parser.add_argument(
         "--threshold",

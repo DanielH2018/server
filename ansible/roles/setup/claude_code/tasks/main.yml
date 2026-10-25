@@ -225,6 +225,89 @@
       claude_code_rc_enabled=true.
   when: not claude_code_rc_enabled
 
+# ── Background-session resume at boot ──────────────────────────────────────────────────
+# Respawns the operator's background sessions the shutdown killed, so their Remote Control
+# links come back without anyone opening agent view. See this role's CLAUDE.md.
+
+- name: Create the background-session resume directory
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ claude_code_bg_resume_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: claude_code_bg_resume_enabled
+
+- name: Install the background-session resume script
+  tags: [claude_code]
+  ansible.builtin.copy:
+    src: bg_session_resume.py
+    dest: "{{ claude_code_bg_resume_dir }}/bg_session_resume.py"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: claude_code_bg_resume_enabled
+
+- name: Install the background-session resume unit
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: claude-bg-resume.service.j2
+    dest: /etc/systemd/system/claude-bg-resume.service
+    mode: "0644"
+  become: true
+  when: claude_code_bg_resume_enabled
+  notify: Reload systemd for claude_code
+
+# Enabled, never started: the unit's job is the next boot. Starting it here would respawn on an
+# apply, and restarting it on a template change would do nothing useful, since the sessions it
+# started outlive it (KillMode=process).
+- name: Enable the background-session resume unit for the next boot
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-bg-resume.service
+    enabled: true
+    daemon_reload: true
+  become: true
+  when: claude_code_bg_resume_enabled
+
+# The way out: false disables and removes the unit and the script. Stopping the unit kills no
+# session, because KillMode=process leaves the supervisor it started running.
+- name: Check whether a background-session resume unit is installed
+  tags: [claude_code]
+  ansible.builtin.stat:
+    path: /etc/systemd/system/claude-bg-resume.service
+  register: claude_code_bg_resume_unit_file
+  become: true
+  when: not claude_code_bg_resume_enabled
+
+- name: Stop and disable the background-session resume unit when disarmed
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-bg-resume.service
+    enabled: false
+    state: stopped
+  become: true
+  when:
+    - not claude_code_bg_resume_enabled
+    - claude_code_bg_resume_unit_file.stat.exists
+
+- name: Remove the background-session resume unit and script when disarmed
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/claude-bg-resume.service
+    - "{{ claude_code_bg_resume_dir }}"
+    # The drift-check fragment the stamp at the end of this role writes while armed.
+    - /var/lib/homelab/setup-deployed-manifest.d/claude-code-bg-resume
+  become: true
+  when: not claude_code_bg_resume_enabled
+  notify: Reload systemd for claude_code
+
 # ── Cgroup resource metrics ────────────────────────────────────────────────────────────
 # The cgroup counters for claude-rc.service and user-1000.slice (SSH-started sessions) are
 # already free (this host sets DefaultMemoryAccounting/CPUAccounting=yes) and node-exporter's
@@ -522,6 +605,7 @@
       - ansible/roles/setup/common/templates/alert-webhook.env.j2
       - ansible/roles/setup/claude_code/templates/claude-rc-restart.service.j2
       - ansible/roles/setup/claude_code/templates/claude-rc-restart.timer.j2
+      - ansible/roles/setup/claude_code/templates/claude-bg-resume.service.j2
       - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.service.j2
       - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.timer.j2
       - ansible/roles/setup/claude_code/templates/fleet-slice-caps.conf.j2
@@ -581,6 +665,16 @@
     stamp_deployed_pairs:
       - live: /usr/local/bin/claude-dotfiles-sync.sh
         src: ansible/roles/setup/claude_code/files/claude-dotfiles-sync.sh
+
+- name: Record the deployed background-session resume script for drift checking
+  tags: [claude_code]
+  when: claude_code_bg_resume_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: claude-code-bg-resume
+    stamp_deployed_pairs:
+      - live: "{{ claude_code_bg_resume_dir }}/bg_session_resume.py"
+        src: ansible/roles/setup/claude_code/files/bg_session_resume.py
 
 - name: Record the deployed triage runner for drift checking
   tags: [claude_code]
