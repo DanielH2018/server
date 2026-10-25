@@ -1,9 +1,9 @@
 """traefik's bouncer-key precheck: the LAPI request, the `traefik-precheck` render and its fence peer.
 
 The script tests drive `check` with a stub opener. The render tests render a copy of the role
-with `traefik_k8s_bouncer_key_precheck` switched on, as pihole's precheck tests do, and check
-the Job meets every Job census row and sits in front of `traefik`. The default render holds no
-Job, because the Job and its fence peer deadlock in one revision (#6095).
+with `traefik_k8s_bouncer_key_precheck` set, as pihole's precheck tests do, and check the Job
+meets every Job census row and sits in front of `traefik`. The default is on since #6157, once
+the fence peer #6095 landed first was live; the Job and its peer deadlock in one revision.
 
 Run: uv run pytest ansible/roles/k8s/traefik/tests/test_traefik_bouncer_key_precheck.py
 """
@@ -113,8 +113,8 @@ def _render_copy(tmp_path, stubs, switch: str = "true", key_digest: str | None =
     (tree / "vars" / "cluster-vars.source").write_text(source)
     defaults = role / "defaults" / "main.yml"
     text = defaults.read_text()
-    assert f"{SWITCH}: false" in text
-    defaults.write_text(text.replace(f"{SWITCH}: false", f"{SWITCH}: {switch}"))
+    assert f"{SWITCH}: true" in text
+    defaults.write_text(text.replace(f"{SWITCH}: true", f"{SWITCH}: {switch}"))
     copied = {**stubs, "playbook_dir": str(tree)}
     return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s").directories()
 
@@ -182,14 +182,22 @@ def test_a_key_rotation_renames_the_job(switched_on, stubs, tmp_path):
     assert _job(rotated[PRECHECK])["metadata"]["name"] != before
 
 
-def test_the_default_renders_no_job_and_leaves_the_service_account(stubs, tmp_path):
-    """Off, `traefik-precheck` holds the ServiceAccount alone, so the flip adds only the Job."""
+def test_the_default_renders_the_job(stubs):
+    """The tree's own render carries the Job, so a rotation is checked before `traefik` rolls."""
+    directories = cluster.render_tag(TAG, stubs).directories()
+    assert _job(directories[PRECHECK])["metadata"]["name"].startswith(
+        "traefik-precheck-"
+    )
+
+
+def test_switched_off_renders_no_job_and_leaves_the_service_account(stubs, tmp_path):
+    """Off, `traefik-precheck` holds the ServiceAccount alone: the off half of the two-step."""
     directories = _render_copy(tmp_path, stubs, "false")
     assert [doc["kind"] for doc in _docs(directories[PRECHECK])] == ["ServiceAccount"]
 
 
 def test_the_lapi_fence_admits_the_precheck_on_the_lapi_port_alone():
-    """The peer lands with the Job off; it must not share traefik's AppSec port."""
+    """The peer the switched-on Job dials through; it must not share traefik's AppSec port."""
     (policy,) = yaml_fast.safe_load_all(
         render_role_template("netpol-baseline", "networkpolicy-crowdsec.yaml.j2")
     )
