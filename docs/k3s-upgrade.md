@@ -18,9 +18,10 @@ the schema.
 
 The pin is `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`, moved there from
 `ansible/roles/setup/k3s/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
-It covers both nodes:
-`server.yml` installs daniel-box, `agent.yml` installs daniel-server, and both pass it to the same
-installer as `INSTALL_K3S_VERSION`. The installer is `install.sh` from that same release tag,
+It covers both nodes.
+Since H6.3c the system-upgrade-controller (SUC) writes daniel-box's version: its `k3s-server` Plan
+selects the node and replaces the binary. `server.yml` installs k3s on a fresh host only, and
+`agent.yml` still installs daniel-server until H6.3d. The installer is `install.sh` from that same release tag,
 fetched with `checksum:` against `k3s_install_script_sha256` in the same file — so a bump has a
 second literal to finish, and a wrong one fails the download rather than the install:
 
@@ -30,12 +31,13 @@ curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<new tag>/install.sh" |
 
 ## Sequence at a glance
 
-Upgrade the cluster first, merge the pin second. A failed upgrade then leaves master unpinned.
+For the agent, upgrade the node first and merge the pin second. For the server, merging the pin
+is the upgrade (H6.3c), so steps 1 and 2 come before the merge and step 3 follows it.
 Merging does not park the deployer either way — see *After merging the pin* below.
 
 1. Pass the gates.
 2. Record pre-upgrade state.
-3. Upgrade the server node, verify.
+3. SUC upgrades the server node on merge, verify.
 4. Upgrade the agent node, verify.
 5. Merge the pin. The pin writes no `manual_plane` line (H6.1b), so only a change elsewhere under
    `ansible/roles/setup/k3s/` leaves one to clear.
@@ -89,21 +91,46 @@ kubectl get svc -A --field-selector spec.type=LoadBalancer -o wide
 uv run python scripts/diagnostics/probe.py monitors
 ```
 
-## Upgrade the server node
+## Before the Plan first selects a node (**operator-only**)
 
-Bump `k3s_version`, then run on daniel-box (the play refuses to run anywhere else):
+SUC's `prepare` container reads the API as the `k3s-plan` ServiceAccount. Impersonating it needs
+more than the read-only account holds, so no agent runs these. Each must print `yes`.
+`hosts/lib/tests/test_k3s_gates_operator_reads.py` derives the list from `k3s_gates.py`'s API
+paths and fails when this page omits one.
 
 ```bash
-uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s_server
+cd /home/ubuntu/server && sudo k3s kubectl auth can-i list volumes.longhorn.io --as=system:serviceaccount:system-upgrade:k3s-plan
+cd /home/ubuntu/server && sudo k3s kubectl auth can-i list backups.longhorn.io --as=system:serviceaccount:system-upgrade:k3s-plan
+cd /home/ubuntu/server && sudo k3s kubectl auth can-i list nodes --as=system:serviceaccount:system-upgrade:k3s-plan
+cd /home/ubuntu/server && sudo k3s kubectl auth can-i get deployments.apps/coredns --as=system:serviceaccount:system-upgrade:k3s-plan -n kube-system
+cd /home/ubuntu/server && sudo k3s kubectl auth can-i get leases.coordination.k8s.io/kube-controller-manager --as=system:serviceaccount:system-upgrade:k3s-plan -n kube-system
+cd /home/ubuntu/server && sudo k3s kubectl auth can-i get plans.upgrade.cattle.io/k3s-server --as=system:serviceaccount:system-upgrade:k3s-plan
 ```
 
-The installer rewrites the unit, daemon-reloads and restarts k3s itself; no handler is involved.
-The apiserver, Traefik's ingress path and Pi-hole DNS all go away for the length of that restart,
+## Upgrade the server node
+
+SUC upgrades daniel-box. Merging a `k3s_version` bump makes Flux apply the `system-upgrade` tag,
+the `k3s-server` Plan resolves the new version, its `prepare` container waits for the gates, and
+the upgrade container replaces the binary. No Ansible command is part of the upgrade.
+The apiserver, Traefik's ingress path and Pi-hole DNS go away for the length of the restart,
 because they all sit behind this node.
 
-The install task is guarded on two clauses ORed together: the unit's arguments, and the installed
-version. The version clause exists because a bump leaves every argument identical — without it the
-guard reads false, the installer never runs, and the play reports `ok` while the node stays put.
+Do not run `k3s-bringup.yml --tags k3s_server` to upgrade. Its install guard has no version
+clause since H6.3c. A missing binary runs the full install. A missing argument re-runs the
+installer with `INSTALL_K3S_SKIP_DOWNLOAD=true`, which rewrites the unit and never the binary.
+A flag change therefore still reaches daniel-box through that play until H6.4b.
+
+Widening the Plan is a selector change only, so it keeps the Plan's version and hash. The
+Kustomization can read Current before any Job exists. The evidence is the node: its
+`plan.upgrade.cattle.io/k3s-server` label equals the Plan's `status.latestHash`, the Job shows a
+`completionTime`, and `ExecMainStartTimestamp` for `k3s` did not move.
+
+```bash
+kubectl -n system-upgrade get plans -o custom-columns='NAME:.metadata.name,HASH:.status.latestHash,VERSION:.status.latestVersion'
+kubectl get nodes -L plan.upgrade.cattle.io/k3s-server
+kubectl -n system-upgrade get jobs -o custom-columns=NAME:.metadata.name,DONE:.status.completionTime
+systemctl show k3s -p ExecMainStartTimestamp
+```
 
 Verify before touching the agent:
 
@@ -227,8 +254,12 @@ those commits were due ([gitops-pipeline.md](gitops-pipeline.md), "The tree is d
 
 ## Rollback
 
-Re-pin to the previous version and re-run the same two commands. The installer's version guard makes
-a downgrade work exactly like an upgrade.
+SUC and the installer both refuse an older binary, so a re-pin alone does not downgrade the server.
+Pause SUC (`homelab/k3s-upgrade-paused` on the node, or an empty `system_upgrade_nodes`), downgrade
+daniel-box by hand, then land a PR that lowers `k3s_version` and sets `k3s_downgrade_acknowledged`
+to the same value in `ansible/roles/k8s/system-upgrade/defaults/main.yml`. Without the key,
+`scripts/validate/cluster_pins.py` refuses the decrease. The agent still follows the old rule
+until H6.3d: re-pin and re-run its command.
 
 This holds **within a minor version**. Across a minor it does not: Kubernetes does not support
 downgrading the control plane, and a stored-object schema written by the newer apiserver may not be

@@ -276,3 +276,51 @@ def test_an_inventory_override_of_a_pin_is_flagged(repo, capsys):
     assert f"[FAIL] {group_vars}: k3s_longhorn_version is set outside" in (
         capsys.readouterr().err
     )
+
+
+# ── k3s_version: a decrease needs the acknowledgement key (H6.3c) ───────────────────────────
+OLD_K3S, LOWER_K3S = "v1.37.1+k3s1", "v1.37.0+k3s1"
+
+
+def test_a_k3s_decrease_without_the_acknowledgement_is_flagged():
+    flagged = cluster_pins.k3s_problems(OLD_K3S, LOWER_K3S, None)
+    assert len(flagged) == 1
+    assert "decreases from v1.37.1+k3s1 to v1.37.0+k3s1" in flagged[0]
+
+
+def test_a_k3s_decrease_acknowledged_at_the_new_pin_is_clean():
+    assert cluster_pins.k3s_problems(OLD_K3S, LOWER_K3S, LOWER_K3S) == []
+
+
+def test_a_k3s_decrease_acknowledged_at_another_version_is_flagged():
+    assert len(cluster_pins.k3s_problems(OLD_K3S, LOWER_K3S, "v1.36.0+k3s1")) == 1
+
+
+def test_a_k3s_suffix_decrease_is_a_decrease():
+    assert len(cluster_pins.k3s_problems("v1.37.1+k3s2", OLD_K3S, None)) == 1
+
+
+def test_a_k3s_raise_with_the_key_absent_is_clean():
+    assert cluster_pins.k3s_problems(OLD_K3S, "v1.37.2+k3s1", None) == []
+
+
+def test_a_k3s_raise_that_leaves_the_key_set_is_flagged():
+    flagged = cluster_pins.k3s_problems(OLD_K3S, "v1.37.2+k3s1", OLD_K3S)
+    assert len(flagged) == 1
+    assert "Remove the key" in flagged[0]
+
+
+def test_an_unchanged_k3s_pin_is_clean_whatever_the_key():
+    assert cluster_pins.k3s_problems(OLD_K3S, OLD_K3S, OLD_K3S) == []
+
+
+def test_a_k3s_pin_that_is_not_a_version_is_unjudged():
+    with pytest.raises(cluster_pins.Unjudged):
+        cluster_pins.k3s_problems(OLD_K3S, "latest", None)
+
+
+def test_the_real_tree_holds_a_k3s_pin_the_check_can_read():
+    """The subject the check reads exists at HEAD, so a moved file cannot silently skip it."""
+    pin, ack = cluster_pins.k3s_values_at("HEAD")
+    assert cluster_pins.K3S_VERSION.fullmatch(pin or "")
+    assert ack is None

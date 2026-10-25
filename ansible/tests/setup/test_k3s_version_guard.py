@@ -25,6 +25,11 @@ Each test here encodes a way the fix regresses while everything still reads gree
     reading says nothing about it; sharing one register across the two would leave the agent
     a version behind its server, which k3s does not support.
 
+The server is the exception since H6.3c: SUC's k3s-server Plan is the only writer of
+daniel-box's version, so `server.yml` must NOT mention `k3s_version` in its `when:` (a bump would
+make Ansible and SUC fight over the binary) and re-runs the installer with
+`INSTALL_K3S_SKIP_DOWNLOAD` when only an argument is missing.
+
 Run: uv run pytest ansible/tests/setup/test_k3s_version_guard.py
 """
 
@@ -61,13 +66,16 @@ def _version_reads(filename: str) -> list[dict]:
     ]
 
 
+AGENT_INSTALLS = [i for i in INSTALLS if i[0] == "agent.yml"]
+
+
 def test_install_condition_consults_the_version() -> None:
     """A version-only bump must reach the installer.
 
     Without this the guard is args-only: `k3s_version` changes, every argument stays the
     same, the condition is false and k3s is never upgraded — silently, with the play green.
     """
-    for filename, name, _ in INSTALLS:
+    for filename, name, _ in AGENT_INSTALLS:
         when = str(_named(filename, name).get("when", ""))
         assert "k3s_version" in when, (
             f"{filename}: the install task's `when:` no longer mentions k3s_version, so a "
@@ -89,6 +97,19 @@ def test_install_condition_still_consults_the_args() -> None:
             f"{filename}: the install task's `when:` no longer mentions {expected}. The "
             f"version check is an addition to the args check, never a replacement."
         )
+
+
+def test_server_install_leaves_the_version_to_suc() -> None:
+    """The version clause is gone, and an args-only re-run never downloads a binary."""
+    task = _named("server.yml", "Install or reconfigure the k3s server")
+    when = str(task.get("when", ""))
+    assert "k3s_version" not in when, "SUC owns the server version; the guard must not"
+    assert "k3s_installed_version" in when, (
+        "a missing binary must still run the install"
+    )
+    env = task.get("environment", {})
+    assert "INSTALL_K3S_SKIP_DOWNLOAD" in env
+    assert "k3s_installed_version.rc" in str(env["INSTALL_K3S_SKIP_DOWNLOAD"])
 
 
 def test_version_read_runs_in_check_mode() -> None:

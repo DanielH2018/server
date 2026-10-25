@@ -28,6 +28,12 @@ INI `key=`, in every YAML and INI file and every file under `inventory/`, `group
 There is no bypass. The plan is docs/target-architecture/host/h1-cluster-config-to-flux.md,
 *CI checks on the pins*, and docs/landing.md says what to do with a refused PR.
 
+- **A k3s downgrade.** `k3s_version` is a forward-only pin of its own kind (H6.3c). A decrease
+  is refused unless `k3s_downgrade_acknowledged` in the same file equals the new pin, and a
+  raise must leave that key absent. The acknowledged decrease is the H6.6 rollback, which
+  lowers the pin after a hand downgrade. `k3s_version` is not in PINS because a bump of it
+  legitimately changes the vendored schemas and other roles, which the alone rule would refuse.
+
 Exit codes: 0 clean; 1 refused; 2 a pin could not be read, so the check could not judge.
 
 Run: uv run python scripts/validate/cluster_pins.py --base origin/master
@@ -75,6 +81,9 @@ ANSIBLE_VARS = (
     ":(glob)ansible/**/host_vars/**",
 )
 ROLES = "ansible/roles/"
+K3S_DEFAULTS = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
+K3S_KEY, K3S_ACK_KEY = "k3s_version", "k3s_downgrade_acknowledged"
+K3S_VERSION = re.compile(r"v(\d+)\.(\d+)\.(\d+)\+k3s(\d+)")
 VERSION = re.compile(r"v?(\d+)\.(\d+)\.(\d+)")
 
 
@@ -161,6 +170,50 @@ def problems(
                     f"{' and '.join(sorted(allowed))} and docs"
                 )
     return found
+
+
+def k3s_problems(old: str | None, new: str | None, ack: str | None) -> list[str]:
+    """Each refusal for a `k3s_version` move from `old` to `new`, given the head's `ack` value.
+
+    Raises:
+        Unjudged: a version is not `vX.Y.Z+k3sN`.
+    """
+    if old is None or new is None or old == new:
+        return []
+    parsed = []
+    for value in (old, new):
+        match = K3S_VERSION.fullmatch(value)
+        if not match:
+            raise Unjudged(f"{K3S_DEFAULTS}: {value!r} is not a vX.Y.Z+k3sN version")
+        parsed.append(tuple(int(g) for g in match.groups()))
+    if parsed[1] < parsed[0]:
+        if ack == new:
+            return []
+        return [
+            f"{K3S_DEFAULTS}: {K3S_KEY} decreases from {old} to {new}. SUC and the "
+            f"installer refuse an older binary, so set {K3S_ACK_KEY}: {new} in the same "
+            "file after the hand downgrade (docs/k3s-upgrade.md, Rollback)"
+        ]
+    if ack is not None:
+        return [
+            f"{K3S_DEFAULTS}: {K3S_KEY} rises from {old} to {new} while {K3S_ACK_KEY} "
+            "is set. Remove the key in the bump"
+        ]
+    return []
+
+
+def k3s_values_at(sha: str, repo: Path = REPO) -> tuple[str | None, str | None]:
+    """`k3s_version` and `k3s_downgrade_acknowledged` at `sha`; None where the file or key is absent."""
+    shown = git("show", f"{sha}:{K3S_DEFAULTS}", cwd=repo, check=False)
+    if shown.returncode != 0:
+        return None, None
+    data = yaml_fast.safe_load(shown.stdout)
+    data = data if isinstance(data, dict) else {}
+    pin, ack = data.get(K3S_KEY), data.get(K3S_ACK_KEY)
+    return (
+        pin if isinstance(pin, str) else None,
+        ack if isinstance(ack, str) else None,
+    )
 
 
 def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
@@ -279,8 +332,12 @@ def check(base: str, head: str, repo: Path = REPO) -> int:
         "diff", "--no-renames", "--name-only", base, head, cwd=repo
     ).split()
     try:
-        found = overrides(head, repo) + problems(
-            pins_at(base, repo), pins_at(head, repo), paths
+        old_k3s, _ = k3s_values_at(base, repo)
+        new_k3s, ack = k3s_values_at(head, repo)
+        found = (
+            overrides(head, repo)
+            + problems(pins_at(base, repo), pins_at(head, repo), paths)
+            + k3s_problems(old_k3s, new_k3s, ack)
         )
     except Unjudged as exc:
         print(f"[FAIL] cluster-pins: cannot judge. {exc}", file=sys.stderr)

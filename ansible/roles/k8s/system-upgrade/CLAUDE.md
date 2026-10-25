@@ -19,9 +19,10 @@ else upgrades k3s once H6.3c and H6.3d land. The slice plan is
 - **Flux applies it, not Ansible** (H6.1b). Its `containers_list` entry carries `owner: flux`
   from its first commit, so `deploy.sh` refuses `--tags=system-upgrade` with exit 5.
   `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path runs it.
-- **The Plans select no node.** `system_upgrade_nodes` in `defaults/main.yml` is empty, and
-  both Plans render it as `no-node-selected`, a hostname no node carries. H6.3c and H6.3d widen
-  the list one node at a time, and setting it back to empty is the durable pause.
+- **The Plans select the nodes in `system_upgrade_nodes`.** The list in `defaults/main.yml` holds
+  `daniel-box` since H6.3c, and H6.3d adds `daniel-server`. Both Plans render an empty list as
+  `no-node-selected`, a hostname no node carries, and setting the list back to empty is the
+  durable pause.
   `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py` holds that an empty
   list matches no node.
 - **The k3s pin lives in `defaults/main.yml`.** `k3s_version`, `k3s_install_script_url` and
@@ -39,7 +40,8 @@ else upgrades k3s once H6.3c and H6.3d land. The slice plan is
   to its key in `defaults/main.yml`.
     - `system-upgrade-controller.yaml` pins the controller image by digest and sets the pod's
       `priorityClassName` to the platform tier's class.
-    - `system-upgrade-controller-env.yaml` sets the Job deadline bounds (3600 and 5400).
+    - `system-upgrade-controller-env.yaml` sets the Job deadline bounds (3600 and 5400) and the
+      Job backoff limit (`system_upgrade_job_backoff_limit`).
       The controller reads its environment at start, so a later change to either bound needs a
       restart of the controller pod, which the Kustomization does not trigger.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside it

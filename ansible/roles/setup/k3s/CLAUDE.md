@@ -61,6 +61,8 @@ some carrying a `DECIDED` marker. `files/` holds the Python the crons run, teste
 since H6.1b, so a pin change routes to the Flux-owned `system-upgrade` tag and writes no
 `manual_plane` line for this role. `tasks/server.yml` and `tasks/agent.yml` read the file with
 `include_vars`. `SYSTEM_UPGRADE_DEFAULTS` in `scripts/lib/repo_paths.py` is the Python readers' path.
+Since H6.3c the server's install task runs only for a missing binary or a missing argument,
+and SUC's `k3s-server` Plan is the only writer of the server's version.
 
 Backup tiering, restoring a volume, restoring etcd and the two upgrade runbooks each have a
 docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recovery.md`,

@@ -60,7 +60,7 @@ system_upgrade_gate_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d3
 # one node at a time (H6.3c: daniel-box, H6.3d: daniel-server), and setting it back to empty is
 # the durable pause. The immediate pause is an operator write: label a node
 # `homelab/k3s-upgrade-paused` and SUC skips it at once.
-system_upgrade_nodes: []
+system_upgrade_nodes: [daniel-box]
 
 # Each Plan's Job deadline. SUC starts both Jobs when the Plans resolve, so the agent's deadline
 # covers the server's 60 minutes plus 30 for Longhorn's recovery and the agent's own upgrade.
@@ -68,6 +68,10 @@ system_upgrade_nodes: []
 # files/patches/system-upgrade-controller-env.yaml sets to 5400.
 system_upgrade_server_deadline_secs: 3600
 system_upgrade_agent_deadline_secs: 5400
+
+# Job pods a failing `prepare` may start before the Job reads Failed, minus one. See the
+# comment in files/patches/system-upgrade-controller-env.yaml.
+system_upgrade_job_backoff_limit: 2
 
 # DECIDED: this tag renders prune: false. Its render holds the Plan CRD, and the CRD census
 # (scripts/renderer/tests/test_renderer_crd_census.py) refuses a CRD under prune: deleting the
