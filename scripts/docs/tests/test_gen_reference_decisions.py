@@ -8,6 +8,8 @@ Run: uv run pytest scripts/docs/tests/test_gen_reference_decisions.py
 """
 
 from functools import cache
+from pathlib import Path
+
 from docs.reference import decisions as g
 from lib.repo_paths import REPO
 
@@ -244,8 +246,14 @@ def _live_rows() -> tuple[dict, ...]:
 
     The three non-vacuity tests below each want the identical full-tree scan; without
     the cache each paid for its own. Rows are read-only here.
+
+    `/dev/null` as the blame repo skips the `git blame` per marker: no test here reads a
+    live row's `decided` date, and the ~200 blames over full history were 57s of CI's
+    pytest time (run 40215966021). `test_blame_is_unknown_outside_a_git_repo` covers the
+    skipped path; a cwd that is not a directory never reaches `git`, so a `GIT_DIR` set by
+    a hook cannot point the blame back at the real repo.
     """
-    return tuple(g.build_rows(REPO, REPO))
+    return tuple(g.build_rows(REPO, Path("/dev/null")))
 
 
 def test_live_tree_yields_at_least_100_markers():

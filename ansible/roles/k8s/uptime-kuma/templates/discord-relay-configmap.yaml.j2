@@ -1,0 +1,14 @@
+{#
+  The script the discord-relay sidecar in the uptime-kuma pod runs (#5657). It lives in files/,
+  not templates/, because validate/k8s_manifests.py parses every template here as YAML. The
+  renderer's restart checksum rolls the Deployment when this ConfigMap changes.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kuma-discord-relay
+  namespace: {{ k8s_namespace }}
+data:
+  discord_relay.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/discord_relay.py') | indent(4, true) }}

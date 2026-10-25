@@ -373,6 +373,7 @@ def test_a_loki_rule_on_an_unknown_machine_is_flagged():
 # container by that name. A value with no entry here fails, so a new rule adds its mapping.
 _RULE_CONTAINERS = {
     "uptime-kuma": ("uptime-kuma", "deployment.yaml.j2"),
+    "discord-relay": ("uptime-kuma", "deployment.yaml.j2"),
     # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
     # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
     "cloudflare-ddns": ("cloudflare-ddns", "deployment-direct.yaml.j2"),

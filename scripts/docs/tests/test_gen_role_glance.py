@@ -290,6 +290,11 @@ def test_render_doc_creates_the_heading_after_the_intro_when_the_doc_has_no_sect
     assert g.render_doc(out, BLOCK, create_heading=True) == out
 
 
+def test_the_k8s_banner_names_the_reconcile_role_as_the_tier_lists_home():
+    assert "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml" in g.BEGIN
+    assert "k3s role" not in g.BEGIN
+
+
 def test_render_doc_refuses_an_unterminated_block():
     broken = "## At a glance\n" + g.BEGIN + "\n- x\n\n## Traps\n"
     with pytest.raises(ValueError, match="no `<!-- /generated_from -->`"):

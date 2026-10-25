@@ -41,11 +41,17 @@ DEADLINE_ENV = "LAND_DEADLINE"
 WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
 # The unfinished master CI runs at which `pace.hold` holds a green merge; 0 turns pacing off.
 PACE_ENV = "LAND_PACE_MASTER_RUNS"
-# DECIDED: hold the merge while 2 or more master runs are unfinished. A full sweep is about 17
-# jobs against a 20-job runner cap, so one sweep nearly fills the runners and a second one
-# already queues behind it; PR runs need runners too. A cap of 3 still admits about 50
-# concurrent jobs, close to the six-run pile measured on 2026-10-24 (#5526).
-PACE_MASTER_RUNS = 2
+# DECIDED: hold the merge while any master run is unfinished. A full sweep is about 18 jobs
+# against a 20-job runner cap, so one sweep nearly fills the runners (#5526). The cap was 2
+# until a cost the backlog alone does not show was measured: a landing whose branch update
+# re-tests it is merged into a master that moved during the re-test, so its merge commit's tree
+# was never tested and its push run sweeps all 18 jobs again. On 2026-10-25, 36 of 81 non-draft
+# PR runs were those re-tests and 6 of 9 master push runs swept in full, so one landing in a
+# burst paid three full runs. Merging only into an idle master makes the re-tested tree the
+# merged tree more often, and `prove` then skips the push sweep. The cost is a longer wait
+# before each merge. Measure it by the share of master push runs that run only `prove` and
+# `prek`, and revert to 2 if that share does not rise.
+PACE_MASTER_RUNS = 1
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.

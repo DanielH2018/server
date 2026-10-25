@@ -310,9 +310,12 @@ def load_longhorn_tier_lists(
     group_vars: dict | None = None,
     entries: list[dict] | None = None,
 ) -> LonghornTiers:
-    """The R2, weekly and no-backup volume lists as a deploy of the k3s role sees them.
+    """The R2, weekly and no-backup volume lists, resolved from the longhorn-reconcile role.
 
-    The role's defaults sit under `group_vars`, the way `Estate.role_vars` layers a setup
+    The lists are the expressions in `ansible/roles/k8s/longhorn-reconcile/defaults/main.yml`,
+    which `resolved_tier_lists` derives from `containers_list`. `k3s_defaults` is the dict they
+    resolve over: a tier key it already holds as a list wins, which is how a test injects one.
+    That dict sits under `group_vars`, the way `Estate.role_vars` layers a setup
     role, so a `group_vars/all.yml` override of a tier list reaches the catalogue and the
     glance blocks as it reaches Ansible (#3918). `group_vars` defaults to the repo's own;
     `k3s_defaults` stays a file path so a test or `service_catalog --k3s-defaults` can
