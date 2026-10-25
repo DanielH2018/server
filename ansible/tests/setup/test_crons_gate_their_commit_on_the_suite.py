@@ -20,8 +20,14 @@ PUBLISHING_CRONS = (*GATED_CRONS, "secret-rotate.sh.j2")
 SUITE_RUN = "python -m pytest"
 
 
+def _path(name: str):
+    """The script's file, in its host component when H7.36 moved it there."""
+    moved = sorted((REPO / "hosts/components").glob(f"*/templates/{name}"))
+    return moved[0] if moved else TEMPLATES / name
+
+
 def _lines(name: str) -> list[str]:
-    return (TEMPLATES / name).read_text().splitlines()
+    return _path(name).read_text().splitlines()
 
 
 @pytest.mark.parametrize("name", GATED_CRONS)
@@ -42,7 +48,7 @@ def test_the_cron_runs_the_suite_before_its_commit(name):
 @pytest.mark.parametrize("name", GATED_CRONS)
 def test_the_suite_failure_stops_the_cron(name):
     """A gate that only logs is not a gate. The run's exit code has to end the script."""
-    text = (TEMPLATES / name).read_text()
+    text = _path(name).read_text()
     block = text[text.index(SUITE_RUN) : text.index(SUITE_RUN) + 1200]
     assert "SUITE_RC=$?" in block, f"{name} does not capture the suite's exit code"
     assert 'if [ "$SUITE_RC" -ne 0 ]; then' in block, f"{name} does not branch on it"
@@ -53,8 +59,6 @@ def test_no_cron_still_carries_the_retired_deselect():
     """The reject half. A leftover `PYTEST_ADDOPTS` that deselects the retired weights ratchet
     names a node id pytest cannot find."""
     stale = [
-        name
-        for name in PUBLISHING_CRONS
-        if "PYTEST_ADDOPTS" in (TEMPLATES / name).read_text()
+        name for name in PUBLISHING_CRONS if "PYTEST_ADDOPTS" in _path(name).read_text()
     ]
     assert not stale, f"{stale} still set PYTEST_ADDOPTS; the ratchet went with #2830"

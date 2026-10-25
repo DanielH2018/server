@@ -71,10 +71,11 @@ the name:
   `AllowTcpForwarding` alone, so `local` refuses every remote forward before
   `AllowStreamLocalForwarding` is read. The comment above the block in `tasks/access.yml`
   carries the derivation and the log line that tells the two refusals apart.
-- **On daniel-pi, sshd reads the package's two drop-ins instead of the tasks (H7.27).**
+- **On daniel-pi (H7.27) and daniel-server (H7.28), sshd reads the package's two drop-ins instead of the tasks.**
   `10-homelab.conf` holds the 17 settings and `90-homelab-match.conf` holds the `Match` block.
   sshd keeps the first value it reads, and `10-` sorts before cloud-init's `50-cloud-init.conf`,
-  where the Ansible tasks wrote the same lines (`ssh_config_path` on the Pi). Those lines stay
+  where the Ansible tasks wrote the same lines (`ssh_config_path` on the Pi). On daniel-server the tasks wrote `/etc/ssh/sshd_config`, whose
+  Ubuntu `Include` line is read first, so the `10-` drop-in wins there too. Those lines stay
   there as harmless duplicates. The `Match` file sorts last so its block cannot reach another
   drop-in. `reload:ssh.service` runs `sshd -t` first, and
   `hosts/lib/tests/test_pi_initial_setup_part1.py` runs `sshd -T` over both drop-ins for the
@@ -168,13 +169,13 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
 its repo source, and has any `template:`-rendered setup script's SOURCE changed since this host
 rendered it?
 
-It runs from `kuma-check-setup-drift.timer` since 2026-09-19, and so does the daily
-secret-rotation audit (`kuma-check-secret-rotation-audit.timer`, on the `has_gitops` host
-only): both import the `common` role's `kuma_check_timer.yml`, exit 1 after a down push, and rerun every 30 min
-under `Restart=on-failure` until they exit 0. For the audit that includes the exec'd
-`secret_rotation.py audit --push`, which returns 1 when it pushed `down`. Each import's
-`kuma_check_state` follows the host gate, so a host dropped from the list, or one without
-`has_gitops`, loses the timer and the cron it replaced.
+It runs from `kuma-check-setup-drift.timer` since 2026-09-19. It imports the `common` role's
+`kuma_check_timer.yml`, exits 1 after a down push, and reruns every 30 min under
+`Restart=on-failure` until it exits 0. The import's `kuma_check_state` follows the host gate, so
+a host dropped from the list loses the timer and the cron it replaced. The daily secret-rotation
+audit used the same form until H7.36 moved it to `homelab-secret-rotation-audit.timer` in the
+`secret-rotation` component of `homelab-daniel-box`, which keeps the exit-code contract as plain
+units. Its `secret_rotation.py audit --push` returns 1 when it pushed `down`.
 
 **Why it exists separately from `manifest-prune-check.sh`.** That check answers the same two
 questions plus an orphaned-cluster-object arm, but it is installed by
@@ -228,6 +229,15 @@ slot missed inside an outage runs at boot; the script's boot-grace arm exits 1 w
 and the restart carries the real verdict. `systemctl status kuma-check-loki-read-route` shows
 `auto-restart` while it is red, and `journalctl -u kuma-check-loki-read-route` holds the runs.
 The import removes the old `Loki read-route witness` cron on every host.
+
+**daniel-box's witness is packaged since H7.36.** The `loki-route-witness` component of
+`homelab-daniel-box` ships `homelab-loki-route-witness.timer` with the same `Restart=on-failure`,
+`RestartSec=15min`, boot-rerun and `Persistent=true` shape, and reads its token from the
+credential `loki_route_witness_push_token`. The role skips daniel-box through
+`initial_setup_packaged_hosts['loki_route_witness']` in `defaults/main.yml` and keeps the
+Ansible-era timer on daniel-server until that host's package moves it. Until then the two copies
+of `loki_route_health.py` and of the script stay in step by hand, and
+`ansible/tests/setup/test_loki_route_witness.py` holds the reader's code identical.
 
 **Why it is a host check and not a monitor-bridge check.** `loki-homelab`'s read route is guarded
 by a ClientIP set of node-owned addresses, and its only caller is `probe.py loki-query` or
@@ -301,9 +311,10 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   hermetic, or it is empty and the whole run is a no-op that reports UP with the reason logged
   (`eval-run.sh.j2`'s header). There is no non-hermetic fallback, because a subscription run's
   numbers are noise `evals/trend.py` refuses to trend anyway.
-- **The key lives in `/etc/homelab/eval-run.env`, not in the script.** `crons.yml` renders
-  that file 0600 to the cron user while `anthropic_api_key` exists, and removes it when the key
-  does not. `eval-run.sh` sources it, so reading the script never prints the key (#4607).
+- **The key arrives as a systemd credential, not in the script.** The `eval-sweep` component
+  of `homelab-daniel-box` lists `anthropic_api_key` under `credentials:`, and
+  `homelab-eval-sweep.service` loads it with `LoadCredential=`. `eval-run` reads it from
+  `$CREDENTIALS_DIRECTORY`, so reading the script never prints the key (#4607).
 - **The authoritative source is the chezmoi eval engine's own grading**
   (`~/.local/share/chezmoi/evals/run-evals.mjs`) — never a cached or hand-edited report.
 - **Its abort valves** are the shared git-tree lock (a dirty tree or another in-flight commit

@@ -1772,7 +1772,8 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.38 Per-user tooling in `DanielH2018/dotfiles` | H7.12a | yes | none |
 | H7.39 The agent users and daniel-server's `claude_code` | H7.12b, H7.12c's daniel-server PR | yes | H7.38, H7.22, H4, H6.2, the H6 PR that lands the window test |
 | H7.40 daniel-box: `claude_code` | H7.12c's daniel-box PR | yes, with H7.39 | H7.39 live, D5's artifacts row |
-| H7.41 daniel-box: the builder hosts itself | H7.14 | yes | H3, H6.2, H7.24a |
+| H7.41a daniel-box: the builder's tooling | H7.14, first half | yes | H3, H6.2, H7.24a |
+| H7.41b daniel-box: the builder hosts itself | H7.14, second half | no: it waits for H7.41a live on daniel-box | H7.41a live, H3, H6.2, H7.24a |
 | H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24a, H6.1b, H6.2 |
 | H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H5, all live |
 | H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6 |
@@ -1887,13 +1888,62 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
     H7.40 each land in a window the operator picks (**operator-only**).
 16. **H7.40** stays alone as the second canary host. It carries the artifacts directories'
     `tmpfiles.d` lines and empties `claude_code`.
-17. **H7.41** stays alone. It carries the fingerprint-file proof, the break-glass procedure
+17. **H7.41 splits in two, ruled on 2026-10-24.** Wherever another row or entry names H7.41
+    as a dependency, it means H7.41b. H7.41a is tooling and spec amendments and moves no
+    builder unit or task. H7.41b is the builder move, and it waits for H7.41a live on
+    daniel-box. The pair carries the fingerprint-file proof, the break-glass procedure
     for a broken builder, and the builder's three tools and its alert unit, which H7.14
     names (nfpm, uv, the interpreter and `homelab-alert@.service`). It waits on H7.24a
     because nfpm arrives in `homelab-tools` with H7.24a. A builder that rebuilds its own
-    package can publish a broken `homelab-daniel-box`, so the PR body states the recovery:
-    `apt-get install homelab-daniel-box=<previous>`, or the by-hand build of one package
-    (*Rollback*).
+    package can publish a broken `homelab-daniel-box`, so H7.41b's PR body states the
+    recovery: `apt-get install homelab-daniel-box=<previous>`, or the by-hand build of one
+    package (*Rollback*).
+    - **H7.41a** carries rulings 2 and 3 below as code, with their tests, and rulings 1, 4 and
+      5 as spec text. It needs no SOPS key.
+    - **H7.41b** carries the builder move and the five facts listed after the rulings.
+    - **Ruling 1, 2026-10-24: the `users:` arm declares uid only.**
+      `scripts/renderer/renderer_lib/host_arms.py:USER_KEYS` is `{name, uid, home, shell,
+      comment}` and `hosts/lib/reconcile_lib/users.py` has no gid. The package declares uid
+      995 and 994. The install adopts the live accounts by uid, and a rebuilt host's groups
+      get gid equal to uid. A grep for the live gids 983 and 982 under `ansible/`, `hosts/`
+      and `scripts/` finds no reader of them.
+    - **Ruling 2, 2026-10-24: uv's archive member is one directory down.** uv 0.13.4 ships
+      tarballs only, with the binary at `uv-x86_64-unknown-linux-gnu/uv` and
+      `uv-aarch64-unknown-linux-gnu/uv`. The member grammar of both twins
+      (`ansible/roles/setup/homelab_builder/files/homelab_tool_fetch.py:_MEMBER` and
+      `scripts/renderer/renderer_lib/host_tools.py:_MEMBER`) accepts exactly one directory
+      segment. `homelab-tools` pins uv 0.13.4, the version of `initial_setup_uv_version`.
+    - **Ruling 3, 2026-10-24: reconcile hands a shadowed unit to the package.** The builder's
+      units are already named `homelab-*`, so the package ships the names of the Ansible
+      copies in `/etc/systemd/system`, and those copies win over `/usr/lib/systemd/system`.
+      `h3-pi-pilot.md`'s assumption that package units are renamed does not hold here. A
+      `{path:}` legacy entry under `/etc/systemd/system/`, either a unit file or a `*.wants/`
+      link, whose basename the package ships as a unit gets this handoff: reconcile removes
+      the file, runs one `daemon-reload` after all such removals, and restarts each packaged
+      unit whose file differed, in step 3's order. A `{unit:}` entry that names a packaged
+      unit takes the same path and is never counted as running drift. A `{path:}` entry
+      under that directory with no packaged unit of that name stays in place and counts as
+      drift. A wants link carries no bytes, so removing one restarts nothing. H7.41b
+      checks that the package's own enable link survives the removal.
+    - **Ruling 4, 2026-10-24: credstore paths.** The builder unit writes
+      `LoadCredential=github_token:/run/credstore/homelab_builder_github_token` and the alert
+      unit writes `LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook`.
+      The builder reads `$CREDENTIALS_DIRECTORY/github_token`, so `config.env` holds no
+      secret. `hosts/lib/homelab-secrets` writes `/run/credstore/<sops key>`.
+    - **Ruling 5, 2026-10-24: `UV_PYTHON_DOWNLOADS` is set on `ExecStart=` only.** The
+      interpreter-install `ExecStartPre=` does not inherit `UV_PYTHON_DOWNLOADS=never`. The
+      variable moves onto `ExecStart=` through `env`.
+    - **Facts for H7.41b, measured on 2026-10-24 and not acted on in H7.41a:**
+        - `ansible/roles/setup/homelab_builder/files/host_package_builder.py` is 596 of 600
+          lines. The token change adds 4 lines at most, or moves code into a sibling module.
+        - Both units need `StateDirectoryMode=0711`.
+        - The alert can use `curl --variable 'webhook@%d/...' --expand-url '{{webhook:trim}}'`
+          with no shell wrapper.
+        - The `UFW_SPEC` grammar rejects quotes, so the commented ufw rules need legacy
+          entries with `replaced_by`.
+        - H7.41b needs `homelab_builder_github_token` and `gitops_deploy_discord_webhook` in
+          daniel-box's host SOPS file, through an operator sync
+          (**operator-only**: `host_secrets.py sync daniel-box`).
 18. **H7.42** stays alone. It carries the bootstrap, offline and bootstrap-pins proofs.
 19. **H7.43** stays alone, because the operator's rebuild is exit observation 2. The operator
     rebuilds at the Pi's console and keeps the old SD card as the rollback
@@ -2215,8 +2265,8 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `ExecStartPre=` runs the packaged uv's `uv python install --no-bin <version>` into
           a directory under the unit's `StateDirectory=`, which `UV_PYTHON_INSTALL_DIR`
           names. The version pin lives in the package, so rebuilding the host needs no
-          Ansible apply. The run keeps `UV_PYTHON_DOWNLOADS=never` and `--no-python-downloads`,
-          so only the `ExecStartPre=` downloads, and it does nothing once the version is
+          Ansible apply. The run keeps `UV_PYTHON_DOWNLOADS=never` (on `ExecStart=` only, per
+          item 17's ruling 5) and `--no-python-downloads`, so only the `ExecStartPre=` downloads, and it does nothing once the version is
           present.
     - **The failure alerts become one packaged template unit.** The role renders
       `homelab-builder-alert.service` and `homelab-repo-sign-alert.service` through
@@ -2228,7 +2278,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `alert_unit.yml` renders. That file's instanced form (`alert_unit_instanced`) is
           the model. The component keeps the retry-until-delivered behaviour and the
           once-per-failure `Failed at <UTC time>` record.
-        - The webhook arrives through `LoadCredential=discord_webhook:/run/credstore/discord_webhook`,
+        - The webhook arrives through `LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook`,
           the form `k3s-restart` and checkout-sync use. The credential is the SOPS key
           `gitops_deploy_discord_webhook`, the key `alert_unit.yml` renders today.
           daniel-box's `package.yml` lists it under `credentials:`, and the operator runs
@@ -2243,8 +2293,8 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `KNOWN_ALERTS` and into the component's own test.
     - **The `users:` arm declares the live ids.** Measured with `id` on daniel-box on
       2026-10-24: `homelab-builder` uid 995 gid 983, and `homelab-signer` uid 994 gid 982.
-      The package declares exactly these ids, so the install adopts the existing accounts
-      and the files they own keep their owners.
+      The package declares the uids only (item 17's ruling 1), so the install adopts the
+      existing accounts and the files they own keep their owners.
     - The packaged builder unit keeps `SyslogLevel=notice`, which this host's journald needs
       (`MaxLevelStore=notice`) for a failed run's traceback to reach the journal, and the
       sandboxing directives that `homelab_builder/tests/test_builder_units.py` holds.
@@ -2262,6 +2312,48 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       gains the script as a second file. It also adds `--offline <kit-dir>` and the kit's
       file list in `docs/break-glass.md`, with the offline container case, about 100 more
       lines (*The cluster-node bring-up*).
+      **Amended 2026-10-25 (H7.42):** the script landed with fake-root tests, written against the
+      live tree. Nine premises did not hold:
+        - *No LVM step.* No task, role or doc creates daniel-server's LVM volumes. Only
+          `ansible/README.md` records a one-time `lvextend` of the root volume. The script
+          therefore writes no volume, and an inventor's layout would be destructive.
+        - *No `homelab-repos` package.* H7.24a replaced it with the per-host `apt-docker`,
+          `apt-azlux` and `apt-github-cli` components, so `--offline` leaves out the
+          `github-cli` source file only.
+        - *nfpm and uv pins.* Both are the blocks of `hosts/packages/homelab-tools/package.yml`
+          (H7.24a, H7.41a), embedded byte for byte. The builder's own role no longer holds
+          the uv pin.
+        - *Three packages, not four.* `--local-build` builds `homelab-tools`,
+          `homelab-updater` and `homelab-<host>`.
+        - *Step 6.* `homelab-docker-engine.service` is not in the tree until H7.25 lands. The
+          script starts it when the unit exists and prints that it starts nothing otherwise.
+        - *The k3s Renovate manager.* The `k3s-io/k3s` rule is a package rule, not a manager.
+          `renovate.json` gains a small custom manager for the script's `K3S_VERSION` line, and
+          the `homelab-tools` manager gains the script as a second file.
+        - *`preflight.yml`'s host-var checks.* They have no counterpart: the script embeds the
+          three host names and refuses any other.
+        - *The anchor check.* It runs as `hosts/lib/bootstrap_anchor.py` from the archived
+          tree, not inside the script, so its decision has unit tests.
+        - *Not in this PR.* The systemd container cases (`apt-get install --simulate` and the
+          offline case with its two red fixtures) need the `host_packages` job's image, and the
+          fake-root suite replaces them for this PR. H7.44's guest drill still owns the
+          end-to-end proof.
+      **Amended 2026-10-25 ([#6231](https://github.com/DanielH2018/server/issues/6231)):** the
+      container cases landed in `scripts/validate/validate_lib/bootstrap_case.py`, which the
+      `host_packages` job runs. Writing them found that `--local-build` looked for homelab-tools'
+      `nfpm.yaml` above the per-architecture directory the renderer writes, so every local
+      build died at step 5. Four premises changed:
+        - *One case per host.* `--local-build` runs on a container named after each host, as
+          far as `apt-get install --simulate`. The path that installs from the repository has no
+          case, because a test repository cannot be signed with the archive key the script pins.
+        - *The anchor.* Each case's scratch clone commits a stub in place of
+          `hosts/lib/bootstrap_anchor.py`, because a pull request's head is on no first-parent
+          chain of master. The anchor's unit tests hold its decision.
+        - *Offline.* The offline container has no network at all, which is stricter than
+          unresolvable GitHub and GHCR hostnames. Its kit's `k3s` is a stand-in that answers
+          `--version`, because the script checks it against the kit's own checksum list.
+        - *No local-build `Depends` red.* The red fixture that gives `homelab-daniel-box` a
+          `Depends` only the repository carries is not in the cases.
     - **H7.15b** The Pi runbook, then the Pi rebuild, which is exit observation 2. The
       operator keeps the old SD card as the rollback. The cluster's wg-easy on 51820 is
       proven first, as in H5.5.

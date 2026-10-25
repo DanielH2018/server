@@ -32,6 +32,7 @@ spec:
         # the thing it is gating stayed unreachable.
         - name: wait-for-broker
           image: {{ n8n_k8s_wait_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c

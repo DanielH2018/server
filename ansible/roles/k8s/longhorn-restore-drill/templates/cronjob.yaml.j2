@@ -69,6 +69,7 @@ spec:
           containers:
             - name: longhorn-restore-drill
               image: {{ longhorn_restore_drill_runner_image }}
+              imagePullPolicy: IfNotPresent
               command: ["bash", "/config/longhorn-restore-drill.sh"]
               env:
                 # kubectl's discovery cache goes under $HOME, and the image has no home for this uid.

@@ -16,7 +16,14 @@
 # The Compose projects are the ones deploy.yml renders under ~/server/containers/<name>,
 # owned 0600 by the connecting user, so the compose tasks run as that user (become: false)
 # the way deploy.yml runs them. A project that was never deployed to this host fails the stop
-# task before anything is upgraded.
+# task before anything is upgraded. The `homelab` project (H5) is the package's
+# /usr/lib/homelab/compose, whose env file is root 0600, so its tasks run with become: true.
+#
+# The play and homelab-reconcile both write the `homelab` project. The play therefore masks
+# homelab-updater.timer first (H3's per-host lever), waits out any updater or reconcile run
+# already in progress, and unmasks the timer only as its last task. A failed play leaves the
+# timer masked on purpose: the Pi installs no package until the operator clears it
+# (docs/target-architecture/host/h5-pi-compose.md, *The engine upgrade*).
 
 - name: Refuse to move the engine where the Compose projects cannot be reached
   ansible.builtin.assert:
@@ -24,6 +31,54 @@
     fail_msg: >-
       This host has no ~/server checkout, so nothing here can stop or recreate its Compose
       projects -- and an engine upgrade under running containers is #1961.
+
+- name: Look for the homelab project's compose file
+  ansible.builtin.stat:
+    path: "{{ docker_install_homelab_compose_dir }}/compose.yaml"
+  register: docker_install_homelab_compose_file
+  become: true
+
+- name: Refuse to move the engine under a homelab project whose compose file is missing
+  ansible.builtin.assert:
+    that: docker_install_homelab_compose_file.stat.exists
+    fail_msg: >-
+      compose_services is not empty, but {{ docker_install_homelab_compose_dir }}/compose.yaml
+      is missing, so the play could neither stop nor recreate the homelab project.
+  when: compose_services | default([]) | length > 0
+
+- name: Read the updater timer's unit state
+  # No state is requested, so the module only reports `status`.
+  ansible.builtin.systemd_service:
+    name: homelab-updater.timer
+  register: docker_install_updater_timer
+  become: true
+
+- name: Remember a mask the operator set before this play
+  ansible.builtin.set_fact:
+    docker_install_updater_was_masked: "{{ docker_install_updater_timer.status.UnitFileState | default('') == 'masked' }}"
+
+- name: Mask the updater timer so no package installs during the play
+  ansible.builtin.systemd_service:
+    name: homelab-updater.timer
+    masked: true
+    state: stopped
+  become: true
+  when: not docker_install_updater_was_masked
+
+- name: Wait for a running updater or reconcile to finish
+  # The limit is docker_install_updater_wait_limit_s, which must exceed the rendered
+  # homelab-updater.service's TimeoutStartSec. Past it the play fails before apt, with the
+  # timer masked and nothing stopped.
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+  loop:
+    - homelab-updater.service
+    - homelab-reconcile.service
+  register: docker_install_updater_activity
+  until: docker_install_updater_activity.status.ActiveState not in ['active', 'activating']
+  retries: "{{ docker_install_updater_wait_limit_s // 10 }}"
+  delay: 10
+  become: true
 
 - name: Refresh the apt cache
   ansible.builtin.apt:
@@ -79,6 +134,16 @@
         - docker_install_engine_upgrade_pending
         - has_repo_checkout
 
+    - name: Stop the homelab project before the engine moves
+      community.docker.docker_compose_v2:
+        project_src: "{{ docker_install_homelab_compose_dir }}"
+        files: [compose.yaml]
+        state: stopped
+      become: true
+      when:
+        - docker_install_engine_upgrade_pending
+        - compose_services | default([]) | length > 0
+
     - name: Upgrade the engine packages to their pins
       ansible.builtin.apt:
         name: "{{ docker_install_package_specs }}"
@@ -101,6 +166,19 @@
   become: true
   when: docker_install_engine_upgrade_pending
 
+- name: Recreate the homelab project on the upgraded engine
+  # First, so what the other projects depend on is up before they are. `recreate: always` is
+  # `up -d --force-recreate`, which gives every container the new shim and the socket inode.
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_install_homelab_compose_dir }}"
+    files: [compose.yaml]
+    state: present
+    recreate: always
+  become: true
+  when:
+    - docker_install_engine_upgrade_pending
+    - compose_services | default([]) | length > 0
+
 - name: Recreate every Compose project on the upgraded engine
   # `recreate: always`, not `auto`: the compose config-hash did not change, so `auto` would
   # only start the stopped containers -- and the one that bind-mounts the daemon socket would
@@ -117,3 +195,13 @@
   when:
     - docker_install_engine_upgrade_pending
     - has_repo_checkout
+
+- name: Release the updater timer
+  # Last on purpose: a failed play never reaches it, and the timer stays masked. A timer that
+  # was masked before the play stays masked, so the play never undoes the operator's lever.
+  ansible.builtin.systemd_service:
+    name: homelab-updater.timer
+    masked: false
+    state: started
+  become: true
+  when: not docker_install_updater_was_masked

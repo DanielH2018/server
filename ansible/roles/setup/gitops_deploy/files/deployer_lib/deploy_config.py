@@ -6,7 +6,8 @@ cannot fail. `load_config` collects a malformed numeric value into `Config.error
 that field's default, so `main()` names the offending key in one line instead of dying in an
 import traceback. `Config.validate()` is the half that raises, and it raises `ConfigError`.
 
-`log` lives here because every module prints through it and it depends on nothing else.
+`log`, `ERR` and `WARNING` are host_lib's, re-exported here because every module prints
+through them and imports them from this leaf.
 
 This is a leaf: it imports `host_lib` and the standard library, and nothing else from this
 role. No test patches a name defined here, so a caller may from-import one. `deploy_io`
@@ -16,57 +17,17 @@ Stdlib only: the unit runs under `uv run --no-project`, never from a venv. The `
 marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
 """
 
-import os
-import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
-from host_lib import parse_env_file
+# `log` and its two priorities are host_lib's, shared with every host-shipped script (#6161).
+# Re-exported here because every deployer module has always imported them from this leaf.
+from host_lib import ERR, WARNING, log, parse_env_file  # noqa: F401
 
 
 # The host clock is UTC; the operator reads the dirty-tree reminder in local time.
 CHICAGO = ZoneInfo("America/Chicago")
-
-
-# sd-daemon(3) priorities for `log`'s `level`. Without one, journald files every line of this
-# unit at its `SyslogLevel=notice`, so `journalctl -u gitops-deploy -p err` found nothing for a
-# failed deploy (#4446). ERR marks a failure that leaves a hold or a rollback behind; WARNING
-# marks a read or a gate that failed and the tick worked around.
-ERR = 3
-WARNING = 4
-
-
-def _fd_is_journal(fd: int) -> bool:
-    """Whether `fd` is the journal stream systemd connected, per `JOURNAL_STREAM`.
-
-    systemd sets `JOURNAL_STREAM=<dev>:<inode>` for the stream it hands a unit, and the
-    variable is inherited by anything the unit starts. So matching it against `fd` itself,
-    not just reading that it is set, is what keeps a test run under a systemd service from
-    printing `<3>` into captured output.
-    """
-    try:
-        dev, ino = os.environ["JOURNAL_STREAM"].split(":")
-        st = os.fstat(fd)
-        return (st.st_dev, st.st_ino) == (int(dev), int(ino))
-    except KeyError, ValueError, OSError:
-        return False
-
-
-def log(msg: str, level: int | None = None) -> None:
-    """Print `msg` to stdout, at priority `level` when stdout is the journal.
-
-    journald reads the `<n>` prefix off each line it receives, so every line of a multi-line
-    message carries it. An exception interpolated into `msg` is often several lines.
-    """
-    if level is not None:
-        try:
-            journal = _fd_is_journal(sys.stdout.fileno())
-        except OSError, ValueError:  # a stdout with no fd, such as pytest's capture
-            journal = False
-        if journal:
-            msg = "\n".join(f"<{level}>{line}" for line in msg.split("\n"))
-    print(msg, flush=True)
 
 
 # ── configuration ─────────────────────────────────────────────────────────────────────────────

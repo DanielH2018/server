@@ -330,6 +330,38 @@ def retire_path(path: Path) -> bool:
     return True
 
 
+def shadow_path(entry: dict, units: dict) -> Path | None:
+    """The /etc/systemd/system path a legacy entry names, when it can shadow a packaged unit.
+
+    A `{path:}` entry under that directory always can. A `{unit:}` entry can when the package
+    ships that unit, because an Ansible-era copy of it shadows the packaged one.
+    """
+    if entry.get("unit") in units:
+        return ETC_UNIT_DIR / entry["unit"]
+    path = Path(entry.get("path", ""))
+    return path if ETC_UNIT_DIR in path.parents and ".." not in path.parts else None
+
+
+def hand_off(path: Path) -> tuple[bool, bool] | None:
+    """Remove the /etc copy of a unit the package ships.
+
+    Returns:
+        None when the removal failed, else whether a file was removed and whether its bytes
+        differ from the packaged unit's (a wants link has none, so it never differs).
+    """
+    target = under_root(path)
+    present = os.path.lexists(target)
+    try:
+        differs = (
+            present
+            and path.parent == ETC_UNIT_DIR
+            and target.read_bytes() != under_root(UNIT_DIR / path.name).read_bytes()
+        )
+    except OSError:
+        differs = True
+    return (present, differs) if retire_path(path) else None
+
+
 def retire_cron(name: str, user: str) -> bool:
     if shutil.which("crontab") is None:
         # No cron package means no crontab holding the entry. Only an absent binary counts:
@@ -634,10 +666,27 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     prev_retired = set(prev.get("retired") or [])
     retired = []
     waiting = None
+    removed, handed = False, set()
     for entry in manifest["legacy"]:
         key = legacy_key(entry)
         if key not in prev_retired and digest and waiting is None:
             waiting = not (secrets and secrets_ready(credentials, outputs))
+        shadow = shadow_path(entry, units)
+        # An Ansible-era copy under /etc shadows the packaged unit of the same name: remove it
+        # (one daemon-reload and the restarts follow the loop). With no packaged unit of that
+        # name, the file is the only copy, so it stays and counts as drift.
+        if shadow and key not in prev_retired and not waiting:
+            if shadow.name not in units:
+                drift["legacy"] += 1
+                say(f"keeping {shadow}: the package ships no unit of that name")
+            elif (result := hand_off(shadow)) is None:
+                ok = False
+            else:
+                retired.append(key)
+                removed |= result[0]
+                if result[1]:
+                    handed.add(shadow.name)
+            continue
         # A running service is never stopped to retire it: the entry stays and counts as drift.
         if key not in prev_retired and not waiting and running_service(entry):
             drift["legacy"] += 1
@@ -648,6 +697,15 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             if waiting:
                 say(f"keeping {key}: the secrets do not all exist yet")
             ok = False
+
+    # Step 4b: one daemon-reload after every shadow removal, then each packaged unit whose
+    # fragment changed, in the order step 3 uses.
+    if removed and systemctl("daemon-reload").returncode != 0:
+        say("daemon-reload failed after removing a shadowing copy")
+        ok = False
+    for unit in sorted(handed):
+        if not left_alone(unit, units, links, manual):
+            ok = bring_up(unit, "restart", outputs, queued) and ok
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest["reconcilers"]:

@@ -25,17 +25,17 @@ WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 # Alert prefix -> (template, the `check` label its textfile carries, the hosts that run it).
 PRODUCERS = {
     "DocsRefresh": (
-        ("setup", "initial_setup", "docs-refresh.sh.j2"),
+        ("components", "docs-refresh", "docs-refresh.sh.j2"),
         "docs-refresh",
         ["daniel-box"],
     ),
     "EvalSweep": (
-        ("setup", "initial_setup", "eval-run.sh.j2"),
+        ("components", "eval-sweep", "eval-run.sh.j2"),
         "eval-run",
         ["daniel-box"],
     ),
     "SecretRotationAudit": (
-        ("setup", "initial_setup", "secret-rotation-audit.sh.j2"),
+        ("components", "secret-rotation", "secret-rotation-audit.sh.j2"),
         "secret-rotation-audit",
         ["daniel-box"],
     ),
@@ -134,3 +134,12 @@ def test_every_producer_names_the_check_label_its_rule_reads(prefix):
     assert re.search(rf"write_check_textfile {re.escape(check)} ", body), (
         f"{template[-1]} does not write the {check} textfile its rules read"
     )
+
+
+def test_the_packaged_loki_witness_renders_the_deadline_the_rules_pin():
+    """daniel-box's witness is a component since H7.36 and daniel-server's stays the role's
+    template, so the shared rule's literals have to hold for both copies."""
+    packaged = rendered_deadline(
+        ("components", "loki-route-witness", "loki-read-route-health.sh.j2")
+    )
+    assert packaged == rendered_deadline(PRODUCERS["LokiReadRoute"][0])

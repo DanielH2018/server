@@ -44,7 +44,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from host_lib import atomic_write, github_get, github_token, parse_env_file
+from host_lib import ERR, atomic_write, github_get, github_token, parse_env_file
+from host_lib import log as host_log
 import homelab_tool_fetch as tools
 from builder_ci_grade import (
     ci_verdict,
@@ -85,11 +86,11 @@ REASONS = frozenset(
 
 
 def log(message: str, err: bool = False) -> None:
-    print(
-        f"homelab-builder: {message}",
-        file=sys.stderr if err else sys.stdout,
-        flush=True,
-    )
+    """One `homelab-builder:` line; a failure goes to stderr at err priority in the journal."""
+    if err:
+        host_log(message, ERR, tag="homelab-builder", stream=sys.stderr)
+    else:
+        host_log(message, tag="homelab-builder")
 
 
 def describe(exc: BaseException, token: str | None = None) -> str:

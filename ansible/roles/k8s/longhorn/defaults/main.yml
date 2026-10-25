@@ -161,14 +161,15 @@ k3s_longhorn_concurrent_engine_upgrade: 3  # noqa var-naming[no-role-prefix]
 # when a third node or a fencing mechanism exists.
 k3s_longhorn_node_down_pod_deletion_policy: do-nothing  # noqa var-naming[no-role-prefix]
 
-# The longest the tag's Kustomization waits for longhorn-manager to roll. The DaemonSet rolls with
-# maxUnavailable 100%, so both pods are replaced at once and the wait is one pod's start time, not
-# two. The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
-# timeout from that key.
+# The longest the tag's Kustomization waits for longhorn-manager to roll. The DaemonSet rolls
+# with maxUnavailable 1 (files/patches/longhorn-manager-update-strategy.yaml, #6009), so the
+# pods are replaced one after the other and the wait is two pods' start times. The literal is
+# `manifests_rollout_timeout` because the renderer reads a role's Flux timeout from that key.
 # Measured 2026-10-22: 36s from deleting both manager pods to both replacements Ready (30s of it
-# termination grace). Cited in #5922. That was a restart with the image cached. A version bump
-# is slower: every node cold-pulls the new manager image, the manager runs its upgrade path, and
-# the Kustomization renders `wait: true`, so the timeout also covers longhorn-driver-deployer
+# termination grace), so about 72s for two in sequence. Cited in #5922. That was a restart with
+# the image cached. A version bump is slower: each node cold-pulls the new manager image in
+# turn, the manager runs its upgrade path, and the Kustomization renders `wait: true`, so the
+# timeout also covers longhorn-driver-deployer
 # (which the old play waited on for 600s), longhorn-ui and longhorn-global-manager. A timeout on
 # a forward-only tag writes DEPLOY_HOLD, so the value is the manifests default of 600s, not 2m.
 manifests_rollout_timeout: 10m  # noqa var-naming[no-role-prefix]

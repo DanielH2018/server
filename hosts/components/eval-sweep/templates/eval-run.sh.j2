@@ -3,7 +3,7 @@
 # result into evals/history.json via evals/trend.py, and publish the change.
 #
 # Usage: eval-run.sh [-h|--help]
-# Takes no arguments. Cron job "Homelab eval sweep" runs it as the deploy user on the ops_cron_host
+# Takes no arguments. homelab-eval-sweep.timer runs it as the deploy user on daniel-box
 # every Sunday at 02:00 with PATH and HOME set. Running it by hand spends API money and publishes
 # a PR for real. It does nothing (and reports UP) without a SOPS anthropic_api_key. Optional env:
 # CLAUDE_EVAL_EPOCH overrides the epoch label that evals/trend.py records, which defaults to the
@@ -61,7 +61,7 @@ PR_BRANCH_PREFIX="evals-history/"
 # State this cron keeps ACROSS runs, and it lives OUTSIDE $REPO deliberately -- docs-refresh.sh's
 # header gives the reason in full: an untracked file inside the checkout parks gitops-deploy
 # exactly as a modified one does, so a file whose job is to record a failure must never be a
-# failure itself. crons.yml creates this subdirectory owned by the cron user.
+# failure itself. The component's tmpfiles.d line creates this subdirectory owned by the cron user.
 STAMP_DIR="/var/lib/homelab/eval-run.d"
 # One log per failing run, pruned to the newest FAILURE_LOGS_KEPT: docs-refresh.sh lost a traceback
 # to the next failure's overwrite (#4764). The `failure-` prefix keeps the prune off the files and
@@ -74,28 +74,29 @@ UNPUBLISHED_HISTORY="$STAMP_DIR/unpublished-history.json"
 SWEEP_ARCHIVE="$STAMP_DIR/sweeps"
 SWEEPS_KEPT=8
 
-# The key comes from an env file, never from this script's own text: a grep or diff over an
-# installed script prints whatever secret was rendered into it (#4607). crons.yml renders the file
-# 0600 while anthropic_api_key exists and removes it when the key does not. Empty FIRST, so an
-# absent file leaves the empty-key gate below to fire rather than `set -u` to abort, and a key
-# inherited from the caller's environment can never arm a paid sweep.
-EVAL_ENV_FILE="{{ initial_setup_eval_run_env_file }}"
+# Both secrets arrive as systemd credentials, never from this script's own text: a grep or diff
+# over an installed script prints whatever secret was rendered into it (#4607), and the renderer
+# withholds every secret from a host package. `LoadCredential=` in homelab-eval-sweep.service
+# puts each under $CREDENTIALS_DIRECTORY. Empty FIRST, so an absent or empty credential leaves
+# the empty-key gate below to fire rather than `set -u` to abort, and a key inherited from the
+# caller's environment can never arm a paid sweep.
 ANTHROPIC_API_KEY=""
-# shellcheck source=/dev/null
-[[ -r "$EVAL_ENV_FILE" ]] && . "$EVAL_ENV_FILE"
+EVAL_PUSH_TOKEN=""
+CRED_DIR="${CREDENTIALS_DIRECTORY:-}"
+[[ -n "$CRED_DIR" && -r "$CRED_DIR/anthropic_api_key" ]] && ANTHROPIC_API_KEY="$(<"$CRED_DIR/anthropic_api_key")"
+[[ -n "$CRED_DIR" && -r "$CRED_DIR/homelab_eval_push_token" ]] && EVAL_PUSH_TOKEN="$(<"$CRED_DIR/homelab_eval_push_token")"
 export ANTHROPIC_API_KEY
 
-# Same `| default('')` gate as docs_refresh_push_token / setup_drift_push_token in
-# static-monitors.yaml.j2: no push_token means no monitor is provisioned there either, so an
-# empty token here and an absent monitor there are the same disarmed state, not a mismatch.
-EVAL_PUSH_TOKEN="{{ homelab_eval_push_token | default('') }}"
+# An empty push token means static-monitors.yaml.j2 provisions no monitor either (the same
+# `| default('')` gate as docs_refresh_push_token), so an empty token here and an absent monitor
+# there are the same disarmed state, not a mismatch.
 PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/${EVAL_PUSH_TOKEN}"
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh 2>/dev/null \
-  || logger -t eval-run "kuma-push-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/kuma-push-lib.sh 2>/dev/null \
+  || logger -t eval-run "kuma-push-lib.sh missing — reinstall homelab-daniel-box"
 
 REPORT_DIR=""
 LOG=""
@@ -130,11 +131,11 @@ trap on_exit EXIT
 # The shared check library, which the textfile write in on_exit needs. It sits below the trap so a
 # host that lacks it still reports `down` through the push, and unlike the push library above it
 # aborts on a miss: its copy task is `tags: [always]`, so a host without it has skipped
-# initial_setup (M6 batch B2). on_exit's write then fails with a log line, because the function is
+# the package install (M6 batch B2). on_exit's write then fails with a log line, because the function is
 # undefined.
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t eval-run "homelab-check-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t eval-run "homelab-check-lib.sh missing — reinstall homelab-daniel-box"
   exit 1
 }
 

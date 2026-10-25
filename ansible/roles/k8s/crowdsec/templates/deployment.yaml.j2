@@ -38,6 +38,7 @@ spec:
         # populated ./crowdsec-config once and Ansible dropped these same files in.
         - name: config-install
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -76,6 +77,7 @@ spec:
         # the loop runs. The entrypoint passes AGENT_PASSWORD the same way for its own agent.
         - name: lapi-register
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -120,6 +122,7 @@ spec:
         # statically linked, which is why it runs in the python image (defaults/main.yml).
         - name: jobs-cscli
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command: ["cp", "/usr/local/bin/cscli", "/tools/cscli"]
           # nobody: the emptyDir is world-writable and the copy keeps its 0755, so the root
           # sidecar runs it as `other`.
@@ -130,6 +133,7 @@ spec:
 {{ container_resources(cpu_limit='100m', mem_limit='64Mi', cpu_request='10m', mem_request='16Mi') }}
         - name: jobs-kubectl
           image: {{ crowdsec_k8s_jobs_kubectl_image }}
+          imagePullPolicy: IfNotPresent
           command: ["cp", "/usr/bin/kubectl", "/tools/kubectl"]
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534, run_as_group=65534) }}
           volumeMounts:
@@ -139,6 +143,7 @@ spec:
       containers:
         - name: crowdsec
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - name: lapi
               containerPort: {{ crowdsec_k8s_lapi_port }}
@@ -199,6 +204,7 @@ spec:
         # job's failure, and its memory limit is twice the measured peak.
         - name: crowdsec-jobs
           image: {{ crowdsec_k8s_jobs_image }}
+          imagePullPolicy: IfNotPresent
           command: ["python3", "/jobs/crowdsec_jobs.py"]
           ports:
             - name: jobs-metrics

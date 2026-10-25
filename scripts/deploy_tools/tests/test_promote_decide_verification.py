@@ -168,7 +168,7 @@ def test_decide_waits_until_prod_and_last_good_agree_then_promotes(world):
             world.set_last_good(c1)
 
     clock = Clock(settle)
-    decision = promote.decide(_reads(world, clock))
+    decision = promote.decide(_reads(world, clock), supersede_on=False)
     assert (decision.verdict, decision.target) == ("promote", tip)
     assert clock.now == 90
 
@@ -179,7 +179,7 @@ def test_a_verification_that_never_settles_stalls_as_current(world):
     world.set_last_good(c0)
     world.publish(tip)
     clock = Clock()
-    decision = promote.decide(_reads(world, clock))
+    decision = promote.decide(_reads(world, clock), supersede_on=False)
     assert decision.verdict == "current"
     assert "never settled" in decision.reason
     assert clock.now >= vp.IN_FLIGHT_WAIT_S
@@ -194,7 +194,7 @@ def test_a_hold_written_during_the_wait_ends_it_as_held(world):
     def fail(now: float) -> None:
         world.run.hold = f"{c1} failed=bento-pdf"
 
-    decision = promote.decide(_reads(world, Clock(fail)))
+    decision = promote.decide(_reads(world, Clock(fail)), supersede_on=False)
     assert decision.verdict == "held"
     assert decision.reason == f"DEPLOY_HOLD={c1} failed=bento-pdf"
 

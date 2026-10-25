@@ -159,7 +159,7 @@ REVERT_RULE = False
 # Whether `decide` may promote T over a verification in flight rather than wait on it (slice
 # D7, `promote_lib/supersede.py`). Turning it on is an operator ruling, in a one-line PR of its
 # own, as for REVERT_RULE.
-SUPERSEDE = False
+SUPERSEDE = True
 
 # How many commits a first run's walk examines, newest first, so a walk with no `prod` stops
 # short of master's root. At about 124 merges a day (see `ci_ancestor_walk_max`) 50 is several
@@ -177,23 +177,23 @@ def decide(
     FIRST_RUN_WALK_MAX candidates. It pulls `prod`'s bundle once, and each candidate's that
     passes every other rule, for the object-loss check.
 
-    With `supersede_on`, a verification in flight that `supersede.in_flight` names does not
-    wait: T is promoted over it unless `supersede.refusal` or T's forward-only tags or
+    With `supersede_on`, a verification in flight that `supersede.supersedable` allows does
+    not wait: T is promoted over it unless `supersede.refusal` or T's forward-only tags or
     snapshot roles refuse, and then `decide` runs again with the wait.
     """
     try:
-        flight = supersede.in_flight(reads) if supersede_on else None
-        hold_read = "none"
-        if flight is not None:
-            held, prod_digest, last_good = None, flight.prod, flight.last_good
-        else:
-            settled = verify.wait_settled(
-                reads.hold, reads.digest, reads.sleep, reads.clock, revert_rule
-            )
-            if settled.stop is not None:
-                return Decision(settled.stop[0], reason=settled.stop[1])
-            held, prod_digest, last_good = settled.held, settled.prod, settled.last_good
-            hold_read = settled.hold
+        settled = verify.wait_settled(
+            reads.hold,
+            reads.digest,
+            reads.sleep,
+            reads.clock,
+            revert_rule,
+            supersedable=supersede.supersedable(reads) if supersede_on else None,
+        )
+        if settled.stop is not None:
+            return Decision(settled.stop[0], reason=settled.stop[1])
+        held, prod_digest, last_good = settled.held, settled.prod, settled.last_good
+        hold_read, flight = settled.hold, settled.in_flight
         required = frozenset(reads.contexts())
         prod = reads.prod()
         tip = reads.tip()
@@ -290,7 +290,7 @@ def decide(
                     hold=candidate,
                 )
             why = ""
-            if flight is not None:
+            if flight:
                 why = supersede.refusal(
                     reads, prod, prod_bundle, last_good_bundle, target_bundle
                 )
@@ -307,10 +307,10 @@ def decide(
                     target_bundle,
                     prod_bundle,
                     last_good_bundle,
-                    supersedes=(prod or "") if flight is not None else "",
+                    supersedes=(prod or "") if flight else "",
                     hold_read=hold_read,
                 )
-                if flight is None or not (decision.no_reset or decision.stateful):
+                if not flight or not (decision.no_reset or decision.stateful):
                     return decision
                 why = "T names a forward-only tag or a snapshot role"
             print(

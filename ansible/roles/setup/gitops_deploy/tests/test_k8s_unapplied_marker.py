@@ -438,6 +438,15 @@ def test_an_unusable_release_record_reads_as_no_commit(tmp_path, content):
     assert deploy_release.release_commit("authelia", str(tmp_path)) is None
 
 
+def test_only_a_corrupt_release_record_is_logged(tmp_path, capsys):
+    """A missing record is a service never deployed; a corrupt one is worth a line (#6161)."""
+    deploy_release.release_commit("authelia", str(tmp_path))
+    assert capsys.readouterr().out == ""
+    (tmp_path / "authelia.json").write_text("not json")
+    deploy_release.release_commit("authelia", str(tmp_path))
+    assert "release: record " in capsys.readouterr().out
+
+
 def test_the_release_dir_matches_the_manifests_role():
     """A drifted path would make every pending line undischargeable, silently.
 

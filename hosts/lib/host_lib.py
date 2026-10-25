@@ -10,7 +10,8 @@ ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed in
 resolves the copy sitting alongside. Single source of truth for helpers that had drifted between
 scripts: the Cloudflare-1010 User-Agent on the Discord POST and its length cap, the
 torn-write-safe atomic state write, the config.env parser, the kubectl runner, the RFC3339
-parser, the Uptime Kuma push, and the GitHub token lookup and REST read below. Stdlib only.
+parser, the Uptime Kuma push, the GitHub token lookup and REST read, the journal-aware ``log``
+with its ``logfmt`` fields and crash hook, and the node-exporter textfile write. Stdlib only.
 """
 
 from __future__ import annotations
@@ -20,11 +21,14 @@ import json
 import os
 import re
 import subprocess
+import sys
+import tempfile
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 
 # The Kuma push lives in its own stdlib-only module so a pod can stage it without the rest of
 # this file (#3745). Re-exported so every host caller keeps `from host_lib import kuma_push`.
@@ -63,6 +67,147 @@ DISCORD_SPOOL_FLUSH_MAX = 4
 
 GITHUB_API = "https://api.github.com"
 GITHUB_TIMEOUT_S = 15
+
+# sd-daemon(3) priorities for `log`'s `level`. Without one, journald files a line at the unit's
+# `SyslogLevel=` (notice on the deployer), so `journalctl -p err` finds nothing for a failure
+# (#4446). ERR marks a failure the run could not work around; WARNING a read or a gate that
+# failed and the run worked around.
+ERR = 3
+WARNING = 4
+
+# A logfmt value with any of these, or an empty one forced to quote, is written in quotes.
+_LOGFMT_NEEDS_QUOTES = re.compile(r'[\s"=\\]')
+
+
+def _fd_is_journal(fd: int) -> bool:
+    """Whether `fd` is the journal stream systemd connected, per `JOURNAL_STREAM`.
+
+    systemd sets `JOURNAL_STREAM=<dev>:<inode>` for the stream it hands a unit, and the
+    variable is inherited by anything the unit starts. So matching it against `fd` itself,
+    not just reading that it is set, is what keeps a test run under a systemd service from
+    printing `<3>` into captured output.
+    """
+    try:
+        dev, ino = os.environ["JOURNAL_STREAM"].split(":")
+        st = os.fstat(fd)
+        return (st.st_dev, st.st_ino) == (int(dev), int(ino))
+    except KeyError, ValueError, OSError:
+        return False
+
+
+def _stream_is_journal(stream) -> bool:
+    try:
+        return _fd_is_journal(stream.fileno())
+    except AttributeError, OSError, ValueError:  # pytest's capture has no fd
+        return False
+
+
+def logfmt(fields: Mapping[str, object], always_quote: Collection[str] = ()) -> str:
+    """`fields` as space-separated logfmt `key=value` pairs, in the mapping's order.
+
+    A value holding whitespace, `"`, `=` or `\\` is double-quoted with `"` and `\\` escaped,
+    the form Loki's `| logfmt` parser reads back. Any other value is bare, an empty one
+    included (`cause=`), and None is empty. A key in `always_quote` is quoted even when bare
+    would parse, for a line whose readers already match the quoted form.
+    """
+    pairs = []
+    for key, value in fields.items():
+        text = "" if value is None else str(value)
+        if key in always_quote or _LOGFMT_NEEDS_QUOTES.search(text):
+            text = '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        pairs.append(f"{key}={text}")
+    return " ".join(pairs)
+
+
+def deploy_event(
+    services: str,
+    sha: str,
+    result: str = "ok",
+    *,
+    duration_s: float | None = None,
+    source: str | None = None,
+) -> str:
+    """The `event=deploy` logfmt line Grafana draws as a deploy annotation.
+
+    `result` is `ok`, `fail` or `rollback`. A `result=ok` line carries no `duration_s`, so it
+    stays byte-identical to the line every emitter wrote before failures were recorded (#6164).
+    `observability_deploy_annotation_expr` reads these lines from syslog, and flux_soak.py
+    writes the same shape from a pod that cannot import this module.
+    """
+    fields: dict[str, object] = {
+        "event": "deploy",
+        "services": services,
+        "sha": sha,
+        "result": result,
+    }
+    if duration_s is not None:
+        fields["duration_s"] = int(duration_s)
+    if source is not None:
+        fields["source"] = source
+    return logfmt(fields)
+
+
+def log(
+    msg: str,
+    level: int | None = None,
+    *,
+    tag: str = "",
+    stream=None,
+    **fields: object,
+) -> None:
+    """Print `msg`, prefixed `<tag>: ` and followed by `fields` as logfmt, and flush.
+
+    `stream` defaults to stdout. With a `level`, each line carries the sd-daemon `<n>` prefix
+    when `stream` is the journal: journald reads the prefix off every line it receives, and an
+    exception interpolated into `msg` is often several lines. Off the journal the text is
+    unchanged, so a terminal or a cron mail never shows `<3>`.
+    """
+    out = sys.stdout if stream is None else stream
+    text = f"{tag}: {msg}" if tag else msg
+    if fields:
+        text = f"{text} {logfmt(fields)}"
+    if level is not None and _stream_is_journal(out):
+        text = "\n".join(f"<{level}>{line}" for line in text.split("\n"))
+    print(text, file=out, flush=True)
+
+
+def install_excepthook() -> None:
+    """Make an uncaught exception's traceback reach the journal at err priority.
+
+    A unit at `SyslogLevel=notice` files a re-raised traceback at notice, so `journalctl -p
+    err` missed every crash; #4446 fixed only the failures the code handles. The hook writes
+    the traceback through `log` on stderr, which prefixes `<3>` when stderr is the journal and
+    leaves it byte for byte Python's own otherwise. A script calls this from `__main__`, never
+    at import, so a test importing the module keeps the default hook.
+    """
+
+    def hook(exc_type, exc, tb) -> None:
+        text = "".join(traceback.format_exception(exc_type, exc, tb)).rstrip("\n")
+        log(text, ERR, stream=sys.stderr)
+
+    sys.excepthook = hook
+
+
+def write_textfile(path: str, text: str | bytes, mode: int = 0o644) -> None:
+    """Replace `path` with `text` atomically, at `mode`, for a reader polling the directory.
+
+    The temp file is `mkstemp`'s, in the same directory, named `.<basename>.<random>`, so it
+    never ends in `.prom` and the node-exporter textfile collector skips a half-written file.
+    `mkstemp` creates 0600 and the collector reads as uid 65534, hence the explicit `mode`.
+    A failed write removes the temp file and re-raises.
+    """
+    directory, name = os.path.split(path)
+    fd, tmp = tempfile.mkstemp(dir=directory or ".", prefix=f".{name}.")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(text.encode() if isinstance(text, str) else text)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
 
 _RFC3339_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
@@ -326,8 +471,11 @@ def github_token(source: Mapping[str, str], run: Callable) -> str | None:
 
     Why authenticate a read of a public repo. The anonymous limit is 60 requests/hour PER
     SOURCE IP, and every GitHub call from this host shares it: the tick's gate, ``await_ci.py``
-    polling every 20s for up to 900s during a landing (45 requests per run), renovate_notify,
-    the ruleset-drift cron. Two ``land.sh`` runs in an hour exhaust it, after which the tick's
+    during a landing, renovate_notify, the ruleset-drift cron. ``await_ci.py`` polls every 20s
+    for up to land.sh's 1200s budget, which would be 61 polls of 2 or more requests each. When
+    this returns None it polls every 90s and skips its descendant walk, which bounds a wait at
+    30 requests (``await_ci.ANONYMOUS_INTERVAL_S``, #6148). Before that back-off, two
+    ``land.sh`` runs in an hour exhausted it, after which the tick's
     gate reads ``HTTP Error 403: rate limit exceeded`` and defers as ``CI not finished``. That
     is correct fail-closed behaviour, and also a deploy outage nobody asked for. Measured
     2026-09-01: two landings and a manual tick, three 403 deferrals. Authenticated, the limit
