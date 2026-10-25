@@ -22,6 +22,12 @@ k3s_version: v1.37.1+k3s1  # noqa var-naming[no-role-prefix]
 #   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"  # noqa var-naming[no-role-prefix]
 k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b  # noqa var-naming[no-role-prefix]
+# The `k3s` line of that release's sha256sum-amd64.txt. The `binary` mode of
+# hosts/lib/k3s_gates.py compares each node's /usr/local/bin/k3s with it, and
+# scripts/validate/k3s_binary_sum.py refuses a change to k3s_version that leaves it. Finish it on
+# the version-bump PR with the line from
+#   gh release download <k3s_version> -R k3s-io/k3s -p sha256sum-amd64.txt -D <empty dir>
+k3s_binary_sha256_amd64: 92b94582eb7b34a8cf532e6006842b9ed215a6783cf56a3dd6271fd35243b2c0  # noqa var-naming[no-role-prefix]
 
 # The controller manifest and the Plan CRD are in-tree copies under files/upstream/, byte for
 # byte what each item's `url` serves. No render may fetch a URL (D5, C1), so the renderer
