@@ -324,3 +324,13 @@ def test_the_real_tree_holds_a_k3s_pin_the_check_can_read():
     pin, ack = cluster_pins.k3s_values_at("HEAD")
     assert cluster_pins.K3S_VERSION.fullmatch(pin or "")
     assert ack is None
+
+
+def test_a_k3s_pin_present_at_the_base_and_gone_at_the_head_is_flagged():
+    flagged = cluster_pins.k3s_problems(OLD_K3S, None, None)
+    assert len(flagged) == 1
+    assert "is gone at the head" in flagged[0]
+
+
+def test_a_k3s_pin_absent_on_both_sides_is_clean():
+    assert cluster_pins.k3s_problems(None, None, None) == []

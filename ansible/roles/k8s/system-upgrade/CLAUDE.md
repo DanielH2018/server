@@ -44,8 +44,9 @@ else upgrades k3s once H6.3c and H6.3d land. The slice plan is
       Job backoff limit (`system_upgrade_job_backoff_limit`).
       The controller reads its environment at start, so a later change to either bound or to
       the backoff limit needs a restart of the controller pod, which the Kustomization does not
-      trigger. The H6.3c PR pauses daniel-box with `homelab/k3s-upgrade-paused` while the
-      operator restarts the pod, so the first Job starts with the new limit.
+      trigger. A change to this patch lands with every selected node paused through
+      `homelab/k3s-upgrade-paused`. The operator restarts the controller, waits for its
+      rollout, and only then removes the label, so no Job starts under the old environment.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside it
   in `defaults/main.yml`), because its render holds the Plan CRD and
   `scripts/renderer/tests/test_renderer_crd_census.py` refuses a CRD under prune. A Plan

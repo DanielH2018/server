@@ -178,7 +178,14 @@ def k3s_problems(old: str | None, new: str | None, ack: str | None) -> list[str]
     Raises:
         Unjudged: a version is not `vX.Y.Z+k3sN`.
     """
-    if old is None or new is None or old == new:
+    if new is None:
+        if old is None:
+            return []
+        return [
+            f"{K3S_DEFAULTS}: {K3S_KEY} is gone at the head, so no later PR can be "
+            "checked against it"
+        ]
+    if old is None or old == new:
         return []
     parsed = []
     for value in (old, new):
@@ -208,12 +215,15 @@ def k3s_values_at(sha: str, repo: Path = REPO) -> tuple[str | None, str | None]:
     if shown.returncode != 0:
         return None, None
     data = yaml_fast.safe_load(shown.stdout)
-    data = data if isinstance(data, dict) else {}
-    pin, ack = data.get(K3S_KEY), data.get(K3S_ACK_KEY)
-    return (
-        pin if isinstance(pin, str) else None,
-        ack if isinstance(ack, str) else None,
-    )
+    if not isinstance(data, dict):
+        raise Unjudged(f"{K3S_DEFAULTS} is not a mapping at {sha[:9]}")
+    values = []
+    for key in (K3S_KEY, K3S_ACK_KEY):
+        value = data.get(key)
+        if value is not None and not isinstance(value, str):
+            raise Unjudged(f"{K3S_DEFAULTS}: {key} is not a string at {sha[:9]}")
+        values.append(value)
+    return values[0], values[1]
 
 
 def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
