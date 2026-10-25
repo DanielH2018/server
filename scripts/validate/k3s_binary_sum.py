@@ -50,9 +50,12 @@ def problems(base: dict, head: dict) -> list[str]:
     return found
 
 
-def keys_at(sha: str, path: str, repo: Path) -> dict:
+def keys_at(sha: str, path: str, repo: Path, introducing: bool = False) -> dict:
+    """The two keys at `sha`. The base side may lack the sum: the PR that adds it is clean."""
     try:
         data = yaml_fast.safe_load(git_stdout("show", f"{sha}:{path}", cwd=repo))
+        if introducing and SUM_KEY not in data:
+            return {VERSION_KEY: data[VERSION_KEY], SUM_KEY: None}
         return {k: data[k] for k in (VERSION_KEY, SUM_KEY)}
     except Exception as exc:
         raise Unjudged(f"{path} at {sha[:9]}: {exc!r}") from exc
@@ -65,7 +68,7 @@ def check(base: str, head: str, repo: Path = REPO, path: str = "") -> int:
         for r in (base, head)
     )
     try:
-        found = problems(keys_at(base, path, repo), keys_at(head, path, repo))
+        found = problems(keys_at(base, path, repo, True), keys_at(head, path, repo))
     except Unjudged as exc:
         print(f"[FAIL] k3s-binary-sum: cannot judge. {exc}", file=sys.stderr)
         return UNJUDGED

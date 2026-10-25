@@ -66,6 +66,12 @@ def test_a_malformed_sum_is_refused(repo):
     assert sut.check(base, head, repo, PATH) == sut.REFUSED
 
 
+def test_the_pr_that_introduces_the_sum_is_clean(repo):
+    base = _commit(repo, "k3s_version: v1.37.1+k3s1\n")
+    head = _commit(repo, _doc("v1.37.1+k3s1", SUM_A))
+    assert sut.check(base, head, repo, PATH) == sut.CLEAN
+
+
 def test_a_missing_key_is_unjudged(repo):
     base = _commit(repo, _doc("v1.37.1+k3s1", SUM_A))
     head = _commit(repo, "k3s_version: v1.37.2+k3s1\n")
