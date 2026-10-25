@@ -427,7 +427,10 @@ with a `cron_file`). It follows every task import, including the shared
 item. A `copy` with `remote_src` is compared by metadata only, because its source is on the
 host. It evaluates each `when:` as Jinja against the host's merged inventory vars, with
 Jinja-valued vars resolved and an import's `vars:` on top. A gate that reads a value only the
-run sets, such as a `set_fact`, a `register` or an `ansible_*` fact, cannot be read. It lists
+run sets, such as a `set_fact`, a `register` or an `ansible_*` fact, cannot be read. The
+gate's names decide this, so a test or filter such as `is defined` or `default()` around a
+run-time name leaves it unreadable. A name with a default that the role also sets at run time
+counts as run-time. It lists
 the tasks it skips with the reason: a `when:` it cannot read for the host, a loop over a list
 that is not literal, a path that does not render, or an `include_role`. A task file it cannot
 read prints as `UNCHECKED`, naming the importing file and the reason, because none of the

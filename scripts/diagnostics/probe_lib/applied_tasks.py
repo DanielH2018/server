@@ -14,9 +14,11 @@ imports, through `block`, `rescue` and `always`, and turns each file-writing tas
 - the same five spelled `ansible.builtin.*`.
 
 A `when:` (its own, or a block's) is Jinja over the walk's context: the host's merged vars,
-Jinja-valued ones resolved, plus an import's `vars:`. A name with no value before the run (a
-`set_fact` or `register` the walk has passed, `item`, an `ansible_*` fact) makes the gate
-unreadable only if evaluating it reaches that name. A gate that reads false drops the task.
+Jinja-valued ones resolved, plus an import's `vars:`. Its names decide whether it can be read.
+A name with no static value (a `set_fact` or `register` anywhere in the role, even one that
+also has a default, `item`, an `ansible_*` fact, or a name the vars lack) makes the gate
+unreadable, whatever test or filter wraps it. A condition of static names only is evaluated,
+and one that reads false drops the task.
 
 A task is SKIPPED, with the reason, when its `when:` cannot be read, its loop is not literal,
 a field still holds Jinja or a `STUB` after the render, or it includes a role. A task FILE the
@@ -39,7 +41,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from jinja2 import StrictUndefined, TemplateSyntaxError, Undefined, meta
+from jinja2 import StrictUndefined, TemplateSyntaxError, meta
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, template_env
 from lib.render_guard import render_or_error
@@ -59,40 +61,20 @@ _SET_FACTS = ("set_fact", "ansible.builtin.set_fact", "ansible.legacy.set_fact")
 _RUN_TIME = frozenset({"item", "hostvars", "groups", "group_names", "play_hosts"})
 
 
-class _Unreadable(Exception):
-    """A gate used a value the walk does not have; the message says which."""
-
-
-class _Unknown:
-    """Stands in for a gate name with no value before the run, and raises when it is used.
-
-    Not a Jinja `Undefined`, so `is defined` cannot call it False. A gate that never reaches
-    it, such as `false and fact.rc == 0`, still evaluates, as Ansible's `and` short-circuits.
-    """
-
-    def __init__(self, why: str):
-        self.why = why
-
-    def _use(self, *_args, **_kwargs):
-        raise _Unreadable(self.why)
-
-    def __getattr__(self, name):
-        if name.startswith("__"):
-            raise AttributeError(name)
-        self._use()
-
-    __bool__ = __len__ = __iter__ = __contains__ = __getitem__ = __hash__ = _use
-    __eq__ = __ne__ = __lt__ = __le__ = __gt__ = __ge__ = __str__ = __int__ = _use
-    __add__ = __radd__ = __call__ = _use
-
-
-def _defined_test(want: bool):
-    def test(value) -> bool:
-        if isinstance(value, _Unknown):
-            value._use()
-        return isinstance(value, Undefined) != want
-
-    return test
+def _run_time_names(tasks) -> set[str]:
+    """Every name a `register:` or `set_fact` sets in `tasks`, through blocks."""
+    names: set[str] = set()
+    for task in tasks if isinstance(tasks, list) else []:
+        if not isinstance(task, dict):
+            continue
+        if isinstance(task.get("register"), str):
+            names.add(task["register"])
+        for key in _SET_FACTS:
+            if isinstance(task.get(key), dict):
+                names |= {str(k) for k in task[key]}
+        for key in ("block", "rescue", "always"):
+            names |= _run_time_names(task.get(key))
+    return names
 
 
 @dataclass(frozen=True)
@@ -189,41 +171,55 @@ class _Walk:
         self.file = "tasks/main.yml"
         self.text_env = make_ansible_env([role_dir / "templates"])
         self.gate_env = make_ansible_env(undefined_cls=StrictUndefined)
-        self.gate_env.tests["defined"] = _defined_test(True)
-        self.gate_env.tests["undefined"] = _defined_test(False)
-        # Names a `set_fact` or `register` the walk has passed sets during the run.
+        # Names a `set_fact` or `register` sets during the run, in any of the role's task
+        # files, so a gate read before the walk reaches the setter still sees them. A shared
+        # file outside the role adds its own as the walk passes it.
         self.run_time: set[str] = set()
+        for path in sorted((role_dir / "tasks").rglob("*.yml")):
+            self.run_time |= _run_time_names(yaml_fast.safe_load(path.read_text()))
 
     def gate(self, whens: list) -> str | None:
         """None when the task runs on the host, `"no"` when it does not, else the reason.
 
-        The `when:` is Jinja over the walk's context. A name with no resolved value is an
-        `_Unknown`, so the gate is unreadable only when evaluating it reaches that name.
+        Readability comes from each condition's NAMES, never from whether evaluating it
+        raises: `fact is defined` or `fact | default(false)` would evaluate against the
+        static vars and settle a run-time fact on a guess. A condition whose every name is
+        static is evaluated; one false condition drops the task, as `when:` list items AND
+        together. Otherwise a condition that reads a run-time name makes the gate unreadable.
         """
         if not whens:
             return None
-        expr = " and ".join(f"({w})" for w in whens)
-        unreadable = f"its when: cannot be read for {self.host}"
         ns = {**self.ctx, "inventory_hostname": self.host}
-        try:
-            names = meta.find_undeclared_variables(
-                self.gate_env.parse("{{ " + expr + " }}")
-            )
-        except TemplateSyntaxError as exc:
-            return f"{unreadable} (`{expr}` does not parse: {exc.message})"
         run_time = _RUN_TIME | self.run_time
-        for name in names:
-            if name in run_time or name.startswith("ansible_") or name not in ns:
-                ns[name] = _Unknown(f"`{name}` has no value before the run")
-            elif any(m in str(ns[name]) for m in ("{{", STUB)):
-                ns[name] = _Unknown(f"`{name}` does not resolve before the run")
-        try:
-            runs = bool(self.gate_env.compile_expression(expr)(**ns))
-        except _Unreadable as exc:
-            return f"{unreadable} ({exc})"
-        except Exception as exc:
-            return f"{unreadable} (`{expr}`: {exc})"
-        return None if runs else "no"
+        unread: set[str] = set()
+        for when in whens:
+            try:
+                tree = self.gate_env.parse("{{ " + str(when) + " }}")
+                names = meta.find_undeclared_variables(tree)
+            except TemplateSyntaxError as exc:
+                return f"its when: `{when}` does not parse ({exc.message})"
+            names -= self.gate_env.globals.keys() - {"lookup", "query", "q"}
+            # DECIDED: a name that is both a default and a set_fact or register is run-time,
+            # because the run can overwrite the default before the gate reads it (#6356).
+            late = {
+                n
+                for n in names
+                if n in run_time
+                or n.startswith("ansible_")
+                or n not in ns
+                or any(m in str(ns[n]) for m in ("{{", STUB))
+            }
+            if late:
+                unread |= late
+                continue
+            try:
+                if not self.gate_env.compile_expression(str(when))(**ns):
+                    return "no"
+            except Exception as exc:
+                return f"its when: cannot be read for {self.host} (`{when}`: {exc})"
+        if unread:
+            return f"when: reads run-time name(s) {', '.join(sorted(unread))}"
+        return None
 
     def render(self, value, item=None) -> str | None:
         """`value` rendered with the role's context; None when a STUB or Jinja survives."""
@@ -251,11 +247,7 @@ class _Walk:
         own = task.get("when")
         here = [*whens, *(own if isinstance(own, list) else [own] if own else [])]
         name = str(task.get("name") or "unnamed task")
-        if isinstance(task.get("register"), str):
-            self.run_time.add(task["register"])
-        for key in _SET_FACTS:
-            if isinstance(task.get(key), dict):
-                self.run_time |= {str(k) for k in task[key]}
+        self.run_time |= _run_time_names([task])
         if any(k in task for k in ("block", "rescue", "always")):
             for key in ("block", "rescue", "always"):
                 for sub in task.get(key) or []:

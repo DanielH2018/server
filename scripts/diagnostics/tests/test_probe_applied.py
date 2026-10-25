@@ -128,7 +128,9 @@ def test_a_false_gate_drops_the_task_and_an_unreadable_one_is_skipped(tmp_path):
     paths = {w.path for w in wants}
     assert "/etc/pi-only" not in paths and "/etc/registered" not in paths
     reasons = {s.task: s.reason for s in skips}
-    assert "its when: cannot be read" in reasons["Gated on a registered result"]
+    assert (
+        "reads run-time name(s) probe_result" in reasons["Gated on a registered result"]
+    )
     assert "not literal" in reasons["Make the configured directories"]
     pi_wants, _ = applied_tasks.expected(_role(tmp_path), "daniel-pi", CTX)
     assert "/etc/pi-only" in {w.path for w in pi_wants}
@@ -325,7 +327,7 @@ GATE_CASES = {
     "inventory-true": ("x_enabled", {"x_enabled": True}, PROBE_OK, "ok       /etc/x/gated"),
     "inventory-false": ("x_node == inventory_hostname", {"x_node": "daniel-pi"}, PROBE_OK, "skipped  import gated.yml: its when: is false for daniel-box"),
     "false-before-a-fact": ("[x_on, 'x_facts | length > 0']", {"x_on": False}, PROBE_OK, "skipped  import gated.yml: its when: is false for daniel-box"),
-    "run-time-fact": ("x_facts | length > 0", {}, PROBE_UNREADABLE, "UNCHECKED tasks/main.yml: import gated.yml: its when: cannot be read for daniel-box (`x_facts` has no value"),
+    "run-time-fact": ("x_facts | length > 0", {}, PROBE_UNREADABLE, "UNCHECKED tasks/main.yml: import gated.yml: when: reads run-time name(s) x_facts"),
 }
 # fmt: on
 
@@ -337,7 +339,33 @@ def test_an_import_gate_is_evaluated_against_the_host_vars(tmp_path, capsys, whe
     assert _run(tmp_path, _as_wanted, GATED.format(when=when), ctx) == code
     out = capsys.readouterr().out
     assert line in out
-    assert ("cannot be read" in out) == (code == PROBE_UNREADABLE)
+    assert ("UNCHECKED" in out) == (code == PROBE_UNREADABLE)
+
+
+# The fact is set AFTER the gate reads it, so only a scan of the whole role can know it.
+LEARN = "- name: Learn the fact\n  ansible.builtin.set_fact: {x_fact: 1}\n"
+FACT_UNREAD = "UNCHECKED tasks/main.yml: import gated.yml: when: reads run-time name(s) x_fact"  # fmt: skip
+# fmt: off
+TYPE_TEST_CASES = {
+    "fact-is-defined": ("x_fact is defined", {}, PROBE_UNREADABLE, FACT_UNREAD),
+    "fact-is-none": ("x_fact is none", {}, PROBE_UNREADABLE, FACT_UNREAD),
+    "fact-default": ("x_fact | default(false)", {}, PROBE_UNREADABLE, FACT_UNREAD),
+    "inventory-is-defined": ("x_inv is defined", {"x_inv": None}, PROBE_OK, "ok       /etc/x/gated"),
+    "inventory-is-none": ("x_inv is none", {"x_inv": None}, PROBE_OK, "ok       /etc/x/gated"),
+    "inventory-default": ("x_inv | default(true)", {"x_inv": False}, PROBE_OK, "skipped  import gated.yml: its when: is false for daniel-box"),
+    "defaulted-and-set": ("x_fact | default(false)", {"x_fact": True}, PROBE_UNREADABLE, FACT_UNREAD),
+}
+# fmt: on
+
+
+@pytest.mark.parametrize(
+    ("when", "ctx", "code", "line"), TYPE_TEST_CASES.values(), ids=TYPE_TEST_CASES
+)
+def test_a_type_test_or_filter_does_not_make_a_run_time_name_readable(tmp_path, capsys, when, ctx, code, line):  # fmt: skip
+    assert _run(tmp_path, _as_wanted, GATED.format(when=when) + LEARN, ctx) == code
+    out = capsys.readouterr().out
+    assert line in out
+    assert ("UNCHECKED" in out) == (code == PROBE_UNREADABLE)
 
 
 def test_a_set_fact_name_is_not_read_from_a_default_of_the_same_name(tmp_path):
@@ -350,9 +378,9 @@ def test_a_set_fact_name_is_not_read_from_a_default_of_the_same_name(tmp_path):
         _role(tmp_path, tasks), "daniel-box", {"x_list": []}
     )
     gated = [s for s in skips if "gated.yml" in s.task]
-    assert [(s.unchecked, "`x_list` has no value" in s.reason) for s in gated] == [
-        (True, True)
-    ]
+    assert [
+        (s.unchecked, s.reason.endswith("run-time name(s) x_list")) for s in gated
+    ] == [(True, True)]
 
 
 def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):
