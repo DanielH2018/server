@@ -135,9 +135,13 @@ def seal_pi(cases, c: Container, seal=None, make_deb=None) -> None:
     c.ok(f"install -d -m 0755 /etc/homelab && age-keygen -o {AGE_KEY}")
     stub_docker(c)
     seed_pi_host(c)
-    credentials = host_mode.render_host(HOST).credentials
+    package = host_mode.render_host(HOST)
+    credentials = package.credentials
     expect(bool(credentials), "the real Pi package lists no credential to seal")
-    sealed = seal(c, {key: f"fixture-only-{key}" for key in credentials})
+    # The Compose env file (H5.7) is an output whose keys the unit also decrypts. Without them in
+    # the ciphertext homelab-secrets fails, and reconcile keeps every legacy entry and exits 1.
+    keys = sorted({*credentials, *(k for out in package.outputs for k in out["keys"])})
+    sealed = seal(c, {key: f"fixture-only-{key}" for key in keys})
     root = cases.work / "build" / f"pi-sealed-{c.name}"
     seal_dir = root / "sops"
     seal_dir.mkdir(parents=True)

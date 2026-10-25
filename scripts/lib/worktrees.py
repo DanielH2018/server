@@ -25,6 +25,7 @@ import os
 import pwd
 import socket
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -53,6 +54,7 @@ from claude_worktree import (
 __all__ = [
     "KEEP",
     "REMOVABLE",
+    "VERDICT_CACHE",
     "Worktree",
     "cherry_says_landed",
     "classify",
@@ -68,8 +70,12 @@ __all__ = [
     "parse_worktree_list",
     "primary_checkout",
     "processes_using",
+    "read_verdicts",
+    "record_verdict",
     "remove",
     "session_is_alive",
+    "verdict_cache_path",
+    "verdict_key",
     "worktree_facts",
 ]
 
@@ -129,17 +135,34 @@ def is_merged(
 
 
 def merged_layer(
-    repo: str, head: str, branch: str = "", base: str = "origin/master"
+    repo: str,
+    head: str,
+    branch: str = "",
+    base: str = "origin/master",
+    forge: Callable[[str, str, str], bool] = forge_says_merged,
 ) -> str | None:
     """The layer of is_merged's ladder that settled `head` as landed, or None when none did.
 
     One of `ancestry`, `patch-id`, `content` or `forge`. `prune_worktrees.py --check` prints
     it, so a reader can tell a squash-landed branch the forge vouched for from one whose
     content git matched locally.
+
+    Every verdict goes through the on-disk cache described at VERDICT_CACHE. `forge` is the
+    fourth layer's read, injectable so a test can answer it without a network.
     """
-    layer = local_landed_layer(repo, head, base=base)
+    key = verdict_key(repo, head, base)
+    layer = _local_layer(repo, head, False, base, key)
     if layer is not None:
         return layer
+    no_key = None
+    if key is not None:
+        no_key = f"forge-no:{key.split(':')[0]}:{branch}"
+        verdicts = read_verdicts(repo)
+        if verdicts.get(key) == "forge":
+            return "forge"
+        asked_at = verdicts.get(no_key, "")
+        if asked_at.isdigit() and time.time() - int(asked_at) < FORGE_NO_TTL_S:
+            return None
     # Fourth and last: squash-merged AND master has since drifted into a conflict on a file the
     # branch also touched. `git merge-tree` then exits non-zero, which is the right local answer
     # ("no verdict") and the wrong final one.
@@ -147,7 +170,98 @@ def merged_layer(
     # Ask the forge, which knows what it merged. This runs LAST because it is the only check
     # needing a network round-trip and credentials; every branch the local checks settle never
     # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
-    return "forge" if forge_says_merged(repo, branch, head) else None
+    if not forge(repo, branch, head):
+        if no_key is not None:
+            record_verdict(repo, no_key, str(int(time.time())))
+        return None
+    if key is not None:
+        record_verdict(repo, key, "forge")
+    return "forge"
+
+
+# The merged verdict, kept on disk across processes. A report then `--prune`, and the
+# `findings.py reap` that `--prune` starts, each asked every layer again for the same trees,
+# and the forge layer is a `gh pr list` per unsettled branch.
+#
+# Keyed by "<head sha>:<base sha>". The three local layers are pure functions of those two
+# commits, so a recorded answer cannot go stale: a moved base or a new commit is a new key. The
+# forge layer asks which head SHA the forge merged, so its "merged" holds for that key forever.
+# A value is the layer that said landed, or "" when the local layers settled "no"; "forge" is
+# only ever written over "".
+#
+# The forge's "not merged" can change, so it is kept under its own "forge-no:<head>:<branch>"
+# key with the epoch second it was asked, and trusted for FORGE_NO_TTL_S only. Measured
+# 2026-10-25 on daniel-box with 180 worktrees: 160 of them reached the forge at ~0.3s each, 47s
+# of a 52s report, so without this a `--prune` straight after the report paid it all again.
+# A stale "no" can only keep a tree a little longer, the safe direction for a pruner.
+#
+# It lives in the git common dir, never in a working tree: one untracked file in the primary
+# checkout parks the GitOps deployer. Every reader treats a missing or unreadable file as empty.
+VERDICT_CACHE = "claude-merged-verdicts.json"
+# Newest kept. A key a moved base has orphaned is never asked again, so age is the right drop.
+VERDICT_CACHE_CAP = 4000
+LOCAL_LAYERS = ("ancestry", "patch-id", "content")
+# Long enough to span reading a report and running `--prune`; short enough that a PR merged
+# since is seen by the next banner rather than the next day.
+FORGE_NO_TTL_S = 15 * 60
+
+
+@functools.cache
+def verdict_cache_path(repo: str) -> Path | None:
+    """The cache file in `repo`'s git common dir, or None when git cannot name that dir."""
+    common = git_stdout(
+        "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=repo, check=False
+    )
+    return Path(common) / VERDICT_CACHE if common else None
+
+
+def verdict_key(repo: str, head: str, base: str) -> str | None:
+    """`<head sha>:<base sha>`, or None when either does not resolve, which skips the cache."""
+    if not head or not base:
+        return None
+    result = git(
+        "rev-parse", f"{head}^{{commit}}", f"{base}^{{commit}}", cwd=repo, check=False
+    )
+    shas = result.stdout.split()
+    if result.returncode != 0 or len(shas) != 2:
+        return None
+    return f"{shas[0]}:{shas[1]}"
+
+
+def read_verdicts(repo: str) -> dict[str, str]:
+    """The recorded verdicts, or an empty dict when the file is missing or unreadable."""
+    path = verdict_cache_path(repo)
+    if path is None:
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except OSError, ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def record_verdict(repo: str, key: str, layer: str) -> None:
+    """Add one verdict to the cache file, best-effort.
+
+    Re-reads before writing and replaces the file by rename, so a concurrent session sees the
+    old file or the new one and never a partial write. Two writers racing can drop one entry,
+    which costs only a recomputation. A failed write is ignored for the same reason.
+    """
+    path = verdict_cache_path(repo)
+    if path is None:
+        return
+    verdicts = read_verdicts(repo)
+    verdicts.pop(key, None)
+    verdicts[key] = layer
+    kept = dict(list(verdicts.items())[-VERDICT_CACHE_CAP:])
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(kept))
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
 
 
 def locally_landed(
@@ -172,30 +286,57 @@ def local_landed_layer(
 ) -> str | None:
     """The local layer that settled `head` as landed: `ancestry`, `patch-id` or `content`.
 
-    None when no local layer did. locally_landed is this as a bool.
+    None when no local layer did. locally_landed is this as a bool. A settled answer is read
+    from and written to the cache described at VERDICT_CACHE.
+    """
+    return _local_layer(repo, head, ancestry_known, base, verdict_key(repo, head, base))
+
+
+def _local_layer(
+    repo: str, head: str, ancestry_known: bool, base: str, key: str | None
+) -> str | None:
+    """local_landed_layer with its cache key already resolved, so merged_layer resolves once."""
+    if key is not None:
+        cached = read_verdicts(repo).get(key)
+        if cached is not None:
+            # "forge" means the local layers said "" before the forge was asked.
+            return cached if cached in LOCAL_LAYERS else None
+    layer, settled = _compute_local_layer(repo, head, ancestry_known, base)
+    if settled and key is not None:
+        record_verdict(repo, key, layer or "")
+    return layer
+
+
+def _compute_local_layer(
+    repo: str, head: str, ancestry_known: bool, base: str
+) -> tuple[str | None, bool]:
+    """(layer, settled). `settled` is False when a git call failed rather than answered.
+
+    Only a settled answer is cached: a failed call reads as not merged, the KEEP direction, and
+    recording it would keep that tree from ever being pruned.
     """
     if not ancestry_known:
         ancestor = git("merge-base", "--is-ancestor", head, base, cwd=repo, check=False)
         if ancestor.returncode == 0:
-            return "ancestry"
+            return "ancestry", True
     cherry = git("cherry", base, head, cwd=repo, check=False)
     # A failed `git cherry` prints nothing, and empty output otherwise means "merged" — so
     # the return code has to gate this, or an unknown ref would read as safe to delete.
     if cherry.returncode != 0:
-        return None
+        return None, False
     if cherry_says_landed(cherry.stdout, empty_means=True):
-        return "patch-id"
+        return "patch-id", True
     master_tree = git("rev-parse", f"{base}^{{tree}}", cwd=repo, check=False)
     if master_tree.returncode != 0:
-        return None
-    # Exit is non-zero on a conflict, and on a git too old for --write-tree (added in 2.38).
-    # Both mean "no verdict", which must read as not merged.
+        return None, False
+    # Exit 1 is a conflict, a settled "no verdict" that must read as not merged. Any other
+    # non-zero exit is a failure, such as a git too old for --write-tree (added in 2.38).
     merged_tree = git("merge-tree", "--write-tree", base, head, cwd=repo, check=False)
     if merged_tree.returncode == 0 and merge_tree_says_contained(
         merged_tree.stdout, master_tree.stdout
     ):
-        return "content"
-    return None
+        return "content", True
+    return None, merged_tree.returncode in (0, 1)
 
 
 def is_dirty(path: str) -> bool:
@@ -491,7 +632,8 @@ def memoised_merged(
     `agent-polling-starves-the-deployers-ci-gate` records what that class of traffic costs.
 
     The memo is keyed on the worktree PATH, whose answer is stable for the duration of one
-    command. It deliberately does NOT touch `classify`: guarding on `not tree.locked` would
+    command. It spares even the cache read; the on-disk cache at VERDICT_CACHE is what carries
+    a verdict from one command to the next. It deliberately does NOT touch `classify`: guarding on `not tree.locked` would
     re-derive `classify`'s branch structure outside `classify` and get it wrong — `classify`
     skips the merged read only on `locked AND session_is_alive`. `classify` still receives an
     eagerly-computed bool.
