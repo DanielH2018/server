@@ -28,7 +28,7 @@ answers. This file keeps the rules a session must not break.
   is not enough — the role tag inherits onto the include and overrides it (#1998).
 
 ## The engine is held; `--tags docker-engine-upgrade` is how it moves
-`docker_engine_packages` (`group_vars/all.yml`) are `apt-mark hold`-equivalent on every
+`docker_engine_packages` (`group_vars/all.yml`) are held on every
 `has_docker` host, set by `ansible.builtin.dpkg_selections` in two places: [[initial_setup]]'s
 `host-basics.yml` immediately BEFORE its dist-upgrade (this role runs after that one, so a
 hold set only here would land one upgrade too late), and `install.yml` right after the
