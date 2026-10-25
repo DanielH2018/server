@@ -201,3 +201,35 @@ def file_tags(text: str) -> frozenset[str] | None:
     if not per_task or any(not tags for tags in per_task):
         return None
     return frozenset().union(*per_task)
+
+
+def _without_import_names(node):
+    """`node` with the `name:` of every static import dropped, blocks walked through."""
+    if isinstance(node, list):
+        return [_without_import_names(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    imports = any(key in node for key in _STATIC_IMPORTS)
+    return {
+        key: _without_import_names(value)
+        for key, value in node.items()
+        if not (imports and key == "name")
+    }
+
+
+def runs_the_same(before: str, after: str) -> bool:
+    """Whether two texts of one task file run the same tasks (#5930).
+
+    Ansible reads a task file only through its parsed values, so a comment edit runs nothing
+    new, the way a comment edit to `defaults/` does (#4384). A static import's `name:` is
+    dropped too: the import is resolved at parse time and never runs as a task, so its name
+    reaches no host. Any other task's `name:` still counts, because this repo matches task
+    names elsewhere (`stale-checkout-guard.yml`'s rows name the tasks they guard).
+
+    A text that does not parse is never the same, so the caller's own parse refuses it.
+    """
+    try:
+        old, new = yaml_fast.safe_load(before), yaml_fast.safe_load(after)
+    except yaml.YAMLError:
+        return False
+    return _without_import_names(old) == _without_import_names(new)
