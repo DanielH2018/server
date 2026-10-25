@@ -365,6 +365,14 @@ a merge made outside `land.sh` bypasses it, and the `NotFound` in H2's body is t
 check. The Flux labels and `kustomize-controller`'s `managedFields` entry stay on the objects.
 No skip reads them alone, so they need no removal.
 
+**A CronJob that a gate Job cannot copy is gated on its schedule.** The restore drill is one:
+a copy of it runs a real restore beside the scheduled one. Such a role goes in
+`UNGATED_BY_DESIGN` in `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py`, and
+its CronJob carries the annotation `homelab/gate: schedule`. That test holds the two sets
+equal. `probe.py health` passes a marked CronJob with no Job for one schedule period after Flux
+first applied the revision, and fails it after that
+(`scripts/diagnostics/probe_lib/health_cronjob.py:format_schedule_gated`, #6128).
+
 **A role with a CronJob loses its deploy-time gate in H2.** A `flux_cronjob_gates` entry
 credits only a flux-owned role, because only the renderer writes its gate Job. Ansible's
 counterpart was the `k8s/cronjob-gate` role, retired in #5716 when no role included it. To

@@ -60,8 +60,10 @@ from diagnostics.probe_lib import health_backup_targets, health_cronjob
 from diagnostics.probe_lib.health_render import render_context as _render_context
 from diagnostics.probe_lib.health_render import rendered_docs
 from diagnostics.probe_lib.health_cronjob import (
+    declared_schedule_gated,
     declared_suspended,
     format_cronjob_health,
+    format_schedule_gated,
     format_suspended,
     latest_owned_job,
 )
@@ -402,7 +404,9 @@ def _fetch_cronjob(role, name, namespace, cluster, tools=DEFAULT_TOOLS):
     return cronjob, latest_job, pods, revision
 
 
-def format_role_cronjob_health(role, checked, now, suspended=frozenset()):
+def format_role_cronjob_health(
+    role, checked, now, suspended=frozenset(), schedule_gated=frozenset()
+):
     """(text, exit code) for a role whose manifests declare at least one CronJob.
 
     `checked` is [(namespace, name, cronjob doc or None, latest Job or None, pods doc or
@@ -413,13 +417,18 @@ def format_role_cronjob_health(role, checked, now, suspended=frozenset()):
     `suspended` is the `namespace/name` set whose manifest declares `suspend: true`
     (`health_cronjob.declared_suspended`). A live-suspended CronJob in it passes with no Job
     to read, and one outside it fails as drift (`health_cronjob.format_suspended`).
+
+    `schedule_gated` is the `namespace/name` set whose manifest carries
+    `health_cronjob.SCHEDULE_GATE`: no gate Job runs it, so its schedule is the gate
+    (`health_cronjob.format_schedule_gated`).
     """
     unhealthy, lines = [], []
     for namespace, name, cronjob, latest_job, pods, deploy_applied_at in checked:
         full = f"{namespace}/{name}"
-        text, code = format_suspended(
-            full, cronjob, suspended
-        ) or format_cronjob_health(
+        gate = (
+            format_schedule_gated if full in schedule_gated else format_cronjob_health
+        )
+        text, code = format_suspended(full, cronjob, suspended) or gate(
             full, cronjob, latest_job, pods, deploy_applied_at, now
         )
         lines.append(f"  {text}")
@@ -556,8 +565,14 @@ def run_health(
                 )
                 for namespace, name in cronjob_targets
             ]
-            declared = declared_suspended(rendered_docs(container, roles_dir) or [], ns)
-            text, code = format_role_cronjob_health(container, checked, now, declared)
+            docs = rendered_docs(container, roles_dir) or []
+            text, code = format_role_cronjob_health(
+                container,
+                checked,
+                now,
+                declared_suspended(docs, ns),
+                declared_schedule_gated(docs, ns),
+            )
             text, code = _with_alert_plane(container, text, code, None, prom, read)
             print(text)
             return code
