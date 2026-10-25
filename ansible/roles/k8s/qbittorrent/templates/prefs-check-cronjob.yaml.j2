@@ -60,6 +60,7 @@ spec:
           containers:
             - name: qbittorrent-prefs-check
               image: {{ qbittorrent_k8s_prefs_check_image }}
+              imagePullPolicy: IfNotPresent
               command: ["python3", "/config/prefs_check.py"]
               env:
                 - name: QBT_URL

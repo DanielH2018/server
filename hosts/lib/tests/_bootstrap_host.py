@@ -42,14 +42,15 @@ case "$mode" in
 esac
 """
 K3S_BINARY = "#!/bin/sh\necho 'k3s version v1.37.1+k3s1'\n"
-# `uv run ... render --out DIR` writes the three packages; the anchor call exits ANCHOR_EXIT.
+# `uv run ... render --out DIR` writes the three packages at the paths the renderer uses, with
+# homelab-tools under its architecture; the anchor call exits ANCHOR_EXIT.
 UV_STUB = """#!/bin/sh
 echo "$PWD: $*" >> "$HOMELAB_ROOT/uv.calls"
 case "$*" in
     *bootstrap_anchor*) exit "${ANCHOR_EXIT:-0}" ;;
     *" render "*)
         for arg; do [ "$prev" = --out ] && out=$arg; prev=$arg; done
-        for dir in packages/homelab-tools packages/homelab-updater hosts/daniel-box; do
+        for dir in packages/homelab-tools/amd64 packages/homelab-updater hosts/daniel-box; do
             mkdir -p "$out/$dir"; : > "$out/$dir/nfpm.yaml"
         done ;;
 esac

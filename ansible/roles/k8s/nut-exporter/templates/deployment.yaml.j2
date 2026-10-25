@@ -38,6 +38,7 @@ spec:
       containers:
         - name: nut-exporter
           image: {{ nut_exporter_k8s_image }}
+          imagePullPolicy: IfNotPresent
           args:
             - --nut.server=nut.{{ k8s_namespace }}.svc.cluster.local
             - --nut.serverport=3493

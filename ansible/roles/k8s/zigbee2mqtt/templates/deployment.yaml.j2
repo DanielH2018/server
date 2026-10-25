@@ -35,6 +35,7 @@ spec:
       initContainers:
         - name: config-install
           image: {{ zigbee2mqtt_k8s_init_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
@@ -50,6 +51,7 @@ spec:
       containers:
         - name: zigbee2mqtt
           image: {{ zigbee2mqtt_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           # Non-root uid owning its data, no caps, immutable rootfs — every persisted path

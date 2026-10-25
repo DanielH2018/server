@@ -33,6 +33,7 @@ spec:
       containers:
         - name: generic-device-plugin
           image: {{ dri_device_plugin_k8s_image }}
+          imagePullPolicy: IfNotPresent
           args:
             - --device
             - |

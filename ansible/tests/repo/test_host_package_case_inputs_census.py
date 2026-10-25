@@ -5,7 +5,8 @@ container steps run on it as they run on a differing render (#5004). The list is
 place those inputs are named, so an input missing from it is an input whose PR skips the cases.
 `test_host_package_cases_run_on_their_inputs.py` proves the trigger fires for each input; this
 module proves the list holds every input there is: the cases script, every `validate` module it
-imports, and every tracked file in the test image's build context.
+imports, every tracked file in the test image's build context, and the script the bootstrap cases
+run.
 
 Run: uv run pytest ansible/tests/repo/test_host_package_case_inputs_census.py
 """
@@ -24,6 +25,9 @@ JOBS = ("host_packages_build", "host_packages")
 CASES_SCRIPT = "scripts/validate/host_package_cases.py"
 DOCKERFILE = "hosts/lib/tests/container/Dockerfile"
 IMAGE_STEP = "Build the test image for this release"
+# The script `validate_lib/bootstrap_case.py` runs in the containers. No package renders it, so a
+# PR that changes only the script changes no render (H7.15a).
+BOOTSTRAP_SCRIPT = "hosts/bootstrap-host.sh"
 # The package whose modules are inputs of the cases alone. The renderer is a render input, which
 # the render diff already sees, and `lib` is shared by every script in the repository.
 _CASE_PACKAGES = ("validate",)
@@ -76,7 +80,7 @@ def _uncovered(files: set[str], pathspecs: list[str]) -> list[str]:
 
 
 def _case_input_members() -> set[str]:
-    """What CASE_INPUTS must cover: the cases script, its imports and the image's context."""
+    """What CASE_INPUTS must cover: the cases, their imports, the image and the bootstrap."""
     (image,) = [step for step in _job_steps() if step.get("name") == IMAGE_STEP]
     match = re.search(
         r"docker build\b.*?-t \S+ (\S+)", image["run"].replace("\\\n", " ")
@@ -85,6 +89,7 @@ def _case_input_members() -> set[str]:
     context = match.group(1).rstrip("/")
     return {
         CASES_SCRIPT,
+        BOOTSTRAP_SCRIPT,
         *_imported_modules(REPO / CASES_SCRIPT),
         *git_out(REPO, "ls-files", context).splitlines(),
     }
@@ -95,6 +100,7 @@ def test_case_inputs_cover_the_cases_script_its_imports_and_the_image_context() 
     named = {
         "scripts/validate/validate_lib/host_fixtures.py",
         "scripts/validate/validate_lib/host_container.py",
+        "scripts/validate/validate_lib/bootstrap_case.py",
         DOCKERFILE,
     }
     assert named <= members, (
