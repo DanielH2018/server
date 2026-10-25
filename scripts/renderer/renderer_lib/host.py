@@ -266,6 +266,7 @@ def _render_maintainer_scripts(
     """Render each listed maintainer script from `hosts/lib/maintainer-scripts/`.
 
     Each template sees the host's context plus `package_units`, the list of `homelab-*` units `prerm` stops.
+    A template unit such as `homelab-alert@.service` is no unit to stop, so the list omits it.
     """
     directory = lib / "maintainer-scripts"
     for name in names:
@@ -284,9 +285,12 @@ def _render_maintainer_scripts(
         ctx, reasons = host_context(host, {}, inventory, withheld)
         # Only `homelab-*` units: reconcile and the prerm lint stop nothing else. A unit that keeps
         # its Ansible-era name (the Pi's node_exporter.service, handed over by a legacy entry)
-        # stays running through a removal of the package.
+        # stays running through a removal of the package. A template unit such as
+        # `homelab-alert@.service` is no unit to stop, so it is omitted too.
         ctx["package_units"] = [
-            unit for unit in package.units() if unit.startswith("homelab-")
+            unit
+            for unit in package.units()
+            if unit.startswith("homelab-") and not unit.endswith("@.service")
         ]
         env = confined_env(directory)
         package.scripts[name] = _render_template(

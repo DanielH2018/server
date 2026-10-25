@@ -37,6 +37,7 @@ spec:
       containers:
         - name: pihole-exporter
           image: {{ pihole_exporter_k8s_image }}
+          imagePullPolicy: IfNotPresent
 {{ hardened_security_context(read_only=true, non_root=true) }}
           env:
             - name: TZ

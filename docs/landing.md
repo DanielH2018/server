@@ -219,8 +219,8 @@ SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `hosts/lib/ci_verdict.py` is the
 merge was immediately followed by another reads `cancelled` permanently. The rule covers the
 gate job too: ci.yml runs `prek` under `always()`, so a cancelled run still runs the gate, which
 fails on its cancelled needs. `ci_verdict.ci_verdict` leaves that gate out unless a need in the
-same run failed outright (#5931). `await_ci.py` follows
-the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
+same run failed outright (#5931), and the deployer's tick reads it the same way (#6007).
+`await_ci.py` follows the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
 no verdict (cancelled/stale) — following the tip <tip>`, and it is normal. It also fires when
 the cancellation came before the `prek` job registered a check-run at all: the check-runs list
 then never carries the required name, so `await_ci.py` reads the SHA's check-suites (a

@@ -1,8 +1,10 @@
 # D7 — Superseding promotions
 
-Status: PLANNED. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in #6145, D7.4 in
-#6156, the refactor D7.5 needed in #6159, D7.5 in #6193, and D7.7. `SUPERSEDE` stays
-`False` until the operator rules on D7.6.
+Status: IN PROGRESS. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in #6145, D7.4
+in #6156, the refactor D7.5 needed in #6159, D7.5 in #6193, D7.7 in #6200, D7.8 in #6205,
+and the hold attribution #6199 asked for in #6204. The operator turned `SUPERSEDE` on in
+D7.6 (#6210), which merged on 2026-10-25. The live pair ran that day, and *Verification*
+records what it proved and what it left open. The red proof for the live pair has not run.
 
 Depends on: D5, through #5704's soak fix (the soak Job exits once `homelab` no longer
 holds its revision). D2.5's in-flight guard and D5.2b1's hold without a reset are the
@@ -317,6 +319,23 @@ supersedes another.
   and T's `verify` log lists the names of both. Then
   `uv run python scripts/diagnostics/probe.py landing` shows `last-good` at T and
   `DEPLOY_HOLD` at `none`.
+- **The live pair's result, 2026-10-25.** The pair was #6206 (bento-pdf) and #6207
+  (ical-proxy), merged 42 seconds apart. Another session's commit, 924f69a9, was already in
+  `verify`, so #6206's run superseded it instead of #6207 superseding #6206.
+    - Promote run 40197487331's `decide` printed `63d02b85… supersedes the verification of
+      924f69a9…`. Its `tag` tagged `sha-63d02b85` `superseding`, then moved `prod`.
+    - #6207's first `decide` (run 40197827680) read `superseding` at `prod`. Under the
+      at-most-once rule it waited instead of superseding again. A `HTTP 502` reading
+      `DEPLOY_HOLD` then ended that run (#6269). A dispatch run, 40197840620, promoted
+      3dd97f74 once 63d02b85 settled, with `flux/bento-pdf` and `flux/ical-proxy` both
+      recorded `success`.
+    - Both landings ended `settled`. `probe.py landing` showed `prod` equal to `last-good`
+      and `DEPLOY_HOLD` at `none`.
+    - Not exercised: `verify` printing `superseded`. 924f69a9's `verify` returned `good` at
+      13:29:09, 14 seconds before 63d02b85's `tag` moved `prod`. Its `settle` then moved
+      `last-good` to 924f69a9 one second after `tag` had checked `last-good`. Both writes
+      landed, which #6268 records: had 63d02b85 failed, its reset would have gone to the
+      `last-good` from before 924f69a9.
 - **The red proof for the live pair** is the failing variant. The second PR breaks a
   readiness probe on its leaf, as #5605 did for speedtest. T's `verify` must print
   `failed` naming that leaf, and `settle` must hold `<T> failed=<leaf>` and reset

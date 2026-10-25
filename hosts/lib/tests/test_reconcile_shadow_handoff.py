@@ -107,3 +107,26 @@ def test_a_path_under_etc_whose_unit_the_package_does_not_ship_is_left_and_repor
     assert node.applied()["drift"]["legacy"] == 1
     assert node.applied()["retired"] == []
     assert f"keeping /{ETC}/{UNIT}" in result.stderr + result.stdout
+
+
+def test_the_packages_enable_link_survives_the_handoff_of_the_ansible_era_link(node):
+    # H7.41b: Ansible enabled homelab-builder.timer with a link under /etc, and the package
+    # enables it with its own link. Removing the /etc link must not disable or stop the timer.
+    timer = "homelab-builder.timer"
+    node.unit(
+        timer, "[Timer]\nNew=1\n", active="active", enabled="enabled", linked=True
+    )
+    assert node.run().returncode == 0
+    shadow(node, f"{ETC}/{timer}", "[Timer]\nOld=1\n")
+    shadow(node, f"{ETC}/timers.target.wants/{timer}", "")
+    for name in (f"{ETC}/{timer}", f"{ETC}/timers.target.wants/{timer}"):
+        node.manifest["legacy"].append({"path": f"/{name}"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not (node.root / ETC / "timers.target.wants" / timer).exists()
+    assert node.applied()["enable_links"] == [timer]
+    assert node.actions() == [["restart", timer]]
+    verbs = {call["argv"][1] for call in node.calls("systemctl")}
+    assert not {"disable", "stop", "mask"} & verbs

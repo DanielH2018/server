@@ -4,6 +4,7 @@ Run: uv run pytest scripts/lib/tests/test_ansible_jinja_env.py
 """
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -209,6 +210,32 @@ def test_the_light_tier_loads_no_ansible_core():
         "the light tier now imports ansible-core — see the DECIDED: marker in "
         f"scripts/lib/k8s_context.py\n{proc.stdout}"
     )
+
+
+# Registers the filters, as every render guard prek runs does, then exits through `os._exit`,
+# which skips atexit the way a guard killed under a background `git commit` does (#5904).
+def test_registering_the_filters_keeps_ansible_temp_out_of_the_home_directory(tmp_path):
+    """A guard killed after loading ansible-core leaves its directory under the temp dir."""
+    home, tmp = tmp_path / "home", tmp_path / "tmp"
+    home.mkdir()
+    tmp.mkdir()
+    script = (
+        "import os, sys\n"
+        "sys.path.insert(0, 'scripts')\n"
+        "import jinja2\n"
+        "from lib.ansible_jinja_env import register_ansible_filters\n"
+        "register_ansible_filters(jinja2.Environment())\n"
+        "import ansible.constants\n"
+        "print(ansible.constants.DEFAULT_LOCAL_TMP, 'ANSIBLE_LOCAL_TEMP' in os.environ)\n"
+        "sys.stdout.flush()\n"
+        "os._exit(0)\n"
+    )
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(home), "TMPDIR": str(tmp)}
+    proc = run([sys.executable, "-c", script], cwd=REPO, env=env, check=True)
+    local_tmp, still_set = proc.stdout.split()
+    assert not list(home.glob(".ansible/tmp/ansible-local-*"))
+    assert Path(local_tmp).parent == tmp
+    assert still_set == "False"
 
 
 @pytest.mark.parametrize(

@@ -215,6 +215,21 @@ def test_a_missing_token_makes_no_request_and_exits_1(lab, monkeypatch):
     assert not (state / "src" / "HEAD").exists(), "fetched before the token check"
 
 
+def test_the_token_comes_from_the_credential_when_the_settings_carry_none(
+    lab, tmp_path, monkeypatch
+):
+    # LoadCredential=github_token:... puts the token in $CREDENTIALS_DIRECTORY, not in the settings.
+    origin, _, _, github = lab
+    tip = origin.commit("a")
+    github.runs[tip] = GREEN
+    (tmp_path / "github_token").write_text("c0red\n")
+    monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(tmp_path))
+    b = builder(lab, GITHUB_TOKEN="")
+    assert b.main() == 0
+    assert b.token == "c0red"
+    assert github.asked, "the run never read the check-runs"
+
+
 def test_a_green_tip_is_built_and_reads_ok_at_zero(lab):
     origin, state, _, github = lab
     origin.commit("a")

@@ -22,8 +22,10 @@ import re
 
 import pytest
 import yaml
+from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_inventory import route_not_ansible_owned, service_owners
 
-from lib.repo_paths import ALL_VARS
+from lib.repo_paths import ALL_VARS, HOST_VARS
 from lib.repo_paths import REPO as _REPO
 
 
@@ -249,8 +251,14 @@ def _rollout_timeout_s(role: str) -> int:
 # Every second the cap grows is also a second of `_worst_lock_hold` above, so the census of
 # tree-lock waiters is what keeps a raise here from being done alone.
 #
-# EVERY promoted role is counted, not just the claim-declaring ones the rollback derivation
-# narrows to: a claim-free role still pays the other three terms. That widening costs this
+# Only an Ansible-owned role counts, as in the rollback derivation, and through the deployer's own
+# filter: `route_not_ansible_owned` moves each tag `service_owners` names to `cs.flux`, which the
+# tick never applies. Every promoted role is flux-owned since the D5 flips, so the live set is
+# empty and the cap is sized for a role handed back to Ansible. `_FORWARD_MUST_FIND` and the
+# fixture pair below are what show the derivation still reads the tree and the filter still bites.
+#
+# Within that set, EVERY promoted role is counted, not just the claim-declaring ones the rollback
+# derivation narrows to: a claim-free role still pays the other three terms. That widening costs this
 # derivation a guarantee the narrow one got for free — a claim-declaring role has a workload by
 # construction, and a claim-free one may have none. `roles/k8s/manifests` queues the drain only
 # when `manifests_rollout | default(manifests_service) | length > 0`, so a role passing
@@ -273,17 +281,24 @@ def _rollout_timeout_s(role: str) -> int:
 _FORWARD_LOCK_ALLOWANCE_S = 90
 _FORWARD_OVERHEAD_S = 60
 
-# The roles whose forward ceiling this derivation must keep reading the way it reads today. Both
-# are found by pattern — the in-role waits by walking `tasks/`, the rollout term by looking for
-# an empty `manifests_rollout` — so a rename or a moved task would leave the sum quietly smaller
-# with every assertion below still green, the failure `_IN_ROLE_WAIT_CENSUS` above exists for.
-#
-#   prowlarr:        the worst promoted role, and the one the cap was sized against while its
-#                    300s isolation probe still ran (#5594 deleted it, leaving 960s).
-#
-# netpol-baseline was a second member, the shape with in-role waits and NO rollout to wait on
-# (370s). Its flip deleted the waits, so no Ansible-owned role has that shape now.
-_FORWARD_CEILING_CENSUS = {"prowlarr": 960}
+# The role the derivation must find, at the ceiling it must read, once its owner is dropped. Both
+# terms are found by pattern — the in-role waits by walking `tasks/`, the rollout term by looking
+# for an empty `manifests_rollout` — so a rename or a moved task would leave the sum quietly
+# smaller with every assertion below still green. prowlarr is the worst promoted role, and the one
+# the cap was sized against while its 300s isolation probe still ran (#5594 deleted it, leaving
+# 960s). It is flux-owned, so the live derivation skips it.
+_FORWARD_MUST_FIND = ("prowlarr", 960)
+
+
+def _ansible_owned(roles: set[str], owners: dict[str, str]) -> set[str]:
+    """The roles the deployer keeps in `cs.k8s` once it routes every owned tag to `cs.flux`."""
+    cs = ChangeSet(k8s=set(roles))
+    route_not_ansible_owned(cs, owners)
+    return cs.k8s
+
+
+def _live_owners() -> dict[str, str]:
+    return service_owners((HOST_VARS / "daniel-box.yml").read_text())
 
 
 def _waits_for_a_rollout(role: str) -> bool:
@@ -307,18 +322,28 @@ def _forward_ceiling(
     return len(claims) * snapshot_timeout + in_role_wait_s(role) + rollout + stabilise
 
 
-def _worst_forward_case(snapshot_timeout: int, stabilise: int) -> tuple[str, int]:
-    """The promoted role with the longest forward ceiling, and that ceiling."""
+def _worst_forward_case(roles_dir, owners, ceiling_of) -> tuple[str, int]:
+    """The promoted, Ansible-owned role in `roles_dir` with the longest forward ceiling, and it.
+
+    A role whose tag `owners` names is skipped, as the deployer skips it. `ceiling_of(role,
+    role_defaults)` prices one role. Returns `("", 0)` when no role qualifies.
+    """
+    paths = {p.parent.parent.name: p for p in roles_dir.glob("*/defaults/main.yml")}
     worst_role, worst = "", 0
-    for role_defaults_path in sorted(_K8S_ROLES_DIR.glob("*/defaults/main.yml")):
-        role = role_defaults_path.parent.parent.name
-        role_defaults = yaml.safe_load(role_defaults_path.read_text()) or {}
+    for role in sorted(_ansible_owned(set(paths), owners)):
+        role_defaults = yaml.safe_load(paths[role].read_text()) or {}
         if not role_defaults.get("k8s_autodeploy"):
             continue
-        ceiling = _forward_ceiling(role, role_defaults, snapshot_timeout, stabilise)
+        ceiling = ceiling_of(role, role_defaults)
         if ceiling > worst:
             worst_role, worst = role, ceiling
     return worst_role, worst
+
+
+def _live_ceiling_of(snapshot_timeout: int, stabilise: int):
+    return lambda role, role_defaults: _forward_ceiling(
+        role, role_defaults, snapshot_timeout, stabilise
+    )
 
 
 def _forward_terms() -> tuple[int, int, int]:
@@ -340,33 +365,45 @@ def _forward_fits(worst: int, cap: int) -> bool:
     return _FORWARD_LOCK_ALLOWANCE_S + worst + _FORWARD_OVERHEAD_S <= cap
 
 
-@pytest.mark.parametrize("role", sorted(_FORWARD_CEILING_CENSUS))
-def test_the_forward_ceiling_census_is_non_vacuous(role):
+def test_the_forward_derivation_reads_the_must_find_role_once_its_owner_is_dropped():
     snapshot_timeout, stabilise, _ = _forward_terms()
-    role_defaults = (
-        yaml.safe_load((_K8S_ROLES_DIR / role / "defaults" / "main.yml").read_text())
-        or {}
+    role, ceiling = _FORWARD_MUST_FIND
+    assert _live_owners().get(role) == "flux"
+    found = _worst_forward_case(
+        _K8S_ROLES_DIR, {}, _live_ceiling_of(snapshot_timeout, stabilise)
     )
-    assert role_defaults.get("k8s_autodeploy"), (
-        f"{role} is no longer promoted, so the derivation below never reaches it; find what "
-        "the worst promoted role is now before trusting a green run"
-    )
-    ceiling = _forward_ceiling(role, role_defaults, snapshot_timeout, stabilise)
-    assert ceiling == _FORWARD_CEILING_CENSUS[role], (
-        f"{role}'s forward ceiling reads {ceiling}s, not the recorded "
-        f"{_FORWARD_CEILING_CENSUS[role]}s ({in_role_wait_s(role)}s of in-role waits, rollout "
+    assert found == _FORWARD_MUST_FIND, (
+        f"with no owner filter the derivation reads {found}, not {role} at {ceiling}s "
+        f"({in_role_wait_s(role)}s of in-role waits, rollout "
         f"{'counted' if _waits_for_a_rollout(role) else 'NOT counted'} at "
         f"{_rollout_timeout_s(role)}s). A moved wait or a changed `manifests_rollout` reads as "
         "a smaller sum here and leaves the fit check below green against a cap it outgrew."
     )
 
 
+def _fixture_forward_case(roles_dir: pathlib.Path, owners: dict[str, str]):
+    # prowlarr's shape, priced flat at its 960s ceiling.
+    defaults = roles_dir / "widget" / "defaults" / "main.yml"
+    defaults.parent.mkdir(parents=True, exist_ok=True)
+    defaults.write_text("k8s_autodeploy: true\n")
+    return _worst_forward_case(roles_dir, owners, lambda _role, _defaults: 960)
+
+
+def test_an_ansible_owned_role_is_counted_in_the_forward_cap(tmp_path):
+    assert _fixture_forward_case(tmp_path, owners={}) == ("widget", 960)
+
+
+def test_a_flux_owned_role_is_left_out_of_the_forward_cap(tmp_path):
+    assert _fixture_forward_case(tmp_path, owners={"widget": "flux"}) == ("", 0)
+    assert _fixture_forward_case(tmp_path, owners={"widget": "released"}) == ("", 0)
+
+
 def test_the_forward_cap_covers_the_worst_promoted_role():
+    # The live set is empty since the D5 flips, so this holds at 0 until a role is handed back;
+    # the must-find test above is what keeps that from being a reader that found nothing.
     snapshot_timeout, stabilise, cap = _forward_terms()
-    worst_role, worst = _worst_forward_case(snapshot_timeout, stabilise)
-    assert worst_role, (
-        "no promoted (k8s_autodeploy: true) k8s role found — the sizing model this test "
-        "encodes no longer matches the repo; update it rather than deleting it"
+    worst_role, worst = _worst_forward_case(
+        _K8S_ROLES_DIR, _live_owners(), _live_ceiling_of(snapshot_timeout, stabilise)
     )
     need = _FORWARD_LOCK_ALLOWANCE_S + worst + _FORWARD_OVERHEAD_S
     assert _forward_fits(worst, cap), (

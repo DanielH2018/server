@@ -88,6 +88,11 @@ def fetch_ci_verdict(
     It reads every page of the check-runs, and a read short of their `total_count` is malformed
     (`deploy_git.read_check_pages`, #5977).
 
+    A gate that failed only because its own run was cancelled is no verdict, as `await_ci.py`
+    reads it (#5931, #6007). `ci_verdict` confirms the cancellation from the commit's
+    check-suites, which it reads only for such a suspect gate, so an ordinary tick spends no
+    extra request. A failed check-suites read is `pending`.
+
     An unreachable or malformed API reads as `pending`, never `pass`: the gate has to fail closed
     or it is not a gate. That defers the tick and retries in 30 minutes, and because the tick still
     completes normally (writing `last_run`), a GitHub outage does NOT trip GitOps-Alive the way a
@@ -98,18 +103,24 @@ def fetch_ci_verdict(
         return "pass"
     try:
         token = github_token(os.environ, subprocess.run)
-        url = f"repos/{repo}/commits/{sha}/check-runs"
-        runs = read_check_pages(
-            lambda query: github_get(url + query, token, user_agent="gitops-deploy"),
-            "check_runs",
-        )
+
+        def read(listing: str, key: str) -> list[dict]:
+            url = f"repos/{repo}/commits/{sha}/{listing}"
+            return read_check_pages(
+                lambda query: github_get(
+                    url + query, token, user_agent="gitops-deploy"
+                ),
+                key,
+            )
+
+        runs = read("check-runs", "check_runs")
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         log(
             f"ci: status unavailable for {sha[:8]} ({e}) — deferring this tick",
             level=WARNING,
         )
         return "pending"
-    return ci_verdict(runs, contexts)
+    return ci_verdict(runs, contexts, lambda: read("check-suites", "check_suites"))
 
 
 def github_authenticated() -> bool:
@@ -117,7 +128,7 @@ def github_authenticated() -> bool:
 
     The ancestor walk asks it before spending up to `CI_ANCESTOR_WALK_MAX` requests on one
     tick. Anonymous, the whole host shares 60 requests an hour with every landing's
-    `await_ci.py` poll (45 per 900s wait) and the two GitHub crons — a burst of ten would
+    `await_ci.py` poll (at most 30 per anonymous wait) and the two GitHub crons — a burst of ten would
     exhaust it and every reader's next call reads `HTTP Error 403`, which this gate maps to
     `pending` and a landing reads as "CI not finished". Authenticated it is 5000/hour, where
     ten reads per ten-minute tick is nothing.

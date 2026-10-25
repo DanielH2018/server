@@ -41,6 +41,7 @@ spec:
         # on this image (alpine ships ssl_client), and the probe job already pins it.
         - name: fetch-plugins
           image: {{ headlamp_k8s_netpol_probe_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
@@ -64,6 +65,7 @@ spec:
       containers:
         - name: headlamp
           image: {{ headlamp_k8s_image }}
+          imagePullPolicy: IfNotPresent
           args:
             - "-in-cluster"
             - "-in-cluster-context-name=main"

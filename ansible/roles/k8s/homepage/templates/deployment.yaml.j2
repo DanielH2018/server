@@ -37,6 +37,7 @@ spec:
       initContainers:
         - name: seed-config
           image: {{ homepage_k8s_init_image }}
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "cp -L /config-secret/* /config/"]
 {{ hardened_security_context(read_only=true) }}
           volumeMounts:
@@ -50,6 +51,7 @@ spec:
       containers:
         - name: homepage
           image: {{ homepage_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
           # docker-entrypoint.sh chowns /app/config and /app/config/logs to PUID/PGID

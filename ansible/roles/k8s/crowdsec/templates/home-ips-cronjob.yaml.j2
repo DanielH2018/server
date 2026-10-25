@@ -74,6 +74,7 @@ spec:
           containers:
             - name: crowdsec-home-ips
               image: {{ crowdsec_k8s_jobs_image }}
+              imagePullPolicy: IfNotPresent
               command: ["python3", "/jobs/home_ips_discover.py"]
               env:
                 - name: HOME_IPS_NAMESPACE

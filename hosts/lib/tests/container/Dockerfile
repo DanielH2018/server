@@ -31,7 +31,8 @@ ENV container=docker
 # with no fetch. Its deb is downloaded here too, because snapshot.ubuntu.com answers 5xx
 # often enough to fail a case that fetches from it. The Pi package Depends on zram-tools,
 # watchdog and earlyoom (H7.25), so their debs and recommends are downloaded the same way. `age` generates the throwaway key the
-# secrets-unit case encrypts to (H4.1c).
+# secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
+# install, and bootstrap-host.sh calls each before it installs anything (H7.15a).
 RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runner-ca.crt \
     set -eu; \
     rm -f /etc/apt/apt.conf.d/docker-clean /etc/apt/sources.list; \
@@ -46,7 +47,7 @@ RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runn
     echo 'Acquire::Retries "10";' > /etc/apt/apt.conf.d/80retries; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt update; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt install -y --no-install-recommends \
-        systemd systemd-sysv python3 ca-certificates age; \
+        systemd systemd-sysv python3 ca-certificates age git gnupg curl; \
     apt-get install -y --download-only tree zram-tools watchdog earlyoom
 
 # Units that would take dpkg's lock mid-case, or reach the runner's devices through

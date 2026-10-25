@@ -57,10 +57,6 @@ EXEMPT: dict[str, str] = {
         "writes /var/lib/gitops-deploy/last_run every tick, which monitor-bridge's GitOps-Alive "
         "check reads, and gitops_tick_metrics.py counts each tick by outcome"
     ),
-    "homelab_builder: timer `homelab-builder`": (
-        "publishes homelab_builder_*.prom through publish-textfile on every stop, and its own "
-        "rules read those series"
-    ),
     "initial_setup: cron `Weekly apt autoremove`": _GAP,
     "initial_setup: cron `Weekly dpkg purge orphaned configs`": _GAP,
     "initial_setup: cron `Weekly firmware update`": _GAP,

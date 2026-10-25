@@ -4,7 +4,7 @@ title: The host-package builder trusts master plus green CI, and checks no signa
 status: Accepted
 date: 2026-10-14
 governs:
-  - "ansible/roles/setup/homelab_builder/files/host_package_builder.py#the anchor is a commit on origin/master's first-parent chain"
+  - "hosts/lib/host_package_builder.py#the anchor is a commit on origin/master's first-parent chain"
 ---
 
 # ADR-0021: The host-package builder trusts master plus green CI, and checks no signature
@@ -79,6 +79,6 @@ commit signature and no landing tag. Every host takes its packages on that ancho
 ## Governs
 
 Builder step 5 reads the anchor in `choose` in
-`ansible/roles/setup/homelab_builder/files/host_package_builder.py`. The `# DECIDED:` marker there
+`hosts/lib/host_package_builder.py`. The `# DECIDED:` marker there
 opens "the anchor is a commit on origin/master's first-parent chain" and cites this record.
 `governs:` names it by that text rather than by line, so an edit above it moves nothing.

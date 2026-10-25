@@ -29,6 +29,7 @@ spec:
       containers:
         - name: collector
           image: {{ scrutiny_k8s_collector_image }}
+          imagePullPolicy: IfNotPresent
           securityContext:
             # The SC3 open question, resolved 2026-08-10: the Docker cap set
             # (SETUID/SETGID/SYS_RAWIO/SYS_ADMIN) + a CharDevice hostPath is NOT enough

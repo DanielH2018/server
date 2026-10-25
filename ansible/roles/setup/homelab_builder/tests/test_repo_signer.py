@@ -130,7 +130,7 @@ def lab(tmp_path, keyhome) -> Lab:
 
 
 def test_the_signer_parses_with_the_3_12_grammar():
-    # fact: ansible/roles/setup/homelab_builder/CLAUDE.md#The signer and the publish (H3.5b)
+    # fact: hosts/components/builder/CLAUDE.md#The signer and the publish (H3.5b)
     # daniel-box runs it under Ubuntu 24.04's python3. A 3.14-only construct, such as an
     # unparenthesised `except A, B:`, would fail every run there and none here.
     ast.parse(SCRIPT.read_text(), feature_version=(3, 12))
