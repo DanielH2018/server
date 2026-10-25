@@ -892,6 +892,7 @@
  "hosts/lib/tests/test_maintainer_scripts.py": 0.03,
  "hosts/lib/tests/test_nothing_waits_on_reconcile.py": 0.66,
  "hosts/lib/tests/test_nut_secondary_packaged_watchdog.py": 0.06,
+ "hosts/lib/tests/test_persisted_outputs_census.py": 4.39,
  "hosts/lib/tests/test_pi_heartbeats_component.py": 0.23,
  "hosts/lib/tests/test_reconcile_activation.py": 5.0,
  "hosts/lib/tests/test_reconcile_component.py": 0.03,
