@@ -23,7 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import applied
-from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
+from lib.exit_codes import PROBE_FAILED, PROBE_OK
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.proc_testing import path_with, write_exec
 
 SCRIPT = "#!/bin/sh\nexec x --port {{ port }}\n"
