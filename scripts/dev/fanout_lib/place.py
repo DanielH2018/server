@@ -319,6 +319,10 @@ def cmd_launch(args, tools: Tools) -> int:
                 tools, host, batch, brief, numbers, target, *flags
             )
             run.batches.append(launched)
+            # Saved per batch, not once after the loop: a launch killed between batches
+            # (a tool timeout, a ^C) otherwise leaves running agents no manifest names,
+            # so `status` and `clean` cannot find them (#6341).
+            manifest_mod.save(run, root=args.manifest_root)
         except launch_mod.LaunchError as exc:
             released = (
                 claims_mod.release_for_orchestrator(tools, numbers, holder)

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-10-22 06:17 UTC
-generated_sha: d749af07a
+generated_at: 2026-10-25 18:17 UTC
+generated_sha: 341de7656
 ---
 
 !!! warning "Generated file — do not edit"
@@ -23,7 +23,7 @@ k3s server / control-plane node. Ansible runs here, and so do the GitOps timer, 
 |---|---|
 | LAN address | `10.0.0.215` |
 | Ansible connection | `local` |
-| Services declared | 60 |
+| Services declared | 67 |
 | Runs the GitOps timer | yes |
 | Has Docker | no |
 
@@ -35,7 +35,7 @@ Raspberry Pi, and the only remaining Docker host. LAN-only utilities.
 |---|---|
 | LAN address | `10.0.0.139` |
 | Ansible connection | `ssh` |
-| Services declared | 4 |
+| Services declared | 2 |
 | Runs the GitOps timer | no |
 | Has Docker | yes |
 
