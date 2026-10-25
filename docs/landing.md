@@ -751,7 +751,8 @@ It ends `deferred` in three cases:
   that arrives in this merge arms nothing until an updater run installs it. The operator starts
   the updater by hand with `systemctl start homelab-updater.service` as root on that host, once
   the agent's Prometheus shows `homelab_repo_published_info` at the merge commit. They then
-  re-run the same `land.sh` command.
+  re-run the same `land.sh` command. daniel-box, daniel-server and the Pi ship the link, so
+  this case reaches only the merge that first adds a link (#6218 added daniel-box's).
 - The host's deadline is more than 45 minutes away. The deadline is the second updater fire
   after the merge plus 10 minutes, read from the first parent's rendered drop-in.
 - The host is still unsettled past its deadline. The line gives the host's last success
