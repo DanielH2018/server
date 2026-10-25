@@ -10,6 +10,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import lander
+from fanout_lib import autoland
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
 
 NOW = 1792959300.0
@@ -124,3 +125,11 @@ def test_pr_narrows_every_section_to_that_pr():
 def test_the_settings_come_from_the_role_and_the_inventory():
     assert PERIOD == 600 and CEILING == 1800
     assert LOG_DIR == "/home/ubuntu/.local/state/fanout-server-lander/logs"
+
+
+def test_a_pass_that_could_not_read_daniel_server_is_the_fail_verdict():
+    """The line `autoland.run` prints, host first; that pass exits 0, so systemd says success."""
+    line = f"{autoland.SERVER_HOST} records unreadable, nothing landed: exit 255: ssh refused"
+    text, code = _report(_doc(entries=[*OLD_PASS, [1792958995.0, 5, "p3", "uv", line]]))
+    assert code == PROBE_FAILED
+    assert f"verdict: {line}" in text

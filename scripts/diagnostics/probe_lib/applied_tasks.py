@@ -1,8 +1,9 @@
 """The files one setup role's tasks write on one host, as `probe.py applied` compares them.
 
-`expected(role_dir, host, ctx)` walks the role's `tasks/main.yml` and every file it imports with
-a literal name, through `block`, `rescue` and `always`, and turns each file-writing task into a
-`Want`. It reads five modules:
+`expected(role_dir, host, ctx)` walks the role's `tasks/main.yml` and every task file it
+imports, through `block`, `rescue` and `always`, and turns each file-writing task into a
+`Want`. An import path renders with `role_path` and `playbook_dir`, so the shared
+`{{ role_path }}/../common/tasks/` files are walked too, with the import's `vars:` on top. It reads five modules:
 
 - `template`: the render of `templates/<src>`, with `dest`, `mode`, `owner` and `group`;
 - `copy`: the bytes of `files/<src>`, or the render of `content`, with the same fields;
@@ -15,7 +16,9 @@ a literal name, through `block`, `rescue` and `always`, and turns each file-writ
 A task is SKIPPED, with the reason, rather than guessed at: its `when:` (its own, or a
 block's) cannot be read for the host; it loops over a list that is not literal; a field still
 holds Jinja or a `STUB` after the render; or it writes from a variable the light render cannot
-resolve. A `when:` that reads false for the host drops the task, as Ansible would.
+resolve. An import whose path does not render to a file, and an `import_role` or
+`include_role`, are skipped the same way. A `copy` with `remote_src` is compared by metadata
+only, because its source is on the host. A `when:` that reads false for the host drops the task, as Ansible would.
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
@@ -27,6 +30,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,9 +38,15 @@ from deploy_tools.setup_lib.setup_gates import GateUnreadable, eval_when_strict
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, template_env
 from lib.render_guard import render_or_error
+from lib.repo_paths import ANSIBLE
 
 STUB = "STUB"
 _IMPORTS = ("import_tasks", "include_tasks")
+_ROLE_INCLUDES = tuple(
+    f"{prefix}{kind}"
+    for kind in ("import_role", "include_role")
+    for prefix in ("", "ansible.builtin.")
+)
 _MODULES = ("template", "copy", "file", "cron")
 _LOOPS = ("loop", "with_items", "with_list")
 
@@ -109,11 +119,20 @@ def _import_of(task: dict) -> str | None:
     return None
 
 
+_BARE_NAME = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
+
+
+def _no_loop() -> list:
+    return [None]
+
+
 class _Walk:
     """One walk of a role's tasks for one host; `wants` and `skips` collect as it goes."""
 
     def __init__(self, role_dir: Path, host: str, ctx: dict):
-        self.role_dir, self.host, self.ctx = role_dir, host, ctx
+        self.role_dir, self.host = role_dir, host
+        # A shared task file names its own templates through these two, as Ansible sets them.
+        self.ctx = {"role_path": str(role_dir), "playbook_dir": str(ANSIBLE), **ctx}
         self.defaults = role_dir / "defaults" / "main.yml"
         self.wants: list[Want] = []
         self.skips: list[Skip] = []
@@ -157,13 +176,14 @@ class _Walk:
                     if isinstance(sub, dict):
                         self.task(sub, here)
             return
+        if any(k in task for k in _ROLE_INCLUDES):
+            self.skips.append(
+                Skip(name, "it includes another role, which this does not follow")
+            )
+            return
         target = _import_of(task)
         if target is not None:
-            if "{{" not in target and (self.role_dir / "tasks" / target).is_file():
-                if (why := self.gate(here)) is None:
-                    self.tasks(self.role_dir / "tasks" / target, here)
-                elif why != "no":
-                    self.skips.append(Skip(f"import {target}", why))
+            self.follow(task, target, here)
             return
         found = _module(task)
         if found is None:
@@ -172,14 +192,63 @@ class _Walk:
             if why != "no":
                 self.skips.append(Skip(name, why))
             return
+        items = self.loop_items(task)
+        if items is None:
+            self.skips.append(Skip(name, "it loops over a list that is not literal"))
+            return
+        for item in items:
+            self.one(name, *found, item=item)
+
+    def loop_items(self, task: dict) -> list | None:
+        """The items a task loops over, `[None]` when it does not loop, None when unknown.
+
+        A literal list is read as written. A loop written as a bare `{{ name }}` whose name
+        the context holds as a list is read from the context; any other is unknown.
+        """
         loop = next((task[k] for k in _LOOPS if k in task), None)
         if loop is None:
-            self.one(name, *found, item=None)
-        elif isinstance(loop, list) and all(isinstance(i, (str, dict)) for i in loop):
-            for item in loop:
-                self.one(name, *found, item=item)
-        else:
-            self.skips.append(Skip(name, "it loops over a list that is not literal"))
+            return _no_loop()
+        if isinstance(loop, str) and (m := _BARE_NAME.match(loop.strip())):
+            loop = self.ctx.get(m.group(1))
+        if isinstance(loop, list) and all(isinstance(i, (str, dict)) for i in loop):
+            return loop
+        return None
+
+    def follow(self, task: dict, target: str, whens: list) -> None:
+        """Walk an imported task file with the import's `vars:` on top, or record a skip.
+
+        A shared file is reached as `{{ role_path }}/../common/tasks/<file>.yml` and takes
+        its inputs from `vars:`, so both are rendered before the file is walked.
+        """
+        label = f"import {target}"
+        resolved = self.render(target)
+        path = None if resolved is None else self.role_dir / "tasks" / resolved
+        if path is None or not path.is_file():
+            self.skips.append(
+                Skip(label, "its file does not resolve to one in the tree")
+            )
+            return
+        if (why := self.gate(whens)) is not None:
+            if why != "no":
+                self.skips.append(Skip(label, why))
+            return
+        items = self.loop_items(task)
+        if items is None:
+            self.skips.append(Skip(label, "it loops over a list that is not literal"))
+            return
+        loop_var = (task.get("loop_control") or {}).get("loop_var", "item")
+        outer = self.ctx
+        try:
+            for item in items:
+                self.ctx = outer if item is None else {**outer, loop_var: item}
+                extra = {}
+                for key, value in (task.get("vars") or {}).items():
+                    rendered = self.render(value) if isinstance(value, str) else None
+                    extra[key] = rendered if rendered is not None else value
+                self.ctx = {**self.ctx, **extra}
+                self.tasks(path, whens)
+        finally:
+            self.ctx = outer
 
     def one(self, name: str, module: str, args: dict, item) -> None:
         state = args.get("state", "present")
@@ -243,6 +312,8 @@ class _Walk:
         src = self.render(args.get("src"), item)
         if src is None or src.endswith("/"):
             return None, "its src does not render to one file"
+        if module == "copy" and args.get("remote_src") in (True, "yes", "true", "True"):
+            return None, "remote_src copies a file already on the host"
         if module == "copy":
             source = self.role_dir / "files" / src
             if not source.is_file():

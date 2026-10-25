@@ -40,6 +40,23 @@ TASKS = """\
   ansible.builtin.file: {path: "/var/lib/{{ item }}", state: directory}
   loop: "{{ dirs }}"
 - ansible.builtin.import_tasks: extra.yml
+- name: Page on failure
+  ansible.builtin.import_tasks: "{{ role_path }}/../shared/alert.yml"
+  vars:
+    alert_name: x
+- name: Copy the binary the host already has
+  ansible.builtin.copy: {src: /usr/local/bin/x, dest: /opt/x/x, remote_src: true, mode: "0755"}
+- name: Import a path nothing resolves
+  ansible.builtin.import_tasks: "{{ some_dir }}/y.yml"
+- name: Bring in another role
+  ansible.builtin.include_role: {name: other}
+"""
+SHARED = """\
+- name: Install the alert unit for {{ alert_name }}
+  ansible.builtin.template:
+    src: "{{ role_path }}/../shared/alert.service.j2"
+    dest: "/etc/systemd/system/{{ alert_name }}-alert.service"
+    mode: "0644"
 """
 EXTRA = """\
 - name: The box's block
@@ -63,7 +80,15 @@ def _role(tmp_path):
     ):
         (role / sub).mkdir(parents=True, exist_ok=True)
         (role / sub / name).write_text(text)
+    _shared(tmp_path)
     return role
+
+
+def _shared(tmp_path):
+    shared = tmp_path / "shared"
+    shared.mkdir(exist_ok=True)
+    (shared / "alert.yml").write_text(SHARED)
+    (shared / "alert.service.j2").write_text("[Unit]\nDescription={{ alert_name }}\n")
 
 
 def _sha(text: str) -> str:
@@ -109,7 +134,7 @@ def test_the_real_claude_code_role_yields_its_units_with_content():
         role, "daniel-box", applied.context(role, "daniel-box")
     )
     by_path = {w.path: w for w in wants}
-    for unit in ("claude-rc.service", "claude-clone-sync.timer"):
+    for unit in ("claude-rc.service", "claude-cgroup-metrics.timer"):
         want = by_path[f"/etc/systemd/system/{unit}"]
         assert want.sha256 is not None and want.mode == "0644"
 
@@ -211,3 +236,53 @@ def test_a_daniel_box_only_role_runs_on_daniel_box_alone():
     """initial_setup.yml gates it on `inventory_hostname == 'daniel-box'`."""
     role = applied.SETUP / "k8s_host_files"
     assert applied.hosts_for("k8s_host_files", role) == ["daniel-box"]
+
+
+def test_a_shared_import_through_role_path_is_walked_with_its_vars(tmp_path):
+    wants, _ = applied_tasks.expected(_role(tmp_path), "daniel-box", CTX)
+    alert = next(w for w in wants if w.path == "/etc/systemd/system/x-alert.service")
+    assert alert.sha256 == _sha("[Unit]\nDescription=x\n") and alert.mode == "0644"
+
+
+def test_an_import_or_role_include_it_cannot_follow_is_listed_as_skipped(tmp_path):
+    _, skips = applied_tasks.expected(_role(tmp_path), "daniel-box", CTX)
+    reasons = {s.task: s.reason for s in skips}
+    assert "does not resolve" in reasons["import {{ some_dir }}/y.yml"]
+    assert "another role" in reasons["Bring in another role"]
+
+
+def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):
+    wants, _ = applied_tasks.expected(_role(tmp_path), "daniel-box", CTX)
+    binary = next(w for w in wants if w.path == "/opt/x/x")
+    assert binary.sha256 is None and "remote_src" in binary.why_no_content
+    assert binary.mode == "0755"
+
+
+def test_the_real_claude_code_role_walks_its_shared_alert_import():
+    """claude_code reaches common/tasks/alert_unit.yml through `{{ role_path }}`."""
+    role = applied.SETUP / "claude_code"
+    wants, skips = applied_tasks.expected(
+        role, "daniel-box", applied.context(role, "daniel-box")
+    )
+    named = {w.path for w in wants} | {s.task for s in skips}
+    assert any("claude-fanout-server-lander-alert" in n for n in named), sorted(named)
+
+
+def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_path):
+    role = _role(tmp_path)
+    (role / "tasks" / "main.yml").write_text(
+        "- name: Each agent\n"
+        "  ansible.builtin.include_tasks: {file: agent.yml}\n"
+        "  loop: '{{ agents }}'\n"
+        "  loop_control: {loop_var: agent}\n"
+        "  vars: {agent_name: '{{ agent.name }}'}\n"
+    )
+    (role / "tasks" / "agent.yml").write_text(
+        "- name: Write the agent's marker\n"
+        "  ansible.builtin.copy: {content: hi, dest: '/etc/{{ agent_name }}'}\n"
+    )
+    ctx = {"agents": [{"name": "a"}, {"name": "b"}]}
+    wants, _ = applied_tasks.expected(role, "daniel-box", ctx)
+    assert {w.path for w in wants} == {"/etc/a", "/etc/b"}
+    _, skips = applied_tasks.expected(role, "daniel-box", {})
+    assert [s.reason for s in skips] == ["it loops over a list that is not literal"]

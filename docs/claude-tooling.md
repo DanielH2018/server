@@ -420,8 +420,12 @@ one row per path:
   `/etc/cron.d` reads this way.
 
 `probe_lib/applied_tasks.py` names the modules it reads (`template`, `copy`, `file`, `cron`
-with a `cron_file`). It lists the tasks it skips with the reason: a `when:` it cannot read for
-the host, a loop over a list that is not literal, or a path that does not render. It exits 1
+with a `cron_file`). It follows every task import, including the shared
+`{{ role_path }}/../common/tasks/` files with the import's `vars:`, and an import loop once per
+item. A `copy` with `remote_src` is compared by metadata only, because its source is on the
+host. It lists the tasks it skips with the reason: a `when:` it cannot read for the host, a
+loop over a list that is not literal, a path or import that does not render, or an
+`include_role`. It exits 1
 on any `DRIFT`, 75 when a path was `unread` or nothing was compared, and 0 otherwise.
 
 ### `ha …`

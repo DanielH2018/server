@@ -51,8 +51,10 @@ UNIT = f"{NAME}.service"
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 SHOW = ["LoadState", "ActiveState", "Result", "ExecMainExitTimestamp"]
-# `fanout_lib/autoland.py:run` prints these when a pass read one source and not the other.
-UNREAD = ("records unreadable", "GitHub unreadable")
+# `fanout_lib/autoland.py:run` ends both of its unread lines with this, after
+# `<SERVER_HOST> records unreadable` or `GitHub unreadable`. A prefix match missed the first,
+# which names the host before the word, and that pass exits 0, so this is its only signal.
+UNREAD = "unreadable, nothing landed:"
 
 LANDER_HELP = (
     "the daniel-server batch lander on daniel-box: the newest pass with its eligible and "
@@ -147,7 +149,7 @@ def report(
             problems.append(
                 f"the newest pass is {_age_phrase(age)} old, past {deadline}s"
             )
-        problems += [e.message for e in newest if e.message.startswith(UNREAD)]
+        problems += [e.message for e in newest if UNREAD in e.message]
     lines = [
         f"lander ({doc.get('host')}): {unit.get('ActiveState')}, newest run "
         f"{unit.get('Result')}; timer every {period}s"
