@@ -1,7 +1,8 @@
 # `setup/claude_code` — Claude Code install + the Remote Control host
 
-Four things live here: the **install** (native installer, per-user, auto-updating),
+Five things live here: the **install** (native installer, per-user, auto-updating),
 **`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone,
+**`claude-bg-resume.service`**, which respawns the operator's background sessions at boot,
 **`claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to daniel-server,
 and **the artifacts node's two crons**, the peer artifact sync and the OTLP-door heartbeat.
 
@@ -98,6 +99,50 @@ directory.
 `user.slice`, their shared parent; `claude_code_fleet_caps_enabled: false` removes both.
 `docs/claude-code-rc-caps.md` has the derivation. **The `Slice=` line takes effect at the next
 start**, so the deploy that changes it drops the RC host's sessions.
+
+## Background sessions come back at boot
+
+`claude-bg-resume.service` runs `files/bg_session_resume.py` once at boot as
+`claude_code_bg_resume_user` (the operator). Claude Code's background supervisor runs on demand,
+and nothing starts it at boot. After a reboot it shows each background session the shutdown
+killed as failed until someone attaches, replies or runs `claude respawn`. Until then the
+session has no process, so its Remote Control entry on the phone is dead. On 2026-10-25 the
+sessions waited five hours, until the operator ran `claude agents`.
+
+- **What it respawns:** each worker in `~/.claude/daemon/roster.json` that
+  `claude agents --json --all` lists as a background session with no `pid`. The roster holds
+  the workers the previous supervisor last recorded as running, so a session it had already
+  stopped for idling stays stopped. A roster older than 48 hours is skipped, matching
+  upstream's own prompt before it resumes a session that old.
+- **The script reads every candidate before the first respawn.** The first `claude respawn`
+  starts a supervisor, and that supervisor rewrites the roster with only its live workers.
+- **A respawned session keeps its Remote Control entry.** Its `bridgeSessionId` is kept in
+  the job's state, so the phone shows the same session rather than a new one.
+- **An interrupted turn may continue on its own.** Upstream says a session restarted after a
+  crash "is told it was restarted". Whether it then resumes mid-task work is not verified.
+- **`KillMode=process` and `RemainAfterExit=yes` are load-bearing.** The supervisor the script
+  starts lives in this unit's cgroup, under the fleet bound on `user.slice`, and hosts every
+  later dispatch until it idles out. Under the default kill the unit would take every
+  session down when it finished or stopped.
+- **The role enables the unit and never starts it.** Its job is the next boot.
+  `claude_code_bg_resume_enabled: false` stops, disables and removes it, and no session dies.
+  ENFORCED: `ansible/tests/setup/test_claude_bg_resume_unit.py`.
+- **To see what it would do,** run `uv run --no-project /usr/local/lib/claude-bg-resume/bg_session_resume.py
+  --claude ~/.local/bin/claude --dry-run`. On a running box it prints 0 sessions. After a boot,
+  `journalctl -b -u claude-bg-resume` shows what it respawned.
+
+What it does not restore:
+
+- **Sessions `claude-rc.service` spawned.** The host comes back by `Restart=always` and spawns
+  new sessions. `claude rc --session-id` cannot be combined with `--spawn`.
+- **Interactive sessions that ran `/remote-control`.** They end with their process. Resume one
+  with `claude --resume <id>`, then `/remote-control`.
+- **The login environment.** The unit sets `HOME`, `PATH`, `KUBECONFIG` and the pytest cap.
+  A respawned session has no `SSH_AUTH_SOCK`, D-Bus session or `XDG_RUNTIME_DIR`, because no
+  one is logged in at boot. `gh` reads its token from `~/.config/gh/hosts.yml`, so it works.
+- **Monitoring.** A failed run pages nothing; `systemctl status claude-bg-resume` shows it.
+  `claude-cgroup-metrics` reads `user-<uid>.slice` and `claude-rc.service`, so it does not
+  count the sessions in this unit's cgroup.
 
 ## The agent user
 
