@@ -72,6 +72,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "metrics",
         "monitors",
         "pi_plane",
+        "push_rules",
         "readonly_rbac",
         "releases",
         "shed_set",

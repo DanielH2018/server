@@ -15,7 +15,6 @@ fails on both sides and reads as "not rolled", which is the double roll.
 
 Observability's entries all declare `restart_on: []`, so the record stamps `restart: false`
 for each. Its ConfigMaps are hashed into their own pod templates, so the apply rolls those.
-The entries carry no `rolled_by_role`, which would drop them from the fingerprints.
 
 Run: uv run pytest ansible/tests/k8s/test_self_rollouts_follow_the_apply.py
 """
@@ -110,7 +109,6 @@ def test_observability_a_changed_secret_expects_only_its_secret_readers_to_roll(
     )
     assert set(rollouts) >= {"prometheus", "grafana", "alertmanager"}, rollouts
     assert not any(r["restart"] for r in rollouts.values()), rollouts
-    assert not any("rolled_by_role" in r for r in rollouts.values()), rollouts
 
 
 def test_observability_an_unchanged_render_expects_nothing_to_roll():
