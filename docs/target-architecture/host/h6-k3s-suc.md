@@ -1003,6 +1003,17 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - **Operator-only:** run the rehearsal twice, against H6.1c's drill Plan and against a
       server Plan one release above the guest's version. Both must pass before H6.1c
       starts.
+    - **Recorded 2026-10-24:** both runs passed on daniel-server, after the guest-script
+      fixes in #6130 and #6133.
+        - Run 1, `--expect red --plan k3s-redproof`, run `20261024T193003Z`: the Plan failed,
+          and the Kustomization read `Ready=False reason=HealthCheckFailed` with the message
+          `health check failed after 5m5.044785708s: failed early due to stalled resources:
+          [Plan/system-upgrade/k3s-redproof status: 'Failed']`.
+        - Run 2, `--expect upgrade --guest-version v1.37.0+k3s1`, run `20261024T193748Z`: the
+          guest node ran `v1.37.1+k3s1`, carried the Plan's `latestHash` as its label, and the
+          Kustomization read Ready.
+        - The reason string that H6.1b2's spec left unmeasured is now measured:
+          `HealthCheckFailed`. H6.1c's expression test pins it.
 4. **H6.1c Red-path drill (about 30 lines, then a revert). Operator-only.** This mirrors
    D2's hold drill, and C8 requires an operator-only drill to state its blast radius.
     - **Gate:** H6.1b2's rehearsal of this Plan passed in the guest, and this PR's body
@@ -1012,6 +1023,10 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       `version`, so the expressions can leave InProgress. It declares no `prepare`, because
       no host ships `k3s_gates.py` before H6.3b. Its `upgrade` container is the gate image
       with `command: [python3, -c, "raise SystemExit(1)"]`, so it touches nothing.
+    - **Amended 2026-10-24:** the Plan also sets `jobActiveDeadlineSecs: 300`. The
+      controller's `SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT` is 99 (*Open questions* 16), so a
+      failing pod retries until the Job deadline, and the red would otherwise arrive at 3600
+      seconds. The rehearsal measured 5m5s to red, which matches the 300-second deadline.
     - **Blast radius.**
         - Objects: the drill Plan, and its Job and pods in `system-upgrade` on daniel-box.
           The pod runs privileged with the host's root mounted, and exits 1 without
