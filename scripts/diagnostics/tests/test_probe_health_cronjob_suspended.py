@@ -119,6 +119,7 @@ def test_run_health_fails_the_drill_suspended_live_when_its_render_runs(capsys):
     assert "does not declare `suspend: true`" in capsys.readouterr().out
 
 
-def test_run_health_fails_the_drill_when_it_is_not_suspended_and_has_never_run(capsys):
+def test_run_health_fails_an_unsuspended_drill_with_no_recorded_apply_time(capsys):
+    """The drill is schedule-gated (#6128), and this boundary serves no Kustomization history."""
     assert _run(_cronjob(False)) == 1
-    assert "FAILED the gate" in capsys.readouterr().out
+    assert "records no apply time" in capsys.readouterr().out

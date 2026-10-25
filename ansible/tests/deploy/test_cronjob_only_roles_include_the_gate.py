@@ -81,7 +81,8 @@ def test_every_cronjob_only_role_is_gated_at_deploy_time():
         assert not missing, (
             f"{role} declares CronJob(s) {sorted(missing)} with no flux_cronjob_gates entry "
             "(a flux-owned role) and no job/<name> wait in tasks/main.yml; an Ansible-owned "
-            "role needs the handback steps in docs/flux-deploy-plane.md"
+            "role needs the handback steps in docs/flux-deploy-plane.md. A CronJob a gate "
+            "Job cannot copy goes in UNGATED_BY_DESIGN and carries `homelab/gate: schedule`"
         )
 
 
