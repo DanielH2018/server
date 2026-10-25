@@ -79,6 +79,13 @@ def test_classify_a_miss_after_a_stable_run_is_regressed():
     }
 
 
+def test_classify_a_miss_with_too_short_a_stable_window_is_flaky():
+    # Two passes then a miss: the old pass-then-miss rule paged, but stable_n=3 needs three.
+    hist = {"a/1": [_entry(True), _entry(True), _entry(False)]}
+    assert classify(hist)["flaky"] == ["a/1"]
+    assert classify(hist, stable_n=2)["regressed"] == ["a/1"]
+
+
 def test_classify_a_single_miss_after_a_mixed_window_is_flaky():
     # 3/3, 1/3, 3/3 then 1/3: the shape skeptic/002 paged on (#5796).
     hist = {"a/1": [_entry(True), _entry(False), _entry(True), _entry(False)]}
@@ -175,6 +182,30 @@ def test_main_exits_zero_on_a_flaky_miss(tmp_path, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "FLAKY      a/1  (now 1/3)" in out and "REGRESSED" not in out
+
+
+def test_flaky_and_regressed_lines_survive_the_pr_body_tail(tmp_path, capsys):
+    # eval-run.sh.j2 keeps `tr '\n' ' ' < trend-output | tail -c 800` as the PR body.
+    stable = {
+        f"agent/{i:03d}-a-long-stable-case-name": [_entry(True)] * 4 for i in range(40)
+    }
+    flaky = {"z/flaky": [_entry(True), _entry(False), _entry(True)]}
+    regressed = {"z/regressed": [_entry(True)] * 3}
+    hist = tmp_path / "history.json"
+    write_json(hist, {**stable, **flaky, **regressed})
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            [_report_case(cid, "PASS", True) for cid in stable]
+            + [
+                _report_case(cid, "FAIL", False, passes=1)
+                for cid in ("z/flaky", "z/regressed")
+            ]
+        )
+    )
+    main(["--history", str(hist), str(report)])
+    body = capsys.readouterr().out.replace("\n", " ")[-800:]
+    assert "FLAKY      z/flaky" in body and "REGRESSED  z/regressed" in body
 
 
 def test_main_subscription_does_not_write(tmp_path):

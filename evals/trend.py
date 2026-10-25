@@ -171,6 +171,15 @@ def _rate(history: dict, cid: str, mode: str) -> str:
 
 
 def _print_summary(history: dict, buckets: dict, mode: str, recorded: bool) -> None:
+    # eval-run.sh.j2 builds the PR body from the LAST 800 bytes of this output, so the long
+    # STABLE list goes first and the cases a reader acts on go last, REGRESSED nearest the end.
+    stable = buckets["stable"]
+    if stable:
+        print(f"  STABLE({len(stable)})  {', '.join(stable)}")
+    for cid in buckets["recovered"]:
+        print(f"  RECOVERED  {cid}  (now {_rate(history, cid, mode)})")
+    for cid in buckets["flaky"]:
+        print(f"  FLAKY      {cid}  (now {_rate(history, cid, mode)})")
     for cid in buckets["regressed"]:
         shift = _epoch_shift(history[cid], mode)
         note = (
@@ -179,13 +188,6 @@ def _print_summary(history: dict, buckets: dict, mode: str, recorded: bool) -> N
             else ""
         )
         print(f"  REGRESSED  {cid}  (now {_rate(history, cid, mode)}){note}")
-    for cid in buckets["recovered"]:
-        print(f"  RECOVERED  {cid}  (now {_rate(history, cid, mode)})")
-    for cid in buckets["flaky"]:
-        print(f"  FLAKY      {cid}  (now {_rate(history, cid, mode)})")
-    stable = buckets["stable"]
-    if stable:
-        print(f"  STABLE({len(stable)})  {', '.join(stable)}")
     if not any(buckets.values()):
         print("  no cross-run deltas")
     print(f"\nhistory {'updated' if recorded else 'NOT written'} ({mode} run).")
