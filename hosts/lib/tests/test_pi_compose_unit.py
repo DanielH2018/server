@@ -11,9 +11,11 @@ Run: uv run pytest hosts/lib/tests/test_pi_compose_unit.py
 import re
 
 import pytest
+import yaml
 from _compose_tree import ALLOY, ComposeTree, text
 from _reconcile_host import SECRETS_UNIT, Node
 
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
 
@@ -108,6 +110,55 @@ def test_a_larger_start_period_lengthens_both_timeouts_and_an_hour_is_refused(tr
     tree.write(defaults={"compose_start_period": "1h"})
     with pytest.raises(RenderError, match="whole_seconds_or_minutes"):
         unit_of(tree)
+
+
+# ComposeUpStale's bound, which only the boot run's timeout derives (#6187).
+
+RULES = REPO / "ansible/roles/k8s/observability/files/rules/host-checks.yaml"
+# Boot reaching the unit, plus one scrape. The rule's comment carries the measured boot run.
+BOOT_SLACK = 300
+
+
+def stale_rule():
+    groups = yaml.safe_load(RULES.read_text())["groups"]
+    rules = [
+        rule
+        for group in groups
+        for rule in group["rules"]
+        if rule.get("alert") == "ComposeUpStale"
+    ]
+    assert len(rules) == 1, f"host-checks.yaml holds {len(rules)} ComposeUpStale rules"
+    return rules[0]
+
+
+def bound_problems(rule, unit):
+    """Why ComposeUpStale's two literals differ from the unit's TimeoutStartSec plus the slack."""
+    _, start = timeouts(unit)
+    bound = start + BOOT_SLACK
+    literals = [
+        *(int(n) for n in re.findall(r"\[(\d+)s\]", rule["expr"])),
+        *(int(n) for n in re.findall(r"> (\d+)", rule["expr"])),
+    ]
+    problems = [
+        f"literal {n}s is not TimeoutStartSec {start}s + {BOOT_SLACK}s = {bound}s"
+        for n in literals
+        if n != bound
+    ]
+    if len(literals) != 2:
+        problems.append(f"expected 2 bound literals, found {literals}")
+    if f"more than {bound}s" not in rule["annotations"]["description"]:
+        problems.append(f"the description does not name {bound}s")
+    return problems
+
+
+def test_compose_up_stale_waits_out_the_boot_runs_timeout_is_clean(tree):
+    assert bound_problems(stale_rule(), unit_of(tree)) == []
+
+
+def test_a_larger_start_period_flags_compose_up_stales_bound(tree):
+    tree.write(defaults={"compose_start_period": "30s"})
+
+    assert bound_problems(stale_rule(), unit_of(tree)) != []
 
 
 def follows_the_project(tree):

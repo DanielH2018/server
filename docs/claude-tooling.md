@@ -81,9 +81,11 @@ vendored `files/upstream/` objects are compared and its `patches/` are not (#572
 commit `lastAppliedOriginRevision` names, the commit its OCIRepository serves, and whether it is
 suspended (`probe_lib/flux.py`). It makes one kubectl read. A tag adds its `-deferred`,
 `-snapshot`, `-prepull`, `-precheck` and `-verify` Kustomizations and the shared `soak`, and no
-tag lists every Kustomization. It exits 1 when a printed row is not Ready, is suspended or has
-applied a commit other than its source's, and when a named tag has no Kustomization. A failed
-read exits 75.
+tag lists every Kustomization. It exits 1 when a printed row is not Ready for another reason, is suspended or is
+Ready at a commit other than its source's, and when a named tag has no Kustomization. A row
+that Flux is still reconciling, or that waits on a dependency (reason `Progressing`,
+`ProgressingWithRetry` or `DependencyNotReady`), prints under `PENDING` and does not fail the
+probe. A failed read exits 75.
 
 To wait for Flux to apply a commit, run `cc-wait flux <name> [--revision SHA]`. It exits 0 when
 the Kustomization is Ready at that commit, 1 when it failed there and 3 when it is suspended.

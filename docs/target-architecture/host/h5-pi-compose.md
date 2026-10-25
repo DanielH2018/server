@@ -1381,8 +1381,9 @@ upstream, revert its downstreams before it.
   exited. From H5.2b its compose arm also pushes `down` while the result reads 0, which
   covers a failed run that leaves every container running. H3's `HostReconcileFailed`
   (PR H3.5d, C7) pages for a Pi held with `homelab_host_reconcile_ok` at 0 for 15 minutes,
-  whatever caused the hold. Nothing pages for a stale compose result, and *Open questions*
-  5 asks M1 for that rule.
+  whatever caused the hold. `ComposeUpStale` (#6187) pages a compose result older than the
+  Pi's last boot, once the boot is older than the unit's `TimeoutStartSec` plus 300 s. A
+  restart by reconcile that writes no result leaves the stale value until the next boot.
 - **A compose run lengthens the Pi's reconcile.** One run takes up to the unit's derived
   `TimeoutStartSec`, 1390 s or about 23 minutes at `70591c307`'s healthcheck values. That is
   inside reconcile's `TimeoutStartSec=30min`, and the unit-timeout test holds the relation.
@@ -1611,8 +1612,14 @@ upstream, revert its downstreams before it.
     - **M1.** Ask for two rules, each labelled `service="daniel-pi"` per C7:
       `homelab_compose_up_result == 0`, and a stale `homelab_compose_up_timestamp_seconds`
       with a bound M1 derives from the updater's schedule. H3's `HostReconcileFailed`
-      (H3.5d) covers `homelab_host_reconcile_ok == 0`. Until M1's two land, the recovery
-      heartbeat's compose arm covers the first, and nothing covers the stale result.
+      (H3.5d) covers `homelab_host_reconcile_ok == 0`. `ComposeUpFailed` (#6166) is the
+      first, in shadow while the recovery heartbeat's compose arm pages the same 0.
+      `ComposeUpStale` (#6187) is the second. Its bound comes from boot, not from the
+      updater's schedule: reconcile restarts the unit only when the unit's file changes, so
+      a package change that leaves the project alone writes no result. Every boot does run
+      the enabled unit, and its `TimeoutStartSec` caps that run.
+      `hosts/lib/tests/test_pi_compose_unit.py` pins the rule's literals to the rendered
+      unit.
     - **G2.** G2 says H5.7 adds a Renovate manager. H5.11 adds the Pi's.
 
    Resolution: each owning slice confirms the item or amends its plan, before H5.2a1. The
