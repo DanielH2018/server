@@ -83,7 +83,7 @@ from validate.validate_lib.host_container import (
     list_problems,
     release_fetched,
 )
-from validate.validate_lib import conffile_case, repos_case, secrets_case
+from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -567,9 +567,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--work", type=Path, required=True, help="a scratch directory for the cases"
     )
-    args = parser.parse_args(argv)
     try:
-        cases = Cases(args)
+        cases = Cases(parser.parse_args(argv))
     except CaseFailed as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
@@ -577,6 +576,7 @@ def main(argv: list[str] | None = None) -> int:
         run()
     secrets_case.run(cases)
     conffile_case.run(cases)
+    shadow_case.run(cases)
     repos_case.run(cases)
     if cases.failed:
         print(
