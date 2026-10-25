@@ -85,8 +85,9 @@ write, so a second run reports "nothing to do".
 qBittorrent marks a file matching `*.exe`, `*.7z`, `*.iso` or another listed pattern "do not
 download" when a torrent is added (#6274). A fake episode that is only such a file then
 downloads and seeds nothing. Sonarr still flags the empty download, so Arr Queue Warnings still
-pages and a human still removes it. `.rar` stays off the list, because scene TV ships as
-multi-part RAR. The comment above the keys in `apply_prefs.py` has the observed fake shapes.
+pages and a human still removes it. RAR volumes are on the list too, because nothing in this
+stack unpacks them, so a RAR release cannot be imported anyway. The comment above the keys in
+`apply_prefs.py` has the observed fake shapes.
 
 **Flux applies `DESIRED` on every revision that rolls the pod.** The `prefs.yaml.j2` Job in
 `qbittorrent-verify` (below) runs the apply once the `qbittorrent` Kustomization reads Ready, so a
