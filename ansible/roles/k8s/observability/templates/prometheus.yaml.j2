@@ -13,6 +13,11 @@
   scheduler_plugin_execution, both workqueue duration families, watch_events_sizes and
   storage_operation_duration.
 
+  Three more families joined the list on 2026-10-25 (#6311), once the size cap was read binding
+  before the 30-day retention: watch_events_dispatch_duration, storage_list_duration and
+  watch_cache_initialization_duration. They held 21,206 of 148,552 series, counting both jobs,
+  and nothing in the repo read their buckets.
+
   That matters because the cap here is BYTES, not series: retention.size is
   `observability_prometheus_retention_size` (7GB) against a 12Gi PVC
   (deliberately under it — the WAL, the head and compaction share the volume). Doubling the
@@ -43,7 +48,7 @@
           - source_labels: [__name__]
             action: drop
             regex: >-
-              (apiserver_request_duration_seconds|apiserver_request_sli_duration_seconds|apiserver_request_body_size_bytes|apiserver_response_sizes|apiserver_watch_list_duration_seconds|apiserver_watch_cache_read_wait_seconds|apiserver_watch_events_sizes|scheduler_plugin_execution_duration_seconds|workqueue_work_duration_seconds|workqueue_queue_duration_seconds|storage_operation_duration_seconds|kubelet_runtime_operations_duration_seconds|rest_client_request_duration_seconds)_bucket
+              (apiserver_request_duration_seconds|apiserver_request_sli_duration_seconds|apiserver_request_body_size_bytes|apiserver_response_sizes|apiserver_watch_list_duration_seconds|apiserver_watch_cache_read_wait_seconds|apiserver_watch_events_sizes|apiserver_watch_events_dispatch_duration_seconds|apiserver_storage_list_duration_seconds|apiserver_watch_cache_initialization_duration_seconds|scheduler_plugin_execution_duration_seconds|workqueue_work_duration_seconds|workqueue_queue_duration_seconds|storage_operation_duration_seconds|kubelet_runtime_operations_duration_seconds|rest_client_request_duration_seconds)_bucket
 {%- endmacro %}
 ---
 apiVersion: v1
