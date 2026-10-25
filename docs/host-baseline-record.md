@@ -71,10 +71,11 @@ the name:
   `AllowTcpForwarding` alone, so `local` refuses every remote forward before
   `AllowStreamLocalForwarding` is read. The comment above the block in `tasks/access.yml`
   carries the derivation and the log line that tells the two refusals apart.
-- **On daniel-pi, sshd reads the package's two drop-ins instead of the tasks (H7.27).**
+- **On daniel-pi (H7.27) and daniel-server (H7.28), sshd reads the package's two drop-ins instead of the tasks.**
   `10-homelab.conf` holds the 17 settings and `90-homelab-match.conf` holds the `Match` block.
   sshd keeps the first value it reads, and `10-` sorts before cloud-init's `50-cloud-init.conf`,
-  where the Ansible tasks wrote the same lines (`ssh_config_path` on the Pi). Those lines stay
+  where the Ansible tasks wrote the same lines (`ssh_config_path` on the Pi). On daniel-server the tasks wrote `/etc/ssh/sshd_config`, whose
+  Ubuntu `Include` line is read first, so the `10-` drop-in wins there too. Those lines stay
   there as harmless duplicates. The `Match` file sorts last so its block cannot reach another
   drop-in. `reload:ssh.service` runs `sshd -t` first, and
   `hosts/lib/tests/test_pi_initial_setup_part1.py` runs `sshd -T` over both drop-ins for the

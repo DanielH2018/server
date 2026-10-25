@@ -79,6 +79,15 @@ docker_install_package_specs: >-
 # `--tags docker-engine-upgrade`.
 docker_install_engine_upgrade: false
 
+# The engine-upgrade play's wait for a running updater or reconcile, in seconds: the rendered
+# homelab-updater.service's TimeoutStartSec (50 min) plus 60 s. An updater run holds its
+# install and a synchronous reconcile, so it is the longest run the wait can meet.
+# ansible/tests/setup/test_engine_upgrade_holds_the_updater_timer.py keeps it above that limit.
+docker_install_updater_wait_limit_s: 3060
+
+# The homelab package's Compose project (H5), which the engine-upgrade play stops and recreates.
+docker_install_homelab_compose_dir: /usr/lib/homelab/compose
+
 # GOMEMLIMIT for each Go daemon, paired with GOGC=off in a systemd drop-in
 # (tasks/go-runtime.yml, tags `docker-go-runtime-dockerd` / `docker-go-runtime-containerd`).
 # With GOGC off the limit is the only thing that starts a collection, so the distance from

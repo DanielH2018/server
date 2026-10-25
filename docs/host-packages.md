@@ -354,6 +354,9 @@ sudo systemctl mask --now homelab-updater.timer
 ```
 
 Reconcile never starts or restarts a masked unit, so no later package undoes the mask.
+The Docker engine-upgrade play (`docker_install`'s `engine-upgrade.yml`) uses the same lever. It
+masks the timer, waits out a running updater, and unmasks the timer as its last task, unless the
+timer was already masked when the play began. A failed play leaves the timer masked.
 `HostUpdateStale` fires for the host once its limit passes, which is expected. To resume:
 
 ```bash
