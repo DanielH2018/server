@@ -471,8 +471,9 @@ def test_a_deleted_task_whose_tag_no_task_carries_any_more_is_flagged(tree):
     [
         "  ansible.builtin.set_fact:\n    demo_fact: 1\n",
         "  ansible.builtin.include_vars:\n    file: extra.yml\n",
+        "  ansible.builtin.command: /bin/true\n  register: demo_probe\n",
     ],
-    ids=["set_fact", "include_vars"],
+    ids=["set_fact", "include_vars", "register"],
 )
 def test_a_file_that_sets_variables_keeps_every_tasks_tag(tree, loader):
     """An edited task may read what an unchanged one sets under another tag."""

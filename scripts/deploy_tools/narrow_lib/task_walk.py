@@ -240,6 +240,7 @@ def runs_the_same(before: str, after: str) -> bool:
 
 # The spellings of `include_vars`. Like a `set_fact`, the variables it loads outlive the task
 # that loads them, so a task elsewhere in the file can read one under a different tag.
+# A task's `register:` makes the same edge, so `_loads_vars` counts it too.
 _INCLUDE_VARS = (
     "include_vars",
     "ansible.builtin.include_vars",
@@ -248,11 +249,11 @@ _INCLUDE_VARS = (
 
 
 def _loads_vars(tasks) -> bool:
-    """Whether a task list runs `include_vars` anywhere, blocks walked through."""
+    """Whether a task list runs `include_vars` or registers a result, blocks walked through."""
     for task in tasks or []:
         if not isinstance(task, dict):
             continue
-        if any(key in task for key in _INCLUDE_VARS):
+        if "register" in task or any(key in task for key in _INCLUDE_VARS):
             return True
         if any(
             _loads_vars(task[key])
@@ -284,8 +285,8 @@ def changed_task_tags(
 
     None means the per-task answer is not safe, and the caller keeps the whole-file one:
       - a text that does not parse, or is not a task list;
-      - a file that sets a fact or loads vars at either text, since a changed task may read
-        a variable an unchanged task in the file sets under another tag;
+      - a file that sets a fact, loads vars or registers a result at either text, since a
+        changed task may read a variable an unchanged task in the file sets under another tag;
       - a deleted task no tag of its own selects;
       - an edit that leaves no tag once `always` is dropped, such as a pure reorder or an
         `always`-only change.

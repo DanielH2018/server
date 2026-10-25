@@ -473,9 +473,9 @@ the tags of the tasks that read it:
   the new ref, and of the tasks it deleted, read at the old ref (#6234). A deleted task's tag must
   still select a task at the new ref, or the derivation refuses. H1.4 deleted the `coredns`
   instance from `setup/k3s`'s `stale-checkout-guard.yml`, and the whole-file answer had named the
-  surviving Longhorn instances' tags instead. A file that sets a fact or runs `include_vars` keeps
-  the tags of every task in it, because an edited task can read a variable that an unchanged task
-  sets under another tag.
+  surviving Longhorn instances' tags instead. A file that sets a fact, runs `include_vars` or
+  `register:`s a result keeps the tags of every task in it, because an edited task can read a
+  variable that an unchanged task sets under another tag.
 - `templates/<f>` or `files/<f>` maps to the tags of every task file naming `<f>`, following a
   template another template includes or imports. A host script's template is usually named in a
   `defaults/` data structure rather than a task's `src:` (`setup/k3s` collects them in

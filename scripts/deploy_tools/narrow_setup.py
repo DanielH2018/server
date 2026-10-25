@@ -15,7 +15,7 @@ to the tags of the tasks that read it:
     refs, once a static import's `name:` is dropped, reaches no host and adds no tag (#5930).
     One `tasks/main` imports statically maps to the tags of the top-level tasks the range
     added or changed, at `new`, and of those it deleted, at `old` (#6234). A file that sets a
-    fact or loads vars keeps the tags of every task in it.
+    fact, loads vars or registers a result keeps the tags of every task in it.
   - `templates/<f>` or `files/<f>`: the tags of every task file naming `<f>`, following a
     template that another template includes or imports.
   - `defaults/main.yml` or `vars/<f>.yml`: the top-level keys whose value changed, then the
