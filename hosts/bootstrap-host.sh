@@ -170,6 +170,10 @@ for candidate in $HOSTS; do
 done
 [ "$known" = yes ] || die "$host is not a host this script knows: $HOSTS"
 
+# Step 1: refuse a host other than the one named, whose package would refuse it anyway.
+actual=$(hostname)
+[ "$actual" = "$host" ] || die "this host is $actual, not $host"
+
 # The k3s mode follows the host, never K3S_URL.
 case "$host" in
     daniel-box) k3s_mode=server k3s_unit=k3s.service k3s_other=k3s-agent.service ;;
@@ -187,10 +191,7 @@ if [ -n "$kit" ]; then
     [ -d "$kit" ] || die "--offline: $kit is not a directory"
 fi
 
-# Step 1: refuse a host other than the one named, whose package would refuse it anyway.
-actual=$(hostname)
-[ "$actual" = "$host" ] || die "this host is $actual, not $host"
-
+# Step 1 is the hostname check above; --until 1 stops here.
 stop_after() {
     if [ "$until_step" -le "$1" ]; then
         echo "bootstrap-host: stopped after step $1 (--until $until_step)"
