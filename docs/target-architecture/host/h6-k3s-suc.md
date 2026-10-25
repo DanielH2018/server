@@ -1,6 +1,7 @@
 # H6 — system-upgrade-controller for k3s
 
-Status: PLANNED
+Status: IN PROGRESS. Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)) and H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)).
+In flight: H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)) is open and held until Monday 2026-10-26.
 Depends on: D2, H1.1a to H1.8, H4, M1 (the contracts.md row; *Open questions* 2 says why
 each edge exists).
 Unblocks: H7
@@ -1027,8 +1028,34 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       controller's `SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT` is 99 (*Open questions* 16), so a
       failing pod retries until the Job deadline, and the red would otherwise arrive at 3600
       seconds. The rehearsal measured 5m5s to red, which matches the 300-second deadline.
-    - **Production drill run 2026-10-25, merged 00:37 UTC; results recorded in the
-      follow-up.**
+    - **Production drill, run and rolled back 2026-10-25 (H6.1c done).** Times are UTC.
+        - 00:37: [#6120](https://github.com/DanielH2018/server/pull/6120) merged, as squash
+          commit `a41b8b1bd`. The land.sh verdict for #6120 was `deploy-failed`, with the
+          reason "DEPLOY_HOLD holds promotion, so system-upgrade is not applied".
+        - 00:48:35: `promote` applied the commit. The Plan `k3s-redproof` existed, and the Job
+          `apply-k3s-redproof-on-daniel-box-…` started.
+        - 00:53:41: `flux/system-upgrade` read `Ready=False`, reason `HealthCheckFailed`,
+          message "health check failed after 5m0.079095792s: failed early due to stalled
+          resources: [Plan/system-upgrade/k3s-redproof status: 'Failed']". That is 5m06s from
+          the Plan appearing. The 300-second `jobActiveDeadlineSecs` set it, not the
+          100-minute Kustomization timeout.
+        - 00:54:11: `DEPLOY_HOLD` was set to `a41b8b1bd1cf7d49abf2c38359d84e49262d8914`, 30
+          seconds after the red. `prod` was not reset, because the tag is forward-only.
+        - 00:54:42: `K3sUpgradeJobFailed` was firing in `ALERTS`, 31 seconds after the hold.
+        - Rollback: the operator labelled daniel-box `homelab/k3s-upgrade-paused=true`.
+          Revert [#6219](https://github.com/DanielH2018/server/pull/6219) merged at 01:05 as
+          `7ed18d48f`, after the cross-plane order gate required the trailer `Removes-Object:
+          Plan/system-upgrade/k3s-redproof`. The operator cleared `DEPLOY_HOLD` after master CI
+          passed at the revert. `promote` run 40149298603 moved `prod` to the revert at 01:13
+          with `system-upgrade` Ready. The operator deleted the Plan by hand (`prune: false`)
+          and removed the label.
+        - After the rollback only `k3s-agent` and `k3s-server` remain, there are no Jobs, and
+          89 of 90 monitors are up. That count is unchanged by the drill: Homelab Evals has
+          been down since 2026-10-20.
+        - **Order matters for the revert.** Do not merge the revert before `DEPLOY_HOLD` is
+          set, or `promote` applies the newer master and the drill never runs. Clear the hold
+          only after master CI passes at the revert, or `promote` can re-apply the drill
+          commit.
     - **Blast radius.**
         - Objects: the drill Plan, and its Job and pods in `system-upgrade` on daniel-box.
           The pod runs privileged with the host's root mounted, and exits 1 without
