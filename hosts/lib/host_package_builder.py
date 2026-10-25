@@ -55,7 +55,7 @@ from builder_ci_grade import (
 from builder_rollout_gate import RELEASE, RolloutGate, admit
 from homelab_tool_fetch import Failure
 
-CONFIG = "/etc/homelab-builder/config.env"
+CONFIG = "/usr/lib/homelab/builder/builder.conf"
 FINGERPRINT = "/etc/homelab-builder/archive-key.fpr"
 HOLD = "/etc/homelab-builder/hold"
 STATE_DIR = "/var/lib/homelab-builder"
@@ -224,11 +224,14 @@ class Builder(RolloutGate):
         self.cache = {
             sha: v for sha, v in self._load("ci-cache.json").items() if v == "pass"
         }
-        # 1. No token, no request: anonymous reads share one quota with the tick's gate. The
-        # stub `run` keeps `gh auth token` out of it; the token comes from config.env alone.
+        # 1. No token, no request: anonymous reads share one quota with the tick's gate. The stub
+        # `run` keeps `gh auth token` out of it. LoadCredential= supplies the token, never the file.
+        cred = Path(os.environ.get("CREDENTIALS_DIRECTORY", "/-"), "github_token")
+        if cred.is_file():
+            self.config["GITHUB_TOKEN"] = cred.read_text()
         token = github_token(self.config, lambda *a, **k: _NO_GH)
         if token is None:
-            return self._fail("token", None, "config.env carries no GITHUB_TOKEN")
+            return self._fail("token", None, "no github_token credential")
         self.token = token
         # 2. Fetch into the builder's own clone, never the primary checkout.
         try:
