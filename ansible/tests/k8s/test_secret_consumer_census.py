@@ -102,6 +102,14 @@ def test_the_census_names_the_pi_package_as_a_consumer_of_autoheals_webhook():
     assert {"monitor-bridge", "observability", "uptime-kuma"} <= set(consumers)
 
 
+def test_the_census_names_the_pi_package_as_a_consumer_of_alloys_http_password():
+    """H5.8 moved the second consumer, alloy's password, out of `ansible/`; it is the member that
+    says the second walk root finds a key that only a service file under the component reads."""
+    consumers = tree_consumers("alloy_pi_http_password")
+
+    assert consumers == {"daniel-pi": "host"}
+
+
 def test_the_repair_commands_give_the_operator_only_sync_and_the_package_path():
     commands = consumer_commands("monitor_discord_webhook_url")
 

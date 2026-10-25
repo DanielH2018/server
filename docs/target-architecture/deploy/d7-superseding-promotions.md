@@ -233,6 +233,15 @@ for any P with a failure in flight. What each interleaving leaves:
   good. So a superseding `tag` also reads `last-good` and moves nothing when it differs
   from the digest `decide` read (D7.7). P's `settle` dispatches the next run, which
   promotes T against the new `last-good`.
+- **P settles good around T's `tag`.** P's `settle` reads `prod` before T's move, and T's
+  `tag` reads `last-good` before P's write. Both checks pass and both writes land: the
+  D7 live drill on 2026-10-25 hit this with the two writes one second apart
+  ([#6268](https://github.com/DanielH2018/server/issues/6268)). `last-good` then names P,
+  while T's reset digest is still the one from before P. So a superseding T's `settle`
+  reads `last-good` again before a reset, and resets to it when it differs from the digest
+  `decide` read. A failed read falls back to the digest `decide` read, with a warning. The
+  hold still stops the next promotion, and `prod` ends equal to `last-good`, so no
+  `reset_to_last_good` dispatch is needed after the operator clears the hold.
 
 ### Call tree
 
@@ -334,8 +343,9 @@ supersedes another.
     - Not exercised: `verify` printing `superseded`. 924f69a9's `verify` returned `good` at
       13:29:09, 14 seconds before 63d02b85's `tag` moved `prod`. Its `settle` then moved
       `last-good` to 924f69a9 one second after `tag` had checked `last-good`. Both writes
-      landed, which #6268 records: had 63d02b85 failed, its reset would have gone to the
-      `last-good` from before 924f69a9.
+      landed, which #6268 records. Had 63d02b85 failed, its reset would have gone to the
+      `last-good` from before 924f69a9. The fix for #6268 makes that reset go to the live
+      `last-good` instead.
 - **The red proof for the live pair** is the failing variant. The second PR breaks a
   readiness probe on its leaf, as #5605 did for speedtest. T's `verify` must print
   `failed` naming that leaf, and `settle` must hold `<T> failed=<leaf>` and reset

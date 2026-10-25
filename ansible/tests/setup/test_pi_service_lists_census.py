@@ -210,7 +210,7 @@ def unmoved(tmp_path_factory) -> dict:
     }
 
 
-@pytest.mark.parametrize("name", ["wg-easy", "alloy"])
+@pytest.mark.parametrize("name", ["wg-easy"])
 def test_a_move_changes_no_render(name, unmoved, tmp_path):
     pi = moved(name)
     assert name in {e["name"] for e in pi["compose_services"]}
@@ -237,13 +237,13 @@ def test_a_reader_of_containers_list_alone_is_flagged(tmp_path):
     assert second in source
     template.write_text(source.replace(second, ""))
     fixture = {"playbook_dir": str(playbook)}
-    unmoved_pi, moved_pi = host_doc(HOST), moved("alloy")
+    unmoved_pi, moved_pi = host_doc(HOST), moved("wg-easy")
 
     after = ansible_render(moved_pi, BRIDGE, fixture)
     assert after != ansible_render(unmoved_pi, BRIDGE, fixture)
-    assert "alloy:12345" not in published_ports(bridge_texts(after))
+    assert "wg-easy:51821" not in published_ports(bridge_texts(after))
 
     tags = ("monitor-bridge",)
     after = c1_render(moved_pi, roles, tags, fixture)
     assert after != c1_render(unmoved_pi, roles, tags, fixture)
-    assert "alloy:12345" not in published_ports(bridge_texts(after))
+    assert "wg-easy:51821" not in published_ports(bridge_texts(after))
