@@ -90,6 +90,32 @@ def test_a_failed_verify_sibling_is_flagged():
     assert "sonarr-verify: Ready=False HealthCheckFailed" in text
 
 
+def test_a_reconciling_row_is_pending_not_failed():
+    """Flux's in-flight state, seen live on qbittorrent on 2026-10-25 (#6337)."""
+    items = [
+        _source(),
+        _ks("sonarr"),
+        _ks("sonarr-verify", "Unknown", "Progressing", applied=OLD),
+    ]
+    text, code = flux.format_flux(items, ["sonarr"])
+    assert code == 0, text
+    assert "FAIL:" not in text
+    assert "PENDING (reconciling, not failed):\n  sonarr-verify: Progressing" in text
+    assert "OK: 1 of 2 Kustomizations are Ready" in text
+
+
+def test_a_failed_row_beside_a_reconciling_one_still_fails():
+    items = [
+        _source(),
+        _ks("sonarr", "Unknown", "Progressing"),
+        _ks("sonarr-verify", "False", "HealthCheckFailed"),
+    ]
+    text, code = flux.format_flux(items, ["sonarr"])
+    assert code == 1
+    assert "  sonarr: Progressing" in text.split("FAIL:")[0]
+    assert "sonarr-verify: Ready=False HealthCheckFailed" in text.split("FAIL:")[1]
+
+
 def test_a_suspended_row_is_flagged():
     text, code = flux.format_flux([_source(), _ks("sonarr", suspend=True)], ["sonarr"])
     assert code == 1
@@ -142,6 +168,11 @@ def test_wait_is_ready_at_the_commit_the_source_serves():
 def test_wait_stays_open_while_behind_or_on_a_dependency():
     items = [_source(), _ks("sonarr", "False", "DependencyNotReady", applied=OLD)]
     assert flux.wait_state(items, "sonarr", None)["state"] == "progressing"
+
+
+def test_wait_stays_open_while_reconciling_the_expected_commit():
+    items = [_source(), _ks("sonarr", "Unknown", "Progressing", applied=OLD)]
+    assert flux.wait_state(items, "sonarr", NEW)["state"] == "progressing"
 
 
 def test_wait_stays_open_on_a_ready_kustomization_that_has_not_observed_its_spec():

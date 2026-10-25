@@ -16,6 +16,11 @@ One kubectl read lists every Kustomization and OCIRepository in `flux-system`. E
 Kustomization. It exits 1 when a printed row is not Ready, is suspended or applied a commit
 other than the one its source serves, and when a named tag has no Kustomization.
 
+A row at Ready=Unknown is mid-reconcile (Flux's reason is `Progressing`), not failed (#6337).
+It prints under PENDING and does not by itself fail the probe, whatever commit it has applied
+so far. A caller that needs the row settled waits on it with `cc-wait flux <name>`. Ready=False
+still exits 1.
+
 `.claude/wait-sources/flux` runs `scripts/diagnostics/flux_wait.py`, which reads the same list
 through `read_flux` and judges one Kustomization with `wait_state`.
 """
@@ -55,7 +60,8 @@ FLUX_HELP = (
     "-verify Kustomizations and the shared soak; no tag lists every one. "
     "`cc-wait flux <name>` waits on one",
     "every row is Ready at its source's commit",
-    "one is not Ready, is suspended, lags its source or a tag has none",
+    "one is Ready=False, is suspended, lags its source while Ready or a tag has none; "
+    "a Ready=Unknown row is reconciling and prints under PENDING",
 )
 FLUX_TAGS_HELP = "deploy tags, as `./scripts/deploy.sh --tags` takes them"
 
@@ -255,12 +261,17 @@ def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
         )
     lines.append("")
     problems = [f"{t}: no Kustomization (not Flux-owned?)" for t in missing]
+    pending = []
     for name in chosen:
         r = rows[name]
         if r.settled:
             continue
         if r.suspended:
             problems.append(f"{name}: suspended")
+        elif r.ready == "Unknown":
+            pending.append(
+                f"{name}: {r.reason or 'no Ready condition'}: {r.message[:200]}"
+            )
         elif r.ready != "True":
             problems.append(f"{name}: Ready={r.ready} {r.reason}: {r.message[:200]}")
         else:
@@ -268,10 +279,19 @@ def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
                 f"{name}: applied {_short(r.applied)}, but {r.source or 'its source'} "
                 f"serves {_short(r.served)}"
             )
+    if pending:
+        lines.append("PENDING (reconciling, not failed):")
+        lines.extend(f"  {p}" for p in pending)
     if problems:
         lines.append("FAIL:")
         lines.extend(f"  {p}" for p in problems)
         return "\n".join(lines), 1
+    if pending:
+        lines.append(
+            f"OK: {len(chosen) - len(pending)} of {len(chosen)} Kustomizations are Ready at "
+            f"the commit their source serves; {len(pending)} still reconciling."
+        )
+        return "\n".join(lines), 0
     lines.append(
         f"OK: all {len(chosen)} Kustomizations are Ready at the commit their source serves."
     )
