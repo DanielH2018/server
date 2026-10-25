@@ -91,6 +91,6 @@ def parse_jails(conf: str) -> list[dict[str, str]]:
 def container_udp_port(entries: list[dict], name: str) -> str:
     entries = [c for c in entries if c["name"] == name]
     assert len(entries) == 1, (
-        f"expected one {name!r} in containers_list, found {len(entries)}"
+        f"expected one {name!r} in the host's service entries, found {len(entries)}"
     )
     return str(entries[0]["udp_port"])

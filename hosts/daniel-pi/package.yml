@@ -27,6 +27,9 @@
 # file gains `alloy_pi_http_password`, so the Pi's SOPS file must hold that key too
 # (`host_secrets.py sync daniel-pi`, operator-only). `credentials:` is unchanged.
 #
+# Since H5.9 the project also runs wg-easy, which reads no secret. The Compose env file and
+# `credentials:` are unchanged, and the Pi's SOPS file needs no new key.
+#
 # Since H7.27 it ships the first three subjects of initial_setup: apt's unattended upgrades, the
 # sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup skips each on
 # this host through `initial_setup_packaged_hosts`. No file here needs a credential.

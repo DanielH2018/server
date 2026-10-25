@@ -73,3 +73,5 @@ legacy:
   # container through the Compose env file, and the package installs a config without it.
   - {path: /home/ubuntu/server/containers/alloy/docker-compose.yml}
   - {path: /home/ubuntu/server/containers/alloy/config/config.alloy}
+  # wg-easy's role rendered only its compose file. The peer keys in ./config are data, not legacy.
+  - {path: /home/ubuntu/server/containers/wg-easy/docker-compose.yml}
