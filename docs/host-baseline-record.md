@@ -334,6 +334,9 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
 - **A REGRESSED case still gets committed** — the data is real — but reports the push DOWN with
   the regression named, matching autofix-bridge's "act, but do not launder the result" pattern
   rather than silently dropping the regression or silently blocking the commit.
+  `evals/trend.py:classify` decides what counts: a miss after a stable run, or a second miss in
+  a row. A single miss after a mixed window is FLAKY, lands in the PR body, and keeps the tile UP,
+  because at k=3 one unlucky trial misses a 2/3 threshold (#5796).
 - **Before widening scope** (grading `run-live.mjs`, changing cadence, adding a case directory
   the loop should skip), read the last few PRs this cron opened (`evals-history/*`,
   squash-merged) for what actually regressed or flaked.

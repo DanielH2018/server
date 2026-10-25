@@ -68,14 +68,33 @@ def test_record_run_inconclusive_has_no_signal():
     assert hist["a/1"][0]["thresholdMet"] is None
 
 
-def test_classify_regressed():
-    hist = {"a/1": [_entry(True), _entry(True), _entry(False)]}
+def test_classify_a_miss_after_a_stable_run_is_regressed():
+    # 3/3, 3/3, 3/3 then 1/3: met threshold in each of the stable_n runs before the miss.
+    hist = {"a/1": [_entry(True), _entry(True), _entry(True), _entry(False)]}
     assert classify(hist) == {
         "regressed": ["a/1"],
         "recovered": [],
         "flaky": [],
         "stable": [],
     }
+
+
+def test_classify_a_single_miss_after_a_mixed_window_is_flaky():
+    # 3/3, 1/3, 3/3 then 1/3: the shape skeptic/002 paged on (#5796).
+    hist = {"a/1": [_entry(True), _entry(False), _entry(True), _entry(False)]}
+    assert classify(hist) == {
+        "regressed": [],
+        "recovered": [],
+        "flaky": ["a/1"],
+        "stable": [],
+    }
+
+
+def test_classify_two_consecutive_misses_are_regressed():
+    hist = {
+        "a/1": [_entry(True), _entry(False), _entry(True), _entry(False), _entry(False)]
+    }
+    assert classify(hist)["regressed"] == ["a/1"]
 
 
 def test_classify_recovered():
@@ -137,14 +156,25 @@ def test_load_history_tolerates_corrupt(tmp_path):
 
 def test_main_records_and_flags_regression(tmp_path, capsys):
     hist = tmp_path / "history.json"
-    write_json(hist, {"a/1": [_entry(True), _entry(True)]})
+    write_json(hist, {"a/1": [_entry(True)] * 3})
     report = tmp_path / "report.json"
     report.write_text(json.dumps([_report_case("a/1", "FAIL", False, passes=1)]))
     rc = main(["--history", str(hist), str(report)])
     assert rc == 1
     saved = load_history(hist)
-    assert len(saved["a/1"]) == 3 and saved["a/1"][-1]["thresholdMet"] is False
+    assert len(saved["a/1"]) == 4 and saved["a/1"][-1]["thresholdMet"] is False
     assert "REGRESSED" in capsys.readouterr().out
+
+
+def test_main_exits_zero_on_a_flaky_miss(tmp_path, capsys):
+    hist = tmp_path / "history.json"
+    write_json(hist, {"a/1": [_entry(True), _entry(False), _entry(True)]})
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps([_report_case("a/1", "FAIL", False, passes=1)]))
+    rc = main(["--history", str(hist), str(report)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "FLAKY      a/1  (now 1/3)" in out and "REGRESSED" not in out
 
 
 def test_main_subscription_does_not_write(tmp_path):
@@ -185,7 +215,7 @@ def test_regression_across_epoch_is_annotated(tmp_path, capsys):
     hist = tmp_path / "history.json"
     write_json(
         hist,
-        {"a/1": [{**_entry(True), "epoch": "e1"}, {**_entry(True), "epoch": "e1"}]},
+        {"a/1": [{**_entry(True), "epoch": "e1"}] * 3},
     )
     report = tmp_path / "report.json"
     report.write_text(json.dumps([_report_case("a/1", "FAIL", False, passes=1)]))

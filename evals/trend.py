@@ -3,7 +3,7 @@
 The chezmoi eval engine (`run-evals.mjs --json report.json`) writes an array of
 per-case aggregates. This rolls those aggregates into `evals/history.json` across
 runs, so a case that was reliably passing and suddenly drops is surfaced as a
-REGRESSION instead of looking like a one-off flake, oscillating cases show up as
+REGRESSION, a single miss after a mixed window or other oscillation shows up as
 FLAKY, and reliably-passing cases are reported as STABLE (a candidate skip-set).
 
 The engine stays the single source of truth — this only consumes its report.json.
@@ -126,6 +126,11 @@ def classify(
     """Bucket each case by its recent signal history.
 
     Categories are exclusive; a case needs at least two signal-bearing runs to be classified.
+
+    A miss is `regressed` only when the trend can attribute it: the case was stable before this
+    run (met threshold in each of the `stable_n` runs before it), or it missed in the previous run
+    too. At k=3 trials and a 2/3 threshold one unlucky trial is a miss, so a single miss after a
+    mixed window is `flaky`, not a regression (#5796). Only `regressed` pages.
     """
     out: dict[str, list[str]] = {
         "regressed": [],
@@ -140,7 +145,9 @@ def classify(
         if len(sig) < 2:
             continue
         cur, prev, recent = sig[-1], sig[-2], sig[-window:]
-        if not cur and prev:
+        before = sig[-stable_n - 1 : -1]
+        was_stable = len(before) == stable_n and all(before)
+        if not cur and (was_stable or not prev):
             out["regressed"].append(cid)
         elif cur and not prev:
             out["recovered"].append(cid)
