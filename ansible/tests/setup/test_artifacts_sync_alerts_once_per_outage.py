@@ -244,8 +244,11 @@ def test_the_cron_runs_the_script_this_suite_renders():
         for task in tasks
         if isinstance(task.get("ansible.builtin.cron"), dict)
     }
-    assert jobs["Sync peer Claude artifacts"].startswith(
-        "/usr/local/bin/sync-artifacts.sh "
+    # The whole job, pipe included: the threshold line these tests prove reaches the journal
+    # only through `logger -t sync-artifacts` (#6162).
+    assert (
+        jobs["Sync peer Claude artifacts"]
+        == "/usr/local/bin/sync-artifacts.sh 2>&1 | logger -t sync-artifacts"
     ), jobs
 
 
