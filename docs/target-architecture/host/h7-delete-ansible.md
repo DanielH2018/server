@@ -2340,7 +2340,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           end-to-end proof.
       **Amended 2026-10-25 ([#6231](https://github.com/DanielH2018/server/issues/6231)):** the
       container cases landed in `scripts/validate/validate_lib/bootstrap_case.py`, which the
-      `host_packages` job runs. They found that `--local-build` looked for homelab-tools'
+      `host_packages` job runs. Writing them found that `--local-build` looked for homelab-tools'
       `nfpm.yaml` above the per-architecture directory the renderer writes, so every local
       build died at step 5. Four premises changed:
         - *One case per host.* `--local-build` runs on a container named after each host, as
