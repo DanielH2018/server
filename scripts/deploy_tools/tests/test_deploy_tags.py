@@ -332,10 +332,15 @@ def test_hosts_routes_a_k8s_only_tag_to_its_k8s_host_alone(capsys):
     assert capsys.readouterr().out == "daniel-box\twg-easy\ndaniel-pi\twg-easy\n"
 
 
-def test_real_inventory_routes_the_pi_log_shipper_to_the_pi():
-    """Non-vacuity against the live inventory: `alloy` resolves to daniel-pi."""
-    assert deploy_tags.tags_by_host(["alloy"]) == {"daniel-pi": ["alloy"]}
-    assert deploy_tags.tag_platforms("alloy") == {"docker"}
+def test_real_inventory_gives_the_packaged_pi_log_shipper_no_deploy_tag():
+    """Non-vacuity against the live inventory: `alloy` left `containers_list` in H5.8.
+
+    The Pi's package deploys it, so no host declares the tag and `deploy.sh --tags alloy`
+    selects nothing. `wg-easy` still resolves, which proves the lookup reads the real files.
+    """
+    assert deploy_tags.tags_by_host(["alloy"]) == {}
+    assert deploy_tags.tag_platforms("alloy") == set()
+    assert "daniel-pi" in deploy_tags.tags_by_host(["wg-easy"])
 
 
 def test_landing_hosts_drops_an_undeployable_host_but_keeps_the_pi(tmp_path):

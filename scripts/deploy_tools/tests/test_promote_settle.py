@@ -47,7 +47,8 @@ def _fake(tool: str) -> str:
 
 # GHCR for the move step: a pull token, then `prod`'s HEAD, which answers FAKE_PROD_STATUS
 # (200 by default) with FAKE_PROD_DIGEST as its Docker-Content-Digest, or with
-# FAKE_PROD_DIGEST_LATER from the second read on when that is set.
+# FAKE_PROD_DIGEST_LATER from the second read on when that is set. `last-good`'s HEAD answers
+# FAKE_LAST_GOOD_STATUS (200 by default) with FAKE_LAST_GOOD_DIGEST, or RESET_DIGEST.
 FAKE_CURL = r"""#!/usr/bin/env bash
 cat > /dev/null
 out= url=
@@ -68,8 +69,9 @@ case "$url" in
     printf 'HTTP/2 %s\r\nDocker-Content-Digest: %s\r\n\r\n' "$status" "$digest" > "$out"
     printf '%s' "$status" ;;
   *"/manifests/last-good")
-    printf 'HTTP/2 200\r\nDocker-Content-Digest: %s\r\n\r\n' "${FAKE_LAST_GOOD_DIGEST-$RESET_DIGEST}" > "$out"
-    printf 200 ;;
+    status=${FAKE_LAST_GOOD_STATUS:-200}
+    printf 'HTTP/2 %s\r\nDocker-Content-Digest: %s\r\n\r\n' "$status" "${FAKE_LAST_GOOD_DIGEST-$RESET_DIGEST}" > "$out"
+    printf '%s' "$status" ;;
   *) echo "fake curl: unexpected $url" >&2; exit 2 ;;
 esac
 """

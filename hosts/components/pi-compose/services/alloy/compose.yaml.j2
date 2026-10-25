@@ -1,6 +1,84 @@
-{% from 'autokuma.yml.j2' import labels as kuma with context %}
-{% from 'networks.yml.j2' import service_networks, external_networks with context %}
-{% from 'resources.yml.j2' import resources %}
+{#- alloy (H5.8, docs/target-architecture/host/h5-pi-compose.md). Grafana Alloy on daniel-pi, shipping
+    this host's container logs and its two token heartbeats' verdict lines to loki-homelab. It
+    was an Ansible role's compose file until H5.8. The macros that file imported (networks,
+    resources, autokuma labels) are written out here, because a service tree has no
+    ansible/templates on its search path. The values are the ones the macros rendered for the Pi.
+    This header holds what the role's CLAUDE.md said; the comments below carry the rest.
+
+    - **Pin policy.** The image is pinned by tag AND digest, moved by hand when the cluster's
+      Alloy (`roles/k8s/loki-homelab/defaults/main.yml`) moves. H5.11 adds a Renovate manager
+      for this file.
+    - **Host.** daniel-pi only. The cluster nodes run the loki-homelab DaemonSet.
+    - **The port is on the Pi's LAN IP.** Prometheus scrapes it as `alloy-pi`, and everything
+      but `/metrics` needs basic auth (the `DECIDED:` marker on `ports:` below).
+    - **Sources.** Container logs through docker-proxy (`job="pi"`), and
+      `/var/log/pi-health/*.log` (`job="syslog"`, `machine="daniel-pi"`). The label contract is
+      guarded by hosts/lib/tests/test_pi_compose_alloy.py.
+    - **One source is counted, not shipped.** `/var/log/pi-health/crowdsec-edge-probe.status`
+      holds the edge probe's once-a-minute HTTP status for crowdsec's off-cluster verify. A
+      `stage.metrics` counter in config.alloy turns it into
+      `loki_process_custom_crowdsec_edge_probe_total` by `status`, which Prometheus reads
+      through the `alloy-pi` scrape, and a drop stage discards every line. The verify's ban
+      makes Traefik refuse this container's Loki pushes, so the count must not depend on them.
+      The timer that writes the file is `hosts/components/crowdsec-probe/`, and the same test
+      pins the stage. The label values render from `loki_streams` in `group_vars/all.yml`,
+      which the cluster's Alloy and monitor-bridge's selectors also read;
+      `ansible/tests/services/test_loki_stream_labels.py` holds the consumers to it.
+    - **Config.** config.alloy (River) is a plain package file beside this one, mounted
+      read-only. It carries no secret: it reads the HTTP password as
+      `sys.env("ALLOY_PI_HTTP_PASSWORD")` and the domain as `sys.env("HOMELAB_DOMAIN")`. The
+      password reaches the environment below through the project's Compose env file
+      (`alloy_pi_http_password`; the operator runs `host_secrets.py sync daniel-pi` after a
+      rotation). The domain is a plain inventory variable, rendered at build time. A secret
+      rotation changes this environment, so `up -d` recreates the container. A config edit
+      changes the `homelab.config-sha256` label, which replaces the role's
+      `common_config_changed` flag: Alloy reads its config once, at startup, so without the
+      label an edit would sit inert while the deploy reported green.
+    - **The host journal is not shipped, and RSS is the reason (#1922, measured 2026-09-17).**
+      `loki.source.journal` works on this image — the 2026-09-02 spike read 6,573 lines in ten
+      minutes — and a `docker.service` unit matcher would ship ~50 lines a day (54 lines for
+      the four days to 2026-09-17), so line volume is not the cost. The container's memory is.
+      `process_resident_memory_bytes{job="alloy-pi"}` over the 7 days to 2026-09-17: median
+      59.3 MB, p95 70.1 MB, and a daily maximum of 75.5–82.1 MB on every one of the seven
+      days, against the 96 MiB (100.7 MB) `resources()` cap and a 72 MiB GOMEMLIMIT.
+      `go_memstats_sys_bytes` read 96.3 MB at the same time. #1944 settled what that peak is
+      (2026-09-18): the top of the GC sawtooth, sampled 1,440 times a day. The live heap is
+      38 MB, not the 19 MiB the sizing assumed, so GOGC=50 set a 58 MB heap goal and the Go
+      runtime's total reached the 72 MiB GOMEMLIMIT at the top of every cycle; since #1967
+      (2026-09-18) GOGC is off and a 104 MiB limit under a 128M cap is the only collection
+      trigger, so the peak is ~20 MB higher and collection runs a third as often (0.18 cycles
+      a minute) — the Go runtime's forced two-minute cycle, which no GOGC value escapes, is
+      what GOGC=off removes. That cut the container's major faults 24% (72/s from 95/s); the
+      rest are its 60-second work re-faulting a cold working set, which no GC setting reaches.
+      Nothing scheduled drives it, and there is no removable cause: what fills the 38 MB is
+      unmeasured and pprof is off by decision. The GOMEMLIMIT and `resources` comments below
+      carry the numbers, and hosts/lib/tests/test_pi_compose_alloy.py takes its floor from that
+      live heap. The journal reader's own footprint is still unmeasured. It is also awkward to
+      measure: sdjournal mmaps the journal files, and here those sit on the 128 MB log2ram
+      tmpfs, so the mapped window counts in this process's RSS (the metric above) while the
+      physical pages stay journald's — the metric and the cgroup cap would disagree, and only a
+      deployed before/after on this host settles it. A reader whose cost cannot be measured
+      without a deploy, added to a process whose runtime already paces against its memory
+      limit, is the case the issue's own drop rule names. The daemon-failure evidence the
+      journal would have carried reaches Loki another way: when dockerd stops answering,
+      `pi-recovery-health` (`hosts/components/pi-heartbeats/`) appends the newest non-info
+      `journalctl -u docker` lines to its own DOWN record, which the `pi_health` source in
+      config.alloy already ships. To revisit the reader, first make room for it — a lower
+      `GOGC` takes ~10 MB off every peak per halving, and the `DECIDED:` marker at the `GOGC`
+      line says what that costs on this host (the heap is faulted back from zram once per
+      cycle, so every halving of GOGC doubles the faults) — then measure RSS for a week and
+      delete `test_the_journal_is_not_shipped` in the same PR. The test is the enforcement for
+      this decision.
+    - **No healthcheck, on purpose.** The image ships no HTTP client, so a `wget` probe fails
+      to EXEC and reads as `unhealthy`; Prometheus `up{job="alloy-pi"}` covers liveness from
+      outside. The comment above `ports:` carries the history.
+    - **Runs as 1000:1000 with `--storage.path=/data`**, not the image's uid 473 or its
+      `/var/lib/alloy`: the comments at `command:` and `user:` say why each half is
+      load-bearing.
+    - **`depends_on: docker-proxy`** replaces the Ansible play's list-order rule. Discovery goes
+      through that read-only proxy, which the docker-proxy service file in this project
+      declares. The Watchtower `depends-on` label is not carried over: Watchtower was retired
+      (35c0dc8d) and nothing reads the label. -#}
 ---
 
 services:
@@ -8,7 +86,7 @@ services:
     container_name: alloy
     # Tag AND digest, unlike the :latest@sha256 the Promtail role carried: Alloy is the shipper
     # the cluster pins by tag in roles/k8s/loki-homelab/defaults/main.yml, and keeping the two
-    # on one version keeps one label contract. Renovate does not track roles/containers/** —
+    # on one version keeps one label contract. Renovate does not track hosts/components/pi-compose/** until H5.11 —
     # no manager's matchFileNames reaches it (renovate.json) — so this pin moves by hand when
     # the cluster's does. The digest is the arm64 manifest, resolved on daniel-pi 2026-09-02.
     image: grafana/alloy:v1.19.2@sha256:b8ec653c44235fbe910879145dac3597d66b0aaecf60bcbbe82580767771a839
@@ -51,7 +129,12 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    {{ service_networks() }}
+    networks:
+{% for net in container_item.networks %}
+      - {{ net }}
+{% endfor %}
+    depends_on:
+      - docker-proxy
     # Docker copies the HOST's resolver options into every container's resolv.conf, and this
     # host's are `timeout:2 attempts:1` (optimize_pi_dns_options) — sized so a dead Pi-hole
     # costs one 2s wait before 1.1.1.1 answers. Inside a container that same single 2s try
@@ -70,16 +153,34 @@ services:
       - timeout:3
       - attempts:3
     volumes:
-      - ./config/config.alloy:/etc/alloy/config.alloy:ro
+      # The config is a package file (a plain file the renderer installs beside this one), not a
+      # bind-mounted file the Ansible role rendered. It is mode 0644, not the role's 0640:
+      # it carries no secret now.
+      - type: bind
+        source: /usr/lib/homelab/compose/alloy/config.alloy
+        target: /etc/alloy/config.alloy
+        read_only: true
+        bind: {create_host_path: false}
       # Positions must survive a restart. Without this the container re-reads every
       # container's log from the beginning on each recreate, which both duplicates lines in
       # Loki and spends the Pi's uplink re-sending them.
-      - ./data:/data
+      - type: bind
+        source: ./data
+        target: /data
+        bind: {create_host_path: false}
       # The two host health timers' verdict lines (pi_health source). Read-only, and the same
       # path inside and out so the config's path needs no translation. No group_add: the
       # timers' services write as uid 1000 and this container already runs as 1000:1000.
-      - /var/log/pi-health:/var/log/pi-health:ro
+      - type: bind
+        source: /var/log/pi-health
+        target: /var/log/pi-health
+        read_only: true
+        bind: {create_host_path: false}
     environment:
+      # The two values config.alloy reads. The password is a SOPS key that the project's Compose
+      # env file fills; the domain is a plain variable, rendered at build time.
+      - ALLOY_PI_HTTP_PASSWORD={{ alloy_pi_http_password }}
+      - HOMELAB_DOMAIN={{ domain }}
       # A soft ceiling on the Go runtime's TOTAL memory (heap, stacks, GC metadata, everything
       # `go_memstats_sys_bytes` counts), not on the live heap. When the total reaches it the
       # runtime collects continuously, and the only thing bounding that is the GC CPU limiter
@@ -102,7 +203,7 @@ services:
       # cycle too (#1944): what a limit that is reached does is force the scavenger to hand
       # idle heap pages back to the kernel, which is cheap. The continuous-collection state
       # above needs the limit under the live set plus GC slack, which is why the guard in
-      # ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py takes the floor from the
+      # hosts/lib/tests/test_pi_compose_alloy.py takes the floor from the
       # measured live heap, not from `sys_bytes` — that metric never shrinks and read 96.3 MB
       # on 2026-09-17, above the old limit and the old cap alike. With GOGC off the guard
       # requires at least the slack GOGC=50 gave, half the live heap, so a "thrifty" edit
@@ -159,7 +260,7 @@ services:
     # NO healthcheck, and this is a correction rather than an omission — inherited from the
     # Promtail role, where a wget probe of /ready shipped and could never work: that image
     # carried no wget, curl, nc or busybox, so every probe exited -1 with "executable file
-    # not found in $PATH", the container went `unhealthy` after its third failure, and autoheal
+    # not found in PATH", the container went `unhealthy` after its third failure, and autoheal
     # restarted it on a loop. Alloy's image (Ubuntu-based, the alloy binary and libc) has no
     # HTTP client either. The general rule stands: on this host a healthcheck is only
     # available to an image that ships an HTTP client, and `test:` failing to EXEC is
@@ -188,10 +289,12 @@ services:
     ports:
       - "{{ server_ip }}:12345:12345/tcp"
     labels:
-      {{ kuma(container_item.name) }}
-
-      # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on=docker-proxy"
+      # Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false), so the
+      # autokuma macro emitted this inert label.
+      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
+      # The sha256 of the rendered config.alloy. Compose cannot see the file's content, so the
+      # label is what makes `up -d` recreate the container when the config changes.
+      - "homelab.config-sha256={{ alloy_config_sha256 }}"
     # 128M is the containment cap, 24 MiB over the 104 MiB GOMEMLIMIT above so a spike is
     # collected rather than OOM-killed (96M was 24 MiB over the 72 MiB limit it paired with).
     # Startup under the 0.30 CPU cap takes minutes on this host (the binary is large and
@@ -221,6 +324,17 @@ services:
     # 456 MB host that already holds 320 MB in swap"; that held for the GOGC=50 pairing and
     # the cost side still does, which is why the extra is taken as compressed swap (see the
     # GOGC marker) rather than resident pages. The cap governs the cgroup; it reserves nothing.
-    {{ resources('0.30', '128M', '0.02', '24M') }}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 128M
+        reservations:
+          cpus: '0.02'
+          memory: 24M
 
-{{ external_networks() }}
+networks:
+{% for net in container_item.networks %}
+  {{ net }}:
+    external: true
+{% endfor %}

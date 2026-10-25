@@ -67,6 +67,7 @@ def test_every_packaged_compose_file_asks_the_daemon_for_at_least_6_mib(package)
 def test_the_canary_reads_no_secret_and_gets_the_domain_at_build_time(package):
     includes = project_of(package)["includes"]
     assert [i["path"] for i in includes] == [
+        f"{COMPOSE}/alloy/compose.yaml",
         f"{COMPOSE}/autoheal/compose.yaml",
         f"{COMPOSE}/docker-proxy/compose.yaml",
         f"{COMPOSE}/pi-canary/compose.yaml",
@@ -120,11 +121,8 @@ def test_a_service_directory_line_without_its_parents_is_flagged():
 
 
 def test_the_env_output_must_carry_exactly_the_keys_the_project_reads(package):
-    """ACCEPT the key autoheal reads, REJECT a key the output does not declare."""
-    check_env_output(package, REAL, frozenset({"monitor_discord_webhook_url"}))
+    """ACCEPT the keys autoheal and alloy read, REJECT a key the output does not declare."""
+    keys = frozenset({"monitor_discord_webhook_url", "alloy_pi_http_password"})
+    check_env_output(package, REAL, keys)
     with pytest.raises(RenderRefused, match="declares"):
-        check_env_output(
-            package,
-            REAL,
-            frozenset({"monitor_discord_webhook_url", "alloy_pi_http_password"}),
-        )
+        check_env_output(package, REAL, keys | {"pi_recovery_push_token"})
