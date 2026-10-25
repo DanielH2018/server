@@ -968,6 +968,9 @@ The banner ends with a triage line of whole `probe.py` commands joined by `or`: 
 
 Three more sections print whether or not anything is unhealthy: the other live Claude sessions
 in this repo, merged worktrees ready to remove, and fan-out worktrees running on another host.
+The fan-out section names a batch only within a day of its launch. Older batches whose
+worktree `fanout.py place clean` never removed fold into one count per host, so a run nobody
+cleaned stops listing its batches in every session.
 
 ### `fanout-stop` (Stop)
 
