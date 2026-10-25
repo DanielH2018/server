@@ -24,6 +24,7 @@ Stdlib only: it runs in the python image the role's CronJobs already pin. The sc
 ConfigMap that Flux substitutes into, so it holds no dollar sign.
 """
 
+import argparse
 import http.server
 import json
 import os
@@ -220,6 +221,12 @@ def make_handler(relay: Relay, worker: threading.Thread):
 
 
 def main() -> int:
+    argparse.ArgumentParser(
+        description="Queue Uptime Kuma's Discord notifications and deliver them inside "
+        "Discord's rate limit.",
+        epilog="Configured by environment: RELAY_PORT and RELAY_WEBHOOK_URL_FILE, plus the "
+        "optional RELAY_MAX_QUEUE (500) and RELAY_DEADLINE_SECONDS (900).",
+    ).parse_args()
     relay = Relay(
         url_file=os.environ["RELAY_WEBHOOK_URL_FILE"],
         max_queue=int(os.environ.get("RELAY_MAX_QUEUE", "500")),
