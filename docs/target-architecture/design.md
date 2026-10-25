@@ -233,7 +233,7 @@ each slice's *Complexity delta*. It counts owned code only, and leaves out tests
 | `land` | D6.12 about 80, for `land.sh`'s k8s list (old D6.1) | the k8s arms with `deploy.sh`'s, about 700 (D6); the host-plane arms in H7, unsized | at most 6,400 lines after D6; final size unplanned |
 | Host reconcile | H5 130; H3, H4, H6 and H7 unsized | — | H7's ceiling, (B + 720) × 1.3, whose crossing switches the host plan to ansible-pull |
 | Host packaging and builder | unsized; H3 measures it | the bring-up playbooks, about 25k lines of setup and containers roles (an unvalidated census that H2 and H7 re-measure) | — |
-| Alert rules and exporters | about 1,100, with 12 items unsized | about 40 | M1's series budget, 140,000 head series |
+| Alert rules and exporters | about 1,100, with 12 items unsized | about 40 | M1's series budget, 2,000 samples a second |
 | monitor-bridge | D2's deploy-pipeline family, about 150 | about 5,700 to 6,700 (M2, M5, M6) | residual about 6,500, capped at 7,000 (M6) |
 | Uptime Kuma | — | about 3,700 lines and 82 push-token secrets | deleted by M6 |
 | Docs guard | about 700 (G1, G3, G4) | about 925 lines plus the 1,471-line generated lock (G2, G4) | — |

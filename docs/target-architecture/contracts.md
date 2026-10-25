@@ -660,8 +660,9 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 - **Host rules.** H3 adds `HostReconcileFailed` and `HostUpdateStale` to M1's rules
   directory. `HostReconcileFailed` fires on `homelab_host_reconcile_ok` at 0 for 15 minutes.
   The PR that adds the two rules waits on M1. They survive M6, and H5 relies on them.
-- **Series budget.** M1 sets a fleet-wide series budget. Each slice that adds a scrape, a
-  probe target or a label states its series delta against that budget.
+- **Series budget.** M1 sets a fleet-wide series budget, stated in samples a second
+  (#4756). Each slice that adds a scrape, a probe target or a label states the samples a
+  second it adds against that budget.
 - **Traces.** No slice adds tracing. The deploy timeline comes from commit-status timestamps
   and from the deploy-pipeline exporter's ages. `design.md` records why.
 - **Check producers.** A host producer follows M3's producer metric contract (M3 *The
