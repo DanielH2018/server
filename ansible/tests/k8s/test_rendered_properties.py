@@ -7,8 +7,8 @@ One that needs a second render context, a cross-document join or a long exemptio
 file (`test_container_security_context.py` is the example).
 
 Rows that would push this file past the test-module length cap live in
-`_config_property_rows.py`, `_workload_property_rows.py`, `_scrape_property_rows.py` and
-`_edge_property_rows.py`, and run here with the rest.
+`_config_property_rows.py`, `_workload_property_rows.py`, `_image_property_rows.py`,
+`_scrape_property_rows.py` and `_edge_property_rows.py`, and run here with the rest.
 
 A row's `reason` is the long form a reader needs before changing the property. Keep it as
 specific as the file docstring it replaced.
@@ -23,6 +23,7 @@ import pytest
 from _config_property_rows import CONFIG_PROPERTIES
 from _edge_property_rows import EDGE_PROPERTIES
 from _helpers import REPO, manifests_rollout_timeout_s
+from _image_property_rows import IMAGE_PROPERTIES
 from _k8s_render import pod_spec
 from _property_table import Property, check
 from _scrape_property_rows import SCRAPE_PROPERTIES
@@ -315,6 +316,7 @@ PROPERTIES = (
     )
     + CONFIG_PROPERTIES
     + WORKLOAD_PROPERTIES
+    + IMAGE_PROPERTIES
     + SCRAPE_PROPERTIES
     + EDGE_PROPERTIES
 )

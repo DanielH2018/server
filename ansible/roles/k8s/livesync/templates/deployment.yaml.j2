@@ -36,6 +36,7 @@ spec:
         # seeded volumes — copying it would freeze a stale docker.ini into the PVC.
         - name: seed-config
           image: {{ livesync_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
@@ -51,6 +52,7 @@ spec:
       containers:
         - name: couchdb
           image: {{ livesync_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
           # CouchDB's entrypoint chowns /opt/couchdb/data and then drops to the couchdb user

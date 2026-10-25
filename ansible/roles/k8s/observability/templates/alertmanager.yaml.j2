@@ -39,6 +39,7 @@ spec:
       containers:
         - name: alertmanager
           image: {{ observability_k8s_alertmanager_image }}
+          imagePullPolicy: IfNotPresent
 {{ hardened_security_context(non_root=true) }}
           args:
             - --config.file=/etc/alertmanager/alertmanager.yml

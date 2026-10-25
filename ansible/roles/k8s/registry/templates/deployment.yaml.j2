@@ -39,6 +39,7 @@ spec:
       containers:
         - name: registry
           image: {{ registry_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             # Named, because the Service's targetPort names it. A pod that declares no port of
             # that name gets no endpoint for it, which keeps the ghcr-mirror pod off this port.
