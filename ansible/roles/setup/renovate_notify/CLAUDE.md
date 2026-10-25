@@ -100,8 +100,14 @@ list. `host_lib.py` is copied in from `hosts/lib/` — edit it there, not here.
 
 ```bash
 uv run pytest ansible/roles/setup/renovate_notify -q -n0
-uv run python ansible/roles/setup/renovate_notify/files/renovate_notify.py --dry-run
+PYTHONPATH=hosts/lib uv run python ansible/roles/setup/renovate_notify/files/renovate_notify.py --dry-run
 ```
+
+The dry run needs `PYTHONPATH=hosts/lib` because the repo holds no `host_lib.py` beside the
+script; the role copies one into `/opt/renovate-notify/` only at deploy time. The script also
+reads the hard-coded `/etc/renovate-notify/config.env`, which exists only on
+`renovate_notify_host` (daniel-box) and is mode `0600` for `sys_user`. Run the dry run there as
+that user; anywhere else it stops at `FileNotFoundError` once the imports resolve.
 
 **A dry run proves only the paths today's dashboard exercises,** and `--check` fails at
 "Enable and start the timer", which is not a bug. Both, plus the captured-fixture rule a new
