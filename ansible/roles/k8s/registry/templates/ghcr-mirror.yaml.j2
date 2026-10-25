@@ -52,6 +52,7 @@ spec:
       containers:
         - name: ghcr-mirror
           image: {{ registry_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             # Named for the Service's targetPort, as the push store's port is.
             - name: ghcr-mirror

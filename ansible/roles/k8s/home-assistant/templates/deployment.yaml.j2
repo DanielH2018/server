@@ -69,6 +69,7 @@ spec:
         # nothing includes them, but a stale copy invites confusion.
         - name: config-install
           image: {{ home_assistant_k8s_init_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -ec
@@ -106,6 +107,7 @@ spec:
       containers:
         - name: home-assistant
           image: {{ home_assistant_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
           # Drop ALL, add the s6 privilege-drop set. No

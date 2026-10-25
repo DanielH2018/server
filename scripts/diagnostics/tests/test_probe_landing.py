@@ -361,6 +361,30 @@ def test_an_agent_only_k3s_row_prints_the_join_and_no_server_command():
     assert not any("k3s-bringup.yml --tags" in line for line in lines), lines
 
 
+def test_a_node_address_row_prints_the_pin_under_the_host_it_runs_on():
+    """#5918: the pin play runs ON the agent, so its command sits under that host's name."""
+    lines = _owed_text(
+        {
+            "subject": "k3s",
+            "playbook": "ansible/k3s-bringup.yml",
+            "tags": ["node-address"],
+            "agent_hosts": ["daniel-server"],
+        }
+    ).splitlines()
+    server = lines.index(
+        "    uv run ansible-playbook ansible/k3s-bringup.yml --tags node-address"
+    )
+    heading = lines.index("  Then pin its LAN address, run on daniel-server:")
+    assert lines[heading + 1] == (
+        "    uv run ansible-playbook ansible/k3s-bringup.yml"
+        " -e pin_agent_address=daniel-server --tags node-address"
+    )
+    clear = next(
+        i for i, line in enumerate(lines) if "clear-owed manual_plane k3s" in line
+    )
+    assert server < heading < clear
+
+
 def test_a_role_no_playbook_applies_prints_no_playbook_command():
     text = _owed_text({"subject": "common", "playbook": "none"})
     assert "Apply the role by hand." in text

@@ -238,6 +238,7 @@ def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
             "by_hand": r.by_hand,
             "warning": r.warning,
             "agents": list(r.agents),
+            "pins": [list(pin) for pin in r.pins],
             "clear": r.clear,
         }
         for r, line in zip(remedies, lines, strict=True)
@@ -493,6 +494,9 @@ def owed_lines(row: dict) -> list[str]:
         if row["agents"]:
             lines.append("  Then join each agent node:")
             lines += [f"    {a}" for a in row["agents"]]
+        # The pin play runs ON the agent, so each command gets its own host line (#5918).
+        for host, cmd in row["pins"]:
+            lines += [f"  Then pin its LAN address, run on {host}:", f"    {cmd}"]
     elif row["agents"]:
         # A row reaching only the agent half: the server play would select nothing (#5628).
         lines.append("  Join each agent node by hand:")

@@ -141,6 +141,7 @@ spec:
       containers:
         - name: kube-state-metrics
           image: {{ observability_k8s_kube_state_metrics_image }}
+          imagePullPolicy: IfNotPresent
           args:
             # Must match the ClusterRole above, as must --custom-resource-state-config below.
             # Restricting the set also drops the metric cardinality this stack has no use for.

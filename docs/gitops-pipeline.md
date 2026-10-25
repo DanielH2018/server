@@ -468,7 +468,14 @@ The ledger's readers ignore unknown keys, which is why the tags live on the line
 **Every task file in a setup role carries its own tags**, so the derivation maps a changed path to
 the tags of the tasks that read it:
 
-- `tasks/<f>.yml` maps to the tags on its own tasks.
+- `tasks/<f>.yml` maps to the tags on its own tasks. When the role's `tasks/main` imports the file
+  statically, an edit maps to the tags of the top-level tasks the range added or changed, read at
+  the new ref, and of the tasks it deleted, read at the old ref (#6234). A deleted task's tag must
+  still select a task at the new ref, or the derivation refuses. H1.4 deleted the `coredns`
+  instance from `setup/k3s`'s `stale-checkout-guard.yml`, and the whole-file answer had named the
+  surviving Longhorn instances' tags instead. A file that sets a fact, runs `include_vars` or
+  `register:`s a result keeps the tags of every task in it, because an edited task can read a
+  variable that an unchanged task sets under another tag.
 - `templates/<f>` or `files/<f>` maps to the tags of every task file naming `<f>`, following a
   template another template includes or imports. A host script's template is usually named in a
   `defaults/` data structure rather than a task's `src:` (`setup/k3s` collects them in
@@ -628,7 +635,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `GH_TOKEN`/`GITHUB_TOKEN` in the environment win) and degrades to anonymous when gh is logged
   out. The anonymous limit is 60 requests an hour per source IP, shared with every landing's
   `await_ci.py` poll on the host, and an exhausted quota reads as "CI not finished." The
-  authenticated limit is 5000 an hour per token.
+  authenticated limit is 5000 an hour per token. An anonymous `await_ci.py` polls every 90s
+  rather than every 20s and never walks descendants, so land.sh's 1200s CI budget costs at
+  most 30 of the 60 requests (`await_ci.ANONYMOUS_INTERVAL_S`, #6148). A poll costs 2
+  requests until a required run registers. On an anonymous host, a merge commit GitHub never
+  ran CI for ends the wait on exit 75 and asks for `gh auth login`.
   - **A tip that is not green sends the gate walking, and the tick deploys the newest GREEN
     ancestor instead of deferring the range.** *What a tick does* has the steps.
     `deploy_phases.assess` reads `git rev-list --first-parent <local>..<origin>` newest first,
@@ -665,6 +676,8 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   - `cancelled`/`stale` count as **no verdict, not failure**: `ci.yml` sets
     `concurrency: cancel-in-progress` on `github.ref`, so two quick pushes cancel the first run,
     and mapping that to a failure would page on an ordinary back-to-back push.
+    The `always()` gate job that fails on those cancelled needs is no verdict either, once the
+    commit's check-suites show its own run concluded `cancelled` (#5931, #6007).
   - `CI_CONTEXTS` holds GitHub check-run **names**, which must match `ci.yml`'s `name:` exactly.
     An empty list or repo **disarms** the gate with a log line rather than passing everything,
     the same fail-closed shape as the k8s denylist. Set `gitops_deploy_require_ci: false` to turn
@@ -1723,8 +1736,9 @@ under-sized.
   failure-driven worst cases cannot stack; the residual is a slow but successful run cut short.
 - Forward and rollback run sequentially in one activation: `TimeoutStartSec` in
   `gitops-deploy.service.j2` is `max(broad, k8s + rollback)` plus the flock wait.
-- **The FORWARD cap is derived from the worst promoted role** (#2397), and it cannot be raised
-  alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
+- **The FORWARD cap is derived from the worst promoted, Ansible-owned role** (#2397). A
+  flux-owned role is skipped, as the deployer skips it, so since the D5 flips the cap is sized
+  for a role handed back to Ansible: prowlarr at 960 s. It cannot be raised alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
   Under-sized, a cap kill lands MID-DRAIN and routes to `_rollback_k8s`.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
   `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 3840 s, and

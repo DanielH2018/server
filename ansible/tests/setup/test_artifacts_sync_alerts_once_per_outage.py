@@ -313,12 +313,18 @@ def test_a_sync_leaves_the_peer_directory_at_the_k8s_host_files_mode(tmp_path):
     )
     kuma_lib = tmp_path / "kuma-push-lib.sh"
     kuma_lib.write_text("kuma_push() { :; }\n")
+    # The repo's check library and a temp textfile directory: the defaults are the host's
+    # installed library and node_exporter's real directory, which a test must not write (#6191).
+    textfile = tmp_path / "textfile"
+    textfile.mkdir()
     proc = launch(
         ["bash", str(script)],
         env={
             "PATH": os.environ["PATH"],
             "SYNC_ARTIFACTS_STATE_DIR": str(tmp_path),
             "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
+            "SYNC_ARTIFACTS_CHECK_LIB": str(CHECK_LIB),
+            "TEXTFILE_DIR": str(textfile),
             "SYNC_ARTIFACTS_SSH": PEER_SSH,
             "SYNC_ARTIFACTS_REAL_RSYNC": real_rsync,
             "BASH_FUNC_rsync%%": f"() {{ {LOCAL_RSYNC_STUB}; }}",
@@ -328,6 +334,7 @@ def test_a_sync_leaves_the_peer_directory_at_the_k8s_host_files_mode(tmp_path):
     assert proc.returncode == 0, proc
     # Non-vacuity: the pull really ran, so the mode below is the one rsync left.
     assert (peer_dir / PEER / "sub" / "plan.html").read_text() == "<p>plan</p>\n"
+    assert (textfile / "sync-artifacts.prom").is_file()
     mode = _peer_directory_task_mode()
     assert oct((peer_dir / PEER).stat().st_mode & 0o777) == oct(int(mode, 8)), mode
 

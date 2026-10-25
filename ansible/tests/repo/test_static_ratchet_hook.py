@@ -243,9 +243,10 @@ def test_the_lander_gate_skips_a_k8s_role_doc():
 # The session ceiling `PYTEST_XDIST_AUTO_NUM_WORKERS` sets for every Claude session.
 SESSION_CEILING = 4
 
-# A multi-module pytest hook that still takes `-n auto`, with the PR that pins it. #5919 pins
-# `static-ratchet-tests` at `-n 4`; delete its row once that lands.
-UNPINNED = {"static-ratchet-tests": "#5919"}
+# A multi-module pytest hook that `-n auto` still runs on one worker, with the PR that pins it.
+# `static-ratchet-tests` sat here for #5919 until the width came from recorded seconds (#5967),
+# which gives it 4.
+UNPINNED: dict[str, str] = {}
 
 
 def _pytest_hooks() -> list[dict]:
@@ -269,19 +270,32 @@ def _pinned_width(entry: str) -> int | None:
     return None
 
 
-def _left_to_auto(hooks: list[dict]) -> list[str]:
-    """The ids of multi-module hooks whose width `-n auto` sizes at one worker."""
+def _left_to_auto(
+    hooks: list[dict], weights: dict[str, float] | None = None
+) -> list[str]:
+    """The ids of multi-module hooks whose width `-n auto` sizes at one worker.
+
+    `weights` defaults to the committed table, which is what `-n auto` reads.
+    """
+    if weights is None:
+        weights = xdist_width.load_weights(REPO) or {}
     return [
         h["id"]
         for h in hooks
         if len(_modules(h)) > 1
         and _pinned_width(h["entry"]) is None
-        and xdist_width.workers_for(len(_modules(h)), SESSION_CEILING) <= 1
+        and xdist_width.workers_for(
+            xdist_width.module_seconds(
+                [REPO / m for m in sorted(_modules(h))], REPO, weights
+            ),
+            SESSION_CEILING,
+        )
+        <= 1
     ]
 
 
 def test_no_multi_module_pytest_hook_leaves_its_width_to_auto():
-    """xdist_width gives `-n auto` one worker per 15 modules, which serialised five (#5917).
+    """`-n auto` once gave one worker per 15 modules, which serialised five (#5917).
 
     An explicit `-n`, `-n0` included, is a measured choice; the defect is the silent fallback.
     """
@@ -310,4 +324,7 @@ def test_every_unpinned_exemption_still_applies():
     ],
 )
 def test_the_guard_flags_only_an_unpinned_multi_module_entry(entry, flagged):
-    assert _left_to_auto([{"id": "h", "entry": entry}]) == (["h"] if flagged else [])
+    # A fixed table, so the cron's twice-daily rewrite of the real one cannot flip a row.
+    weights = {"a.py": 0.5, "b.py": 0.5, "c.py": 0.5}
+    hooks = [{"id": "h", "entry": entry}]
+    assert _left_to_auto(hooks, weights) == (["h"] if flagged else [])

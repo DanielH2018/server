@@ -25,6 +25,7 @@ spec:
       containers:
         - name: cloudflare-ddns
           image: {{ cloudflare_ddns_k8s_image }}
+          imagePullPolicy: IfNotPresent
           # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
           # kubelet refuses a container whose image names its user instead of numbering it.
           # `/bin/ddns` measured at uid 1000 on 2026-08-31.

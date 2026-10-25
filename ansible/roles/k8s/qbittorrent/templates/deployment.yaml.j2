@@ -38,6 +38,7 @@ spec:
         # gates the main containers, so qbittorrent cannot start until wg0 is up.
         - name: wireguard
           image: {{ qbittorrent_k8s_wireguard_image }}
+          imagePullPolicy: IfNotPresent
           restartPolicy: Always
           # files/netns-reset.sh runs before the image's own /init on EVERY start of this
           # container. The pod netns outlives the container, so a restart inherits the dead
@@ -116,6 +117,7 @@ spec:
       containers:
         - name: qbittorrent
           image: {{ qbittorrent_k8s_image }}
+          imagePullPolicy: IfNotPresent
           # No network configuration of its own: containers in a pod share one network
           # namespace, so it inherits the wireguard sidecar's.
           ports:
