@@ -354,6 +354,14 @@ reported as unreadable, never as absent. Exit 75 means the directory or a marker
 read, and stderr names which. The exit says nothing about what the markers hold, so it is
 never 1.
 
+`--why` adds the failure lines of the tick that wrote `hold_sha` (#6324,
+`probe_lib/gitops_why.py`). It finds that tick by the marker's mtime. It reads
+`gitops-deploy.service`'s journal from one `TimeoutStartSec` before the mtime to two minutes
+after it. It takes the unit run that logged the line nearest the mtime, and prints that
+run's deployer lines at priority err with Ansible's `fatal:` and `FAILED!` lines. The line
+also names the run's `_SYSTEMD_INVOCATION_ID`, for `journalctl` to show the whole run. A
+journal it cannot read exits 75. Under `--json` the section is the `why` key.
+
 ### `push-rules <branch> [--rev HEAD] [--remote origin]`
 
 `push-rules` names the GitHub ruleset rule a push meets and why (#6327). GitHub prints `- Cannot
@@ -373,6 +381,57 @@ so fetch first.
 
 The `auto-mode-bridge` hook points at this probe when a `git push` fails with `Repository rule
 violations found`. On a push that printed `Bypassed rule violations`, it says the push landed.
+
+### Host reads: `lander`, `builder`, `applied <role>`
+
+These three read state that lives on one host, through `probe_lib/host_reader.py`. It runs one
+stdlib reader there with `python3 -I -`: as a local process on that host, and otherwise as one
+ssh call, so a probe never trips `ufw limit ssh`. Every read reports absent and unreadable
+apart. A journal that `journalctl` hides from a user outside `adm` and `systemd-journal`
+exits 75 rather than reading as a unit that never ran. `--dry-run` prints the command and the plan it
+would send.
+
+`lander [--pr N] [--since 6h]` reports the daniel-server batch lander on daniel-box
+(`probe_lib/lander.py`). It prints the newest pass with its `eligible` or `ineligible` line
+per PR, each landing the lander started with its exit code and `VERDICT:` line, and every
+other PR a pass in the window named, with the newest line about it. The verdict is about the
+lander, not the PRs. It exits 1 when the unit is not installed, when its newest run failed,
+when no pass ran within two timer periods plus `TimeoutStartSec`, or when the newest pass
+could not read daniel-server or GitHub. The landing logs sit under the operator's home. The
+agent user cannot list them, so that section says unreadable and the verdict stands on the
+journal alone.
+
+`builder [-n 5] [--since 24h]` reports the host-package builder on daniel-box
+(`probe_lib/builder.py`). It prints the reason and commit from `homelab_builder.prom`, the age
+of the last fetch, every version `homelab_repo.prom` says the repository serves, the newest
+builds, and the failures in the window. A failure is a builder line at priority err, or
+systemd's one `Failed with result` line per failed run. It exits 1 when the reason is not `ok`
+or `canary`, or when the last fetch is older than two timer periods plus `TimeoutStartSec`.
+
+`applied <role> [--host H]` checks that a setup role's files landed (#6326,
+`probe_lib/applied.py`). It renders the role's files from the working tree, so commit or
+stash first to check `HEAD`. It reads every host the role's playbook entry admits and prints
+one row per path:
+
+- `ok` means present with the declared mode, owner and group, and with the render's content
+  hash.
+- `ok-meta` means the same, except that the content was not compared. The row names why: a
+  render holding a secret leaves a `STUB`, and a root-only file is unreadable as this user.
+- `DRIFT` means missing, present where an absent arm removes it, or different.
+- `unread` means this user cannot stat the path. Everything under daniel-box's 0700
+  `/etc/cron.d` reads this way.
+
+`probe_lib/applied_tasks.py` names the modules it reads (`template`, `copy`, `file`, `cron`
+with a `cron_file`). It follows every task import, including the shared
+`{{ role_path }}/../common/tasks/` files with the import's `vars:`, and an import loop once per
+item. A `copy` with `remote_src` is compared by metadata only, because its source is on the
+host. It lists the tasks it skips with the reason: a `when:` it cannot read for the host, a
+loop over a list that is not literal, a path that does not render, or an `include_role`. An
+import whose path does not render to a file in the tree prints as `UNCHECKED`, naming the task
+file and the expression, because none of the tasks in it were read. It exits 1 on any
+`DRIFT`. It exits 75 when a path was `unread`, an import was `UNCHECKED` or nothing was
+compared, and stderr says coverage was partial for an `UNCHECKED` import. It exits 0
+otherwise.
 
 ### `ha …`
 
