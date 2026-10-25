@@ -59,7 +59,7 @@
   when: has_rsyslog
   # The other half of MaxLevelSyslog=info above, and it must exist wherever that does.
   # Without it every info line on the host — k3s alone was 53% of pre-cap syslog — lands in
-  # /var/log/syslog, which promtail ships to Loki as {job="syslog"}. Measured floor for that:
+  # /var/log/syslog, which Alloy ships to Loki as {job="syslog"}. Measured floor for that:
   # +7 MB/day/host against 1.33 MB/day with the filter.
   #
   # 49- so it sorts before 50-default.conf: `stop` only prevents a message reaching the rules
