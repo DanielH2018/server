@@ -34,8 +34,8 @@ which the abort-on-first-failure semantics above rule out entirely.
 
 Sized against `ansible/roles/k8s/volume-revert/CLAUDE.md`'s task-6 numbers: at
 `volume_revert_state_timeout`/`volume_revert_api_timeout` = 90/30, a two-claim service's
-`worst_case_revert` is 720s, inside `gitops_deploy_k8s_rollback_timeout_s` — which is 1320s, not
-leaving 600s for the realistic (not worst-case) cost of the rest of that run. The assertions
+`worst_case_revert` is 720s, inside `gitops_deploy_k8s_rollback_timeout_s` — which is 1620s,
+leaving 900s for the realistic (not worst-case) cost of the rest of that run. The assertions
 read the live YAML, but this prose is what an operator reads when the test fails, which is the
 worst moment to hand them a wrong number.
 
@@ -52,9 +52,16 @@ IN-ROLE WAITS ARE A THIRD TERM. What a role waits for in its own `tasks/` — ne
 probe Job waits 310s — runs before the drain and adds to it, so a
 derivation that counts the drain alone undercounts. `_role_tasks.in_role_wait_s` reads the term and
 excludes an inline `rollout status` gate, which waits for a rollout the drain also waits for.
+
+ONLY AN ANSIBLE-OWNED ROLE IS IN THE BATCH. The deployer routes every tag `tag_owners` names to
+`cs.flux` and never applies or rolls it back, and every promoted, claim-declaring role is
+flux-owned since the D5 flips. The live batch is therefore empty, and the batch test holds at
+zero until a role is handed back. `_BATCH_MUST_FIND` and the fixture pair are what show the
+reader still reads the tree and the owner filter still bites.
 """
 
 from lib import yaml_fast
+from lib.k8s_roles import tag_owners
 from _helpers import ALL_VARS, manifests_rollout_timeout_s
 from _helpers import REPO as _REPO
 from _role_tasks import in_role_wait_s
@@ -133,14 +140,23 @@ def _rollout_timeout_s(role: str) -> int:
     return manifests_rollout_timeout_s(_K8S_ROLES / role)
 
 
-def _promoted_claim_roles() -> list[tuple[str, int]]:
-    """(role, claim count) for every role that is BOTH auto-deployable and claim-declaring.
+# A promoted, claim-declaring role the reader must find once the owner filter is dropped.
+_BATCH_MUST_FIND = ("prowlarr", 1)
+
+
+def _promoted_claim_roles(
+    owners: dict[str, str], roles_dir=_K8S_ROLES
+) -> list[tuple[str, int]]:
+    """(role, claim count) for every Ansible-owned role that is auto-deployable and claims.
 
     These are the only roles that cost anything on the revert path, so they are the only ones
-    the per-tick cap needs to bound.
+    the per-tick cap needs to bound. A role whose tag `owners` names is skipped, as the deployer
+    skips it.
     """
     out = []
-    for defaults_path in sorted(_K8S_ROLES.glob("*/defaults/main.yml")):
+    for defaults_path in sorted(roles_dir.glob("*/defaults/main.yml")):
+        if defaults_path.parent.parent.name in owners:
+            continue
         data = yaml_fast.safe_load(defaults_path.read_text()) or {}
         if not data.get("k8s_autodeploy"):
             continue
@@ -158,9 +174,10 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
     phase serially inside it. Only the rollout WAIT is deduped, by k8s/manifests/tasks/drain.yml — hence
     `max()` on that term and `sum()` on the rest.
 
-    Reverting `gitops_deploy_k8s_autodeploy_max_claim_services_per_tick` to 3 (or removing the
-    cap, which reads as 0 -> treated as unbounded here) fails this test: two co-batched
-    single-claim services already come to ~1680s against the 1320s budget.
+    Removing `gitops_deploy_k8s_autodeploy_max_claim_services_per_tick` (it reads as 0) fails
+    this test outright. Raising it to 3 fails it once two claim-declaring roles are Ansible-owned
+    again: two co-batched single-claim services come to ~1680s against the 1620s budget. While
+    the live batch is empty, the size check holds at zero.
     """
     revert_defaults = yaml_fast.safe_load(_VOLUME_REVERT_DEFAULTS.read_text())
     snapshot_defaults = yaml_fast.safe_load(
@@ -183,11 +200,8 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
         "disables it, which restores the unbounded batch this test exists to prevent"
     )
 
-    promoted = _promoted_claim_roles()
-    assert promoted, (
-        "no role is both k8s_autodeploy: true and claim-declaring; this test would pass "
-        "vacuously — check the reader before trusting a green run"
-    )
+    # Empty since the D5 flips; the must-find test below keeps that from being a broken reader.
+    promoted = _promoted_claim_roles(tag_owners())
 
     # The worst batch the cap still permits: the `cap` most expensive claim-declaring services.
     #
@@ -205,8 +219,10 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
     # Each role waits for its own Jobs and addresses before the drain runs, so sum() here.
     batch_in_role = sum(in_role_wait_s(role) for role, _ in by_cost)
     # Deduped across the batch by k8s/manifests/tasks/drain.yml, so max() not sum().
-    batch_rollout = max(_rollout_timeout_s(role) for role, _ in by_cost)
-    worst_batch = batch_revert + batch_in_role + batch_rollout + stabilise
+    batch_rollout = max((_rollout_timeout_s(role) for role, _ in by_cost), default=0)
+    worst_batch = (
+        batch_revert + batch_in_role + batch_rollout + (stabilise if by_cost else 0)
+    )
 
     assert worst_batch <= rollback_timeout, (
         f"the worst batch the cap permits ({cap} claim-declaring service(s): "
@@ -219,3 +235,29 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
         f"gitops_deploy_k8s_autodeploy_max_claim_services_per_tick, or raise the budget within "
         f"the unit's TimeoutStartSec."
     )
+
+
+def test_the_batch_reader_finds_the_must_find_role_once_its_owner_is_dropped():
+    role, _ = _BATCH_MUST_FIND
+    assert tag_owners().get(role) == "flux"
+    assert _BATCH_MUST_FIND in _promoted_claim_roles({}), (
+        "the reader no longer finds a promoted, claim-declaring role in the tree"
+    )
+
+
+def _fixture_claim_roles(roles_dir, owners: dict[str, str]):
+    defaults = roles_dir / "widget" / "defaults" / "main.yml"
+    defaults.parent.mkdir(parents=True, exist_ok=True)
+    defaults.write_text(
+        "k8s_autodeploy: true\nk8s_autodeploy_snapshot_pvcs: [widget-config]\n"
+    )
+    return _promoted_claim_roles(owners, roles_dir)
+
+
+def test_an_ansible_owned_claim_role_joins_the_batch(tmp_path):
+    assert _fixture_claim_roles(tmp_path, owners={}) == [("widget", 1)]
+
+
+def test_a_flux_owned_claim_role_is_left_out_of_the_batch(tmp_path):
+    assert _fixture_claim_roles(tmp_path, owners={"widget": "flux"}) == []
+    assert _fixture_claim_roles(tmp_path, owners={"widget": "released"}) == []

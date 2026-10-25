@@ -1725,8 +1725,9 @@ under-sized.
   failure-driven worst cases cannot stack; the residual is a slow but successful run cut short.
 - Forward and rollback run sequentially in one activation: `TimeoutStartSec` in
   `gitops-deploy.service.j2` is `max(broad, k8s + rollback)` plus the flock wait.
-- **The FORWARD cap is derived from the worst promoted role** (#2397), and it cannot be raised
-  alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
+- **The FORWARD cap is derived from the worst promoted, Ansible-owned role** (#2397). A
+  flux-owned role is skipped, as the deployer skips it, so since the D5 flips the cap is sized
+  for a role handed back to Ansible: prowlarr at 960 s. It cannot be raised alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
   Under-sized, a cap kill lands MID-DRAIN and routes to `_rollback_k8s`.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
   `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 3840 s, and
