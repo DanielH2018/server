@@ -22,15 +22,23 @@ Both errors run toward over-reporting; neither hides an orphan.
 
 Report only by default. A branch with no PR is not proof the work on it is gone, and the
 skill classifies each orphan (settled / dependency gone / pending update) before anything is
-deleted — that reading stays in the skill. `--prune` is the operator's sweep:
-`git push origin --delete <branch>` per orphan, the whole of it.
+deleted — that reading stays in the skill. `--prune BRANCH [BRANCH ...]` is the operator's
+sweep: `git push origin --delete <branch>` for each NAMED branch, the set the operator
+classified. It re-runs the census and deletes a named branch only while that census still
+lists it as an orphan; a branch that gained a PR or a dashboard entry, or is gone, is skipped
+with a line saying so. A branch that became an orphan after the report is never deleted unseen,
+because `--prune` has no "every orphan" form: a bare `--prune` is a usage error.
 
 Usage:
-    uv run python scripts/dev/renovate_branch_sweep.py            # list the orphans
-    uv run python scripts/dev/renovate_branch_sweep.py --prune    # also delete them
+    uv run python scripts/dev/renovate_branch_sweep.py                       # list the orphans
+    uv run python scripts/dev/renovate_branch_sweep.py --prune BRANCH [...]  # delete those
 
-Exit codes: 0 always for a report (an empty orphan set is the healthy answer); 2 `gh` or
-`git` failed (its stderr is printed), or no open Dependency Dashboard was found.
+The report ends with the `--prune` command for exactly the branches it listed.
+
+Exit codes: 0 for a report (an empty orphan set is the healthy answer) and for a prune that
+skipped a named branch, because a skip is a normal outcome of the race this guards; 2 `gh`
+or `git` failed (its stderr is printed), or no open Dependency Dashboard was found; 64 a
+bare `--prune`.
 """
 
 import json
@@ -53,6 +61,7 @@ from lib.git import git as _git
 from lib.repo_paths import REPO
 
 BRANCH_PREFIX = "renovate/"
+PRUNE_COMMAND = "uv run python scripts/dev/renovate_branch_sweep.py --prune"
 # Renovate's own title for the issue it rewrites on every run; `renovate_notify` matches the
 # same string (`notify_logic.DASHBOARD_TITLE`), copied rather than imported because that
 # module ships into `/opt` and is not on a script's path.
@@ -148,9 +157,18 @@ def main(
 ) -> int:
     parser = ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
-        "--prune", action="store_true", help="delete each orphan on origin"
+        "--prune",
+        nargs="*",
+        metavar="BRANCH",
+        help="delete the named renovate/* branches on origin, each only while it is still "
+        "an orphan; a branch that is not is skipped",
     )
     args = parser.parse_args(argv)
+    if args.prune is not None and not args.prune:
+        parser.error(
+            "--prune needs the branches you classified: "
+            "--prune BRANCH [BRANCH ...] (the report ends with the command)"
+        )
     try:
         found = census(gh)
     except subprocess.CalledProcessError as exc:
@@ -159,22 +177,33 @@ def main(
     except NoDashboard as exc:
         print(str(exc), file=stderr)
         return RENOVATE_SWEEP_GH_FAILED
-    if not found:
-        print("no orphan renovate/* branch", file=out)
-        return 0
-    print(
-        f"{len(found)} renovate/* branch(es) with no open PR and no dashboard entry:",
-        file=out,
-    )
-    for branch in found:
-        print(f"  {branch}", file=out)
-    if not args.prune:
+    if args.prune is None:
+        if not found:
+            print("no orphan renovate/* branch", file=out)
+            return 0
         print(
-            "report only — classify each (renovate-prs skill, §8) before `--prune`",
+            f"{len(found)} renovate/* branch(es) with no open PR and no dashboard entry:",
             file=out,
         )
+        for branch in found:
+            print(f"  {branch}", file=out)
+        print(
+            "report only — classify each (renovate-prs skill, §8), then delete the ones "
+            "you classified:",
+            file=out,
+        )
+        print(f"{PRUNE_COMMAND} {' '.join(found)}", file=out)
         return 0
-    for branch in found:
+    # Delete only what the operator named AND the census just listed: a branch orphaned since
+    # the report was never classified, and one that gained a PR or entry is no longer an orphan.
+    for branch in dict.fromkeys(args.prune):
+        if branch not in found:
+            print(
+                f"skipped {branch}: not an orphan now (it has an open PR or a dashboard "
+                "entry, or it is gone)",
+                file=out,
+            )
+            continue
         try:
             git("push", "origin", "--delete", branch, cwd=REPO)
         except subprocess.CalledProcessError as exc:

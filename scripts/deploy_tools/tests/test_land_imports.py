@@ -28,6 +28,8 @@ MODULES = frozenset(
         "detach",
         "handoff",
         "host_wait",
+        "host_schedule",
+        "compose_wait",
         "pr_json",
         "gh_read",
         "land_flux",
@@ -41,6 +43,7 @@ MODULES = frozenset(
         "land_tested_base",
         "pin_gate",
         "pin_reads",
+        "verdict_log",
     }
 )
 ALLOWED = {
@@ -57,7 +60,11 @@ ALLOWED = {
         "land_shared",
         "land_tags",
         "land_tested_base",
+        # The per-user verdict record `Tools.record_verdict` writes by default.
+        "verdict_log",
     },
+    # The record `probe.py landing-verdicts` reads; a leaf, written through `Tools`.
+    "verdict_log": set(),
     # The PR JSON types are a leaf: `Landing.view` returns them and the policy reads them.
     "pr_json": set(),
     # The retry around a read-only gh call: `Landing.view` uses it, and it prints with `say`.
@@ -112,7 +119,7 @@ ALLOWED = {
     # which imports `land_tags`, so it sits above both (#4945).
     "land_tags_cli": {"land_tags", "land_reach"},
     # H3.9a: the wait on the hosts a merge reaches. It takes `gate_snapshot` from `tools`.
-    "host_wait": {"landing", "outcome", "tools"},
+    "host_wait": {"landing", "outcome", "tools", "compose_wait", "host_schedule"},
     "land_platform": {"land_tags"},
     "land_reach": set(),
     # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
@@ -124,6 +131,8 @@ ALLOWED = {
     # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the
     # stdlib-only fork record and the verdict words.
     "land_probe": {"detach", "outcome"},
+    "compose_wait": {"outcome"},
+    "host_schedule": set(),
     "pipeline": {
         "landing",
         "outcome",

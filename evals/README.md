@@ -84,7 +84,11 @@ uv run python evals/trend.py report.json --no-write                 # report onl
   run, where `costUsd` sums every case report's `costUsd`, so it equals the engine's
   `sweep cost:` line (or the sum of those lines over a multi-agent report). A report with any case
   missing `costUsd`, such as one from before the engine priced its calls, records `null`, not 0.
-- Exits non-zero if any case **regressed** (was passing last run, now failing) — usable as a gate.
+- Exits non-zero if any case **regressed** — usable as a gate. A miss is a regression only when
+  the trend can attribute it: the case was **STABLE** before this run, or it also missed the run
+  before. At k=3 trials and a 2/3 threshold one unlucky trial is a miss, so a single miss after a
+  mixed window reports **FLAKY** and exits 0 (#5796). Every below-threshold case still prints, as
+  one or the other.
 - **STABLE** = met threshold in the last `--stable-n` (default 3) hermetic runs; a candidate
   skip-set. The chezmoi engine has no `--skip` flag yet, so this is advisory today — wiring
   `--skip-stable` into `run-evals.mjs` is a small follow-up if you want the paid-run cost saving

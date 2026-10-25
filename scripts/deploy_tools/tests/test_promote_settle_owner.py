@@ -1,7 +1,8 @@
 """`settle` and `tag` write only while `prod` names the run's own target (slice D7.1).
 
 `settle` applies a verdict on T only while `prod` still names T's digest, and reads `prod`
-again before its reset. `tag` reads DEPLOY_HOLD again just before it moves `prod`. The cases
+again before its reset. A superseding T resets to the live `last-good` when the superseded
+run's `settle` moved it after T's `tag` read it (#6268). `tag` reads DEPLOY_HOLD again just before it moves `prod`. The cases
 run each step's own `run:` under the fakes of `test_promote_settle.py`, as clean/flagged
 pairs. docs/target-architecture/deploy/d7-superseding-promotions.md has the design.
 
@@ -10,6 +11,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_settle_owner.py
 
 from test_promote_settle import (
     HOLD,
+    RECORD,
     REPO_URL,
     RESET_PROD,
     T,
@@ -180,3 +182,44 @@ def test_a_hold_after_a_supersession_names_the_superseded_commit(tmp_path, jobs)
     assert result.returncode == 0, result.stderr
     assert calls[0] == HOLD
     assert f"superseded the verification of {'b' * 40}" in result.stdout
+
+
+P_GOOD = "sha256:" + "9" * 64
+
+
+def test_a_superseding_failure_after_the_superseded_run_settled_good_resets_to_it(
+    tmp_path, jobs
+):
+    """The superseded run moved `last-good` after this run's `tag` read it (#6268)."""
+    result, calls = _settle(
+        tmp_path, jobs, SUPERSEDES="b" * 40, FAKE_LAST_GOOD_DIGEST=P_GOOD
+    )
+    assert result.returncode == 0, result.stderr
+    assert calls == [
+        HOLD,
+        f"flux tag artifact {REPO_URL}@{P_GOOD} --tag prod",
+        f"gh variable set PROD_DIGEST --body {P_GOOD} -R DanielH2018/server",
+    ]
+
+
+def test_a_failure_that_supersedes_nothing_keeps_the_reset_digest_decide_read(
+    tmp_path, jobs
+):
+    result, calls = _settle(tmp_path, jobs, FAKE_LAST_GOOD_DIGEST=P_GOOD)
+    assert result.returncode == 0, result.stderr
+    assert calls == [HOLD, RESET_PROD, RECORD]
+
+
+def test_a_superseding_failure_with_an_unreadable_last_good_resets_to_decides_read(
+    tmp_path, jobs
+):
+    result, calls = _settle(
+        tmp_path,
+        jobs,
+        SUPERSEDES="b" * 40,
+        FAKE_LAST_GOOD_DIGEST=P_GOOD,
+        FAKE_LAST_GOOD_STATUS="503",
+    )
+    assert result.returncode == 0, result.stderr
+    assert calls == [HOLD, RESET_PROD, RECORD]
+    assert "last-good could not be read" in result.stdout

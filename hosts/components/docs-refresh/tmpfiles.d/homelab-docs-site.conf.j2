@@ -1,0 +1,17 @@
+# The docs-refresh component's directories (H7.10a).
+# homelab-docs-refresh.service runs `systemd-tmpfiles --create` on this file in ExecStartPre=
+# with the `+` prefix, which runs that one command as root while the service itself runs as
+# {{ sys_user }}. systemd-tmpfiles-setup.service also creates both directories at boot. dpkg never
+# owns a path under /home.
+#
+# The first line is docs' hostPath. The docs Deployment (ansible/roles/k8s/docs) mounts it as
+# `type: Directory`, so it must exist before the pod starts on a rebuilt daniel-box: a missing path
+# leaves the pod in ContainerCreating. kubelet would create it as root, and the build runs as
+# {{ sys_user }}. Its path equals `docs_host_site_dir` in ansible/roles/k8s/docs/defaults/main.yml
+# (ansible/tests/setup/test_docs_refresh_site_dir.py holds the two equal).
+#
+# The second line is the commit-failure stamp directory. It sits outside the checkout because an
+# untracked file inside it parks the deployer. /var/lib/homelab is root-owned 0755.
+#Type Path                                Mode User          Group         Age
+d /home/{{ sys_user }}/docs-site          0755 {{ sys_user }} {{ sys_user }} -
+d /var/lib/homelab/docs-refresh.d         0755 {{ sys_user }} {{ sys_user }} -

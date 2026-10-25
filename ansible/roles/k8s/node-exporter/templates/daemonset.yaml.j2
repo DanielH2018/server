@@ -32,6 +32,7 @@ spec:
       containers:
         - name: node-exporter
           image: {{ node_exporter_k8s_image }}
+          imagePullPolicy: IfNotPresent
           args:
             - --path.procfs=/host/proc
             - --path.rootfs=/rootfs
@@ -165,6 +166,7 @@ spec:
         # the Kustomization's wait. A wedged loop surfaces as IscsiSessionsNotReporting.
         - name: iscsi-sessions
           image: {{ node_exporter_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -187,6 +189,7 @@ spec:
         # busybox's shell and wget. No probes, as for iscsi-sessions above.
         - name: ghcr-mirror-pull
           image: {{ node_exporter_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c

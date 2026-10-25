@@ -19,11 +19,11 @@ from pathlib import Path as _Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from lib.ansible_inventory import PI_HOST
+from lib import yaml_fast
 from lib.estate import Estate
 from lib.repo_paths import ALL_VARS, K8S_ROLES, REPO, ROLES
 
-OPTIMIZE_PI_ROLE = ROLES / "setup" / "optimize_pi"
+PI_TUNING = REPO / "hosts" / "components" / "pi-tuning"
 VALHEIM_ROLE = K8S_ROLES / "valheim"
 JELLYFIN_ROLE = K8S_ROLES / "jellyfin"
 RENOVATE_AGENT_ROLE = ROLES / "setup" / "renovate_agent"
@@ -165,41 +165,58 @@ def render_pi_apt_timers(timers: list[dict[str, str]]) -> str:
     """The pinned apt timers as a table.
 
     Args:
-        timers: `optimize_pi_apt_timers` entries, each `{unit, at}` with `at` in UTC.
+        timers: Entries each `{unit, at}` with `at` in UTC.
     """
     rows = [[f"`{t['unit']}`", f"`{t['at']}`"] for t in timers]
     return _table(["Timer", "Daily at (UTC)"], rows)
 
 
-def _pi_apt_timers() -> tuple[str, list[str]]:
-    d = Estate().role_vars(OPTIMIZE_PI_ROLE, host=PI_HOST)
-    return render_pi_apt_timers(d["optimize_pi_apt_timers"]), [
-        _rel(OPTIMIZE_PI_ROLE / "defaults" / "main.yml")
-    ]
-
-
-# log2ram.conf key -> the role var that declares it, in the order the page names them.
-_LOG2RAM_KEYS = [
-    ("SIZE", "optimize_pi_log2ram_size"),
-    ("ZL2R", "optimize_pi_log2ram_zram_backed"),
-    ("LOG_DISK_SIZE", "optimize_pi_log2ram_disk_size"),
-    ("COMP_ALG", "optimize_pi_log2ram_comp_alg"),
+# The pi-tuning drop-in template that pins each apt timer.
+_APT_DROPINS = [
+    ("apt-daily.timer", "apt-daily-quiet-hour.conf"),
+    ("apt-daily-upgrade.timer", "apt-daily-upgrade-quiet-hour.conf"),
 ]
+_ON_CALENDAR = re.compile(r"^OnCalendar=\*-\*-\* (\d\d:\d\d)$", re.M)
 
 
-def render_pi_log2ram(d: dict) -> str:
-    """The four `/etc/log2ram.conf` values the optimize_pi role declares.
+def _on_calendar(path: _Path) -> str:
+    found = _ON_CALENDAR.search(path.read_text())
+    if found is None:
+        raise SystemExit(f"{path} has no OnCalendar= line")
+    return found.group(1)
+
+
+def _pi_apt_timers() -> tuple[str, list[str]]:
+    paths = [PI_TUNING / "templates" / name for _, name in _APT_DROPINS]
+    timers = [
+        {"unit": unit, "at": _on_calendar(path)}
+        for (unit, _), path in zip(_APT_DROPINS, paths, strict=True)
+    ]
+    return render_pi_apt_timers(timers), [_rel(path) for path in paths]
+
+
+# log2ram.conf keys, in the order the page names them.
+_LOG2RAM_KEYS = ["SIZE", "ZL2R", "LOG_DISK_SIZE", "COMP_ALG"]
+
+
+def render_pi_log2ram(values: dict[str, str]) -> str:
+    """The four `/etc/log2ram.conf` values the pi-tuning component declares.
 
     Args:
-        d: the optimize_pi role's variables, carrying the `optimize_pi_log2ram_*` set.
+        values: The `/etc/log2ram.conf` value of each key in `_LOG2RAM_KEYS`.
     """
-    rows = [[f"`{key}`", f"`{var}`", f"`{d[var]}`"] for key, var in _LOG2RAM_KEYS]
-    return _table(["`log2ram.conf` key", "Role var", "Value"], rows)
+    rows = [[f"`{key}`", f"`{values[key]}`"] for key in _LOG2RAM_KEYS]
+    return _table(["`log2ram.conf` key", "Value"], rows)
 
 
 def _pi_log2ram() -> tuple[str, list[str]]:
-    d = Estate().role_vars(OPTIMIZE_PI_ROLE, host=PI_HOST)
-    return render_pi_log2ram(d), [_rel(OPTIMIZE_PI_ROLE / "defaults" / "main.yml")]
+    spec = yaml_fast.safe_load((PI_TUNING / "component.yml").read_text())
+    values = dict(
+        edit["line"].split("=", 1)
+        for edit in spec["lines"]
+        if edit["path"] == "/etc/log2ram.conf"
+    )
+    return render_pi_log2ram(values), [_rel(PI_TUNING / "component.yml")]
 
 
 # --- valheim-mods --------------------------------------------------------------------------

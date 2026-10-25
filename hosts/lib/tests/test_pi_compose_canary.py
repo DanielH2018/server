@@ -1,10 +1,10 @@
 """The real Pi package runs the canary through the Compose project (H5.2b).
 
 The censuses in `test_pi_compose_census.py` run over fixture services. This file runs them over
-the real render of `hosts/daniel-pi/package.yml`, whose only service is `pi-canary`: the first
-service the package runs. The canary reads no secret, so the package declares no `compose.env`
-output and the include names no `env_file:` (operator ruling 2026-10-24, h5-pi-compose.md
-*Open questions* 7).
+the real render of `hosts/daniel-pi/package.yml`, which runs `pi-canary` (H5.2b) and, since H5.6,
+`docker-proxy`, and since H5.7 `autoheal`. The canary reads no secret and gets the domain at
+build time (operator ruling 2026-10-24, h5-pi-compose.md *Open questions* 7). The package's
+Compose env file holds only the keys autoheal reads.
 
 Run: uv run pytest hosts/lib/tests/test_pi_compose_canary.py
 """
@@ -66,15 +66,22 @@ def test_every_packaged_compose_file_asks_the_daemon_for_at_least_6_mib(package)
 
 def test_the_canary_reads_no_secret_and_gets_the_domain_at_build_time(package):
     includes = project_of(package)["includes"]
-    assert [i["path"] for i in includes] == [f"{COMPOSE}/pi-canary/compose.yaml"]
-    assert not any("env_file" in i for i in includes)
-    assert not [o for o in package.outputs if o["destination"].endswith("compose.env")]
+    assert [i["path"] for i in includes] == [
+        f"{COMPOSE}/alloy/compose.yaml",
+        f"{COMPOSE}/autoheal/compose.yaml",
+        f"{COMPOSE}/docker-proxy/compose.yaml",
+        f"{COMPOSE}/pi-canary/compose.yaml",
+        f"{COMPOSE}/wg-easy/compose.yaml",
+    ]
     body = text(package, f"{COMPOSE}/pi-canary/compose.yaml")
     assert "HOMELAB_DOMAIN=" in body
     assert "${" not in body and "{{" not in body
 
 
 HOME = "/home/ubuntu"
+# A data directory that a container created as root, and whose line copies the live owner (H5.9).
+# Every other directory under the home is created as ubuntu.
+ROOT_OWNED_DATA = frozenset({f"{HOME}/server/containers/wg-easy/config"})
 
 
 def parent_problems(tmpfiles: str) -> list[str]:
@@ -95,7 +102,7 @@ def parent_problems(tmpfiles: str) -> list[str]:
         problems += [
             f"{path}: {p} is not created above it" for p in parents if p not in created
         ]
-        if fields[3] != "ubuntu":
+        if fields[3] != "ubuntu" and path not in ROOT_OWNED_DATA:
             problems.append(f"{path}: owner {fields[3]}, not ubuntu")
         created.add(path)
     return problems
@@ -117,8 +124,22 @@ def test_a_service_directory_line_without_its_parents_is_flagged():
     ]
 
 
-def test_a_canary_with_a_placeholder_would_need_the_env_output(package):
-    """REJECT: the censuses reject a project that reads `${key}` with no matching output."""
+def test_a_root_owned_line_is_flagged_unless_it_is_a_listed_data_directory():
+    """REJECT: a service directory owned by root, which tmpfiles would take for an unsafe path."""
+    parents = f"d {HOME}/server - ubuntu ubuntu -\nd {HOME}/server/containers - ubuntu ubuntu -\n"
+    leaf = f"{HOME}/server/containers/wg-easy"
+    root_owned = f"d {leaf}/config 0755 root root -\n"
+    ubuntu_dir = f"d {leaf} 0755 ubuntu ubuntu -\n"
+    assert parent_problems(parents + ubuntu_dir + root_owned) == []
+    other = f"d {HOME}/server/containers/other 0755 root root -\n"
+    assert parent_problems(parents + other) == [
+        f"{HOME}/server/containers/other: owner root, not ubuntu"
+    ]
 
+
+def test_the_env_output_must_carry_exactly_the_keys_the_project_reads(package):
+    """ACCEPT the keys autoheal and alloy read, REJECT a key the output does not declare."""
+    keys = frozenset({"monitor_discord_webhook_url", "alloy_pi_http_password"})
+    check_env_output(package, REAL, keys)
     with pytest.raises(RenderRefused, match="declares"):
-        check_env_output(package, REAL, frozenset({"monitor_discord_webhook_url"}))
+        check_env_output(package, REAL, keys | {"pi_recovery_push_token"})

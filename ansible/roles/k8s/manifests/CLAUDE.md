@@ -28,8 +28,8 @@ saying `secret` renders 0600 under `no_log`. `manifests_exclude_files` drops one
 include; a passed list wins whole.
 
 Optional and empty by default: `manifests_extra_rollouts` (`{name, image?, restart_on?}` per
-extra Deployment to wait on and roll), `manifests_self_rollouts` (`{name, kind, image?, namespace?,
-rolled_by_role?}`, for a role restarting its own workloads afterwards),
+extra Deployment to wait on and roll), `manifests_self_rollouts` (`{name, kind, image?,
+namespace?}`, for a role restarting its own workloads afterwards),
 `manifests_outside_secrets` (`{name, keys}` per Secret another role renders that this role's
 pods read; no task reads it, and the renderer hashes each key's digest into the
 restart checksum annotation),

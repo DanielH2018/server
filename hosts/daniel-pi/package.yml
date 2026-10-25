@@ -15,11 +15,32 @@
 # the first service, `pi-canary`. The canary reads no secret, so `credentials:` is unchanged and
 # the Pi's SOPS file needs no new key.
 #
+# Since H5.6 the project also runs docker-proxy and its docker-proxy-lifecycle sub-proxy, which
+# read no secret.
+#
+# Since H5.7 the project also runs autoheal, the first service that reads a secret. The pi-compose
+# component's `outputs:` entry renders the Compose env file with `monitor_discord_webhook_url`, so
+# the Pi's SOPS file must hold that key (`host_secrets.py sync daniel-pi`, operator-only).
+# `credentials:` is unchanged.
+#
+# Since H5.8 the project also runs alloy, the second service that reads a secret. The Compose env
+# file gains `alloy_pi_http_password`, so the Pi's SOPS file must hold that key too
+# (`host_secrets.py sync daniel-pi`, operator-only). `credentials:` is unchanged.
+#
+# Since H5.9 the project also runs wg-easy, which reads no secret. The Compose env file and
+# `credentials:` are unchanged, and the Pi's SOPS file needs no new key.
+#
 # Since H7.27 it ships the first three subjects of initial_setup: apt's unattended upgrades, the
 # sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup skips each on
 # this host through `initial_setup_packaged_hosts`. No file here needs a credential.
+#
+# Since H7.25 it ships the optimize_pi role's subjects: the memory, log and watchdog tuning
+# (pi-tuning), the node exporter unit and its textfile directory (pi-node-exporter), the resolver
+# and hostname line (pi-resolver), and pi-peer-backup's forced-command wrapper and key
+# (pi-peer-backup-target). The interim heartbeat token files are legacy entries below. No file
+# here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token
@@ -33,3 +54,13 @@ files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
 enable:
   homelab-updater.timer: timers.target
+legacy:
+  # The Pi's three heartbeats read their push tokens from /run/credstore since H4.5, and nothing
+  # reads the interim copies optimize_pi staged (pi-heartbeats/component.yml). H4.6's retirement
+  # lands here with the role that wrote them. The directory comes after its files, because
+  # reconcile removes a directory only once it is empty.
+  - {path: /etc/homelab/interim/pi_sd_health_push_token}
+  - {path: /etc/homelab/interim/pi_recovery_push_token}
+  - {path: /etc/homelab/interim}
+  # The Pi-only Kuma push helper that the packaged heartbeats superseded.
+  - {path: /usr/local/lib/pi-kuma-push-lib.sh}

@@ -21,9 +21,8 @@ from secrets_mgmt.consumers import (
     consumer_commands,
     consumer_tags,
 )
-from secrets_mgmt.secrets_lib.secret_registry import audit
 from lib.repo_paths import HOST_VARS
-from secrets_mgmt.rotation_tools import REPO, load_registry, today
+from secrets_mgmt.rotation_tools import REPO, load_registry
 
 
 # ── consumer mapping (which redeploys apply a rotated token) ─────────────────
@@ -109,40 +108,11 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     )
 
 
-def test_no_cross_host_token_is_badly_overdue():
-    # The test above proves each cross-host token is DECLARED manual; this one proves someone is
-    # doing the manual part.
-    # `consumer_tags` returning () is deliberate and documented beside CROSS_HOST_PUSH_TOKENS:
-    # the pusher and the AutoKuma label live on different hosts, so one redeploy cannot update
-    # both halves atomically. But the design that skips them assumes an operator picks them up,
-    # and the daily audit line that asks reports the whole registry and is easy to skim past.
-    #
-    # So the reminder becomes a CI failure. This is deliberately NOT the audit's own due-date:
-    # the point is to catch sustained neglect, not to fail the build the day something comes
-    # due. Rotating one is a manual, two-host procedure — see docs/secret-rotation.md.
-    #
-    # NOT the fix the reviewer proposed. That was to give CROSS_HOST_PUSH_TOKENS a two-tag
-    # consumer list, and it stays rejected — but the REASON is the hosts, not the arity.
-    # `consumer_tags` returns two tags for an ordinary push token, because its tile lives in
-    # k8s/uptime-kuma while its pusher lives elsewhere, and BOTH deploy from daniel-box in one
-    # playbook run. CROSS_HOST tokens are the case that remains unrepresentable: their
-    # two halves sit on different HOSTS, so any tag list would assert a repair that no single
-    # `rotate --deploy` can perform. They still return `()`, and
-    # test_consumer_tags_cross_host_tokens_are_manual is the guard that keeps them there.
-    grace_days = 30
-    reg = load_registry()
-    res = audit(reg, today())
-    badly_overdue = [
-        (name, -days)
-        for name, _tier, _due, days in res["all"]
-        if name in CROSS_HOST_PUSH_TOKENS and days < -grace_days
-    ]
-    assert not badly_overdue, (
-        f"cross-host push tokens more than {grace_days} days overdue: {badly_overdue}. These "
-        f"are skipped by the unattended weekly cron BY DESIGN, so nothing rotates them but a "
-        f"person. Rotate them (docs/secret-rotation.md), then `uv run python "
-        f"scripts/secrets_mgmt/secret_rotation.py sync` and commit."
-    )
+# DECIDED: no test here asserts a cross-host token is not badly overdue. One did, and on
+# 2026-10-25 the calendar turned master and two unrelated PRs red in the same minute with no
+# code change. Overdue is runtime state: the daily Secret Rotation Kuma push goes DOWN for any
+# overdue token, cross-host ones included, and `cmd_audit --check` deliberately ignores it.
+# `test_no_test_file_reads_the_live_clock` refuses the bare `today()` call it was built on.
 
 
 # ── consumer_tag correctness ────────────────────────────────────────────────

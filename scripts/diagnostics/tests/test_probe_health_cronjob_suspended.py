@@ -20,6 +20,7 @@ from diagnostics.probe_lib import health, health_alerts
 from diagnostics.probe_lib.health_cronjob import declared_suspended, format_suspended
 from diagnostics.probe_lib.health_render import rendered_docs
 from lib.kubectl import Tools
+from _probe_health_fixtures import current_checkout
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
 NAME = "homelab/longhorn-restore-drill"
@@ -111,6 +112,7 @@ def _run(cronjob):
         served="prod",
         tools=_tools(cronjob),
         prom=_QUIET,
+        stale_reason=current_checkout,
     )
 
 
@@ -119,6 +121,7 @@ def test_run_health_fails_the_drill_suspended_live_when_its_render_runs(capsys):
     assert "does not declare `suspend: true`" in capsys.readouterr().out
 
 
-def test_run_health_fails_the_drill_when_it_is_not_suspended_and_has_never_run(capsys):
+def test_run_health_fails_an_unsuspended_drill_with_no_recorded_apply_time(capsys):
+    """The drill is schedule-gated (#6128), and this boundary serves no Kustomization history."""
     assert _run(_cronjob(False)) == 1
-    assert "FAILED the gate" in capsys.readouterr().out
+    assert "records no apply time" in capsys.readouterr().out

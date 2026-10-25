@@ -33,7 +33,6 @@ _HOST_LIB = frozenset(
     {
         "fake_remux",
         "gitops_deploy",
-        "homelab_builder",
         "k3s",
         "renovate_agent",
         "renovate_notify",
@@ -47,7 +46,6 @@ _ALERT_UNIT = frozenset(
     {
         "claude_code",
         "gitops_deploy",
-        "homelab_builder",
         "renovate_agent",
         "renovate_notify",
     }
@@ -92,11 +90,11 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # moved the socket away from every agent. A change to that key applies the whole
     # claude_code tag: its reader, `tasks/agent_access.yml`, runs only inside the agent
     # include, whose tasks all carry that one tag. A change to keys claude_code never reads
-    # drops claude_code from the tick's run (#4361). claude_code, renovate_agent and
-    # homelab_builder each copy the uv binary `initial_setup_uv_version` pins, and name that key
-    # where they check the copy, so a uv bump re-applies all three after initial_setup (#5945).
+    # drops claude_code from the tick's run (#4361). claude_code and renovate_agent each copy
+    # the uv binary `initial_setup_uv_version` pins, and name that key where they check the
+    # copy, so a uv bump re-applies both after initial_setup (#5945).
     "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
-        {"claude_code", "homelab_builder", "renovate_agent"}
+        {"claude_code", "renovate_agent"}
     ),
     # initial_setup's worktree-holder crons read the agent list, the agent user, its primary
     # profile and the operator checkout from claude_code's defaults (#4357).
@@ -104,24 +102,18 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
     # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
     "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),
-    # The host-package builder's settings file renders the deployer's CI gate, walk bound and
-    # repo from these defaults (H3.5a), so a change to any of them re-renders the builder's copy.
-    # H7.2e moves the CI keys into inventory and owes this row's replacement.
-    "ansible/roles/setup/gitops_deploy/defaults/main.yml": frozenset(
-        {"homelab_builder"}
-    ),
 }
 
 
 # DECIDED: `common/templates/resolv.conf.j2` stays out of the table above and records `common`
-# (#3319). `k3s` and `optimize_pi` render it directly, and neither is the tick's to apply:
-# `k3s` runs only from `k3s-bringup.yml`, and `optimize_pi` only on daniel-pi, by its gate in
-# `initial_setup.yml` (#3933). Recording `common` prints the
-# two-host remediation in `deploy_remediation._setup_commands` as one line.
+# (#3319). `k3s` renders it directly, and it is not the tick's to apply: it runs only from
+# `k3s-bringup.yml`. `optimize_pi` rendered it too until H7.25 moved the Pi's resolver into the
+# `pi-resolver` component, which the host package builder renders on its own. Recording `common`
+# prints the remediation in `deploy_remediation._setup_commands` as one line.
 # The value names the roles that render the file. `_setup_commands` builds `common`'s command
 # from them and the routing (#4316), so neither a host nor a playbook is written down twice.
 SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
-    f"{_COMMON}/templates/resolv.conf.j2": frozenset({"k3s", "optimize_pi"}),
+    f"{_COMMON}/templates/resolv.conf.j2": frozenset({"k3s"}),
 }
 
 # The k8s roles that import a setup file by path, so a change to it defer-and-alerts each one

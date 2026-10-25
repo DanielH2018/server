@@ -27,6 +27,7 @@ spec:
       containers:
         - name: blackbox-exporter
           image: {{ blackbox_exporter_k8s_image }}
+          imagePullPolicy: IfNotPresent
           # Named explicitly: the mount below shadows the image's own /etc/blackbox_exporter.
           args:
             - --config.file=/etc/blackbox_exporter/blackbox.yml

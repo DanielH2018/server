@@ -31,6 +31,15 @@ with no server command. `templates/registries.yaml.j2` narrows to `k3s_server` p
 The deployer records the hosts on the line as `agent_hosts`, so the SessionStart banner,
 `probe.py gitops` and monitor-bridge print the same commands from the row.
 
+**`--tags node-address` pins daniel-box alone.** `tasks/static-address.yml` also runs from the
+opt-in pin play, which matches no host without `-e pin_agent_address=<host>` and runs ON the
+agent. So a change reaching that file, and the whole-role tag, also print
+`uv run ansible-playbook ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address`
+for each agent host, with the host to run it on. The server command keeps `node-address`,
+because `tasks/main.yml` imports the same file. The data is
+`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:AGENT_PIN_TAGS`, and the commands
+come from `ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_pin_cmds`.
+
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`;
@@ -61,6 +70,8 @@ some carrying a `DECIDED` marker. `files/` holds the Python the crons run, teste
 since H6.1b, so a pin change routes to the Flux-owned `system-upgrade` tag and writes no
 `manual_plane` line for this role. `tasks/server.yml` and `tasks/agent.yml` read the file with
 `include_vars`. `SYSTEM_UPGRADE_DEFAULTS` in `scripts/lib/repo_paths.py` is the Python readers' path.
+Since H6.3c the server's install task runs only for a missing binary or a missing argument,
+and SUC's `k3s-server` Plan is the only writer of the server's version.
 
 Backup tiering, restoring a volume, restoring etcd and the two upgrade runbooks each have a
 docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recovery.md`,

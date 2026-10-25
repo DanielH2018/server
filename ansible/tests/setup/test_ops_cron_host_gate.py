@@ -1,16 +1,17 @@
 """Guards on `ops_cron_host` — the single-host gate in `initial_setup/tasks/crons.yml`.
 
-Thirteen tasks there install the repo-level ops crons behind one variable instead of an
-`inventory_hostname == 'daniel-box'` literal, so moving those crons to another host is one
-edit.
+The repo-level ops crons sat behind one variable instead of an `inventory_hostname ==
+'daniel-box'` literal, so moving them to another host was one edit. H7.10 moved the docs
+refresh and the infrastructure map into host components, so no task in crons.yml names the
+variable now; `scripts/docs/reference/crons.py` still reads it.
 
 WHERE THE VARIABLE LIVES IS PART OF THE GUARD. `scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when`
 resolves a gate against `group_vars/all.yml` + `host_vars` only, and returns "every host"
 for a name it cannot resolve. Moved to the role's `defaults/`, this gate would put the
 over-broad verdict back on every change to this file.
 
-THE CENSUS GLOBS FOR ITS OWN SUBJECT, so KNOWN_GATED_TASKS names members it must find: a
-rename that emptied the census would pass the literal assertion over nothing.
+No task gates on this variable any more: H7.10 moved the last two out. The literal check
+stays, so a task that reintroduces a host name fails.
 
 Run: uv run pytest ansible/tests/setup/test_ops_cron_host_gate.py
 """
@@ -24,16 +25,6 @@ from lib import yaml_fast
 VAR = "ops_cron_host"
 CRONS = ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks" / "crons.yml"
 _HOST_LITERAL = re.compile(r"inventory_hostname\s*==\s*['\"]")
-
-# Named rather than counted, so a rename fails with the member that went missing.
-KNOWN_GATED_TASKS = frozenset(
-    {
-        "Schedule the weekly worktree sweep and git object-store repair (box only)",
-        "Schedule the infrastructure-map refresh (box only)",
-        "Schedule the generated-docs refresh (box only)",
-        "Schedule the weekly homelab eval sweep (box only)",
-    }
-)
 
 
 def _gated_tasks() -> dict[str, str]:
@@ -49,14 +40,12 @@ def _gated_tasks() -> dict[str, str]:
     return gated
 
 
-def test_the_single_host_gate_names_the_variable_not_a_literal():
+def test_no_host_gate_in_crons_hard_codes_a_host_name():
     gated = _gated_tasks()
-    assert KNOWN_GATED_TASKS <= set(gated), KNOWN_GATED_TASKS - set(gated)
     literals = {
         name: when for name, when in gated.items() if _HOST_LITERAL.search(when)
     }
     assert not literals, f"host names hard-coded in a gate: {literals}"
-    assert [when for when in gated.values() if VAR in when]
 
 
 def test_the_reach_reader_still_narrows_the_gate_to_one_host():

@@ -98,29 +98,57 @@ otherwise; none of the values below are secrets themselves, only names and locat
    saved as image archives and refreshed with the bundle, for a rebuilt cluster that cannot
    reach GHCR.
    Source: `docs/longhorn-disaster-recovery.md` ("The off-site recovery kit").
+    - **The offline bootstrap files.** `sudo hosts/bootstrap-host.sh <host> --offline <kit-dir>`
+      reads every fetch from one directory and checks each file against the pin the download
+      path checks. A file that is missing or differs from its pin stops the script and names
+      the file. The directory holds, for the node's architecture:
+        - `install.sh` at `K3S_VERSION`, whose sha256 is `K3S_INSTALL_SHA256` in the script;
+        - the `k3s` binary (`k3s-arm64` on arm64) and the release's `sha256sum-<arch>.txt`;
+        - the `nfpm` and `uv` archives that the script's pins name:
+          `nfpm_<version>_Linux_x86_64.tar.gz` and `uv-x86_64-unknown-linux-gnu.tar.gz` on
+          amd64, or the arm64 files the same pins name;
+        - `tools-cache/`, the files that `homelab-tools`' `tools.json` pins, each named by its
+          sha256, which the build reads instead of downloading;
+        - `uv-cache/` and `uv-python/`, uv's package cache and the interpreter at
+          `host_python_version`, which `uv run --offline` reads.
+      Refresh these files whenever the pins move. With `--local-build`, the script prints that
+      the clone is unchecked, because it makes neither GitHub read.
 
-9. **The host-package archive signing key.** The `homelab_builder` role generates it once on
-   daniel-box, in `homelab-signer`'s GnuPG home `/var/lib/homelab-signer/gnupg/` (mode
-   0700). Every host's apt trusts its public half. The role's teardown never removes that
-   home, so a disarm keeps the key. The password manager holds the copy, which the operator
-   exports after the first apply that generates the key:
+9. **The host-package archive signing key.** The `homelab_builder` role generated it once on
+   daniel-box (H3), and the `builder` component has run the builder since H7.41b. The key sits in
+   `homelab-signer`'s GnuPG home `/var/lib/homelab-signer/gnupg/` (mode 0700). Every host's apt
+   trusts its public half. Nothing removes that home. The password manager holds the copy,
+   which the operator exports once:
    `sudo -u homelab-signer gpg --homedir /var/lib/homelab-signer/gnupg --armor
    --export-secret-keys`. Then stop the agent that the export starts, with
    `sudo -u homelab-signer gpgconf --homedir /var/lib/homelab-signer/gnupg --kill gpg-agent`.
    Left running, it is another uid's process in the operator's login slice. The worktree
    tools cannot read such a process's cwd, so they treat every worktree as in use.
-    - **To restore it** onto a rebuilt daniel-box, run `initial_setup.yml --tags
-      homelab_builder` once with the flag armed. That apply creates the users and
-      directories and generates a fresh key. As `homelab-signer`, import the copy with
-      `gpg --homedir /var/lib/homelab-signer/gnupg --batch --import`, then delete the fresh
-      key with `--batch --yes --delete-secret-and-public-key <its fingerprint>`. Leave
-      `openpgp-revocs.d/` in place: it is the key generation's `creates:` guard, and without
-      it the next apply generates another key. Then re-run the same apply. From the plan's PR H3.5a, that apply also runs the task that
-      writes `/etc/homelab-builder/archive-key.fpr`, so the builder names the restored key.
+    - **To restore it** onto a rebuilt daniel-box, install `homelab-daniel-box` first (the
+      bootstrap does). The package declares the two users and creates the directories. As
+      `homelab-signer`, import the copy with
+      `gpg --homedir /var/lib/homelab-signer/gnupg --batch --import`. The builder's next run
+      writes `/etc/homelab-builder/archive-key.fpr` from the imported key through its
+      `ExecStartPre=+` script, with no Ansible apply. The package does not generate a key. A
+      rebuild with no copy starts with a fresh key from
+      `gpg --homedir /var/lib/homelab-signer/gnupg --batch --pinentry-mode loopback
+      --passphrase "" --quick-generate-key "homelab archive signing key <homelab-archive@daniel-box>"
+      rsa4096 sign never`, run as `homelab-signer`, which re-pins every host as a rotation does.
     - **To rotate it**, follow *Rotating the archive key, or recovering from a revoked one*
-      in `docs/host-packages.md`. A rotation re-pins every host, so it is never a step in a
-      routine disarm or re-arm.
-   Source: `ansible/roles/setup/homelab_builder/CLAUDE.md` and `docs/host-packages.md`.
+      in `docs/host-packages.md`. A rotation re-pins every host.
+    - **When the builder's own package is broken.** The builder builds `homelab-daniel-box`,
+      which carries the builder, so a broken version can stop the builds that would repair
+      it. First try the repository's previous version: `sudo apt-get install
+      homelab-daniel-box=<previous>`, where `apt-cache madison homelab-daniel-box` lists the
+      versions the pool keeps. If that fails, build one package by hand. Set the hold with
+      `sudo touch /etc/homelab-builder/hold`, check out the fix from master in a scratch
+      directory, and run the builder's two steps as `homelab-builder`: render with
+      `/usr/lib/homelab/bin/uv run --frozen --python <host_python_version> python
+      scripts/validate/host_packages.py render --tree . --out <out>`, then build with
+      `HOMELAB_VERSION=<version> /usr/lib/homelab/bin/nfpm package --config nfpm.yaml --packager
+      deb --target <dir>/` inside `<out>/homelab-daniel-box`. Install the file with `sudo apt
+      install ./<file>.deb`, then release the hold with `sudo rm /etc/homelab-builder/hold`.
+   Source: `hosts/components/builder/CLAUDE.md` and `docs/host-packages.md`.
 
 10. **The cluster age key.** A dedicated age keypair that decrypts only the cluster file
     (`ansible/vars/cluster-vars.sops.env`) and the SOPS manifests under

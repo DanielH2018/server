@@ -46,11 +46,6 @@ initial_setup_worktree_sweep_cron_weekday: 0  # Sunday
 # is exact and would strip a membership granted anywhere else.
 initial_setup_worktree_holders_group: worktree-holders
 
-# Where the weekly eval sweep reads its Anthropic API key from: tasks/crons.yml renders the file
-# and templates/eval-run.sh.j2 sources it (#4607). A variable rather than a literal in both, so
-# the test that runs the script points it at a file under tmp_path and never at the live key.
-initial_setup_eval_run_env_file: /etc/homelab/eval-run.env
-
 # The hosts whose package owns a subject (docs/target-architecture/host/h7-delete-ansible.md,
 # *Moving one host at a time*). Each task of a listed subject carries
 # `when: inventory_hostname not in initial_setup_packaged_hosts['<subject>']`, so the role writes
@@ -61,7 +56,10 @@ initial_setup_eval_run_env_file: /etc/homelab/eval-run.env
 #   sshd    the sshd settings and the Match block: hosts/components/sshd
 #   sysctl  /etc/sysctl.conf keys, ufw's sysctl file, login.defs, the journald cap and limits.d:
 #           hosts/components/host-tuning
+#   loki_route_witness: daniel-box's witness is the loki-route-witness component since H7.36;
+#           daniel-server keeps the Ansible-era timer until its package moves it.
 initial_setup_packaged_hosts:
-  apt: [daniel-pi]
-  sshd: [daniel-pi]
-  sysctl: [daniel-pi]
+  apt: [daniel-pi, daniel-server, daniel-box]
+  sshd: [daniel-pi, daniel-server, daniel-box]
+  sysctl: [daniel-pi, daniel-server, daniel-box]
+  loki_route_witness: [daniel-box]

@@ -74,6 +74,20 @@ DROPPED_PUSH_GRACE_S = 180
 # request against the hourly budget `fetch_check_runs` describes.
 DESCENDANT_LIMIT = 10
 
+# The poll interval with no GitHub token, in seconds (#6148). Anonymous reads share 60 per hour
+# per source IP with the deployer's gate on the same host. At the 20s default, land.sh's 1200s
+# budget is 61 polls, so one landing that times out spends the whole hour. A poll before any
+# required run registers costs 2 requests (check-runs, then check-suites), so the interval
+# is 90s rather than 60s: 15 polls, at most 30 requests. An anonymous wait also never walks
+# descendants (`wait`'s `walk_descendants`).
+ANONYMOUS_INTERVAL_S = 90
+
+
+# The cause a pending line names for a head whose every gate run was skipped (#6077). Only a
+# draft PR's run skips the `prek` gate (ci.yml's `draft != true`), and a re-run replays that
+# run's draft event, so it skips again. `land_lib/merge.py` reads the phrase to act on it.
+DRAFT_SKIPPED = "every CI run on it skipped the gate because the PR was a draft"
+
 
 class DisarmedGateError(RuntimeError):
     """Raised when the required-context set is empty.
@@ -94,9 +108,11 @@ def fetch_check_runs(sha: str) -> list[dict]:
 
     Authenticated through `gh auth token` when the CLI is logged in, anonymous otherwise.
     The anonymous limit is 60/hour per source IP and this poll shares it with the deployer's
-    own gate on the same host: at one request per 20s for up to 900s, one landing costs 45 of
-    those 60, so the second landing in an hour starved the tick's gate into deferring on a
-    403. host_lib.github_token carries the numbers.
+    own gate on the same host. An anonymous wait therefore polls every
+    `ANONYMOUS_INTERVAL_S` (90s) rather than every 20s, and skips the descendant walk:
+    land.sh's 1200s budget then costs at most 30 requests, not 60 or more.
+    `ANONYMOUS_INTERVAL_S` has the arithmetic. Authenticated, a poll also reads up to
+    `DESCENDANT_LIMIT` descendants once a push reads as dropped.
     """
     return _github_pages(f"commits/{sha}/check-runs", "check_runs")
 
@@ -111,9 +127,30 @@ def fetch_check_suites(sha: str) -> list[dict]:
     return _github_pages(f"commits/{sha}/check-suites", "check_suites")
 
 
+def lookup_token() -> str | None:
+    """The GitHub token this tool reads with, or None when it reads anonymously."""
+    return github_token(os.environ, subprocess.run)
+
+
+def poll_interval(requested: int, authenticated: bool) -> int:
+    """`requested`, raised to `ANONYMOUS_INTERVAL_S` when there is no token to read with.
+
+    Backing off rather than refusing keeps an anonymous landing working: the operator ruled
+    on #6148 that an anonymous read is a fail-safe case, not a fault to stop on.
+    """
+    if authenticated or requested >= ANONYMOUS_INTERVAL_S:
+        return requested
+    print(
+        f"await_ci: no GitHub token, so reads are anonymous; polling every "
+        f"{ANONYMOUS_INTERVAL_S}s, not {requested}s. `gh auth login` restores {requested}s.",
+        file=sys.stderr,
+    )
+    return ANONYMOUS_INTERVAL_S
+
+
 def _github_pages(path: str, key: str) -> list[dict]:
     """Every page of a listing, as the deployer's gate reads it (#5977); short reads raise."""
-    token = github_token(os.environ, subprocess.run)
+    token = lookup_token()
     url = f"repos/{CI_REPO}/{path}"
     return read_check_pages(
         lambda query: github_get(url + query, token, user_agent="await-ci"), key
@@ -136,7 +173,7 @@ def verdict_for(sha: str, fetch=fetch_check_runs, required=None, suites=None) ->
 
 def _fetch_tip() -> str:
     # This runs from the primary checkout (land.sh cd's there) and takes no git-tree lock,
-    # so it can run while the 30-min timer is mid-tick. Safe: a fetch appends objects and
+    # so it can run while the 10-min timer is mid-tick. Safe: a fetch appends objects and
     # moves a remote-tracking ref under git's own per-ref lock. It touches neither HEAD nor
     # the working tree, which is what the git-tree lock exists to guard.
     git_stdout("fetch", "-q", "origin", "master")
@@ -188,6 +225,23 @@ def _has_only_no_verdict_conclusions(runs: list[dict], required) -> bool:
     return all(
         r.get("status") == "completed"
         and r.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS
+        for r in seen
+    )
+
+
+def draft_skipped(runs: list[dict], required) -> bool:
+    """True when the head has gate runs and every one of them was skipped.
+
+    A draft run is the only shape that skips the gate, so no CI ran on such a head and none
+    arrives until the PR is marked ready or pushed. It reads the gate's own name rather than
+    the jobs `jobs_verdict` aggregates: a skipped matrix job reports its unexpanded name, such
+    as `pytest (shard ${{ matrix.shard }} of ...)`. A ready run's gate beside the skipped one,
+    queued or finished, makes this False, so the seconds before a ready run settles read as
+    plain pending.
+    """
+    seen = [r for r in runs if r.get("name") in required]
+    return bool(seen) and all(
+        r.get("status") == "completed" and r.get("conclusion") == "skipped"
         for r in seen
     )
 
@@ -426,6 +480,18 @@ def _tip_of(sha: str, descendants) -> str:
     return chain[-1] if chain else sha
 
 
+def _read_once(read):
+    """`read`, remembering each SHA's answer. A read that raises is not remembered."""
+    answers: dict[str, list[dict]] = {}
+
+    def once(sha: str) -> list[dict]:
+        if sha not in answers:
+            answers[sha] = read(sha)
+        return answers[sha]
+
+    return once
+
+
 def wait(
     sha: str,
     timeout_s: int,
@@ -436,8 +502,13 @@ def wait(
     fetch_suites=fetch_check_suites,
     descendants=_descendants,
     fetch_tip=_fetch_tip,
+    walk_descendants: bool = True,
 ) -> tuple[int, str]:
     """(exit code, message). Polls until pass/fail or the budget elapses.
+
+    `walk_descendants=False` is the anonymous wait. A dropped push then ends at once on 75
+    rather than reading up to `DESCENDANT_LIMIT` descendants a poll, which would spend the
+    host's 60 anonymous requests an hour (#6148).
 
     A SHA with no Actions suite after `DROPPED_PUSH_GRACE_S` is a push GitHub dropped, and
     its verdict comes from `descendant_verdict` instead. Until one goes green it keeps waiting,
@@ -451,6 +522,10 @@ def wait(
     target = sha
     dropped = False
     while True:
+        # One check-suites read per SHA per poll. `_no_verdict_will_ever_arrive` and the
+        # dropped-push check both want it while no required run exists, and reading it twice
+        # made each such poll cost 3 requests rather than 2 (#6148).
+        suites_this_poll = _read_once(fetch_suites)
         try:
             runs = fetch(target)
         except urllib.error.URLError, TimeoutError, ValueError, OSError:
@@ -458,12 +533,14 @@ def wait(
         # `runs` is bound as a default rather than closed over: verdict_for calls this
         # synchronously within the iteration, so late binding is harmless today, but a
         # future caller that deferred the call would silently read the next poll's runs.
-        verdict = verdict_for(target, lambda _s, _runs=runs: _runs, None, fetch_suites)
+        verdict = verdict_for(
+            target, lambda _s, _runs=runs: _runs, None, suites_this_poll
+        )
         if verdict == "pass":
             return 0, f"{target[:8]}: CI green"
         if verdict == "fail":
             return 1, f"{target[:8]}: CI RED"
-        if _no_verdict_will_ever_arrive(target, runs, fetch_suites):
+        if _no_verdict_will_ever_arrive(target, runs, suites_this_poll):
             moved = resolve_sha(target)
             if moved != target:
                 print(
@@ -476,13 +553,18 @@ def wait(
         if now - started >= DROPPED_PUSH_GRACE_S and not dropped:
             try:
                 dropped = _push_was_dropped(
-                    runs, fetch_suites(target), required_contexts()
+                    runs, suites_this_poll(target), required_contexts()
                 )
             except urllib.error.URLError, TimeoutError, ValueError, OSError:
                 dropped = False
         if any(r.get("name") in required_contexts() for r in runs):
             # A push that was only late, not dropped: its own run now carries the verdict.
             dropped = False
+        if dropped and not walk_descendants:
+            return 75, (
+                f"{target[:8]}: GitHub never ran CI for it, and reading its descendants' CI "
+                "needs a GitHub token -- run `gh auth login`, then re-run"
+            )
         if dropped:
             nearest, verdict = descendant_verdict(
                 target, fetch=fetch, descendants=descendants
@@ -567,6 +649,12 @@ def wait(
                     "for it, and no later master commit is green yet; a re-run converges "
                     "once one is"
                 )
+            if draft_skipped(runs, required_contexts()):
+                return 75, (
+                    f"{target[:8]}: no verdict after {timeout_s}s — {DRAFT_SKIPPED}, and a "
+                    "re-run skips again; mark the PR ready, or, if it is ready already, "
+                    "convert it to draft and back, or push"
+                )
             return 75, f"{target[:8]}: no verdict after {timeout_s}s"
         sleep(interval_s)
 
@@ -587,7 +675,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     ns = parser.parse_args(argv)
     try:
-        code, msg = wait(ns.sha, ns.timeout, ns.interval)
+        authenticated = bool(lookup_token())
+        code, msg = wait(
+            ns.sha,
+            ns.timeout,
+            poll_interval(ns.interval, authenticated),
+            walk_descendants=authenticated,
+        )
     except DisarmedGateError as e:
         print(f"await_ci: {e}", file=sys.stderr)
         return CI_DISARMED

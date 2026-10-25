@@ -9,12 +9,24 @@ the line the unit wrote to its `--verdict-file`, and land.sh's exit code as the 
 
 The unit always runs `--arm-merge --await-merge` and decides the deploy itself, so a flag that
 would change what lands or what deploys is refused rather than dropped.
+
+THE UNIT'S PHASE LINES ARE RELAYED INTO THIS LOG. The unit's land.sh prints its `== N/M` phase
+headers to the unit's journal, and `systemctl start` blocks for the whole landing. Without the
+relay, a detached handoff's log held one `== handing ...` line for the whole run, so `cc-wait
+land` reported no progress until the verdict. `land_through_unit` follows the journal while the
+start blocks and copies each `== ` line, which `land_probe.read` reports as the landing's phase.
+It copies nothing else: a relayed `VERDICT:` or `land:` line would displace the one this module
+prints, because `detach.verdict_in` reads the first `VERDICT:` and `detach.error_in` the last
+`land:`.
 """
 
+import contextlib
 import re
 import subprocess
 import sys as _sys
-from collections.abc import Callable
+import threading
+import time
+from collections.abc import Callable, Generator, Iterable
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
@@ -31,6 +43,8 @@ LAND_CODES = frozenset({0, 1, 64, 75})
 START_TIMEOUT_S = 16 * 3600
 # The PR numbers the lander's polkit rule lets the agent user start a unit for.
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
+# How long the relay's follower gets to exit after it is told to stop, before it is killed.
+_FOLLOW_STOP_S = 5
 
 
 def refused_flags(opts: Options) -> list[str]:
@@ -63,18 +77,72 @@ def _status(
     return dict(line.split("=", 1) for line in shown.stdout.splitlines() if "=" in line)
 
 
+def _relay(lines: Iterable[str]) -> None:
+    """Print each `== ` phase line of `lines` as it arrives; drop every other line."""
+    for line in lines:
+        if line.startswith("== "):
+            print(line.rstrip("\n"), flush=True)
+
+
+@contextlib.contextmanager
+def _relaying_phases(
+    follow: Callable[[str, float], subprocess.Popen[str]] | None,
+    instance: str,
+    since: float,
+) -> Generator[None]:
+    """Relay `instance`'s phase lines for the duration of the block.
+
+    A start that joins a unit already running relays only the phases from `since` on. The
+    follower is stopped and its reader joined before the block's caller prints anything else:
+    the landing leaves through `os._exit`, so a follower left running would be orphaned and
+    keep writing into the log.
+    """
+    if follow is None:
+        yield
+        return
+    try:
+        proc = follow(instance, since)
+    except OSError as exc:
+        # Progress is a convenience; a missing journalctl must not stop the landing.
+        print(f"== not relaying {instance}'s phases: {exc}", flush=True)
+        yield
+        return
+    reader = threading.Thread(target=_relay, args=(proc.stdout,), daemon=True)
+    reader.start()
+    try:
+        yield
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=_FOLLOW_STOP_S)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        reader.join(timeout=_FOLLOW_STOP_S)
+        if proc.stdout is not None:
+            proc.stdout.close()
+
+
 def land_through_unit(
     pr: str,
     unit: str,
     systemctl: Callable[..., subprocess.CompletedProcess[str]],
     state_root: _Path = STATE_ROOT,
-) -> int:
-    """Start `<unit>@<pr>.service`, wait for it, and report its landing; land.sh's exit code.
+    follow: Callable[[str, float], subprocess.Popen[str]] | None = None,
+    wall_clock: Callable[[], float] = time.time,
+) -> tuple[int, str]:
+    """Start `<unit>@<pr>.service`, wait for it, and report its landing.
+
+    Returns land.sh's exit code and the one line `Outcome.file_line` gives the landing, which
+    `land.py` records in this user's `verdict_log`.
 
     Prints the unit's `VERDICT:` line to stdout. When the landing stopped without one, prints
     `land: <why>` to stderr and a `VERDICT:` line of its own for an exit 1 or 75, as a landing
     run here would (#4451). A verdict file the unit did not write during this start is an
     earlier landing's, and is never reported as this one's.
+
+    `follow` starts a reader of the unit's journal from a given epoch second; while the start
+    blocks, its `== ` phase lines are printed here. None relays nothing.
     """
     instance = f"{unit}@{pr}.service"
     verdict = state_root / unit / f"{pr}.verdict"
@@ -82,8 +150,12 @@ def land_through_unit(
     print(
         f"== handing PR #{pr} to {instance}, which lands it as the operator", flush=True
     )
+    # One second early, because `--since` takes whole seconds and a phase line written in
+    # the start's own second must not be missed.
+    since = wall_clock() - 1
     try:
-        started = systemctl("start", instance, timeout=START_TIMEOUT_S)
+        with _relaying_phases(follow, instance, since):
+            started = systemctl("start", instance, timeout=START_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         return _stopped(
             pr,
@@ -110,10 +182,11 @@ def land_through_unit(
     print(line)
     recorded = _status(systemctl, instance).get("ExecMainStatus", "")
     rc = int(recorded) if recorded.isdigit() else 1
-    return rc if rc in LAND_CODES else 1
+    return (rc if rc in LAND_CODES else 1), line
 
 
-def _stopped(pr: str, rc: int, msg: str, verdict: str | None = None) -> int:
+def _stopped(pr: str, rc: int, msg: str, verdict: str | None = None) -> tuple[int, str]:
     """Print `land: <msg>` and the VERDICT line `Outcome` gives `rc`, as `Landing.die` does."""
-    Outcome(rc, f"PR #{pr} — {msg}", verdict, error=msg).emit()
-    return rc
+    outcome = Outcome(rc, f"PR #{pr} — {msg}", verdict, error=msg)
+    outcome.emit()
+    return rc, outcome.file_line()

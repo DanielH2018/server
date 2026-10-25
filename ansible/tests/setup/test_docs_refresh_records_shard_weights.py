@@ -31,8 +31,8 @@ import pytest_shard
 from _helpers import REPO
 from _shell_render import rendered_shell_text, shell_template_path
 
-TEMPLATE = shell_template_path("setup", "initial_setup", "docs-refresh.sh.j2")
-SCRIPT = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
+TEMPLATE = shell_template_path("components", "docs-refresh", "docs-refresh.sh.j2")
+SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
 WEIGHTS = pytest_shard.WEIGHTS_PATH.relative_to(REPO).as_posix()
 SHARD_SCRIPT = (REPO / "scripts/dev/pytest_shard.py").relative_to(REPO).as_posix()
 PUBLISH_GATE = "if git diff --cached --quiet; then"

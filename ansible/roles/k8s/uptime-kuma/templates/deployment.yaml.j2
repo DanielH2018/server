@@ -34,6 +34,7 @@ spec:
       containers:
         - name: uptime-kuma
           image: {{ uptime_kuma_k8s_image }}
+          imagePullPolicy: IfNotPresent
           # The entry's `port` sets the listener too, so the Service, the scrape target, the
           # CronJobs' URLs and the process all read one value (#3816). Kuma reads it in
           # server/config.js, ahead of its built-in default.
@@ -70,6 +71,7 @@ spec:
 {{ container_resources(cpu_limit=uptime_kuma_k8s_cpu_limit, mem_limit=uptime_kuma_k8s_mem_limit, cpu_request=uptime_kuma_k8s_cpu_request, mem_request=uptime_kuma_k8s_mem_request) }}
         - name: autokuma
           image: {{ uptime_kuma_k8s_autokuma_image }}
+          imagePullPolicy: IfNotPresent
           env:
             - name: AUTOKUMA__KUMA__URL
               value: http://localhost:{{ containers_list | entry_port('uptime-kuma') }}
@@ -194,6 +196,42 @@ spec:
             periodSeconds: 30
             failureThreshold: 3
 {{ container_resources(cpu_limit=uptime_kuma_k8s_autokuma_cpu_limit, mem_limit=uptime_kuma_k8s_autokuma_mem_limit, cpu_request=uptime_kuma_k8s_autokuma_cpu_request, mem_request=uptime_kuma_k8s_autokuma_mem_request) }}
+        # Queues the "Homelab Alerts" notification and delivers it inside Discord's rate limit,
+        # because Kuma posts once and drops a 429 (#5657; files/discord_relay.py has the design).
+        # It listens on the pod's loopback, which the notification's webhookURL in
+        # static-monitors.yaml.j2 names, so it needs no Service and no NetworkPolicy rule.
+        - name: discord-relay
+          image: {{ uptime_kuma_k8s_status_page_sync_image }}
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/relay/discord_relay.py"]
+          env:
+            - name: RELAY_PORT
+              value: "{{ uptime_kuma_k8s_discord_relay_port }}"
+            - name: RELAY_WEBHOOK_URL_FILE
+              value: /etc/discord-relay/discord_webhook_url
+            - name: RELAY_DEADLINE_SECONDS
+              value: "{{ uptime_kuma_k8s_discord_relay_deadline_seconds }}"
+            - name: RELAY_MAX_QUEUE
+              value: "{{ uptime_kuma_k8s_discord_relay_max_queue }}"
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000, run_as_group=1000) }}
+          volumeMounts:
+            - name: discord-relay-script
+              mountPath: /relay
+              readOnly: true
+            - name: discord-relay-webhook
+              mountPath: /etc/discord-relay
+              readOnly: true
+          # No readinessProbe: pod Ready is the AND of every container, and the relay must never
+          # gate uptime-kuma's Service. The GET answers 503 once the delivery thread has died.
+          # An exec probe, because the relay binds loopback only and the kubelet's httpGet
+          # reaches the pod IP.
+          livenessProbe:
+            exec:
+              command: ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{{ uptime_kuma_k8s_discord_relay_port }}/healthz', timeout=5)"]
+            timeoutSeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+{{ container_resources(cpu_limit=uptime_kuma_k8s_discord_relay_cpu_limit, mem_limit=uptime_kuma_k8s_discord_relay_mem_limit, cpu_request=uptime_kuma_k8s_discord_relay_cpu_request, mem_request=uptime_kuma_k8s_discord_relay_mem_request) }}
       volumes:
         - name: uptime-kuma-data
           persistentVolumeClaim:
@@ -211,4 +249,16 @@ spec:
             # recursively chown the data PVC on every mount) and autokuma is uid 1000, so
             # 400 reads as an empty password and Kuma rejects the login. Pod-scoped
             # exposure only, and the kuma container is root anyway.
+            defaultMode: 0o444
+        - name: discord-relay-script
+          configMap:
+            name: kuma-discord-relay
+        # The webhook key alone, so the relay never sees the Kuma admin password beside it.
+        - name: discord-relay-webhook
+          secret:
+            secretName: autokuma-credentials
+            items:
+              - key: discord_webhook_url
+                path: discord_webhook_url
+            # 444 for the same reason as the volume above: the relay runs as uid 1000.
             defaultMode: 0o444

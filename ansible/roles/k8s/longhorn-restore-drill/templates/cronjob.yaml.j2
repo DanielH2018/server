@@ -26,6 +26,11 @@
   `probe.py loki-query '{container="longhorn-restore-drill"}'`. The pod carries no
   `netpol-baseline` label: it opens no inbound connection and reaches the API server, and the
   probe pod it creates is a separate pod in the claim's namespace.
+
+  `homelab/gate: schedule` tells `probe.py health` that no gate Job runs this CronJob per
+  revision, so the scheduled run is the gate (#6128). With no Job yet, the gate passes for one
+  schedule period after the revision applies and fails after it
+  (`scripts/diagnostics/probe_lib/health_cronjob.py:format_schedule_gated`).
 #}
 ---
 apiVersion: batch/v1
@@ -33,6 +38,8 @@ kind: CronJob
 metadata:
   name: longhorn-restore-drill
   namespace: {{ longhorn_drill_namespace }}
+  annotations:
+    homelab/gate: schedule
 spec:
   schedule: "{{ k3s_longhorn_restore_drill_cron }}"
   timeZone: Etc/UTC
@@ -69,6 +76,7 @@ spec:
           containers:
             - name: longhorn-restore-drill
               image: {{ longhorn_restore_drill_runner_image }}
+              imagePullPolicy: IfNotPresent
               command: ["bash", "/config/longhorn-restore-drill.sh"]
               env:
                 # kubectl's discovery cache goes under $HOME, and the image has no home for this uid.

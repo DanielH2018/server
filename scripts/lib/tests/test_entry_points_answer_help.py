@@ -6,6 +6,12 @@ waiting on stdin or a network, one died resolving a kubeconfig at import, and `d
 its staleness gate first and answered with exit 4 and a `git rebase` remedy. A static check for
 `add_argument` passes on all five.
 
+WHAT COUNTS AS AN ANSWER. Exit 0 with output is not enough: a script that ignores `--help` and
+runs its whole check exits 0 with output too, and `validate_ha_config.py --help` passed that way
+while it printed `Home Assistant config OK` (#5579). The answer must carry the first line of the
+entry point's docstring, which `lib.cli_help.answer_help` prints, or a `usage:` line, which
+argparse prints. A shell script's docstring is its leading comment block.
+
 WHAT COUNTS AS AN ENTRY POINT. `lib.script_classify.classify` reads the tree for how each
 script is reached, and everything it does not call a library is one. A Python module with no
 `if __name__ == "__main__"` guard cannot be run at all, and the classifier calls every one
@@ -30,6 +36,7 @@ regardless, and the test could not see the one failure a cron hits first (#3296)
 Run: uv run pytest scripts/lib/tests/test_entry_points_answer_help.py
 """
 
+import ast
 import importlib
 import os
 import subprocess
@@ -96,6 +103,47 @@ def _pythonpath_without_scripts():
     )
 
 
+def _doc_first_line(path):
+    """The first line of an entry point's docstring, or "" when it has none.
+
+    A Python module's docstring is its own. A shell script's is its leading comment block,
+    which every shell entry point here prints for `--help`: the first comment line after the
+    shebang that carries text.
+    """
+    text = path.read_text()
+    if path.suffix == ".py":
+        doc = (ast.get_docstring(ast.parse(text)) or "").strip()
+        return doc.splitlines()[0].strip() if doc else ""
+    for line in text.splitlines()[1:]:
+        if not line.startswith("#"):
+            return ""
+        if line.lstrip("#").strip():
+            return line.lstrip("#").strip()
+    return ""
+
+
+def _answers_help(stdout, path):
+    """Whether `stdout` is a help answer rather than a job's output.
+
+    exit 0 with any output is what a script that ignores `--help` and runs its whole check
+    gives too (#5579), so the answer must carry the docstring's first line, which
+    `answer_help` prints, or a `usage:` line, which argparse and the shell scripts print.
+    """
+    first = _doc_first_line(path)
+    if first and first in stdout:
+        return True
+    return any(
+        line.strip().lower().startswith("usage:") for line in stdout.splitlines()
+    )
+
+
+def _comment_markers_left(stdout, path):
+    """The lines of a shell entry point's `--help` answer that still open with `#`."""
+    if path.suffix != ".sh":
+        return []
+    return [line for line in stdout.splitlines() if line.startswith("#")]
+
+
 def test_the_census_still_finds_the_entry_points_it_is_measured_against():
     missing = MUST_FIND - set(ENTRY_POINTS)
     assert not missing, f"the entry-point census lost {sorted(missing)}"
@@ -130,6 +178,16 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
         f"environment.\nstdout: {r.stdout[-400:]}\nstderr: {r.stderr[-400:]}"
     )
     assert r.stdout.strip(), f"{name} --help exited 0 and printed nothing to stdout"
+    assert _answers_help(r.stdout, path), (
+        f"{name} --help exited 0, but its stdout carries neither its docstring's first line "
+        "nor a `usage:` line, so it ran its job instead of answering (#5579). Put "
+        f"`lib.cli_help.answer_help` ahead of that work.\nstdout: {r.stdout[-400:]}"
+    )
+    marked = _comment_markers_left(r.stdout, path)
+    assert not marked, (
+        f"{name} --help prints its header with the `#` markers still on: {marked[:3]}. "
+        "Strip them in the awk, as `scripts/validate/vale.sh` does."
+    )
 
 
 # The entry points the test above once waited on: each ignored `--help` and ran its whole check,
@@ -162,7 +220,7 @@ def test_an_entry_point_answers_help_before_its_work(name, capsys):
 
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
 PROBES = sorted(path.name for path in WAIT_SOURCES.iterdir() if path.is_file())
-MUST_FIND_PROBES = frozenset({"land", "deploy", "fanout"})
+MUST_FIND_PROBES = frozenset({"land", "deploy", "fanout", "fanout-headroom", "flux"})
 
 # cc-wait reports a refused `--describe` with only the last 400 characters of its stderr
 # (dotfiles `cc_wait/repo.py`, `ProbeWait.describe`), so the usage has to land inside them.
@@ -216,6 +274,22 @@ def test_either_help_flag_is_recognised(flag):
 def test_a_flag_that_merely_contains_help_is_not_a_help_request():
     """The reject half. `--helpful` and `--no-help` are somebody else's flags."""
     assert not wants_help(["--helpful", "--no-help", "help"])
+
+
+def test_a_shell_entry_point_answers_with_its_header_comment(tmp_path):
+    """The shell half of `_answers_help`: the header comment counts, a job's output does not."""
+    script = tmp_path / "fake.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n#\n# Check the fakes.\n#\n# More.\nexit 0\n"
+    )
+    assert _doc_first_line(script) == "Check the fakes."
+    assert _answers_help("Check the fakes.\n\nMore.\n", script)
+    assert not _answers_help("4 template(s) checked, 0 failure(s).\n", script)
+    assert _comment_markers_left("Check the fakes.\n\nMore.\n", script) == []
+    assert _comment_markers_left("#\n# Check the fakes.\n", script) == [
+        "#",
+        "# Check the fakes.",
+    ]
 
 
 def test_answer_help_prints_the_doc_and_exits_zero(capsys):

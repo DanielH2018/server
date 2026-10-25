@@ -1,0 +1,10 @@
+# The node_exporter textfile collector's directory on the Pi (H7.25, docs/target-architecture/host/h7-delete-ansible.md,
+# H7.4's *textfile directory*). homelab-updater, which runs as root, writes homelab_host.prom here
+# and exits non-zero without creating the directory when it is missing. This line is the
+# directory's only creator on the Pi since H3.6's optimize_pi task left. M3's owner contract
+# (docs/target-architecture/monitoring/m3-textfile-timer.md) is root, group {{ sys_user }}, mode
+# 2775: the group lets a {{ sys_user }} writer in, and setgid keeps that group on new files.
+# node_exporter.service runs systemd-tmpfiles --create on this file in ExecStartPre=, and
+# systemd-tmpfiles-setup.service applies it at boot.
+#Type Path                            Mode User Group           Age
+d /var/lib/node-exporter-textfile     2775 root {{ sys_user }}  -

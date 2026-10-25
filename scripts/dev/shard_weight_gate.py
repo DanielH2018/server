@@ -372,15 +372,50 @@ OUTSIDE_DIFF_NOTE = (
 )
 
 
-# The files that decide every module's verdict at once: the weight table and the gate's code.
-# A diff touching one can repair any module, so the gate runs unscoped on it.
-GATE_INPUTS = frozenset(
+# The weight table, whose rows a pull request owns one at a time, and the gate's code, whose
+# bounds decide every module's verdict at once. A diff touching the code runs the gate unscoped.
+WEIGHTS_TABLE = "scripts/dev/pytest_shard_weights.json"
+GATE_CODE = frozenset(
     {
-        "scripts/dev/pytest_shard_weights.json",
         "scripts/dev/pytest_shard.py",
         "scripts/dev/shard_weight_gate.py",
     }
 )
+
+
+def rows_written(weights: dict[str, float], base: dict[str, float]) -> set[str]:
+    """The modules whose table row differs from `base`: added, changed or dropped.
+
+    A pull request that edits the table owns exactly these rows. Until #6266 an edit to any
+    row made every module's complaint its author's. A PR that re-recorded one row then failed
+    on a heavy module another PR had merged without a weight, which its author neither wrote
+    nor could see in the diff. That shape was 6 of the 7 gate failures outside a PR's diff
+    between 2026-10-18 and 2026-10-25. A full `--record` writes every row, so it still owns
+    every module. A dropped row for a deleted module (#5989) names a file no shard runs, so it
+    widens nothing.
+    """
+    changed = {m for m, s in weights.items() if base.get(m) != s}
+    return changed | (base.keys() - weights.keys())
+
+
+def diff_scope(
+    changed: set[str] | None,
+    weights: dict[str, float],
+    base: dict[str, float] | None,
+) -> set[str] | None:
+    """The modules whose complaints fail a run with diff `changed`, or None for every module.
+
+    None when there is no diff (a push), when the diff touches the gate's code, or when it
+    edits the table with no `base` to compare against. Otherwise the diff's own paths, plus
+    the rows it wrote when it edits the table.
+    """
+    if changed is None or changed & GATE_CODE:
+        return None
+    if WEIGHTS_TABLE not in changed:
+        return changed
+    if base is None:
+        return None
+    return changed | rows_written(weights, base)
 
 
 def split_by_diff(text: str, changed: set[str]) -> tuple[str, str]:
@@ -404,27 +439,29 @@ def gate_complaints(
     threshold: float = RUNNER_HEAVY_SECONDS,
     ratio: float = STALE_WEIGHT_RATIO,
     fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
+    base_weights: dict[str, float] | None = None,
 ) -> tuple[list[str], list[str]]:
     """`(problems, warnings)` for a durations report: what fails the run, and what annotates it.
 
     `changed` is the set of paths a pull request's diff adds or modifies, or None for a run
     with no diff to scope to. With None, every module's complaint counts, as on a push. With a
-    set, only a module in it can fail the run. Every other module's complaint becomes a
-    warning, because its author is not the one reading this run: 4 of the 16 gate failures
+    set, only a module in `diff_scope` can fail the run. Every other module's complaint becomes
+    a warning, because its author is not the one reading this run: 4 of the 16 gate failures
     between 2026-10-15 and 2026-10-17 named a module outside the failing PR's diff (#5480).
 
-    A set that holds one of `GATE_INPUTS` counts as None. A PR that re-records the table or
-    moves a bound wrote every row the gate then reads, so every complaint is its author's.
+    `base_weights` is the table at the PR's merge base. A diff that edits the table also owns
+    the rows it wrote, which `rows_written` reads from the two tables.
 
     The empty-report complaint reads the WHOLE report. Most PRs change no test module a given
     shard ran, so a scoped half is usually empty, and that is not a format change.
     """
-    if changed is None or changed & GATE_INPUTS or not parse_durations(text):
+    scope = diff_scope(changed, weights, base_weights)
+    if scope is None or not parse_durations(text):
         return (
             durations_problems(text, weights, threshold, ratio, fail_above),
             durations_warnings(text, weights, threshold, fail_above, ratio=ratio),
         )
-    inside, outside = split_by_diff(text, changed)
+    inside, outside = split_by_diff(text, scope)
     problems, warnings = [], []
     if inside:
         problems = durations_problems(inside, weights, threshold, ratio, fail_above)

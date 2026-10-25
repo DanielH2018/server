@@ -20,7 +20,12 @@ deletes nothing. So the arm adopts a rule that predates it by appending it again
 Each run does these steps in order. A fault fails the run, which holds the host. Drift is counted
 and the run succeeds, so that a revert still updates the host.
 
- 1. Set the default policies, when the manifest declares a rule. The routed default stays alone.
+ 1. Set the default policies, when the manifest declares a rule, and only a policy that
+    `ufw status verbose` shows differing. On an active firewall `ufw default` stops and starts
+    the whole ruleset even when the value is unchanged, and a kube-router sync that lands inside
+    that window wipes the before chains (the 2026-10-25 outage on daniel-box). An inactive ufw
+    prints no policies, so every policy is set, which loads nothing. The routed default stays
+    alone.
  2. Add or adopt each declared rule, then read `ufw show added` again; a rule that is not there
     with its label is a fault.
  3. Check each `before:` relation; a violated one is a fault, and the arm never repairs it.
@@ -32,6 +37,11 @@ and the run succeeds, so that a revert still updates the host.
  6. Enable ufw only when it reads `Status: inactive`, steps 1 to 3 succeeded, and the keep rules
     named in REQUIRED_KEEP are declared and present. Then check the relations again on the
     active ruleset. A failed enable, or a relation violated after it, is a fault.
+ 7. On an active ufw, read `iptables -S ufw-before-input` and fault when it lacks LOOPBACK, the
+    first rule before.rules loads. Its absence means the loaded ruleset diverged from the file,
+    whoever caused it, and the host has no loopback DNS. The check only reads, so its fault
+    holds the host and restarts nothing; the repair, `ufw reload`, is the operator's. It reads
+    once, straight after the arm's own commands, so a restore that lands later is missed.
 
 When nothing declares ufw, and no earlier run did, the arm runs no ufw command at all.
 """
@@ -49,6 +59,11 @@ ID = re.compile(r"[a-z0-9][a-z0-9-]*")
 SPEC = re.compile(r"(?:allow|deny|limit|reject) [A-Za-z0-9 ./:_-]+")
 _ADDED = re.compile(r"ufw (.+?)(?: comment '(.*)')?")
 _NUMBERED = re.compile(r"\[\s*\d+\].*#\s*(homelab:\S+)\s*$")
+_DEFAULTS = re.compile(
+    r"Default: (\w+) \(incoming\), (\w+) \(outgoing\), (\w+) \(routed\)"
+)
+POLICIES = {"incoming": "deny", "outgoing": "allow"}
+LOOPBACK = "-A ufw-before-input -i lo -j ACCEPT"
 
 
 def label(rule: dict) -> str:
@@ -108,6 +123,40 @@ def ufw(*args: str) -> bool:
     return result.returncode == 0
 
 
+def defaults() -> dict[str, str]:
+    """The live default policy per direction, or {} when ufw is inactive or cannot say."""
+    result = run("ufw", "status", "verbose")
+    match = _DEFAULTS.search(result.stdout) if result.returncode == 0 else None
+    if not match:
+        return {}
+    return dict(zip(("incoming", "outgoing", "routed"), match.groups(), strict=True))
+
+
+def set_defaults() -> bool:
+    """Step 1: set each policy in POLICIES that the live firewall does not already have."""
+    live = defaults()
+    ok = True
+    for direction, policy in POLICIES.items():
+        if live.get(direction) != policy:
+            ok = ufw("default", policy, direction) and ok
+    return ok
+
+
+def before_chain_intact() -> bool:
+    """Step 7: False when an active ufw's ufw-before-input lacks the loopback accept."""
+    status = run("ufw", "status")
+    if status.returncode != 0 or not status.stdout.startswith("Status: active"):
+        return True
+    chain = run("iptables", "-S", "ufw-before-input")
+    if LOOPBACK in chain.stdout.splitlines():
+        return True
+    say(
+        "ufw-before-input lacks the loopback accept, so the loaded rules differ from "
+        "/etc/ufw/before.rules; run `ufw reload` and check `iptables -S ufw-before-input`"
+    )
+    return False
+
+
 def crossed(order: list[str], rules: list[dict]) -> list[str]:
     """The `before:` relations the ordered labels break: a rule below the one it must precede."""
     by_id = {r["id"]: label(r) for r in rules}
@@ -151,7 +200,7 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
     record = {"ids": sorted(r["id"] for r in rules)}
     ok = True
     if rules:
-        ok = ufw("default", "deny", "incoming") and ufw("default", "allow", "outgoing")
+        ok = set_defaults()
         for rule in rules:
             ok = put(rule, added() or []) and ok
     current = added()
@@ -172,6 +221,8 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
         drift, ok = remove_undeclared(rules, current)
     if ok and rules:
         ok = enable(rules, present)
+    if ok:
+        ok = before_chain_intact()
     return ok, record, drift
 
 

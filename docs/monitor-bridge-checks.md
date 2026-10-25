@@ -803,15 +803,16 @@ checks each gate suppresses.
   so an arm that stopped evaluating shows as an absence.
   `PVC_EXCLUDE` drops `media-data`, the one claim backed by a `local` PV at `/srv/media` rather
   than by Longhorn: it IS the `/` filesystem Root Disk already watches, so scanning it here pages
-  twice for one full disk. The query aggregates `max by (namespace, persistentvolumeclaim)`,
-  because daniel-box's claims are scraped TWICE (k3s serves the kubelet registry on the
-  supervisor's `/metrics` too, so the same series arrives under `job="kubernetes-kubelet"` and
-  `job="kubernetes-apiserver"`, 43 + 27 series over 43 claims), and `sum` would report a
-  double-scraped claim at twice its real fullness.
-  **Fails closed on a thin claim census**, and `PVC_MIN_CLAIMS` (32) is DERIVED: the kubelet job
-  alone reports all 43 claims and the apiserver job alone 27, so losing the apiserver job costs no
-  coverage and the only hazard is a dead kubelet job, which leaves 27 claims answering, every one
-  under the limit, while daniel-server's go dark. Any floor at or under 27 reads that as healthy.
+  twice for one full disk. The query aggregates `max by (namespace, persistentvolumeclaim)`, so
+  a claim reads as one value however many series carry it. Until #6331 daniel-box's claims were
+  scraped TWICE (k3s serves the kubelet registry on the supervisor's `/metrics` too, so the same
+  series arrived under `job="kubernetes-kubelet"` and `job="kubernetes-apiserver"`, 43 + 27
+  series over 43 claims). The apiserver job now keeps only `apiserver_` and `etcd_` families, so
+  the kubelet job is the claims' one source.
+  **Fails closed on a thin claim census**, and `PVC_MIN_CLAIMS` (32) is DERIVED: daniel-box's
+  kubelet target reports 27 claims and daniel-server's 16. The hazard is a dead daniel-server
+  target, which leaves 27 claims answering, every one under the limit, while daniel-server's go
+  dark. Any floor at or under 27 reads that as healthy. A dead kubelet job empties the census.
   For the same reason the check has **no `EXPORTER_DEPENDENT` entry** keyed on the kubelet job:
   that would suppress the page on exactly the partial outage the floor exists to catch, the
   `node`-only mistake that blinded Host Temperature on two hosts of three. A fullness breach gets
@@ -879,10 +880,11 @@ checks each gate suppresses.
   `apiserver_storage_size_bytes` is scraped unconditionally and matches the etcd snapshot's size
   (#2403: 53,768,192 on 2026-09-24, 2.6% of the quota).
   **`max(...)` over the bare series, no `by` and no `job` selector.** k3s serves the apiserver and
-  the kubelet from one process, so the series is scraped TWICE with the same value, under
-  `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"`. Two identical series would make
-  `prom_scalar`'s `result[0]` an arbitrary pick, and selecting on `job` would tie the check to a
-  scrape-job name rather than to the metric. **2 GiB is etcd's OWN default** and is what is in
+  the kubelet from one process, so until #6331 the series was scraped TWICE with the same value,
+  under `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"`. The kubelet job now drops
+  the server node's `apiserver_` families, so one series is left, and `max` keeps
+  `prom_scalar`'s `result[0]` well defined if a second copy returns. Selecting on `job` would tie
+  the check to a scrape-job name rather than to the metric. **2 GiB is etcd's OWN default** and is what is in
   force: `k3s_server_args` carries no `--etcd-arg=quota-backend-bytes`, so adding one there moves
   `ETCD_DB_QUOTA_BYTES` with it or the check measures against a quota the cluster does not have.
   **No grace**, for the reason CSI Read-only Mounts has none: a DB near its quota does not shrink

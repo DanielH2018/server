@@ -28,7 +28,6 @@ import re
 
 import pytest
 
-from _compose_render import rendered_text
 from _helpers import ALL_VARS, load_yaml
 from _k8s_render import render_pod_env, render_role_template
 from _loki_streams import (
@@ -39,6 +38,7 @@ from _loki_streams import (
 )
 from lib import yaml_fast
 from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
 
 OWNER = load_yaml(ALL_VARS)["loki_streams"]
 OWNER_JOBS = {labels["job"] for labels in OWNER.values()}
@@ -77,10 +77,16 @@ def _selected_jobs(expr: str) -> set[str]:
     return jobs
 
 
+def _pi_alloy_config() -> str:
+    """The config the Pi installs, from the rendered package (H5.8), not a role template."""
+    package = host_mode.render_host("daniel-pi")
+    return package.files["/usr/lib/homelab/compose/alloy/config.alloy"][0].decode()
+
+
 def _alloy_configs() -> dict[str, str]:
     return {
         "loki-homelab": render_role_template("loki-homelab", "config/config.alloy.j2"),
-        "alloy (daniel-pi)": rendered_text("alloy", "config.alloy.j2"),
+        "alloy (daniel-pi)": _pi_alloy_config(),
     }
 
 
@@ -367,6 +373,7 @@ def test_a_loki_rule_on_an_unknown_machine_is_flagged():
 # container by that name. A value with no entry here fails, so a new rule adds its mapping.
 _RULE_CONTAINERS = {
     "uptime-kuma": ("uptime-kuma", "deployment.yaml.j2"),
+    "discord-relay": ("uptime-kuma", "deployment.yaml.j2"),
     # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
     # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
     "cloudflare-ddns": ("cloudflare-ddns", "deployment-direct.yaml.j2"),

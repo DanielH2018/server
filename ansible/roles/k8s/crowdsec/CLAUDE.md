@@ -8,7 +8,7 @@ rollout race, the stalled bouncer pull, the partial-line measurements, the remov
 dashboard and the dashboard findings.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=crowdsec` with exit 5
 - **Images:** `python` (`crowdsec_k8s_jobs_image`), `alpine/k8s`
@@ -202,6 +202,12 @@ deleting, and deleting the parent takes every row holding the key), and **the mo
 prune unless a `k8straefik*` row pulled in the last 50 minutes**, because pruning the last row
 makes LAPI answer 403 to the edge. Read a run with
 `probe.py loki-query '{container="crowdsec-jobs"} |= "crowdsec-bouncer-prune"'`.
+
+Any other client of the bouncer key would add rows too, and a fresh `last_pull` on one of them
+would satisfy that survivor check while the edge is not pulling. traefik's bouncer-key
+precheck sends `HEAD /v1/decisions` for that reason: LAPI answers a HEAD from the key's hash
+alone, adding no row and stamping no `last_pull`. The `DECIDED:` note in
+`ansible/roles/k8s/traefik/files/traefik_bouncer_key_precheck.py` cites the upstream code.
 
 ### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
 The tailer read a Traefik access-log line before Traefik finished writing it. Each occurrence is

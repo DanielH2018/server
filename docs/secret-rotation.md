@@ -2,7 +2,8 @@
 
 Secrets in `ansible/vars/secrets.yml` are tracked for rotation by a plaintext registry
 (`ansible/secret_rotation.yml`) and the tool `scripts/secrets_mgmt/secret_rotation.py`. A daily server
-timer (`secret-rotation-audit.sh`, initial_setup) pushes the **"Secret Rotation"** Uptime
+timer (`homelab-secret-rotation-audit.timer`, the `secret-rotation` component of the
+`homelab-daniel-box` package) pushes the **"Secret Rotation"** Uptime
 Kuma monitor — it goes **down** when any secret is past its per-tier window, or when a
 secret exists in `secrets.yml` but not the registry.
 
@@ -241,6 +242,16 @@ not rotated again by the weekly cron. Examples:
   jsonpath='{.data.token}' | base64 -d`, which is **operator-only**. Then `sops set` the new
   value, run `host_secrets.py sync daniel-box` (and each other host that carries the key), and
   commit. The unit reads the credential at its next window.
+- `alloy_pi_http_password` (H5.8): the basic-auth password on the Pi's Alloy listener. It is a
+  lock rather than a login, so no app issues it: mint a new random value yourself. After
+  `sops set`, the operator runs `uv run python scripts/secrets_mgmt/host_secrets.py sync
+  daniel-pi` (**operator-only**) and commits the Pi's host file in the same PR. The Pi installs
+  the value when the package's next version lands, through the package's Compose env file.
+  `secret_rotation.py consumers alloy_pi_http_password` names the package and prints the `sync`
+  command. The password sits in alloy's container environment, where the read-only docker-proxy
+  can return it, and the H5.8 PR body records the operator's approval of that exposure
+  (`h5-pi-compose.md`, *Open questions* 6). No redeploy step exists: `deploy.sh` no longer
+  reaches alloy, and the recreate follows from the environment change.
 - `mqtt_password_hash`: `mosquitto_passwd` writes a `username:hash` line. Store only the part
   after the first `:`, because the template prepends `mqtt_username` itself. The mosquitto
   deploy refuses a stored hash that holds a colon, before the apply.
@@ -295,6 +306,11 @@ not rotated again by the weekly cron. Examples:
   as well as on `crowdsec` (`flux_verify_after` in the `crowdsec` role's defaults), so it
   probes the rolled Traefik pod. It therefore fails, or never starts, after the outage
   has begun.
+  The `traefik-precheck` Job is the prevention (#6095, switched on by #6157). It runs after `crowdsec` and before `traefik`, sends the new
+  key to the LAPI, and fails on a 403, so Flux holds `traefik` while the old pod serves. Its
+  name changes with the key, so every rotation runs it. A failed run stays failed. To recover,
+  run the bouncer delete, wait for the restarted engine pod, then have the operator delete the
+  failed `traefik-precheck-*` Job; Flux recreates it under the same name and it runs again.
   Verify after: `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list`
   (fresh `last_pull`) and a `kubectl -n homelab logs deploy/traefik` free of LAPI 403s.
   (`crowdsec_bouncer_api_key` — the retired local LAPI's legacy key — and
@@ -313,15 +329,17 @@ not rotated again by the weekly cron. Examples:
   only with a new Google project.
 - `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
   `sops set`, and commit the public half over
-  `ansible/roles/setup/k8s_host_files/files/pi-peer-backup.pub`. The private key is multi-line,
-  so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
+  `hosts/components/pi-peer-backup-target/pi-peer-backup.pub` and into the `line:` of that
+  component's `component.yml`, which `hosts/lib/tests/test_pi_tuning_component.py` and
+  `ansible/tests/services/test_pi_peer_backup_forced_command.py` hold equal. The private key is
+  multi-line, so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
   `ansible/roles/k8s/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. Flux owns pi-peer-backup,
   so that Secret reaches the cluster as the SOPS manifest `cluster_vars.py write` regenerates
-  (operator-run), which `promote` applies once the change merges. The public half is in the
-  setup plane: the GitOps tick applies `initial_setup.yml --tags k8s_host_files`, whose
-  `authorized_key` task authorizes it on the Pi. That task adds the new line and leaves the
-  old one, so remove the old key from the Pi's `authorized_keys` after the next nightly run
-  succeeds.
+  (operator-run), which `promote` applies once the change merges. The public half reaches the
+  Pi as a new `homelab-daniel-pi` version: the reconcile line arm replaces the line anchored on
+  the key comment `pi-peer-backup-cronjob` in the Pi user's `authorized_keys` and never
+  removes a line, so the old key is gone as soon as the new version installs. The nightly run
+  after the install is the proof.
 - `authelia_oidc_rsa_key_content`: generate a new RSA private key in PEM form, such as with
   `openssl genrsa 4096`, and store it with `sops set`. The value is multi-line, so it has a
   Secret of its own, `authelia-oidc-jwk`, rendered from
@@ -450,6 +468,12 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
       A rotation re-sets that secret too, with `gh secret set DEPLOY_DISCORD_WEBHOOK -R
       DanielH2018/server` reading the new value from stdin (**operator-only**). A stale copy
       fails the next stateful hold's post red, with the hold already written.
+    - A key that a host file carries needs one more step after `sops set`: the operator runs
+      `uv run python scripts/secrets_mgmt/host_secrets.py sync <host>` (**operator-only**,
+      because it decrypts) and commits the host file in the same PR. `monitor_discord_webhook_url`
+      is such a key since H5.7: autoheal on `daniel-pi` reads it through the package's Compose
+      env file. `secret_rotation.py consumers <name>` names the host package and prints the
+      `sync` command, and the Pi installs the new value when the package's next version lands.
 - `mullvad_account`: Mullvad account panel. The value is all digits, so it has a Secret of its
   own, `qbittorrent-mullvad-account`, rendered from
   `ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes

@@ -31,7 +31,9 @@ A role reaches the hosts `land_reach.setup_role_hosts` names, less those its lea
 `delegate_to:` host writes on that host, not on the host its playbook entry runs on (H5.14). A task, its block or its import guarded by
 `<role>_packaged_hosts` writes nothing on a host the map lists
 (`setup_gates.packaged_guard_hosts`; `test_host_package_ufw_two_writers.py` holds the proof). A role that function cannot place, such as `common`,
-whose task files other roles import, reaches every host.
+whose task files other roles import, reaches every host. `k3s` is the exception: its playbook is
+`k3s-bringup.yml`, which applies it to the cluster nodes only (`k3s_server_hosts` and
+`k3s_agent_hosts`), so `role_reach` reads those and no Pi write of `k3s` is invented.
 
 Run: uv run pytest ansible/tests/setup/test_host_package_two_writers.py
 """
@@ -53,7 +55,7 @@ from deploy_tools.setup_lib.setup_gates import HOSTS, packaged_guard_hosts
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 from lib.render_context import render_context
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import ALL_VARS, ANSIBLE
 from renderer.renderer_lib import host as host_mode
 
 SETUP = ANSIBLE / "roles" / "setup"
@@ -78,9 +80,10 @@ CRON = "ansible.builtin.cron"
 # Where the cron module writes a relative `cron_file:`. An absolute one replaces it on join.
 CRON_D = PurePosixPath("/etc/cron.d")
 
-# The Ansible-side members: the interim push-token files optimize_pi stages on the Pi, which
-# the package reads through LoadCredential= and never writes (H3.8a).
-OPTIMIZE_PI_WRITES = frozenset(
+# The legacy members: the interim push-token files optimize_pi staged on the Pi, which the
+# package reads through LoadCredential= and never wrote (H3.8a), and which the Pi package retires
+# since H7.25 emptied the role.
+INTERIM_LEGACY = frozenset(
     {
         ("path", "/etc/homelab/interim/pi_sd_health_push_token"),
         ("path", "/etc/homelab/interim/pi_recovery_push_token"),
@@ -172,10 +175,18 @@ def task_writes(task: dict, ctx: dict) -> set[Key]:
     return writes
 
 
+def role_reach(name: str) -> frozenset[str]:
+    """The hosts a setup role reaches: `initial_setup.yml`'s reading, or the cluster nodes for `k3s`."""
+    if name == "k3s":
+        nodes = yaml_fast.safe_load(ALL_VARS.read_text())
+        return frozenset(nodes["k3s_server_hosts"] + nodes["k3s_agent_hosts"])
+    return setup_role_hosts(name)
+
+
 def ansible_writes(
     roles: list[tuple[Path, Path]],
     hosts: tuple[str, ...],
-    reach_of: Callable[[str], frozenset[str]] = setup_role_hosts,
+    reach_of: Callable[[str], frozenset[str]] = role_reach,
 ) -> dict[str, dict[Key, set[str]]]:
     """Per host, each write the setup roles make there, mapped to the task files making it."""
     by_host: dict[str, dict[Key, set[str]]] = defaultdict(lambda: defaultdict(set))
@@ -256,9 +267,16 @@ def test_no_path_has_two_writers():
     assert not found, "\n".join(found)
 
 
-def test_the_ansible_side_finds_the_optimize_pi_interim_files():
+def test_the_package_side_retires_the_optimize_pi_interim_files():
+    _, packages = _tree()
+    assert INTERIM_LEGACY <= set(packages["daniel-pi"])
+
+
+def test_k3s_writes_the_cluster_nodes_and_never_the_pi():
     ansible, _ = _tree()
-    assert OPTIMIZE_PI_WRITES <= set(ansible["daniel-pi"])
+    resolver = ("path", "/etc/resolv.conf")
+    assert "ansible/roles/setup/k3s/tasks/node.yml" in ansible["daniel-box"][resolver]
+    assert resolver not in ansible["daniel-pi"]
 
 
 def test_the_package_side_finds_the_retired_heartbeat_crons():

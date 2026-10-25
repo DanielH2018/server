@@ -382,9 +382,18 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_two_credential
     assert credentials == ["pi_recovery_push_token", "pi_sd_health_push_token"]
     for key in credentials:
         node.credential(key)
+    # H5.7: the Compose env file is an output, which the secrets unit renders before reconcile
+    # restarts homelab-compose.service.
+    outputs = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])["outputs"]
+    for output in outputs:
+        node.output_file(output["destination"], persist=output["persist"])
     # H7.27: the line arm edits conffiles that exist on a real host.
-    for unit in ("ssh.service", "systemd-journald.service"):
+    for unit in ("ssh.service", "systemd-journald.service", "auditd.service"):
         live_unit(node, unit)
+    node.state["users"] = {
+        "node_exporter": 999
+    }  # the account the live Pi already holds
+    (node.root / "var/lib/node-exporter-textfile").mkdir(parents=True)
     for edit in package.lines:
         target = node.root / edit["path"].lstrip("/")
         target.parent.mkdir(parents=True, exist_ok=True)

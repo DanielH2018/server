@@ -18,9 +18,11 @@ from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_tools import ARCHES, BIN_DIR, PINS_FILE
 from lib.repo_paths import REPO
 
-NAMED_MEMBERS = frozenset({f"{BIN_DIR}/{t}" for t in ("sops", "chezmoi", "nfpm")})
-# nfpm names its amd64 build x86_64.
-UPSTREAM_ARCH = {"amd64": "x86_64", "arm64": "arm64"}
+NAMED_MEMBERS = frozenset(
+    {f"{BIN_DIR}/{t}" for t in ("sops", "chezmoi", "nfpm", "node-exporter", "uv")}
+)
+# nfpm and uv name the amd64 build x86_64, and uv names the arm64 build aarch64.
+UPSTREAM_ARCH = {"amd64": ("x86_64",), "arm64": ("aarch64",)}
 DIGEST = "a" * 64
 
 
@@ -58,13 +60,15 @@ def test_the_real_package_installs_its_tools_under_the_private_bin_dir():
 
 
 def test_a_package_that_moves_sops_is_missing_a_named_member(hosts):
-    # The fixture installs chezmoi and nfpm at their paths and sops under another tool name.
+    # The fixture installs every other named tool at its path and sops under another tool name.
     package = render(
         hosts,
         {
             "tools": {
                 "chezmoi": dict.fromkeys(ARCHES, pin()),
                 "nfpm": dict.fromkeys(ARCHES, pin()),
+                "node-exporter": dict.fromkeys(ARCHES, pin()),
+                "uv": dict.fromkeys(ARCHES, pin()),
                 "sops-old": dict.fromkeys(ARCHES, pin()),
             }
         },
@@ -82,9 +86,10 @@ def test_a_render_writes_one_tree_per_architecture_with_its_own_pins(tmp_path):
         assert nfpm["arch"] == arch
         assert {c["dst"] for c in nfpm["contents"]} == NAMED_MEMBERS
         pins = json.loads((tree / PINS_FILE).read_text())
-        assert set(pins) == {"sops", "chezmoi", "nfpm"}
+        assert set(pins) == {"sops", "chezmoi", "nfpm", "node-exporter", "uv"}
         assert all(
-            arch in p["url"] or UPSTREAM_ARCH[arch] in p["url"] for p in pins.values()
+            arch in p["url"] or any(a in p["url"] for a in UPSTREAM_ARCH[arch])
+            for p in pins.values()
         )
         # The render carries pins and no bytes.
         assert not (tree / "root").exists()
@@ -107,6 +112,25 @@ def test_a_valid_fixture_renders_and_expands_both_placeholders(hosts):
     assert (
         package.tools["sops"]["arm64"].url == "https://example.invalid/v1.2.3/x-1.2.3"
     )
+
+
+def test_a_member_one_directory_down_renders(hosts):
+    package = spec()
+    package["tools"]["sops"]["amd64"]["member"] = "uv-x/uv"
+    assert render(hosts, package).tools["sops"]["amd64"].member == "uv-x/uv"
+
+
+def test_a_member_expands_the_version_placeholders(hosts):
+    package = spec()
+    package["tools"]["sops"]["amd64"]["member"] = "x-{bare}.linux/x"
+    assert render(hosts, package).tools["sops"]["amd64"].member == "x-1.2.3.linux/x"
+
+
+def test_a_member_with_another_placeholder_is_refused(hosts):
+    package = spec()
+    package["tools"]["sops"]["amd64"]["member"] = "x-{arch}/x"
+    with pytest.raises(RenderRefused, match="member"):
+        render(hosts, package)
 
 
 @pytest.mark.parametrize(
@@ -156,6 +180,16 @@ def test_a_valid_fixture_renders_and_expands_both_placeholders(hosts):
             lambda t: t["sops"]["amd64"].update(member="../sops"),
             "not a plain file name",
             id="member-escapes",
+        ),
+        pytest.param(
+            lambda t: t["sops"]["amd64"].update(member="a/b/c"),
+            "not a plain file name",
+            id="member-two-directories-deep",
+        ),
+        pytest.param(
+            lambda t: t["sops"]["amd64"].update(member="a/../sops"),
+            "not a plain file name",
+            id="member-escapes-after-a-directory",
         ),
         pytest.param(
             lambda t: t.update({"a/b": t.pop("sops")}),

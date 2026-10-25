@@ -25,6 +25,8 @@ DEPS = {
     "sops": "getsops/sops",
     "chezmoi": "twpayne/chezmoi",
     "nfpm": "goreleaser/nfpm",
+    "node-exporter": "prometheus/node_exporter",
+    "uv": "astral-sh/uv",
 }
 
 
@@ -61,8 +63,8 @@ def _spec_pins() -> list[tuple[str, str, str]]:
 def test_the_manager_reads_every_version_and_digest_pair_of_the_spec() -> None:
     found = tools_pins(_CONFIG_MANAGERS, (_REPO / SPEC).read_text())
     assert found == _spec_pins()
-    # Non-vacuity: three tools, two architectures.
-    assert len(found) == 6
+    # Non-vacuity: five tools, two architectures.
+    assert len(found) == 10
 
 
 def test_a_missing_or_version_only_manager_is_flagged() -> None:

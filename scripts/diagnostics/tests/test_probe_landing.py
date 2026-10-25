@@ -361,6 +361,30 @@ def test_an_agent_only_k3s_row_prints_the_join_and_no_server_command():
     assert not any("k3s-bringup.yml --tags" in line for line in lines), lines
 
 
+def test_a_node_address_row_prints_the_pin_under_the_host_it_runs_on():
+    """#5918: the pin play runs ON the agent, so its command sits under that host's name."""
+    lines = _owed_text(
+        {
+            "subject": "k3s",
+            "playbook": "ansible/k3s-bringup.yml",
+            "tags": ["node-address"],
+            "agent_hosts": ["daniel-server"],
+        }
+    ).splitlines()
+    server = lines.index(
+        "    uv run ansible-playbook ansible/k3s-bringup.yml --tags node-address"
+    )
+    heading = lines.index("  Then pin its LAN address, run on daniel-server:")
+    assert lines[heading + 1] == (
+        "    uv run ansible-playbook ansible/k3s-bringup.yml"
+        " -e pin_agent_address=daniel-server --tags node-address"
+    )
+    clear = next(
+        i for i, line in enumerate(lines) if "clear-owed manual_plane k3s" in line
+    )
+    assert server < heading < clear
+
+
 def test_a_role_no_playbook_applies_prints_no_playbook_command():
     text = _owed_text({"subject": "common", "playbook": "none"})
     assert "Apply the role by hand." in text
@@ -441,3 +465,47 @@ def test_deploy_ui_port_is_the_roles_default():
         (REPO / "ansible/roles/setup/deploy_ui/defaults/main.yml").read_text()
     )
     assert landing.DEPLOY_UI_PORT == defaults["deploy_ui_port"]
+
+
+def _verdicts(monkeypatch, tmp_path, capsys, argv, records):
+    """Run `probe.py landing-verdicts <argv>` over a record holding `records`; (rc, stdout)."""
+    import probe
+    from land_lib import verdict_log
+
+    path = tmp_path / "landing-verdicts.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in records))
+    monkeypatch.setenv(verdict_log.PATH_ENV, str(path))
+    rc = probe.main(["landing-verdicts", *argv])
+    return rc, capsys.readouterr().out
+
+
+RECORDS = [
+    {"pr": "10", "at": 100, "rc": 1, "line": "VERDICT: ci-red (PR #10)"},
+    {"pr": "11", "at": 200, "rc": 0, "line": "VERDICT: settled (PR #11)"},
+    {"pr": "10", "at": 300, "rc": 0, "line": "VERDICT: settled (PR #10)"},
+]
+
+
+def test_landing_verdicts_lists_the_newest_verdict_of_each_pr(
+    monkeypatch, tmp_path, capsys
+):
+    rc, out = _verdicts(monkeypatch, tmp_path, capsys, [], RECORDS)
+    assert rc == 0
+    assert out.splitlines() == [
+        "#10  1970-01-01T00:05:00Z  rc=0  VERDICT: settled (PR #10)",
+        "#11  1970-01-01T00:03:20Z  rc=0  VERDICT: settled (PR #11)",
+    ]
+
+
+def test_landing_verdicts_for_one_pr_prints_only_that_pr(monkeypatch, tmp_path, capsys):
+    rc, out = _verdicts(monkeypatch, tmp_path, capsys, ["#11", "--json"], RECORDS)
+    assert rc == 0
+    assert [e["line"] for e in json.loads(out)] == ["VERDICT: settled (PR #11)"]
+
+
+def test_landing_verdicts_for_a_pr_with_no_record_exits_1(
+    monkeypatch, tmp_path, capsys
+):
+    rc, out = _verdicts(monkeypatch, tmp_path, capsys, ["12"], RECORDS)
+    assert rc == 1
+    assert "no landing verdict recorded for PR #12" in out

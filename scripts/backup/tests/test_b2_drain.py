@@ -8,6 +8,9 @@ deletion actually happened.
 Run: uv run pytest scripts/backup/tests/test_b2_drain.py
 """
 
+import json
+import stat
+
 import pytest
 
 from b2_drain import (
@@ -125,6 +128,7 @@ class FakeBucket:
         }
         self.fail_on = fail_on
         self.deleted = []
+        self.list_requests = []
 
     def __call__(self, url, headers, payload, timeout):
         api = url.rsplit("/", 1)[-1]
@@ -135,6 +139,7 @@ class FakeBucket:
         if api == "b2_authorize_account":
             return self.auth
         if api == "b2_list_file_versions":
+            self.list_requests.append(payload["prefix"])
             return {
                 "files": [
                     v
@@ -143,6 +148,8 @@ class FakeBucket:
                 ]
             }
         if api == "b2_delete_file_version":
+            if payload["fileId"] not in {v["fileId"] for v in self.versions}:
+                raise B2Error("HTTP 400: file_not_present", "file_not_present")
             self.deleted.append(payload["fileId"])
             self.versions = [
                 v for v in self.versions if v["fileId"] != payload["fileId"]
@@ -201,3 +208,103 @@ def test_a_b2_error_exits_2_with_its_message_rather_than_a_traceback(run, capsys
     assert run(bucket, "--apply") == 2
     assert "transaction_cap_exceeded" in capsys.readouterr().err
     assert bucket.deleted == []
+
+
+# --- reusing the dry run's listing ------------------------------------------------------------
+
+
+def _dry_run_saving_listing(run, tmp_path, versions):
+    """Dry-run against `versions`, returning the saved listing path."""
+    listing = tmp_path / "listing.json"
+    assert run(FakeBucket(versions), "--listing-file", str(listing)) == 0
+    return listing
+
+
+def _edit_listing(listing, **changes):
+    document = json.loads(listing.read_text())
+    document.update(changes)
+    listing.write_text(json.dumps(document))
+
+
+def test_a_dry_run_saves_the_listing_it_paid_for(run, tmp_path):
+    listing = _dry_run_saving_listing(run, tmp_path, [_v(KEY, "upload", "u1")])
+    saved = json.loads(listing.read_text())
+    assert saved["prefix"] == BACKUPSTORE_PREFIX
+    assert saved["bucket_id"] == "bid"
+    assert [v["fileId"] for v in saved["versions"]] == ["u1"]
+    assert stat.S_IMODE(listing.stat().st_mode) == 0o600
+
+
+def test_an_apply_reuses_a_fresh_listing_and_lists_only_to_verify(
+    run, tmp_path, capsys
+):
+    versions = [_v(KEY, "hide", "h1"), _v(KEY, "upload", "u1")]
+    listing = _dry_run_saving_listing(run, tmp_path, versions)
+    capsys.readouterr()
+    bucket = FakeBucket(versions)
+    assert run(bucket, "--listing-file", str(listing), "--apply") == 0
+    out = capsys.readouterr().out
+    assert "listing: reused" in out
+    assert bucket.list_requests == [f"{BACKUPSTORE_PREFIX}a1/b2/{VOL}/"]
+    assert "list calls (Class C): 1" in out
+    assert sorted(bucket.deleted) == ["h1", "u1"]
+
+
+def test_an_apply_lists_afresh_when_the_listing_is_stale(run, tmp_path, capsys):
+    versions = [_v(KEY, "upload", "u1")]
+    listing = _dry_run_saving_listing(run, tmp_path, versions)
+    # A fixed past instant is older than the limit whatever the clock reads.
+    _edit_listing(listing, listed_at="2000-01-01T00:00:00+00:00")
+    bucket = FakeBucket(versions)
+    assert run(bucket, "--listing-file", str(listing), "--apply") == 0
+    assert "listing: fresh, because the saved listing is" in capsys.readouterr().out
+    assert bucket.list_requests[0] == BACKUPSTORE_PREFIX
+
+
+def test_an_apply_lists_afresh_when_the_listing_is_for_another_prefix(
+    run, tmp_path, capsys
+):
+    versions = [_v(KEY, "upload", "u1")]
+    listing = _dry_run_saving_listing(run, tmp_path, versions)
+    _edit_listing(listing, prefix="longhorn/backupstore/other/")
+    bucket = FakeBucket(versions)
+    assert run(bucket, "--listing-file", str(listing), "--apply") == 0
+    assert "different prefix or bucket" in capsys.readouterr().out
+    assert bucket.list_requests[0] == BACKUPSTORE_PREFIX
+
+
+def test_fresh_listing_forces_a_new_listing_despite_a_usable_one(run, tmp_path):
+    versions = [_v(KEY, "upload", "u1")]
+    listing = _dry_run_saving_listing(run, tmp_path, versions)
+    bucket = FakeBucket(versions)
+    args = ("--listing-file", str(listing), "--fresh-listing", "--apply")
+    assert run(bucket, *args) == 0
+    assert bucket.list_requests[0] == BACKUPSTORE_PREFIX
+
+
+def test_a_version_deleted_since_the_listing_is_already_gone_not_an_error(
+    run, tmp_path, capsys
+):
+    listing = _dry_run_saving_listing(
+        run, tmp_path, [_v(KEY, "hide", "h1"), _v(KEY, "upload", "u1")]
+    )
+    bucket = FakeBucket([_v(KEY, "upload", "u1")])  # h1 was deleted meanwhile
+    assert run(bucket, "--listing-file", str(listing), "--apply") == 0
+    assert "already gone: h1" in capsys.readouterr().out
+    assert bucket.deleted == ["u1"]
+
+
+def test_a_version_created_since_the_listing_fails_the_verification_read(
+    run, tmp_path, capsys
+):
+    listing = _dry_run_saving_listing(run, tmp_path, [_v(KEY, "upload", "u1")])
+    bucket = FakeBucket([_v(KEY, "upload", "u1"), _v(KEY, "upload", "new")])
+    assert run(bucket, "--listing-file", str(listing), "--apply") == 2
+    assert "still holds 1 versions" in capsys.readouterr().err
+
+
+def test_an_apply_that_deleted_consumes_the_listing(run, tmp_path):
+    versions = [_v(KEY, "upload", "u1")]
+    listing = _dry_run_saving_listing(run, tmp_path, versions)
+    assert run(FakeBucket(versions), "--listing-file", str(listing), "--apply") == 0
+    assert not listing.exists()

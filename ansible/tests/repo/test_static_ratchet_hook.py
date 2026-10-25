@@ -58,6 +58,18 @@ ADDED_BY_5481 = {
     "scripts/diagnostics/tests/test_probe_health_rolled.py": "scripts/diagnostics/probe.py",
 }
 
+# Six more that failed 2 to 4 PR branches each between 2026-10-18 and 2026-10-25, with the edit
+# that turned a branch red. Two run a single node: the module's other cases cost 5-11s.
+# `test_cluster_vars_tree.py` failed four branches too and stays out (prek.toml says why).
+ADDED_2026_10_25 = {
+    "evals/tests/test_eval_cases.py": "CLAUDE.md",
+    "ansible/tests/setup/test_k8s_host_files_pairs.py": "ansible/roles/k8s/registry/defaults/main.yml",
+    "ansible/tests/deploy/test_landing_annotations.py": "scripts/deploy_tools/land_lib/ledger.py",
+    "ansible/tests/deploy/test_gitops_deploy_imports.py": "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py",
+    "scripts/validate/tests/test_validate_alert_rules.py": "ansible/roles/k8s/observability/files/rules/ingress-probes.yaml",
+    "scripts/validate/tests/test_validate_unit_templates.py": "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
+}
+
 NUMBER_WORDS = {
     word: n
     for n, word in enumerate(
@@ -99,7 +111,7 @@ def _ratchet_hooks() -> list[dict]:
 
 def test_the_hook_runs_every_expected_module_and_each_exists():
     named = set().union(*(_modules(hook) for hook in _ratchet_hooks()))
-    assert named == EXPECTED_MODULES | set(ADDED_BY_5481)
+    assert named == EXPECTED_MODULES | set(ADDED_BY_5481) | set(ADDED_2026_10_25)
     missing = sorted(m for m in named if not (REPO / m).is_file())
     assert not missing, f"{HOOK_ID} names modules that do not exist: {missing}"
 
@@ -129,7 +141,9 @@ def test_the_gate_matches_an_edit_the_tests_react_to(path):
     assert re.search(_hook()["files"], path)
 
 
-@pytest.mark.parametrize(("module", "trigger"), sorted(ADDED_BY_5481.items()))
+@pytest.mark.parametrize(
+    ("module", "trigger"), sorted((ADDED_BY_5481 | ADDED_2026_10_25).items())
+)
 def test_a_commit_reintroducing_a_listed_failure_runs_its_test(module, trigger):
     """The edit that turned a PR red now selects a ratchet hook whose entry runs the test."""
     running = [hook for hook in _ratchet_hooks() if module in _modules(hook)]
@@ -149,7 +163,7 @@ def test_claude_md_states_how_many_files_the_hook_runs():
     )
     word = match.group(1).lower()
     stated = int(word) if word.isdigit() else NUMBER_WORDS.get(word)
-    assert stated == len(EXPECTED_MODULES | set(ADDED_BY_5481))
+    assert stated == len(EXPECTED_MODULES | set(ADDED_BY_5481) | set(ADDED_2026_10_25))
 
 
 @pytest.mark.parametrize(
@@ -243,9 +257,10 @@ def test_the_lander_gate_skips_a_k8s_role_doc():
 # The session ceiling `PYTEST_XDIST_AUTO_NUM_WORKERS` sets for every Claude session.
 SESSION_CEILING = 4
 
-# A multi-module pytest hook that still takes `-n auto`, with the PR that pins it. #5919 pins
-# `static-ratchet-tests` at `-n 4`; delete its row once that lands.
-UNPINNED = {"static-ratchet-tests": "#5919"}
+# A multi-module pytest hook that `-n auto` still runs on one worker, with the PR that pins it.
+# `static-ratchet-tests` sat here for #5919 until the width came from recorded seconds (#5967),
+# which gives it 4.
+UNPINNED: dict[str, str] = {}
 
 
 def _pytest_hooks() -> list[dict]:
@@ -269,19 +284,32 @@ def _pinned_width(entry: str) -> int | None:
     return None
 
 
-def _left_to_auto(hooks: list[dict]) -> list[str]:
-    """The ids of multi-module hooks whose width `-n auto` sizes at one worker."""
+def _left_to_auto(
+    hooks: list[dict], weights: dict[str, float] | None = None
+) -> list[str]:
+    """The ids of multi-module hooks whose width `-n auto` sizes at one worker.
+
+    `weights` defaults to the committed table, which is what `-n auto` reads.
+    """
+    if weights is None:
+        weights = xdist_width.load_weights(REPO) or {}
     return [
         h["id"]
         for h in hooks
         if len(_modules(h)) > 1
         and _pinned_width(h["entry"]) is None
-        and xdist_width.workers_for(len(_modules(h)), SESSION_CEILING) <= 1
+        and xdist_width.workers_for(
+            xdist_width.module_seconds(
+                [REPO / m for m in sorted(_modules(h))], REPO, weights
+            ),
+            SESSION_CEILING,
+        )
+        <= 1
     ]
 
 
 def test_no_multi_module_pytest_hook_leaves_its_width_to_auto():
-    """xdist_width gives `-n auto` one worker per 15 modules, which serialised five (#5917).
+    """`-n auto` once gave one worker per 15 modules, which serialised five (#5917).
 
     An explicit `-n`, `-n0` included, is a measured choice; the defect is the silent fallback.
     """
@@ -310,4 +338,7 @@ def test_every_unpinned_exemption_still_applies():
     ],
 )
 def test_the_guard_flags_only_an_unpinned_multi_module_entry(entry, flagged):
-    assert _left_to_auto([{"id": "h", "entry": entry}]) == (["h"] if flagged else [])
+    # A fixed table, so the cron's twice-daily rewrite of the real one cannot flip a row.
+    weights = {"a.py": 0.5, "b.py": 0.5, "c.py": 0.5}
+    hooks = [{"id": "h", "entry": entry}]
+    assert _left_to_auto(hooks, weights) == (["h"] if flagged else [])

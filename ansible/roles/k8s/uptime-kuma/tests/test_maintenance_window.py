@@ -179,6 +179,27 @@ def kuma_check_calendars():
             found[variables["kuma_check_name"]] = env.from_string(
                 variables["kuma_check_on_calendar"]
             ).render({**GROUP_VARS, **defaults})
+    found.update(component_check_calendars())
+    return found
+
+
+def component_check_calendars():
+    """Unit name (minus `homelab-`) -> `OnCalendar=`, for every host-component timer whose
+    service is the kuma-check form: `Restart=on-failure`, so a red verdict reruns the check.
+
+    H7.36 moved daniel-box's secret-rotation audit and Loki witness out of the setup role's
+    `kuma_check_timer.yml` imports and into components, where a timer is a plain unit file.
+    A component timer whose service does not rerun on failure is not a Kuma check, and its
+    calendar (a weekly rotation, a twice-daily refresh) is not this window's concern.
+    """
+    found = {}
+    for timer in sorted((REPO / "hosts" / "components").glob("*/units/*.timer")):
+        service = next(iter(timer.parent.glob(f"{timer.stem}.service*")), None)
+        if service is None or "Restart=on-failure" not in service.read_text():
+            continue
+        match = re.search(r"^OnCalendar=(.*)$", timer.read_text(), re.MULTILINE)
+        assert match, f"{timer} has no OnCalendar="
+        found[timer.stem.removeprefix("homelab-")] = match.group(1)
     return found
 
 

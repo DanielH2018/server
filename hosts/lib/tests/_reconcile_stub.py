@@ -27,7 +27,10 @@ state.json keys:
         with no comment matches any comment, and a delete with another comment matches none.
         "reorder_on_enable" reverses the rules when ufw is enabled. `ufw status` prints only
         `Status: inactive` while inactive, which is why the arm reads
-        `ufw show added`.
+        `ufw show added`. "policy" maps a direction to its default, and defaults to one the arm
+        must change. `ufw default` sets it and logs itself to "defaults". `ufw status verbose`
+        prints the policies only while active, as ufw does. "before_input" is what
+        `iptables -S ufw-before-input` prints, and defaults to the chain before.rules loads.
     users, sysusers, expired, libvirt, conffiles: the users, libvirt and lines arms' state,
         documented in `_reconcile_arms_stub.py`, which also holds those arms' commands.
 """
@@ -224,6 +227,14 @@ def ufw(state: dict, args: list[str]) -> int:
             print(f"ufw {spec}" + (f" comment '{comment}'" if comment else ""))
         if not rules:
             print("(None)")
+    elif args == ["status", "verbose"]:
+        print(f"Status: {'active' if model['active'] else 'inactive'}")
+        if model["active"]:
+            policy = {**STOCK_POLICY, **model.get("policy", {})}
+            print(
+                f"Default: {policy['incoming']} (incoming), {policy['outgoing']} (outgoing), "
+                f"{policy['routed']} (routed)"
+            )
     elif args[0] == "status":
         if not model["active"]:
             print("Status: inactive")
@@ -238,12 +249,18 @@ def ufw(state: dict, args: list[str]) -> int:
                 )
     elif args[0] == "default":
         model.setdefault("defaults", []).append(" ".join(args[1:]))
+        model.setdefault("policy", {})[args[2]] = args[1]
     elif args == ["--force", "enable"]:
         model["active"] = True
         if model.get("reorder_on_enable"):
             rules.reverse()
     else:
         _ufw_edit(model, args)
+    return 0
+
+
+def iptables(state: dict, args: list[str]) -> int:
+    print("\n".join(state["ufw"].get("before_input", BEFORE_INPUT)))
     return 0
 
 
@@ -281,6 +298,15 @@ def _ufw_edit(model: dict, args: list[str]) -> None:
         rules.append([spec, comment])
 
 
+# A policy the arm must change in both directions it manages, so a first run sets both.
+STOCK_POLICY = {"incoming": "allow", "outgoing": "deny", "routed": "disabled"}
+BEFORE_INPUT = [
+    "-N ufw-before-input",
+    "-A ufw-before-input -i lo -j ACCEPT",
+    "-A ufw-before-input -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+    "-A ufw-before-input -j ufw-user-input",
+]
+
 HANDLERS = {
     "hostname": hostname,
     "dpkg-query": dpkg_query,
@@ -291,6 +317,7 @@ HANDLERS = {
     "sshd": sshd,
     "fail2ban-client": fail2ban_client,
     "ufw": ufw,
+    "iptables": iptables,
     "udevadm": udevadm,
     **arms.HANDLERS,
 }

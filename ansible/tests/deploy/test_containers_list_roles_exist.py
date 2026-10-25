@@ -35,9 +35,9 @@ K8S_ROLES = ANSIBLE / "roles" / "k8s"
 # neither is a service.
 NOT_SERVICES = frozenset({"common", "archive"})
 
-# Two services the Pi runs, so an emptied census fails by name
-# rather than passing on `set() == set()`.
-KNOWN_PI_SERVICES = frozenset({"wg-easy", "docker-proxy"})
+# The Pi's Docker play deploys nothing since H5.9: its last service, wg-easy, runs in the package.
+# The red-proof below keeps the comparison honest while the census is empty. H5.12 deletes this
+# module's Pi half with the roles.
 
 
 def _entries():
@@ -91,11 +91,11 @@ def declared_services(host_vars: Path) -> set[str]:
 def test_every_pi_role_is_declared_and_every_declared_service_has_a_role():
     roles = service_roles(DOCKER_ROLES)
     declared = declared_services(HOST_VARS / "daniel-pi.yml")
-    assert KNOWN_PI_SERVICES <= roles and KNOWN_PI_SERVICES <= declared
     assert roles == declared, (
         f"role without an entry: {sorted(roles - declared)}; "
         f"entry without a role: {sorted(declared - roles)}"
     )
+    assert roles == set(), f"the Pi's Docker play drains to nothing at H5.9: {roles}"
 
 
 def test_a_role_without_an_entry_is_flagged(tmp_path: Path):

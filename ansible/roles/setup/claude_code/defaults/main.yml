@@ -184,6 +184,19 @@ claude_code_rc_disable_bg_shell_pressure_reap: true
 # started with. systemd OnCalendar syntax.
 claude_code_rc_restart_schedule: weekly
 
+# ── Background-session resume at boot ──────────────────────────────────────────────────
+# claude-bg-resume.service respawns, once at boot, the background sessions (`claude agents`,
+# `claude --bg`) the shutdown killed, so their Remote Control links come back without anyone
+# opening agent view first. True enables the unit for the next boot; false disables it and
+# leaves running sessions alone. This role's CLAUDE.md has what it does and does not restore.
+claude_code_bg_resume_enabled: true
+
+# Whose background sessions to resume. The operator dispatches them; claude-rc.service's
+# sessions are a different feature and come back through that unit's own Restart=always.
+claude_code_bg_resume_user: "{{ sys_user }}"
+claude_code_bg_resume_home: "/home/{{ claude_code_bg_resume_user }}"
+claude_code_bg_resume_dir: /usr/local/lib/claude-bg-resume
+
 # ── Login-session caps ──────────────────────────────────────────────────────────────────
 # claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only
 # that unit's own cgroup. A session started with `claude agents` (or a bare `claude`) from
@@ -572,10 +585,10 @@ claude_code_artifacts_node: "{{ k8s_primary_node }}"
 # pull direction, on a timer. A session on daniel-box mounts its own tree and never waits.
 claude_code_artifacts_sync_minute: "*/5"
 
-# Consecutive failed runs before sync-artifacts.sh writes to stderr, which is what cron mails.
-# 12 runs at the interval above is an hour of a peer being unreachable. Below it the failure goes
-# to the journal alone (`journalctl -t sync-artifacts`), because daniel-server being off is the
-# ordinary case and mailing each run would bury the spool.
+# Consecutive failed runs before sync-artifacts.sh writes its once-per-outage line to stderr,
+# which the cron pipes to the journal under the same tag. 12 runs at the interval above is an
+# hour of a peer being unreachable. Below it each failure writes only its per-run journal line
+# (`journalctl -t sync-artifacts`), because daniel-server being off is the ordinary case.
 claude_code_artifacts_sync_alert_after_failures: 12
 
 # Hosts whose artifacts are PULLED onto the artifacts node, because it is the only side that can
@@ -628,3 +641,18 @@ claude_code_takeover_check_flux_url: >-
   }}/flux_{{ claude_code_takeover_check_flux_version | replace('v', '', 1)
   }}_linux_amd64.tar.gz
 claude_code_takeover_check_flux_sha256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
+
+# ── The root inspector, `rootq` (issue #6323) ──────────────────────────────────────────────
+# A root-owned, read-only script that reads root-only host state (nft, ufw, sshd -T, root's
+# crontab, and ls, stat and cat of an allowlisted path set), granted to the users below through
+# one NOPASSWD sudoers line, with an unprivileged shim on PATH. True in daniel-box.yml and
+# daniel-server.yml. False removes the grant, the shim and the script, in that order. CLAUDE.md,
+# "The root inspector", has the grant and its limits.
+claude_code_rootq_enabled: false
+# The operator's account, which is where fan-out batches and the operator's sessions run. Not
+# the agent user: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297),
+# and NoNewPrivileges in claude-rc.service stops sudo there anyway (docs/claude-agent-user.md).
+claude_code_rootq_users:
+  - "{{ sys_user }}"
+claude_code_rootq_script: /usr/local/sbin/homelab-rootq
+claude_code_rootq_shim: /usr/local/bin/rootq

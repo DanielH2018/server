@@ -94,11 +94,21 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    kubectl -n longhorn-system rollout status deploy/longhorn-driver-deployer --timeout=600s
    ```
    A new StorageClass parameter changes a field that Kubernetes treats as immutable. The manager
-   does not necessarily replace a class whose ConfigMap changed, so compare the live class with the
-   ConfigMap's before the next step: `kubectl get storageclass longhorn -o jsonpath={.parameters}`.
-   If they differ, the fix is an **operator-only** delete of the class, which the manager
-   recreates from the ConfigMap. Deleting a class is safe, because parameters are read at
-   provision time only.
+   does not necessarily replace a class whose ConfigMap changed. Before the next step, run the
+   health gate on daniel-box:
+   ```bash
+   uv run python scripts/diagnostics/probe.py health longhorn
+   ```
+   After a healthy rollout, the gate compares the live `longhorn` class's parameters with the
+   class in ConfigMap `longhorn-system/longhorn-storageclass`
+   (`scripts/diagnostics/probe_lib/health_plumbing.py:longhorn_storageclass`). A match prints
+   `StorageClass longhorn matches`. A mismatch exits 1 with the head line `longhorn: the
+   plumbing check FAILED the gate after a healthy rollout` and a `FAILED:` line that names
+   each parameter whose live and ConfigMap values differ. An exit 1 without that head line
+   comes from the rollout or the alert plane, and the comparison may not have run. Exit 75
+   means a read failed, which is no verdict. When the parameters differ, the fix is an **operator-only** delete of the class, which the
+   manager recreates from the ConfigMap. Deleting a class is safe, because parameters are read
+   at provision time only.
 4. **Wait for the engines to follow the manager.** Upstream ships
    `concurrent-automatic-engine-upgrade-per-node-limit` at `0`, which leaves engines on the old
    image. This repo sets it to `3` (`k3s_longhorn_concurrent_engine_upgrade` in the `longhorn`
@@ -141,6 +151,15 @@ through Flux (H1.8b). `k3s_longhorn_version` records where it stands. Four lesso
   v1.13 also adds the `longhorn-global-manager` Deployment, three replicas with a preferred
   (not required) anti-affinity. The role's `longhorn-global-manager.yaml` patch cuts it to two,
   one per node, and gives it a memory request (#5968).
+
+- **The manager DaemonSet rolls one pod at a time** (#6009). Upstream ships
+  `maxUnavailable: 100%`, and the role's `longhorn-manager-update-strategy.yaml` patch sets
+  `1`. The manager pods serve the admission webhook that every claim's dry run calls. On
+  the v1.13.0 hop both pods went down at once, and four claim-holding tags posted `failure`
+  for two minutes. The patch header has the evidence that 100% is not needed for an upgrade.
+  A new manager turns Ready before it waits for the old pods to go, so a hop cannot stall
+  with one pod down. The cost is that a hop runs the old and new webhooks side by side for
+  one pod's start.
 
 ### Expected-red node conditions
 

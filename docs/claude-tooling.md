@@ -75,6 +75,23 @@ vendored `files/upstream/` objects are compared and its `patches/` are not (#572
   rendered object live exits 75. `docs/flux-deploy-plane.md` (*What a takeover strips*) has the
   rules and the operator's `flux diff kustomization` command.
 
+### `flux [tag...]`
+
+`flux` prints each Flux Kustomization in `flux-system` with its Ready status and reason, the
+commit `lastAppliedOriginRevision` names, the commit its OCIRepository serves, and whether it is
+suspended (`probe_lib/flux.py`). It makes one kubectl read. A tag adds its `-deferred`,
+`-snapshot`, `-prepull`, `-precheck` and `-verify` Kustomizations and the shared `soak`, and no
+tag lists every Kustomization. It exits 1 when a printed row is not Ready for another reason, is suspended or is
+Ready at a commit other than its source's, and when a named tag has no Kustomization. A row
+that Flux is still reconciling, or that waits on a dependency (reason `Progressing`,
+`ProgressingWithRetry` or `DependencyNotReady`), prints under `PENDING` and does not fail the
+probe. A failed read exits 75.
+
+To wait for Flux to apply a commit, run `cc-wait flux <name> [--revision SHA]`. It exits 0 when
+the Kustomization is Ready at that commit, 1 when it failed there and 3 when it is suspended.
+Without `--revision` it waits for the commit the source serves. `scripts/diagnostics/flux_wait.py`
+is the source, and its docstring lists which readings keep the wait open.
+
 ### `alerts [--days N --check X]`
 
 Reconstructs DOWN alert history from Loki, because Kuma keeps only current state — one row per
@@ -307,6 +324,20 @@ agrees. Each fact comes from a reader that already exists:
 A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
 on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.
 
+### `landing-verdicts [<pr>] [--json] [--limit N]`
+
+`landing-verdicts` prints the newest `VERDICT:` line of each PR you landed, newest first,
+with its time and land.sh's exit code (#6325). Given a PR, it prints that PR's line alone and
+exits 1 when it has none. Read it instead of grepping a background task's output file for
+`VERDICT`, which is a harness internal that disappears with the session.
+
+Every landing appends its line as it exits, plain, `--detach` or crashed, to
+`$XDG_STATE_HOME/homelab/landing-verdicts.jsonl` (`~/.local/state/` by default;
+`$LAND_VERDICT_LOG` overrides it). A handed-off landing is recorded by the user that handed
+it off as well as by the lander unit. The file is per user and per host, so a landing run on
+daniel-box reads back only on daniel-box. `land_lib/verdict_log.py` owns the format and the
+trim.
+
 ### `gitops-state [--json]`
 
 `gitops-state` prints every marker the GitOps deployer keeps, without ticking (#3931). It reads
@@ -322,6 +353,85 @@ user. Elsewhere it says there is no state directory. A marker that exists and ca
 reported as unreadable, never as absent. Exit 75 means the directory or a marker could not be
 read, and stderr names which. The exit says nothing about what the markers hold, so it is
 never 1.
+
+`--why` adds the failure lines of the tick that wrote `hold_sha` (#6324,
+`probe_lib/gitops_why.py`). It finds that tick by the marker's mtime. It reads
+`gitops-deploy.service`'s journal from one `TimeoutStartSec` before the mtime to two minutes
+after it. It takes the unit run that logged the line nearest the mtime, and prints that
+run's deployer lines at priority err with Ansible's `fatal:` and `FAILED!` lines. The line
+also names the run's `_SYSTEMD_INVOCATION_ID`, for `journalctl` to show the whole run. A
+journal it cannot read exits 75. Under `--json` the section is the `why` key.
+
+### `push-rules <branch> [--rev HEAD] [--remote origin]`
+
+`push-rules` names the GitHub ruleset rule a push meets and why (#6327). GitHub prints `- Cannot
+update this protected ref.` both when a ruleset refuses a push and when the pushing account
+bypasses it, and names neither the ruleset nor the reason. The probe reads the rules matching
+the branch from `rules/branches/<branch>`, then each ruleset's name, enforcement and
+`current_user_can_bypass`. It evaluates each rule against the push from local git state: whether
+the branch exists on the remote, whether the push is a fast-forward, and which new commits carry
+no signature (`%G?` of `N`). It prints each rule that binds as `REFUSES` or `bypassed`. A signed
+commit under `required_signatures` prints as a caveat instead: GitHub verifies the signature
+against the pushing account's registered key, which the probe cannot read.
+
+The bypass answer is for the `gh` login, which the probe prints beside the push remote's URL,
+because `git push` may authenticate as another account. Exit 1 means at least one rule refuses
+the push, and 75 means a read failed. A remote head this checkout never fetched is a failed read,
+so fetch first.
+
+The `auto-mode-bridge` hook points at this probe when a `git push` fails with `Repository rule
+violations found`. On a push that printed `Bypassed rule violations`, it says the push landed.
+
+### Host reads: `lander`, `builder`, `applied <role>`
+
+These three read state that lives on one host, through `probe_lib/host_reader.py`. It runs one
+stdlib reader there with `python3 -I -`: as a local process on that host, and otherwise as one
+ssh call, so a probe never trips `ufw limit ssh`. Every read reports absent and unreadable
+apart. A journal that `journalctl` hides from a user outside `adm` and `systemd-journal`
+exits 75 rather than reading as a unit that never ran. `--dry-run` prints the command and the plan it
+would send.
+
+`lander [--pr N] [--since 6h]` reports the daniel-server batch lander on daniel-box
+(`probe_lib/lander.py`). It prints the newest pass with its `eligible` or `ineligible` line
+per PR, each landing the lander started with its exit code and `VERDICT:` line, and every
+other PR a pass in the window named, with the newest line about it. The verdict is about the
+lander, not the PRs. It exits 1 when the unit is not installed, when its newest run failed,
+when no pass ran within two timer periods plus `TimeoutStartSec`, or when the newest pass
+could not read daniel-server or GitHub. The landing logs sit under the operator's home. The
+agent user cannot list them, so that section says unreadable and the verdict stands on the
+journal alone.
+
+`builder [-n 5] [--since 24h]` reports the host-package builder on daniel-box
+(`probe_lib/builder.py`). It prints the reason and commit from `homelab_builder.prom`, the age
+of the last fetch, every version `homelab_repo.prom` says the repository serves, the newest
+builds, and the failures in the window. A failure is a builder line at priority err, or
+systemd's one `Failed with result` line per failed run. It exits 1 when the reason is not `ok`
+or `canary`, or when the last fetch is older than two timer periods plus `TimeoutStartSec`.
+
+`applied <role> [--host H]` checks that a setup role's files landed (#6326,
+`probe_lib/applied.py`). It renders the role's files from the working tree, so commit or
+stash first to check `HEAD`. It reads every host the role's playbook entry admits and prints
+one row per path:
+
+- `ok` means present with the declared mode, owner and group, and with the render's content
+  hash.
+- `ok-meta` means the same, except that the content was not compared. The row names why: a
+  render holding a secret leaves a `STUB`, and a root-only file is unreadable as this user.
+- `DRIFT` means missing, present where an absent arm removes it, or different.
+- `unread` means this user cannot stat the path. Everything under daniel-box's 0700
+  `/etc/cron.d` reads this way.
+
+`probe_lib/applied_tasks.py` names the modules it reads (`template`, `copy`, `file`, `cron`
+with a `cron_file`). It follows every task import, including the shared
+`{{ role_path }}/../common/tasks/` files with the import's `vars:`, and an import loop once per
+item. A `copy` with `remote_src` is compared by metadata only, because its source is on the
+host. It lists the tasks it skips with the reason: a `when:` it cannot read for the host, a
+loop over a list that is not literal, a path that does not render, or an `include_role`. An
+import whose path does not render to a file in the tree prints as `UNCHECKED`, naming the task
+file and the expression, because none of the tasks in it were read. It exits 1 on any
+`DRIFT`. It exits 75 when a path was `unread`, an import was `UNCHECKED` or nothing was
+compared, and stderr says coverage was partial for an `UNCHECKED` import. It exits 0
+otherwise.
 
 ### `ha …`
 
@@ -518,6 +628,24 @@ has drifted from Authelia's own row.
 The two_factor session also gets its own state file and is never a fallback for the default one:
 `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as the repo user
 (code-server) and volume deletion (longhorn) behind every page load.
+
+## `rootq` — root-only host state, read-only
+
+`rootq` answers the questions a session without sudo used to guess at. It runs a root-owned
+script through one `NOPASSWD` sudoers line, and its verbs come in two tiers:
+
+- **Tier 1 prints no content.** `stat PATH`, `sha256 PATH` and `matches PATH REPO_FILE` take
+  a file on an explicit allowlist, such as `/etc/netplan/*.yaml`, `/etc/cron.d/*` or
+  `/usr/local/bin/registry-gc.sh`. `matches` exits 0 when the live file is byte-identical to
+  REPO_FILE in your checkout. The shim hashes REPO_FILE, so root never opens it.
+- **Tier 2 prints, redacted by default.** `nft`, `ufw`, `sshd`, `crontab` and
+  `cat /etc/netplan/*.yaml` keep only the tokens their grammar makes provably plain, such as
+  rule keywords, addresses, ports, paths and flag names. Every other value becomes a
+  placeholder.
+
+Anything not listed is refused. `rootq --help` lists the verbs and the allowlist.
+`ansible/roles/setup/claude_code/CLAUDE.md` (*The root inspector*) has the grant, its limits
+and how to take it back.
 
 ## `promtool`, `amtool`, `pint` and `lokitool` (`scripts/validate/alert_tools.sh`)
 

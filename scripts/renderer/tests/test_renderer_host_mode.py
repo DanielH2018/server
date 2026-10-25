@@ -401,6 +401,7 @@ def test_a_maintainer_script_is_written_outside_root_and_named_in_the_spec(
     units = [
         {"src": "u", "dst": "/usr/lib/systemd/system/homelab-u.timer"},
         {"src": "u", "dst": "/usr/lib/systemd/system/homelab-u.service"},
+        {"src": "u", "dst": "/usr/lib/systemd/system/homelab-u@.service"},
         {"src": "u", "dst": "/usr/lib/systemd/system/k3s.service.d/50-homelab.conf"},
     ]
     root = hosts(
@@ -415,7 +416,7 @@ def test_a_maintainer_script_is_written_outside_root_and_named_in_the_spec(
 
     base = out / "packages" / "homelab-updater"
     script = base / "scripts" / "prerm"
-    # Only the package's own units: no drop-in.
+    # Only the package's own units: no drop-in and no template unit.
     assert script.read_text() == "#!/bin/sh\nhomelab-u.service homelab-u.timer\n"
     assert stat.S_IMODE(script.stat().st_mode) == 0o755
     assert not (base / "root" / "scripts").exists()

@@ -27,6 +27,7 @@ from gitops_markers import (
     PLAYBOOK_CMD,
     ManualPlaneEntry,
     agent_join_cmds,
+    agent_pin_cmds,
     by_hand,
     k8s_deferred_deploy_cmd,
     maximal_apply_warning,
@@ -71,15 +72,17 @@ def _apply_and_clear(pending, narrow) -> str:
         server = server_tags(role, selected)
         warning = maximal_apply_warning(role, server)
         agents = agent_join_cmds(role, entry.playbook, selected, entry.agent_hosts)
+        pins = agent_pin_cmds(role, entry.playbook, selected, entry.agent_hosts)
         how = by_hand(entry.playbook)
         if not how and server:
-            how = "apply `%s %s --tags %s%s` by hand%s%s" % (
+            how = "apply `%s %s --tags %s%s` by hand%s%s%s" % (
                 PLAYBOOK_CMD,
                 entry.playbook,
                 ",".join(sorted(server)),
                 target_arg(entry.host),
                 " (WARNING: %s)" % warning if warning else "",
                 "".join(" and `%s`" % a for a in agents),
+                "".join(" and `%s` (run on %s)" % (cmd, host) for host, cmd in pins),
             )
         elif not how:
             # A row reaching only the agent half: the server play would select nothing.

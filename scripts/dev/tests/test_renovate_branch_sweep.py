@@ -3,11 +3,13 @@
 Run: uv run pytest scripts/dev/tests/test_renovate_branch_sweep.py
 """
 
+import contextlib
 import io
 import json
 import subprocess
 
 import pytest
+from lib.exit_codes import USAGE_ERROR
 from renovate_branch_sweep import (
     DASHBOARD_TITLE,
     NoDashboard,
@@ -108,16 +110,40 @@ def test_a_report_names_the_orphans_and_deletes_nothing():
     assert deleted == []
 
 
-def test_prune_deletes_exactly_the_orphans():
-    gh, git, deleted = _tools(BRANCHES, ["renovate/a"], [DASHBOARD_ISSUE])
-    assert main(["--prune"], gh=gh, git=git, out=io.StringIO()) == 0
+def test_prune_deletes_only_the_named_orphans():
+    # renovate/b and renovate/e are both orphans; only the one the operator classified goes.
+    gh, git, deleted = _tools(
+        [*BRANCHES, "renovate/e"], ["renovate/a"], [DASHBOARD_ISSUE]
+    )
+    assert main(["--prune", "renovate/b"], gh=gh, git=git, out=io.StringIO()) == 0
     assert deleted == ["renovate/b"]
+
+
+def test_a_named_branch_that_is_no_longer_an_orphan_is_skipped_with_its_reason():
+    gh, git, deleted = _tools(BRANCHES, ["renovate/a"], [DASHBOARD_ISSUE])
+    out = io.StringIO()
+    # a has an open PR, c a dashboard entry, renovate/gone no longer exists; b is still orphaned.
+    named = ["renovate/a", "renovate/c", "renovate/gone", "renovate/b"]
+    assert main(["--prune", *named], gh=gh, git=git, out=out) == 0
+    for branch in named[:3]:
+        assert f"skipped {branch}: not an orphan now" in out.getvalue()
+    assert deleted == ["renovate/b"]
+
+
+def test_a_bare_prune_is_a_usage_error_that_names_the_new_form():
+    gh, git, deleted = _tools(BRANCHES, [], [DASHBOARD_ISSUE])
+    err = io.StringIO()
+    with pytest.raises(SystemExit) as exc, contextlib.redirect_stderr(err):
+        main(["--prune"], gh=gh, git=git, out=io.StringIO())
+    assert exc.value.code == USAGE_ERROR
+    assert "--prune BRANCH [BRANCH ...]" in err.getvalue()
+    assert deleted == []
 
 
 def test_an_empty_orphan_set_is_the_healthy_answer():
     gh, git, deleted = _tools(["master"], [], [DASHBOARD_ISSUE])
     out = io.StringIO()
-    assert main(["--prune"], gh=gh, git=git, out=out) == 0
+    assert main([], gh=gh, git=git, out=out) == 0
     assert "no orphan" in out.getvalue()
     assert deleted == []
 
@@ -125,7 +151,7 @@ def test_an_empty_orphan_set_is_the_healthy_answer():
 def test_a_missing_dashboard_stops_the_sweep_before_any_delete():
     gh, git, deleted = _tools(["renovate/orphan"], [], [])
     err = io.StringIO()
-    assert main(["--prune"], gh=gh, git=git, stderr=err) == 2
+    assert main(["--prune", "renovate/orphan"], gh=gh, git=git, stderr=err) == 2
     assert "Dependency Dashboard" in err.getvalue()
     assert deleted == []
 
@@ -145,5 +171,10 @@ def test_a_failed_gh_read_is_reported_not_graded():
 @pytest.mark.parametrize("prune", [False, True])
 def test_the_prune_flag_is_the_only_write_path(prune):
     gh, git, deleted = _tools(["renovate/orphan"], [], [DASHBOARD_ISSUE])
-    main(["--prune"] if prune else [], gh=gh, git=git, out=io.StringIO())
+    main(
+        ["--prune", "renovate/orphan"] if prune else [],
+        gh=gh,
+        git=git,
+        out=io.StringIO(),
+    )
     assert deleted == (["renovate/orphan"] if prune else [])

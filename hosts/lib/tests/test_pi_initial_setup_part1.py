@@ -24,9 +24,11 @@ from renderer.renderer_lib import host as host_mode
 
 SSHD_D = "/etc/ssh/sshd_config.d"
 SYSCTL = "/etc/sysctl.conf"
-# The twenty keys initial_setup's two `ansible.posix.sysctl` tasks set on the Pi. The Pi's
-# vm.swappiness and vm.page-cluster belong to optimize_pi, so they are absent on purpose.
+# The twenty keys initial_setup's two `ansible.posix.sysctl` tasks set on the Pi, and the two
+# zram keys that joined them from optimize_pi in H7.25.
 SYSCTL_KEYS = {
+    "vm.swappiness": "130",
+    "vm.page-cluster": "0",
     "net.ipv4.ip_forward": "1",
     "net.ipv4.conf.all.rp_filter": "2",
     "net.ipv4.conf.all.accept_redirects": "0",
@@ -219,14 +221,25 @@ def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
     (node.root / "usr/lib/homelab/secrets.json").write_bytes(secrets)
     for key in json.loads(secrets)["credentials"]:
         node.credential(key)
+    # H5.7: the Compose env file is an output the secrets unit renders.
+    for output in json.loads(secrets)["outputs"]:
+        node.output_file(output["destination"], persist=output["persist"])
     for name in node.manifest["units"]:
         node.state["units"][name] = {
             "load": "loaded",
             "active": "inactive",
             "enabled": "disabled",
         }
-    for unit in ("ssh.service", "systemd-journald.service"):
+    # The Pi runs each unit its edits activate, and its tmpfiles line made the textfile directory.
+    for unit in (
+        "ssh.service",
+        "systemd-journald.service",
+        "auditd.service",
+        "apt-daily.timer",
+        "apt-daily-upgrade.timer",
+    ):
         live_unit(node, unit)
+    (node.root / "var/lib/node-exporter-textfile").mkdir(parents=True)
     for path in package.activations:
         target = node.root / path.lstrip("/")
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -236,6 +249,9 @@ def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a") as handle:
             handle.write(edit["line"] + "\n")
+    node.state["users"] = {
+        "node_exporter": 999
+    }  # the account the live Pi already holds
     node.state["installed"]["homelab-daniel-pi"] = ["ii ", V1]
     node.state["ufw"] = {"active": True, "rules": [["limit 22/tcp", ""]], "fail": []}
 
@@ -243,6 +259,6 @@ def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
 
     assert result.returncode == 0, result.stderr
     assert node.calls("ufw") == []
-    # The twenty sysctl edits share one file, so its changed hash reloads sysctl once.
+    # The sysctl edits share one file, so its changed hash reloads sysctl once.
     assert len(node.calls("sysctl")) == 1
     assert node.applied()["result"]["ok"] is True

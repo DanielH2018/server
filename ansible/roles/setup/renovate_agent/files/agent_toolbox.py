@@ -26,10 +26,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gitops_hold import DeployerSnapshot
 from gitops_markers import STATE_DIR
 from host_lib import discord_post, flush_discord_spool
+from host_lib import log as host_log
 
 
 def log(msg: str) -> None:
-    print(f"[renovate-agent] {msg}", flush=True)
+    host_log(msg, tag="renovate-agent")
 
 
 def read_file(path: str) -> str:

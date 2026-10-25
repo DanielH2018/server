@@ -1,0 +1,12 @@
+{
+  "checksum": "db3e1a0d9d8ff04c645bb579d22675ce9e6cdf3e5a71cd2b72e8197b5a5cbd6a",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#Background sessions come back at boot",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_claude_bg_resume_unit.py": "b2aaee70b4fe2cd1331014f35a007b19ded52288544553bd6f3a02ffa9888faa"
+    },
+    "python": "3.14",
+    "verified_sha": "33b2d10b1"
+  }
+}

@@ -207,6 +207,25 @@ Four things the arrangement depends on:
 - **The AutoKuma id stays `discord`** so no monitor's `notification_name_list` moves, and the name
   stays `Homelab Alerts`, which Kuma prints in its `Cannot send notification to <name>` line.
   The `KumaNotificationDropped` rule filters on that text and names no notification.
+- **The webhook URL is the `discord-relay` sidecar, not Discord** (#5657). After the internet
+  outage on 2026-10-18, Kuma restarted with 64 of 104 monitors DOWN, and Discord answered six
+  notifications with `HTTP 429 Too Many Requests`. Kuma 2.5.5 sends each notification once and
+  never retries (`Monitor.sendNotification` in `server/model/monitor.js`), so all six reached
+  nobody. The relay queues every body and forwards it in order. It sleeps `retry_after` on a
+  429, and it holds the next send while `X-RateLimit-Remaining` is 0.
+    - **It answers Kuma at once, before Discord does.** The push route in
+      `server/routers/api-router.js` awaits `sendNotification` before it answers the pusher. A
+      relay that held each request until Discord accepted it would hold every push open behind
+      the queue, and `kuma-push-lib.sh` gives up after 10 s.
+    - **A drop is still counted.** The relay logs a message it gives up on with Kuma's own
+      `Cannot send notification to Homelab Alerts` text, and `KumaNotificationDropped` selects
+      both containers. It gives up on a 4xx other than 429, on a message older than
+      `uptime_kuma_k8s_discord_relay_deadline_seconds`, and on every queued message when the pod
+      stops. A full queue answers 503, so Kuma logs that drop itself.
+    - **Options not taken.** Grouping a mass flip into one summary is not configurable in Kuma.
+      Routing Kuma through Alertmanager would make the paging path depend on the Alertmanager it
+      watches. Accepting the loss gave up the alerts that matter most. Alertmanager posts to the
+      same webhook and keeps its own retry; M6 deletes the relay with the role.
 - **A Liquid error drops every alert at once.** A parse error throws inside `send()`, Kuma logs
   `Cannot send notification` and does not retry. The Test button on its own proves nothing: it
   renders with `heartbeatJSON` null, and Liquid renders a missing key as empty text.

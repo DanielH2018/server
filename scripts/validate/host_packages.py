@@ -76,11 +76,11 @@ from pathlib import Path
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git
-from lib.repo_paths import REPO
+from lib.repo_paths import HOST_LIB_FILES
 from validate.validate_lib import package_roots
 
 # The module the builder fetches tools with (stdlib only), which CI runs the same way.
-_TOOL_FETCH_DIR = REPO / "ansible" / "roles" / "setup" / "homelab_builder" / "files"
+_TOOL_FETCH_DIR = HOST_LIB_FILES
 
 _UNIT = r"homelab-[a-z0-9-]+\.(?:service|timer|socket|path)"
 _HOST = r"[a-z0-9][a-z0-9-]*"

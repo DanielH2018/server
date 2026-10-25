@@ -1,9 +1,10 @@
 {
-  "checksum": "b959a0ee298b72c25a42f3dbbb9cd2146510ec972692184f053d66e6c6bb49e6",
+  "checksum": "3292e20a2eeb2120b49ae28d549787a8a5d6892d695d8675d0cc813e171c8d20",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)",
   "row": {
     "atoms": {
+      "ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py::test_the_schedule_gate_marker_names_exactly_the_ungated_roles": "15aed956d09a7ab57be666d2dc2c5f46633fcf2ee05cee0083fb4ff1bb08c00b",
       "ansible/tests/k8s/test_rbac_against_script_drill.py::test_a_drill_role_without_the_volume_delete_wait_is_flagged": "3924373d3dcb66b478289e54f388fdf6cbdaf0ce811750652cc1ec8976032263",
       "ansible/tests/k8s/test_rbac_against_script_drill.py::test_the_drill_role_grants_every_call_its_script_makes": "f56ea80dc42efb70fb648bf1b107990c912511f1d90350438d98125608d66218",
       "ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py::test_an_undeclared_volume_still_fails_with_no_files": "e79abead2a2106c7a72e35790d42f3602e41a2dbb670db50cbd35c2bcc38f0e7",
@@ -14,9 +15,10 @@
       "ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick": "337fb955a69cfc8948e872fdfc65c709c551521fdb5a386d5ab9799a5f2bcb81",
       "ansible/tests/longhorn/test_longhorn_restore_drill_retry.py::test_a_retry_already_spent_leaves_the_rotation_alone": "68f0b43a183a12ed13ba672b821a4d0f1aebd047df68bf97e660e812f9451139",
       "ansible/tests/repo/test_census_rows_roles.py::test_census_row_holds_on_the_tree": "3517271dec93e78a96e775ed1530225b87c538ea15b6f25186cd223d4dfce72d",
-      "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d"
+      "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d",
+      "scripts/diagnostics/tests/test_probe_health_cronjob_schedule_gate.py::test_no_job_past_one_schedule_period_of_the_apply_fails": "475460b7c941708c83599fbeb2f2696ae3d6e42bc41d9165c56da1933f7f6c10"
     },
     "python": "3.14",
-    "verified_sha": "4001b7221"
+    "verified_sha": "b4a9d85b5"
   }
 }

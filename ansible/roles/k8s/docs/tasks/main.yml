@@ -1,7 +1,7 @@
 ---
-# The site directory the pod mounts is a host write, so roles/setup/k8s_host_files/tasks/docs.yml
-# creates it through the setup plane (D5's conversion PR for docs). A Flux-owned role runs no
-# task, so a host write left here would stop at the flip.
+# The site directory the pod mounts is a host write, so hosts/components/docs-refresh/tmpfiles.d/homelab-docs-site.conf.j2
+# creates it through daniel-box's host package (D5's conversion PR for docs, then H7.10a). A
+# Flux-owned role runs no task, so a host write left here would stop at the flip.
 - name: Deploy the docs site to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

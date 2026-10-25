@@ -1,0 +1,43 @@
+# Shipped by homelab-daniel-box. No timer and no [Install]: homelab-builder.service starts it
+# through OnSuccess= after every run that exits 0, a held run included, which is what makes the
+# daily re-sign happen.
+[Unit]
+Description=Homelab repository signer (signs and publishes the packages the builder staged)
+OnFailure=homelab-alert@%n.service
+
+[Service]
+Type=oneshot
+User=homelab-signer
+Group=homelab-signer
+# homelab-apt-repo.service is a DynamicUser that reads repo/ through the other bits. The
+# script sets each published mode itself as well.
+UMask=0022
+# Sandboxing (h3-pi-pilot.md, *The builder and the repository*, Sandboxing). Signing needs no
+# network, so PrivateNetwork=yes. It may write its own state directory and empty staged/.
+# hosts/lib/tests/test_builder_component.py holds each directive.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+StateDirectory=homelab-signer
+StateDirectoryMode=0711
+ReadWritePaths=/var/lib/homelab-signer
+ReadWritePaths=/var/lib/homelab-builder/staged
+Environment=HOME=/var/lib/homelab-signer
+Environment=PYTHONDONTWRITEBYTECODE=1
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout and
+# stderr log at notice, or a failed run's traceback never reaches the journal.
+SyslogLevel=notice
+TimeoutStartSec=10min
+# The host's python3, standard library only: the signer cannot read the builder's pinned
+# interpreter under its 0700 state directory.
+ExecStart=/usr/bin/python3 /usr/lib/homelab/builder/homelab_repo_sign.py
+# `+` runs the copy as root outside the sandbox, `-` keeps a failed copy from failing the unit.
+ExecStopPost=-+/bin/sh /usr/lib/homelab/publish-textfile homelab_repo_ /var/lib/homelab-signer/homelab_repo.prom

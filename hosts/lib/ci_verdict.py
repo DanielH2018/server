@@ -36,10 +36,11 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 # 13:57Z, gate check-run 119868712075 concluded `failure`, and `land.sh` ended `pr-ci-red` on a head
 # that no job had failed on. `ci_verdict` leaves that gate out once its `read_suites` reader shows
 # the gate's check suite concluded `cancelled`. A cancelled need alone does not prove it: GitHub
-# reports a job past its `timeout-minutes` as `cancelled` too, on a run nobody cancelled. The
-# deployer's reader passes no `read_suites`, so its gate keeps such a gate red. The rule lives in
-# THIS module because it is the one module both runtimes import: the deployer ships only its role's `files/`, so a rule under `scripts/`
-# would not exist on the host, while `scripts/deploy_tools/await_ci.py` already imports this file.
+# reports a job past its `timeout-minutes` as `cancelled` too, on a run nobody cancelled. Both
+# readers pass `read_suites`: `await_ci.verdict_for` and the deployer's `fetch_ci_verdict` (#6007).
+# The rule lives in THIS module because it is the one module both runtimes import: the deployer
+# ships only its role's `files/`, so a rule under `scripts/` would not exist on the host, while
+# `scripts/deploy_tools/await_ci.py` already imports this file.
 # ENFORCED: `ansible/tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
 # to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
 # `jobs_verdict`.

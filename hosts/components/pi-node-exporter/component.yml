@@ -1,0 +1,39 @@
+# node_exporter as a host unit on daniel-pi (H7.25, old step H7.4; docs/target-architecture/host/
+# h7-delete-ansible.md). It replaces the optimize_pi role's `node-exporter-host` tasks: the system
+# user, the tarball download and unpack, the /usr/local/bin symlink, the textfile directory, the
+# unit and its enable. One containerd shim fewer on a host that keeps 10-25 MB free: this is the
+# one container whose host form changes no decision, because it reads /proc and /sys and needs no
+# Docker API.
+#
+# - The binary is homelab-tools' `node-exporter`, at /usr/lib/homelab/bin/node-exporter. The
+#   version is the cluster DaemonSet's, held equal by
+#   ansible/tests/setup/test_pi_node_exporter_host_unit.py. Ubuntu's prometheus-node-exporter is
+#   1.7.0, five minors behind, so the upstream release stays the source.
+# - The unit ships at /usr/lib/systemd/system/node_exporter.service under the name of the
+#   Ansible-era copy in /etc/systemd/system. That copy shadows the packaged one, so the legacy
+#   entries below hand it over: reconcile removes the /etc unit and its wants link, runs one
+#   daemon-reload, and restarts the unit because its bytes differ (ExecStart= moved).
+# - The textfile directory is a tmpfiles.d line at root, group sys_user, mode 2775 (M3's owner
+#   contract). H3.6's optimize_pi task was its only creator on the Pi; this line replaces it, so
+#   H3's two-writer census still finds one writer, now homelab-daniel-pi. The unit runs
+#   `systemd-tmpfiles --create` in ExecStartPre= with the `+` prefix, and
+#   systemd-tmpfiles-setup.service applies the file at boot. The directory is not a dpkg-owned
+#   path, so removing the package leaves it in place.
+# - The users arm declares node_exporter at the uid the live Pi holds. The arm compares uids and
+#   creates only a missing user. The live group has gid 986; a rebuilt Pi gets gid equal to uid.
+# - The LAN's 9100 ufw rule (`optimize_pi: node_exporter`) stays an Ansible-era rule that H7.30
+#   declares with the rest of the Pi's ufw rules. The rule persists in ufw when the task goes.
+# - Retired on the live Pi, and left to the next rebuild: /opt/node_exporter-<version>.linux-arm64
+#   and /usr/local/src/node_exporter-<version>.linux-arm64.tar.gz hold about 40 MB of the old
+#   download. Legacy entries remove files, not directories, so the operator removes both by hand.
+users:
+  - {name: node_exporter, uid: 999, home: /home/node_exporter, shell: /usr/sbin/nologin, comment: Prometheus node exporter}
+files:
+  - {src: units/node_exporter.service.j2, dst: /usr/lib/systemd/system/node_exporter.service}
+  - {src: tmpfiles.d/homelab-node-exporter.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-node-exporter.conf}
+enable:
+  node_exporter.service: multi-user.target
+legacy:
+  - {path: /etc/systemd/system/node_exporter.service}
+  - {path: /etc/systemd/system/multi-user.target.wants/node_exporter.service}
+  - {path: /usr/local/bin/node_exporter}

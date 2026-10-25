@@ -38,6 +38,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 sys.path.insert(0, str(HOST_LIB_FILES))
 from deployer_lib import deploy_locks
+from host_lib import deploy_event
 
 
 class Run(Protocol):
@@ -146,11 +147,12 @@ def run_playbook(run: Run) -> int:
     return status
 
 
-def annotate(run: Run) -> None:
-    """Record a successful deploy where Grafana draws it as an annotation. Fire-and-forget.
+def annotate(run: Run, result: str = "ok", duration_s: float | None = None) -> None:
+    """Record a deploy where Grafana draws it as an annotation. Fire-and-forget.
 
     A syslog line, not a POST: this is a host process, Alloy already ships syslog to Loki, and
     Grafana reads that Loki. The sha is the snapshot's own, captured when the snapshot existed.
+    The line is `host_lib.deploy_event`'s; a success's is byte-identical to the one before #6164.
     """
     services = ",".join(run.tags) or "full"
     sha = run.snapshot_sha or "unknown"
@@ -160,11 +162,20 @@ def annotate(run: Run) -> None:
                 "logger",
                 "-t",
                 "deploy-annotation",
-                f"event=deploy services={services} sha={sha} result=ok",
+                deploy_event(services, sha, result, duration_s=duration_s),
             ],
             stderr=subprocess.DEVNULL,
             check=False,
         )
+
+
+def annotate_failure(run: Run, duration_s: float) -> None:
+    """Record a playbook that ran and failed as a `result=fail` annotation (#6164).
+
+    A name of its own, not `annotate(run, "fail")`: `test_deploy_annotations.py` holds every
+    `annotate` call behind `status == 0`, so a failed deploy never leaves a success marker.
+    """
+    annotate(run, "fail", duration_s)
 
 
 # How long the discharge waits for the tree lock after a deploy. A tick holds it for minutes,

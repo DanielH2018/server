@@ -76,12 +76,17 @@ def without_legacy(doc: dict, legacy: list[dict]) -> set[str]:
     }
 
 
-def moved(name: str) -> dict:
-    """The Pi's host_vars with `name` moved from `containers_list` to `compose_services`."""
+def reverted(name: str) -> dict:
+    """The Pi's host_vars with `name` put back from `compose_services` into `containers_list`.
+
+    H5.9 moved the last listed service, so no entry is left to move forward. A move changes no
+    render exactly when its reverse changes none, so each check below compares the real
+    inventory with this one. The reverse is also the shape a revert of a move PR restores.
+    """
     doc = host_doc(HOST)
-    entry = next(e for e in doc["containers_list"] if e["name"] == name)
-    doc["containers_list"] = [e for e in doc["containers_list"] if e is not entry]
-    doc["compose_services"] = [*doc["compose_services"], entry]
+    entry = next(e for e in doc["compose_services"] if e["name"] == name)
+    doc["compose_services"] = [e for e in doc["compose_services"] if e is not entry]
+    doc["containers_list"] = [*doc["containers_list"], entry]
     return doc
 
 
@@ -201,7 +206,7 @@ def test_the_census_reads_both_keys_and_finds_the_named_members():
 
 @pytest.fixture(scope="module")
 def unmoved(tmp_path_factory) -> dict:
-    """The three renders of the inventory as it is, built once for every move below."""
+    """The three renders of the inventory as it is, built once for every reverted move below."""
     doc = host_doc(HOST)
     return {
         "ansible": ansible_render(doc),
@@ -210,10 +215,10 @@ def unmoved(tmp_path_factory) -> dict:
     }
 
 
-@pytest.mark.parametrize("name", ["docker-proxy", "wg-easy", "autoheal", "alloy"])
+@pytest.mark.parametrize("name", ["wg-easy"])
 def test_a_move_changes_no_render(name, unmoved, tmp_path):
-    pi = moved(name)
-    assert name in {e["name"] for e in pi["compose_services"]}
+    pi = reverted(name)
+    assert name in {e["name"] for e in pi["containers_list"]}
     assert ansible_render(pi) == unmoved["ansible"]
     assert c1_render(pi) == unmoved["c1"]
     after = recovery_script(tmp_path, moved_inventory(tmp_path, pi))
@@ -237,13 +242,13 @@ def test_a_reader_of_containers_list_alone_is_flagged(tmp_path):
     assert second in source
     template.write_text(source.replace(second, ""))
     fixture = {"playbook_dir": str(playbook)}
-    unmoved_pi, moved_pi = host_doc(HOST), moved("alloy")
+    packaged_pi, listed_pi = host_doc(HOST), reverted("wg-easy")
 
-    after = ansible_render(moved_pi, BRIDGE, fixture)
-    assert after != ansible_render(unmoved_pi, BRIDGE, fixture)
-    assert "alloy:12345" not in published_ports(bridge_texts(after))
+    after = ansible_render(packaged_pi, BRIDGE, fixture)
+    assert after != ansible_render(listed_pi, BRIDGE, fixture)
+    assert "wg-easy:51821" not in published_ports(bridge_texts(after))
 
     tags = ("monitor-bridge",)
-    after = c1_render(moved_pi, roles, tags, fixture)
-    assert after != c1_render(unmoved_pi, roles, tags, fixture)
-    assert "alloy:12345" not in published_ports(bridge_texts(after))
+    after = c1_render(packaged_pi, roles, tags, fixture)
+    assert after != c1_render(listed_pi, roles, tags, fixture)
+    assert "wg-easy:51821" not in published_ports(bridge_texts(after))

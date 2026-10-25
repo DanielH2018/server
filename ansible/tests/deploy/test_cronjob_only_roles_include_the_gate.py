@@ -17,6 +17,8 @@ from _autodeploy import _K8S_ROLES
 from _role_census import role_dirs
 from _autodeploy_batch import _batch_gated_names
 from diagnostics.probe_lib import health
+from diagnostics.probe_lib.health_cronjob import declared_schedule_gated
+from diagnostics.probe_lib.health_render import rendered_docs
 
 _DEFAULT_NS = "homelab"
 
@@ -32,7 +34,8 @@ _KNOWN_CRONJOB_ONLY_ROLES = frozenset(
 # Job that Flux runs once per revision, and a copy of this one creates a real Volume, PV and PVC
 # under the fixed name `restore-drill-<pvc>` that a scheduled run also uses, so an extra run can
 # tear down another run's restore. The plan's *First run* says the same: the bouncer prune and the
-# drill are not gated. The first scheduled run is the evidence instead (H2.3e).
+# drill are not gated. The first scheduled run is the evidence instead (H2.3e): its CronJob
+# carries `homelab/gate: schedule`, and `probe.py health` gates it on its schedule (#6128).
 UNGATED_BY_DESIGN = frozenset({"longhorn-restore-drill"})
 
 
@@ -78,7 +81,8 @@ def test_every_cronjob_only_role_is_gated_at_deploy_time():
         assert not missing, (
             f"{role} declares CronJob(s) {sorted(missing)} with no flux_cronjob_gates entry "
             "(a flux-owned role) and no job/<name> wait in tasks/main.yml; an Ansible-owned "
-            "role needs the handback steps in docs/flux-deploy-plane.md"
+            "role needs the handback steps in docs/flux-deploy-plane.md. A CronJob a gate "
+            "Job cannot copy goes in UNGATED_BY_DESIGN and carries `homelab/gate: schedule`"
         )
 
 
@@ -109,3 +113,24 @@ def test_an_exemption_for_a_gated_or_missing_role_is_flagged():
     assert _stale_exemptions({"a"}, census, lambda role: {"job-a"}) == ["a"]
     assert _stale_exemptions({"b"}, census, lambda role: set()) == ["b"]
     assert _stale_exemptions({"a"}, census, lambda role: set()) == []
+
+
+def _schedule_gated_roles(census):
+    """The roles among `census` whose rendered CronJobs carry the schedule-gate marker."""
+    return {
+        role
+        for role, targets in census.items()
+        if declared_schedule_gated(rendered_docs(role), _DEFAULT_NS)
+        & {f"{ns}/{name}" for ns, name in targets}
+    }
+
+
+def test_the_schedule_gate_marker_names_exactly_the_ungated_roles():
+    """The probe's leniency (`format_schedule_gated`) and this exemption are one set (#6128).
+
+    A marked CronJob with a gate Job would hide a missing gate run, and an exempt one without
+    the marker reads unhealthy until its first scheduled run and every revision after.
+    """
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    census = _cronjob_only_census()
+    assert _schedule_gated_roles(census) == UNGATED_BY_DESIGN

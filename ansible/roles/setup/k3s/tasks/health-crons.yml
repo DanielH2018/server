@@ -242,7 +242,7 @@
     name: "Longhorn backup health"
     minute: "{{ k3s_longhorn_backup_health_cron_minute }}"
     user: "{{ sys_user }}"
-    job: "/usr/local/bin/longhorn-backup-health.sh"
+    job: "/usr/local/bin/longhorn-backup-health.sh 2>&1 | logger -t longhorn-backup-health"
     cron_file: longhorn-backup-health
   become: true
 
@@ -403,7 +403,7 @@
     name: "daniel-box disk health"
     minute: "{{ k3s_disk_health_cron_minute }}"
     user: "{{ sys_user }}"
-    job: "/usr/local/bin/disk-health.sh"
+    job: "/usr/local/bin/disk-health.sh 2>&1 | logger -t disk-health"
     cron_file: disk-health
   become: true
 
@@ -478,7 +478,7 @@
     name: "Release staleness drift check"
     minute: "{{ k3s_release_staleness_cron_minute }}"
     user: "{{ sys_user }}"
-    job: "/usr/local/bin/release-staleness-check.sh"
+    job: "/usr/local/bin/release-staleness-check.sh 2>&1 | logger -t release-staleness-check"
     cron_file: release-staleness-check
   become: true
 
@@ -610,7 +610,7 @@
     minute: "{{ k3s_etcd_s3_cron_minute }}"
     hour: "{{ k3s_etcd_s3_cron_hour }}"
     user: root
-    job: "/usr/local/bin/etcd-snapshot-offbox.sh"
+    job: "/usr/local/bin/etcd-snapshot-offbox.sh 2>&1 | logger -t etcd-snapshot-offbox"
     cron_file: etcd-snapshot-offbox
   become: true
 

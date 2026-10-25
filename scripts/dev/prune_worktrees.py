@@ -18,6 +18,11 @@ piled up. `git cherry` compares by patch-id and settles the rebase case. A squas
 both, because collapsing several commits into one leaves no patch-id to match; `git merge-tree`
 settles that by asking whether merging the branch would change master at all. See is_merged.
 
+Each verdict is cached in the git common dir, keyed by the head and master SHAs, so the
+`--prune` run after a report, and the `findings.py reap` it starts, reuse the report's answers
+instead of asking git and the forge again. Dirty, lock and process checks are always live. See
+lib.worktrees.VERDICT_CACHE.
+
 The lock is the interesting one. Claude Code locks a session's worktree with a reason
 naming the owning process — `claude session <name> (pid 1285937 start 2164388)` — and does
 not release it when the session ends. Treating any lock as "in use" would therefore keep

@@ -4,7 +4,7 @@ Traefik terminates TLS. Every routed k8s role depends on it, and through it on t
 `traefik-crds` tag that holds the IngressRoute/Middleware CRDs those roles' manifests use.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=traefik`
   with exit 5
 - **Images:** `traefik` (`traefik_k8s_image`), `alpine` (`traefik_k8s_logrotate_image`)
@@ -53,6 +53,15 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   too. Three constraints hold it together — the entrypoint, the path and matching on a path
   rather than a Host — and `ansible/tests/services/test_traefik_edge_selfcheck.py` ENFORCES
   all three.
+- **A rejected bouncer key is refused before the roll by `traefik-precheck`** (#6095,
+  switched on by #6157 through `traefik_k8s_bouncer_key_precheck`). The startupProbe also
+  catches a key the LAPI rejects, through AppSec's 401, but only on the new pod, and the roll
+  is `Recreate`. The Job in `templates/precheck/bouncer-key.yaml.j2` runs after `crowdsec`
+  and before `traefik`, sends the key to the LAPI as a HEAD, and fails on a 403, so Flux
+  holds `traefik` while the old pod serves. The Job and its netpol-baseline fence peer
+  deadlock in one revision, so a change that removes the peer switches the Job off first;
+  the default's `DECIDED:` comment has the chain.
+  `tests/test_traefik_bouncer_key_precheck.py` pins the request and the render.
 - **Do not re-run the outage to see the red path — it is measured** (2026-09-10, #1345).
   Every container restart re-downloads the plugin, so the shared `/plugins-storage` emptyDir
   short-circuits nothing.

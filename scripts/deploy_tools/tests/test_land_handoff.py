@@ -7,6 +7,7 @@ the fake did not write during the start stands for an earlier landing's.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_handoff.py
 """
 
+import io
 import re
 import subprocess
 from pathlib import Path
@@ -52,9 +53,35 @@ class FakeSystemctl:
         return subprocess.CompletedProcess(args, 0, shown + "\n", "")
 
 
-def _hand_off(tmp_path, **fake):
+class FakeFollower:
+    """`journalctl -f` on the unit: `lines` is what the journal holds; records each start."""
+
+    def __init__(self, lines=()):
+        self.lines = list(lines)
+        self.followed: list[tuple[str, float]] = []
+
+    def __call__(self, unit: str, since: float):
+        self.followed.append((unit, since))
+        self.stdout = io.StringIO("".join(f"{line}\n" for line in self.lines))
+        return self
+
+    def terminate(self):
+        pass
+
+    def wait(self, timeout=None):
+        return 0
+
+
+def _hand_off(tmp_path, follow=None, **fake):
     systemctl = FakeSystemctl(tmp_path / UNIT / f"{PR}.verdict", **fake)
-    rc = handoff.land_through_unit(PR, UNIT, systemctl, state_root=tmp_path)
+    rc, _line = handoff.land_through_unit(
+        PR,
+        UNIT,
+        systemctl,
+        state_root=tmp_path,
+        follow=follow,
+        wall_clock=lambda: 1000.0,
+    )
     return rc, systemctl
 
 
@@ -164,7 +191,7 @@ def test_a_pr_that_is_not_a_number_is_refused(monkeypatch, tmp_path):
     assert not systemctl.calls
 
 
-def test_land_sh_hands_off_rather_than_landing(monkeypatch, tmp_path):
+def test_land_sh_hands_off_rather_than_landing(monkeypatch, tmp_path, capsys):
     """The pipeline's first boundary is `gh`; a handoff must start the unit and call nothing else."""
     monkeypatch.setenv(HANDOFF_ENV, UNIT)
     monkeypatch.setenv(PRIMARY_ENV, str(tmp_path))
@@ -173,9 +200,72 @@ def test_land_sh_hands_off_rather_than_landing(monkeypatch, tmp_path):
     def no_gh(*args, **kwargs):
         raise AssertionError(f"the handoff called gh: {args}")
 
-    tools = Tools(systemctl=systemctl, gh_json=no_gh, gh=no_gh)
+    follow = FakeFollower(["== 1/6  resolving PR #3633"])
+    tools = Tools(systemctl=systemctl, gh_json=no_gh, gh=no_gh, follow_journal=follow)
     assert land.main(["--pr", PR, "--arm-merge", "--await-merge"], tools=tools) == 1
     assert systemctl.calls[0] == ("start", INSTANCE)
+    assert "== 1/6  resolving PR #3633" in capsys.readouterr().out
+
+
+def test_the_units_phase_lines_reach_the_log_before_the_verdict(tmp_path, capsys):
+    """The unit's journal is where its phases go; without the relay the log shows none."""
+    follow = FakeFollower(["== 3/6  waiting for master CI", "== 4/6  GitOps tick"])
+    _hand_off(tmp_path, follow=follow, line=LANDED)
+    out = capsys.readouterr().out
+    assert follow.followed == [(INSTANCE, 999.0)]
+    assert out.index("== 3/6") < out.index("== 4/6") < out.index(LANDED)
+
+
+def test_only_phase_lines_are_relayed(tmp_path, capsys):
+    """A relayed VERDICT or land: line would displace the one the handoff prints."""
+    follow = FakeFollower(
+        [
+            "== 1/6  resolving PR #3633",
+            "VERDICT: blocked (PR #3633)",
+            "land: refused",
+            "noise",
+        ]
+    )
+    _hand_off(tmp_path, follow=follow, line=LANDED)
+    captured = capsys.readouterr()
+    assert _printed_verdicts(captured.out) == ["settled"]
+    assert "land: refused" not in captured.out + captured.err
+    assert "noise" not in captured.out
+
+
+@pytest.mark.parametrize(
+    "fake",
+    [{"line": LANDED}, {"raises": subprocess.TimeoutExpired("systemctl", 1)}],
+    ids=["settled", "timed-out"],
+)
+def test_the_follower_is_stopped_however_the_start_ends(tmp_path, fake):
+    """A follower left running outlives the landing's `os._exit` and keeps writing the log."""
+    started: list[subprocess.Popen[str]] = []
+
+    def follow(unit: str, since: float) -> subprocess.Popen[str]:
+        started.append(
+            subprocess.Popen(["sleep", "60"], stdout=subprocess.PIPE, text=True)
+        )
+        return started[0]
+
+    _hand_off(tmp_path, follow=follow, **fake)
+    assert started and started[0].poll() is not None
+
+
+def test_a_handed_off_landing_is_recorded_in_this_users_verdict_log(
+    monkeypatch, tmp_path, capsys
+):
+    """The unit records in the operator's file, which the handing-off user cannot read."""
+    from deploy_tools.land_lib import verdict_log
+
+    monkeypatch.setenv(HANDOFF_ENV, UNIT)
+    systemctl = FakeSystemctl(tmp_path / "unused", stderr="Access denied")
+    assert land.main(["--pr", PR], tools=Tools(systemctl=systemctl)) == 1
+    printed = capsys.readouterr().out.splitlines()[-1]
+    assert printed.startswith("VERDICT: refused (PR #3633")
+    assert [(e["pr"], e["rc"], e["line"]) for e in verdict_log.latest()] == [
+        (PR, 1, printed)
+    ]
 
 
 _VERDICT_LINE = re.compile(r"^VERDICT: (\S+) \(", re.MULTILINE)

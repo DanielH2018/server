@@ -1,6 +1,6 @@
 ---
 # DOCKER_MODS rides along (HACS).
-home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.10.2-ls257@sha256:38ca271323058a45cefa5829d58a15761df669f598862ae084d41e0a11d211d2
+home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.10.4-ls260@sha256:352e928e4db1e4d4946e118b84acdd9a6f95d3e7c206686f8bde0ad609672eba
 
 # The budget of the home-assistant-prepull Kustomization, whose Job pulls this role's images onto
 # its node before the home-assistant Kustomization applies

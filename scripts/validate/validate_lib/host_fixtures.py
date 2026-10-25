@@ -5,7 +5,7 @@
 the fixture homelab-daniel-pi in three versions, rendered by the real renderer from
 `hosts/lib/tests/container/fixture/`, a fourth, `sealed`, that carries `secrets-unit`
 (H4.1c), and a fifth, `conffile`, whose line-arm edit lands in another package's conffile
-(#6088); a homelab-updater whose unit changes; a copy of the real
+(#6088), a sixth, `shadow`, whose unit an Ansible-era copy shadows (H7.41a); a homelab-updater whose unit changes; a copy of the real
 homelab-daniel-pi whose drop-in on the updater's timer changes; the real homelab-daniel-pi
 rendered with its container-recovery timer disarmed; and the apt repository, in
 suite `homelab`, that serves a chosen set of them. `publish` signs that repository's `InRelease`
@@ -36,7 +36,7 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 FIXTURE = REPO / "hosts" / "lib" / "tests" / "container" / "fixture"
-VARIANTS = ("base", "head", "payload", "sealed", "conffile")
+VARIANTS = ("base", "head", "payload", "sealed", "conffile", "shadow")
 # The `sealed` variant carries `secrets-unit`, which ships a host's ciphertext. This stand-in is
 # the file the render takes where no ciphertext is given, and it holds no value (H4.1c).
 STAND_IN = FIXTURE.parent / "standin"

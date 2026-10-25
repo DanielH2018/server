@@ -71,7 +71,9 @@ def test_completed_and_wedged_runs_do_not_hold_the_merge(landing):
         # Unfinished past the 2-hour cutoff: wedged, not queued.
         _run("queued", 3 * 60 * 60),
     ]
-    ln, calls = _landing(landing, 1, [runs])
+    # A cap of 2 admits the one run that counts, so the merge proves the other three are
+    # not counted.
+    ln, calls = _landing(landing, 1, [runs], pace_master_runs=2)
     merge.await_merge(ln)
     assert _merges(calls) == 1
 
@@ -106,4 +108,12 @@ def test_the_cap_reads_from_the_environment(monkeypatch):
     monkeypatch.setenv(options.PACE_ENV, "0")
     assert options.parse_args(["--pr", "1"], "").pace_master_runs == 0
     monkeypatch.delenv(options.PACE_ENV)
-    assert options.parse_args(["--pr", "1"], "").pace_master_runs == 2
+    assert options.parse_args(["--pr", "1"], "").pace_master_runs == 1
+
+
+def test_by_default_one_unfinished_master_run_holds_the_merge(landing, capsys):
+    ln, calls = _landing(landing, 2, [[_run("in_progress", 600)], []])
+    merge.await_merge(ln)
+    assert _merges(calls) == 1
+    out = capsys.readouterr().out
+    assert out.count("pacing the merge: 1 master CI run(s) unfinished") == 1

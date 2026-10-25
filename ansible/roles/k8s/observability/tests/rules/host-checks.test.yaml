@@ -1385,7 +1385,7 @@ tests:
                 host.
 
   # A check no per-check rule names stops writing at time 0 with a 600s deadline. HostCheckOverdue
-  # stays quiet at 9m and fires at 11m from its own deadline series. A pod exporter's check with
+  # crosses its own deadline series at 11m, holds pending through 12m and fires at 13m. A pod exporter's check with
   # the same origin and an older timestamp is pods.yaml's to page, so it never appears here.
   - interval: 1m
     input_series:
@@ -1403,7 +1403,10 @@ tests:
       - eval_time: 9m
         alertname: HostCheckOverdue
         exp_alerts: []
-      - eval_time: 11m
+      - eval_time: 12m
+        alertname: HostCheckOverdue
+        exp_alerts: []
+      - eval_time: 13m
         alertname: HostCheckOverdue
         exp_alerts:
           - exp_labels:
@@ -1411,7 +1414,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's new-producer check is past its own deadline.
               description: >-
@@ -1472,6 +1474,109 @@ tests:
                 abcdef012345: a key check, the config check, an image pull, compose-adopt or
                 `docker compose up --wait` failed. Read `journalctl -u homelab-compose` and
                 `docker ps -a` on daniel-pi.
+
+  # The Pi booted at time 0, and its compose result predates the boot, so the boot run never
+  # wrote. ComposeUpStale waits out the 1690s grace (quiet at 20m) and fires at 30m.
+  - interval: 1m
+    input_series:
+      - series: 'node_boot_time_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x40'
+      - series: 'homelab_compose_up_timestamp_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '-200000x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ComposeUpStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: ComposeUpStale
+        exp_alerts:
+          - exp_labels:
+              host: daniel-pi
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: The Pi's Compose project has not run since daniel-pi booted.
+              description: >-
+                daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
+                still predates that boot or is missing, so the boot's compose-run never wrote its
+                result. The unit is masked or disabled, systemd killed the run at its
+                TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
+                failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+                homelab-compose` on daniel-pi.
+
+  # The same boot, but the boot run writes 120s after it. A week-old result is quiet as long
+  # as it follows the last boot.
+  - interval: 1m
+    input_series:
+      - series: 'node_boot_time_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x40'
+      - series: 'homelab_compose_up_timestamp_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '-200000x2 120x38'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ComposeUpStale
+        exp_alerts: []
+
+  # The exporter serves a boot time but no compose result at all: the file is gone.
+  - interval: 1m
+    input_series:
+      - series: 'node_boot_time_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ComposeUpStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: ComposeUpStale
+        exp_alerts:
+          - exp_labels:
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: The Pi's Compose project has not run since daniel-pi booted.
+              description: >-
+                daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
+                still predates that boot or is missing, so the boot's compose-run never wrote its
+                result. The unit is masked or disabled, systemd killed the run at its
+                TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
+                failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+                homelab-compose` on daniel-pi.
+
+  # A stale result fires while the exporter answers, and the rule goes quiet once the scrape
+  # fails and every series goes stale, leaving the page to ScrapeTargetDown.
+  - interval: 1m
+    input_series:
+      - series: 'node_boot_time_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '-100000x10 _x30'
+      - series: 'homelab_compose_up_timestamp_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '-200000x10 _x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ComposeUpStale
+        exp_alerts:
+          - exp_labels:
+              host: daniel-pi
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: The Pi's Compose project has not run since daniel-pi booted.
+              description: >-
+                daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
+                still predates that boot or is missing, so the boot's compose-run never wrote its
+                result. The unit is masked or disabled, systemd killed the run at its
+                TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
+                failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+                homelab-compose` on daniel-pi.
+      - eval_time: 30m
+        alertname: ComposeUpStale
+        exp_alerts: []
 
   # daniel-box first owed a reboot 690000s before time 0, and a later package change rewrites
   # its reconcile file every minute without moving that time. It is quiet at 10m (690600s, under

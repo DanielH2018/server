@@ -1,5 +1,5 @@
 {
-  "checksum": "d980395509989aa42ecc69d26a876965fbba6152820dda22a2cf3b956ea2df28",
+  "checksum": "a11e6c1f1189abd6353b1389bc55075b366121fdcec6a37cd1ed3054322908fb",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#`setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons",
   "row": {
@@ -7,11 +7,13 @@
       "ansible/inventory/group_vars/all.yml": "a9e26f83a4a9763bd4261ca4b7d94354ff85fb63301d701c683420cdfded7c0b",
       "ansible/k3s-bringup.yml": "72b787809fc709416df6dbc688428ec5953c55dc98b855b29a79dfef3f8f7fc5",
       "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:maximal_tag_warning": "9376e5055deb6b2ab7972dd74c23a53971919041b2f1cfa68b4d46715a73aff8",
+      "ansible/roles/setup/gitops_deploy/files/gitops_markers.py:AGENT_PIN_TAGS": "51b5a4a9171e56a444ad6378a2c784c485f3078c75675fee1d9b8e5e5226ffd1",
       "ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds": "29dec8ce6e057f931fa522a44c0a0c7a1d4677a0b1ae6492ef675a089813c0d1",
+      "ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_pin_cmds": "339d01d521a6ba9b2390798e62e7548ac04204fc57e7903aea2a8ebbe017d408",
       "ansible/roles/setup/k3s/tasks/kubeconfig.yml": "a838bb40af4bcdd674784ee2ddcad8729684eaa39fd09383c27e467ab457ef33",
       "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d"
     },
     "python": "3.14",
-    "verified_sha": "14cf76620"
+    "verified_sha": "8419fa7c0"
   }
 }

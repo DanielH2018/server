@@ -121,10 +121,14 @@ def test_hook_wrappers_reference_existing_python():
 
 
 def _probe_subcommands():
-    # probe.py's argparse surface lives in probe_lib/cli_parser.py; probe.py itself holds
-    # only main() and its dispatch table, so scanning it returns an empty set.
-    body = _read(
-        os.path.join(REPO, "scripts", "diagnostics", "probe_lib", "cli_parser.py")
+    # probe.py's argparse surface lives in probe_lib/: cli_parser.py, and the modules whose own
+    # add_parser() cli_parser.py calls (gitops_why.py adds `gitops-state`). probe.py itself
+    # holds only main() and its dispatch table, so scanning it returns an empty set.
+    lib = os.path.join(REPO, "scripts", "diagnostics", "probe_lib")
+    body = "\n".join(
+        _read(os.path.join(lib, name))
+        for name in sorted(os.listdir(lib))
+        if name.endswith(".py")
     )
     return set(re.findall(r'\.add_parser\(\s*"([\w-]+)"', body))
 

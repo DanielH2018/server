@@ -197,8 +197,9 @@ the same three series over HTTP.
       because a file that lost the series would silently disable a rule built on it (class 3).
       Each per-check rule carries the deadline as a literal, and a pytest pins that literal to
       the rendered value (M1 convention 1). One rule does read it: `HostCheckOverdue` in
-      `host-checks.yaml`, one per host, is a shadow backstop that covers a producer before its
-      own pair exists (#6166). It cannot replace the pairs, because it has no `absent_over_time`
+      `host-checks.yaml`, one per host, is a backstop that covers a producer before its own
+      pair exists (#6166). An Alertmanager inhibit mutes it wherever the pair fires, so it
+      pages only for a producer with no pair (#6186). It cannot replace the pairs, because it has no `absent_over_time`
       arm and inherits the class-3 gap.
 - **A fourth series from the shared library.** `write_check_textfile` in
   `homelab-check-lib.sh` also writes `homelab_check_duration_seconds`, the run's seconds up to

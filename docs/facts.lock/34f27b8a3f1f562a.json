@@ -1,0 +1,17 @@
+{
+  "checksum": "87a1788e8fee1bac3f0f49ce57c7fa782476dc660bbfbcc96250d2c5149c7830",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/optimize_pi/CLAUDE.md#Where the work went",
+  "row": {
+    "atoms": {
+      "docs/pi-host-tuning-record.md": "a608a4080a6e45e5e453c94a8a5d86aba0c6319a9cab7c063be331b0d741c133",
+      "hosts/components/pi-heartbeats/": "60dc7e1066b40a73ca02188395384a5b1175cb524d787aab24acbe05da3254c4",
+      "hosts/components/pi-node-exporter/": "56e5170bc2867008fc8741c27bd79e3fb46de14cd9f8d91effa643cc6bc4e2d5",
+      "hosts/components/pi-peer-backup-target/": "57d5c023c977ec54ca3a4d36d99fff8c73ac4c9a257b76083143f68763ff1e89",
+      "hosts/components/pi-resolver/": "4a6ea57dd3b062e35af447f20e01dcba7ff2ec4fc159a799b795d2b1b3d1b267",
+      "hosts/components/pi-tuning/": "e039f06216b1028ca0efbe3840daeacb17ac726a3f4d665fc9ff59e87b680ad9"
+    },
+    "python": "3.14",
+    "verified_sha": "7ed18d48f"
+  }
+}

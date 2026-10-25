@@ -6,9 +6,12 @@ plan names. `_soak_world.World` is the promotion every case starts from.
 Run: uv run pytest ansible/roles/k8s/manifests/tests/test_flux_soak.py
 """
 
+import re
+
 import pytest
 
 import flux_soak
+import host_lib
 from _soak_world import OTHER, T0, W, R, World, kustomization, pod, restart, run
 
 
@@ -51,10 +54,27 @@ def test_nothing_to_judge_keeps_its_own_line_and_names_no_service(
     ]
 
 
-def test_a_failing_soak_prints_no_pass_line_and_no_annotation(world, tmp_path, capsys):
+def test_a_failing_soak_prints_a_fail_annotation_and_no_pass_line(
+    world, tmp_path, capsys
+):
+    """The failure reaches the dashboards too (#6164), naming the service that failed."""
     restart(world.pods["authelia"][0], T0 + 100)
     assert run(world, tmp_path)[0] == 1
-    assert capsys.readouterr().out == ""
+    assert re.fullmatch(
+        rf"event=deploy services=authelia sha={R[:8]} result=fail duration_s=\d+ "
+        r"source=flux\n",
+        capsys.readouterr().out,
+    )
+
+
+def test_the_soak_line_is_host_libs_deploy_event():
+    """The pod cannot import host_lib, so its copy of the line is held to the shared one."""
+    assert flux_soak.deploy_line(R, "flux", "ok") == host_lib.deploy_event(
+        "flux", R[:8], source="flux"
+    )
+    assert flux_soak.deploy_line(R, "a,b", "fail", 12.7) == host_lib.deploy_event(
+        "a,b", R[:8], "fail", duration_s=12.7, source="flux"
+    )
 
 
 # Open question 19: the run-time wait.

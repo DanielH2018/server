@@ -59,7 +59,7 @@
   when: has_rsyslog
   # The other half of MaxLevelSyslog=info above, and it must exist wherever that does.
   # Without it every info line on the host — k3s alone was 53% of pre-cap syslog — lands in
-  # /var/log/syslog, which promtail ships to Loki as {job="syslog"}. Measured floor for that:
+  # /var/log/syslog, which Alloy ships to Loki as {job="syslog"}. Measured floor for that:
   # +7 MB/day/host against 1.33 MB/day with the filter.
   #
   # 49- so it sorts before 50-default.conf: `stop` only prevents a message reaching the rules
@@ -180,14 +180,16 @@
   # Tens of GB of RAM with swap sitting unused — prefer reclaiming page cache over
   # swapping service heaps. True of daniel-server and of daniel-box, whose control
   # plane holds etcd, Longhorn and Prometheus heaps. The Pi runs the OPPOSITE
-  # tuning (swappiness=130, zram-eager) in optimize_pi — 512 MB + zram needs eager swap.
+  # tuning (swappiness=130, zram-eager) in hosts/components/pi-tuning — 512 MB + zram needs eager swap.
   ansible.posix.sysctl:
     name: vm.swappiness
     value: "10"
     state: present
     sysctl_set: true
   become: true
-  when: has_ample_ram
+  when:
+    - has_ample_ram
+    - inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   tags: [tuning]
 
 # ── Debloat (daniel-server) ──────────────────────────────────────────────────
