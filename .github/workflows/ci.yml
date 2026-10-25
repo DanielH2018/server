@@ -670,7 +670,9 @@ jobs:
       # The gate below fails a pull request only for a module the PR's diff adds or changes
       # (#5480). The diff is read here, before the suite runs, because the suite's tests write
       # git state of their own. Only `changed.txt` is read: a deletion's full-sweep rule is
-      # about which files a hook checks, not about who can re-record a weight.
+      # about which files a hook checks, not about who can re-record a weight. The weight table
+      # at the merge base is read here for the same reason: it lets the gate tell a table edit
+      # that only drops retired modules' rows from one that wrote a row (#5989).
       - name: Collect this PR's changed files
         if: github.event_name == 'pull_request'
         env:
@@ -679,6 +681,8 @@ jobs:
         run: |
           set -euo pipefail
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
+          base=$(git merge-base "origin/$BASE_REF" HEAD)
+          git show "$base:scripts/dev/pytest_shard_weights.json" > "$RUNNER_TEMP/base_weights.json"
 
       - name: Run the test suite
         run: |
@@ -718,8 +722,10 @@ jobs:
       # (`--changed-files`). A module outside the diff annotates, because its author is not the
       # one reading the run and the docs-refresh cron re-records it: 4 of 16 gate failures in
       # two days named such a module (#5480). A PR that changes the weight table or the gate's
-      # code fails on every module, because it wrote every row the gate reads. A dispatch has
-      # no base to diff, so it fails on every module too.
+      # code fails on every module, because it wrote every row the gate reads. A table change
+      # that only drops the rows of modules the tree no longer holds is the exception: every PR
+      # that retires a module makes one, and it wrote no row (#5989). A dispatch has no base to
+      # diff, so it fails on every module too.
       - name: Check every heavy module's recorded weight
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
@@ -728,6 +734,7 @@ jobs:
           mode=()
           if [ "$EVENT" = push ] || [ "$EVENT" = merge_group ]; then mode=(--warn-only); fi
           if [ "$EVENT" = pull_request ]; then mode=(--changed-files "$RUNNER_TEMP/changed.txt"); fi
+          if [ "$EVENT" = pull_request ]; then mode+=(--base-weights "$RUNNER_TEMP/base_weights.json"); fi
           uv run python scripts/dev/pytest_shard.py "${mode[@]}" \
             --check-durations "$RUNNER_TEMP/durations.log"
 

@@ -18,6 +18,7 @@ would leave them all green over a parser that had stopped matching anything.
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_durations.py
 """
 
+import json
 import sys
 
 import pytest
@@ -377,6 +378,73 @@ def test_a_pull_request_editing_the_weight_table_fails_on_every_module():
     changed = {"scripts/dev/pytest_shard_weights.json"}
     problems, _ = shard_weight_gate.gate_complaints(REPORT, RECORDED, changed)
     assert len(problems) == 1 and NEW_MODULE in problems[0]
+
+
+RETIRED = "scripts/gone/tests/test_retired.py"
+
+
+def test_a_table_edit_that_only_drops_deleted_modules_keeps_the_scope(tmp_path):
+    """Retiring a module has to drop its row, so the PR edits the table without writing one
+    (#5989). The bad weight outside its diff annotates, as it would with the table untouched."""
+    base = {**RECORDED, RETIRED: 1.5}
+    problems, warnings = shard_weight_gate.gate_complaints(
+        REPORT,
+        RECORDED,
+        {shard_weight_gate.WEIGHTS_TABLE},
+        base_weights=base,
+        root=tmp_path,
+    )
+    assert problems == []
+    assert any(
+        NEW_MODULE in w and shard_weight_gate.OUTSIDE_DIFF_NOTE in w for w in warnings
+    )
+
+
+@pytest.mark.parametrize(
+    "base",
+    [
+        pytest.param(
+            {**RECORDED, "scripts/dev/tests/test_run_as_cron.py": 9.0}, id="changed"
+        ),
+        pytest.param({"scripts/dev/tests/test_run_as_cron.py": 0.05}, id="added"),
+        pytest.param({**RECORDED, RETIRED: 1.5}, id="dropped-but-present"),
+    ],
+)
+def test_a_table_edit_that_writes_or_drops_a_live_row_fails_on_every_module(
+    tmp_path, base
+):
+    """The counterpart: a changed or added row, or a dropped row whose module is still in the
+    tree, is the PR author's row, so the gate stays unscoped."""
+    (tmp_path / RETIRED).parent.mkdir(parents=True)
+    (tmp_path / RETIRED).write_text("")
+    problems, _ = shard_weight_gate.gate_complaints(
+        REPORT,
+        RECORDED,
+        {shard_weight_gate.WEIGHTS_TABLE},
+        base_weights=base,
+        root=tmp_path,
+    )
+    assert len(problems) == 1 and NEW_MODULE in problems[0]
+
+
+def test_the_cli_hands_the_base_table_to_the_gate(tmp_path, capsys):
+    """CI passes `--base-weights`; without it the same retire-only edit fails on every module."""
+    (tmp_path / "changed.txt").write_text(f"{shard_weight_gate.WEIGHTS_TABLE}\n")
+    (tmp_path / "base.json").write_text(
+        json.dumps({**pytest_shard.load_weights(), RETIRED: 1.5})
+    )
+    (tmp_path / "durations.log").write_text(REPORT)
+    argv = [
+        "--check-durations",
+        str(tmp_path / "durations.log"),
+        "--changed-files",
+        str(tmp_path / "changed.txt"),
+    ]
+    assert pytest_shard.main(argv) == 1
+    assert (
+        pytest_shard.main([*argv, "--base-weights", str(tmp_path / "base.json")]) == 0
+    )
+    assert shard_weight_gate.OUTSIDE_DIFF_NOTE in capsys.readouterr().out
 
 
 def test_the_diff_scopes_the_recorded_weight_arms_too():
