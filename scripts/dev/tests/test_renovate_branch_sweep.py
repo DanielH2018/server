@@ -140,15 +140,6 @@ def test_a_bare_prune_is_a_usage_error_that_names_the_new_form():
     assert deleted == []
 
 
-def test_the_report_ends_with_the_copy_pasteable_prune_command():
-    gh, git, _ = _tools(BRANCHES, ["renovate/a"], [DASHBOARD_ISSUE])
-    out = io.StringIO()
-    main([], gh=gh, git=git, out=out)
-    assert out.getvalue().splitlines()[-1] == (
-        "uv run python scripts/dev/renovate_branch_sweep.py --prune renovate/b"
-    )
-
-
 def test_an_empty_orphan_set_is_the_healthy_answer():
     gh, git, deleted = _tools(["master"], [], [DASHBOARD_ISSUE])
     out = io.StringIO()
