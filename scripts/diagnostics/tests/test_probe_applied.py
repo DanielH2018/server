@@ -67,6 +67,10 @@ EXTRA = """\
     - name: Write the box marker
       ansible.builtin.copy: {content: "box {{ port }}\\n", dest: /etc/x/box}
 """
+GATED_FILE = """\
+- name: Write the gated file
+  ansible.builtin.copy: {content: gated, dest: /etc/x/gated}
+"""
 CTX = {"port": 8080}
 SCRIPT = "#!/bin/sh\nexec x --port {{ port }}\n"
 
@@ -76,6 +80,7 @@ def _role(tmp_path, tasks=TASKS):
     for sub, name, text in (
         ("tasks", "main.yml", tasks),
         ("tasks", "extra.yml", EXTRA),
+        ("tasks", "gated.yml", GATED_FILE),
         ("templates", "x.sh.j2", SCRIPT),
         ("templates", "secret.j2", "token={{ x_api_token }}\n"),
         ("files", "lib.py", "print('x')\n"),
@@ -123,7 +128,9 @@ def test_a_false_gate_drops_the_task_and_an_unreadable_one_is_skipped(tmp_path):
     paths = {w.path for w in wants}
     assert "/etc/pi-only" not in paths and "/etc/registered" not in paths
     reasons = {s.task: s.reason for s in skips}
-    assert "its when: cannot be read" in reasons["Gated on a registered result"]
+    assert (
+        "reads run-time name(s) probe_result" in reasons["Gated on a registered result"]
+    )
     assert "not literal" in reasons["Make the configured directories"]
     pi_wants, _ = applied_tasks.expected(_role(tmp_path), "daniel-pi", CTX)
     assert "/etc/pi-only" in {w.path for w in pi_wants}
@@ -182,9 +189,9 @@ def test_an_absent_arm_drifts_only_when_the_path_exists():
     assert applied.compare(gone, _live(WANT), "u")[0] == "DRIFT"
 
 
-def _run(tmp_path, rows, tasks=TASKS):
+def _run(tmp_path, rows, tasks=TASKS, ctx=CTX):
     _role(tmp_path, tasks)
-    wants, _ = applied_tasks.expected(tmp_path / "x", "daniel-box", CTX)
+    wants, _ = applied_tasks.expected(tmp_path / "x", "daniel-box", ctx)
 
     def read(plan, host):
         live = {w.path: rows(w) for w in wants}
@@ -196,7 +203,7 @@ def _run(tmp_path, rows, tasks=TASKS):
 
     ns = SimpleNamespace(role="x", host="daniel-box", dry_run=False)
     return applied.run_applied(
-        ns, read=read, setup=tmp_path, render_ctx=lambda role_dir, host: CTX
+        ns, read=read, setup=tmp_path, render_ctx=lambda role_dir, host: ctx
     )
 
 
@@ -269,17 +276,111 @@ def test_an_unchecked_import_makes_an_otherwise_clean_role_partial(tmp_path, cap
 def test_every_jinja_import_in_the_real_setup_roles_resolves():
     """A census: an import the walk cannot find hides its tasks, so none may exist today.
 
-    `claude_code` reaching `common/tasks/alert_unit.yml` through `{{ role_path }}` is the
-    member `test_the_real_claude_code_role_walks_its_shared_alert_import` pins.
+    Only a path that does not resolve counts here. A gate or loop that reads a run-time value
+    is UNCHECKED too, and `claude_code` has three by design (#6356). `claude_code` reaching
+    `common/tasks/alert_unit.yml` through `{{ role_path }}` is the member
+    `test_the_real_claude_code_role_walks_its_shared_alert_import` pins.
     """
     walked, lost = [], []
     for role in sorted(p for p in applied.SETUP.iterdir() if (p / "tasks" / "main.yml").is_file()):  # fmt: skip
         for host in ("daniel-box", "daniel-server"):
             _, skips = applied_tasks.expected(role, host, applied.context(role, host))
-            lost += [f"{role.name}@{host}: {s.task}" for s in skips if s.unchecked]
+            lost += [
+                f"{role.name}@{host}: {s.task}"
+                for s in skips
+                if s.unchecked and "render" in s.reason
+            ]
         walked.append(role.name)
     assert "claude_code" in walked and len(walked) > 10
     assert lost == []
+
+
+def test_the_real_node_crons_gate_resolves_for_each_host():
+    """`node_crons.yml` is gated on `claude_code_artifacts_node`, which is `{{ k8s_primary_node }}`."""
+    role = applied.SETUP / "claude_code"
+    walked = {
+        host: applied_tasks.expected(role, host, applied.context(role, host))
+        for host in ("daniel-box", "daniel-server")
+    }
+    box_paths = {w.path for w in walked["daniel-box"][0]}
+    assert {"/usr/local/bin/sync-artifacts.sh", "/usr/local/bin/claude-otel-health.sh"} <= box_paths  # fmt: skip
+    for host, (_, skips) in walked.items():
+        node_crons = [s for s in skips if "node_crons.yml" in s.task]
+        assert all("does not apply" in s.reason for s in node_crons), (host, node_crons)
+    assert any("node_crons" in s.task for s in walked["daniel-server"][1])
+    # The three task files #6359 tracks read set_fact values; a fourth must not appear unseen.
+    for host, (_, skips) in walked.items():
+        assert sorted(s.task.rsplit("/", 1)[-1] for s in skips if s.unchecked) == ["main.yml: import agent.yml", "stamp_deployed.yml", "stamp_deployed.yml"], host  # fmt: skip
+
+
+GATED = """\
+- name: Write the ungated file
+  ansible.builtin.copy: {{content: x, dest: /etc/x/ungated}}
+- name: Import the gated file
+  when: {when}
+  ansible.builtin.import_tasks: gated.yml
+"""
+
+
+# fmt: off
+GATE_CASES = {
+    "inventory-true": ("x_enabled", {"x_enabled": True}, PROBE_OK, "ok       /etc/x/gated"),
+    "inventory-false": ("x_node == inventory_hostname", {"x_node": "daniel-pi"}, PROBE_OK, "skipped  import gated.yml: its when: is false for daniel-box"),
+    "false-before-a-fact": ("[x_on, 'x_facts | length > 0']", {"x_on": False}, PROBE_OK, "skipped  import gated.yml: its when: is false for daniel-box"),
+    "run-time-fact": ("x_facts | length > 0", {}, PROBE_UNREADABLE, "UNCHECKED tasks/main.yml: import gated.yml: when: reads run-time name(s) x_facts"),
+}
+# fmt: on
+
+
+@pytest.mark.parametrize(
+    ("when", "ctx", "code", "line"), GATE_CASES.values(), ids=GATE_CASES
+)
+def test_an_import_gate_is_evaluated_against_the_host_vars(tmp_path, capsys, when, ctx, code, line):  # fmt: skip
+    assert _run(tmp_path, _as_wanted, GATED.format(when=when), ctx) == code
+    out = capsys.readouterr().out
+    assert line in out
+    assert ("UNCHECKED" in out) == (code == PROBE_UNREADABLE)
+
+
+# The fact is set AFTER the gate reads it, so only a scan of the whole role can know it.
+LEARN = "- name: Learn the fact\n  ansible.builtin.set_fact: {x_fact: 1}\n"
+FACT_UNREAD = "UNCHECKED tasks/main.yml: import gated.yml: when: reads run-time name(s) x_fact"  # fmt: skip
+# fmt: off
+TYPE_TEST_CASES = {
+    "fact-is-defined": ("x_fact is defined", {}, PROBE_UNREADABLE, FACT_UNREAD),
+    "fact-is-none": ("x_fact is none", {}, PROBE_UNREADABLE, FACT_UNREAD),
+    "fact-default": ("x_fact | default(false)", {}, PROBE_UNREADABLE, FACT_UNREAD),
+    "inventory-is-defined": ("x_inv is defined", {"x_inv": None}, PROBE_OK, "ok       /etc/x/gated"),
+    "inventory-is-none": ("x_inv is none", {"x_inv": None}, PROBE_OK, "ok       /etc/x/gated"),
+    "inventory-default": ("x_inv | default(true)", {"x_inv": False}, PROBE_OK, "skipped  import gated.yml: its when: is false for daniel-box"),
+    "defaulted-and-set": ("x_fact | default(false)", {"x_fact": True}, PROBE_UNREADABLE, FACT_UNREAD),
+}
+# fmt: on
+
+
+@pytest.mark.parametrize(
+    ("when", "ctx", "code", "line"), TYPE_TEST_CASES.values(), ids=TYPE_TEST_CASES
+)
+def test_a_type_test_or_filter_does_not_make_a_run_time_name_readable(tmp_path, capsys, when, ctx, code, line):  # fmt: skip
+    assert _run(tmp_path, _as_wanted, GATED.format(when=when) + LEARN, ctx) == code
+    out = capsys.readouterr().out
+    assert line in out
+    assert ("UNCHECKED" in out) == (code == PROBE_UNREADABLE)
+
+
+def test_a_set_fact_name_is_not_read_from_a_default_of_the_same_name(tmp_path):
+    tasks = (
+        "- name: Work out the list\n"
+        "  ansible.builtin.set_fact: {x_list: '{{ [1] }}'}\n"
+        + GATED.format(when="x_list | length > 0")
+    )
+    _, skips = applied_tasks.expected(
+        _role(tmp_path, tasks), "daniel-box", {"x_list": []}
+    )
+    gated = [s for s in skips if "gated.yml" in s.task]
+    assert [
+        (s.unchecked, s.reason.endswith("run-time name(s) x_list")) for s in gated
+    ] == [(True, True)]
 
 
 def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):
@@ -316,4 +417,4 @@ def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_pat
     wants, _ = applied_tasks.expected(role, "daniel-box", ctx)
     assert {w.path for w in wants} == {"/etc/a", "/etc/b"}
     _, skips = applied_tasks.expected(role, "daniel-box", {})
-    assert [s.reason for s in skips] == ["it loops over a list that is not literal"]
+    assert [(s.reason, s.unchecked) for s in skips] == [("it loops over a list that is not literal", True)]  # fmt: skip

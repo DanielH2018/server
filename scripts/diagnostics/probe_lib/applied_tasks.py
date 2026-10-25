@@ -13,13 +13,19 @@ imports, through `block`, `rescue` and `always`, and turns each file-writing tas
   line itself, so the content is not compared;
 - the same five spelled `ansible.builtin.*`.
 
-A task is SKIPPED, with the reason, rather than guessed at: its `when:` (its own, or a
-block's) cannot be read for the host; it loops over a list that is not literal; a field still
-holds Jinja or a `STUB` after the render; or it writes from a variable the light render cannot
-resolve. An `import_role` or `include_role` is skipped the same way. An import whose path
-does not render to a file in the tree is UNCHECKED rather than skipped: the file it names may
-install anything, so the probe cannot call the role clean, and `applied` exits 75 for it. A `copy` with `remote_src` is compared by metadata
-only, because its source is on the host. A `when:` that reads false for the host drops the task, as Ansible would.
+A `when:` (its own, or a block's) is Jinja over the walk's context: the host's merged vars,
+Jinja-valued ones resolved, plus an import's `vars:`. Its names decide whether it can be read.
+A name with no static value (a `set_fact` or `register` anywhere in the role, even one that
+also has a default, `item`, an `ansible_*` fact, or a name the vars lack) makes the gate
+unreadable, whatever test or filter wraps it. A condition of static names only is evaluated,
+and one that reads false drops the task.
+
+A task is SKIPPED, with the reason, when its `when:` cannot be read, its loop is not literal,
+a field still holds Jinja or a `STUB` after the render, or it includes a role. A task FILE the
+walk cannot read is UNCHECKED: an import whose path does not render to a file, or whose `when:`
+or loop cannot be read. It may install anything, so `applied` exits 75 for it. An import whose
+`when:` is false is listed as not applicable. A `copy` with `remote_src` is compared by
+metadata only, because its source is on the host.
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
@@ -35,7 +41,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from deploy_tools.setup_lib.setup_gates import GateUnreadable, eval_when_strict
+from jinja2 import StrictUndefined, TemplateSyntaxError, meta
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, template_env
 from lib.render_guard import render_or_error
@@ -50,6 +56,25 @@ _ROLE_INCLUDES = tuple(
 )
 _MODULES = ("template", "copy", "file", "cron")
 _LOOPS = ("loop", "with_items", "with_list")
+_SET_FACTS = ("set_fact", "ansible.builtin.set_fact", "ansible.legacy.set_fact")
+# Names Ansible fills in only while the play runs. Every `ansible_*` name is one too.
+_RUN_TIME = frozenset({"item", "hostvars", "groups", "group_names", "play_hosts"})
+
+
+def _run_time_names(tasks) -> set[str]:
+    """Every name a `register:` or `set_fact` sets in `tasks`, through blocks."""
+    names: set[str] = set()
+    for task in tasks if isinstance(tasks, list) else []:
+        if not isinstance(task, dict):
+            continue
+        if isinstance(task.get("register"), str):
+            names.add(task["register"])
+        for key in _SET_FACTS:
+            if isinstance(task.get(key), dict):
+                names |= {str(k) for k in task[key]}
+        for key in ("block", "rescue", "always"):
+            names |= _run_time_names(task.get(key))
+    return names
 
 
 @dataclass(frozen=True)
@@ -81,8 +106,9 @@ class Want:
 class Skip:
     """A file-writing task this probe does not compare, and why.
 
-    `unchecked` marks an import whose file the walk could not find, so every task in it went
-    unread: `applied` reports it as UNCHECKED and its verdict as partial coverage.
+    `unchecked` marks a task file the walk could not read, because its path, its `when:` or
+    its loop does not resolve, so every task in it went unread: `applied` reports it as
+    UNCHECKED and its verdict as partial coverage.
     """
 
     task: str
@@ -139,22 +165,61 @@ class _Walk:
         self.role_dir, self.host = role_dir, host
         # A shared task file names its own templates through these two, as Ansible sets them.
         self.ctx = {"role_path": str(role_dir), "playbook_dir": str(ANSIBLE), **ctx}
-        self.defaults = role_dir / "defaults" / "main.yml"
         self.wants: list[Want] = []
         self.skips: list[Skip] = []
         # The task file being walked, for an UNCHECKED line.
         self.file = "tasks/main.yml"
         self.text_env = make_ansible_env([role_dir / "templates"])
+        self.gate_env = make_ansible_env(undefined_cls=StrictUndefined)
+        # Names a `set_fact` or `register` sets during the run, in any of the role's task
+        # files, so a gate read before the walk reaches the setter still sees them. A shared
+        # file outside the role adds its own as the walk passes it.
+        self.run_time: set[str] = set()
+        for path in sorted((role_dir / "tasks").rglob("*.yml")):
+            self.run_time |= _run_time_names(yaml_fast.safe_load(path.read_text()))
 
     def gate(self, whens: list) -> str | None:
-        """None when the task runs on the host, `"no"` when it does not, else the reason."""
+        """None when the task runs on the host, `"no"` when it does not, else the reason.
+
+        Readability comes from each condition's NAMES, never from whether evaluating it
+        raises: `fact is defined` or `fact | default(false)` would evaluate against the
+        static vars and settle a run-time fact on a guess. A condition whose every name is
+        static is evaluated; one false condition drops the task, as `when:` list items AND
+        together. Otherwise a condition that reads a run-time name makes the gate unreadable.
+        """
         if not whens:
             return None
-        try:
-            runs = eval_when_strict(whens, self.host, role_defaults=self.defaults)
-        except GateUnreadable as exc:
-            return f"its when: cannot be read for {self.host} ({exc})"
-        return None if runs else "no"
+        ns = {**self.ctx, "inventory_hostname": self.host}
+        run_time = _RUN_TIME | self.run_time
+        unread: set[str] = set()
+        for when in whens:
+            try:
+                tree = self.gate_env.parse("{{ " + str(when) + " }}")
+                names = meta.find_undeclared_variables(tree)
+            except TemplateSyntaxError as exc:
+                return f"its when: `{when}` does not parse ({exc.message})"
+            names -= self.gate_env.globals.keys() - {"lookup", "query", "q"}
+            # DECIDED: a name that is both a default and a set_fact or register is run-time,
+            # because the run can overwrite the default before the gate reads it (#6356).
+            late = {
+                n
+                for n in names
+                if n in run_time
+                or n.startswith("ansible_")
+                or n not in ns
+                or any(m in str(ns[n]) for m in ("{{", STUB))
+            }
+            if late:
+                unread |= late
+                continue
+            try:
+                if not self.gate_env.compile_expression(str(when))(**ns):
+                    return "no"
+            except Exception as exc:
+                return f"its when: cannot be read for {self.host} (`{when}`: {exc})"
+        if unread:
+            return f"when: reads run-time name(s) {', '.join(sorted(unread))}"
+        return None
 
     def render(self, value, item=None) -> str | None:
         """`value` rendered with the role's context; None when a STUB or Jinja survives."""
@@ -182,6 +247,7 @@ class _Walk:
         own = task.get("when")
         here = [*whens, *(own if isinstance(own, list) else [own] if own else [])]
         name = str(task.get("name") or "unnamed task")
+        self.run_time |= _run_time_names([task])
         if any(k in task for k in ("block", "rescue", "always")):
             for key in ("block", "rescue", "always"):
                 for sub in task.get(key) or []:
@@ -245,13 +311,20 @@ class _Walk:
             )
             self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
             return
-        if (why := self.gate(whens)) is not None:
-            if why != "no":
-                self.skips.append(Skip(label, why))
+        # DECIDED: a task file whose gate or loop the walk cannot read is UNCHECKED too (#6356).
+        # Its tasks install files nobody compared, the defect an unfound import already reports.
+        why = self.gate(whens)
+        if why == "no":
+            why = f"its when: is false for {self.host}, so it does not apply"
+            self.skips.append(Skip(label, why))
+            return
+        if why is not None:
+            self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
             return
         items = self.loop_items(task)
         if items is None:
-            self.skips.append(Skip(label, "it loops over a list that is not literal"))
+            why = "it loops over a list that is not literal"
+            self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
             return
         loop_var = (task.get("loop_control") or {}).get("loop_var", "item")
         outer = self.ctx
