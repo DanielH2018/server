@@ -112,7 +112,7 @@ from renderer.renderer_lib.restart import outside_secrets, restart_targets
 from renderer.renderer_lib.restart import restart_values, stamp
 from renderer.renderer_lib.restart import source_digests
 from renderer.renderer_lib.context import load_stubs
-from renderer.renderer_lib.environment import ansible_local_temp
+from lib.ansible_jinja_env import ansible_local_temp
 from renderer.renderer_lib.host import render_host, render_package, write_packages
 from renderer.renderer_lib.sops_entries import (
     copy_sops_manifests,
