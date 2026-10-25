@@ -293,11 +293,16 @@ def test_a_gate_failed_by_its_own_runs_cancellation_defers_the_tick(monkeypatch)
 
 
 def test_a_cancelled_need_in_a_suite_that_was_not_cancelled_stays_red(monkeypatch):
-    """A job past its `timeout-minutes` reads `cancelled` in a suite that concluded `failure`."""
-    _stub_cancelled_run(monkeypatch, "failure")
+    """A job past its `timeout-minutes` reads `cancelled` in a suite that concluded `failure`.
+
+    The check-suites read is asserted too, so the `fail` comes from the suite's conclusion and
+    not from a gate that never asked.
+    """
+    urls = _stub_cancelled_run(monkeypatch, "failure")
     assert (
         deploy_toolbox.fetch_ci_verdict(
             SHA, require_ci=True, repo=REPO, contexts=frozenset({CI_GATE_NAME})
         )
         == "fail"
     )
+    assert urls[-1].split("?")[0].endswith(f"/commits/{SHA}/check-suites")
