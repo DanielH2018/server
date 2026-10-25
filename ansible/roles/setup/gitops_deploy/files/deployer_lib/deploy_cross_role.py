@@ -114,14 +114,14 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
 
 
 # DECIDED: `common/templates/resolv.conf.j2` stays out of the table above and records `common`
-# (#3319). `k3s` and `optimize_pi` render it directly, and neither is the tick's to apply:
-# `k3s` runs only from `k3s-bringup.yml`, and `optimize_pi` only on daniel-pi, by its gate in
-# `initial_setup.yml` (#3933). Recording `common` prints the
-# two-host remediation in `deploy_remediation._setup_commands` as one line.
+# (#3319). `k3s` renders it directly, and it is not the tick's to apply: it runs only from
+# `k3s-bringup.yml`. `optimize_pi` rendered it too until H7.25 moved the Pi's resolver into the
+# `pi-resolver` component, which the host package builder renders on its own. Recording `common`
+# prints the remediation in `deploy_remediation._setup_commands` as one line.
 # The value names the roles that render the file. `_setup_commands` builds `common`'s command
 # from them and the routing (#4316), so neither a host nor a playbook is written down twice.
 SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
-    f"{_COMMON}/templates/resolv.conf.j2": frozenset({"k3s", "optimize_pi"}),
+    f"{_COMMON}/templates/resolv.conf.j2": frozenset({"k3s"}),
 }
 
 # The k8s roles that import a setup file by path, so a change to it defer-and-alerts each one

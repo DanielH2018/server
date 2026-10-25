@@ -1,5 +1,5 @@
 {
-  "checksum": "6f6512129dde06afab72f146f09c199adad6ab24088ad31975831677b3beebbb",
+  "checksum": "7c6602d4128abec870066b4562a57aaee98aed941760dca6f6df5fd768624077",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state",
   "row": {
@@ -8,6 +8,6 @@
       "ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler": "fd8273f78c215200044a1814469080adfd7973ae080ebf763d0678ef81f0a8a8"
     },
     "python": "3.14",
-    "verified_sha": "fd34ae8eb"
+    "verified_sha": "7ed18d48f"
   }
 }

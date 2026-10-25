@@ -106,13 +106,6 @@ def test_a_shipped_file_and_a_target_are_both_searchable(real_tree):
     assert any(i.mentions("net.core.bpf_jit_harden") for i in items)
 
 
-def test_the_pi_peer_backup_wrapper_counts_against_daniel_pi(real_tree):
-    wrapper = "/usr/local/bin/pi-peer-backup-shell"
-    on_pi = [i for i in real_tree["daniel-pi"] if i.target == wrapper]
-    assert on_pi
-    assert all(i.role == "k8s_host_files" for i in on_pi)
-
-
 # --- what an item is --------------------------------------------------------------------------
 
 

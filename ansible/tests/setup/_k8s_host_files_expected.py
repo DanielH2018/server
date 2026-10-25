@@ -83,32 +83,6 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
             {"path": "{{ item }}", "state": "absent"},
         ),
     },
-    # The wrapper first, then the key pinned to it: the reverse order leaves a forced command
-    # that does not exist. Both run on daniel-pi through the block's `delegate_to`.
-    "pi-peer-backup.yml": {
-        "Install the forced-command wrapper on daniel-pi": (
-            "ansible.builtin.copy",
-            {
-                "src": "pi-peer-backup-shell.sh",
-                "dest": "/usr/local/bin/pi-peer-backup-shell",
-                "owner": "root",
-                "group": "root",
-                "mode": "0755",
-            },
-        ),
-        "Authorize the pull key on daniel-pi": (
-            "ansible.posix.authorized_key",
-            {
-                "user": "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}",
-                "key": "{{ lookup('file', 'pi-peer-backup.pub') }}",
-                "key_options": (
-                    'restrict,command="/usr/local/bin/pi-peer-backup-shell '
-                    '{{ pi_peer_backup_src_dir }}"'
-                ),
-                "state": "present",
-            },
-        ),
-    },
     "crowdsec.yml": CROWDSEC_ARMS,
     # No mode, on purpose: the library keeps the directory modes it came with.
     "media-volume.yml": {

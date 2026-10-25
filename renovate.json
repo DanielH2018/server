@@ -791,7 +791,7 @@
       "automerge": false
     },
     {
-      "description": "node_exporter is pinned TWICE by design (#3893): the cluster DaemonSet's image (`node_exporter_k8s_image`, docker `prom/node-exporter`) and the Pi's host unit tarball (`optimize_pi_node_exporter_version`, an annotated github-releases pin for `prometheus/node_exporter`). ansible/tests/setup/test_pi_node_exporter_host_unit.py holds them equal, so a PR bumping either alone is red until the other follows. One group = one PR touching both files. It must stay AFTER the annotated-pin rule above, whose groupName it overrides. NO automerge: the Pi pin's sha256 needs `asset_pins.py --refresh prometheus/node_exporter`, and the merged Pi bump is applied by hand on daniel-pi because the deployer's tick runs optimize_pi on daniel-box, where the role is skipped. matchUpdateTypes leaves the image's digest-only re-pushes to the k8s digest rule, which automerges them: a digest moves no version, so the Pi has nothing to follow. ENFORCED: scripts/tests/test_renovate_annotated_pins.py.",
+      "description": "node_exporter is pinned TWICE by design (#3893): the cluster DaemonSet's image (`node_exporter_k8s_image`, docker `prom/node-exporter`) and the Pi's host binary, the `node-exporter` tool of `homelab-tools` (`hosts/packages/homelab-tools/package.yml`, a github-release-attachments pin for `prometheus/node_exporter` that moves its version and both digests in one match). ansible/tests/setup/test_pi_node_exporter_host_unit.py holds them equal, so a PR bumping either alone is red until the other follows. One group = one PR touching both files. It must stay AFTER the annotated-pin rule and the homelab-tools rule above, whose groupName it overrides. NO automerge: the pair moves a host binary, which the Pi's updater installs from the next package version, so the merge is followed to a verified `node_textfile_scrape_error{job=\"node-pi\"}` read. matchUpdateTypes leaves the image's digest-only re-pushes to the k8s digest rule, which automerges them: a digest moves no version, so the Pi has nothing to follow. ENFORCED: scripts/tests/test_renovate_annotated_pins.py.",
       "matchPackageNames": [
         "prom/node-exporter",
         "prometheus/node_exporter"
@@ -801,7 +801,7 @@
         "minor",
         "patch"
       ],
-      "groupName": "node_exporter (manual — lockstep: cluster image + Pi host unit; asset_pins.py --refresh prometheus/node_exporter, then initial_setup.yml --tags node-exporter-host -e target=daniel-pi)",
+      "groupName": "node_exporter (manual — lockstep: cluster image + homelab-tools node-exporter pin; the Pi installs it with its next package version)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"

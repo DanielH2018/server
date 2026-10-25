@@ -1,40 +1,27 @@
-# config_files — operator dotfiles (.bashrc / .gitconfig)
+# config_files — emptied; the Pi package owns the SOPS export
 
-Drops the deploy user's shell + git dotfiles onto a host. **Not a container role** — a
-host-setup role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`.
-See repo-root `CLAUDE.md` for conventions.
+The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` marker in
+`ansible/roles/setup/config_files/tasks/main.yml`. H7.25 emptied it. It stays until H7.20a,
+because `ansible/initial_setup.yml` names it and an edit to that playbook parks the deployer.
+Repo-root `CLAUDE.md` has the conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
-- **Applied by:** `initial_setup.yml --tags "config_files"`
+- **Applied by:** `initial_setup.yml --tags "config_files"`; ends on hosts where `True`
+  (leading `meta: end_role`)
 - **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
   `templates/*.timer.j2`)
 <!-- /generated_from -->
 
-## Where it runs
-- **First** role in `ansible/initial_setup.yml` (before [[initial_setup]], [[sops_setup]],
-  [[docker_install]]) — every host. Both copies skip a host whose dotfiles chezmoi owns
-  (see Notable).
-- Sub-tags `git` and `bash` select one file.
+## Where the work went
+The role copied a tracked `.bashrc` and `.gitconfig` to the Pi, the only host without chezmoi.
+`hosts/components/pi-tuning/` now ships `/etc/profile.d/homelab.sh`, which carries the
+`SOPS_AGE_KEY_FILE` export the tracked `.bashrc` held. The Pi keeps the `.bashrc` and
+`.gitconfig` it holds, and a rebuilt Pi gets Ubuntu's own `.bashrc` and no `.gitconfig`.
+chezmoi owns the dotfiles on daniel-box and daniel-server.
 
-## What it does (`tasks/main.yml`)
-- `copy`s the tracked static `files/.gitconfig` and `files/.bashrc` to the deploy user's
-  home, **hardcoded to `/home/{{ sys_user }}`** (`owner`/`group` `sys_user`, `mode 0644`,
-  `backup: true` → an existing file is preserved as a timestamped `.bak` when content
-  changes). The play runs become:true, so a former become:false `echo $HOME` task resolved
-  the home (to avoid shipping these dotfiles to /root); that was dropped 2026-06-10
-  (commit 6f49a152) — the home is just `/home/{{ sys_user }}`, hardcoded directly to match
-  [[sops_setup]]'s `.bashrc` path.
-
-## Notable
-- **The SOPS export lives in `files/.bashrc`.** `export SOPS_AGE_KEY_FILE=…` is part of the
-  tracked file, so a `--tags config_files` run keeps it. Until #2319, [[sops_setup]] appended
-  it with `lineinfile` instead, and a `config_files`-only run stripped it until the next
-  `sops_setup`. The chezmoi-managed hosts carry the same line in the dotfiles repo's
-  `home/dot_bashrc`, above `ble-attach`.
-- **Both copies skip a host whose dotfiles chezmoi owns.** A `stat` of
-  `/home/{{ sys_user }}/.local/share/chezmoi` gates them, so daniel-box and daniel-server
-  keep chezmoi's `.bashrc` and templated `.gitconfig`, which carries commit signing. Only
-  daniel-pi takes these files. Before #2322 the role had no guard, and a run against a
-  cluster node replaced both chezmoi files (keeping a `.bak`).
-- Dotfiles are static — edit `files/.bashrc` / `files/.gitconfig` directly (no Jinja).
+## Rollback
+A revert of H7.25 restores the tasks, and the operator then re-applies the role on the Pi after
+`homelab_host_applied_info` shows the reverted version: `cd /home/ubuntu/server && uv run
+ansible-playbook ansible/initial_setup.yml --tags config_files -e target=daniel-pi`
+(operator-only).

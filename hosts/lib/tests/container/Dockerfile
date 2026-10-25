@@ -29,7 +29,8 @@ ENV container=docker
 # Dir::Cache::pkgcache, so the common-path case would compare a pkgcache.bin that never
 # exists. The Ubuntu lists stay, so `tree`, which the Depends case's fixture needs, resolves
 # with no fetch. Its deb is downloaded here too, because snapshot.ubuntu.com answers 5xx
-# often enough to fail a case that fetches from it. `age` generates the throwaway key the
+# often enough to fail a case that fetches from it. The Pi package Depends on zram-tools,
+# watchdog and earlyoom (H7.25), so their debs and recommends are downloaded the same way. `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c).
 RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runner-ca.crt \
     set -eu; \
@@ -46,7 +47,7 @@ RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runn
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt update; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt install -y --no-install-recommends \
         systemd systemd-sysv python3 ca-certificates age; \
-    apt-get install -y --no-install-recommends --download-only tree
+    apt-get install -y --download-only tree zram-tools watchdog earlyoom
 
 # Units that would take dpkg's lock mid-case, or reach the runner's devices through
 # --privileged, never start. The updater's own timer is left alone: neither the fixture nor the
@@ -59,8 +60,9 @@ RUN systemctl mask \
         getty@tty1.service console-getty.service systemd-modules-load.service \
     && systemctl set-default multi-user.target
 
-# The textfile directory with M3's owner and mode, which optimize_pi creates on the Pi
-# (sys_user is ubuntu).
+# The textfile directory with M3's owner and mode, which the Pi package's tmpfiles.d line creates
+# when node_exporter.service starts (sys_user is ubuntu). The image holds it so the updater's
+# first run finds it before that unit has started.
 RUN install -d -o root -g ubuntu -m 2775 /var/lib/node-exporter-textfile
 
 # dpkg unpacks the homelab.sources homelab-updater ships at the diverted path, outside
