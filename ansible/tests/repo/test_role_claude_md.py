@@ -62,8 +62,8 @@ PLANES = [
     Plane(
         "containers",
         CONTAINER_ROLES,
-        floor=3,
-        members=frozenset({"wg-easy", "common", "alloy"}),
+        floor=2,
+        members=frozenset({"wg-easy", "common"}),
     ),
 ]
 PLANE_IDS = [p.name for p in PLANES]

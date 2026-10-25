@@ -54,6 +54,7 @@ class PrView(TypedDict, total=False):
     headRefName: str
     headRefOid: str
     isCrossRepository: bool
+    isDraft: bool
     mergeCommit: Commit | None
     mergeStateStatus: str
     mergeable: str
@@ -138,6 +139,11 @@ def parse_view(obj: JsonObject) -> PrView:
         if not isinstance(cross, bool):
             raise ValueError(f"isCrossRepository: expected a boolean, got {cross!r}")
         view["isCrossRepository"] = cross
+    if "isDraft" in obj:
+        draft = obj["isDraft"]
+        if not isinstance(draft, bool):
+            raise ValueError(f"isDraft: expected a boolean, got {draft!r}")
+        view["isDraft"] = draft
     if "mergeCommit" in obj:
         commit = obj["mergeCommit"]
         view["mergeCommit"] = (
