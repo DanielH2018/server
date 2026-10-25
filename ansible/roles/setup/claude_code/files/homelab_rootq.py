@@ -18,11 +18,13 @@ one of the directories in ALLOW, every directory above it must be root-owned and
 root alone, and it must miss every pattern in DENY. `cat` also refuses a file with more than
 one hard link, a binary file and a file over READ_MAX bytes.
 
-Output is filtered twice. Output that matches a pattern in REFUSE is withheld whole, so a file
-or crontab holding a key, a token or a webhook prints nothing. Otherwise, in every `NAME=value`
-assignment the value is kept only when it is a number, a duration, a boolean, an absolute path
-or a colon list of them; anything else becomes `<value>`. A systemd directive such as `Type=simple` passes, except
-Environment=, whose assignments are filtered. Output stops at OUT_MAX bytes.
+Output is filtered twice. Output that matches a pattern in REFUSE, or that gives a key whose
+name says credential (password, token, secret, api_key and the rest) a literal value after `=`
+or `:`, is withheld whole, so a file or crontab holding a key, a token or a webhook prints
+nothing. Otherwise, in every `NAME=value` assignment the value is kept only when it is a
+number, a duration, a boolean, an absolute path or a colon list of them; anything else becomes
+`<value>`. The systemd directives in DIRECTIVES, such as `Type=simple`, pass as written, and
+Environment= has each of its assignments filtered. Output stops at OUT_MAX bytes.
 
 It runs under /usr/bin/python3, Ubuntu 24.04's 3.12, not uv's pinned interpreter: that one sits
 under a user's home, and root never executes a file a user can write. `-I` keeps PYTHONPATH,
@@ -112,6 +114,23 @@ REFUSE = re.compile(
     r"|(?im:^\s*(?:password|passwd|psk|private-key|private_key|secret|token)\s*:\s*[^\s$])"
     r"|hc-ping\.com/[0-9a-f]{8}-"
     r"|(?i:--?(?:token|password|passwd|secret|api-?key)\s+[^\s$-])"
+    r"|hooks\.slack\.com/services/"
+    r"|(?:\s-u|--user)\s+[^\s:$]+:[^\s$]"
+    r"|\bmysql\w*\b.*\s-p[^\s$]"
+)
+# A key whose name says it holds a credential, with a literal value after `=` or `:`, in any of
+# the shapes a shell, ini, YAML, TOML, JSON or HTTP header file writes it. Its value passes only
+# when it is empty, plain (see _PLAIN) or a reference such as `$VAR`, `${VAR}`, `<value>` or
+# `{{ var }}`.
+_KEYED = re.compile(
+    # The value sits in a lookahead, so a match consumes only its key and separator, and a key
+    # inside an earlier match's value, such as `key=` in a URL's query, is still matched.
+    r"(?<![A-Za-z0-9_.-])([\"']?)([A-Za-z_][A-Za-z0-9_.-]*)\1\s*[:=]\s*"
+    r"(?=(\"[^\"\n]*\"|'[^'\n]*'|[^\s,;&}\]]*))"
+)
+_CREDENTIAL_NAME = re.compile(
+    r"pass|pwd|secret|token|credential|webhook|cookie|\bdsn\b|apikey|privatekey"
+    r"|(?:^|[_.-])(?:api|access|private|secret|signing|auth|client)?[_.-]?key$"
 )
 PATH_SHAPE = re.compile(r"/[A-Za-z0-9._@+:,=/-]{0,4095}")
 READ_MAX = 1024 * 1024
@@ -122,7 +141,31 @@ ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
 _ASSIGN = re.compile(
     r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|'[^']*'|[^\s\"';]*)"
 )
-_DIRECTIVE = re.compile(r"[A-Z][a-z]+(?:[A-Z][A-Za-z0-9]*)*")
+# The systemd directives whose value passes as written, a closed set: a capitalised key not
+# named here is filtered like any other assignment.
+DIRECTIVES = frozenset(
+    """
+    Description Documentation After Before Wants Requires Requisite BindsTo PartOf Conflicts
+    Upholds OnFailure OnSuccess DefaultDependencies StartLimitIntervalSec StartLimitBurst
+    ConditionPathExists ConditionPathIsDirectory ConditionHost AssertPathExists
+    Type User Group ExecStart ExecStartPre ExecStartPost ExecStop ExecStopPost ExecReload
+    ExecCondition WorkingDirectory RootDirectory Restart RestartSec RemainAfterExit
+    TimeoutSec TimeoutStartSec TimeoutStopSec RuntimeMaxSec KillMode KillSignal SuccessExitStatus
+    Slice Nice CPUQuota CPUWeight IOWeight MemoryHigh MemoryMax MemorySwapMax TasksMax
+    LimitNOFILE LimitNPROC UMask StandardInput StandardOutput StandardError SyslogIdentifier
+    EnvironmentFile LoadCredential ImportCredential ReadWritePaths ReadOnlyPaths InaccessiblePaths
+    ProtectSystem ProtectHome ProtectHostname ProtectClock ProtectKernelTunables
+    ProtectKernelModules ProtectKernelLogs ProtectControlGroups PrivateTmp PrivateDevices
+    PrivateNetwork PrivateUsers NoNewPrivileges CapabilityBoundingSet AmbientCapabilities
+    RestrictNamespaces RestrictRealtime RestrictSUIDSGID LockPersonality MemoryDenyWriteExecute
+    SystemCallFilter SystemCallArchitectures DynamicUser SupplementaryGroups StateDirectory
+    RuntimeDirectory CacheDirectory LogsDirectory ConfigurationDirectory
+    ListenStream ListenDatagram SocketMode SocketUser SocketGroup Accept Service
+    OnCalendar OnBootSec OnStartupSec OnActiveSec OnUnitActiveSec OnUnitInactiveSec Unit
+    Persistent RandomizedDelaySec AccuracySec WakeSystem
+    WantedBy RequiredBy Also Alias DefaultInstance
+    """.split()
+)
 _PLAIN = re.compile(
     r"-?\d+(\.\d+)?"
     r"|\d+(\.\d+)?(us|ms|s|sec|m|min|h|hr|d|w)"
@@ -229,9 +272,26 @@ def _assign(match: re.Match) -> str:
     return match.group(0) if _keep(value) else f"{name}=<value>"
 
 
+def holds_credential(text: str) -> bool:
+    """Whether TEXT matches REFUSE, or gives a credential-named key a literal value."""
+    if REFUSE.search(text):
+        return True
+    for match in _KEYED.finditer(text):
+        key, value = match.group(2), match.group(3).strip("\"'")
+        # A directive such as LoadCredential= names a credential rather than holding one.
+        if key in DIRECTIVES or not _CREDENTIAL_NAME.search(key.lower()):
+            continue
+        # Under four characters is prose, such as `K3S_TOKEN=xxx` in a usage comment; every
+        # false refusal measured on daniel-server's readable ALLOW files was three letters.
+        if len(value) < 4 or value[0] in "$<{%" or _PLAIN.fullmatch(value):
+            continue
+        return True
+    return False
+
+
 def redact_line(line: str) -> str:
     head, sep, rest = line.partition("=")
-    if sep and _DIRECTIVE.fullmatch(head.strip()):
+    if sep and head.strip() in DIRECTIVES | {"Environment"}:
         if head.strip() == "Environment":
             try:
                 split = shlex.split(rest, posix=True)
@@ -249,7 +309,7 @@ def redact_line(line: str) -> str:
 
 
 def filter_output(text: str) -> str:
-    if REFUSE.search(text):
+    if holds_credential(text):
         raise Refused(
             "the output matches a credential pattern, so none of it is printed"
         )

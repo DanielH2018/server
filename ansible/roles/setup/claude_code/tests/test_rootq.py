@@ -60,6 +60,20 @@ SECRETS = {
     "netplan-wifi": 'wifis:\n  wlan0:\n    access-points:\n      "home":\n        password: "sentinel"\n',
     "hc-ping": "curl https://hc-ping.com/0a1b2c3d-sentinel\n",
     "flag-argument": "backup --password sentinel /srv\n",
+    # Credential-named keys with a literal value, in the shapes other files write them.
+    "capitalised-key": "Password=sentinel\n",
+    "private-key-ini": "[Interface]\nPrivateKey = sentinel\n",
+    "spaced-assignment": 'TOKEN = "sentinel"\n',
+    "json": '{"token": "sentinel"}\n',
+    "yaml-suffixed-key": "  auth_token: sentinel\n",
+    "yaml-api-key": "api_key: sentinel\n",
+    "header": 'curl -H "X-Api-Key: sentinel" https://x\n',
+    "lowercase-header": "x-token: sentinel\n",
+    "url-query": "curl https://x/ping?key=sentinel\n",
+    # Split so the fixture does not read as a real credential to gitleaks.
+    "basic-auth": "curl -u admin" + ":sentinel https://x\n",
+    "mysql": "mysql -psentinel db\n",
+    "slack": "WEBHOOK_URL: https://hooks.slack.com/services/T0/B0/sentinel\n",
 }
 
 
@@ -243,8 +257,9 @@ def test_a_file_holding_a_credential_is_withheld_whole(rig, capsys, kind) -> Non
 def test_a_secret_named_by_reference_is_printed(rig, capsys) -> None:
     path = rig.file(
         "registry-gc.sh",
-        'PUSH_TOKEN="sentinel"\ncurl "https://kuma/api/push/${PUSH_TOKEN}"\n'
-        "backup --password $PASS /srv\npassword: ${WIFI}\n",
+        'PUSH_TOKEN="$(cat /etc/kuma/token)"\ncurl "https://kuma/api/push/${PUSH_TOKEN}"\n'
+        "backup --password $PASS /srv\npassword: ${WIFI}\nPasswordAuthentication=no\n"
+        "# Usage: K3S_TOKEN=xxx k3s-install.sh\nImportCredential=login.*\n",
     )
     rc, out, _ = run(rig, capsys, "cat", path)
     assert rc == 0
@@ -253,6 +268,9 @@ def test_a_secret_named_by_reference_is_printed(rig, capsys) -> None:
         'curl "https://kuma/api/push/${PUSH_TOKEN}"',
         "backup --password $PASS /srv",
         "password: ${WIFI}",
+        "PasswordAuthentication=no",
+        "# Usage: K3S_TOKEN=<value> k3s-install.sh",
+        "ImportCredential=login.*",
     ]
 
 
@@ -319,7 +337,7 @@ def test_assignment_values_are_redacted_unless_plain(rig, capsys) -> None:
     rig.fake_output(
         "crontab",
         "MAILTO=root\nPATH=/usr/local/bin:/usr/bin\nTIMEOUT=30\nRUN=yes\nLAG=5min\n"
-        "API=sentinel-1\n0 * * * * curl https://x/ping?key=sentinel-2 >/dev/null\n",
+        "API=sentinel-1\n0 * * * * curl https://x/ping?mode=sentinel-2 >/dev/null\n",
     )
     rc, out, _ = run(rig, capsys, "crontab")
     assert rc == 0
@@ -330,7 +348,7 @@ def test_assignment_values_are_redacted_unless_plain(rig, capsys) -> None:
         "RUN=yes",
         "LAG=5min",
         "API=<value>",
-        "0 * * * * curl https://x/ping?key=<value> >/dev/null",
+        "0 * * * * curl https://x/ping?mode=<value> >/dev/null",
     ]
 
 
@@ -339,8 +357,9 @@ def test_a_unit_file_keeps_its_directives_and_redacts_its_environment(
 ) -> None:
     path = rig.file(
         "demo.service",
-        '[Service]\nType=oneshot\nUser=claude\nEnvironment="API_KEY=sentinel" N=3 '
-        'HOME=/root\nEnvironment="BROKEN=sentinel\nExecStart=/usr/bin/x --token=sentinel\n',
+        '[Service]\nType=oneshot\nUser=claude\nEnvironment="MODE=sentinel" N=3 '
+        'HOME=/root\nEnvironment="BROKEN=sentinel\nExecStart=/usr/bin/x --level=sentinel\n'
+        "KeyringMode=private\nFrobnicate=sentinel\n",
     )
     rc, out, _ = run(rig, capsys, "cat", path)
     assert rc == 0
@@ -348,9 +367,12 @@ def test_a_unit_file_keeps_its_directives_and_redacts_its_environment(
         "[Service]",
         "Type=oneshot",
         "User=claude",
-        "Environment='API_KEY=<value>' N=3 HOME=/root",
+        "Environment='MODE=<value>' N=3 HOME=/root",
         "Environment=<value>",
-        "ExecStart=/usr/bin/x --token=<value>",
+        "ExecStart=/usr/bin/x --level=<value>",
+        # A capitalised key outside DIRECTIVES is filtered like any assignment.
+        "KeyringMode=<value>",
+        "Frobnicate=<value>",
     ]
 
 

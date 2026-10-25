@@ -347,7 +347,11 @@ decide what the grant reaches are on the lander's approval list.
   root alone, and it must miss every pattern in `DENY`. `cat` also refuses a file with a second
   hard link. `/var/lib/gitops-deploy` is not a root, because `sys_user` owns it.
 - **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a
-  webhook URL, is withheld whole. In the rest, each `NAME=value` keeps its value only when the
-  value is a number, a duration, a boolean or an absolute path. Output stops at 256 KiB.
+  webhook URL, is withheld whole. So is output that gives a credential-named key, such as
+  `password`, `token` or `api_key`, a literal value after `=` or `:`. In the rest, each
+  `NAME=value` keeps its value only when the value is a number, a duration, a boolean or an
+  absolute path, except for the systemd directive names in `DIRECTIVES`. Output stops at
+  256 KiB. A refusal can be a false one: on daniel-server, 2 of the 204 files an unprivileged
+  user can read under the allowlist are refused.
 - **To take it back:** set `claude_code_rootq_enabled: false` and apply the role. The role
   removes the sudoers file, the shim and the script, in that order.
