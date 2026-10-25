@@ -82,3 +82,43 @@ def test_format_loki_routes_its_lines_through_the_redaction():
     out = metrics.format_loki(data)
     assert TOKEN not in out
     assert "_handle_signal_show_view" in out
+
+
+# Sonarr and Radarr log a failed Torznab call with its full URL, which carries Prowlarr's API key
+# as `apikey=<32 hex>` (#6276). Loki keeps the lines shipped before the Alloy stage for 744h, so
+# `probe.py loki-query` must redact them on the way out.
+APIKEY = "f" * 32
+
+TORZNAB_RECORD = (
+    "[Warn] Torznab: Tokyo Toshokan (Prowlarr) server is currently unavailable. "
+    f"http://prowlarr:9696/21/api?t=tvsearch&cat=5000&extended=1&apikey={APIKEY}"
+    "&offset=0&limit=100"
+)
+
+
+def test_torznab_apikey_is_redacted():
+    out = core.redact_log_secrets(TORZNAB_RECORD)
+    assert APIKEY not in out
+    assert "apikey=<redacted>" in out
+
+
+def test_an_upper_case_apikey_is_redacted():
+    key = "F" * 32
+    out = core.redact_log_secrets(TORZNAB_RECORD.replace(APIKEY, key))
+    assert key not in out
+
+
+def test_the_rest_of_the_torznab_record_is_printed():
+    out = core.redact_log_secrets(TORZNAB_RECORD)
+    assert APIKEY not in out
+    assert "Tokyo Toshokan (Prowlarr)" in out
+    assert "t=tvsearch" in out
+    assert "&offset=0&limit=100" in out
+
+
+def test_format_loki_redacts_the_torznab_apikey():
+    """The loki-query output path, over a Sonarr line shipped before the Alloy stage."""
+    data = {"data": {"result": [{"values": [["1761350400000000000", TORZNAB_RECORD]]}]}}
+    out = metrics.format_loki(data)
+    assert APIKEY not in out
+    assert "Torznab" in out

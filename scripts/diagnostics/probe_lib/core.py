@@ -469,16 +469,22 @@ def sops_extract(key_name):
 # `'refresh_token': None` does not.
 _LOG_SECRET_RE = re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}")
 
+# Sonarr and Radarr log a failed Torznab call with its full URL, which carries Prowlarr's API key
+# as `apikey=<32 hex>` (#6276). The Alloy stage strips it from new records; `loki-query` prints
+# the older ones through here.
+_APIKEY_RE = re.compile(r"(apikey=)[0-9a-fA-F]{32}")
+
 REDACTED = "<redacted>"
 
 
 def redact_log_secrets(text):
-    """Return `text` with credential values that HA logs replaced by `<redacted>`.
+    """Return `text` with credential values that HA and the *arr apps log replaced by `<redacted>`.
 
     Pure, so a test asserts what reaches stdout without stubbing the HTTP call. Operates on raw
     text rather than a parsed body, because `/api/error_log` is a plain-text log, not JSON.
     """
-    return _LOG_SECRET_RE.sub(rf"\g<1>{REDACTED}", text)
+    text = _LOG_SECRET_RE.sub(rf"\g<1>{REDACTED}", text)
+    return _APIKEY_RE.sub(rf"\g<1>{REDACTED}", text)
 
 
 def _rows_from_loki(data: dict) -> list[tuple[int, str]]:
