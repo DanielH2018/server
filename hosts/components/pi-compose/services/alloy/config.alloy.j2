@@ -4,7 +4,7 @@
 //
 // Scope is deliberately two sources. This is a Zero 2 W with 456 MB of RAM and measurable CPU
 // pressure at idle, so every target costs something real — see the resource notes in
-// docker-compose.yml.j2.
+// compose.yaml.j2 beside this file.
 //
 // The host JOURNAL is readable now and still not shipped. Promtail's arm64 build was a
 // journal stub; this image is not — measured 2026-09-02, loki.source.journal read 6,573
@@ -13,12 +13,12 @@
 // `probe.py alerts` needs, at ~576 lines/day against the journal's ~38k. Turning the journal
 // on is one `loki.source.journal` block with a relabel setting `job` (its default job label is
 // the component id) — not a capability gap any more. What decided against it is this
-// process's memory, not Loki volume: the RSS measurement is in this role's CLAUDE.md (#1922).
+// process's memory, not Loki volume: the RSS measurement is in compose.yaml.j2's header (#1922).
 //
 // Every label this file emits is a contract with the cluster's streams: `container`, `job`,
 // `machine`, `stream` — the same names the cluster shipper writes, so one LogQL query spans
 // the estate and `machine` tells the sources apart.
-// ansible/tests/services/test_alloy_pi_config_labels.py guards the set.
+// hosts/lib/tests/test_pi_compose_alloy.py guards the set.
 
 logging {
   // `warn`, not the default `info`: at info Alloy logs a line per discovery pass, which on a
@@ -26,7 +26,7 @@ logging {
   level = "warn"
 }
 
-// The HTTP server on 12345 is published to the LAN — docker-compose.yml.j2's `ports:` marker
+// The HTTP server on 12345 is published to the LAN — compose.yaml.j2's `ports:` marker
 // says why it has to be. Everything it serves besides /metrics is a control surface:
 // /-/reload re-reads the config and restarts components on an unauthenticated GET, the UI
 // renders the whole config graph, and /api/v0/component/ exposes each component's live state.
@@ -41,7 +41,9 @@ http {
   auth {
     basic {
       username = "alloy"
-      password = "{{ alloy_pi_http_password }}"
+      // The password reaches the container's environment from the project's Compose env file,
+      // so this config carries no secret and installs at mode 0644.
+      password = sys.env("ALLOY_PI_HTTP_PASSWORD")
     }
     filter {
       paths                       = ["/metrics"]
@@ -57,7 +59,7 @@ loki.write "homelab" {
     // host's IP for /loki/api/v1/push and nothing else, so every other path 404s by design.
     // The cert is the same *.local wildcard Traefik serves everywhere here, so it verifies
     // against the system trust store and needs no tls_config.
-    url = "https://loki-homelab.local.{{ domain }}/loki/api/v1/push"
+    url = "https://loki-homelab.local." + sys.env("HOMELAB_DOMAIN") + "/loki/api/v1/push"
     // Small batches, long timeout. The default 1 MB / 1s suits a busy node; here it just
     // holds more of a scarce heap, and the Pi's uplink is the slow half of the path.
     batch_size          = "64KiB"
@@ -142,7 +144,7 @@ loki.source.file "pi_health" {
 
 // crowdsec's off-cluster verify reads its evidence here (D5, *crowdsec's verify from outside
 // the cluster*, and its Open question 9, confirmed by the operator on 2026-10-18). The
-// crowdsec-edge-probe timer (roles/setup/k8s_host_files/tasks/crowdsec.yml) appends
+// crowdsec-edge-probe timer (hosts/components/crowdsec-probe/) appends
 // `<time> http=<code>` once a minute, and this stage counts each line by status. Prometheus
 // scrapes the counter straight off this container as `alloy-pi`, a pull to the Pi's LAN
 // address. The ban the verify places makes Traefik refuse every push from the Pi, so a Loki

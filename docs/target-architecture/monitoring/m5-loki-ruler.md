@@ -694,7 +694,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
   Each roster keeps at least one member, so none can pass on an empty set.
 - Rewrite the text that names a removed key as a live consumer: the comments in
   `test_check_loki.py` and the stream-label helper that call `LOKI_STREAM` the checked
-  selector, and the module docstring of `ansible/tests/services/test_alloy_pi_config_labels.py`,
+  selector, and the module docstring of `hosts/lib/tests/test_pi_compose_alloy.py`,
   which names `LOKI_PI_STREAM` where `LokiPiLogsSilent` now selects `{job="pi"}`.
 - Remove `"Kuma Notification Delivery"` and its comment from `EMAIL_TIER` in
   `ansible/tests/services/test_kuma_static_monitors.py`. The tile renders from the
@@ -1457,7 +1457,7 @@ offered. Refuted: none.
   `test_the_selector_roster_covers_the_known_selectors` also holds `HA_BAN_SELECTOR`, which
   stays. PR 4a names each roster and its remaining set, and the tree lists both test files. A
   `grep -rlE` for the six removed keys also found the module docstring of
-  `ansible/tests/services/test_alloy_pi_config_labels.py`, which names `LOKI_PI_STREAM`. PR 4a
+  `hosts/lib/tests/test_pi_compose_alloy.py`, which names `LOKI_PI_STREAM`. PR 4a
   rewrites it.
 - **M5-c3-04 (medium). The rules ConfigMap needed a `fileglob` the offline renderer lacks.**
   Fixed with a role default, `loki_homelab_rule_groups`, which `rules-configmap.yaml.j2` loops

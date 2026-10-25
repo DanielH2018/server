@@ -95,26 +95,12 @@ containers_list:
   # origin reporting node_*, and this host is excluded from both (HOST_METRIC_ORIGIN_EXCLUDE
   # in monitor-bridge's check.py) because check_pi_pressure already owns Pi disk and memory
   # against thresholds sized for a 456 MB box.
-  #
-  # Container logs to loki-homelab. Needs docker-proxy, which the package's `homelab` project runs
-  # (compose_services below): discovery goes through that read-only proxy rather than the raw
-  # Docker socket, and it needs the `proxy` network to reach it.
-  #
-  # Sized carefully — this is a 456 MB Zero 2 W. GOMEMLIMIT/GOMAXPROCS are set in the compose
-  # template and the cap is 96M; if the measured RSS sits near the cap rather than near
-  # 48 MiB, this host cannot afford a log shipper and the right answer is a syslog forwarder,
-  # not a bigger limit. Host logs are deliberately NOT shipped: rsyslog is inactive here.
-  - name: alloy
-    port: 12345
-    use_authelia: false
-    networks:
-      - proxy
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
 # A service lives in exactly one of this key and containers_list: Ansible's Docker play
 # deploys containers_list, and the package deploys this key. Entries keep containers_list's
-# field names. It holds the canary, docker-proxy (H5.6) and autoheal (H5.7). Every reader of the
-# Pi's services reads both keys and fails on a missing one, so keep the key even when it is
-# empty. The cluster templates that read it are named in
+# field names. It holds the canary, docker-proxy (H5.6), autoheal (H5.7) and alloy (H5.8). Every
+# reader of the Pi's services reads both keys and fails on a missing one, so keep the key even
+# when it is empty. The cluster templates that read it are named in
 # docs/target-architecture/host/h5-pi-compose.md (The service list).
 compose_services:
   # H5.2b's canary: a digest-pinned busybox that proves the package runs a service and that an
@@ -137,3 +123,18 @@ compose_services:
     networks:
       # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
       - lifecycle
+  # Container logs to loki-homelab. Needs docker-proxy, which the docker-proxy service file in this
+  # project declares, so its service file carries `depends_on: docker-proxy`: discovery goes
+  # through that read-only proxy rather than the raw Docker socket, and it needs the `proxy`
+  # network to reach it. Legacy entries: /home/ubuntu/server/containers/alloy/docker-compose.yml and
+  # /home/ubuntu/server/containers/alloy/config/config.alloy (project `alloy`).
+  #
+  # Sized carefully — this is a 456 MB Zero 2 W. GOMEMLIMIT/GOMAXPROCS are set in the service
+  # file and the cap is 128M; if the measured RSS sits near the cap rather than near
+  # 48 MiB, this host cannot afford a log shipper and the right answer is a syslog forwarder,
+  # not a bigger limit. Host logs are deliberately NOT shipped: rsyslog is inactive here.
+  - name: alloy
+    port: 12345
+    use_authelia: false
+    networks:
+      - proxy
