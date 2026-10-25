@@ -1,6 +1,6 @@
 """Rule 9 of the block-footguns guard: `deploy.sh --skip-staleness-check` typed as a command.
 
-Its own file because test_block_footguns.py sits at the 500-line test cap; the loader is
+Its own file because test_block_footguns.py reached its line cap; the loader is
 the same, so `_mod` here is the same hook module.
 
 Run: uv run pytest .claude/hooks

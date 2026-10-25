@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the SessionStart banner's remote fan-out lines.
 
-Split from test_session_health.py (which sits at 492 of a 500-line ceiling) rather than
+Split from test_session_health.py (then at 492 of a 500-line ceiling) rather than
 grown in place. Covers `remote_fanout_lines()`, which reads
 `~/.claude/fanout/<run-id>.json` manifests so the banner can name a fan-out worktree that
 `git worktree list` cannot see because it was created on the other host.

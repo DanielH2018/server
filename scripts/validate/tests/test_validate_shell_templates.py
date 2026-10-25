@@ -74,6 +74,7 @@ def test_discover_templates_finds_the_known_set():
         "rkhunter-check.sh.j2",
         "docs-refresh.sh.j2",
         "eval-run.sh.j2",
+        "worktree-sweep.sh.j2",
         "pi-sd-health.sh.j2",
         "pi-gz-integrity.sh.j2",
         "pi-recovery-health.sh.j2",

@@ -29,12 +29,11 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from _helpers import ANSIBLE
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
+from lib.repo_paths import REPO
 
-SCRIPT = rendered_shell_text("setup", "initial_setup", "docs-refresh.sh.j2")
-CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
+SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
 
 # The functions this module sources. Named rather than globbed: a rename would otherwise leave
 # every test below sourcing an empty string and passing on nothing at all.
@@ -472,19 +471,22 @@ def test_the_capture_runs_before_the_restore_on_the_commit_failure_path():
     ), branch
 
 
-def test_the_stamp_directory_is_created_and_writable_by_the_cron_user():
-    """The whole fix is inert if the stamp cannot be written: `mkdir -p` under a root-owned
-    0755 /var/lib/homelab fails as the cron user, and every failure path swallows that.
-    """
-    block = CRONS[CRONS.index("Create the docs-refresh state directory") :]
-    block = block[: block.index("\n- name:")]
-    assert f"path: {STAMP_DIR}" in block
-    assert 'owner: "{{ sys_user }}"' in block, (
-        "the docs-refresh cron runs as sys_user without become — a root-owned stamp directory "
+def test_the_stamp_directory_is_created_and_writable_by_the_service_user():
+    """The fix is inert if the stamp cannot be written, and every failure path swallows that."""
+    tmpfiles = (
+        REPO / "hosts/components/docs-refresh/tmpfiles.d/homelab-docs-site.conf.j2"
+    ).read_text()
+    line = next(
+        (ln for ln in tmpfiles.splitlines() if STAMP_DIR in ln and ln.startswith("d ")),
+        None,
+    )
+    assert line, f"no tmpfiles d line creates {STAMP_DIR}"
+    assert re.search(r"0755 \{\{ sys_user \}\} \{\{ sys_user \}\} -$", line), (
+        "the docs-refresh service runs as sys_user — a root-owned stamp directory "
         "makes every mark_commit_failed a silent no-op"
     )
     assert STAMP_DIR in SCRIPT, (
-        "the script and the task no longer agree on the stamp path"
+        "the script and the tmpfiles file no longer agree on the stamp path"
     )
 
 

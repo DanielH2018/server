@@ -1,10 +1,43 @@
-# daniel-box's host package (H6.2). It starts with `reconcile` only. daniel-box runs k3s and the
-# deployer, and no path moves out of Ansible's hands in this version: the builder, the
-# repository and every daniel-box timer stay with Ansible until H7
-# (docs/target-architecture/host/h6-k3s-suc.md, *Steps, as PRs*, item 5).
+# daniel-box's host package. H6.2 shipped `reconcile` only. H6.3b adds the windowed k3s restart
+# (docs/target-architecture/host/h6-k3s-suc.md, *Steps, as PRs*, item 7) and, with it, the first
+# credential: the secrets unit decrypts `k3s_readonly_token` into /run/credstore, and
+# homelab-k3s-restart loads it to read the API. ansible/vars/hosts/daniel-box.sops.yaml carries
+# every key this tree names, and `host_secrets.py sync daniel-box` rewrites it (operator-only).
 #
-# The package carries no credential, so it has no `secrets-unit` and no
-# ansible/vars/hosts/daniel-box.sops.yaml. H6.3b adds both with the first daniel-box key.
+# H7.33 adds the UPS secondary (hosts/components/nut-secondary): its watchdog unit loads
+# `ups_secondary_push_token`, and its upsmon.conf output reads `nut_monitor_password`, both from
+# the same SOPS file.
+#
+# The builder, the repository and every daniel-box timer stay with Ansible until H7. The
+# `windowed` mark for k3s.service arrives in H6.4a with the first k3s.service drop-in, because the
+# renderer refuses a unit policy that no package installs or drops in on (item 5, Amended
+# 2026-10-24).
+#
+# The restart window is `k3s_restart_window` in ansible/inventory/host_vars/daniel-box.yml, which
+# sits above the component's defaults (H3, *Component variables*). A package-level `defaults:` map
+# reaches only the package's own files, never a component's.
 description: daniel-box's homelab host package
-components: [reconcile]
+components:
+  - reconcile
+  - secrets-unit
+  - k3s-restart
+  - kuma-push
+  - nut-secondary
+  - check-lib
+  - docs-refresh
+  - infra-map
+  - eval-sweep
+  - worktree-sweep
+  - secret-rotation
+  - loki-route-witness
+  - apt-github-cli
+credentials:
+  - k3s_readonly_token
+  - ups_secondary_push_token
 maintainer_scripts: [preinst, postinst, prerm]
+# H7.24a: nfpm, for the builder this host runs.
+depends:
+  - homelab-tools
+files:
+  # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).
+  - {src: tmpfiles.d/homelab-k3s-restart.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-restart.conf}

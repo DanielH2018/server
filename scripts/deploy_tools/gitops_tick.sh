@@ -98,7 +98,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h | --help)
-      awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"
+      awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
       exit 0
       ;;
     *)

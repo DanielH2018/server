@@ -69,7 +69,7 @@ from diagnostics.probe_lib.releases_format import (  # noqa: E402
 )
 
 # The one rule that has to read a diff rather than a path lives in its own module, for the
-# reason the renderers do: this one is at the 600-line cap.
+# reason the renderers do: this one reached its line cap.
 from diagnostics.probe_lib.releases_diff import drop_check_mode_only  # noqa: E402
 from diagnostics.probe_lib.releases_diff import drop_comment_only_defaults  # noqa: E402
 

@@ -9,7 +9,7 @@ change never touched.
 owns which tags a path set proves are k3s. This owns whether `deploy_by_host` hands the subset
 over, through both of its reads.
 
-Split from test_land_deploy.py, which sits at its line cap.
+Split from test_land_deploy.py when it reached its line cap.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy_platform_routing.py
 """

@@ -37,7 +37,7 @@ _sys.path.insert(0, str(ANSIBLE_TESTS))
 from _helpers import REPO
 from lib.cli_help import ArgumentParser
 from _ratchet import Ratchet, parse_allowlist, tighten
-from _ratchet_census import LENGTHS, PATCHES, line_counts, monkeypatch_counts
+from _ratchet_census import LENGTHS, PATCHES, code_line_counts, monkeypatch_counts
 
 
 def changes(before: str, after: str) -> list[str]:
@@ -73,7 +73,10 @@ def main() -> int:
     args = parser.parse_args()
 
     edited = False
-    for ratchet, counts in ((LENGTHS, line_counts()), (PATCHES, monkeypatch_counts())):
+    for ratchet, counts in (
+        (LENGTHS, code_line_counts()),
+        (PATCHES, monkeypatch_counts()),
+    ):
         found = tighten_list(ratchet, counts, write=args.tighten)
         if found:
             edited = True

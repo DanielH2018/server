@@ -1,0 +1,14 @@
+{
+  "checksum": "4d39250b97be0117d393b77638d099fa14152e4e02be01b0398f77ab35ba208c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/nut_host/CLAUDE.md#Where the work went",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/nut/CLAUDE.md": "cbe7846e40000e742f0e2983e73f780dbcbe07567222baebf8ca34d4f7aff5c7",
+      "ansible/roles/k8s/nut/defaults/main.yml": "28e5abeb0b7dfcd3879b9441f88e25807c45c224c7aca2790af4a4c95fe54a1d",
+      "hosts/components/nut-secondary/": "ee3c4ee71ee6f233830c9c3fee79ced4f9100f62b22943dd1fe4762b9867eea2"
+    },
+    "python": "3.14",
+    "verified_sha": "eab40596f"
+  }
+}

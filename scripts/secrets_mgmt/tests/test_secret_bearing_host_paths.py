@@ -35,25 +35,15 @@ from secrets_mgmt.secret_bearing_host_paths import (
     secret_names,
 )
 
-# Path -> a secret name the census MUST report for it. Three entries chosen to span the shapes
-# the derivation has to cover, so a narrowing cannot survive by keeping one of them:
-#   * secret-rotation-audit.sh — the incident the module's docstring records (roles/setup/)
-#   * ups-secondary-health.sh  — setup/nut_host, a role initial_setup.yml alone applies (the
-#     "not just k8s" shape).
-#     Matched on a COMMENT mention: the script renders nothing and reads the endpoint out of
-#     /etc/nut/upsmon.conf at runtime. Kept deliberately — the census errs toward denying, and
-#     narrowing the matcher to Jinja expressions would drop a read-deny and this anchor with it
-#     The no_log census (ansible/tests/repo/) matches Jinja-only because a false hit
-#     there demands a task change, not a prompt. Its name is not `*_push_token`, so the
-#     census cannot silently narrow to push-token-shaped matches and still pass.
-#   * secret-rotate.sh — its only reason to be in the census is `secret_rotation_push_token`,
-#     so nothing else pins the path.
+# Path -> a secret name the census MUST report for it. Entries chosen to span the shapes
+# the derivation has to cover:
+#   * github-ruleset-drift.sh — a gitops_deploy script that embeds a push token. The module's
+#     docstring records the incident on secret-rotation-audit.sh, which H7.36 moved to a host
+#     package and which now reads its token from a credential, so it left the census.
 # The NAME is pinned alongside the path deliberately: a path survives a `GENERIC_NAMES` entry
 # or a tier flipped to `ignore` while losing the very name that made it dangerous.
 MUST_FIND = {
-    "/usr/local/bin/secret-rotation-audit.sh": "secret_rotation_push_token",
-    "/usr/local/bin/ups-secondary-health.sh": "nut_monitor_password",
-    "/usr/local/bin/secret-rotate.sh": "secret_rotation_push_token",
+    "/usr/local/bin/github-ruleset-drift.sh": "ruleset_drift_push_token",
 }
 
 # The hook's own copy of the prefix list. It short-circuits on this before importing anything,
@@ -115,7 +105,7 @@ def test_the_generic_address_name_is_not_tracked_but_its_password_is():
     """`email` is an address, so it is tiered `ignore` rather than listed in GENERIC_NAMES.
 
     The pair is the point. `email` word-matches in any script mentioning an address —
-    it reached `/usr/local/bin/secret-rotate.sh` through a `git -c user.email=` line that
+    it reached the secret-rotation script through a `git -c user.email=` line that
     embeds no credential — so a census that tracks it teaches sessions the guard is noise.
     `smtp_notify_app_password` is the value that actually authenticates that SMTP session and
     must stay tracked, so a sweep that tiered the whole SMTP family `ignore` fails here.
@@ -131,11 +121,11 @@ def test_tiering_the_address_did_not_drop_its_script_from_the_census(real_census
     `MUST_FIND` already pins the path; this says why it is there, and fails with the reason
     rather than with a missing-key diff if a later change removes the push token too.
     """
-    reported = real_census.get("/usr/local/bin/secret-rotate.sh", ())
+    reported = real_census.get("/usr/local/bin/github-ruleset-drift.sh", ())
     assert "email" not in reported
-    assert "secret_rotation_push_token" in reported, (
-        "secret-rotate.sh left the census; the hook now permits a content-printing read of a "
-        "script that renders a push token inline"
+    assert "ruleset_drift_push_token" in reported, (
+        "github-ruleset-drift.sh left the census; the hook now permits a content-printing read "
+        "of a script that renders a push token inline"
     )
 
 

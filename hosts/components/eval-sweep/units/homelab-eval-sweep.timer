@@ -1,0 +1,12 @@
+# Shipped by homelab-daniel-box with its enable link. Sunday 02:00, the cron's slot: well ahead of
+# the 07:30 weekly reboot, so a slow multi-agent sweep is never killed mid-run by it. Not
+# Persistent=: a sweep missed while the host was down is not caught up, as with the cron.
+[Unit]
+Description=Run the weekly homelab eval sweep on Sunday at 02:00
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

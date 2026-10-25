@@ -81,7 +81,7 @@ NAMED_MEMBERS = [
     ("template", "Install the lander unit"),
     ("template", "Pin the node's LAN address in netplan"),
     ("get_url", "Download and install SOPS binary"),
-    ("systemd_service", "Enable and start the host upsmon service"),
+    ("systemd_service", "Disable the legacy performance-governor unit (daniel-server)"),
     ("sysctl", "Apply kernel security hardening"),
     ("ufw", "Enable UFW firewall"),
 ]

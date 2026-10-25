@@ -7,6 +7,7 @@ the I/O shell (renovate_notify.py) only fetches, persists, and posts.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -205,6 +206,43 @@ def parse_automerge(body: str) -> bool:
     Absent/unknown -> False, so classify_pr() surfaces it as `manual` (fail toward surfacing).
     """
     return "Automerge**: Enabled" in (body or "")
+
+
+# The check-runs page walk's size and cap, equal to deploy_git's (a parity test holds them).
+CHECK_PAGE_SIZE, CHECK_PAGES_MAX = 100, 20
+
+
+def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:
+    """Every entry of `key` across a paged GitHub listing, walked as `deploy_git.read_check_pages`.
+
+    GitHub answers a check-runs or combined-status GET with no `per_page` with one page of 30,
+    so a failing entry past it read as green and the digest dropped a PR whose CI was failing
+    (#6002). Both bodies carry `total_count` beside their list. The notifier
+    cannot import `deployer_lib`, so this is a copy, held equal by
+    `tests/test_renovate_notify.py`. `fetch_page(query)` returns the parsed body for the
+    `?per_page=&page=` string this walk builds. A read short of `total_count` raises rather
+    than returning a partial list: the run fails, which pages through `OnFailure=` and the
+    missed alive beat, instead of posting a digest that omits a failing PR.
+
+    Raises:
+        ValueError: a body without a `key` list or an integer `total_count`, a short read, or
+            more than CHECK_PAGES_MAX pages.
+    """
+    found: list[dict] = []
+    for page in range(1, CHECK_PAGES_MAX + 1):
+        body = fetch_page(f"?per_page={CHECK_PAGE_SIZE}&page={page}")
+        entries = body.get(key) if isinstance(body, dict) else None
+        total = body.get("total_count") if isinstance(body, dict) else None
+        if not isinstance(entries, list):
+            raise ValueError(f"{key} page {page}: the body has no {key} list")
+        if not isinstance(total, int) or isinstance(total, bool):
+            raise ValueError(f"{key} page {page}: the body has no total_count")
+        found.extend(entries)
+        if len(entries) < CHECK_PAGE_SIZE or len(found) >= total:
+            if len(found) < total:
+                raise ValueError(f"{key}: read {len(found)} of {total}")
+            return found
+    raise ValueError(f"{key}: more than {CHECK_PAGES_MAX} pages")
 
 
 def ci_rollup(check_runs: list[dict], statuses: list[dict]) -> str:

@@ -1,5 +1,5 @@
 {
-  "checksum": "bb76332fcc4c09dbcb681bbae23fddf42342ca69132c99ffd1476b74e02cc7ff",
+  "checksum": "28432050de9203f0c864ecbb3b087fdec929819bdeb87e30ee4c15a136840eb9",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k8s_host_files/CLAUDE.md#What it holds",
   "row": {
@@ -11,9 +11,10 @@
       "ansible/tests/setup/test_k8s_host_files_render.py": "59899b9c8f498b760641e55c1bc0de8c402ce6dade780130a4bc59e8711dedd1",
       "ansible/tests/setup/test_k8s_host_files_rows.py": "a3d62c69e3322e4ae0cd598b77fb133dab3a7ef9f3f0bf44637903a437ff9c39",
       "ansible/tests/setup/test_setup_cross_role_reads.py": "c2f854a253fff368c00a3b1d673287739e63bf312f1a677522395ea9566fe25b",
-      "hosts/components/crowdsec-probe/": "2922c6c83b4b37d7f48683f222dc5897af5d49dc27959fa678d8745764b421c8"
+      "hosts/components/crowdsec-probe/": "2922c6c83b4b37d7f48683f222dc5897af5d49dc27959fa678d8745764b421c8",
+      "hosts/components/docs-refresh/": "f6bdb22c998ccf4d1b8b7a0bd3d9ba109c7fe1cccbd01c47093e758b26d957e7"
     },
     "python": "3.14",
-    "verified_sha": "37f64931b"
+    "verified_sha": "eab40596f"
   }
 }

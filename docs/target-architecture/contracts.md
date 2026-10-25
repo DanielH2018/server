@@ -31,6 +31,7 @@ merged.
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
 | D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. littlelink's flux PR also M6's B-1e. monitor-bridge's flip also M6's A6-7a, live. No flip waits on M6's C-1: the operator ruled on 2026-10-21 that uptime-kuma flips with janitorr and jellyfin, and M6's Phase C works on flux-owned roles (#5821) |
 | D6 | Delete the old deploy path; ADR superseding 0010 | D5, and M6's C-2b, live. D6.11 needs only D5.1a2 and D5's flux PR; #5425 dropped D6.10 |
+| D7 | Superseding promotions | D5, through #5704's soak fix |
 | M1 | Alertmanager and its watcher | — |
 | M2 | One bridge family to rules | M1 |
 | M3 | One host timer to the textfile collector | M1. The cutover also M2's PR 3 |
@@ -319,6 +320,20 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   `DECIDED: a verification in flight is guarded by two checks`. Any other job that moves
   `prod` or `last-good`, such as D5's `reset_to_last_good` dispatch, must hold both checks
   true or state why it may break them. *The reset input* holds both.
+- **A superseding promotion** (D7). With `promote.SUPERSEDE` on, `decide` may promote T over
+  P, `prod`'s commit, while P's verification is in flight, instead of waiting.
+  `promote_lib/supersede.py` holds the conditions: `DEPLOY_HOLD` reads `none`, `prod` is
+  not the `held` or the `superseding` digest, P has no failure yet, T's own change is
+  disjoint from P's changed set, neither touches `longhorn`, `flux` or `cluster-vars` nor
+  widened, and T names no forward-only tag or snapshot role. Any failed condition leaves
+  the wait above in place.
+    - T's changed set, its record of statuses and its reboot-window timeout are taken
+      against `last-good` rather than `prod`, so T's verification covers P's changes too.
+    - `tag` tags T `superseding` before it moves `prod`, so a verification is superseded at
+      most once.
+    - A verdict on T counts only while `prod` names T's digest. P's `verify` prints
+      `superseded` once `prod` moves past it, and `settle` writes neither `last-good`, the
+      hold, `held` nor the reset for a run whose T `prod` no longer names (D7.1, D7.2).
 - **The reset input.** A `reset_to_last_good` dispatch input moves `prod` to `last-good` and
   does nothing else. It runs in its own concurrency group, `promote-reset`, and ignores the
   reboot window. It refuses unless `DEPLOY_HOLD` holds a hold: `none`, an empty value and a
@@ -512,8 +527,11 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 - **Package names:**
   - `homelab-<hostname>`, one per host;
-  - `homelab-updater`, the pull timer;
-  - `homelab-repos`, the third-party apt sources and keyrings.
+  - `homelab-updater`, the pull timer.
+
+  The third-party apt sources and keyrings ship in the host packages that use them, as the
+  `apt-docker`, `apt-azlux` and `apt-github-cli` components (operator ruling, 2026-10-24). No
+  shared `homelab-repos` package exists, because no source is used by every host.
 - **Version.** `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`,
   with `Architecture: all`. `<chosen>` is the commit the builder builds: the newest commit on
   `origin/master`'s first-parent chain with a green CI verdict, which can be older than the
@@ -1293,6 +1311,11 @@ Applied to this page:
   `service="observability"` alongside it. This clears the gate before M2's PR 4b merges.
 
 ### Applied requests (2026-10-24)
+
+- **Superseding promotions** (D7 *Requested amendment*). C2 gains *A superseding
+  promotion*. The operator approved D7 as planned on 2026-10-24, which clears the gate
+  before D7.5 merges. The request on the shape of `verify` stays open; if `verify` changes
+  shape, the `superseded` read moves with it.
 
 - **A prune exemption for a ConfigMap that holds state no render restores** (H2 Open
   question 12). C3 *Prune exemptions* gains "and a ConfigMap that holds state no render

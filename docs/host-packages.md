@@ -44,11 +44,14 @@ lists.
 - `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats.
 - `homelab-daniel-server` ships reconcile, the secrets unit, the `kuma-push` component and the
   UPS shutdown chain.
-- `homelab-daniel-box` (H6.2) ships reconcile and nothing else. It carries no credential, so it
-  has no secrets unit and no `ansible/vars/hosts/daniel-box.sops.yaml`. Ansible keeps the builder,
-  the repository and every daniel-box timer until H7, and the deployer keeps k3s's files until
-  H6.4a. To remove the package before H6.4a, run `sudo apt-get remove homelab-daniel-box`. After
-  H6.4a the package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
+- `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
+  `k3s-restart` component. Its one credential is `k3s_readonly_token`, which
+  `ansible/vars/hosts/daniel-box.sops.yaml` carries. Ansible keeps the builder, the repository and
+  every other daniel-box timer until H7, and the deployer keeps k3s's files until H6.4a. To
+  remove the package before H6.4a, run `sudo apt-get remove homelab-daniel-box`. After H6.4a the
+  package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
+  daniel-server's package does not ship the component yet, so a k3s-agent restart there stays a
+  hand step.
 
 ## The restart contract
 
@@ -63,8 +66,22 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   restarts them.
 - **`windowed` units.** Reconcile neither starts nor restarts a unit the manifest marks
   `windowed` (`k3s.service` and `k3s-agent.service`, once H6 marks them). Its queue entry is
-  dropped. The two processes that restart such a unit do not exist yet; H6.3b adds them and their mutual
-  exclusion to this page.
+  dropped. Two other processes restart such a unit, each under its own condition
+  ([the H4 plan](target-architecture/host/h4-secrets-unit.md), *The restart contract*):
+    - **SUC's upgrade container** restarts it after replacing the binary. It runs when `promote`
+      applies a changed Plan, behind the Plan's `prepare` gates, outside any window.
+    - **`homelab-k3s-restart.service`** (the `k3s-restart` component, H6.3b) restarts it inside
+      the host's `k3s_restart_window`, once per changed hash of the files the package ships for
+      the unit. It runs behind `k3s_gates.py host` and makes one attempt per hash. A package
+      that lists the component declares the credential `k3s_readonly_token`.
+    - **The two exclude each other on a node.** `prepare` refuses while
+      `/run/homelab-k3s-restart/` exists, which the unit's `RuntimeDirectory=` creates. The unit
+      refuses while a Plan is applying or a SUC Job in `system-upgrade` has no `Complete` or
+      `Failed` condition.
+    - **To pause the window**, run `sudo systemctl mask --now homelab-k3s-restart.timer`. To
+      resume, `unmask` it and `start` it. **To retry a failed attempt**, remove
+      `/var/lib/homelab-k3s-restart/failed.sha256`. A k3s that a failed restart left down is
+      restarted by hand (H6, *Rollback*), because the unit's gates need the API.
 - **The restart set.** Before step 2, reconcile builds one set from the units whose file or
   drop-in changed and the units in `pending.json`. A unit enters it only when it is enabled or
   active. Step 2 starts every other enabled unit that is not active. Step 3 restarts the set.
@@ -96,7 +113,9 @@ changes. The grammar and the validations are the docstring of
   action on a unit the manifest marks `manual` or `windowed`, records the unit's `InvocationID`
   in `applied.json`. The record clears when the unit restarts. Reconcile writes both states to
   `homelab_host_reboot_pending{host}` and `homelab_host_activation_pending{host,unit}` in
-  `homelab_host_reconcile.prom`, beside the updater's `homelab_host.prom`.
+  `homelab_host_reconcile.prom`, beside the updater's `homelab_host.prom`. While the flag
+  exists, `homelab_host_reboot_pending_since_seconds{host}` carries its mtime, the time the
+  host first owed the reboot; a later reboot-class change leaves it alone.
 - **Drift is not a failure.** `homelab_host_reconcile_drift{host,arm}` counts items an arm
   left alone on purpose: UFW rules the floor kept, libvirt objects a running guest still
   references, users the floor kept, and legacy services that are still running.

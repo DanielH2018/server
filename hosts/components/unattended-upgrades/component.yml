@@ -1,0 +1,16 @@
+# Periodic and unattended apt upgrades (H7.6a, docs/target-architecture/host/h7-delete-ansible.md).
+# initial_setup's `Enable periodic unattended security upgrades` and `Set local
+# unattended-upgrades policy` tasks wrote these two files with `copy`. No package lists either
+# path (`dpkg -S` on daniel-pi), so dpkg takes the files over on unpack and no legacy entry is
+# needed.
+#
+# The local policy keeps its extra origins in Origins-Pattern with the `::` append form, for the
+# two reasons the Ansible task's comment gave: Allowed-Origins matches only a repo that publishes
+# a `Suite:` field, and a `{ ... }` block reads like a replacement that would drop the -security
+# pocket. The list is `unattended_upgrades_origins_patterns` in group_vars/all.yml.
+#
+# After a change, `apt-config dump` must still list -security under Allowed-Origins and the extras
+# under Origins-Pattern. No daemon reads these files at start, so no file carries `activate:`.
+files:
+  - {src: templates/20auto-upgrades, dst: /etc/apt/apt.conf.d/20auto-upgrades}
+  - {src: templates/52unattended-upgrades-local.j2, dst: /etc/apt/apt.conf.d/52unattended-upgrades-local}

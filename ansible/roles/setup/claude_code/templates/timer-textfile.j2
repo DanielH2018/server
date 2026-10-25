@@ -1,0 +1,27 @@
+{#- The textfile line each claude_code timer's service writes after a clean run (#6165).
+
+A timer that stops firing pages nothing through OnFailure=, and node_exporter's systemd
+collector is off, so the file this line writes is the only signal that the timer still runs.
+`ansible/roles/k8s/observability/files/rules/host-checks.yaml` reads it as `<Check>NotReporting`.
+
+ExecStartPost= runs only after ExecStart= succeeds, so the file only ever says success 1: a
+crash writes nothing and is paged by OnFailure=. The `+` runs the line as root past the unit's
+User= and sandboxing, because only root writes the textfile directory. `%%s` keeps systemd from
+expanding `%s` to the user's shell.
+
+The deadline is two timer periods plus `slack_s` plus 300s (M3's rule,
+docs/target-architecture/monitoring/m3-textfile-timer.md). One period is the normal gap, the
+second covers one failed or skipped run, `slack_s` is the longest legitimate run, and the 300s
+covers the 1m `node` scrape and the 1m rule evaluation. `period` is an `<N>min` timespan. Any
+other shape fails the render rather than publish a guessed deadline.
+`ansible/tests/setup/test_claude_timer_rule_literals.py` pins each rule's literals to the render.
+-#}
+{% macro timer_textfile(check, period, slack_s=0) -%}
+{%- set _minutes = period | string | regex_replace('^([0-9]+)min$', '\\1') -%}
+{%- if _minutes.isdigit() and _minutes ~ 'min' == period | string -%}
+{%- set _period_s = 60 * (_minutes | int) -%}
+{%- else -%}
+{%- set _period_s = claude_code_timer_period_not_minutes | mandatory('the ' ~ check ~ ' timer period must be <N>min to derive its textfile deadline, got ' ~ period) -%}
+{%- endif -%}
+ExecStartPost=+/usr/bin/env -i PATH=/usr/bin:/bin /bin/bash -c 'source /usr/local/lib/homelab-check-lib.sh && write_check_textfile {{ check }} 1 "$(date +%%s)" {{ 2 * _period_s + slack_s + 300 }} || logger -t {{ check }} "textfile write failed (homelab-check-lib.sh missing or the textfile directory unwritable)"'
+{%- endmacro %}

@@ -31,6 +31,10 @@ k3s_readonly_crd_api_groups:  # noqa var-naming[no-role-prefix]
   # endpoint, folder and region but no keys (those stay in the root-only etcd S3 env file under
   # /etc/rancher/k3s), and an Addon records a manifest's path and checksum.
   - k3s.cattle.io
+  # system-upgrade-controller's Plans. `k3s_gates.py host` reads them to refuse a restart while
+  # a Plan is applying (H6.3b). The template grants `resources: ["*"]`, which also covers the
+  # group's only other resource, and both are read-only and hold no credential.
+  - upgrade.cattle.io
 
 # The inert ConfigMap that proves the `kustomize.toolkit.fluxcd.io/reconcile=disabled`
 # annotation (templates/skip-probe-configmap.yaml.j2).

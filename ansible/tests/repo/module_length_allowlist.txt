@@ -1,41 +1,42 @@
-# Modules over their line cap.
+# Modules over their code-line cap.
 #
-# Format: `<repo-relative-path> <max_lines>`, one line per file, in `LC_ALL=C sort` order
-# (codepoint order, which is what Python's own `sorted()` gives). Caps are 600 lines for a
-# module and 500 for a test module; a line here raises the bar for that one file. An entry may
+# Format: `<repo-relative-path> <max_code_lines>`, one line per file, in `LC_ALL=C sort` order
+# (codepoint order, which is what Python's own `sorted()` gives). Caps are 450 code lines for
+# a module and 400 for a test module; a line here raises the bar for that one file. An entry may
 # only fall or be deleted -- ansible/tests/repo/test_module_length_ratchet.py enforces that
 # against origin/master. A file back at or under its cap must lose its line; the list records
 # remaining work and the conjoined modules below, nothing else.
 #
 # A path may be ADDED when origin/master does not track the file (it is new, or renamed),
-# when the same commit changes the guard itself (a widened rule finds files that were always
-# over), or when the line ends with a stated reason: `<path> <max>  # conjoined: <why>`.
+# when the same commit changes the guard itself and does not edit the file (a widened rule
+# finds files that were always over), or when the line ends with a stated reason:
+# `<path> <max>  # conjoined: <why>`. The reason names one line count at most: the max it
+# approves. The earlier raises are in the commit history, not on the line.
 #
 # DECIDED: the cap prompts a decision; it does not force a split (#3661, operator ruling
 # 2026-10-09). Split a module over the cap when each piece reads alone. When every split
 # would leave a piece conjoined with its parent, so that it calls methods only the parent
 # defines or copies a literal it may not import, list the module with a `conjoined:` reason
 # instead. The reason has to be on the entry's own line. A conjoined entry rises only in a
-# diff that rewrites its reason to name the new max, so growth past it restates the decision. Why: such a split
-# adds an interface and hides nothing, and each one made here added a module, often a copied
-# literal, and a test comparing the copies. What is given up is that every long module awaits a
-# split; what is kept is that every long module states why it is long.
+# diff that rewrites its reason to name the new max, so growth past it restates the decision.
+# Why: such a split adds an interface and hides nothing, and each one made here added a
+# module, often a copied literal, and a test comparing the copies. What is given up is that
+# every long module awaits a split; what is kept is that every long module states why it is long.
 # docs/python-code-organization.md has the long form.
 #
-# Line count is `wc -l` semantics -- the number of newline characters:
-#   wc -l <path>
-ansible/roles/k8s/artifacts/tests/test_artifact_server.py 515
-ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 585
-ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 585
-ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 567
-ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py 641  # conjoined: the hold, alert-slot and k8s-owed methods read and write only through read/write, which this class alone defines (three mixins until #3661)
-ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 533
-ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 552
-ansible/tests/setup/test_cron_scripts_publish_via_pr.py 663
-hosts/lib/k3s_gates.py 648  # conjoined: the host-side checks, the cluster checks and the modes share ReadError, Getter and the API path constants, and the script ships as the single stdlib file /usr/lib/homelab/k3s_gates.py, so a second module would be a second file every Plan's prepare and the restart unit must find
-scripts/backup/tests/test_longhorn_reap_logic.py 668
-scripts/deploy_tools/tests/test_deploy_detach_notify.py 506
-scripts/dev/fanout_lib/review/review.py 655  # conjoined: the red phase and green gate read the pipeline state and call _claude, _git and the argv builders only Pipeline defines (the RedPhase mixin until this entry); reaping every test run it starts took it to 663 (#4508); moving the hold reports and the CI wait out took it to 647 (#4737); the green-gate contest and the issue subjects took it to 655 (#5400), with the contest rules in green_contest
-scripts/lib/exit_codes.py 817  # conjoined: each family's constants and its CONTRACTS row are held to each other by test_exit_codes.py, so a family split out would import _c and Code from here and CONTRACTS would import it back; the readers of CONTRACTS live in exit_messages.py. The shadow_diff.py family took it to 807, and deploy.sh's exit 5 (DEPLOY_FLUX_OWNED, D2.1b) to 817
-scripts/renderer/renderer_lib/bundle.py 622  # conjoined: 622 since H6.1b added the healthCheckExprs field to tag_kustomization; homelab_namespace_files, D5's namespace PR, calls tag_kustomization and kustomization_text, which only this module defines, and bundle_files calls it for every bundle, so moving it out is the deferred import cycle soak.py already needs (ALLOWED_CYCLES in test_scripts_import_direction.py)
-scripts/renderer/tests/_job_census.py 502  # conjoined: every row reads the census's private _annotations, _containers and _configmap_docs, so a split module would only re-export them
+# A code line holds a token that is neither a comment nor part of a docstring
+# (`code_lines` in ansible/tests/_ratchet.py). Blank lines, comments and docstrings are free.
+# `uv run python scripts/dev/tighten_ratchets.py --tighten` lowers each entry to its file.
+ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 409
+ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 450
+ansible/tests/k8s/_workload_property_rows.py 401
+ansible/tests/repo/test_census_rows_roles.py 414
+ansible/tests/repo/test_census_rows_text.py 416
+evals/ablate.py 456
+hosts/lib/k3s_gates.py 477  # conjoined: the host-side checks, the cluster checks and the modes share ReadError, Getter and the API path constants, and the script ships as the single stdlib file /usr/lib/homelab/k3s_gates.py, so a second module would be a second file every Plan's prepare and the restart unit must find
+scripts/backup/tests/test_longhorn_reap_logic.py 441
+scripts/deploy_tools/narrow_lib/order_only_runner.py 508
+scripts/deploy_tools/tests/test_digest_covers.py 435
+scripts/diagnostics/probe_lib/cli_parser.py 501
+scripts/lib/exit_codes.py 641  # conjoined: each family's constants and its CONTRACTS row are held to each other by test_exit_codes.py, so a family split out would import _c and Code from here and CONTRACTS would import it back; the readers of CONTRACTS live in exit_messages.py
+scripts/validate/host_package_cases.py 455
