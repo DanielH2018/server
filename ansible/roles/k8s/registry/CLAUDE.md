@@ -113,8 +113,12 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     85%, and `registry-data` is not in its `PVC_EXCLUDE`. On 2026-10-24 the claim was 38% full
     (3.98 GB), so at about 1 GiB a year of pins it pages years before the claim fills.
     `ansible/tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page`
-    fails if the claim joins the exclusion. No runbook for a page exists yet. A collection
-    must not race Flux on `spec.replicas`, and #6114 tracks the options.
+    fails if the claim joins the exclusion. When it pages, `docs/registry-push-store-gc.md` is
+    the procedure. The operator untags what nothing runs while the registry serves, then
+    suspends the `registry` Kustomization before scaling `deploy/registry` to zero, so Flux
+    cannot restore the pod mid-GC. A plain `garbage-collect` Job runs, and the resume scales
+    the registry back up. On 2026-10-25 the store held one seed, and the bytes were ten
+    repositories of images built before their roles moved to GHCR.
 - **A sidecar on every node proves the mirror serves pulls** (#5542). containerd falls back
   to `ghcr.io` past a broken mirror, so nothing else notices one while the WAN is up.
   node-exporter's `ghcr-mirror-pull` sidecar
