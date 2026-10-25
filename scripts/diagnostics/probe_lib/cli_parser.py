@@ -512,8 +512,7 @@ def _build_parser():
             "something blocks",
         ),
     )
-    _flag(landing, "--json", "the JSON document the deck mod reads"
-    )
+    _flag(landing, "--json", "the JSON document the deck mod reads")
     add_verdicts_parser(sub)
     gitops_state = sub.add_parser(
         "gitops-state",
