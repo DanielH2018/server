@@ -43,7 +43,7 @@ from validate.shell_templates import discover_templates
 
 # The Pi's roles whose templates the accessor must render. Derived from `containers_list` below
 # as well, so this names what must still be deployed there rather than only what is.
-KNOWN_PI_ROLES = frozenset({"alloy", "autoheal", "docker-proxy", "wg-easy"})
+KNOWN_PI_ROLES = frozenset({"alloy", "autoheal", "wg-easy"})
 
 
 def _pi_docker_roles() -> set[str]:
