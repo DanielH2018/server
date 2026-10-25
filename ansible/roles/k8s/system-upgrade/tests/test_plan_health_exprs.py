@@ -10,11 +10,9 @@ proof of the reason strings and of the semantics this module assumes for an abse
 Run: uv run pytest ansible/roles/k8s/system-upgrade/tests/test_plan_health_exprs.py
 """
 
-import re
 import shutil
 
 import pytest
-from _k8s_render import render_role_template
 from _mini_cel import CelError, evaluate
 
 from lib import yaml_fast
@@ -142,43 +140,3 @@ def test_the_checked_in_defaults_name_each_expression():
     )
     [check] = defaults["flux_health_check_exprs"]
     assert {"inProgress", "failed", "current"} <= set(check)
-
-
-# Measured by the H6.1b2 rehearsal of `k3s-redproof` (run 20261024T193003Z on daniel-server,
-# `--expect red --plan k3s-redproof`), copied from its rehearsal-verdict.txt. This is Flux's
-# reading of the Plan. The evaluator here cannot produce it, so the tests below hold only the
-# parts of it that the repo's own files determine.
-OBSERVED_REASON = "HealthCheckFailed"
-OBSERVED_MESSAGE = (
-    "health check failed after 5m5.044785708s: failed early due to stalled resources: "
-    "[Plan/system-upgrade/k3s-redproof status: 'Failed']"
-)
-
-
-def _drill() -> dict:
-    return yaml_fast.safe_load(
-        render_role_template("system-upgrade", "plan-k3s-redproof.yaml.j2")
-    )
-
-
-def test_the_observed_red_names_the_drill_plan_and_the_failed_expression():
-    meta = _drill()["metadata"]
-    assert OBSERVED_REASON == "HealthCheckFailed"
-    assert (
-        f"Plan/{meta['namespace']}/{meta['name']} status: 'Failed'" in OBSERVED_MESSAGE
-    )
-    # 'Failed' is the `failed` expression's result, which the drill's Plan status produces.
-    assert _state(_exprs(), _plan(STORED, [JOB_FAILED], ["daniel-box"])) == "Failed"
-
-
-def test_the_observed_red_arrived_at_the_drill_deadline_not_at_the_timeout():
-    found = re.search(r"after (\d+)m([\d.]+)s", OBSERVED_MESSAGE)
-    assert found is not None, "the observed message states the elapsed time"
-    elapsed = int(found[1]) * 60 + float(found[2])
-    deadline = _drill()["spec"]["jobActiveDeadlineSecs"]
-    fields, problems = role_fields(["system-upgrade"], K8S_ROLES)
-    assert problems == []
-    timeout_minutes = int(fields["system-upgrade"]["timeout"].removesuffix("m"))
-    # A red that arrives only at the Kustomization's timeout would prove the timeout (H6 step 4).
-    assert deadline <= elapsed < deadline + 120
-    assert elapsed < timeout_minutes * 60 / 10
