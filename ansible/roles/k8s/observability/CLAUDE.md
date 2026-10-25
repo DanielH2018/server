@@ -98,9 +98,6 @@ would restart Prometheus.
 renders the flipped role and holds both values still across such an edit.
 
 Every entry declares `restart_on: []`, which the renderer ignores for a self-rollout entry.
-The entries carry no `rolled_by_role`, because the shared role drops a marked entry from the
-pod-template fingerprints (#3115). The ruling is
-`ansible/roles/k8s/observability/defaults/main.yml:DECIDED: no rolled_by_role`.
 
 **Widen the capture when you add a `data:` key.** Every capture but Grafana's holds ONE key's
 body, so a second key in `prometheus.yaml.j2` lands outside the hash and the pod never rolls.
