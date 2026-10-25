@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-10-22 06:17 UTC
-generated_sha: d749af07a
+generated_at: 2026-10-25 18:17 UTC
+generated_sha: 341de7656
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: d749af07a
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-10-22T06:08:32+0000 | 8m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-10-21T11:14:05+0000 | 19h3m | 1d | ok | session completed |
-| renovate-notify | 2026-10-21T13:00:35+0000 | 17h16m | 1d | ok | notified |
-| docs-refresh | 2026-10-21T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| secret-rotate | 2026-10-17T13:41:40+0000 | 4d16h | 7d | ok | last touched by: Switch on the agent's triage unit on daniel-box |
-| longhorn-restore-drill | 2026-10-22T04:10:57+0000 | 2h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-10-19T10:20:03+0000 | 2d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1792377903.zip) |
+| gitops-deploy | 2026-10-25T18:12:56+0000 | 4m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-10-25T11:07:33+0000 | 7h9m | 1d | ok | session completed |
+| renovate-notify | 2026-10-25T13:03:25+0000 | 5h14m | 1d | ok | notified |
+| docs-refresh | 2026-10-25T06:18:00+0000 | 11h59m | unknown | ok | generators: ok |
+| secret-rotate | 2026-10-25T13:06:24+0000 | 5h11m | unknown | ok | last touched by: Rotate setup_drift_push_token, 31 days past its due date |
+| longhorn-restore-drill | 2026-10-25T04:10:49+0000 | 14h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-10-19T10:20:03+0000 | 6d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1792377903.zip) |
