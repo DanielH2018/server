@@ -45,6 +45,7 @@ EXPECTED_MODULES = frozenset(
         "metrics",
         "monitors",
         "pi_plane",
+        "push_rules",
         "readonly_rbac",
         "releases",
         "shed_set",

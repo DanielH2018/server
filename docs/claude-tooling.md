@@ -338,6 +338,24 @@ reported as unreadable, never as absent. Exit 75 means the directory or a marker
 read, and stderr names which. The exit says nothing about what the markers hold, so it is
 never 1.
 
+### `push-rules <branch> [--rev HEAD] [--remote origin]`
+
+`push-rules` names the GitHub ruleset rule a push meets and why (#6327). GitHub prints `- Cannot
+update this protected ref.` both when a ruleset refuses a push and when the pushing account
+bypasses it, and names neither the ruleset nor the reason. The probe reads the rules matching
+the branch from `rules/branches/<branch>`, then each ruleset's name, enforcement and
+`current_user_can_bypass`. It evaluates each rule against the push from local git state: whether
+the branch exists on the remote, whether the push is a fast-forward, and which new commits carry
+no signature header. It prints each rule that binds as `REFUSES` or `bypassed`.
+
+The bypass answer is for the `gh` login, which the probe prints beside the push remote's URL,
+because `git push` may authenticate as another account. Exit 1 means at least one rule refuses
+the push, and 75 means a read failed. A remote head this checkout never fetched is a failed read,
+so fetch first.
+
+The `auto-mode-bridge` hook points at this probe when a `git push` fails with `Repository rule
+violations found`. On a push that printed `Bypassed rule violations`, it says the push landed.
+
 ### `ha …`
 
 Reads live Home Assistant state, authed with the SOPS `claude_ha_token`. `ha automation
