@@ -36,6 +36,7 @@ spec:
           # (StartError "executable file not found" at first deploy). Same init image
           # zigbee2mqtt and home-assistant use.
           image: {{ peanut_k8s_init_image }}
+          imagePullPolicy: IfNotPresent
           command: ["cp", "/config-seed/settings.yml", "/config/settings.yml"]
 {{ hardened_security_context(read_only=true) }}
           volumeMounts:
@@ -49,6 +50,7 @@ spec:
       containers:
         - name: peanut
           image: {{ peanut_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true) }}

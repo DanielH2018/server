@@ -64,6 +64,7 @@ spec:
           containers:
             - name: longhorn-reconcile
               image: {{ longhorn_reconcile_k8s_image }}
+              imagePullPolicy: IfNotPresent
               command: ["python3", "/config/longhorn_reconcile.py"]
               env:
                 - name: RECONCILE_NAMESPACE

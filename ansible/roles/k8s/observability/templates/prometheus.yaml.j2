@@ -1007,6 +1007,7 @@ spec:
       containers:
         - name: prometheus
           image: {{ observability_k8s_prometheus_image }}
+          imagePullPolicy: IfNotPresent
 {{ hardened_security_context(non_root=true) }}
           args:
             - --config.file=/etc/prometheus/prometheus.yml

@@ -56,6 +56,7 @@ spec:
       containers:
         - name: alloy
           image: {{ loki_homelab_k8s_alloy_image }}
+          imagePullPolicy: IfNotPresent
           args:
             - run
             - /etc/alloy/config.alloy

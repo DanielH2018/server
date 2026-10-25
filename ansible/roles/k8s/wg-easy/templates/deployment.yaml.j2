@@ -58,6 +58,7 @@ spec:
       initContainers:
         - name: config-chown
           image: {{ wg_easy_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - chown
             - -R
@@ -88,6 +89,7 @@ spec:
         # Enabling per-client filtering in the UI inserts the WG_CLIENTS jump ABOVE these rules.
         - name: peer-cluster-drop
           image: {{ wg_easy_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -ec
@@ -102,6 +104,7 @@ spec:
       containers:
         - name: wg-easy
           image: {{ wg_easy_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.udp_port }}
               protocol: UDP
