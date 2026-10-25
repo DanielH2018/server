@@ -32,6 +32,10 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+import os
+import tempfile
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
@@ -50,6 +54,7 @@ __all__ = [
     "BOOLEANS_FALSE",
     "BOOLEANS_TRUE",
     "ansible_bool",
+    "ansible_local_temp",
     "file_lookup",
     "make_ansible_env",
     "register_ansible_filters",
@@ -97,6 +102,29 @@ def ansible_bool(value) -> bool:
         return bool(check == 1)
     except TypeError:  # unhashable, e.g. a list or dict
         return False
+
+
+@contextmanager
+def ansible_local_temp() -> Generator[None]:
+    """Point ansible-core's local temp directory at the system temp directory for the block.
+
+    ansible-core creates its local temp directory when a process first imports its
+    constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
+    directory untouched, and ansible-core removes its own subdirectory at exit. A value the
+    caller already set is left alone. The block restores the environment on exit, so an
+    in-process caller such as a pytest worker does not hand the variable to every later
+    test and subprocess (#5002). A process killed by a signal skips the atexit handler, so
+    its directory stays behind; under the system temp directory it is the system's to
+    clean rather than a leak in the home directory (#5904).
+    """
+    if "ANSIBLE_LOCAL_TEMP" in os.environ:
+        yield
+        return
+    os.environ["ANSIBLE_LOCAL_TEMP"] = tempfile.gettempdir()
+    try:
+        yield
+    finally:
+        os.environ.pop("ANSIBLE_LOCAL_TEMP", None)
 
 
 def register_ansible_filters(env: Environment) -> Environment:
@@ -177,19 +205,21 @@ def register_ansible_filters(env: Environment) -> Environment:
     import service_tier
     from toposort import filter_by_platform
 
-    from ansible.plugins.filter.core import (
-        b64encode,
-        combine,
-        comment,
-        from_json,
-        from_yaml,
-        get_hash,
-        mandatory,
-        regex_replace,
-        to_bool,
-        to_uuid,
-    )
-    from ansible.plugins.test.core import search
+    # The first ansible-core import creates its local temp directory (#5904).
+    with ansible_local_temp():
+        from ansible.plugins.filter.core import (
+            b64encode,
+            combine,
+            comment,
+            from_json,
+            from_yaml,
+            get_hash,
+            mandatory,
+            regex_replace,
+            to_bool,
+            to_uuid,
+        )
+        from ansible.plugins.test.core import search
 
     env.filters["b64encode"] = b64encode
     env.filters["bool"] = to_bool
