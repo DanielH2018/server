@@ -11,6 +11,7 @@ the hook wiring — `pytest_runtest_setup` putting the stub dir on PATH and
 prove the helpers work and say nothing about whether the plugin is loaded.
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -505,3 +506,67 @@ def test_the_image_marker_is_one_the_image_suite_actually_carries() -> None:
     name = "test_longhorn_restore_drill_image.py"
     suite = REPO / "ansible" / "tests" / "longhorn" / name
     assert f"pytestmark = pytest.mark.{leakguard._IMAGE_MARKER}" in suite.read_text()
+
+
+# Imports the plugin, then ansible-core's constants as a conftest would, and exits through
+# `os._exit`, which skips atexit the way a SIGTERM'd or SIGKILL'd run does (#5904).
+_IMPORTS_ANSIBLE_THEN_DIES = """
+import os
+import sys
+
+import leakguard
+import ansible.constants
+
+print(ansible.constants.DEFAULT_LOCAL_TMP)
+sys.stdout.flush()
+os._exit(0)
+"""
+
+
+def _run_script(tmp_path: Path, script: str) -> str:
+    """Run `script` with a scratch home and temp directory; returns its stdout."""
+    home, tmp = tmp_path / "home", tmp_path / "tmp"
+    home.mkdir(exist_ok=True)
+    tmp.mkdir(exist_ok=True)
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(home),
+            "TMPDIR": str(tmp),
+            "PYTHONPATH": str(REPO / "ansible" / "tests"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+    return proc.stdout.strip()
+
+
+def test_a_run_that_skips_atexit_leaves_nothing_under_the_home_directory(
+    tmp_path: Path,
+) -> None:
+    """The leaked directory lands in the plugin's temp directory, and the next run sweeps it."""
+    leaked = Path(_run_script(tmp_path, _IMPORTS_ANSIBLE_THEN_DIES))
+    home_tmp = tmp_path / "home" / ".ansible" / "tmp"
+    assert not home_tmp.exists() or not list(home_tmp.glob("ansible-local-*"))
+    assert leaked.parent == tmp_path / "tmp" / f"pytest-ansible-local-{os.getuid()}"
+    assert leaked.is_dir()
+
+    _run_script(tmp_path, "import leakguard")
+    assert not leaked.exists()
+
+
+def test_the_sweep_removes_only_a_dead_process_directory(tmp_path: Path) -> None:
+    child = subprocess.Popen(["true"])
+    child.wait()
+    dead = tmp_path / f"ansible-local-{child.pid}abcd_123"
+    live = tmp_path / f"ansible-local-{os.getpid()}abcd_123"
+    other = tmp_path / f"leakguard-{child.pid}abcd_123"
+    for path in (dead, live, other):
+        (path / "inner").mkdir(parents=True)
+
+    assert leakguard.sweep_dead_ansible_local(tmp_path) == [dead.name]
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted([live.name, other.name])
