@@ -543,3 +543,42 @@ def test_newest_green_descendant_reads_at_most_the_descendant_limit():
     shas = [f"c{n}" for n in range(await_ci.DESCENDANT_LIMIT + 5)]
     found, asked, _ = _newest_green(shas, {s: [] for s in shas})
     assert found == "" and asked == shas[: await_ci.DESCENDANT_LIMIT]
+
+
+# PR #6069's head e9ec9143 at 01:39:50Z on 2026-10-24: its one CI run, from the push made while
+# the PR was a draft, skipped every job. A skipped matrix job keeps its unexpanded name.
+_DRAFT_RUN = [
+    _run("prek (lint + validate + tests + secrets)", "completed", "skipped"),
+    _run("prove the pushed tree was tested", "completed", "skipped"),
+    _run(
+        "pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})",
+        "completed",
+        "skipped",
+    ),
+    _run("hooks (lint + validate + secrets + docs)", "completed", "skipped"),
+]
+
+
+@pytest.mark.parametrize(
+    "ready_gate, names_the_draft",
+    [
+        (None, True),
+        # The reject half: the ready run's gate has registered, so its verdict is on its way.
+        (_run("prek (lint + validate + tests + secrets)", "queued", None), False),
+        (_run("prek (lint + validate + tests + secrets)", "in_progress", None), False),
+    ],
+)
+def test_a_head_whose_only_ci_skipped_as_a_draft_says_so(ready_gate, names_the_draft):
+    """#6077: land.sh waited 1740s on such a head with no line naming why."""
+    runs = _DRAFT_RUN + ([ready_gate] if ready_gate else [])
+    code, msg = await_ci.wait(
+        "e9ec9143569607f8",
+        0,
+        20,
+        sleep=lambda _s: None,
+        clock=lambda: 0,
+        fetch=lambda _s: runs,
+        fetch_suites=lambda _s: [],
+    )
+    assert code == 75
+    assert (await_ci.DRAFT_SKIPPED in msg) is names_the_draft

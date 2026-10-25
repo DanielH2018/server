@@ -285,8 +285,9 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="monitor-bridge-longhorn-volumes", display="Longhorn Volume Redundancy", status_group="Backups & Storage", gate="prometheus", critical=True, runbook="longhorn-disaster-recovery",
         description="monitor-bridge reads Longhorn's volume metrics via the cluster Prometheus, held 3 cycles for a replica rebuild. DOWN: a volume is degraded or faulted, or the census emptied. The message names the volume; `longhorn-disaster-recovery` has the revert and rebuild procedures.",
     ),
-    # No EXPORTER_DEPENDENT entry on job="kubernetes-kubelet": the claims are scraped under two
-    # jobs, so a dead kubelet job is a PARTIAL blindness PVC_MIN_CLAIMS is sized to page on.
+    # No EXPORTER_DEPENDENT entry on job="kubernetes-kubelet": a dead kubelet job empties the
+    # claim census, which PVC_MIN_CLAIMS pages on. The apiserver job stopped carrying the claims
+    # in #6331, so this is total blindness now, not partial, and it still pages.
     PushCheck(
         name="pvc_fullness", fn=storage.check_pvc_fullness, token="monitor_bridge_pvc_push_token",
         kuma_id="monitor-bridge-pvc-fullness", display="k3s PVC Fullness", status_group="Backups & Storage", gate="prometheus", critical=True, runbook="longhorn-disaster-recovery",

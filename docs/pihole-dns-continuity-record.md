@@ -12,8 +12,8 @@ instances with `dependsOn` and `wait: true`. The record stays because returning 
 
 ## Where the roll expectation for pihole-2 comes from
 
-- **`probe.py health pihole` holds a roll expectation for pihole-2 only because `roll_one.yml`
-  writes one.** The release record is stamped inside the shared include, before
+- **HISTORY — `probe.py health pihole` held a roll expectation for pihole-2 only because
+  `roll_one.yml` wrote one.** The release record is stamped inside the shared include, before
   `tasks/apply_instance_2.yml` runs, so it cannot know whether that apply rolled instance 2 by
   changing its pod template (stamping no `restartedAt`) or `roll_one.yml` restarted it (stamping
   one). `rolled_by_role: true` on the `manifests_self_rollouts` entry records `restart: false`
@@ -22,6 +22,9 @@ instances with `dependsOn` and `wait: true`. The record stays because returning 
   Deploy time is covered either way and more strictly: `roll_one.yml` blocks on pihole-2's
   `rollout status`, and `Verify both Pi-hole instances have a ready DNS endpoint` refuses fewer
   than two ready endpoints.
+  `rolled_by_role` and `tasks/rollout_amend.yml` were retired after the flip (#5819). A
+  return to Ansible that restores `roll_one.yml` also restores both, from the commit before
+  that retirement.
 
 ## Why each private restart waits for its own apply
 

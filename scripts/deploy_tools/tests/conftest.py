@@ -70,6 +70,22 @@ def _no_syslog(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def verdict_record(tmp_path_factory, monkeypatch) -> Path:
+    """Aim every landing's verdict record at a file of this test's own, and return its path.
+
+    A landing appends to the per-user `verdict_log` on every exit, and `Tools()` defaults to the
+    real writer, so without this a test run fills the operator's record with `pr=999` rows that
+    `probe.py landing-verdicts` then reports as landings. Autouse for the reason `_no_syslog`
+    gives; the env var reaches the modules that run the real `land.sh` too.
+    """
+    path = tmp_path_factory.mktemp("verdicts") / "landing-verdicts.jsonl"
+    # `verdict_log.PATH_ENV`, spelled out so this directory still collects without the
+    # module; `test_the_env_var_overrides_the_default_path` pins the name.
+    monkeypatch.setenv("LAND_VERDICT_LOG", str(path))
+    return path
+
+
+@pytest.fixture(autouse=True)
 def _own_ansible_tmp(tmp_path_factory, monkeypatch):
     """Point ansible's local and remote temp directories at a directory of this test's own.
 

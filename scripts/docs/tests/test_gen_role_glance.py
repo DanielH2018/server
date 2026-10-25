@@ -22,7 +22,7 @@ KNOWN_SERVICES = frozenset(
 KNOWN_SETUP_ROLES = frozenset(
     {"gitops_deploy", "k3s", "renovate_agent", "initial_setup"}
 )
-KNOWN_PI_SERVICES = frozenset({"alloy", "wg-easy"})
+# H5.9 moved wg-easy, the last Pi service, into the host package, so no Pi role takes a block.
 
 
 # --- facts -------------------------------------------------------------------------------
@@ -332,7 +332,7 @@ def test_the_gate_covers_the_known_setup_roles_and_pi_services():
     assert KNOWN_SETUP_ROLES <= setup, sorted(KNOWN_SETUP_ROLES - setup)
     assert "common" not in setup
     pi = {e["name"] for e in g.Estate().pi_entries()}
-    assert KNOWN_PI_SERVICES <= pi, sorted(KNOWN_PI_SERVICES - pi)
+    assert pi == set(), sorted(pi)
 
 
 def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):

@@ -40,8 +40,9 @@ Pi-hole's `local.<domain>` wildcard answers the cluster ingress VIP for everythi
   every `.local` name.
 - The hosts-file option in A3 and the `AllowedIPs` narrowing in A2 (the two places that name IPs by
   hand) need **`10.0.0.240`**, plus `10.0.0.243` if you point at Pi-hole.
-- `daniel-pi` runs a second, **LAN-only** wg-easy on `51822/udp`. It is deliberately not forwarded
-  and is not the endpoint above, so don't point a remote client at it.
+- `daniel-pi` runs a second wg-easy on `51822/udp`, and the router forwards that port to the Pi.
+  It is the backup way in when the cluster's endpoint above is down, not the endpoint to give
+  a client by default. Its admin UI on `51821/tcp` stays LAN-only.
 
 ---
 
@@ -225,8 +226,8 @@ Pi's LAN-only wg-easy is the only Docker copy left, and it isn't on this path.
 
 **HISTORY — the server's bcrypt admin auth.** The server's wg-easy entry carried `password_hash: "{{ wg_easy_password_hash }}"`, which fed the compose `PASSWORD_HASH` env from 2026-07-04 and closed an admin UI that was otherwise unauthenticated to every `monitoring`-net neighbour. The k3s migration retired that mechanism on 2026-08-14, because the k8s wg-easy v15 keeps credentials in its own SQLite DB. The operator removed `wg_easy_password_hash` from `ansible/vars/secrets.yml` and the rotation registry on 2026-08-24 (review M-7), so do not reintroduce that var name expecting it to exist.
 
-The bcrypt `$`-doubling note still applies to any `password_hash` set on the Pi's entry, which
-is the only live use of that field now.
+The bcrypt `$`-doubling note still applies to any `PASSWORD_HASH` that someone adds to the Pi's
+service file, which would be the only use of that variable. The service file's header says how.
 
 ## The Pi's wg-easy healthcheck: why the block carries no `test:`
 
@@ -245,3 +246,70 @@ that `container_healthcheck_interval` was tuned to remove. Second, the probe's i
 an exec measured at 8.2s end-to-end passed on 2026-09-17, so Docker's own `timeout` is the
 limit that decides `unhealthy` under that stall. 60s is what the other Pi probes got from
 #1910, and this healthcheck inherits it.
+
+## The Pi's wg-easy in the host package (H5.9)
+
+Since H5.9 the Pi's wg-easy is one service of the `homelab-daniel-pi` package's Compose
+project, not an Ansible role. `./scripts/deploy.sh --tags wg-easy -e target=daniel-pi` deploys
+nothing on the Pi. The Pi's updater installs the package, and `homelab-compose.service` runs
+the project.
+
+- **Where it lives.** The service file is
+  `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2`, and its header holds the
+  notes that the deleted role's `CLAUDE.md` carried. The entry is in `compose_services` in
+  `ansible/inventory/host_vars/daniel-pi.yml`.
+- **What did not move.** The WireGuard port is still `51822/udp` on every interface, the admin
+  UI is still the Pi's LAN address on `51821/tcp`, and the generated client configs still name
+  `wireguard.<domain>:51822`. The Pi's `ufw` needs no rule for either port, because Docker's `nat`
+  and FORWARD rules bypass the `ufw` INPUT chain.
+- **The keys.** The WireGuard keys and client config are `wg0.conf` and `wg0.json` in
+  `/home/ubuntu/server/containers/wg-easy/config/`, the directory the pi-peer-backup CronJob
+  pulls nightly. The move recreates the container and leaves that directory in place. A
+  `tmpfiles.d` line for it copies the live mode and owner (755 root), so a rebuilt Pi has the
+  directory before the container starts.
+- **The seconds of downtime.** compose-adopt removes the old container and `up` creates the new
+  one, so tunnels drop for the seconds `up --wait` takes. A client reconnects by itself, because
+  `WG_PERSISTENT_KEEPALIVE` is 25 seconds.
+- **No secret.** wg-easy reads the plain variable `domain` and no SOPS key, so the move needs no
+  `host_secrets.py sync daniel-pi`.
+
+### Access-path proof after the install
+
+H5.5 proved the cluster's wg-easy on `51820/udp` as a way into the homelab while the Pi's
+wg-easy is down. The steps below prove that the Pi's own endpoint works after the move. They run
+from a LAN session and are **operator-only**. An agent does not run them.
+
+1. **Before merging, hold the updater timer.** On the Pi, run
+   `sudo systemctl stop homelab-updater.timer`. Do not reboot the Pi until step 4, because a
+   reboot re-arms the timer.
+2. **Before merging, record the keys' fingerprint.** On the Pi, run
+   `sha256sum /home/ubuntu/server/containers/wg-easy/config/wg0.conf /home/ubuntu/server/containers/wg-easy/config/wg0.json`.
+   Note the two hashes, which reveal no key. Also note the peer count with
+   `docker exec wg-easy wg show wg0 peers | wc -l`.
+3. **After the builder publishes the merge commit's package,** run
+   `sudo systemctl start homelab-updater.service`. This is the attended install. Reconcile
+   re-arms the timer as part of it.
+4. **Check the container and the data.**
+    - `docker ps --filter name=wg-easy` shows `Up` and `(healthy)` within a few minutes. The
+      health probe is the image's `wg show`, and the Pi widens it to a 60s timeout.
+    - `docker port wg-easy` shows `51822/udp` on every interface and `51821/tcp` on the Pi's
+      LAN address only.
+    - The `sha256sum` of step 2 prints the same two hashes, and the peer count is unchanged.
+    - `systemctl is-active homelab-updater.timer` prints `active`.
+5. **Connect a client through the Pi's endpoint.** Use a client config that the Pi's instance
+   generated before the move, and connect from outside the LAN, such as a phone on cellular
+   data. The router forwards `51822/udp` to the Pi, so this proves the path a remote client
+   takes.
+6. **Read the handshake on the Pi.** Run `docker exec wg-easy wg show wg0`. The peer in use
+   shows a `latest handshake` of seconds ago and non-zero `transfer` counters. Record those two
+   lines only, and redact the keys.
+7. **Reach a LAN-only service through the tunnel.** With the client from step 5 connected from
+   outside the LAN, open a service that only the LAN reaches, such as the Pi's admin UI at
+   the Pi's LAN address on port `51821`, or `https://<name>.local.<domain>` if the config's
+   DNS and `AllowedIPs` cover it. The page loads.
+8. **Record the output** of steps 4, 6 and 7 in the PR body or the landing note.
+
+If a step fails, restore the old project from the LAN: revert the move PR, wait for the Pi to
+install the reverted package, then run
+`./scripts/deploy.sh --tags "wg-easy" -e target=daniel-pi` from daniel-box. Between those two
+steps the cluster's endpoint (H5.5) is the only way in.

@@ -220,7 +220,7 @@ def test_an_entry_point_answers_help_before_its_work(name, capsys):
 
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
 PROBES = sorted(path.name for path in WAIT_SOURCES.iterdir() if path.is_file())
-MUST_FIND_PROBES = frozenset({"land", "deploy", "fanout"})
+MUST_FIND_PROBES = frozenset({"land", "deploy", "fanout", "fanout-headroom", "flux"})
 
 # cc-wait reports a refused `--describe` with only the last 400 characters of its stderr
 # (dotfiles `cc_wait/repo.py`, `ProbeWait.describe`), so the usage has to land inside them.

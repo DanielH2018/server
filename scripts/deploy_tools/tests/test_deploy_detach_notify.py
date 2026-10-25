@@ -15,6 +15,18 @@ def _result(returncode, stdout="", stderr=""):
     return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+def _pi_only(tmp_path, name):
+    """A fixture inventory whose only Docker entry is `name` on daniel-pi.
+
+    The real inventory declares no Docker-only tag since H5.9: the Pi's last Docker service,
+    wg-easy, moved into the host package and has a k8s counterpart.
+    """
+    host_vars = tmp_path / notify_mod.HOST_VARS_REL
+    host_vars.mkdir(parents=True)
+    (host_vars / "daniel-pi.yml").write_text(f"containers_list:\n  - name: {name}\n")
+    return tmp_path
+
+
 def test_check_one_ok_on_k8s_first_try():
     calls = []
 
@@ -31,20 +43,27 @@ def test_check_one_ok_on_k8s_first_try():
     assert "--docker" not in calls[0]
 
 
-def test_check_one_falls_back_to_docker(monkeypatch):
+def test_check_one_falls_back_to_docker():
+    """A tag the inventory declares on no host tries the cluster first, then Docker.
+
+    `unlisted-svc` stands in for the tag: since H5.9 no live tag is Docker-only, so the fallback
+    is reached by a tag that routes to neither platform up front.
+    """
     calls = []
 
     def run(argv, **kwargs):
         calls.append(argv)
         if "--docker" in argv:
-            return _result(0, "wg-easy: running, health=healthy, restarts=0")
-        return _result(1, "wg-easy: no Deployment or DaemonSet in this namespace (...)")
+            return _result(0, "unlisted-svc: running, health=healthy, restarts=0")
+        return _result(
+            1, "unlisted-svc: no Deployment or DaemonSet in this namespace (...)"
+        )
 
     state, detail = notify_mod.check_one(
-        "wg-easy", tools=notify_mod.NotifyTools(run=run)
+        "unlisted-svc", tools=notify_mod.NotifyTools(run=run)
     )
     assert state == "ok"
-    assert "wg-easy" in detail
+    assert "unlisted-svc" in detail
     assert len(calls) == 2
     assert "--docker" in calls[1]
 
@@ -86,7 +105,7 @@ def test_check_one_skips_a_role_that_declares_no_workload():
     assert state == "skipped"
 
 
-def test_check_one_flags_a_declared_pi_container_that_is_absent():
+def test_check_one_flags_a_declared_pi_container_that_is_absent(tmp_path):
     """The reject half of the skip above, and the safety-critical half.
 
     A Pi service daniel-pi's inventory declares, with no container on the host, is a deploy that
@@ -104,7 +123,9 @@ def test_check_one_flags_a_declared_pi_container_that_is_absent():
         return _result(1, "wg-easy: no Deployment or DaemonSet in this namespace (...)")
 
     state, detail = notify_mod.check_one(
-        "wg-easy", tools=notify_mod.NotifyTools(run=run)
+        "wg-easy",
+        tools=notify_mod.NotifyTools(run=run),
+        cwd=_pi_only(tmp_path, "wg-easy"),
     )
     assert state == "unhealthy"
     assert "MISSING" in detail
@@ -225,15 +246,24 @@ def test_check_one_tag_on_both_platforms_needs_the_pi_healthy():
     assert "exited" in detail
 
 
-def test_check_one_reads_platforms_from_the_inventory_when_not_given():
-    """alloy is declared on daniel-pi alone, so the real inventory routes it to --docker."""
+def test_check_one_reads_platforms_from_the_inventory_when_not_given(tmp_path):
+    """A tag only daniel-pi's containers_list declares routes to --docker.
+
+    The inventory is a fixture tree passed as `cwd`: since H5.8 the real inventory declares no
+    Docker-only tag (alloy moved into the Pi's package and wg-easy has a k8s counterpart).
+    """
+    host_vars = tmp_path / notify_mod.HOST_VARS_REL
+    host_vars.mkdir(parents=True)
+    (host_vars / "daniel-pi.yml").write_text("containers_list:\n  - name: alloy\n")
     calls = []
 
     def run(argv, **kwargs):
         calls.append(argv)
         return _result(0, "alloy: running (no healthcheck), restarts=0")
 
-    state, _ = notify_mod.check_one("alloy", tools=notify_mod.NotifyTools(run=run))
+    state, _ = notify_mod.check_one(
+        "alloy", tools=notify_mod.NotifyTools(run=run), cwd=tmp_path
+    )
     assert state == "ok"
     assert calls and all("--docker" in argv for argv in calls)
 

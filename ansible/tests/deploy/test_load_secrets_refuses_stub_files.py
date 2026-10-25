@@ -263,12 +263,24 @@ def test_the_docker_play_allows_a_stub_file_only_on_a_host_with_no_docker_entry(
     docker_play = _deploy_allowed_expressions()[0]
     assert isinstance(docker_play, str)
     verdicts = {}
-    for host in ("daniel-box", "daniel-pi"):
-        hostvars = yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text())
+    # H5.9 emptied the Pi's containers_list, so the Pi has no docker entry any more. The
+    # synthetic host keeps the refusing side of the rule under test.
+    lists = {
+        host: yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text())[
+            "containers_list"
+        ]
+        for host in ("daniel-box", "daniel-pi")
+    }
+    lists["a host with a docker entry"] = [{"name": "wg-easy"}]
+    for host, containers_list in lists.items():
         templar = Templar(
             loader=DataLoader(),
-            variables={"containers_list": hostvars["containers_list"]},
+            variables={"containers_list": containers_list},
         )
         templar.environment.filters["filter_by_platform"] = filter_by_platform
         verdicts[host] = templar.template(trust_as_template(docker_play))
-    assert verdicts == {"daniel-box": True, "daniel-pi": False}
+    assert verdicts == {
+        "daniel-box": True,
+        "daniel-pi": True,
+        "a host with a docker entry": False,
+    }

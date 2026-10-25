@@ -62,9 +62,10 @@ spec:
         # traefik-precheck is traefik's bouncer-key precheck
         # (traefik/templates/precheck/bouncer-key.yaml.j2), which sends one HEAD to the LAPI
         # with the bouncer key before `traefik` applies. Like crowdsec-verify it never dials
-        # AppSec, so it sits here rather than in traefik's rule. Its Job ships switched off
-        # (`traefik_k8s_bouncer_key_precheck`) until this peer is live, because a refused
-        # precheck holds `traefik`, and this policy applies only after `traefik` does.
+        # AppSec, so it sits here rather than in traefik's rule. This peer landed live before
+        # the Job was switched on (`traefik_k8s_bouncer_key_precheck`, #6157), because a refused
+        # precheck holds `traefik`, and this policy applies only after `traefik` does. To
+        # remove or rename it, switch the Job off in an earlier revision.
         - podSelector:
             matchLabels:
               app: traefik-precheck

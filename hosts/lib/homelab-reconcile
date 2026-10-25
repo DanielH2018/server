@@ -311,6 +311,12 @@ def owned(path: Path) -> bool | None:
 
 
 def retire_path(path: Path) -> bool:
+    """Remove an unowned legacy path, and say whether the entry is retired.
+
+    A directory goes only when it is empty, through `rmdir`. A non-empty one stays and fails
+    the entry, so a package lists a directory after the files in it, and reconcile never
+    deletes contents nothing named.
+    """
     owner = owned(path)
     if owner is None:
         say(f"dpkg -S {path} failed; not removing it")
@@ -322,7 +328,10 @@ def retire_path(path: Path) -> bool:
     if not os.path.lexists(target):
         return True
     try:
-        target.unlink()
+        if target.is_dir() and not target.is_symlink():
+            target.rmdir()
+        else:
+            target.unlink()
     except OSError as exc:
         say(f"cannot remove {path}: {exc}")
         return False

@@ -96,6 +96,10 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   a blocking `systemctl restart homelab-secrets.service` before step 2. Legacy entries retire only
   once that unit is active and every credential and output in `secrets.json` exists. A package
   without the field makes no call that names `homelab-secrets`, as the Pi's did until H4.5.
+- **A legacy directory.** A `path` entry naming a directory retires only once the directory is
+  empty: reconcile runs `rmdir`, never a recursive delete. A non-empty one stays and fails the
+  run. A package therefore lists the directory after the files in it, as the Pi's does for
+  `/etc/homelab/interim`.
 
 ## Activation, pending state and drift
 

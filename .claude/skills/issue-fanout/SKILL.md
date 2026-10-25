@@ -152,13 +152,13 @@ transport cannot share one connection per host, `transport.control_dir`); or it 
 holding more RUNNING batches than its cap, counting every earlier run not yet cleaned (the memory
 cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
 The cap is three on daniel-box and four on daniel-server (`launch_gates.live_batch_cap`, #5667).
-A batch whose agent has finished does not count, whether or not its worktree still stands:
-`launch` reads the unit state `place status` reads, and only for a batch on the host it runs
-on, and only when the manifests alone would refuse. A state it cannot read counts as running,
-and so does every batch on the other host, where the read would cost an ssh connection the
-budget lacks. Narrow the fan-out, do not queue. For the third, wait for a batch to finish, or
-`clean <run-id>` the finished runs on the other host. `--host daniel-box` pins a batch that must land in
-the same run or that only daniel-box can verify.
+A batch whose agent has finished does not count, whether or not its worktree still stands.
+Each host's headroom read also reads the unit state `place status` reads for that host's
+uncleaned batches, on the same connection (#5506). A state it cannot read counts as running,
+and so does every batch on a host whose headroom read failed. Narrow the fan-out, do not
+queue. For the third, wait with `cc-wait fanout-headroom` (*Refilling as headroom frees*,
+below), or `clean <run-id>` the finished runs. `--host daniel-box` pins a batch that must
+land in the same run or that only daniel-box can verify.
 
 **Every batch gets a separate review unless `launch` is given `--no-review`** (the default
 since #3675, whose judged records found 0.65 real findings per PR at about $2.60 of review
@@ -240,6 +240,18 @@ between. Its last line ends the run: `finished` (exit 0), `needs-attention` (1) 
 That line names every batch that is not plain success. The source is
 `scripts/dev/fanout.py probe`, which reads the `status` command below and shares one read per
 90s among every watcher on the host.
+
+**Refilling as headroom frees.** To launch the next batch as soon as one would place, run
+`cc-wait fanout-headroom [--batches N] [--host HOST] --budget 1740` in the background, and
+re-run it on exit 75. It ends `room` (exit 0) once a `launch` of N batches would place, or
+`no-signing-host` (6) when no host signs verifiably. While it waits, its detail is the
+refusal `launch` would print. An unpinned wait also names each host a `--host` launch would
+place on, because `launch` checks the batch cap only on the host with the most memory. It
+answers for every run, other sessions' included, which `cc-wait fanout` cannot. The source
+is `scripts/dev/fanout.py headroom`, which calls the same two placement functions `launch`
+does, so `room` is not a promise the issue-body gates pass. Launch within a minute of
+`room`: the probe's ssh connection to daniel-server persists for `MUX_PERSIST_S` (60s), and
+`launch` reuses it rather than spending another against `ufw limit ssh`.
 
 A batch that stops on any state but `done` also pages Discord once, as
 `fanout-alert@<unit>:<state>`, whether or not an orchestrator is watching (#4602). The page
@@ -421,6 +433,12 @@ Each agent starts with none of this conversation's context, so its brief must ca
 - That it then labels its worktree with its issues, so the session banner and
   `prune_worktrees.py` print what the `agent-<hash>` tree works on:
   `uv run python scripts/dev/label_worktree.py <n>...`.
+- That it starts every compound Bash command with `cd <its worktree> &&`. The Claude Code
+  binary refuses a compound command from an isolated agent ("This agent is isolated in the
+  worktree …") unless the command opens that way, and no hook can lift the refusal: 1,047
+  refusals cost a turn each across 99 sessions in 2026-10-16..25 (#6328). A headless batch
+  needs no such line, because `claude -p` runs in the worktree without isolation and none
+  of its transcripts hold the refusal.
 
 - That `land.sh` (the `land-after-merge` skill) is the landing path, and that hand-polling CI
   is not.
@@ -484,7 +502,7 @@ actually produced; don't split further just to add width.
 
 Done when: every batch has a spawned agent carrying both `isolation: "worktree"` and
 `model: "opus"`, and every brief names the claim already held, the comment it must post first,
-the landing path, the blocking-wait command, the close restriction, and what to do with a
+the `cd <worktree> &&` prefix, the landing path, the blocking-wait command, the close restriction, and what to do with a
 verdict that leaves a host apply owed.
 
 ## 4. Land

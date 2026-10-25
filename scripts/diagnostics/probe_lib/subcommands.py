@@ -13,7 +13,7 @@ The registry carries names, descriptions, each subcommand's backing `probe_lib` 
 the `probe_lib` modules agree.
 
 This module defines no `run_*` function of its own, so `lib.cli_registry.package_entry_points`
-still reports the same sixteen subcommand backends — the `run_*` names below are imported, and
+still reports the same seventeen subcommand backends — the `run_*` names below are imported, and
 that function counts only what a module defines.
 """
 
@@ -33,8 +33,10 @@ from diagnostics.probe_lib.b2_ledger import (
     run_b2_spend,
 )
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
+from diagnostics.probe_lib.flux import run_flux
 from diagnostics.probe_lib.gitops_view import run_gitops_state
 from diagnostics.probe_lib.landing_blockers import run_landing
+from diagnostics.probe_lib.landing_verdicts import run_landing_verdicts
 from diagnostics.probe_lib.health import run_health
 from diagnostics.probe_lib.longhorn import (
     run_b2_budget,
@@ -43,6 +45,7 @@ from diagnostics.probe_lib.longhorn import (
 from diagnostics.probe_lib.metrics import run_query
 from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
 from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
+from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
 from diagnostics.probe_lib.shed_set import run_shed_set
@@ -137,6 +140,13 @@ SUBCOMMANDS = [
         run_takeover,
     ),
     (
+        "flux",
+        "each Flux Kustomization's Ready, applied commit against its source, and suspension "
+        "(exit 1 when one is not settled)",
+        "flux",
+        run_flux,
+    ),
+    (
         "pi",
         "daniel-pi container view (`pi containers`, one ssh + docker inspect)",
         "pi_plane",
@@ -166,11 +176,25 @@ SUBCOMMANDS = [
         run_landing,
     ),
     (
+        "landing-verdicts",
+        "the newest recorded VERDICT line of each landed PR, without grepping task output "
+        "(exit 1 when the named PR has none)",
+        "landing_verdicts",
+        run_landing_verdicts,
+    ),
+    (
         "gitops-state",
         "every GitOps deployer marker and owed-ledger line with its clear command, "
         "read-only (exit 1 when one is unreadable)",
         "gitops_view",
         run_gitops_state,
+    ),
+    (
+        "push-rules",
+        "which GitHub ruleset rule a push of HEAD to a branch meets, and whether this login "
+        "bypasses it (exit 1 when a rule refuses the push)",
+        "push_rules",
+        run_push_rules,
     ),
 ]
 
@@ -195,11 +219,13 @@ VERDICT_SUBCOMMANDS = frozenset(
         "b2-deletions",
         "readonly-rbac",
         "vip-placement",
+        "flux",
         "pi",
         "health",
         "ha",
         "landing",
         "gitops-state",
+        "push-rules",
     }
 )
 VERDICT_HA_SUBCOMMANDS = frozenset({"verify-automations", "verify-entities"})
