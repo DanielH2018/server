@@ -117,7 +117,7 @@ def github_authenticated() -> bool:
 
     The ancestor walk asks it before spending up to `CI_ANCESTOR_WALK_MAX` requests on one
     tick. Anonymous, the whole host shares 60 requests an hour with every landing's
-    `await_ci.py` poll (45 per 900s wait) and the two GitHub crons — a burst of ten would
+    `await_ci.py` poll (at most 30 per anonymous wait) and the two GitHub crons — a burst of ten would
     exhaust it and every reader's next call reads `HTTP Error 403`, which this gate maps to
     `pending` and a landing reads as "CI not finished". Authenticated it is 5000/hour, where
     ten reads per ten-minute tick is nothing.

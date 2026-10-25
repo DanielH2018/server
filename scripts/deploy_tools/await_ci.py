@@ -76,9 +76,11 @@ DESCENDANT_LIMIT = 10
 
 # The poll interval with no GitHub token, in seconds (#6148). Anonymous reads share 60 per hour
 # per source IP with the deployer's gate on the same host. At the 20s default, land.sh's 1200s
-# budget is 60 polls, so one landing that times out spends the whole hour. At 60s the same
-# budget is 20 polls.
-ANONYMOUS_INTERVAL_S = 60
+# budget is 61 polls, so one landing that times out spends the whole hour. A poll before any
+# required run registers costs 2 requests (check-runs, then check-suites), so the interval
+# is 90s rather than 60s: 15 polls, at most 30 requests. An anonymous wait also never walks
+# descendants (`wait`'s `walk_descendants`).
+ANONYMOUS_INTERVAL_S = 90
 
 
 class DisarmedGateError(RuntimeError):
@@ -101,11 +103,10 @@ def fetch_check_runs(sha: str) -> list[dict]:
     Authenticated through `gh auth token` when the CLI is logged in, anonymous otherwise.
     The anonymous limit is 60/hour per source IP and this poll shares it with the deployer's
     own gate on the same host. An anonymous wait therefore polls every
-    `ANONYMOUS_INTERVAL_S` (60s) rather than every 20s: land.sh's 1200s budget is then 20
-    polls, not 60. A poll costs one request on the ordinary path. It costs more for a
-    listing past its first page, for the check-suites read once no required run exists, and
-    for up to `DESCENDANT_LIMIT` descendants once a push reads as dropped.
-    host_lib.github_token carries the rest of the numbers.
+    `ANONYMOUS_INTERVAL_S` (90s) rather than every 20s, and skips the descendant walk:
+    land.sh's 1200s budget then costs at most 30 requests, not 60 or more.
+    `ANONYMOUS_INTERVAL_S` has the arithmetic. Authenticated, a poll also reads up to
+    `DESCENDANT_LIMIT` descendants once a push reads as dropped.
     """
     return _github_pages(f"commits/{sha}/check-runs", "check_runs")
 
@@ -125,13 +126,13 @@ def lookup_token() -> str | None:
     return github_token(os.environ, subprocess.run)
 
 
-def poll_interval(requested: int, token: str | None) -> int:
+def poll_interval(requested: int, authenticated: bool) -> int:
     """`requested`, raised to `ANONYMOUS_INTERVAL_S` when there is no token to read with.
 
     Backing off rather than refusing keeps an anonymous landing working: the operator ruled
     on #6148 that an anonymous read is a fail-safe case, not a fault to stop on.
     """
-    if token or requested >= ANONYMOUS_INTERVAL_S:
+    if authenticated or requested >= ANONYMOUS_INTERVAL_S:
         return requested
     print(
         f"await_ci: no GitHub token, so reads are anonymous; polling every "
@@ -456,6 +457,18 @@ def _tip_of(sha: str, descendants) -> str:
     return chain[-1] if chain else sha
 
 
+def _read_once(read):
+    """`read`, remembering each SHA's answer. A read that raises is not remembered."""
+    answers: dict[str, list[dict]] = {}
+
+    def once(sha: str) -> list[dict]:
+        if sha not in answers:
+            answers[sha] = read(sha)
+        return answers[sha]
+
+    return once
+
+
 def wait(
     sha: str,
     timeout_s: int,
@@ -466,8 +479,13 @@ def wait(
     fetch_suites=fetch_check_suites,
     descendants=_descendants,
     fetch_tip=_fetch_tip,
+    walk_descendants: bool = True,
 ) -> tuple[int, str]:
     """(exit code, message). Polls until pass/fail or the budget elapses.
+
+    `walk_descendants=False` is the anonymous wait. A dropped push then ends at once on 75
+    rather than reading up to `DESCENDANT_LIMIT` descendants a poll, which would spend the
+    host's 60 anonymous requests an hour (#6148).
 
     A SHA with no Actions suite after `DROPPED_PUSH_GRACE_S` is a push GitHub dropped, and
     its verdict comes from `descendant_verdict` instead. Until one goes green it keeps waiting,
@@ -481,6 +499,10 @@ def wait(
     target = sha
     dropped = False
     while True:
+        # One check-suites read per SHA per poll. `_no_verdict_will_ever_arrive` and the
+        # dropped-push check both want it while no required run exists, and reading it twice
+        # made each such poll cost 3 requests rather than 2 (#6148).
+        suites_this_poll = _read_once(fetch_suites)
         try:
             runs = fetch(target)
         except urllib.error.URLError, TimeoutError, ValueError, OSError:
@@ -488,12 +510,14 @@ def wait(
         # `runs` is bound as a default rather than closed over: verdict_for calls this
         # synchronously within the iteration, so late binding is harmless today, but a
         # future caller that deferred the call would silently read the next poll's runs.
-        verdict = verdict_for(target, lambda _s, _runs=runs: _runs, None, fetch_suites)
+        verdict = verdict_for(
+            target, lambda _s, _runs=runs: _runs, None, suites_this_poll
+        )
         if verdict == "pass":
             return 0, f"{target[:8]}: CI green"
         if verdict == "fail":
             return 1, f"{target[:8]}: CI RED"
-        if _no_verdict_will_ever_arrive(target, runs, fetch_suites):
+        if _no_verdict_will_ever_arrive(target, runs, suites_this_poll):
             moved = resolve_sha(target)
             if moved != target:
                 print(
@@ -506,13 +530,18 @@ def wait(
         if now - started >= DROPPED_PUSH_GRACE_S and not dropped:
             try:
                 dropped = _push_was_dropped(
-                    runs, fetch_suites(target), required_contexts()
+                    runs, suites_this_poll(target), required_contexts()
                 )
             except urllib.error.URLError, TimeoutError, ValueError, OSError:
                 dropped = False
         if any(r.get("name") in required_contexts() for r in runs):
             # A push that was only late, not dropped: its own run now carries the verdict.
             dropped = False
+        if dropped and not walk_descendants:
+            return 75, (
+                f"{target[:8]}: GitHub never ran CI for it, and reading its descendants' CI "
+                "needs a GitHub token -- run `gh auth login`, then re-run"
+            )
         if dropped:
             nearest, verdict = descendant_verdict(
                 target, fetch=fetch, descendants=descendants
@@ -617,7 +646,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     ns = parser.parse_args(argv)
     try:
-        code, msg = wait(ns.sha, ns.timeout, poll_interval(ns.interval, lookup_token()))
+        authenticated = bool(lookup_token())
+        code, msg = wait(
+            ns.sha,
+            ns.timeout,
+            poll_interval(ns.interval, authenticated),
+            walk_descendants=authenticated,
+        )
     except DisarmedGateError as e:
         print(f"await_ci: {e}", file=sys.stderr)
         return CI_DISARMED

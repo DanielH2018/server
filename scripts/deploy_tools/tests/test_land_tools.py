@@ -430,25 +430,26 @@ def test_the_watched_tick_inherits_the_working_directory(monkeypatch):
     assert seen["cwd"] is None
 
 
-def _intervals(timeout_s, token):
-    """The poll intervals `await_ci_verdict` hands `await_ci.wait` for one call."""
+def _wait_args(timeout_s, token):
+    """The (interval, walk_descendants) `await_ci_verdict` hands `await_ci.wait`."""
     seen = []
 
-    def wait(sha, budget, interval):
-        seen.append(interval)
+    def wait(sha, budget, interval, walk_descendants):
+        seen.append((interval, walk_descendants))
         return 0, f"{sha[:8]}: CI green"
 
     tools.await_ci_verdict("abc123def", timeout_s, wait=wait, token=lambda: token)
     return seen
 
 
-def test_an_anonymous_ci_wait_cannot_spend_the_hourly_quota(capsys):
+def test_an_anonymous_ci_wait_backs_off_and_walks_no_descendants(capsys):
     """#6148: anonymous reads get 60/hour per IP, shared with the deployer's gate."""
-    (interval,) = _intervals(1200, None)
-    assert 1200 / interval <= 20
+    (interval, walk) = _wait_args(1200, None)[0]
+    assert interval >= 60
+    assert walk is False
     assert "gh auth login" in capsys.readouterr().err
 
 
-def test_an_authenticated_ci_wait_keeps_the_20s_poll(capsys):
-    assert _intervals(1200, "ghp_token") == [20]
+def test_an_authenticated_ci_wait_keeps_the_20s_poll_and_the_walk(capsys):
+    assert _wait_args(1200, "ghp_token") == [(20, True)]
     assert capsys.readouterr().err == ""
