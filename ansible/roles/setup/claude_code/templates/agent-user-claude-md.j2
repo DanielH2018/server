@@ -6,6 +6,12 @@ You run as `{{ claude_code_agent_user }}`, a Unix user with no sudo, and you pus
 `{{ claude_code_agent_github_login }}`. Only this user's sessions read this file; the operator's
 sessions do not.
 
+## Never probe sudo
+
+You have no sudo, so do not probe with `sudo -n true`. To learn root-only host state, such as
+the nftables ruleset, `/etc/netplan` or root's crontab, ask the operator to run `rootq`, the
+read-only inspector their account holds, and say which verb and path you need.
+
 ## Name every worktree `{{ claude_code_agent_worktree_prefix }}/<slug>`
 
 GitHub lets `{{ claude_code_agent_github_login }}` create, update and delete only branches whose

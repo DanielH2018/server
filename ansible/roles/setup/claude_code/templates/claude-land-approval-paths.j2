@@ -28,6 +28,13 @@ ansible/roles/setup/claude_code/templates/claude-triage
 ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2
 ansible/roles/setup/claude_code/files/claude_triage_run.py
 ansible/roles/setup/claude_code/files/claude_triage_poll.py
+# The read-only root inspector (issue #6323): the root script that decides what root reads and
+# prints, the shim, the task file and the sudoers grant. The agent holds the grant, so it must
+# not widen what the grant reaches.
+ansible/roles/setup/claude_code/files/homelab_rootq.py
+ansible/roles/setup/claude_code/files/rootq.sh
+ansible/roles/setup/claude_code/tasks/rootq.yml
+ansible/roles/setup/claude_code/templates/claude-rootq.sudoers.j2
 # The landing policy and the code that runs it.
 scripts/deploy_tools/land
 # The interpreter and packages `uv run` syncs before land.py starts. A package can run code at

@@ -28,6 +28,7 @@
 # (`code_lines` in ansible/tests/_ratchet.py). Blank lines, comments and docstrings are free.
 # `uv run python scripts/dev/tighten_ratchets.py --tighten` lowers each entry to its file.
 ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 409
+ansible/roles/setup/claude_code/files/homelab_rootq.py 510  # conjoined: root runs it as the single stdlib file /usr/local/sbin/homelab-rootq under python3 -I, which puts no other directory on sys.path, so a second module would be a second root-owned file the install task, the sudoers grant's reach and the lander's approval list must all name
 ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 450
 ansible/tests/k8s/_workload_property_rows.py 401
 ansible/tests/repo/test_census_rows_roles.py 414

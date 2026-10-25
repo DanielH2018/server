@@ -1,0 +1,66 @@
+---
+# The read-only root inspector, `rootq` (issue #6323). Imported from main.yml.
+# files/homelab_rootq.py is the root script, files/rootq.sh the shim on PATH, and the role's
+# CLAUDE.md, "The root inspector", has the grant and how to take it back.
+#
+# Install order puts the grant last, so the sudoers line never names a command that is not yet
+# on disk. Removal runs the other way round: the grant first, then the shim, then the script.
+
+- name: Install the root inspector
+  when: claude_code_rootq_enabled
+  block:
+    - name: Install the root inspector's script
+      tags: [claude_code]
+      ansible.builtin.copy:
+        src: homelab_rootq.py
+        dest: "{{ claude_code_rootq_script }}"
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Install the rootq shim
+      tags: [claude_code]
+      ansible.builtin.copy:
+        src: rootq.sh
+        dest: "{{ claude_code_rootq_shim }}"
+        owner: root
+        group: root
+        mode: "0755"
+        validate: sh -n %s
+      become: true
+
+    - name: Grant the root inspector to its users
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: claude-rootq.sudoers.j2
+        dest: /etc/sudoers.d/claude-rootq
+        owner: root
+        group: root
+        mode: "0440"
+        validate: visudo -cf %s
+      become: true
+
+- name: Take the root inspector back
+  when: not claude_code_rootq_enabled
+  block:
+    - name: Remove the root inspector's sudoers grant
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: /etc/sudoers.d/claude-rootq
+        state: absent
+      become: true
+
+    - name: Remove the rootq shim
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ claude_code_rootq_shim }}"
+        state: absent
+      become: true
+
+    - name: Remove the root inspector's script
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ claude_code_rootq_script }}"
+        state: absent
+      become: true

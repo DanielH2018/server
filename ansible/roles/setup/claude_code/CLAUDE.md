@@ -324,3 +324,52 @@ only, where `claude_code_takeover_check_enabled` is true.
   role removes the sudoers file, the wrapper, the flux copy and the state directory, in that
   order.
 - **To widen who holds it,** add to `claude_code_takeover_check_users`; one line per user.
+
+## The root inspector
+
+`rootq` reads root-only host state for a session that has no general sudo. It runs
+`/usr/local/sbin/homelab-rootq` (`files/homelab_rootq.py`) as root, behind one `NOPASSWD`
+line in `/etc/sudoers.d/claude-rootq` (issue #6323). The operator approved the shape on
+2026-10-25 and reviews the grant before it lands. It exists where `claude_code_rootq_enabled`
+is true: daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
+only, where fan-out batches and the operator's sessions run. The agent user stays without
+sudo: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297), and
+`NoNewPrivileges=yes` in `claude-rc.service` stops sudo there anyway. The four files that
+decide what the grant reaches are on the lander's approval list.
+
+Everything rootq accepts is an explicit allowlist, and anything not listed is refused. The
+list is deliberately minimal: the files and sources #6323's sessions needed. It grows only when
+a need appears.
+
+- **Tier 1 prints no file content.** `stat PATH` prints mode, type, owner, group, size and
+  mtime. `sha256 PATH` prints the hash. `matches PATH REPO_FILE` exits 0 when the live file is
+  byte-identical to REPO_FILE in the caller's checkout, and 1 when it differs. The shim
+  (`files/rootq.sh`) hashes REPO_FILE as the caller and passes only the hash. Root therefore
+  receives `matches PATH HEX` and never opens a caller-named file. The shim refuses a REPO_FILE
+  that is absolute, holds `..`, or resolves outside the checkout.
+- **Tier 2 prints, from fixed sources only:** `nft list ruleset`, `ufw status verbose`,
+  `sshd -T`, `crontab -l -u root`, and `cat` of `/etc/netplan/*.yaml`. Every argv is written
+  in `ansible/roles/setup/claude_code/files/homelab_rootq.py:COMMANDS`, and no caller flag
+  reaches any of them. There is no general `cat`.
+- **Which paths:** `ansible/roles/setup/claude_code/files/homelab_rootq.py:PATHS` lists the
+  files tier 1 takes, as a directory plus a glob over one file name, and `CAT` lists the ones
+  tier 2 prints. A path must resolve to itself, so a symlink, `..` or `//` is refused. Every
+  directory above it must be root-owned and writable by root alone. It must also miss every
+  pattern in `DENY`, an independent second layer. `/var/lib/gitops-deploy` is not listed,
+  because `sys_user` owns it and the caller already reads it.
+- **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a
+  webhook URL, is withheld whole. The rest is redacted by default. A value prints only when it
+  matches one of the token classes the script defines in one block, such as a number of up to
+  seven digits, a duration, an address, a port, an interface name, a path under a standard
+  root, or a keyword of the printing program's grammar. Under a key whose name could name a
+  credential, such as `pass`, `pin`, `auth`, `key` or `token`, the value is always replaced,
+  digits included. A crontab command keeps its binary, flag names and paths, and every other
+  argument becomes `<arg>`. A line with no key, list or cron structure becomes `<line>`.
+  Output stops at 256 KiB.
+- **To expand it:** a new tier-1 path needs a `PATHS` entry, a must-pass case and a
+  must-refuse neighbour case in `tests/test_rootq.py`: a sibling the new entry still does not
+  admit. A new tier-2 source also needs a structural argument, written at `CAT` or `COMMANDS`,
+  for why the filter redacts its grammar cleanly, with must-pass and must-redact cases in
+  `tests/test_rootq_redaction.py`.
+- **To take it back:** set `claude_code_rootq_enabled: false` and apply the role. The role
+  removes the sudoers file, the shim and the script, in that order.
