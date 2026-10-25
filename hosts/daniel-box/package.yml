@@ -17,7 +17,20 @@
 # sits above the component's defaults (H3, *Component variables*). A package-level `defaults:` map
 # reaches only the package's own files, never a component's.
 description: daniel-box's homelab host package
-components: [reconcile, secrets-unit, k3s-restart, kuma-push, nut-secondary, apt-github-cli]
+components:
+  - reconcile
+  - secrets-unit
+  - k3s-restart
+  - kuma-push
+  - nut-secondary
+  - check-lib
+  - docs-refresh
+  - infra-map
+  - eval-sweep
+  - worktree-sweep
+  - secret-rotation
+  - loki-route-witness
+  - apt-github-cli
 credentials:
   - k3s_readonly_token
   - ups_secondary_push_token

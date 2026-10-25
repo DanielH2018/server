@@ -10,22 +10,15 @@ full, and the journald-cap forensics.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "initial_setup"`
-- **Crons (13):**
+- **Crons (7):**
   - `Weekly apt autoremove` — `0 2 * * 0`
   - `Weekly dpkg purge orphaned configs` — `15 2 * * 0`
-  - `Weekly secret rotation (auto tier)` — `0 9 * * 0`
   - `Weekly system restart` — `30 7 * * 0`
   - `Weekly firmware update` — `0 7 * * 0`
   - `Clean unused Docker images` — `30 6 * * *`
-  - `Clear ansible log file` — `0 6 * * 0`
-  - `Weekly git object-store repair` — `20 4 * * 0`
-  - `Refresh homelab infrastructure map` — `*/15 * * * *`
-  - `Refresh generated docs` — `17 6,18 * * *`
-  - `Homelab eval sweep` — `0 2 * * 0`
   - `Weekly rkhunter malware scan` — `0 2 * * 3`
   - `Weekly AIDE file integrity check` — `0 3 * * 1`
-- **Timers (3):** `kuma-check-secret-rotation-audit.timer` (`OnCalendar=*-*-* 08:30:00`),
-  `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 08:20:00`),
+- **Timers (2):** `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 08:20:00`),
   `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
 <!-- /generated_from -->
 
@@ -76,38 +69,25 @@ are in the record page.
   says why, and why the order there matters. ENFORCED:
   `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`.
 
-## Autonomous-role contract — Generated docs refresh (`crons` tag)
-Twice daily (06:17 and 18:17, daniel-box only): `docs-refresh.sh.j2` regenerates the reference
-pages and the infra map, weights any unweighted test module, re-measures one eighth of the
-recorded weights and rewrites those that drifted, rebuilds the site, and publishes
-the diff through a PR that a detached landing merges (#3609).
-- **Scope:** three derived paths and nothing else — `docs/reference/`,
-  `docs/assets/generated/` and `scripts/dev/pytest_shard_weights.json`; a write outside them
-  parks every deploy on the box.
-- **Mode:** degrade, never abort. A failing generator sets `GENERATORS_OK=0`, publishes what
-  succeeded and reports DOWN. A red test suite still exits 1.
-- **Abort valves:** the shared git-tree lock, the dirty-tree gate, the
-  unlanded-branch guard, and the commit-failure stamp under `/var/lib/homelab/docs-refresh.d`.
-- **Required evidence:** `status=<up|down> <msg>` in the log, a push to "Docs Refresh", and
-  `docs-refresh.prom` in the node_exporter textfile directory.
-- **Next-run review:** before adding a fourth staged path, check no prek hook matching it can
-  fail on generator output. `docs/host-baseline-record.md`'s *The generated-docs refresh cron,
-  in detail* has why, the `PUSH_STATUS` default and the `vale` exception.
-
-## Autonomous-role contract — Homelab eval sweep (`evals` tag)
-Weekly (Sunday 02:00, daniel-box only): grades every case under `evals/cases/`, rolls the result
-into `evals/history.json`, then publishes it.
-- **Scope:** run the existing cases and commit the trended result; never edits a case, an agent
-  or a skill definition, and never runs the `run-live.mjs` live-smoke path.
-- **Mode:** binary, no dial — hermetic when the API key exists, else a no-op reporting UP.
-- **Authoritative source:** the chezmoi eval engine's own grading, never a cached report.
-- **Abort valves:** the shared git-tree lock; the unlanded-branch guard; the empty-key gate
-  above.
-- **Required evidence:** `status=<up|down> <msg>` in the log, `eval-run.prom` in the node_exporter
-  textfile directory and, when armed, a push to "Homelab Evals".
-- **Next-run review:** before widening scope, read the last few `evals-history/*` PRs this cron
-  opened for what regressed or flaked. `docs/host-baseline-record.md`'s *The eval sweep, in
-  detail* has the REGRESSED-case commit rule and why there is no non-hermetic fallback.
+## Autonomous-role contract — the host crons that remain (`crons` tag)
+The weekly reboot, the weekly firmware update, the Docker image prune, the weekly apt autoremove
+and dpkg purge, and the rkhunter and AIDE scans run with no human in the loop. H7.36 moved the
+docs refresh, the infrastructure-map refresh, the eval sweep, the object-store repair and the
+secret-rotation timers into components under `hosts/components/` (`docs-refresh/`, `infra-map/`,
+`eval-sweep/`, `worktree-sweep/`, `secret-rotation/`). Each component's `component.yml` carries
+its own contract. This role keeps the Loki read-route witness for daniel-server
+(`initial_setup_packaged_hosts` in `defaults/main.yml` excludes daniel-box) and the setup-drift
+check.
+- **Scope:** reboot the host, stage firmware, prune unused Docker images older than a week,
+  remove orphaned packages and configs, and scan. None edits the repository or the cluster.
+- **Mode:** the reboot, firmware and prune jobs follow `weekly_reboot_*` and `has_docker`; a
+  host without the capability loses the job on the next apply.
+- **Abort valves:** a failed prune leaves its Healthchecks.io ping unsent, and the reboot
+  chain reboots even when its ping fails, by design.
+- **Required evidence:** a `weekly-restart`, `fwupd-auto` or `docker-prune` line in the journal,
+  and the Healthchecks.io check for the reboot and the prune.
+- **Next-run review:** before adding a state-changing cron here, check whether a component
+  under `hosts/components/` should own it instead.
 
 ## Notable
 **Two host checks live here rather than in monitor-bridge**, both `kuma-check-*` timers that

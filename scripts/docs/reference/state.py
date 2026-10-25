@@ -170,7 +170,7 @@ def docs_refresh_run(build_info: Path = _DOCS_SITE_BUILD_INFO) -> LoopRun:
 
     Cadence: crons.build_rows() job "Refresh generated docs". Reads build-info.json, the
     served-site stamp build_docs.py writes -- see
-    ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2.
+    hosts/components/docs-refresh/templates/docs-refresh.sh.j2.
     """
     if not build_info.is_file():
         return LoopRun(None, "build-info.json not reachable from here", unreadable=True)
