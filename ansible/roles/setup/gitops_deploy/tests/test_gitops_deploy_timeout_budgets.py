@@ -132,10 +132,9 @@ def test_a_budget_that_outgrows_the_ceiling_is_caught():
     )
 
 
-_INITIAL_SETUP_TEMPLATES = (
-    pathlib.Path(__file__).parents[2] / "initial_setup" / "templates"
+_SECRET_ROTATE = (
+    _REPO / "hosts/components/secret-rotation/templates/secret-rotate.sh.j2"
 )
-_SECRET_ROTATE = _INITIAL_SETUP_TEMPLATES / "secret-rotate.sh.j2"
 
 # Every job that waits for the git-tree lock, with the regex that reads its wait.
 #
@@ -148,11 +147,11 @@ _SECRET_ROTATE = _INITIAL_SETUP_TEMPLATES / "secret-rotate.sh.j2"
 _LOCK_WAITERS = {
     "secret-rotate.sh.j2": (_SECRET_ROTATE, r"^flock\s+-w\s+(\d+)\s+9"),
     "docs-refresh.sh.j2": (
-        _INITIAL_SETUP_TEMPLATES / "docs-refresh.sh.j2",
+        _REPO / "hosts/components/docs-refresh/templates/docs-refresh.sh.j2",
         r"^flock\s+-w\s+(\d+)\s+9",
     ),
     "eval-run.sh.j2": (
-        _INITIAL_SETUP_TEMPLATES / "eval-run.sh.j2",
+        _REPO / "hosts/components/eval-sweep/templates/eval-run.sh.j2",
         r"^flock\s+-w\s+(\d+)\s+9",
     ),
     "deploy_lib/under_locks.py": (
@@ -181,6 +180,8 @@ def test_the_lock_waiter_census_is_non_vacuous():
 
 def _waiter_text(path: pathlib.Path) -> str:
     # What ships: a template is read as its render, a Python module as its source.
+    if path.suffix == ".j2" and path.parent.parent.parent.name == "components":
+        return rendered_shell_text("components", path.parent.parent.name, path.name)
     if path.suffix == ".j2":
         return rendered_shell_text("setup", "initial_setup", path.name)
     return path.read_text()

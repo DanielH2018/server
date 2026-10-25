@@ -24,6 +24,7 @@ from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, run, write_exec
 
 ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
+COMPONENTS = ANSIBLE.parent / "hosts" / "components"
 CHECK_LIB = ROLE / "files" / "homelab-check-lib.sh"
 PUSH_LIB = "/usr/local/lib/kuma-push-lib.sh"
 CHECK_LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
@@ -36,6 +37,11 @@ OVERRIDES = {
 
 
 def _render(template: str) -> str:
+    """The script as rendered, from its host component once H7.36 moved it out of the role."""
+    for path in sorted(COMPONENTS.glob(f"*/templates/{template}")):
+        return render_shell_script(
+            "components", path.parents[1].name, template, overrides=OVERRIDES
+        )
     return render_shell_script("setup", "initial_setup", template, overrides=OVERRIDES)
 
 
@@ -216,7 +222,7 @@ def test_setup_drift_without_a_push_token_still_writes_the_textfile(tmp_path):
 # --- secret-rotation-audit: the audit's exit code is the verdict ------------------------------
 
 
-def _run_audit(tmp_path, audit_rc=0, dirty=False):
+def _run_audit(tmp_path, audit_rc=0, dirty=False, credential=True):
     """Run the rendered wrapper in a scratch checkout with `uv` standing in for the audit."""
     repo = tmp_path / "server"
     (repo / "ansible" / "vars").mkdir(parents=True)
@@ -226,19 +232,22 @@ def _run_audit(tmp_path, audit_rc=0, dirty=False):
     push_lib = tmp_path / "kuma-push-lib.sh"
     push_lib.write_text(PUSH_STUB)
     body = _render("secret-rotation-audit.sh.j2")
+    # The packaged script (H7.36) sources both libraries from /usr/lib/homelab.
+    audit_push_lib = "/usr/lib/homelab/kuma-push-lib.sh"
+    audit_check_lib = "/usr/lib/homelab/homelab-check-lib.sh"
     for needle in (
-        PUSH_LIB,
-        CHECK_LIB_PATH,
+        audit_push_lib,
+        audit_check_lib,
         "/home/ubuntu/server",
         "/home/ubuntu/.local/bin/uv",
     ):
-        assert needle in body, f"secret-rotation-audit.sh no longer references {needle}"
+        assert needle in body, f"secret-rotation-audit no longer references {needle}"
     body = (
         # The checkout path first: the library path substituted below sits under /home/ubuntu/server.
         body.replace("/home/ubuntu/server", str(repo))
         .replace("/home/ubuntu/.local/bin/uv", str(uv))
-        .replace(PUSH_LIB, str(push_lib))
-        .replace(CHECK_LIB_PATH, str(CHECK_LIB))
+        .replace(audit_push_lib, str(push_lib))
+        .replace(audit_check_lib, str(CHECK_LIB))
     )
     script = write_exec(tmp_path / "secret-rotation-audit.sh", body)
     textfile_dir, env = _env(
@@ -258,7 +267,13 @@ def _run_audit(tmp_path, audit_rc=0, dirty=False):
     )
     env["PATH"] = path_with(stubs)
     env["STUB_GIT_STATUS"] = " M ansible/vars/secrets.yml" if dirty else ""
-    result = run([str(script)], env=env)
+    # The unit's LoadCredential= directory; the script reads its push token from there.
+    creds = tmp_path / "credentials"
+    creds.mkdir()
+    if credential:
+        (creds / "secret_rotation_push_token").write_text("rotation-token")
+    env["CREDENTIALS_DIRECTORY"] = str(creds)
+    result = run([str(script)], env=env, check=False)
     return textfile_dir, result.returncode
 
 
@@ -286,6 +301,14 @@ def test_a_failed_audit_writes_success_zero_and_keeps_its_exit_code_for_the_time
         == "0"
     )
     assert code == 1
+
+
+def test_an_audit_without_its_credential_exits_one_and_pushes_nothing(tmp_path):
+    """Rejecting half of the credential move: the unit's directory is the only token source."""
+    textfile_dir, code = _run_audit(tmp_path, audit_rc=0, credential=False)
+    assert code == 1
+    assert _pushes(tmp_path) == []
+    assert not (textfile_dir / "secret-rotation-audit.prom").exists()
 
 
 def test_a_dirty_tree_short_circuit_writes_success_zero_before_it_pushes(tmp_path):

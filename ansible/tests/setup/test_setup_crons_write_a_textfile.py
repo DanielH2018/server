@@ -64,17 +64,8 @@ EXEMPT: dict[str, str] = {
     "initial_setup: cron `Weekly apt autoremove`": _GAP,
     "initial_setup: cron `Weekly dpkg purge orphaned configs`": _GAP,
     "initial_setup: cron `Weekly firmware update`": _GAP,
-    "initial_setup: cron `Weekly secret rotation (auto tier)`": _KUMA,
     "initial_setup: cron `Weekly system restart`": _HC,
     "initial_setup: cron `Clean unused Docker images`": _HC,
-    "initial_setup: cron `Clear ansible log file`": (
-        "truncates a log file; a missed run leaves the file one week longer, nothing else"
-    ),
-    "initial_setup: cron `Weekly git object-store repair`": _HC,
-    "initial_setup: cron `Refresh homelab infrastructure map`": (
-        "regenerates a derived HTML artifact from the tree; a stale map is visible in the "
-        "page's own timestamp and changes nothing else"
-    ),
     "k3s: cron `Longhorn filesystem trim`": (
         "touches a cron-fired stamp that longhorn-backup-health.sh reads into its own "
         "textfile verdict"

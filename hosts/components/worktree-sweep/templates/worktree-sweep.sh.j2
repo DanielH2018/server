@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Weekly worktree sweep and git object-store repair, then a Healthchecks.io ping carrying the
+# sweep's exit code.
+#
+# Usage: worktree-sweep [-h|--help]
+# Takes no arguments. homelab-worktree-sweep.timer runs it as the checkout owner on daniel-box
+# on Sunday at 04:20 UTC. Running it by hand removes merged worktrees and drops unreachable
+# objects for real.
+#
+# `prune_worktrees.py --prune --brief` removes the merged worktrees, deletes the orphan
+# `worktree-*` branches whose content is on origin/master, deletes the unregistered directories
+# under .claude/worktrees/ whose every file a ref already reaches (dev/worktree_orphans.py,
+# #4425), then drops the unreachable objects older than a day and clears a stale gc.log. See
+# repair_object_store in that script for why the grace period is not `now`.
+#
+# THE EXIT CODE REACHES HEALTHCHECKS.IO (#4482). `prune_worktrees.py` exits 1 when a removal or a
+# branch deletion failed (#4445). `$rc` on the ping URL is Healthchecks.io's exit-status
+# endpoint: 0 is a success ping and anything else is a failure, so a failed sweep pages at once
+# and a sweep that never ran pages on silence. The key comes from /etc/healthchecks/ping.env,
+# and `[ -r ] &&` guards the `.`, because a failed `.` would end the script before the ping.
+# The check is named for the host: `<host>-worktree-sweep`.
+set -u
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
+cd /home/{{ sys_user }}/server || exit 1
+# PATH explicitly: the unit's environment inherits neither /usr/local/bin nor the user's
+# ~/.local/bin, so a bare `uv` is not found.
+PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief
+rc=$?
+# shellcheck source=/dev/null
+[ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env
+[ -n "${HC_PING_KEY:-}" ] && curl -fs -m 10 --retry 3 "https://hc-ping.com/$HC_PING_KEY/$(hostname -s)-worktree-sweep/$rc" >/dev/null 2>&1
+exit "$rc"

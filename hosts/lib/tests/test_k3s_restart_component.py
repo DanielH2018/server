@@ -18,6 +18,18 @@ from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_sources import lib_source
 
+# Every key the daniel-box package names: a credential outside secrets.yml fails the render.
+_KEYS = (
+    "k3s_readonly_token: x\n"
+    "docs_refresh_push_token: x\n"
+    "homelab_eval_push_token: x\n"
+    "anthropic_api_key: x\n"
+    "secret_rotation_push_token: x\n"
+    "loki_route_witness_push_token: x\n"
+    "ups_secondary_push_token: x\n"
+    "nut_monitor_password: x\n"
+)
+
 COMPONENT = REPO / "hosts/components/k3s-restart"
 SYSTEM = "/usr/lib/systemd/system/"
 SERVICE = f"{SYSTEM}homelab-k3s-restart.service"
@@ -28,13 +40,9 @@ TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-restart.conf"
 @pytest.fixture(scope="module")
 def package(tmp_path_factory):
     root = tmp_path_factory.mktemp("box")
-    (root / "secrets.yml").write_text(
-        "k3s_readonly_token: x\nups_secondary_push_token: x\nnut_monitor_password: x\n"
-    )
+    (root / "secrets.yml").write_text(_KEYS)
     (root / "sops").mkdir()
-    (root / "sops/daniel-box.sops.yaml").write_text(
-        "k3s_readonly_token: x\nups_secondary_push_token: x\nnut_monitor_password: x\n"
-    )
+    (root / "sops/daniel-box.sops.yaml").write_text(_KEYS)
     return host_mode.render_host(
         "daniel-box", secrets=root / "secrets.yml", sops_dir=root / "sops"
     )
@@ -110,12 +118,8 @@ def test_a_host_without_a_window_fails_the_render():
 
 def test_the_timer_is_enabled_from_timers_target(package):
     link = f"{SYSTEM}timers.target.wants/homelab-k3s-restart.timer"
-    # The UPS watchdog timer (H7.33) is the package's other enable link.
-    watchdog = f"{SYSTEM}timers.target.wants/homelab-ups-watchdog.timer"
-    assert package.links == {
-        link: "../homelab-k3s-restart.timer",
-        watchdog: "../homelab-ups-watchdog.timer",
-    }
+    # The UPS watchdog timer (H7.33) is a second enable link, so only this one is held.
+    assert package.links[link] == "../homelab-k3s-restart.timer"
 
 
 def test_the_credential_and_the_secrets_unit_are_in_the_package(package):

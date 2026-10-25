@@ -268,11 +268,39 @@ def _scheduled(repo: Path) -> dict[str, str]:
     return reached
 
 
+def _component_timer_jobs(repo: Path) -> dict[str, str]:
+    """Script filename -> the host-component unit that reaches it (H7.10).
+
+    A timer's service in `hosts/components/*/units/` runs a script directly, or a shipped
+    wrapper whose template sits in the same component. The wrapper installs under
+    `/usr/lib/homelab/<name>`, so a wrapper is matched by the template's stem.
+    """
+    components = repo / "hosts" / "components"
+    wrappers = {
+        path.name.removesuffix(".sh.j2"): path
+        for path in components.glob("*/*/*.sh.j2")
+    }
+    reached: dict[str, str] = {}
+    for unit in sorted(components.glob("*/units/*.service*")):
+        text = file_text(unit)
+        for line in text.splitlines():
+            if not line.startswith("ExecStart"):
+                continue
+            command = line.partition("=")[2]
+            for script in _invoked_in(command):
+                reached.setdefault(script, unit.name)
+            wrapper = wrappers.get(Path(command.split()[0].lstrip("+")).name)
+            if wrapper is not None:
+                for script in _invoked_in(file_text(wrapper)):
+                    reached.setdefault(script, f"{unit.name} (via {wrapper.name})")
+    return reached
+
+
 def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     """(file, kind, evidence) for every file in the tree that can invoke a script.
 
-    Nothing in `scripts/` is reached from a systemd unit — every `ExecStart` in the tree
-    runs a host binary or a role's own `files/` module — so units are not scanned.
+    Systemd units are not scanned here: the units that reach `scripts/` since H7.10 are the
+    host components' timers, which `_component_timer_jobs` reads.
     """
     sites: list[tuple[Path, str, str]] = []
 
@@ -378,6 +406,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
 
     for script, cron in _scheduled(repo).items():
         record(script, "scheduled", f"cron: {cron}")
+    for script, unit in _component_timer_jobs(repo).items():
+        record(script, "scheduled", f"timer: {unit}")
 
     catalogue = candidates(scripts)
     by_path = {p.name: p for p in catalogue}

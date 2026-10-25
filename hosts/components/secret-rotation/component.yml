@@ -1,0 +1,73 @@
+# daniel-box's secret rotation and its daily audit as packaged timers (H7.10c, docs/target-
+# architecture/host/h7-delete-ansible.md). Until H7.36 the initial_setup role installed them as the
+# "Weekly secret rotation (auto tier)" cron and the Ansible-era `kuma-check-secret-rotation-audit`
+# timer, both gated on `has_gitops`, which is true on daniel-box alone. Both scripts push the
+# "Secret Rotation" Kuma monitor through one token, which arrives as the credential
+# `secret_rotation_push_token` (LoadCredential= from /run/credstore, filled by homelab-secrets
+# from daniel-box's SOPS file). Neither script carries the token in its text.
+#
+# - homelab-secret-rotation, Sunday 09:00: rotates the coming-due auto-tier push tokens, commits
+#   and publishes through a PR (scripts/secrets_mgmt/secret_rotation.py rotate --commit --deploy,
+#   then scripts/deploy_tools/publish_pr.py).
+# - homelab-secret-rotation-audit, daily 08:30: scripts/secrets_mgmt/secret_rotation.py audit
+#   --push. It exits 1 after a `down` push, so Restart=on-failure reruns it every 30 minutes
+#   until the verdict is up (the kuma-check form M6 left), and its boot unit reruns it once at
+#   boot while the last verdict was not up (#4495).
+#
+# Autonomous-role contract (the weekly rotation changes live credentials with no human in the
+# loop; the audit only reads and reports).
+#
+# - Scope / exclusions: only `auto`-tier push tokens that fall due within ROTATE_LEAD_DAYS and
+#   have a single-redeploy consumer (monitor-bridge or cloudflare-ddns). Cross-host tokens stay
+#   manual. The commit holds `ansible/vars/secrets.yml`, `ansible/secret_rotation.yml` and, once
+#   the cluster file exists, the three cluster paths `cluster_vars.py write` keeps in step.
+#   Nothing else is staged. The audit reads the registry and the key list and changes nothing.
+# - Mode (explicit and reversible): the two timers' enable links in this package arm them.
+#   Dropping a link from a package version, or reverting this component, stops that timer on the
+#   install that drops it (reconcile's step 1). `systemctl stop homelab-secret-rotation.timer` on
+#   daniel-box stops the rotation until the next package install. A rotation failure reverts the
+#   working tree, so a half-rotated secret is never left committed. After the commit the rotation
+#   is already live, so the script leaves the commit where the publisher left it for a human.
+# - Authoritative sources: `ansible/secret_rotation.yml` and the key list of
+#   `ansible/vars/secrets.yml` in the primary checkout, and `origin` for the stale-branch check.
+#   The scripts take the shared git-tree lock before they touch the tree, so they never overlap
+#   the deployer.
+# - Abort valves: the shared git-tree lock, the dirty-tree gate (a dirty tree aborts and pages),
+#   the one-rotation-in-flight gate (an unlanded `secret-rotate/*` branch on origin refuses a new
+#   rotation), and reconcile's `hold_sha`.
+# - Required evidence, every run: a `status=<up|down>` line tagged secret-rotate or
+#   secret-rotation-audit in the journal, a push to the "Secret Rotation" monitor, and
+#   secret-rotation-audit.prom in node_exporter's textfile directory for the audit.
+# - Next-run review: a `secret-rotate/*` branch on origin for more than 6 hours, or a rotation
+#   commit left local, means a rotated credential is live but unpublished. Land it by hand before
+#   the next Sunday. docs/secret-rotation.md has the tiers and the recovery steps.
+#
+# ENFORCED: ansible/tests/setup/test_initial_setup_check_textfiles.py (the audit's behaviour
+# against stubs), ansible/tests/setup/test_cron_scripts_publish_via_pr.py and
+# hosts/lib/tests/test_secret_rotation_component.py (the units, the credential and the legacy
+# entries).
+credentials:
+  - secret_rotation_push_token
+files:
+  - {src: templates/secret-rotate.sh.j2, dst: /usr/lib/homelab/secret-rotate, mode: "0755"}
+  - {src: templates/secret-rotation-audit.sh.j2, dst: /usr/lib/homelab/secret-rotation-audit, mode: "0755"}
+  - {src: units/homelab-secret-rotation.service.j2, dst: /usr/lib/systemd/system/homelab-secret-rotation.service}
+  - {src: units/homelab-secret-rotation.timer, dst: /usr/lib/systemd/system/homelab-secret-rotation.timer}
+  - {src: units/homelab-secret-rotation-audit.service.j2, dst: /usr/lib/systemd/system/homelab-secret-rotation-audit.service}
+  - {src: units/homelab-secret-rotation-audit.timer, dst: /usr/lib/systemd/system/homelab-secret-rotation-audit.timer}
+  - {src: units/homelab-secret-rotation-audit-boot.service, dst: /usr/lib/systemd/system/homelab-secret-rotation-audit-boot.service}
+enable:
+  homelab-secret-rotation.timer: timers.target
+  homelab-secret-rotation-audit.timer: timers.target
+  homelab-secret-rotation-audit-boot.service: multi-user.target
+# What initial_setup installed before H7.36. Reconcile retires each once the timers above have
+# started, so a rotation or an audit never runs twice or not at all.
+legacy:
+  - {cron: "Weekly secret rotation (auto tier)", user: "{{ sys_user }}"}
+  - {cron: "Daily secret rotation audit", user: "{{ sys_user }}"}
+  - {unit: kuma-check-secret-rotation-audit.timer}
+  - {unit: kuma-check-secret-rotation-audit.service}
+  - {unit: kuma-check-secret-rotation-audit-boot.service}
+  - {path: /usr/local/bin/secret-rotate.sh}
+  - {path: /usr/local/bin/secret-rotation-audit.sh}
+  - {path: /var/lib/homelab/setup-render-manifest.d/secret-rotation}

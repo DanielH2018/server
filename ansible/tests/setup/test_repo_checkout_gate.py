@@ -43,7 +43,6 @@ CONTROLLER_SIDE = frozenset({"src", "content", "fail_msg", "msg", "that"})
 KNOWN_HITS = frozenset(
     {
         "Install Git hooks",
-        "Create cron job to clear ansible.log weekly",
         "Install pinned Ansible collections from requirements.yml",
         "Seed ansible/.sops.yaml (first-host bootstrap only)",
         "Schedule the etcd restore drill",

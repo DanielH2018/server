@@ -453,10 +453,10 @@ def test_remaining_setup_hosts_note_stays_empty_for_pr_1241():
     two playbook runs that change nothing -- 7 of the 18 such verdicts in the two days to
     2026-09-05 had this shape."""
     files = [
-        "ansible/roles/setup/initial_setup/templates/docs-refresh.sh.j2",
-        "ansible/roles/setup/initial_setup/templates/eval-run.sh.j2",
+        "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
+        "ansible/roles/setup/initial_setup/templates/setup-drift-kuma-push.env.j2",
     ]
-    assert land_reach.remaining_setup_hosts_note(files, "daniel-box") == ""
+    assert land_reach.remaining_setup_hosts_note(files, "daniel-server") == ""
 
 
 def test_setup_file_hosts_reads_a_role_markdown_as_shipped_nowhere(
