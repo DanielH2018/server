@@ -613,7 +613,8 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # the edit that usually breaks the row deletes a macro template, which `.j2` already gates.
 #
 # CI skips it on both `prek run` steps, because its `pytest` job runs the same twelve files.
-# The `static-ratchet-tests-*` siblings below carry the eleven more #5481 added.
+# The `static-ratchet-tests-*` siblings below carry the eleven more #5481 added and six more
+# from the 2026-10-25 survey of a week's PR reds.
 # That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
 # runs there too, against the merge base with origin/master (#4009). docs-refresh
 # stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
@@ -630,7 +631,7 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 # Eleven more cheap ratchet and census modules, which failed 15 PR runs across 13 PRs between
 # 2026-10-15 and 2026-10-17 (#5481). They sit in sibling hooks rather than in the entry above,
 # so that each runs only on a commit that can change its verdict. Widening the gate above to
-# `renovate.json` or a planning doc would make those commits pay all twenty-three modules.
+# `renovate.json` or a planning doc would make those commits pay all twenty-nine modules.
 # Each `files` gate is the data the tests read, plus the test module and its import closure
 # (scripts/tests/test_prek_files_cover_entry_imports.py), plus pyproject.toml and uv.lock,
 # which decide the pytest that runs them. None matches a path the docs-refresh or eval-run
@@ -736,6 +737,79 @@ entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/
 language = "system"
 pass_filenames = false
 files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(lib|validate)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
+
+# Six more rules that failed PR CI between 2026-10-18 and 2026-10-25: the eval cases'
+# CLAUDE.md quotes, the k8s_host_files pairs, the Landings board, the deployer's import
+# boundary, the alert conventions and the unit-template census. Each failed 2 to 4 branches
+# that changed an input the hook below names, and none ran before CI. Two of them run one node
+# rather than the module: the alert module's promtool cases took 4.8-5.2s and the unit module's
+# systemd-analyze cases 10.6-11.2s, where the convention node and the census node, the ones
+# that failed, took 1.0s and 0.6s.
+#
+# Cost, one at a time with `-n0` on daniel-box on 2026-10-25 at load average 4.1-4.7, each
+# including its interpreter start: eval cases 0.3-0.8s, host-files pairs 0.4-0.5s, Landings
+# board 0.4s, deployer imports 0.7-0.8s, alert conventions 1.0s, unit census 0.6s.
+#
+# `test_cluster_vars_tree.py` failed four branches in the same week and stays out. It takes
+# 11-12s because it renders every flux-owned role, so its gate would be every k8s template,
+# and its only repair is `cluster_vars.py write`, which is operator-only: catching it at commit
+# saves no round trip an agent can act on.
+
+# The eval cases' CLAUDE.md quotes, Pi roles and cited role paths. Any role path counts,
+# because a case may cite a file under any role, and deleting or renaming it fails the case.
+[[repos.hooks]]
+id = "static-ratchet-tests-evals"
+name = "Eval cases quote the live CLAUDE.md and cite live role paths"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider evals/tests/test_eval_cases.py"
+language = "system"
+pass_filenames = false
+files = "^(evals/(cases|tests)/.*|CLAUDE\\.md|ansible/inventory/host_vars/daniel-pi\\.yml|ansible/roles/.*|scripts/lib/repo_paths\\.py|pyproject\\.toml|uv\\.lock)$"
+
+# Each key k8s_host_files copies from a k8s role's defaults or group_vars/all.yml.
+[[repos.hooks]]
+id = "static-ratchet-tests-host-files"
+name = "k8s_host_files copies equal their k8s sources"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/setup/test_k8s_host_files_pairs.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/k8s/[^/]+/defaults/main\\.yml|ansible/roles/setup/k8s_host_files/(defaults|tasks)/.*|ansible/inventory/group_vars/all\\.yml|ansible/tests/(_[^/]+|setup/test_k8s_host_files_pairs)\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+
+# The Landings board against the labels and causes the landing ledger writes.
+[[repos.hooks]]
+id = "static-ratchet-tests-landing"
+name = "Landings board groups by labels the landing ledger writes"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_landing_annotations.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/k8s/observability/files/dashboards/Infrastructure/landings\\.json|scripts/deploy_tools/land_lib/(ledger|outcome)\\.py|ansible/roles/setup/gitops_deploy/files/gitops_markers\\.py|hosts/lib/[^/]+\\.py|scripts/lib/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/test_landing_annotations)\\.py|pyproject\\.toml|uv\\.lock)$"
+
+# The GitOps deployer imports only the modules it ships beside it and host_lib.
+[[repos.hooks]]
+id = "static-ratchet-tests-deployer"
+name = "GitOps deployer imports only what it ships"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_gitops_deploy_imports.py"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/setup/gitops_deploy/files/.*\\.py|hosts/lib/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_gitops_deploy_allowed|deploy/test_gitops_deploy_imports)\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+
+# The alert conventions over the rendered rules. The gate is validate-alert-rules's, whose
+# render this node reads, plus the test module.
+[[repos.hooks]]
+id = "static-ratchet-tests-alerts"
+name = "Alert rules meet the alert conventions"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/rules-configmap\\.yaml\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+
+# The unit-template census: every unit template the validator must find still exists.
+[[repos.hooks]]
+id = "static-ratchet-tests-units"
+name = "Every known unit template is still discovered"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_unit_templates.py::test_discover_templates_finds_the_known_set"
+language = "system"
+pass_filenames = false
+files = "^(ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(unit_templates|tests/test_validate_unit_templates)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|ansible/filter_plugins/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file

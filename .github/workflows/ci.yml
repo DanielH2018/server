@@ -405,11 +405,11 @@ jobs:
       # serving with nothing saying why.
       - name: Run hooks (full sweep)
         # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
-        # --skip static-ratchet-tests*: the `pytest` job runs those twenty-three test files already.
+        # --skip static-ratchet-tests*: the `pytest` job runs those twenty-nine test files already.
         # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
         # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
         # `real_tree`), so the hook here was a second render of every k8s role (#6150).
-        run: prek run --all-files --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --color always
+        run: prek run --all-files --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-host-files --skip static-ratchet-tests-landing --skip static-ratchet-tests-deployer --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --color always
 
   # The two PR-only refusals, the cross-plane order gate and the cluster pin checks, in a job of
   # their own (#6149). They ran serially inside `hooks`, ahead of its sweep, and on PR run
