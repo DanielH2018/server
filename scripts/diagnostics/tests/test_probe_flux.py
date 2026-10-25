@@ -42,7 +42,11 @@ def _ks(name, ready="True", reason="ReconciliationSucceeded", applied=NEW, **kw)
     return {
         "kind": "Kustomization",
         "metadata": {"name": name, "generation": 4},
-        "spec": {"sourceRef": {"name": "homelab"}, "suspend": kw.get("suspend", False)},
+        "spec": {
+            "sourceRef": {"name": "homelab"},
+            "suspend": kw.get("suspend", False),
+            "dependsOn": [{"name": d} for d in kw.get("depends_on", ())],
+        },
         "status": {
             "observedGeneration": kw.get("observed", 4),
             "lastAppliedOriginRevision": f"master@sha1:{applied}",
@@ -117,6 +121,29 @@ def test_a_sibling_waiting_on_its_reconciling_tag_is_pending():
     text, code = flux.format_flux(items, ["sonarr"])
     assert code == 0, text
     assert "sonarr-verify: Ready=False DependencyNotReady" in text
+
+
+def test_a_row_waiting_on_a_failed_dependency_fails():
+    """configarr dependsOn sonarr, which no select() of `configarr` prints (#6340)."""
+    items = [
+        _source(),
+        _ks("sonarr", "False", "HealthCheckFailed"),
+        _ks("configarr", "False", "DependencyNotReady", depends_on=["sonarr"]),
+    ]
+    text, code = flux.format_flux(items, ["configarr"])
+    assert code == 1, text
+    assert "FAIL:\n  configarr: Ready=False DependencyNotReady" in text
+    assert "dependency sonarr failed" in text
+
+
+def test_a_row_waiting_on_a_reconciling_dependency_stays_pending():
+    items = [
+        _source(),
+        _ks("sonarr", "Unknown", "Progressing", applied=OLD),
+        _ks("configarr", "False", "DependencyNotReady", depends_on=["sonarr"]),
+    ]
+    text, code = flux.format_flux(items, ["configarr"])
+    assert code == 0, text
 
 
 def test_a_row_with_no_ready_condition_fails():
@@ -236,6 +263,15 @@ def test_wait_is_ready_at_a_later_commit_that_holds_the_expected_one():
         items, "sonarr", OLD, contains=lambda c, a: (c, a) == (NEW, OLD)
     )
     assert state["state"] == "ready"
+
+
+def test_wait_without_a_revision_stays_open_until_a_reset_to_an_older_commit_applies():
+    """Master was reset to OLD, so the NEW still applied descends from it but is stale (#6336)."""
+    items = [_source(OLD), _ks("sonarr")]
+    state = flux.wait_state(
+        items, "sonarr", None, contains=lambda c, a: (c, a) == (NEW, OLD)
+    )
+    assert state["state"] == "progressing"
 
 
 def test_wait_stays_open_at_a_later_commit_that_does_not_hold_the_expected_one():
