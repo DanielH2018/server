@@ -50,6 +50,7 @@ from gitops_markers import MARKERS
 from deploy_tools import await_ci, shared_role_reach
 from deploy_tools.land_lib import land_platform, land_reach, land_rerolls
 from deploy_tools.land_lib import land_flux, land_shared, land_tags, land_tested_base
+from deploy_tools.land_lib import verdict_log
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
@@ -597,6 +598,8 @@ class Tools:
     follow_journal: Callable[[str, float], subprocess.Popen[str]] = follow_journal
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog
+    # Appends `(pr, rc, line)` to the per-user record `probe.py landing-verdicts` reads.
+    record_verdict: Callable[[str, int, str], None] = verdict_log.record
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
     # Wall-clock seconds, for comparing with a release record's `applied_at`.

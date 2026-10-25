@@ -283,11 +283,16 @@ def test_the_key_pins_the_directory_the_cronjob_pulls(package):
 
 
 def test_the_package_retires_the_interim_token_files_nothing_reads(package):
-    paths = {e["path"] for e in package.legacy if "path" in e}
-    assert {
+    paths = [e["path"] for e in package.legacy if "path" in e]
+    tokens = {
         "/etc/homelab/interim/pi_sd_health_push_token",
         "/etc/homelab/interim/pi_recovery_push_token",
-    } <= paths
+    }
+    assert tokens <= set(paths)
+    # Reconcile removes a directory only once it is empty, so it follows both files.
+    assert all(
+        paths.index("/etc/homelab/interim") > paths.index(token) for token in tokens
+    )
     # The units read the tokens from /run/credstore instead.
     for dst, (data, _) in package.files.items():
         if dst.startswith("/usr/lib/systemd/system/homelab-pi-"):

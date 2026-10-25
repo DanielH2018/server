@@ -27,7 +27,7 @@ from diagnostics.probe_lib.cli_parser import _build_parser
 from lib.cli_registry import Registry, package_entry_points
 
 # The seventeen probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
-# helpers, not a subcommand backend). Every one of probe.py's 26 subcommands maps to one of
+# helpers, not a subcommand backend). Every one of probe.py's 28 subcommands maps to one of
 # these (several subcommands share a module, e.g. "monitors"/"kuma-drift" both back onto
 # monitors.py, and "targets"/"pi" both back onto pi_plane.py) or to none (the streaming,
 # plan()-driven subcommands like `loki-labels`/`cert`).
@@ -41,10 +41,12 @@ EXPECTED_MODULES = frozenset(
         "ha",
         "health",
         "landing_blockers",
+        "landing_verdicts",
         "longhorn",
         "metrics",
         "monitors",
         "pi_plane",
+        "push_rules",
         "readonly_rbac",
         "releases",
         "shed_set",
@@ -73,7 +75,7 @@ def test_list_flag_prints_every_subcommand_with_a_description(capsys):
     assert probe.main(["--list"]) == 0
     out = capsys.readouterr().out
     lines = out.strip().splitlines()
-    assert len(lines) == len(subcommands.SUBCOMMANDS) == 26
+    assert len(lines) == len(subcommands.SUBCOMMANDS) == 28
     for name, description, _module, _func in subcommands.SUBCOMMANDS:
         assert any(line.startswith(name) and description in line for line in lines), (
             name,

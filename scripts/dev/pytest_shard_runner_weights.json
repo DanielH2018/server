@@ -297,7 +297,6 @@
  "ansible/tests/k8s/test_render_record_shares_the_release_digest.py": 0.14,
  "ansible/tests/k8s/test_rendered_properties.py": 6.91,
  "ansible/tests/k8s/test_restore_drill_stamps.py": 2.66,
- "ansible/tests/k8s/test_rollout_amend_raises_a_deferred_expectation.py": 0.03,
  "ansible/tests/k8s/test_root_needs_dac_capability.py": 0.74,
  "ansible/tests/k8s/test_root_security_context_is_written_out_in_full.py": 0.06,
  "ansible/tests/k8s/test_scrape_jobs_derive_from_containers_list.py": 1.74,

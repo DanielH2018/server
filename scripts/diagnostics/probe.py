@@ -64,7 +64,11 @@ Subcommands:
     ha verify-entities       Assert every entity in external_entities.yml still exists live
     ha-state [--inventory]   Live view of the derived HA state model
     landing [--json]         What would stop a landing now, runs in flight, worktrees + claims
+    landing-verdicts [<pr>]  Newest recorded VERDICT line per landed PR [--json --limit N]
+                             (exit 1 when <pr> has none; this user, this host)
     gitops-state [--json]    Every deployer marker + owed-ledger line with its clear command
+    push-rules <branch>      Which ruleset rule a push to the branch meets and whether the gh
+                             login bypasses it [--rev HEAD] [--remote origin]
 
 Exit codes: every verdict subcommand exits 0 or 1 for what it observed, and 75 when it could
 not read its source, with the failed read on stderr. Its last stdout line is

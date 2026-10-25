@@ -940,9 +940,8 @@ groups:
       # The Pi's Compose project (H5). compose-run writes homelab_compose_up_result each time
       # homelab-reconcile starts homelab-compose.service, and a failed `up --wait` writes 0. The
       # Pi's recovery heartbeat pages the same 0 through its Kuma tile, so this rule is SHADOW
-      # until that arm retires (h5-pi-compose.md, open question 5, "M1"). It has no stale-time
-      # twin: the unit runs only when reconcile restarts it, so no schedule bounds the age of
-      # homelab_compose_up_timestamp_seconds (#6166).
+      # until that arm retires (h5-pi-compose.md, open question 5, "M1"). ComposeUpStale below
+      # is its stale-time twin.
       - alert: ComposeUpFailed
         expr: homelab_compose_up_result{origin="daniel-pi"} == 0
         labels:
@@ -956,6 +955,41 @@ groups:
             {{ $labels.sha }}: a key check, the config check, an image pull, compose-adopt or
             `docker compose up --wait` failed. Read `journalctl -u homelab-compose` and
             `docker ps -a` on daniel-pi.
+      # No schedule bounds the age of the compose result: reconcile restarts the unit only when
+      # its file changes, so a quiet week leaves the timestamp a week old (#6187). Boot does
+      # bound it. The unit is enabled for multi-user.target, so every boot runs compose-run
+      # once, and TimeoutStartSec caps that run. A timestamp older than node_boot_time_seconds,
+      # once the boot is older than the cap, means the boot run never wrote: the unit was
+      # masked, systemd killed the run at its timeout, or the write failed. The second arm
+      # catches a file that is gone. Both arms need node_boot_time_seconds, which goes stale
+      # with every failed scrape, so a dead exporter leaves this quiet for ScrapeTargetDown.
+      #
+      # 1690s is the TimeoutStartSec that homelab-compose.service renders from the Pi's
+      # healthcheck variables, 1390s, plus 300s for boot to reach the unit and for one scrape.
+      # The boot run of 2026-10-25 wrote 94s after boot. Both literals are pinned to the
+      # rendered unit by hosts/lib/tests/test_pi_compose_unit.py.
+      - alert: ComposeUpStale
+        expr: |
+          (
+              homelab_compose_up_timestamp_seconds{origin="daniel-pi"}
+              < on (origin) group_left node_boot_time_seconds{origin="daniel-pi"}
+            or
+              absent_over_time(homelab_compose_up_timestamp_seconds{origin="daniel-pi"}[1690s])
+          )
+          and on (origin)
+            time() - node_boot_time_seconds{origin="daniel-pi"} > 1690
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: The Pi's Compose project has not run since daniel-pi booted.
+          description: >-
+            daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
+            still predates that boot or is missing, so the boot's compose-run never wrote its
+            result. The unit is masked or disabled, systemd killed the run at its
+            TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
+            failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+            homelab-compose` on daniel-pi.
       # One rule per inventory host, so `service` stays a literal (#6166). Reconcile writes
       # homelab_host_reboot_pending 1 when a package change needs a reboot, and the weekly
       # reboot is what applies it. homelab_host_reboot_pending_since_seconds is when the host

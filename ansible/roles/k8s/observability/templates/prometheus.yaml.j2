@@ -861,6 +861,16 @@ data:
           - action: labelmap
             regex: __meta_kubernetes_node_label_(.+)
 {{ control_plane_bucket_drop() }}
+          # DECIDED: one copy of the server node's registry (#6331). k3s serves the apiserver,
+          # etcd client, scheduler and kubelet from one process, so the server node's kubelet
+          # /metrics returned the same 35,686 series as the kubernetes-apiserver job (measured
+          # 2026-10-25). The `apiserver_` and `etcd_` families stay with that job, and every
+          # other family stays here, so each keeps the job label it had. The agent node carries
+          # no control-plane label and keeps its own `apiserver_` client series.
+          - source_labels: [node_role_kubernetes_io_control_plane, __name__]
+            separator: ';'
+            action: drop
+            regex: 'true;(apiserver|etcd)_.+'
       # Per-pod CPU/memory straight from the kubelet's summary API rather than from cadvisor's
       # cgroup walk. Cheaper and lower-cardinality than the cadvisor series, and it is what
       # `kubectl top` reads — so a dashboard built on it agrees with the CLI, where one built
@@ -912,6 +922,11 @@ data:
         static_configs:
           - targets: ['kubernetes.default.svc:443']
 {{ control_plane_bucket_drop() }}
+          # The other half of the kubelet job's server-node drop above: this job keeps only the
+          # `apiserver_` and `etcd_` families, and the kubelet job holds the rest of the registry.
+          - source_labels: [__name__]
+            action: keep
+            regex: '(apiserver|etcd)_.+'
 {% if k3s_etcd_expose_metrics | default(false) %}
       # Embedded etcd, the single existential risk on a one-server control plane: db size
       # against its quota, fsync/commit latency, leader changes, and proposal failures. None of

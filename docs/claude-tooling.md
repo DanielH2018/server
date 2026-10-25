@@ -81,9 +81,11 @@ vendored `files/upstream/` objects are compared and its `patches/` are not (#572
 commit `lastAppliedOriginRevision` names, the commit its OCIRepository serves, and whether it is
 suspended (`probe_lib/flux.py`). It makes one kubectl read. A tag adds its `-deferred`,
 `-snapshot`, `-prepull`, `-precheck` and `-verify` Kustomizations and the shared `soak`, and no
-tag lists every Kustomization. It exits 1 when a printed row is not Ready, is suspended or has
-applied a commit other than its source's, and when a named tag has no Kustomization. A failed
-read exits 75.
+tag lists every Kustomization. It exits 1 when a printed row is not Ready for another reason, is suspended or is
+Ready at a commit other than its source's, and when a named tag has no Kustomization. A row
+that Flux is still reconciling, or that waits on a dependency (reason `Progressing`,
+`ProgressingWithRetry` or `DependencyNotReady`), prints under `PENDING` and does not fail the
+probe. A failed read exits 75.
 
 To wait for Flux to apply a commit, run `cc-wait flux <name> [--revision SHA]`. It exits 0 when
 the Kustomization is Ready at that commit, 1 when it failed there and 3 when it is suspended.
@@ -322,6 +324,20 @@ agrees. Each fact comes from a reader that already exists:
 A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
 on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.
 
+### `landing-verdicts [<pr>] [--json] [--limit N]`
+
+`landing-verdicts` prints the newest `VERDICT:` line of each PR you landed, newest first,
+with its time and land.sh's exit code (#6325). Given a PR, it prints that PR's line alone and
+exits 1 when it has none. Read it instead of grepping a background task's output file for
+`VERDICT`, which is a harness internal that disappears with the session.
+
+Every landing appends its line as it exits, plain, `--detach` or crashed, to
+`$XDG_STATE_HOME/homelab/landing-verdicts.jsonl` (`~/.local/state/` by default;
+`$LAND_VERDICT_LOG` overrides it). A handed-off landing is recorded by the user that handed
+it off as well as by the lander unit. The file is per user and per host, so a landing run on
+daniel-box reads back only on daniel-box. `land_lib/verdict_log.py` owns the format and the
+trim.
+
 ### `gitops-state [--json]`
 
 `gitops-state` prints every marker the GitOps deployer keeps, without ticking (#3931). It reads
@@ -337,6 +353,26 @@ user. Elsewhere it says there is no state directory. A marker that exists and ca
 reported as unreadable, never as absent. Exit 75 means the directory or a marker could not be
 read, and stderr names which. The exit says nothing about what the markers hold, so it is
 never 1.
+
+### `push-rules <branch> [--rev HEAD] [--remote origin]`
+
+`push-rules` names the GitHub ruleset rule a push meets and why (#6327). GitHub prints `- Cannot
+update this protected ref.` both when a ruleset refuses a push and when the pushing account
+bypasses it, and names neither the ruleset nor the reason. The probe reads the rules matching
+the branch from `rules/branches/<branch>`, then each ruleset's name, enforcement and
+`current_user_can_bypass`. It evaluates each rule against the push from local git state: whether
+the branch exists on the remote, whether the push is a fast-forward, and which new commits carry
+no signature (`%G?` of `N`). It prints each rule that binds as `REFUSES` or `bypassed`. A signed
+commit under `required_signatures` prints as a caveat instead: GitHub verifies the signature
+against the pushing account's registered key, which the probe cannot read.
+
+The bypass answer is for the `gh` login, which the probe prints beside the push remote's URL,
+because `git push` may authenticate as another account. Exit 1 means at least one rule refuses
+the push, and 75 means a read failed. A remote head this checkout never fetched is a failed read,
+so fetch first.
+
+The `auto-mode-bridge` hook points at this probe when a `git push` fails with `Repository rule
+violations found`. On a push that printed `Bypassed rule violations`, it says the push landed.
 
 ### `ha …`
 
