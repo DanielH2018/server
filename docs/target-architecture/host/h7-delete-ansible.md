@@ -2312,6 +2312,32 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       gains the script as a second file. It also adds `--offline <kit-dir>` and the kit's
       file list in `docs/break-glass.md`, with the offline container case, about 100 more
       lines (*The cluster-node bring-up*).
+      **Amended 2026-10-25 (H7.42):** the script landed with fake-root tests, written against the
+      live tree. Nine premises did not hold:
+        - *No LVM step.* No task, role or doc creates daniel-server's LVM volumes. Only
+          `ansible/README.md` records a one-time `lvextend` of the root volume. The script
+          therefore writes no volume, and an inventor's layout would be destructive.
+        - *No `homelab-repos` package.* H7.24a replaced it with the per-host `apt-docker`,
+          `apt-azlux` and `apt-github-cli` components, so `--offline` leaves out the
+          `github-cli` source file only.
+        - *nfpm and uv pins.* Both are the blocks of `hosts/packages/homelab-tools/package.yml`
+          (H7.24a, H7.41a), embedded byte for byte. The builder's own role no longer holds
+          the uv pin.
+        - *Three packages, not four.* `--local-build` builds `homelab-tools`,
+          `homelab-updater` and `homelab-<host>`.
+        - *Step 6.* `homelab-docker-engine.service` is not in the tree until H7.25 lands. The
+          script starts it when the unit exists and prints that it starts nothing otherwise.
+        - *The k3s Renovate manager.* The `k3s-io/k3s` rule is a package rule, not a manager.
+          `renovate.json` gains a small custom manager for the script's `K3S_VERSION` line, and
+          the `homelab-tools` manager gains the script as a second file.
+        - *`preflight.yml`'s host-var checks.* They have no counterpart: the script embeds the
+          three host names and refuses any other.
+        - *The anchor check.* It runs as `hosts/lib/bootstrap_anchor.py` from the archived
+          tree, not inside the script, so its decision has unit tests.
+        - *Not in this PR.* The systemd container cases (`apt-get install --simulate` and the
+          offline case with its two red fixtures) need the `host_packages` job's image, and the
+          fake-root suite replaces them for this PR. H7.44's guest drill still owns the
+          end-to-end proof.
     - **H7.15b** The Pi runbook, then the Pi rebuild, which is exit observation 2. The
       operator keeps the old SD card as the rollback. The cluster's wg-easy on 51820 is
       proven first, as in H5.5.
