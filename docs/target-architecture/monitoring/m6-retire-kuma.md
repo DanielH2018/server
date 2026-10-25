@@ -2478,6 +2478,16 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    `1792078185`, 6.4s after `process_start_time_seconds{job="prometheus"}` read
    `1792078178.57`. Its activation therefore reset at the last restart, so B-1 keeps the
    "age unknown" message.
+   **Recorded on 2026-10-25 (#5333): the value moves, so the message stays.** Prometheus
+   restarted at 07:42:40 UTC, and `process_start_time_seconds{job="prometheus"}` went from
+   `1792858430.65` to `1792914160.96`. `AideCheckNotReporting{origin="daniel-box"}` has no
+   `for:` and fired on both sides of the restart. Before it, an `@ 1792913500` query read its
+   `ALERTS_FOR_STATE` as `1792885066` (23:37:46 UTC on 2026-10-24), 7.4h after that process
+   started. After it, the value read `1792914226`, 65s after the new start. Every other alert
+   that fired across the restart reset the same way, the Watchdog from `1792858485` to
+   `1792914225`. None of those rules carries a `for:`. So the reading shows the reset for a
+   short-`for:` rule and says nothing about restoration for a `for:` longer than the grace
+   period.
 10. **Owner of the `workload_log_errors` port** (M2 Open question 6). M5's text keeps
     `with_log_errors` and does not retire the row's token, and M2 names M6 as the fallback
     owner. Resolution: M6 owns it as A7. If M5's text adopts the port before A7's shadow PR,
