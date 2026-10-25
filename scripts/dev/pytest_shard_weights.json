@@ -587,6 +587,7 @@
  "ansible/tests/repo/test_vale_matches_the_ci_pin.py": 0.0,
  "ansible/tests/repo/test_xdist_width.py": 0.0,
  "ansible/tests/services/test_alert_history_board_parses_the_bridge_down_line.py": 0.0,
+ "ansible/tests/services/test_alertmanager_host_check_inhibit.py": 0.88,
  "ansible/tests/services/test_alertmanager_reboot_mute.py": 0.42,
  "ansible/tests/services/test_alertmanager_routing.py": 8.7,
  "ansible/tests/services/test_anisync_pin_matches_server.py": 0.0,
