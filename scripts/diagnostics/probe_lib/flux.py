@@ -16,10 +16,13 @@ One kubectl read lists every Kustomization and OCIRepository in `flux-system`. E
 Kustomization. It exits 1 when a printed row is not Ready, is suspended or applied a commit
 other than the one its source serves, and when a named tag has no Kustomization.
 
-A row at Ready=Unknown is mid-reconcile (Flux's reason is `Progressing`), not failed (#6337).
-It prints under PENDING and does not by itself fail the probe, whatever commit it has applied
-so far. A caller that needs the row settled waits on it with `cc-wait flux <name>`. Ready=False
-still exits 1.
+A row that is not Ready for a reason in `NOT_YET_REASONS` is mid-reconcile, not failed
+(#6337). Examples are `<tag>` at Ready=Unknown/Progressing, and its `-verify` sibling at
+Ready=False/DependencyNotReady while it waits on `<tag>`. Such a row prints under PENDING and
+does not by itself fail the probe, whatever commit it has applied so far. A caller that needs
+the row settled waits on it with `cc-wait flux <name>`. Any other not-Ready row exits 1,
+including one with no Ready condition at all, which is what a stopped kustomize-controller
+leaves on an object it never reconciled.
 
 `.claude/wait-sources/flux` runs `scripts/diagnostics/flux_wait.py`, which reads the same list
 through `read_flux` and judges one Kustomization with `wait_state`.
@@ -60,8 +63,8 @@ FLUX_HELP = (
     "-verify Kustomizations and the shared soak; no tag lists every one. "
     "`cc-wait flux <name>` waits on one",
     "every row is Ready at its source's commit",
-    "one is Ready=False, is suspended, lags its source while Ready or a tag has none; "
-    "a Ready=Unknown row is reconciling and prints under PENDING",
+    "one is not Ready and not reconciling, is suspended, lags its source while Ready or a "
+    "tag has none; a row reconciling or waiting on a dependency prints under PENDING",
 )
 FLUX_TAGS_HELP = "deploy tags, as `./scripts/deploy.sh --tags` takes them"
 
@@ -78,8 +81,10 @@ SOAK = "soak"
 # `promote_state.artifact_of` reads the same field, but it is not reachable without the venv.
 REVISION_ANNOTATION = "org.opencontainers.image.revision"
 
-# Ready=False reasons that mean "not yet", not "failed": kustomize-controller is waiting on a
-# dependency or is mid-apply. Every other False reason is a failed apply or health check.
+# Ready reasons that mean "not yet", not "failed": kustomize-controller is waiting on a
+# dependency or is mid-apply. Flux sets Progressing with Ready=Unknown and DependencyNotReady
+# with Ready=False. Every other reason on a not-Ready row is a failed apply or health check.
+# `wait_state` and `format_flux` both read this set, so the probe and cc-wait agree.
 NOT_YET_REASONS = frozenset(
     {"DependencyNotReady", "Progressing", "ProgressingWithRetry"}
 )
@@ -268,10 +273,8 @@ def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
             continue
         if r.suspended:
             problems.append(f"{name}: suspended")
-        elif r.ready == "Unknown":
-            pending.append(
-                f"{name}: {r.reason or 'no Ready condition'}: {r.message[:200]}"
-            )
+        elif r.ready != "True" and r.reason in NOT_YET_REASONS:
+            pending.append(f"{name}: Ready={r.ready} {r.reason}: {r.message[:200]}")
         elif r.ready != "True":
             problems.append(f"{name}: Ready={r.ready} {r.reason}: {r.message[:200]}")
         else:
