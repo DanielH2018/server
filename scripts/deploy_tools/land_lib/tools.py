@@ -342,10 +342,17 @@ class CiVerdict(NamedTuple):
     line: str
 
 
-def await_ci_verdict(sha: str, timeout_s: int) -> CiVerdict:
-    """await_ci.wait with its CLI's exit contract: 0 green, 1 red, 75 pending, 2 disarmed."""
+def await_ci_verdict(
+    sha: str, timeout_s: int, wait=await_ci.wait, token=await_ci.lookup_token
+) -> CiVerdict:
+    """await_ci.wait with its CLI's exit contract: 0 green, 1 red, 75 pending, 2 disarmed.
+
+    An anonymous wait polls every 60s, not 20s (`await_ci.poll_interval`, #6148). A zero
+    budget is one poll that never sleeps, so the merge loop's per-poll call skips the lookup.
+    """
+    interval = await_ci.poll_interval(20, token()) if timeout_s else 20
     try:
-        return CiVerdict(*await_ci.wait(sha, timeout_s, 20))
+        return CiVerdict(*wait(sha, timeout_s, interval))
     except await_ci.DisarmedGateError as exc:
         return CiVerdict(CI_DISARMED, f"await_ci: {exc}")
 

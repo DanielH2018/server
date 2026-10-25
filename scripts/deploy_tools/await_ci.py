@@ -74,6 +74,12 @@ DROPPED_PUSH_GRACE_S = 180
 # request against the hourly budget `fetch_check_runs` describes.
 DESCENDANT_LIMIT = 10
 
+# The poll interval with no GitHub token, in seconds (#6148). Anonymous reads share 60 per hour
+# per source IP with the deployer's gate on the same host. At the 20s default, land.sh's 1200s
+# budget is 60 polls, so one landing that times out spends the whole hour. At 60s the same
+# budget is 20 polls.
+ANONYMOUS_INTERVAL_S = 60
+
 
 class DisarmedGateError(RuntimeError):
     """Raised when the required-context set is empty.
@@ -94,9 +100,12 @@ def fetch_check_runs(sha: str) -> list[dict]:
 
     Authenticated through `gh auth token` when the CLI is logged in, anonymous otherwise.
     The anonymous limit is 60/hour per source IP and this poll shares it with the deployer's
-    own gate on the same host: at one request per 20s for up to 900s, one landing costs 45 of
-    those 60, so the second landing in an hour starved the tick's gate into deferring on a
-    403. host_lib.github_token carries the numbers.
+    own gate on the same host. An anonymous wait therefore polls every
+    `ANONYMOUS_INTERVAL_S` (60s) rather than every 20s: land.sh's 1200s budget is then 20
+    polls, not 60. A poll costs one request on the ordinary path. It costs more for a
+    listing past its first page, for the check-suites read once no required run exists, and
+    for up to `DESCENDANT_LIMIT` descendants once a push reads as dropped.
+    host_lib.github_token carries the rest of the numbers.
     """
     return _github_pages(f"commits/{sha}/check-runs", "check_runs")
 
@@ -111,9 +120,30 @@ def fetch_check_suites(sha: str) -> list[dict]:
     return _github_pages(f"commits/{sha}/check-suites", "check_suites")
 
 
+def lookup_token() -> str | None:
+    """The GitHub token this tool reads with, or None when it reads anonymously."""
+    return github_token(os.environ, subprocess.run)
+
+
+def poll_interval(requested: int, token: str | None) -> int:
+    """`requested`, raised to `ANONYMOUS_INTERVAL_S` when there is no token to read with.
+
+    Backing off rather than refusing keeps an anonymous landing working: the operator ruled
+    on #6148 that an anonymous read is a fail-safe case, not a fault to stop on.
+    """
+    if token or requested >= ANONYMOUS_INTERVAL_S:
+        return requested
+    print(
+        f"await_ci: no GitHub token, so reads are anonymous; polling every "
+        f"{ANONYMOUS_INTERVAL_S}s, not {requested}s. `gh auth login` restores {requested}s.",
+        file=sys.stderr,
+    )
+    return ANONYMOUS_INTERVAL_S
+
+
 def _github_pages(path: str, key: str) -> list[dict]:
     """Every page of a listing, as the deployer's gate reads it (#5977); short reads raise."""
-    token = github_token(os.environ, subprocess.run)
+    token = lookup_token()
     url = f"repos/{CI_REPO}/{path}"
     return read_check_pages(
         lambda query: github_get(url + query, token, user_agent="await-ci"), key
@@ -136,7 +166,7 @@ def verdict_for(sha: str, fetch=fetch_check_runs, required=None, suites=None) ->
 
 def _fetch_tip() -> str:
     # This runs from the primary checkout (land.sh cd's there) and takes no git-tree lock,
-    # so it can run while the 30-min timer is mid-tick. Safe: a fetch appends objects and
+    # so it can run while the 10-min timer is mid-tick. Safe: a fetch appends objects and
     # moves a remote-tracking ref under git's own per-ref lock. It touches neither HEAD nor
     # the working tree, which is what the git-tree lock exists to guard.
     git_stdout("fetch", "-q", "origin", "master")
@@ -587,7 +617,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ns = parser.parse_args(argv)
     try:
-        code, msg = wait(ns.sha, ns.timeout, ns.interval)
+        code, msg = wait(ns.sha, ns.timeout, poll_interval(ns.interval, lookup_token()))
     except DisarmedGateError as e:
         print(f"await_ci: {e}", file=sys.stderr)
         return CI_DISARMED

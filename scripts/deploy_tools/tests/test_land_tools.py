@@ -428,3 +428,27 @@ def test_the_watched_tick_inherits_the_working_directory(monkeypatch):
     tools.run_tick(observe=lambda *_: None)
     assert seen["argv"] == [str(tools.HERE / "gitops_tick.sh")]
     assert seen["cwd"] is None
+
+
+def _intervals(timeout_s, token):
+    """The poll intervals `await_ci_verdict` hands `await_ci.wait` for one call."""
+    seen = []
+
+    def wait(sha, budget, interval):
+        seen.append(interval)
+        return 0, f"{sha[:8]}: CI green"
+
+    tools.await_ci_verdict("abc123def", timeout_s, wait=wait, token=lambda: token)
+    return seen
+
+
+def test_an_anonymous_ci_wait_cannot_spend_the_hourly_quota(capsys):
+    """#6148: anonymous reads get 60/hour per IP, shared with the deployer's gate."""
+    (interval,) = _intervals(1200, None)
+    assert 1200 / interval <= 20
+    assert "gh auth login" in capsys.readouterr().err
+
+
+def test_an_authenticated_ci_wait_keeps_the_20s_poll(capsys):
+    assert _intervals(1200, "ghp_token") == [20]
+    assert capsys.readouterr().err == ""
