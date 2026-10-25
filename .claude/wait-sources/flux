@@ -1,0 +1,8 @@
+#!/bin/sh
+# cc-wait's `flux` source: `cc-wait flux <name> [--revision SHA]` waits on one Flux
+# Kustomization reading Ready at a commit. The logic and its contract are
+# scripts/diagnostics/flux_wait.py; this only finds it.
+# The repo is 3.14-only and the probe is stdlib-only, so it runs under uv's 3.14 with no
+# project environment, which a fresh worktree would otherwise build on the first read.
+root=$(cd "$(dirname "$0")/../.." && pwd)
+exec uv run --no-project --quiet --python 3.14 python "$root/scripts/diagnostics/flux_wait.py" "$@"

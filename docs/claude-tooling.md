@@ -75,6 +75,21 @@ vendored `files/upstream/` objects are compared and its `patches/` are not (#572
   rendered object live exits 75. `docs/flux-deploy-plane.md` (*What a takeover strips*) has the
   rules and the operator's `flux diff kustomization` command.
 
+### `flux [tag...]`
+
+`flux` prints each Flux Kustomization in `flux-system` with its Ready status and reason, the
+commit `lastAppliedOriginRevision` names, the commit its OCIRepository serves, and whether it is
+suspended (`probe_lib/flux.py`). It makes one kubectl read. A tag adds its `-deferred`,
+`-snapshot`, `-prepull`, `-precheck` and `-verify` Kustomizations and the shared `soak`, and no
+tag lists every Kustomization. It exits 1 when a printed row is not Ready, is suspended or has
+applied a commit other than its source's, and when a named tag has no Kustomization. A failed
+read exits 75.
+
+To wait for Flux to apply a commit, run `cc-wait flux <name> [--revision SHA]`. It exits 0 when
+the Kustomization is Ready at that commit, 1 when it failed there and 3 when it is suspended.
+Without `--revision` it waits for the commit the source serves. `scripts/diagnostics/flux_wait.py`
+is the source, and its docstring lists which readings keep the wait open.
+
 ### `alerts [--days N --check X]`
 
 Reconstructs DOWN alert history from Loki, because Kuma keeps only current state — one row per
