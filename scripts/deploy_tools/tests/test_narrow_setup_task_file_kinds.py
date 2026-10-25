@@ -34,6 +34,7 @@ from _setup_role_fixtures import (
     Tree,
     build,
     narrow,
+    touched,
 )
 
 # A second renderer of `alpha.conf.j2` under its own tag. The template is already rendered by
@@ -210,7 +211,7 @@ def _touch_the_included_file(
         + "  loop: [0, 1]\n  loop_control:\n    loop_var: shard\n",
     )
     old = tree.commit("include the shard file")
-    tree.write(f"{ROLE}/tasks/shard.yml", shard + "# touched\n")
+    tree.write(f"{ROLE}/tasks/shard.yml", touched(shard))
     return narrow(tree, old, tree.commit("touch the shard file"))
 
 
@@ -285,7 +286,7 @@ def _touch_the_play_included_file(
     tree.write(f"{ROLE}/tasks/join.yml", join)
     tree.write(PLAYBOOK, PLAYBOOK_TEXT + JOIN_PLAY % include_extra)
     old = tree.commit("add the join play")
-    tree.write(f"{ROLE}/tasks/join.yml", join + "# touched\n")
+    tree.write(f"{ROLE}/tasks/join.yml", touched(join))
     return narrow(tree, old, tree.commit("touch the join file"))
 
 
