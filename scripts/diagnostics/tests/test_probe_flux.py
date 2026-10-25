@@ -7,6 +7,7 @@ on 2026-10-25 mid-promotion: the OCIRepository's commit under
 """
 
 import os
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -113,6 +114,17 @@ def _failed_read(cluster, *args):
     return None
 
 
+def _timed_out_read(cluster, *args):
+    raise subprocess.TimeoutExpired(["kubectl", *args], 60.0)
+
+
+def test_run_flux_exits_unreadable_on_a_kubectl_timeout(capsys):
+    """A stalled API server is a failed read (75), never the `fail` verdict."""
+    ns = type("NS", (), {"tags": [], "dry_run": False, "cluster": "prod"})()
+    assert flux.run_flux(ns, read=_timed_out_read) == PROBE_UNREADABLE
+    assert "timed out after 60.0s" in capsys.readouterr().err
+
+
 def test_run_flux_exits_unreadable_on_a_failed_read(capsys):
     ns = type("NS", (), {"tags": [], "dry_run": False, "cluster": "prod"})()
     assert flux.run_flux(ns, read=_failed_read) == PROBE_UNREADABLE
@@ -167,6 +179,21 @@ def test_wait_does_not_fail_before_the_source_artifact_was_attempted():
     assert flux.wait_state(items, "sonarr", None)["state"] == "progressing"
 
 
+def test_wait_is_ready_at_a_later_commit_that_holds_the_expected_one():
+    """Another session's promotion landed before Flux applied OLD, and NEW carries it."""
+    items = [_source(), _ks("sonarr")]
+    state = flux.wait_state(
+        items, "sonarr", OLD, contains=lambda c, a: (c, a) == (NEW, OLD)
+    )
+    assert state["state"] == "ready"
+
+
+def test_wait_stays_open_at_a_later_commit_that_does_not_hold_the_expected_one():
+    items = [_source(), _ks("sonarr")]
+    state = flux.wait_state(items, "sonarr", OLD, contains=lambda c, a: False)
+    assert state["state"] == "progressing"
+
+
 def test_wait_ends_on_a_suspended_kustomization():
     items = [_source(), _ks("sonarr", suspend=True)]
     assert flux.wait_state(items, "sonarr", None)["state"] == "suspended"
@@ -180,6 +207,12 @@ def test_flux_wait_exits_nonzero_on_a_failed_read(capsys):
     """cc-wait retries a probe that exits non-zero, rather than reading a state."""
     assert flux_wait.main(["sonarr"], read=_failed_read) == 1
     assert capsys.readouterr().out == ""
+
+
+def test_flux_wait_reports_a_kubectl_timeout_on_one_line(capsys):
+    assert flux_wait.main(["sonarr"], read=_timed_out_read) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("flux_wait: kubectl timed out") and "Traceback" not in err
 
 
 def test_flux_wait_prints_one_reading(capsys):

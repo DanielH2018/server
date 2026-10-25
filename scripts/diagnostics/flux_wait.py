@@ -15,12 +15,15 @@ WHICH COMMIT. `--revision` takes a commit or a prefix of one. Without it, the co
 one the Kustomization's OCIRepository serves at each read, so the wait follows a promotion
 that lands while it runs.
 
-THE STATES. `ready` (exit 0): Ready=True with `lastAppliedOriginRevision` at that commit.
+THE STATES. `ready` (exit 0): Ready=True with `lastAppliedOriginRevision` at that commit or
+at a descendant of it, by this checkout's git history. A later promotion that lands before
+Flux applies the commit still carries it.
 `failed` (exit 1): Ready=False for a reason other than a pending dependency, after an attempt
 at the artifact the source serves, and the source serves that commit. `suspended` (exit 3):
 `spec.suspend` is set, so nothing will apply. Every other reading keeps the wait open:
 `absent` (no such Kustomization yet), `waiting` (the source serves no commit) and
-`progressing`. A `--revision` the source never serves therefore waits until the budget ends.
+`progressing`. A `--revision` that no applied commit descends from waits until the budget
+ends, as does one this checkout has not fetched.
 
 A failed kubectl read exits 1 with the reason on stderr, which cc-wait retries.
 """

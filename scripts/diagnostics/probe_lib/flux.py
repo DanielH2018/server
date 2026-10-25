@@ -28,6 +28,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import subprocess
 from dataclasses import dataclass
 
 from deploy_tools.kustomizations import (
@@ -37,6 +38,7 @@ from deploy_tools.kustomizations import (
     origin_commit,
 )
 from lib.exit_codes import PROBE_UNREADABLE
+from lib.git import git
 from lib.kubectl import DEFAULT_CLUSTER, MissingKubectl, kubectl_argv, kubectl_json
 
 FLUX_NAMESPACE = "flux-system"
@@ -191,7 +193,7 @@ def read_flux(cluster: str = DEFAULT_CLUSTER, read=kubectl_json) -> list[dict]:
     """Every Kustomization and OCIRepository in `flux-system`.
 
     Raises:
-      FluxUnreadable: kubectl failed or is missing, or listed no Kustomization at all. Flux
+      FluxUnreadable: kubectl failed, timed out or is missing, or listed no Kustomization at all. Flux
         always holds the root `homelab`, so an empty list is a failed read, never "nothing
         to report".
       lib.kubectl.WrongCluster: the local kubectl serves another cluster.
@@ -200,6 +202,8 @@ def read_flux(cluster: str = DEFAULT_CLUSTER, read=kubectl_json) -> list[dict]:
         doc = read(cluster, *flux_args())
     except MissingKubectl as exc:
         raise FluxUnreadable(str(exc)) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise FluxUnreadable(f"kubectl timed out after {exc.timeout}s") from exc
     items = (doc or {}).get("items")
     if not isinstance(items, list):
         raise FluxUnreadable(f"kubectl {' '.join(flux_args())} returned no list")
@@ -274,12 +278,45 @@ def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
     return "\n".join(lines), 0
 
 
-def wait_state(items: list[dict], name: str, expected: str | None) -> dict:
+# The checkout `contains` asks: the one this file sits in, which shares its object store with
+# every worktree of the repo.
+REPO = _Path(__file__).resolve().parents[3]
+
+
+def contains(commit: str, ancestor: str) -> bool:
+    """Whether `commit` is `ancestor` or descends from it, by this checkout's git history.
+
+    False when git does not know either commit, so an unfetched promotion keeps a wait open
+    rather than ending it.
+    """
+    try:
+        proc = git(
+            "merge-base",
+            "--is-ancestor",
+            ancestor,
+            commit,
+            cwd=REPO,
+            check=False,
+            timeout=10,
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return False
+    return proc.returncode == 0
+
+
+def wait_state(
+    items: list[dict], name: str, expected: str | None, contains=contains
+) -> dict:
     """One cc-wait reading of Kustomization `name`: `{"state", "detail"}`.
 
     `expected` is a commit or a prefix of one; None means the commit the source serves.
-    `ready` and `failed` both require that commit to be the one in question, so a failure at
-    an earlier commit keeps the wait open rather than ending it.
+    `ready` holds when the applied commit is `expected` or descends from it, because a later
+    promotion can land before Flux applies `expected` and carry its change. `failed`
+    requires the source to serve `expected` itself, so a failure at another commit keeps the
+    wait open rather than ending it.
+
+    Args:
+        contains: `contains`'s signature, injectable so a test needs no git history.
     """
     kustomizations, sources = split(items)
     match = [k for k in kustomizations if kustomization_name(k) == name]
@@ -300,9 +337,14 @@ def wait_state(items: list[dict], name: str, expected: str | None) -> dict:
             "state": "waiting",
             "detail": f"{r.source or 'the source'} serves no commit yet",
         }
-    at_want = r.applied is not None and r.applied.startswith(want)
+    at_want = r.applied is not None and (
+        r.applied.startswith(want) or contains(r.applied, want)
+    )
     if r.observed and r.ready == "True" and at_want:
-        return {"state": "ready", "detail": f"{name} is Ready at {_short(r.applied)}"}
+        return {
+            "state": "ready",
+            "detail": f"{name} is Ready at {_short(r.applied)}, which holds {_short(want)}",
+        }
     source_at_want = r.served is not None and r.served.startswith(want)
     if (
         r.observed
