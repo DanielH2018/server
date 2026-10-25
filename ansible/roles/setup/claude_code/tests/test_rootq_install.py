@@ -47,7 +47,7 @@ def test_the_rendered_sudoers_file_passes_visudo(tmp_path) -> None:
 def test_the_shim_runs_only_the_granted_script_through_sudo() -> None:
     lines = (ROLE / "files" / "rootq.sh").read_text().splitlines()
     assert [x.strip() for x in lines if "$sudo" in x and not x.startswith("#")] == [
-        'exec "$sudo" -n "$script" matches "$2" "${hash%% *}" < /dev/null',
+        'exec "$sudo" -n "$script" matches "$2" "$hash" < /dev/null',
         'exec "$sudo" -n "$script" "$@" < /dev/null',
     ]
     assert "sudo=${HOMELAB_ROOTQ_SUDO:-/usr/bin/sudo}" in lines
@@ -81,6 +81,22 @@ def test_matches_hands_root_only_the_hash_of_the_repo_file(shim) -> None:
     assert result.returncode == 0, result.stderr
     digest = hashlib.sha256(b"network:\n  version: 2\n").hexdigest()
     assert argv == ["-n", SCRIPT, "matches", "/etc/netplan/a.yaml", digest]
+
+
+def test_matches_hands_root_a_hash_given_in_place_of_the_repo_file(shim) -> None:
+    """`probe.py applied` asks this way on a host with no checkout (#6357)."""
+    digest = "ab" * 32
+    result, argv = shim("matches", "/etc/netplan/a.yaml", digest)
+    assert result.returncode == 0, result.stderr
+    assert argv == ["-n", SCRIPT, "matches", "/etc/netplan/a.yaml", digest]
+
+
+@pytest.mark.parametrize("almost", ["ab" * 31, "AB" * 32, "ab" * 32 + "0"])
+def test_matches_reads_a_near_hash_as_a_repo_file(shim, almost) -> None:
+    result, argv = shim("matches", "/etc/netplan/a.yaml", almost)
+    assert result.returncode == 2
+    assert "does not exist" in result.stderr
+    assert argv is None
 
 
 def test_every_other_verb_passes_its_arguments_through_unchanged(shim) -> None:

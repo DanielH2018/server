@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import core, host_reader
+from lib.proc_testing import path_with, write_exec
 
 HERE = "daniel-box"
 
@@ -132,3 +133,26 @@ def test_a_log_directory_behind_an_untraversable_parent_is_unreadable_not_absent
     assert _local({"logs": [str(tmp_path / "gone"), "*", 0]})["logs"] == {
         "status": "absent"
     }
+
+
+def test_a_file_this_user_stats_but_cannot_open_is_hashed_by_rootq(
+    tmp_path, monkeypatch
+):
+    """Only `matches` is asked: the reader's own lstat already has the metadata (#6357)."""
+    bin_dir, log = tmp_path / "bin", tmp_path / "rootq.argv"
+    bin_dir.mkdir()
+    write_exec(bin_dir / "rootq", f'#!/bin/sh\necho "$*" >> {log}\necho match\n')
+    monkeypatch.setenv("PATH", path_with(bin_dir))
+    script = tmp_path / "x.sh"
+    script.write_text("exec x\n")
+    script.chmod(0o000)
+    digest = hashlib.sha256(b"exec x\n").hexdigest()
+    try:
+        if os.access(script, os.R_OK):
+            pytest.skip("running as root, which reads a 0000 file")
+        row = _local({"stat": [str(script)], "rootq": {str(script): digest}})
+    finally:
+        script.chmod(0o600)
+    row = row["stat"][str(script)]
+    assert (row["mode"], row["via"], row["match"]) == ("0000", "rootq", True)
+    assert log.read_text().splitlines() == [f"matches {script} {digest}"]

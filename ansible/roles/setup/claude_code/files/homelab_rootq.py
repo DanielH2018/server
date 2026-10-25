@@ -12,7 +12,9 @@ Tier 1 never prints file content. Each takes a PATH on the PATHS list:
   rootq matches PATH FILE   exit 0 when PATH is byte-identical to FILE in your checkout, else 1
 
 For `matches`, the shim hashes FILE as the caller and passes only the hash, so this script
-receives `matches PATH HEX` and never opens a caller-named file.
+receives `matches PATH HEX` and never opens a caller-named file. The shim also takes the
+64-hex SHA-256 in place of FILE, which is how `probe.py applied` asks on a host with no
+checkout.
 
 Tier 2 prints, and only from fixed sources, each through the redaction filter:
 
@@ -79,6 +81,9 @@ PATHS = (
     ("/usr/local/bin", "registry-gc.sh"),
     ("/etc/systemd/system", "*.service"),
     ("/etc/systemd/system", "*.timer"),
+    # The polkit rules this role installs, fanout-alert, land and triage, which `probe.py
+    # applied claude_code` read as `unread` on 2026-10-25 (#6357): rules.d is 0750 root.
+    ("/etc/polkit-1/rules.d", "50-claude-*.rules"),
 )
 # The only files tier 2 prints. A new printing source needs a structural argument for why the
 # filter redacts it cleanly: netplan is YAML, whose every line is a key, a list item or a
@@ -98,7 +103,7 @@ DENY = (
     "/var/lib/rancher/k3s/server/token",
     "*/node-token",
     "*/cred",
-    "*/credentials",
+    "*/credentials*",
     "*/keys.txt",
     "*.agekey",
     "*/sops/age",
@@ -410,9 +415,8 @@ def plain(value: str) -> bool:
 
 
 def unquote(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    return value
+    quoted = len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'"
+    return value[1:-1] if quoted else value
 
 
 def redact_value(key: str, value: str) -> str:

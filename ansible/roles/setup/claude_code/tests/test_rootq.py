@@ -45,6 +45,7 @@ DENIED = [
     "/var/lib/rancher/k3s/server/node-token",
     "/var/lib/rancher/k3s/server/cred/passwd",
     "/opt/app/credentials/db",
+    "/var/lib/claude/.config/homelab-ui/credentials.json",
     "/home/ubuntu/.config/sops/age/keys.txt",
     "/etc/backup.agekey",
     "/home/claude/.config/sops/age",

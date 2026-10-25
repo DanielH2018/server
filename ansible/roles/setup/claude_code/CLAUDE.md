@@ -346,7 +346,10 @@ a need appears.
   byte-identical to REPO_FILE in the caller's checkout, and 1 when it differs. The shim
   (`files/rootq.sh`) hashes REPO_FILE as the caller and passes only the hash. Root therefore
   receives `matches PATH HEX` and never opens a caller-named file. The shim refuses a REPO_FILE
-  that is absolute, holds `..`, or resolves outside the checkout.
+  that is absolute, holds `..`, or resolves outside the checkout. It also takes the 64-hex
+  SHA-256 in place of REPO_FILE and passes it on as it is, which gains the caller nothing a
+  file in a checkout could not. `probe.py applied` asks that way, on hosts with no checkout,
+  for each installed file it cannot stat or open, and uses only `stat` and `matches` (#6357).
 - **Tier 2 prints, from fixed sources only:** `nft list ruleset`, `ufw status verbose`,
   `sshd -T`, `crontab -l -u root`, and `cat` of `/etc/netplan/*.yaml`. Every argv is written
   in `ansible/roles/setup/claude_code/files/homelab_rootq.py:COMMANDS`, and no caller flag

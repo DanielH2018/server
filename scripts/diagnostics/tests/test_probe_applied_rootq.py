@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import applied
-from lib.exit_codes import PROBE_FAILED, PROBE_OK
+from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
 from lib.proc_testing import path_with, write_exec
 
 SCRIPT = "#!/bin/sh\nexec x --port {{ port }}\n"
@@ -187,3 +187,14 @@ def test_applied_asks_rootq_only_through_stat_and_matches(
     verbs = [json.loads(line)[0] for line in rig.log.read_text().splitlines()]
     assert verbs, "applied never consulted rootq for the paths it could not stat"
     assert set(verbs) <= ALLOWED_VERBS, verbs
+
+
+def test_a_root_only_file_rootq_does_not_list_stays_unread_with_its_reason(
+    tmp_path, monkeypatch, capsys
+):
+    rig = _rig(tmp_path, monkeypatch, SCRIPT_TASK, {})
+    code, rows = _run(rig, capsys)
+    status, line = rows[f"{rig.locked}/x.sh"]
+    assert status == "unread", line
+    assert "not on the allowlist" in line, line
+    assert code == PROBE_UNREADABLE
