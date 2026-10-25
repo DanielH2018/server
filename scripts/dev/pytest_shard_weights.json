@@ -1209,6 +1209,7 @@
  "scripts/diagnostics/tests/test_probe_monitors_gates.py": 0.03,
  "scripts/diagnostics/tests/test_probe_monitors_stored_beat.py": 0.32,
  "scripts/diagnostics/tests/test_probe_pi_plane.py": 0.0,
+ "scripts/diagnostics/tests/test_probe_push_rules.py": 0.0,
  "scripts/diagnostics/tests/test_probe_readonly_rbac.py": 0.0,
  "scripts/diagnostics/tests/test_probe_registry.py": 0.03,
  "scripts/diagnostics/tests/test_probe_releases.py": 0.01,
