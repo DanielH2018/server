@@ -14,10 +14,11 @@ playbook entry admits in one `host_reader` call per host, and prints one row per
   0700 `/etc/cron.d`.
 
 `applied_tasks` says which tasks it reads and which it skips; the skipped ones are listed too.
-An import whose file the walk cannot find prints as `UNCHECKED` with the task file and the
-expression, because nothing in it was read.
-Exit 1 on any `DRIFT`, else 75 when a path was `unread`, an import was `UNCHECKED` or nothing
-was compared, else 0. A 75 for an `UNCHECKED` import says on stderr that coverage was partial.
+A task file the walk cannot read prints as `UNCHECKED` with the importing file and the reason,
+because nothing in it was read: its path does not resolve, or its `when:` or loop reads a
+value only the run sets. An import whose `when:` is false for the host prints as skipped.
+Exit 1 on any `DRIFT`, else 75 when a path was `unread`, a task file was `UNCHECKED` or nothing
+was compared, else 0. A 75 for an `UNCHECKED` task file says on stderr that coverage was partial.
 The render is the working tree's, so commit or stash first to check `HEAD`.
 """
 
@@ -211,7 +212,7 @@ def run_applied(ns, read=read_host, setup: Path = SETUP, render_ctx=None) -> int
         return PROBE_FAILED
     if "UNCHECKED" in statuses:
         print(
-            f"applied: coverage partial: an UNCHECKED import of {ns.role} was not read",
+            f"applied: coverage partial: an UNCHECKED task file of {ns.role} was not read",
             file=_sys.stderr,
         )
         return PROBE_UNREADABLE

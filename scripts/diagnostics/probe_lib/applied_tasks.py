@@ -13,13 +13,22 @@ imports, through `block`, `rescue` and `always`, and turns each file-writing tas
   line itself, so the content is not compared;
 - the same five spelled `ansible.builtin.*`.
 
-A task is SKIPPED, with the reason, rather than guessed at: its `when:` (its own, or a
-block's) cannot be read for the host; it loops over a list that is not literal; a field still
-holds Jinja or a `STUB` after the render; or it writes from a variable the light render cannot
-resolve. An `import_role` or `include_role` is skipped the same way. An import whose path
-does not render to a file in the tree is UNCHECKED rather than skipped: the file it names may
-install anything, so the probe cannot call the role clean, and `applied` exits 75 for it. A `copy` with `remote_src` is compared by metadata
-only, because its source is on the host. A `when:` that reads false for the host drops the task, as Ansible would.
+A `when:` (its own, or a block's) is evaluated as Jinja against the walk's context: the
+host's merged inventory vars with every Jinja-valued var resolved, plus an import's `vars:`.
+A gate that reads a name with no value before the run (a `set_fact`, a `register`, `item`, an
+`ansible_*` fact) cannot be read. A `set_fact` or `register` name is dropped from the context
+when the walk passes its task, so a default of the same name is not read in its place.
+
+A task is SKIPPED, with the reason, rather than guessed at: its `when:` cannot be read for the
+host; it loops over a list that is not literal; a field still holds Jinja or a `STUB` after
+the render; or it writes from a variable the light render cannot resolve. An `import_role` or
+`include_role` is skipped the same way. A task FILE the walk cannot read is UNCHECKED rather
+than skipped: an import whose path does not render to a file in the tree, whose `when:` cannot
+be read, or whose loop is not literal. The file may install anything, so the probe cannot call
+the role clean, and `applied` exits 75 for it. An import whose `when:` reads false for the host
+is listed as not applicable. A `copy` with `remote_src` is compared by metadata only, because
+its source is on the host. A task whose `when:` reads false for the host is dropped, as
+Ansible would.
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
@@ -35,7 +44,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from deploy_tools.setup_lib.setup_gates import GateUnreadable, eval_when_strict
+from jinja2 import StrictUndefined, TemplateSyntaxError, meta
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, template_env
 from lib.render_guard import render_or_error
@@ -50,6 +59,9 @@ _ROLE_INCLUDES = tuple(
 )
 _MODULES = ("template", "copy", "file", "cron")
 _LOOPS = ("loop", "with_items", "with_list")
+_SET_FACTS = ("set_fact", "ansible.builtin.set_fact", "ansible.legacy.set_fact")
+# Names Ansible fills in only while the play runs. Every `ansible_*` name is one too.
+_RUN_TIME = frozenset({"item", "hostvars", "groups", "group_names", "play_hosts"})
 
 
 @dataclass(frozen=True)
@@ -81,8 +93,9 @@ class Want:
 class Skip:
     """A file-writing task this probe does not compare, and why.
 
-    `unchecked` marks an import whose file the walk could not find, so every task in it went
-    unread: `applied` reports it as UNCHECKED and its verdict as partial coverage.
+    `unchecked` marks a task file the walk could not read, because its path, its `when:` or
+    its loop does not resolve, so every task in it went unread: `applied` reports it as
+    UNCHECKED and its verdict as partial coverage.
     """
 
     task: str
@@ -139,21 +152,48 @@ class _Walk:
         self.role_dir, self.host = role_dir, host
         # A shared task file names its own templates through these two, as Ansible sets them.
         self.ctx = {"role_path": str(role_dir), "playbook_dir": str(ANSIBLE), **ctx}
-        self.defaults = role_dir / "defaults" / "main.yml"
         self.wants: list[Want] = []
         self.skips: list[Skip] = []
         # The task file being walked, for an UNCHECKED line.
         self.file = "tasks/main.yml"
         self.text_env = make_ansible_env([role_dir / "templates"])
+        self.gate_env = make_ansible_env(undefined_cls=StrictUndefined)
+        # Names a `set_fact` or `register` the walk has passed sets during the run.
+        self.run_time: set[str] = set()
 
     def gate(self, whens: list) -> str | None:
-        """None when the task runs on the host, `"no"` when it does not, else the reason."""
+        """None when the task runs on the host, `"no"` when it does not, else the reason.
+
+        The `when:` is Jinja, evaluated against the walk's context the way Ansible evaluates
+        it against the host's vars. Every name it reads must hold a resolved value first, so
+        a fact the run sets is never read as undefined, which `is defined` would call False.
+        """
         if not whens:
             return None
+        expr = " and ".join(f"({w})" for w in whens)
+        unreadable = f"its when: cannot be read for {self.host}"
+        ns = {**self.ctx, "inventory_hostname": self.host}
         try:
-            runs = eval_when_strict(whens, self.host, role_defaults=self.defaults)
-        except GateUnreadable as exc:
-            return f"its when: cannot be read for {self.host} ({exc})"
+            names = meta.find_undeclared_variables(
+                self.gate_env.parse("{{ " + expr + " }}")
+            )
+        except TemplateSyntaxError as exc:
+            return f"{unreadable} (`{expr}` does not parse: {exc.message})"
+        for name in sorted(names):
+            value = ns.get(name)
+            if (
+                name in _RUN_TIME
+                or name in self.run_time
+                or name.startswith("ansible_")
+                or name not in ns
+            ):
+                return f"{unreadable} (`{name}` has no value before the run)"
+            if isinstance(value, str) and ("{{" in value or STUB in value):
+                return f"{unreadable} (`{name}` does not resolve before the run)"
+        try:
+            runs = self.gate_env.compile_expression(expr)(**ns)
+        except Exception as exc:
+            return f"{unreadable} (`{expr}`: {exc})"
         return None if runs else "no"
 
     def render(self, value, item=None) -> str | None:
@@ -182,6 +222,11 @@ class _Walk:
         own = task.get("when")
         here = [*whens, *(own if isinstance(own, list) else [own] if own else [])]
         name = str(task.get("name") or "unnamed task")
+        if isinstance(task.get("register"), str):
+            self.run_time.add(task["register"])
+        for key in _SET_FACTS:
+            if isinstance(task.get(key), dict):
+                self.run_time |= {str(k) for k in task[key]}
         if any(k in task for k in ("block", "rescue", "always")):
             for key in ("block", "rescue", "always"):
                 for sub in task.get(key) or []:
@@ -245,13 +290,20 @@ class _Walk:
             )
             self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
             return
-        if (why := self.gate(whens)) is not None:
-            if why != "no":
-                self.skips.append(Skip(label, why))
+        # DECIDED: a task file whose gate or loop the walk cannot read is UNCHECKED too (#6356).
+        # Its tasks install files nobody compared, the defect an unfound import already reports.
+        why = self.gate(whens)
+        if why == "no":
+            why = f"its when: is false for {self.host}, so it does not apply"
+            self.skips.append(Skip(label, why))
+            return
+        if why is not None:
+            self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
             return
         items = self.loop_items(task)
         if items is None:
-            self.skips.append(Skip(label, "it loops over a list that is not literal"))
+            why = "it loops over a list that is not literal"
+            self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
             return
         loop_var = (task.get("loop_control") or {}).get("loop_var", "item")
         outer = self.ctx
