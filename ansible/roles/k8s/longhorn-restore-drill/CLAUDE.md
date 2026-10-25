@@ -69,6 +69,14 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
   gone, so the CronJob is the only runner. Setting `suspend: true` again is the first step of any
   revert that restores the host cron. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_cronjob_is_unsuspended_and_never_overlaps`.
+- **The schedule is the post-deploy gate.** No gate Job runs the drill per revision, because a
+  copy would run a real restore beside the scheduled one. The CronJob carries
+  `homelab/gate: schedule`, and `probe.py health longhorn-restore-drill` reads it. With no Job
+  yet, the gate passes for one schedule period after Flux first applied the revision and fails
+  after that. With a Job, the gate reads the newest firing, which must have succeeded within two
+  periods. ENFORCED:
+  `scripts/diagnostics/tests/test_probe_health_cronjob_schedule_gate.py::test_no_job_past_one_schedule_period_of_the_apply_fails`,
+  `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py::test_the_schedule_gate_marker_names_exactly_the_ungated_roles`.
 - **Abort valves.** The Job's `activeDeadlineSeconds` is the restore timeout plus the probe pod's
   300-second bound plus a 600-second margin. The kubelet's SIGTERM at the deadline runs the
   script's `cleanup` through its TERM trap, within the 300-second grace period. ENFORCED:

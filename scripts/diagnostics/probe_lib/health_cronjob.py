@@ -69,10 +69,14 @@ class FluxRevision:
             None when the Kustomization is missing or carries no such annotation.
         gate: The name of the gate Job whose pod template carries `digest8`, or None when
             no gate Job does.
+        applied_at: When Flux first applied the revision it applies now
+            (`revision_applied_at`), or None when the Kustomization does not say. Only a
+            schedule-gated CronJob (`SCHEDULE_GATE`) reads it.
     """
 
     digest8: str | None
     gate: str | None
+    applied_at: str | None = None
 
 
 def _is_owned_by(job, cronjob_name):
@@ -129,16 +133,36 @@ def flux_revision(kustomization, jobs_doc, cronjob_name):
     """
     annotations = ((kustomization or {}).get("metadata") or {}).get("annotations") or {}
     digest8 = (annotations.get(CONTENT_DIGEST) or "")[:8] or None
+    applied_at = revision_applied_at(kustomization)
     if digest8 is None:
-        return FluxRevision(None, None)
+        return FluxRevision(None, None, applied_at)
     for job in (jobs_doc or {}).get("items") or []:
         template = (job.get("spec") or {}).get("template") or {}
         stamped = ((template.get("metadata") or {}).get("annotations") or {}).get(
             ROLE_DIGEST8
         )
         if stamped == digest8 and _is_flux_gate_job(job, cronjob_name):
-            return FluxRevision(digest8, job["metadata"]["name"])
-    return FluxRevision(digest8, None)
+            return FluxRevision(digest8, job["metadata"]["name"], applied_at)
+    return FluxRevision(digest8, None, applied_at)
+
+
+def revision_applied_at(kustomization):
+    """When Flux first applied the revision Kustomization `kustomization` applies now, or None.
+
+    kustomize-controller keeps one `status.history` entry per applied content digest, and the
+    entry whose `metadata.revision` is `status.lastAppliedRevision` is the live one. Its
+    `firstReconciled` is when that content went live. Verified live 2026-10-25 on
+    `longhorn-restore-drill`: the entry before the live one starts at 17:38:28Z on 2026-10-24,
+    the second the CronJob's kustomize-controller `managedFields` entry records for the unsuspend.
+    """
+    status = (kustomization or {}).get("status") or {}
+    revision = status.get("lastAppliedRevision")
+    if not revision:
+        return None
+    for entry in status.get("history") or []:
+        if (entry.get("metadata") or {}).get("revision") == revision:
+            return entry.get("firstReconciled") or None
+    return None
 
 
 def _flux_revision_failure(name, job_name, revision):
@@ -215,6 +239,72 @@ def declared_suspended(docs, default_namespace):
         for doc in docs
         if doc.get("kind") == "CronJob"
         and (doc.get("spec") or {}).get("suspend") is True
+    )
+
+
+# The marker a CronJob carries when nothing runs it per revision and its schedule is the gate
+# (#6128). The restore drill carries it: a gate Job would run a real restore beside the
+# scheduled one, under the same `restore-drill-<pvc>` name
+# (`ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py:UNGATED_BY_DESIGN`).
+SCHEDULE_GATE = "homelab/gate"
+SCHEDULE_GATE_VALUE = "schedule"
+
+
+def declared_schedule_gated(docs, default_namespace):
+    """`namespace/name` of each CronJob among `docs` whose rendered metadata sets `SCHEDULE_GATE`."""
+    return frozenset(
+        f"{(doc.get('metadata') or {}).get('namespace') or default_namespace}/"
+        f"{(doc.get('metadata') or {}).get('name')}"
+        for doc in docs
+        if doc.get("kind") == "CronJob"
+        and ((doc.get("metadata") or {}).get("annotations") or {}).get(SCHEDULE_GATE)
+        == SCHEDULE_GATE_VALUE
+    )
+
+
+def format_schedule_gated(name, cronjob, latest_job, pods, revision, now):
+    """(text, exit code) for a Flux-owned CronJob whose schedule is its gate.
+
+    No gate Job carries the revision, so `_flux_revision_failure` would fail it for good. The
+    revision's apply time stands in for `applied_at` instead, and is never optional here:
+
+      - No Job yet: a pass for one schedule period after the apply, the longest a firing can
+        take to arrive, and a failure after it.
+      - A Job: `format_cronjob_health`'s release-record path, against the apply time.
+    """
+    if cronjob is None:
+        return format_cronjob_health(name, cronjob, latest_job, pods, None, now)
+    if not isinstance(revision, FluxRevision) or revision.applied_at is None:
+        return (
+            f"{name}: the role's Flux Kustomization records no apply time for the "
+            "revision it applies (no `status.history` entry for its "
+            "`lastAppliedRevision`), so its schedule cannot be judged — failing closed",
+            1,
+        )
+    if latest_job is not None:
+        return format_cronjob_health(
+            name, cronjob, latest_job, pods, revision.applied_at, now
+        )
+    schedule = (cronjob.get("spec") or {}).get("schedule")
+    interval = _schedule_interval_seconds(schedule)
+    age = seconds_since(revision.applied_at, now)
+    if interval is None or age is None:
+        return (
+            f"{name}: no Job has run yet, and either its schedule ({schedule!r}) or the "
+            f"revision's apply time ({revision.applied_at!r}) cannot be read as an interval "
+            "— failing closed rather than guess",
+            1,
+        )
+    if age > interval:
+        return (
+            f"{name}: no Job found for this CronJob, {int(age)}s after the revision applied "
+            f"against a {interval}s schedule — its first scheduled run never came",
+            1,
+        )
+    return (
+        f"{name}: no Job has run yet; the revision applied {int(age)}s ago, inside one "
+        f"{schedule!r} period, so its first scheduled run is still due",
+        0,
     )
 
 
