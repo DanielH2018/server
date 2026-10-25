@@ -30,6 +30,7 @@ import http.server
 import json
 import os
 import queue
+import re
 import signal
 import sys
 import threading
@@ -43,6 +44,7 @@ NOTIFICATION = "Homelab Alerts"
 USER_AGENT = "kuma-discord-relay"
 HTTP_TIMEOUT = 10.0
 MAX_BACKOFF = 30.0
+WEBHOOK_PLACEHOLDER = "<webhook URL>"
 
 
 def post(url: str, body: bytes, content_type: str) -> tuple[int | None, dict, bytes]:
@@ -130,7 +132,17 @@ class Relay:
         return True
 
     def drop(self, reason: str) -> None:
-        self.log(f"Cannot send notification to {NOTIFICATION}: discord-relay {reason}")
+        self.log(
+            f"Cannot send notification to {NOTIFICATION}: discord-relay {self.redact(reason)}"
+        )
+
+    def redact(self, text: str) -> str:
+        """`text` with the webhook URL removed: its path is the token, and the log reaches Loki."""
+        url = self.webhook_url()
+        if url:
+            text = text.replace(url, WEBHOOK_PLACEHOLDER)
+        text = re.sub(r"https?://\S+", WEBHOOK_PLACEHOLDER, text)
+        return re.sub(r"\S*/api/webhooks/\S+", WEBHOOK_PLACEHOLDER, text)
 
     def webhook_url(self) -> str:
         # Read on every send, so a rotated URL reaches the relay once the kubelet refreshes the
@@ -148,6 +160,11 @@ class Relay:
             url = self.webhook_url()
             if not url:
                 self.drop(f"has no webhook URL in {self.url_file}")
+                return
+            # A malformed URL never succeeds, so drop it now rather than retry it to the
+            # deadline as a network error.
+            if not url.startswith(("https://", "http://")):
+                self.drop(f"has a malformed webhook URL in {self.url_file}")
                 return
             status, headers, answer = self.send(url, body, content_type)
             if status is not None and 200 <= status < 300:

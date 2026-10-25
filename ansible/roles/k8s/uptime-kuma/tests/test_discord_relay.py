@@ -124,6 +124,39 @@ def test_an_unexpected_exception_is_a_logged_drop_and_the_worker_survives(tmp_pa
     assert [s[1] for s in fake.sent] == [b"second"]
 
 
+def test_a_malformed_webhook_url_is_dropped_at_once_without_naming_it(tmp_path):
+    fake = Fake([])
+    relay = fake.relay(tmp_path)
+    (tmp_path / "url").write_text("discord.example/api/webhooks/123/secret-token\n")
+    relay.accept(b"{}", "application/json")
+    assert relay.run_once(timeout=0)
+    assert fake.sent == [] and fake.slept == []
+    assert [line for line in fake.lines if DROP in line and "malformed" in line]
+    assert not any("secret-token" in line for line in fake.lines), fake.lines
+
+
+def test_a_drop_line_never_carries_the_webhook_token(tmp_path):
+    fake = Fake([])
+    relay = fake.relay(tmp_path)
+    (tmp_path / "url").write_text(
+        "https://discord.example/api/webhooks/123/secret-token\n"
+    )
+    relay.drop(
+        "failed with ValueError: bad https://discord.example/api/webhooks/123/secret-token"
+    )
+    relay.drop("gave up, last answer /api/webhooks/123/secret-token")
+    assert len(fake.lines) == 2
+    assert not any("secret-token" in line for line in fake.lines), fake.lines
+    assert all(discord_relay.WEBHOOK_PLACEHOLDER in line for line in fake.lines)
+
+
+def test_a_drop_line_without_a_url_is_unchanged(tmp_path):
+    fake = Fake([])
+    relay = fake.relay(tmp_path)
+    relay.drop("was refused with HTTP 400: b'bad'")
+    assert fake.lines == [f"{DROP}: discord-relay was refused with HTTP 400: b'bad'"]
+
+
 def test_a_webhook_url_without_a_scheme_reads_as_a_failed_send():
     status, _headers, _body = discord_relay.post(
         "discord.example/hook", b"{}", "application/json"
