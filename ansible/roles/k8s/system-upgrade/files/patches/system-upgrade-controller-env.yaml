@@ -11,3 +11,8 @@ metadata:
 data:
   SYSTEM_UPGRADE_JOB_ACTIVE_DEADLINE_SECONDS: "3600"
   SYSTEM_UPGRADE_JOB_ACTIVE_DEADLINE_SECONDS_MAX: "5400"
+  # Upstream's job.go reads this variable (v0.20.2), and the vendored manifest sets 99. At 99 a
+  # failing `prepare` retries until the Job deadline. At 2 it ends in `JobFailed` after three pods.
+  # The literal equals `system_upgrade_job_backoff_limit` in defaults/main.yml, which the role's
+  # test holds. The controller reads its environment at start only.
+  SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT: "2"

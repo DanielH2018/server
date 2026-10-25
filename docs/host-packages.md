@@ -156,6 +156,36 @@ Reconcile enables UFW only when `ufw status` reads `Status: inactive`, and only 
 rules `ssh-limit` and `lan-ssh` are declared and present. A rebuilt host is the case it exists
 for. The live hosts are active, so there the step does nothing.
 
+### A default policy is set only when it differs
+
+On an active firewall, `ufw default <policy> <direction>` stops and starts the whole ruleset,
+even when the policy is unchanged. `frontend.py` `set_default_policy` calls `stop_firewall()`
+and then `start_firewall()`, and `ufw enable` on an active firewall calls `start_firewall()`
+too. The start flushes every UFW chain before it reloads them from `/etc/ufw`. On a k3s node,
+kube-router's network-policy sync saves the filter table and restores all of it. A restore of
+a snapshot taken inside that window writes the flushed chains back.
+
+That happened on daniel-box on 2026-10-25. The first install of a package whose `builder`
+component declares `ufw:` ran the arm, which then issued two `ufw default` calls. kube-router
+logged a sync at 14:14:43.722, and the first `[UFW BLOCK] IN=lo` came at 14:14:43.8.
+`ufw-before-input` was left holding only `-j ufw-user-input`, which is the last line
+`ufw_start` appends. Loopback traffic was dropped, so host DNS on 127.0.0.1 and k3s's own API
+failed. k3s lost its lease and exited at 14:14:54. `/etc/ufw/before.rules` was intact
+throughout, and a manual `ufw reload` at about 14:28 restored the chain.
+
+So the arm reads `ufw status verbose` and sets only a policy that differs. A steady-state run
+issues no command that reloads the firewall. An inactive UFW prints no policies, so there the
+arm sets both, which reloads nothing. Last, on an active UFW, the arm reads
+`iptables -S ufw-before-input`. When the chain lacks `-A ufw-before-input -i lo -j ACCEPT`,
+the run fails, and the failure holds the host. The check only reads and restarts nothing. The
+repair is an operator's `ufw reload`, which opens the same window again. The check reads once,
+straight after the arm's commands, so it misses a restore that lands later. initial_setup's
+`Enable UFW firewall` task has the same gate and the same check
+(`ansible/roles/setup/initial_setup/tasks/network.yml`).
+
+A rule add, relabel or delete on an active firewall still reloads the user chains. Those
+chains sit below the before chains, so loopback and established traffic survive that window.
+
 ## The users, libvirt and line arms
 
 Three more arms of reconcile keep state that `dpkg` does not hold. Each has the same early exit
