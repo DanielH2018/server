@@ -91,7 +91,13 @@ from fragments_lib import (
 )
 from lib.cli_help import ArgumentParser
 from lib.docs_provenance import write_if_body_changed
-from lib.ansible_inventory import K8S_HOST, K8S_HOST_VARS, PI_HOST, PI_HOST_VARS
+from lib.ansible_inventory import (
+    K8S_HOST,
+    K8S_HOST_VARS,
+    PI_HOST,
+    PI_HOST_VARS,
+    pi_entries_in,
+)
 from lib.estate import Estate
 from lib.repo_paths import (
     ALL_VARS,
@@ -229,7 +235,7 @@ def _lan() -> tuple[str, list[str]]:
         str(group["k3s_metallb_ingress_vip"]),
         str(group["dns_k8s_vip"]),
         container_udp_port(estate.entries(K8S_HOST), "wg-easy"),
-        container_udp_port(estate.entries(PI_HOST), "wg-easy"),
+        container_udp_port(pi_entries_in(estate.own_vars(PI_HOST)), "wg-easy"),
         str(group["lan_subnet"]),
         str(group["wg_client_subnet"]),
     ), [

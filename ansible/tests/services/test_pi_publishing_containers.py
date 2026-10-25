@@ -156,20 +156,26 @@ def test_a_udp_only_container_does_not_join_the_set():
     )
 
 
-def test_a_publisher_moved_to_compose_services_is_still_watched():
-    """The H5 move leaves the set unchanged: the second key is read, and the order is by name."""
+def test_a_publisher_in_either_key_is_still_watched():
+    """The set is the same whichever key holds the entry, and the order is by name.
+
+    Every Pi publisher is in `compose_services` since H5.9, so the rollback shape is the one to
+    test: a revert of a move PR puts the entry back in `containers_list`.
+    """
     pi = load_yaml(HOST_VARS / "daniel-pi.yml")
-    wg_easy = [e for e in pi["containers_list"] if e["name"] == "wg-easy"]
+    wg_easy = [e for e in pi["compose_services"] if e["name"] == "wg-easy"]
     assert wg_easy, (
-        "wg-easy left containers_list, so this test no longer moves a listed entry"
+        "wg-easy left compose_services, so this test no longer reverts a move"
     )
-    moved = {
+    reverted = {
         **pi,
-        "containers_list": [e for e in pi["containers_list"] if e["name"] != "wg-easy"],
-        "compose_services": [*pi["compose_services"], *wg_easy],
+        "containers_list": [*pi["containers_list"], *wg_easy],
+        "compose_services": [
+            e for e in pi["compose_services"] if e["name"] != "wg-easy"
+        ],
     }
     found = {host: load_yaml(HOST_VARS / f"{host}.yml") for host in HOSTS}
-    found["daniel-pi"] = moved
+    found["daniel-pi"] = reverted
     raw = render_pod_env(ROLE, {"hostvars": found})[ENV_VAR]
     assert raw == render_pod_env(ROLE, {"hostvars": _hostvars()})[ENV_VAR]
     assert raw == "alloy:12345,wg-easy:51821"
