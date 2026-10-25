@@ -43,7 +43,7 @@ from validate.shell_templates import discover_templates
 
 # The Pi's roles whose templates the accessor must render. Derived from `containers_list` below
 # as well, so this names what must still be deployed there rather than only what is.
-KNOWN_PI_ROLES = frozenset({"alloy", "wg-easy"})
+KNOWN_PI_ROLES = frozenset({"wg-easy"})
 
 
 def _pi_docker_roles() -> set[str]:
@@ -62,25 +62,31 @@ def test_every_pi_docker_role_is_rendered() -> None:
     assert rendered == _pi_docker_roles()
 
 
-def test_every_pi_template_is_rendered_not_just_the_compose() -> None:
-    """alloy's River config is the artifact #3175 was filed for; a compose-only set misses it."""
-    assert ("alloy", "config.alloy.j2") in {(r, t) for r, t, _ in rendered_texts()}
+def test_every_pi_template_is_rendered() -> None:
+    """The accessor renders each `templates/*.j2` of a Pi role, compose and config alike (#3175).
+
+    alloy's River config was the artifact #3175 was filed for. H5.8 moved it into the Pi's
+    package, which tests read through `render_host`, so the named member is wg-easy's compose.
+    """
+    assert ("wg-easy", "docker-compose.yml.j2") in {
+        (r, t) for r, t, _ in rendered_texts()
+    }
 
 
 def test_a_rendered_pi_template_has_its_jinja_expanded() -> None:
-    config = rendered_text("alloy", "config.alloy.j2")
-    assert "{{" not in config
-    assert "loki-homelab.local." in config
+    compose = rendered_text("wg-easy", "docker-compose.yml.j2")
+    assert "{{" not in compose
+    assert "container_name: wg-easy" in compose
 
 
 def test_an_unrendered_pi_template_is_named_rather_than_missed() -> None:
     with pytest.raises(AssertionError, match=r"config\.river\.j2"):
-        rendered_text("alloy", "config.river.j2")
+        rendered_text("wg-easy", "config.river.j2")
 
 
 def test_a_pi_template_that_will_not_render_fails_the_caller() -> None:
     with pytest.raises(AssertionError, match="render error"):
-        render_role_template("alloy", "no-such-template.j2")
+        render_role_template("wg-easy", "no-such-template.j2")
 
 
 def _pi_role_rendering(tmp_path, default: str, host: dict | None = None) -> str:

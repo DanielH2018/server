@@ -726,7 +726,13 @@ Four things sit in that position:
   `initial_setup.yml`'s `hosts:` is one target per run, and the tick runs it on whichever host
   `land.sh` executes on — so a role with no `when:` gate (`initial_setup` itself, plus
   `config_files`, `sops_setup`, `docker_install`, `hypervisor`) reaches all three hosts, and a
-  role's own `when:` can reach more than one (`nut_host`: daniel-box and daniel-server). The
+  role's own `when:` can reach more than one (`claude_code`: daniel-box and daniel-server,
+  through `has_claude_code`). A `when:` that admits a host is not proof that the role changes
+  anything there. `nut_host`'s `when:` admits both cluster nodes, but its only task is the
+  unconditional `meta: end_role` under
+  `ansible/roles/setup/nut_host/tasks/main.yml:DECIDED: this role is emptied`, so an apply
+  changes nothing on either host. Each node's NUT client arrives through its host package
+  (`hosts/components/nut-secondary/`, in `homelab-daniel-box` and `homelab-daniel-server`). The
   tick converging says only that the LOCAL host is current; PR #1002 changed the shared Kuma
   push library, the tick converged on daniel-box, and `land.sh` read `settled` while
   daniel-server and daniel-pi kept the old library for three days. The line names each remaining

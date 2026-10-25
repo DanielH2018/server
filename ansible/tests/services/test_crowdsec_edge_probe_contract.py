@@ -4,7 +4,7 @@ Three files in three roles carry one contract, and each side passes its own test
 
 - the probe script (`hosts/components/crowdsec-probe/crowdsec-edge-probe.sh`) writes
   `<time> http=<code>` to a status file;
-- the Pi's Alloy (`containers/alloy/templates/config.alloy.j2`) tails that path, extracts
+- the Pi's Alloy (`hosts/components/pi-compose/services/alloy/config.alloy.j2`) tails that path, extracts
   `status` with a regex and counts it under a metric name;
 - the verify Job (`k8s/crowdsec/files/crowdsec_verify.py`) queries `COUNTER` from Prometheus.
 
@@ -22,9 +22,9 @@ import subprocess
 
 import pytest
 
-from _compose_render import rendered_text
 from _helpers import REPO
 from lib.proc_testing import write_exec
+from renderer.renderer_lib import host as host_mode
 
 # crowdsec's verify module ships from its role's files/, which `pythonpath` in pyproject.toml
 # puts on sys.path (autofix-bridge's ConfigMap carries crowdsec's jobs_metrics.py).
@@ -88,7 +88,9 @@ def _probe_line(tmp_path, script_text: str, code: str) -> tuple[str, str]:
 
 @pytest.fixture(scope="module")
 def alloy() -> str:
-    return rendered_text("alloy", "config.alloy.j2")
+    """The config the Pi installs, from the rendered package (H5.8), not the template source."""
+    package = host_mode.render_host("daniel-pi")
+    return package.files["/usr/lib/homelab/compose/alloy/config.alloy"][0].decode()
 
 
 def test_alloy_counts_the_metric_the_verify_job_queries(alloy):

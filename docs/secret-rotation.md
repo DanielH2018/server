@@ -242,6 +242,16 @@ not rotated again by the weekly cron. Examples:
   jsonpath='{.data.token}' | base64 -d`, which is **operator-only**. Then `sops set` the new
   value, run `host_secrets.py sync daniel-box` (and each other host that carries the key), and
   commit. The unit reads the credential at its next window.
+- `alloy_pi_http_password` (H5.8): the basic-auth password on the Pi's Alloy listener. It is a
+  lock rather than a login, so no app issues it: mint a new random value yourself. After
+  `sops set`, the operator runs `uv run python scripts/secrets_mgmt/host_secrets.py sync
+  daniel-pi` (**operator-only**) and commits the Pi's host file in the same PR. The Pi installs
+  the value when the package's next version lands, through the package's Compose env file.
+  `secret_rotation.py consumers alloy_pi_http_password` names the package and prints the `sync`
+  command. The password sits in alloy's container environment, where the read-only docker-proxy
+  can return it, and the H5.8 PR body records the operator's approval of that exposure
+  (`h5-pi-compose.md`, *Open questions* 6). No redeploy step exists: `deploy.sh` no longer
+  reaches alloy, and the recreate follows from the environment change.
 - `mqtt_password_hash`: `mosquitto_passwd` writes a `username:hash` line. Store only the part
   after the first `:`, because the template prepends `mqtt_username` itself. The mosquitto
   deploy refuses a stored hash that holds a colon, before the apply.
