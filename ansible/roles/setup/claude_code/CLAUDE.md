@@ -332,7 +332,10 @@ only, where `claude_code_takeover_check_enabled` is true.
 line in `/etc/sudoers.d/claude-rootq` (issue #6323). The operator approved the shape on
 2026-10-25 and reviews the grant before it lands. It exists where `claude_code_rootq_enabled`
 is true: daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
-and, where the host builds one, the agent user.
+only, where fan-out batches and the operator's sessions run. The agent user stays without
+sudo: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297), and
+`NoNewPrivileges=yes` in `claude-rc.service` stops sudo there anyway. The four files that
+decide what the grant reaches are on the lander's approval list.
 
 - **What root runs:** `nft list ruleset`, `ufw status verbose`, `sshd -T`,
   `crontab -l -u root`, and `ls -la --` or `stat --` of a checked path. `cat` reads the file

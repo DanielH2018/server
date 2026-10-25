@@ -1288,11 +1288,11 @@ claude_code_fanout_server_lander_enabled: true
 # The D5 flip pre-merge checks as one sudoers-granted wrapper (issue #5494); daniel-box holds the
 # cluster-admin kubeconfig. False removes the grant, the wrapper, the flux copy and the state dir.
 claude_code_takeover_check_enabled: true
-# The read-only root inspector, `rootq` (issue #6323), for the operator and the agent user.
+# The read-only root inspector, `rootq` (issue #6323), for the operator's account.
 # False removes the grant, the shim and the script.
 claude_code_rootq_enabled: true
-# The `claude` Unix user the operator's Claude sessions move to, with no sudo beyond `rootq` and no
-# read on /home/ubuntu. It needs one interactive `claude` login as that user, like has_claude_code
+# The `claude` Unix user the operator's Claude sessions move to, with no sudo and no read on
+# /home/ubuntu. It needs one interactive `claude` login as that user, like has_claude_code
 # above. False expires the account and keeps its home.
 claude_code_agent_user_enabled: true
 # The account claude-rc.service runs as: the phone's sessions run as the agent user. The first

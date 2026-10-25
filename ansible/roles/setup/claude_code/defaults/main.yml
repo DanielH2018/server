@@ -649,8 +649,10 @@ claude_code_takeover_check_flux_sha256: b4d22673e9246cbd628881f1a9ef3b090085dced
 # daniel-server.yml. False removes the grant, the shim and the script, in that order. CLAUDE.md,
 # "The root inspector", has the grant and its limits.
 claude_code_rootq_enabled: false
-# The operator's account, and the agent user where this host builds one.
-claude_code_rootq_users: >-
-  {{ [sys_user] + ([claude_code_agent_user] if claude_code_agent_user_enabled else []) }}
+# The operator's account, which is where fan-out batches and the operator's sessions run. Not
+# the agent user: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297),
+# and NoNewPrivileges in claude-rc.service stops sudo there anyway (docs/claude-agent-user.md).
+claude_code_rootq_users:
+  - "{{ sys_user }}"
 claude_code_rootq_script: /usr/local/sbin/homelab-rootq
 claude_code_rootq_shim: /usr/local/bin/rootq

@@ -86,6 +86,8 @@ def test_disabling_removes_the_grant_the_shim_and_the_script_in_order() -> None:
     assert defaults["claude_code_rootq_enabled"] is False
     assert defaults["claude_code_rootq_script"] == SCRIPT
     assert defaults["claude_code_rootq_shim"] == "/usr/local/bin/rootq"
+    # The operator's account only: the agent user's sudo grant became a socket in #4297.
+    assert defaults["claude_code_rootq_users"] == ["{{ sys_user }}"]
 
 
 def test_daniel_box_and_daniel_server_enable_the_inspector() -> None:

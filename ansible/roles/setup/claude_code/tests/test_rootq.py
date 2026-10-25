@@ -55,6 +55,11 @@ SECRETS = {
     "userinfo": "rsync rsync://backup:sentinel@nas/share\n",
     "k3s-token": "K10" + "a" * 20 + "::server:sentinel\n",
     "github": "GH=ghp_" + "S" * 30 + "\n",
+    # The shapes the tree renders into an ALLOW root (#6323's census).
+    "kuma-push": 'PUSH_URL="https://${KUMA_HOST}/api/push/sentinel"\n',
+    "netplan-wifi": 'wifis:\n  wlan0:\n    access-points:\n      "home":\n        password: "sentinel"\n',
+    "hc-ping": "curl https://hc-ping.com/0a1b2c3d-sentinel\n",
+    "flag-argument": "backup --password sentinel /srv\n",
 }
 
 
@@ -233,6 +238,22 @@ def test_a_binary_or_oversized_file_is_refused(rig, capsys) -> None:
 def test_a_file_holding_a_credential_is_withheld_whole(rig, capsys, kind) -> None:
     path = rig.file("script.sh", "#!/bin/sh\necho harmless\n" + SECRETS[kind])
     assert_refused(run(rig, capsys, "cat", path), rig, "credential pattern")
+
+
+def test_a_secret_named_by_reference_is_printed(rig, capsys) -> None:
+    path = rig.file(
+        "registry-gc.sh",
+        'PUSH_TOKEN="sentinel"\ncurl "https://kuma/api/push/${PUSH_TOKEN}"\n'
+        "backup --password $PASS /srv\npassword: ${WIFI}\n",
+    )
+    rc, out, _ = run(rig, capsys, "cat", path)
+    assert rc == 0
+    assert out.splitlines() == [
+        "PUSH_TOKEN=<value>",
+        'curl "https://kuma/api/push/${PUSH_TOKEN}"',
+        "backup --password $PASS /srv",
+        "password: ${WIFI}",
+    ]
 
 
 def test_a_command_whose_output_holds_a_credential_is_withheld_whole(

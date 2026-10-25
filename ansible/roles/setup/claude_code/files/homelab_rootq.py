@@ -92,7 +92,11 @@ DENY = (
     "*/sops/age",
     "/var/lib/kubelet/pods",
 )
-# Content that withholds the whole output rather than redacting it.
+# Content that withholds the whole output rather than redacting it. The last four rows are the
+# shapes the tree itself renders into ALLOW roots: a Kuma push token in a URL path (the
+# sync-artifacts, telemetry-health and GitHub check scripts), netplan's Wi-Fi `password:`, a
+# healthchecks ping UUID, and a secret passed as the next word after its flag. A `${VAR}`
+# reference in those places names a secret without holding it, so it passes.
 REFUSE = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY"
     r"|AGE-SECRET-KEY-"
@@ -104,6 +108,10 @@ REFUSE = re.compile(
     r"|\bK10[0-9a-f]{16,}::"
     r"|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_"
     r"|\bxox[abprs]-|\bsk-ant-|\bglpat-"
+    r"|/api/push/[A-Za-z0-9]"
+    r"|(?im:^\s*(?:password|passwd|psk|private-key|private_key|secret|token)\s*:\s*[^\s$])"
+    r"|hc-ping\.com/[0-9a-f]{8}-"
+    r"|(?i:--?(?:token|password|passwd|secret|api-?key)\s+[^\s$-])"
 )
 PATH_SHAPE = re.compile(r"/[A-Za-z0-9._@+:,=/-]{0,4095}")
 READ_MAX = 1024 * 1024
