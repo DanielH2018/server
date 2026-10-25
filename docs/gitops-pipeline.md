@@ -628,7 +628,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `GH_TOKEN`/`GITHUB_TOKEN` in the environment win) and degrades to anonymous when gh is logged
   out. The anonymous limit is 60 requests an hour per source IP, shared with every landing's
   `await_ci.py` poll on the host, and an exhausted quota reads as "CI not finished." The
-  authenticated limit is 5000 an hour per token.
+  authenticated limit is 5000 an hour per token. An anonymous `await_ci.py` polls every 90s
+  rather than every 20s and never walks descendants, so land.sh's 1200s CI budget costs at
+  most 30 of the 60 requests (`await_ci.ANONYMOUS_INTERVAL_S`, #6148). A poll costs 2
+  requests until a required run registers. On an anonymous host, a merge commit GitHub never
+  ran CI for ends the wait on exit 75 and asks for `gh auth login`.
   - **A tip that is not green sends the gate walking, and the tick deploys the newest GREEN
     ancestor instead of deferring the range.** *What a tick does* has the steps.
     `deploy_phases.assess` reads `git rev-list --first-parent <local>..<origin>` newest first,
@@ -1725,8 +1729,9 @@ under-sized.
   failure-driven worst cases cannot stack; the residual is a slow but successful run cut short.
 - Forward and rollback run sequentially in one activation: `TimeoutStartSec` in
   `gitops-deploy.service.j2` is `max(broad, k8s + rollback)` plus the flock wait.
-- **The FORWARD cap is derived from the worst promoted role** (#2397), and it cannot be raised
-  alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
+- **The FORWARD cap is derived from the worst promoted, Ansible-owned role** (#2397). A
+  flux-owned role is skipped, as the deployer skips it, so since the D5 flips the cap is sized
+  for a role handed back to Ansible: prowlarr at 960 s. It cannot be raised alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
   Under-sized, a cap kill lands MID-DRAIN and routes to `_rollback_k8s`.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
   `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 3840 s, and

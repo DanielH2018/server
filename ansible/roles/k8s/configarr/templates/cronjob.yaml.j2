@@ -49,6 +49,7 @@ spec:
           containers:
             - name: configarr
               image: {{ configarr_k8s_image }}
+              imagePullPolicy: IfNotPresent
               # Read-only root since 2026-09-28: configarr writes its guide clones to
               # /app/repos, and /tmp is the one other path Node or git may touch.
 {{ job_hardened_security_context(read_only=true) }}

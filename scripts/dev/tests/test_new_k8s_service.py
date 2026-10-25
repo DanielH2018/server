@@ -118,6 +118,18 @@ def test_the_generated_deployment_renders_and_pins_a_uid(args, tmp_path):
     assert container["ports"][0]["containerPort"] == 8080
 
 
+def test_the_generated_container_pulls_if_not_present(args, tmp_path):
+    """A digest-pinned image must not re-pull on restart: the image row refuses it (#6136)."""
+    text = scaffold.deployment_template(args.name, args.strategy, args.priority_class)
+    doc = next(
+        d
+        for d in _render(tmp_path, text, args.name, args.port, _defaults(args))
+        if d["kind"] == "Deployment"
+    )
+    container = doc["spec"]["template"]["spec"]["containers"][0]
+    assert container.get("imagePullPolicy") == "IfNotPresent"
+
+
 def _entry(args) -> dict:
     return yaml_fast.safe_load(
         scaffold.entry_lines(

@@ -25,6 +25,7 @@ spec:
       containers:
         - name: nginx
           image: {{ freshrss_k8s_cache_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
           # Read-only rootfs: root nginx writes only its pidfile (/var/run) — the cache is

@@ -159,7 +159,7 @@ REVERT_RULE = False
 # Whether `decide` may promote T over a verification in flight rather than wait on it (slice
 # D7, `promote_lib/supersede.py`). Turning it on is an operator ruling, in a one-line PR of its
 # own, as for REVERT_RULE.
-SUPERSEDE = False
+SUPERSEDE = True
 
 # How many commits a first run's walk examines, newest first, so a walk with no `prod` stops
 # short of master's root. At about 124 merges a day (see `ci_ancestor_walk_max`) 50 is several
