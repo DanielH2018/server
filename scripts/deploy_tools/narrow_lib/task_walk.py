@@ -13,6 +13,9 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
+import difflib
+import json
+
 import yaml
 
 from lib import yaml_fast
@@ -233,3 +236,92 @@ def runs_the_same(before: str, after: str) -> bool:
     except yaml.YAMLError:
         return False
     return _without_import_names(old) == _without_import_names(new)
+
+
+# The spellings of `include_vars`. Like a `set_fact`, the variables it loads outlive the task
+# that loads them, so a task elsewhere in the file can read one under a different tag.
+_INCLUDE_VARS = (
+    "include_vars",
+    "ansible.builtin.include_vars",
+    "ansible.legacy.include_vars",
+)
+
+
+def _loads_vars(tasks) -> bool:
+    """Whether a task list runs `include_vars` anywhere, blocks walked through."""
+    for task in tasks or []:
+        if not isinstance(task, dict):
+            continue
+        if any(key in task for key in _INCLUDE_VARS):
+            return True
+        if any(
+            _loads_vars(task[key])
+            for key in ("block", "rescue", "always")
+            if isinstance(task.get(key), list)
+        ):
+            return True
+    return False
+
+
+def _name(task) -> str | None:
+    return str(task["name"]) if isinstance(task, dict) and "name" in task else None
+
+
+def changed_task_tags(
+    before: str, after: str
+) -> tuple[frozenset[str], frozenset[str]] | None:
+    """The tags of the top-level tasks one edit to a task file changed, or None (#6234).
+
+    The first set holds the tags at `after` of every task the edit added or changed. The
+    second holds the tags at `before` of every task it deleted, which the caller checks still
+    select a task at the new commit. A task equal at both texts, once a static import's
+    `name:` is dropped, contributes nothing. A task whose `name:` survives in the same run of
+    differing tasks was changed, not deleted, so only its tags at `after` count: a retag runs
+    the task under its new tag alone. A moved task counts as deleted and added, because the
+    sequence match pairs tasks in order. H1.4 deleted the `coredns` instance from
+    `setup/k3s`'s `stale-checkout-guard.yml`; the whole-file answer named the surviving
+    Longhorn instances' tags, and `--tags longhorn` re-ran the Longhorn install.
+
+    None means the per-task answer is not safe, and the caller keeps the whole-file one:
+      - a text that does not parse, or is not a task list;
+      - a file that sets a fact or loads vars at either text, since a changed task may read
+        a variable an unchanged task in the file sets under another tag;
+      - a deleted task no tag of its own selects;
+      - an edit that leaves no tag once `always` is dropped, such as a pure reorder or an
+        `always`-only change.
+    """
+    try:
+        old, new = yaml_fast.safe_load(before), yaml_fast.safe_load(after)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(old, list) or not isinstance(new, list):
+        return None
+    if _set_facts(old) or _set_facts(new) or _loads_vars(old) or _loads_vars(new):
+        return None
+
+    def canonical(task) -> str:
+        return json.dumps(_without_import_names(task), sort_keys=True, default=str)
+
+    matcher = difflib.SequenceMatcher(
+        None, [canonical(t) for t in old], [canonical(t) for t in new], autojunk=False
+    )
+    added: set[str] = set()
+    gone: set[str] = set()
+    for op, i1, i2, j1, j2 in matcher.get_opcodes():
+        if op == "equal":
+            continue
+        for tags in _task_tags(new[j1:j2], frozenset()):
+            added |= tags
+        kept = {_name(t) for t in new[j1:j2]} - {None}
+        for task in old[i1:i2]:
+            if _name(task) in kept:
+                continue
+            for tags in _task_tags([task], frozenset()):
+                if not tags:
+                    return None
+                gone |= tags
+    added -= {"always"}
+    gone -= {"always"}
+    if not added and not gone:
+        return None
+    return frozenset(added), frozenset(gone)
