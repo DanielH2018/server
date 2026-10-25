@@ -79,6 +79,13 @@ MUST_DROP = [
     ("kube-state-metrics", "kube_job_status_ready"),
     ("flux", "gotk_reconcile_duration_seconds_bucket"),
     ("flux", "workqueue_queue_duration_seconds_bucket"),
+    ("kubernetes-apiserver", "apiserver_watch_events_dispatch_duration_seconds_bucket"),
+    ("kubernetes-apiserver", "apiserver_storage_list_duration_seconds_bucket"),
+    (
+        "kubernetes-apiserver",
+        "apiserver_watch_cache_initialization_duration_seconds_bucket",
+    ),
+    ("kubernetes-kubelet", "apiserver_watch_events_dispatch_duration_seconds_bucket"),
 ]
 
 # (job, metric, why it matters) — the half that catches a rule widened past its intent.
@@ -158,6 +165,16 @@ MUST_KEEP = [
         "flux",
         "controller_runtime_reconcile_errors_total",
         "a counter one family from the dropped histograms; a widened regex would take it",
+    ),
+    (
+        "kubernetes-apiserver",
+        "etcd_request_duration_seconds_bucket",
+        "kept by decision: etcd write latency is what the control-plane scrape exists for",
+    ),
+    (
+        "kubernetes-apiserver",
+        "apiserver_watch_events_dispatch_duration_seconds_count",
+        "_sum and _count survive the bucket drop, so dispatch rates stay available",
     ),
 ]
 
