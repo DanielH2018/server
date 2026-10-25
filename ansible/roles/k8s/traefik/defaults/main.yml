@@ -84,11 +84,14 @@ traefik_k8s_manage_crowdsec: true
 # and `traefik-precheck` keeps only the ServiceAccount. It renders nothing either while
 # `traefik_k8s_manage_crowdsec` is false.
 #
-# DECIDED: it ships false, and a second PR sets it true once netpol-baseline has applied the
-# `traefik-precheck` peer in `networkpolicy-crowdsec.yaml.j2`. Both in one revision deadlock:
-# the fence refuses the Job, the failed Job holds `traefik`, and netpol-baseline, which applies
-# after `traefik`, never applies the peer. The template's header has the full chain.
-traefik_k8s_bouncer_key_precheck: false
+# DECIDED: the Job and its fence peer land in separate revisions, the peer first. #6095 landed
+# the `traefik-precheck` peer in netpol-baseline's `networkpolicy-crowdsec.yaml.j2` with this
+# false, and #6157 set it true once the live `crowdsec` NetworkPolicy listed the peer. Both in
+# one revision deadlock: the fence refuses the Job, the failed Job holds `traefik`, and
+# netpol-baseline, which applies after `traefik`, never applies the peer. So a change that
+# removes the peer sets this false first, and re-enabling takes the same two steps. The
+# template's header has the full chain.
+traefik_k8s_bouncer_key_precheck: true
 
 # The file-provider token gate (livesync-gate-secret.yaml.j2) and the file provider that
 # reads it. False for a cluster that runs neither CouchDB nor homelab-mcp, which is what
