@@ -207,7 +207,51 @@
   # history, not hardware. It retires once the Pi has converged.
   when: inventory_hostname == 'daniel-pi'
 
+# `ufw enable` on a firewall that is already active still runs ufw-init start, which flushes
+# every ufw chain and reloads them from the files (frontend.py `set_enabled`), and the module
+# runs it on every apply. On a k3s node a kube-router sync that saves and restores the filter
+# table inside that window writes back the flushed chains: on 2026-10-25 daniel-box kept only
+# `-j ufw-user-input` in ufw-before-input and lost loopback DNS and its own API. So the enable
+# runs only on an inactive firewall, which is the only state it changes.
+- name: Read whether UFW is active
+  tags: [firewall]
+  ansible.builtin.command:
+    cmd: ufw status
+  register: initial_setup_ufw_status
+  changed_when: false
+  check_mode: false
+  become: true
+
 - name: Enable UFW firewall
   tags: [firewall]
   community.general.ufw:
     state: enabled
+  when: "initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True)"
+
+# The loaded ruleset can differ from before.rules while the file is intact, which is what the
+# 2026-10-25 outage looked like, so this reads the live chain rather than the file. It only
+# reads: a failure stops the play and repairs nothing. The repair is `ufw reload`, run by the
+# operator, and it reopens the same window, so it waits for someone to decide when.
+# A check-mode run on a host whose firewall is still inactive enabled nothing and has no chain.
+- name: Read the loaded UFW before-input chain
+  tags: [firewall]
+  ansible.builtin.command:
+    cmd: iptables -S ufw-before-input
+  register: initial_setup_ufw_before_input
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  when: "not (ansible_check_mode and initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True))"
+
+- name: Fail when UFW's before-input chain lost the loopback accept
+  tags: [firewall]
+  ansible.builtin.assert:
+    that:
+      - "'-A ufw-before-input -i lo -j ACCEPT' in initial_setup_ufw_before_input.stdout_lines"
+    fail_msg: >-
+      The loaded ufw-before-input chain has no `-i lo -j ACCEPT`, so it differs from
+      /etc/ufw/before.rules and loopback traffic, host DNS on 127.0.0.1 included, is dropped.
+      Run `sudo ufw reload`, then `sudo iptables -S ufw-before-input`.
+    quiet: true
+  when: initial_setup_ufw_before_input is not skipped
