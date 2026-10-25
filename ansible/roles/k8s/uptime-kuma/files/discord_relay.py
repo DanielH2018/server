@@ -25,6 +25,7 @@ ConfigMap that Flux substitutes into, so it holds no dollar sign.
 """
 
 import argparse
+import http.client
 import http.server
 import json
 import os
@@ -46,18 +47,23 @@ MAX_BACKOFF = 30.0
 
 def post(url: str, body: bytes, content_type: str) -> tuple[int | None, dict, bytes]:
     """POST one body. Returns (status, headers, response body); status None is a network error."""
-    request = urllib.request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers={"Content-Type": content_type, "User-Agent": USER_AGENT},
-    )
     try:
+        request = urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={"Content-Type": content_type, "User-Agent": USER_AGENT},
+        )
         with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:
             return response.status, dict(response.headers), response.read()
     except urllib.error.HTTPError as error:
         return error.code, dict(error.headers or {}), error.read()
-    except (urllib.error.URLError, OSError) as error:
+    except (
+        urllib.error.URLError,
+        OSError,
+        http.client.HTTPException,
+        ValueError,
+    ) as error:
         return None, {}, str(error).encode()
 
 
@@ -176,6 +182,10 @@ class Relay:
         self.in_flight = 1
         try:
             self.deliver(enqueued, body, content_type)
+        except Exception as error:
+            # Any other failure must not kill the only delivery thread, and the message it was
+            # carrying must still count as a drop.
+            self.drop(f"failed with {type(error).__name__}: {error}")
         finally:
             self.in_flight = 0
             self.queue.task_done()
@@ -205,7 +215,8 @@ def make_handler(relay: Relay, worker: threading.Thread):
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length)
             content_type = self.headers.get("Content-Type") or "application/json"
-            accepted = relay.accept(body, content_type)
+            # With the worker dead nothing drains the queue, so refuse and let Kuma log the drop.
+            accepted = worker.is_alive() and relay.accept(body, content_type)
             self.send_response(204 if accepted else 503)
             self.end_headers()
 
