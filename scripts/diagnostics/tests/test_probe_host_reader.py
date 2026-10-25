@@ -111,3 +111,24 @@ def test_a_unit_duration_reads_in_seconds_and_a_missing_one_raises():
     )
     with pytest.raises(ValueError, match="no TimeoutStartSec= line"):
         host_reader.unit_span_s("[Service]\n", "TimeoutStartSec")
+
+
+def test_a_log_directory_behind_an_untraversable_parent_is_unreadable_not_absent(
+    tmp_path,
+):
+    """The agent user on daniel-box cannot traverse the operator's 0750 home."""
+    logs = tmp_path / "home" / "logs"
+    logs.mkdir(parents=True)
+    home = tmp_path / "home"
+    mode = home.stat().st_mode
+    home.chmod(0o000)
+    try:
+        if os.access(home, os.X_OK):
+            pytest.skip("running as root, which traverses a 0000 directory")
+        read = _local({"logs": [str(logs), "land*-*.log", 0]})["logs"]
+    finally:
+        home.chmod(mode)
+    assert read["status"] == "unreadable"
+    assert _local({"logs": [str(tmp_path / "gone"), "*", 0]})["logs"] == {
+        "status": "absent"
+    }

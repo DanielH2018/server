@@ -45,7 +45,7 @@ BOX = "daniel-box"
 READ_TIMEOUT_S = 90
 
 READER = r"""
-import glob, grp, hashlib, json, os, pwd, subprocess
+import fnmatch, grp, hashlib, json, os, pwd, subprocess
 plan = json.loads(__PLAN__)
 out = {"host": os.uname().nodename, "user": pwd.getpwuid(os.getuid()).pw_name}
 
@@ -96,15 +96,16 @@ def alive(pid_text):
     return True
 
 def logs(directory, pattern, since):
-    if not os.path.isdir(directory):
-        return {"status": "absent" if not os.path.exists(directory) else "unreadable"}
+    # listdir, not isdir: isdir is False on EACCES too, which would read a parent this user
+    # cannot traverse as an absent directory.
     try:
-        names = glob.glob(os.path.join(directory, pattern))
-        os.listdir(directory)
+        names = os.listdir(directory)
+    except FileNotFoundError:
+        return {"status": "absent"}
     except OSError as exc:
         return {"status": "unreadable", "error": str(exc)}
     rows = []
-    for path in sorted(names):
+    for path in sorted(os.path.join(directory, n) for n in fnmatch.filter(names, pattern)):
         try:
             mtime = os.stat(path).st_mtime
         except OSError:

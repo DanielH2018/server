@@ -9,6 +9,8 @@ import os
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import core, gitops_view, gitops_why
@@ -121,3 +123,19 @@ def test_a_rotated_journal_says_no_run_covers_the_hold(tmp_path, capsys):
     assert (
         "no gitops-deploy.service run in the journal covers" in capsys.readouterr().out
     )
+
+
+def test_an_unreadable_hold_is_not_reported_as_no_hold(tmp_path, capsys):
+    _held_state(tmp_path)
+    (tmp_path / gitops_view.MARKERS["hold"]).chmod(0o000)
+    try:
+        if os.access(tmp_path / gitops_view.MARKERS["hold"], os.R_OK):
+            pytest.skip("running as root, which reads a 0000 file")
+        rc = gitops_view.run_gitops_state(
+            SimpleNamespace(json=False, why=True), tmp_path, NOW, read=_read(TICK)
+        )
+    finally:
+        (tmp_path / gitops_view.MARKERS["hold"]).chmod(0o600)
+    assert rc == PROBE_UNREADABLE
+    out = capsys.readouterr().out
+    assert "no hold_sha" not in out and "hold_sha is unreadable" in out

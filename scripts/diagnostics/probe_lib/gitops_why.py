@@ -90,9 +90,14 @@ def held_tick(entries, held_at: float) -> list:
 def explain(snap: dict, *, read=read_host, ceiling_s: int | None = None) -> dict | None:
     """The `why` section for `snap`, or None when no `hold_sha` is set.
 
+    An unreadable `hold_sha` returns an `unreadable` section, never None, so the view does not
+    say "no hold" under a hold it could not read.
+
     Raises:
         core.Unreadable: the hold file's mtime or the journal could not be read.
     """
+    if snap.get("hold", {}).get("status") == "unreadable":
+        return {"unreadable": "hold_sha is unreadable, so there is no tick to look up"}
     if not snap.get("hold", {}).get("sha"):
         return None
     hold = Path(snap["state_dir"]) / MARKERS["hold"]
