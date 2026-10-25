@@ -2354,6 +2354,12 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `--version`, because the script checks it against the kit's own checksum list.
         - *No local-build `Depends` red.* The red fixture that gives `homelab-daniel-box` a
           `Depends` only the repository carries is not in the cases.
+        - *First run.* The ready run of #6247, [run 40159182858](https://github.com/DanielH2018/server/actions/runs/40159182858),
+          passed all six cases on both `host_packages` legs, Ubuntu 24.04 and 26.04. Two gaps
+          stay open, each under its own issue. daniel-server and daniel-pi install from the
+          repository, and that path has no case
+          ([#6245](https://github.com/DanielH2018/server/issues/6245)). The `Depends` red has
+          no fixture ([#6244](https://github.com/DanielH2018/server/issues/6244)).
     - **H7.15b** The Pi runbook, then the Pi rebuild, which is exit observation 2. The
       operator keeps the old SD card as the rollback. The cluster's wg-easy on 51820 is
       proven first, as in H5.5.
