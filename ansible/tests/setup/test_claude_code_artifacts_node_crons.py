@@ -42,16 +42,16 @@ TWINS = {
 
 # What the k8s roles installed before H2.7, copied from their tasks at the move. The cron module
 # keys an entry on `name` inside `cron_file`, so these two fields are the identity; the job is
-# the script path.
+# the script path, plus the journal pipe both jobs gained in #6162.
 CRONS_BEFORE_H2_7 = {
     "Sync peer Claude artifacts": {
         "cron_file": "sync-artifacts",
-        "job": "/usr/local/bin/sync-artifacts.sh",
+        "job": "/usr/local/bin/sync-artifacts.sh 2>&1 | logger -t sync-artifacts",
         "minute": "*/5",
     },
     "Claude Code telemetry health": {
         "cron_file": "claude-otel-health",
-        "job": "/usr/local/bin/claude-otel-health.sh",
+        "job": "/usr/local/bin/claude-otel-health.sh 2>&1 | logger -t claude-otel-health",
         "minute": "*/10",
     },
 }

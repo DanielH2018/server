@@ -139,10 +139,13 @@
     # No config override: the script's own default IS fake_remux_config_dir/config.env. Passing
     # CONFIG_PATH= would read nothing and report "disabled": it is not the variable either script
     # reads (the two subcommands use FAKE_REMUX_CONFIG / FAKE_REMUX_REPLACE_CONFIG).
+    # Both streams go to the journal, braced so the `||` failure line does too (#6162). A bare
+    # `cmd 2>&1 | logger` would lose it: cron's /bin/sh has no pipefail, so a pipeline exits
+    # with logger's status. The same shape serves the reconcile and the mkv repair below.
     job: >-
-      /usr/bin/flock -w 600 {{ fake_remux_lock }}
+      { /usr/bin/flock -w 600 {{ fake_remux_lock }}
       /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/fake_remux.py scan
-      >/dev/null 2>&1 || logger -t fake-remux-scan 'scan wrapper failed'
+      || echo 'scan wrapper failed'; } 2>&1 | logger -t fake-remux-scan
     cron_file: fake-remux-scan
   become: true
 
@@ -153,9 +156,9 @@
     minute: "{{ fake_remux_replace_cron_minute }}"
     user: "{{ sys_user }}"
     job: >-
-      /usr/bin/flock -w 600 {{ fake_remux_lock }}
+      { /usr/bin/flock -w 600 {{ fake_remux_lock }}
       /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/fake_remux.py replace
-      >/dev/null 2>&1 || logger -t fake-remux-reconcile 'reconcile wrapper failed'
+      || echo 'reconcile wrapper failed'; } 2>&1 | logger -t fake-remux-reconcile
     cron_file: fake-remux-reconcile
   become: true
 
@@ -186,9 +189,9 @@
     minute: "{{ fake_remux_mkv_attachment_cron_minute }}"
     user: "{{ sys_user }}"
     job: >-
-      /usr/bin/flock -w 600 {{ fake_remux_lock }}
+      { /usr/bin/flock -w 600 {{ fake_remux_lock }}
       /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/mkv_attachment_repair.py
-      >/dev/null 2>&1 || logger -t mkv-attachment-repair 'repair wrapper failed'
+      || echo 'repair wrapper failed'; } 2>&1 | logger -t mkv-attachment-repair
     cron_file: mkv-attachment-repair
   become: true
 
@@ -230,7 +233,7 @@
     name: "fake-remux health"
     minute: "{{ fake_remux_health_cron_minute }}"
     user: "{{ sys_user }}"
-    job: "/usr/local/bin/fake-remux-health.sh"
+    job: "/usr/local/bin/fake-remux-health.sh 2>&1 | logger -t fake-remux-health"
     cron_file: fake-remux-health
   become: true
 

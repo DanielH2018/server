@@ -37,8 +37,8 @@ flock -n 9 || exit 0
 
 status=0
 # The Kuma verdict, pushed once after every peer has run (#2516). The tile goes DOWN only when a
-# peer's streak has reached the same threshold that mails, so a peer that is briefly off stays UP
-# with its streak named in the message.
+# peer's streak has reached the same threshold as the stderr line, so a peer that is briefly off
+# stays UP with its streak named in the message.
 verdict=up
 report=""
 {% for peer in claude_code_artifacts_peer_sources %}
@@ -75,11 +75,11 @@ $(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails") failed run(s)"
   report="${report:+$report; }{{ peer.name }} synced"
 else
   # DECIDED: a failure goes to the journal, and only the run that REACHES the threshold writes
-  # to stderr, which is what cron mails. The old script mailed every failure: 145 messages
-  # reached /var/mail/ubuntu between 2026-08-20 and 2026-09-24, nobody reads that spool, and a
-  # peer that is simply powered off is the common case. Alerting once per outage keeps the mail
-  # as an alert without making it a log. The Kuma push after the loop is the monitor (#2516); the
-  # mail stays as the one alert that does not depend on Kuma being up.
+  # to stderr. The old script mailed every failure: 145 messages reached /var/mail/ubuntu
+  # between 2026-08-20 and 2026-09-24, nobody reads that spool, and a peer that is simply
+  # powered off is the common case. The cron pipes stderr to `logger -t sync-artifacts` since
+  # #6162, because mail was never shipped anywhere, so the threshold line is one journal line
+  # per outage that Loki keeps. The Kuma push after the loop is the monitor (#2516).
   fails=$(( $(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails" 2>/dev/null || echo 0) + 1 ))
   echo "$fails" > "${state_dir}/sync-artifacts-{{ peer.name }}.fails"
   logger -t sync-artifacts "{{ peer.name }} failed (consecutive run $fails)"
@@ -90,8 +90,8 @@ else
   if [ "$fails" -eq {{ claude_code_artifacts_sync_alert_after_failures }} ]; then
     echo "sync-artifacts: {{ peer.name }} has failed $fails consecutive runs" >&2
   fi
-  # -ge, not the -eq the mail uses: the mail fires once per outage, but the tile must stay DOWN
-  # on every run past the threshold, or it would go green again in the middle of the outage.
+  # -ge, not the -eq the stderr line uses: that line fires once per outage, but the tile must
+  # stay DOWN on every run past the threshold, or it would go green again mid-outage.
   if [ "$fails" -ge {{ claude_code_artifacts_sync_alert_after_failures }} ]; then
     verdict=down
     report="${report:+$report; }{{ peer.name }} failed $fails consecutive runs"
