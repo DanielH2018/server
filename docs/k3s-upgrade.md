@@ -31,16 +31,16 @@ curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<new tag>/install.sh" |
 
 ## Sequence at a glance
 
-For the agent, upgrade the node first and merge the pin second. For the server, merging the pin
-is the upgrade (H6.3c), so steps 1 and 2 come before the merge and step 3 follows it.
-Merging does not park the deployer either way — see *After merging the pin* below.
+Merging the pin upgrades the server (H6.3c), so the merge comes before the server verification.
+The agent then follows by hand until H6.3d. An agent newer than its server is unsupported, so
+never upgrade daniel-server first. Merging does not park the deployer: see *After merging the pin* below.
 
 1. Pass the gates.
 2. Record pre-upgrade state.
-3. SUC upgrades the server node on merge, verify.
-4. Upgrade the agent node, verify.
-5. Merge the pin. The pin writes no `manual_plane` line (H6.1b), so only a change elsewhere under
-   `ansible/roles/setup/k3s/` leaves one to clear.
+3. Merge the pin. SUC upgrades daniel-box. The pin writes no `manual_plane` line (H6.1b), so only a
+   change elsewhere under `ansible/roles/setup/k3s/` leaves one to clear.
+4. Verify the server by its node label and version.
+5. Upgrade the agent node by hand, then verify.
 
 ## The gates — before any install
 
@@ -259,12 +259,13 @@ those commits were due ([gitops-pipeline.md](gitops-pipeline.md), "The tree is d
 
 ## Rollback
 
-SUC and the installer both refuse an older binary, so a re-pin alone does not downgrade the server.
-Pause SUC (`homelab/k3s-upgrade-paused` on the node, or an empty `system_upgrade_nodes`), downgrade
+SUC's `upgrade.sh` refuses an older binary, so a lowered Plan fails its Job and a re-pin alone
+does not downgrade the server. Pause SUC (`homelab/k3s-upgrade-paused` on the node, or an empty `system_upgrade_nodes`), downgrade
 daniel-box by hand, then land a PR that lowers `k3s_version` and sets `k3s_downgrade_acknowledged`
 to the same value in `ansible/roles/k8s/system-upgrade/defaults/main.yml`. Without the key,
-`scripts/validate/cluster_pins.py` refuses the decrease. The agent still follows the old rule
-until H6.3d: re-pin and re-run its command.
+`scripts/validate/cluster_pins.py` refuses the decrease. `k3s_version` is shared, so until
+H6.3d a downgrade of the agent follows the same procedure: pause daniel-box, downgrade by hand,
+then land the acknowledged decrease.
 
 This holds **within a minor version**. Across a minor it does not: Kubernetes does not support
 downgrading the control plane, and a stored-object schema written by the newer apiserver may not be

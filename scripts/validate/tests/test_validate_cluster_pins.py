@@ -323,7 +323,7 @@ def test_the_real_tree_holds_a_k3s_pin_the_check_can_read():
     """The subject the check reads exists at HEAD, so a moved file cannot silently skip it."""
     pin, ack = cluster_pins.k3s_values_at("HEAD")
     assert cluster_pins.K3S_VERSION.fullmatch(pin or "")
-    assert ack is None
+    assert ack is None or ack == pin
 
 
 def test_a_k3s_pin_present_at_the_base_and_gone_at_the_head_is_flagged():

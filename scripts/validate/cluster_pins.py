@@ -197,8 +197,8 @@ def k3s_problems(old: str | None, new: str | None, ack: str | None) -> list[str]
         if ack == new:
             return []
         return [
-            f"{K3S_DEFAULTS}: {K3S_KEY} decreases from {old} to {new}. SUC and the "
-            f"installer refuse an older binary, so set {K3S_ACK_KEY}: {new} in the same "
+            f"{K3S_DEFAULTS}: {K3S_KEY} decreases from {old} to {new}. SUC's upgrade.sh "
+            f"refuses an older binary, so set {K3S_ACK_KEY}: {new} in the same "
             "file after the hand downgrade (docs/k3s-upgrade.md, Rollback)"
         ]
     if ack is not None:
