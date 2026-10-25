@@ -64,7 +64,6 @@ Run by kuma-check-live-drift.timer (daily) as the sys_user, installed as
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import os
 import re
@@ -306,7 +305,6 @@ def is_server_side_applied(meta: dict) -> bool:
     )
 
 
-@dataclasses.dataclass
 class Sweep:
     """What one run found, sorted into the buckets the verdict and the log lines read.
 
@@ -318,11 +316,12 @@ class Sweep:
         checked: how many objects were compared against a baseline.
     """
 
-    drifted: list[tuple[str, str, str, list]] = dataclasses.field(default_factory=list)
-    unannotated: list[str] = dataclasses.field(default_factory=list)
-    errors: list[str] = dataclasses.field(default_factory=list)
-    server_side: list[str] = dataclasses.field(default_factory=list)
-    checked: int = 0
+    def __init__(self) -> None:
+        self.drifted: list[tuple[str, str, str, list]] = []
+        self.unannotated: list[str] = []
+        self.errors: list[str] = []
+        self.server_side: list[str] = []
+        self.checked = 0
 
     def add(self, kind: str, items: list[dict]) -> None:
         """Sort one kind's fetched objects, skipping each one is_foreign exempts."""
