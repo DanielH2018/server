@@ -81,6 +81,8 @@ DESIRED: dict[str, bool | int | str] = {
             "*.zipx",
             "*.arj",
             "*.iso",
+            "*.rar",
+            "*.r[0-9][0-9]",
         )
     ),
 }
