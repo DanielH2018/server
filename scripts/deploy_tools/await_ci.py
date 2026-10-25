@@ -83,6 +83,12 @@ DESCENDANT_LIMIT = 10
 ANONYMOUS_INTERVAL_S = 90
 
 
+# The cause a pending line names for a head whose every gate run was skipped (#6077). Only a
+# draft PR's run skips the `prek` gate (ci.yml's `draft != true`), and a re-run replays that
+# run's draft event, so it skips again. `land_lib/merge.py` reads the phrase to act on it.
+DRAFT_SKIPPED = "every CI run on it skipped the gate because the PR was a draft"
+
+
 class DisarmedGateError(RuntimeError):
     """Raised when the required-context set is empty.
 
@@ -219,6 +225,23 @@ def _has_only_no_verdict_conclusions(runs: list[dict], required) -> bool:
     return all(
         r.get("status") == "completed"
         and r.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS
+        for r in seen
+    )
+
+
+def draft_skipped(runs: list[dict], required) -> bool:
+    """True when the head has gate runs and every one of them was skipped.
+
+    A draft run is the only shape that skips the gate, so no CI ran on such a head and none
+    arrives until the PR is marked ready or pushed. It reads the gate's own name rather than
+    the jobs `jobs_verdict` aggregates: a skipped matrix job reports its unexpanded name, such
+    as `pytest (shard ${{ matrix.shard }} of ...)`. A ready run's gate beside the skipped one,
+    queued or finished, makes this False, so the seconds before a ready run settles read as
+    plain pending.
+    """
+    seen = [r for r in runs if r.get("name") in required]
+    return bool(seen) and all(
+        r.get("status") == "completed" and r.get("conclusion") == "skipped"
         for r in seen
     )
 
@@ -625,6 +648,12 @@ def wait(
                     f"{target[:8]}: no verdict after {timeout_s}s — GitHub never ran CI "
                     "for it, and no later master commit is green yet; a re-run converges "
                     "once one is"
+                )
+            if draft_skipped(runs, required_contexts()):
+                return 75, (
+                    f"{target[:8]}: no verdict after {timeout_s}s — {DRAFT_SKIPPED}, and a "
+                    "re-run skips again; mark the PR ready, or, if it is ready already, "
+                    "convert it to draft and back, or push"
                 )
             return 75, f"{target[:8]}: no verdict after {timeout_s}s"
         sleep(interval_s)

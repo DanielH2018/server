@@ -340,3 +340,30 @@ def test_the_merge_wait_never_hand_polls_ci():
     assert "gh pr checks" not in text
     assert '"run"' not in text
     assert "await_ci" in text
+
+
+@pytest.mark.parametrize("is_draft, ends_early", [(False, True), (True, False)])
+def test_a_head_ci_skipped_as_a_draft_ends_the_wait_once_the_pr_is_ready(
+    landing, capsys, is_draft, ends_early
+):
+    """#6077: PR #6069 was ready, its head's only run had skipped as a draft, and the wait sat
+    out its whole budget. A PR still a draft gets its run once it is marked ready, so it waits.
+    The ending's message is what tells the two apart, so it is asserted."""
+    line = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
+    ln, _ = landing(
+        Fakes(
+            gh_views={
+                "state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"]),
+                "isDraft": {"isDraft": is_draft},
+            },
+            await_ci=[(75, line)],
+        ),
+        merge_timeout=merge.DRAFT_SKIPPED_GRACE_S * 3,
+        merge_poll=merge.DRAFT_SKIPPED_GRACE_S // 3,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
+    assert ("gh pr ready --undo 999" in exc.value.error) is ends_early
+    assert ("still OPEN after" in exc.value.error) is not ends_early
+    assert capsys.readouterr().out.count(merge.await_ci.DRAFT_SKIPPED) == 1
