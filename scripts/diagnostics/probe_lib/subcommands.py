@@ -44,6 +44,7 @@ from diagnostics.probe_lib.longhorn import (
 from diagnostics.probe_lib.metrics import run_query
 from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
 from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
+from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.releases import run_releases
 from diagnostics.probe_lib.shed_set import run_shed_set
@@ -180,6 +181,13 @@ SUBCOMMANDS = [
         "gitops_view",
         run_gitops_state,
     ),
+    (
+        "push-rules",
+        "which GitHub ruleset rule a push of HEAD to a branch meets, and whether this login "
+        "bypasses it (exit 1 when a rule refuses the push)",
+        "push_rules",
+        run_push_rules,
+    ),
 ]
 
 # The subcommands with a callable that `main()` routes by hand instead of through `handlers`,
@@ -209,6 +217,7 @@ VERDICT_SUBCOMMANDS = frozenset(
         "ha",
         "landing",
         "gitops-state",
+        "push-rules",
     }
 )
 VERDICT_HA_SUBCOMMANDS = frozenset({"verify-automations", "verify-entities"})

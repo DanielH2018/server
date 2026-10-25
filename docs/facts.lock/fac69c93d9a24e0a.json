@@ -1,10 +1,9 @@
 {
-  "checksum": "e0a7ecbfa49a26b73f59dd4888ba918875143c1805b42c562d05199894625e17",
+  "checksum": "f1febe63e04c36a95f67238d35ba112f31ebd7ae4c5965f15c788a4751db3406",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart",
   "row": {
     "atoms": {
-      "ansible/roles/k8s/observability/defaults/main.yml:DECIDED: no rolled_by_role": "0f5cb6ec8bff39dc9c9ce3557d2175822fb74d109116129d04f8d1d30c3c894e",
       "ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads": "7eb37ae37887203f1204e137d6c60c5a00b8ad681d3b59cec5acd8c3bfcb438f",
       "ansible/roles/k8s/observability/templates/prometheus.yaml.j2:DECIDED: rules reload in place": "5abbd531d56afb299173219d3007a490b4934626948fb2dba68f660f225d7eda",
       "ansible/templates/checksum-annotation.yml.j2": "a4437adb5cdb813552c464e339f5feb58deb96c0f949caa0382bdfd9c85a7e48",
@@ -13,6 +12,6 @@
       "scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value": "2591a20ab3f7e5001134459c83e38bcbb009ff01e42dc35a3c023a8773e0f597"
     },
     "python": "3.14",
-    "verified_sha": "ff5cc95cb"
+    "verified_sha": "4a1f8caa9"
   }
 }

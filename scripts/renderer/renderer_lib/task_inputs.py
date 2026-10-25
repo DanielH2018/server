@@ -94,7 +94,7 @@ def include_vars(role_dir: Path) -> dict:
     """The `manifests_*` vars `role_dir`'s tasks pass to the `k8s/manifests` include that renders.
 
     That is the include with no `tasks_from`, or `tasks_from: main`. Another entry point, such
-    as configarr's `drain.yml` or pihole's `rollout_amend.yml`, renders nothing. The values are
+    as configarr's `drain.yml`, renders nothing. The values are
     read as written, so a Jinja value is still a string for the caller to resolve.
 
     Raises:

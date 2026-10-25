@@ -6,6 +6,8 @@ Two events, two contracts:
      when the classifier actually reached a verdict.
   2. PostToolUseFailure — decode deploy.sh's resume-point exit codes, which all mean nothing was
      deployed and each of which has a different next step.
+  3. PostToolUseFailure and PostToolUse on a `git push` — name the probe behind a ruleset
+     refusal, and call a bypass notice a push that landed.
 
 The retry ledger writes a per-session file in the system temp dir, so every test that can grant a retry points
 `ledger_path` at a tmp_path instead — otherwise the suite's own runs would spend the cap and the
@@ -236,3 +238,58 @@ def _deploy_failure(rc: int) -> dict:
         "tool_input": {"command": "./scripts/deploy.sh --tags sonarr"},
         "error": f"Exit code {rc}\nsomething the harness printed",
     }
+
+
+# GitHub's output for a ruleset refusal and for a bypass, as a push prints them. The bypass shape
+# is copied from a session transcript; both print the same `- Cannot update this protected ref.`.
+REFUSED_PUSH = (
+    "Exit code 1\n"
+    "remote: error: GH013: Repository rule violations found for refs/heads/master.\n"
+    "remote: - Cannot update this protected ref.\n"
+    " ! [remote rejected] master -> master (push declined due to repository rule violations)\n"
+)
+BYPASSED_PUSH = (
+    "remote: Bypassed rule violations for refs/heads/worktree-fanout-4507:        \n"
+    "remote: - Cannot update this protected ref.        \n"
+)
+
+
+def test_a_ruleset_refused_push_names_the_probe_for_its_branch():
+    note = _mod.push_refusal_note(
+        failure(command="git push origin master", error=REFUSED_PUSH)
+    )
+    assert "probe.py push-rules master`" in note
+
+
+def test_a_push_that_failed_for_another_reason_gets_no_note():
+    error = "Exit code 128\nfatal: unable to access 'https://github.com/': Could not resolve host"
+    assert _mod.push_refusal_note(failure(command="git push", error=error)) is None
+    assert (
+        _mod.push_refusal_note(failure(command="git status", error=REFUSED_PUSH))
+        is None
+    )
+
+
+def _push_success(stderr, command="git push -u origin worktree-fanout-4507"):
+    return {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "tool_response": {"stdout": "", "stderr": stderr},
+    }
+
+
+def test_a_bypass_notice_is_named_a_push_that_landed(capsys, monkeypatch):
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(json.dumps(_push_success(BYPASSED_PUSH)))
+    )
+    _mod.main()
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["hookEventName"] == "PostToolUse"
+    assert "the push landed" in out["additionalContext"]
+    assert "push-rules worktree-fanout-4507`" in out["additionalContext"]
+
+
+def test_a_push_with_no_bypass_notice_gets_no_note():
+    plain = "To github.com:DanielH2018/server.git\n   abc..def  topic -> topic\n"
+    assert _mod.push_bypass_note(_push_success(plain)) is None

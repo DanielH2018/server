@@ -245,6 +245,33 @@ def test_a_path_dpkg_reports_as_owned_is_never_removed_and_an_unowned_one_is(nod
     assert not (node.root / "usr/local/bin/stray").exists()
 
 
+def test_an_empty_legacy_directory_listed_after_its_files_is_removed(node):
+    interim = node.root / "etc/homelab/interim"
+    interim.mkdir(parents=True)
+    (interim / "token").write_text("")
+    node.manifest["legacy"].append({"path": "/etc/homelab/interim/token"})
+    node.manifest["legacy"].append({"path": "/etc/homelab/interim"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not interim.exists()
+    assert len(node.applied()["retired"]) == 2
+
+
+def test_a_legacy_directory_that_still_holds_a_file_is_kept_and_fails_the_run(node):
+    interim = node.root / "etc/homelab/interim"
+    interim.mkdir(parents=True)
+    (interim / "unnamed").write_text("")
+    node.manifest["legacy"].append({"path": "/etc/homelab/interim"})
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert (interim / "unnamed").exists()
+    assert node.applied()["retired"] == []
+
+
 def test_an_ansible_era_unit_is_disabled_stopped_and_removed_unless_a_package_owns_it(
     node,
 ):
