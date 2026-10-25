@@ -1,3 +1,4 @@
+# Shipped by homelab-daniel-box.
 [Unit]
 Description=Homelab apt repository (serves the signer's published tree over HTTP)
 After=network-online.target
@@ -12,7 +13,7 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
-ExecStart=/usr/bin/python3 -m http.server --bind {{ server_ip }} {{ homelab_builder_repo_port }} --directory {{ homelab_builder_signer_dir }}/repo
+ExecStart=/usr/bin/python3 -m http.server --bind {{ server_ip }} {{ builder_repo_port }} --directory /var/lib/homelab-signer/repo
 Restart=on-failure
 RestartSec=5
 SyslogLevel=notice

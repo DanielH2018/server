@@ -1,0 +1,126 @@
+# The host-package builder, the signer and the apt repository on daniel-box (H7.41b,
+# docs/target-architecture/host/h7-delete-ansible.md, item 14). Until H7.41b the `homelab_builder`
+# role installed them. The role is emptied and ends on every host.
+#
+# - homelab-builder.timer runs homelab-builder.service every 2 minutes. A run that exits 0 starts
+#   homelab-repo-sign.service through OnSuccess=, a held run included.
+# - homelab-apt-repo.service serves the signer's published tree on `server_ip` at `builder_repo_port`.
+# - A failure of either oneshot starts `homelab-alert@%n.service` (the `failure-alert` component).
+# - The builder reads its GitHub token from $CREDENTIALS_DIRECTORY/github_token. `homelab-secrets`
+#   writes /run/credstore/homelab_builder_github_token from daniel-box's SOPS file, and config.env
+#   holds no secret.
+# - The builder's three tools come from `homelab-tools` (nfpm and uv) and from the unit (the
+#   interpreter): an ExecStartPre= installs the pinned Python into the state directory, and only
+#   ExecStart= sets UV_PYTHON_DOWNLOADS=never.
+# - An ExecStartPre=+ script (`builder-fingerprint`) writes /etc/homelab-builder/archive-key.fpr from
+#   the signer's GnuPG home on every run, so a restored signing key needs no Ansible apply.
+# - The units keep the names the Ansible copies had. Reconcile's shadow handoff removes each copy in
+#   /etc/systemd/system, runs one daemon-reload, and restarts each packaged unit whose file differed.
+#
+# The signing key is not generated here. The Ansible role generated it once, and docs/break-glass.md
+# item 9 holds the restore and the rebuild procedures.
+#
+# A host that lists this component lists `secrets-unit`, `failure-alert` and the `homelab-tools`
+# dependency too, and has `server_ip`, `host_python_version`, `ci_required_contexts` and
+# `ci_ancestor_walk_max` in its inventory.
+#
+# Autonomous-role contract (the builder and the signer publish host packages with no human in the loop).
+# - Scope / exclusions: the builder builds only a commit on origin/master's first-parent chain with
+#   green required CI, and it never builds without a GitHub token. The signer signs only what the
+#   builder staged. The repository serves public, signed packages to the two peer hosts.
+# - Mode (explicit and reversible): the timer's enable link arms the builder. `sudo systemctl mask
+#   --now homelab-builder.timer` pauses it, and `unmask` then `start` resumes it. The hold file
+#   under the builder's state directory stops a build without stopping the timer
+#   (docs/host-packages.md).
+# - Abort valves: the CI grade, the rollout gate, the hold file, `TimeoutStartSec=20min`, and the
+#   once-per-condition failure record in the state directory.
+# - Authoritative sources: GitHub's check-runs API for master, the rendered keyring for the
+#   fingerprint file, and the canary host's applied version for the rollout gate.
+# - Required evidence: `homelab_builder_*` and `homelab_repo_*` series in the node-exporter textfile
+#   directory, and a `homelab-alert@` page for a failed run. Notice lines in the journal name a
+#   failed run's reason.
+# - Next-run review: read `journalctl -u homelab-builder -p notice` before changing the unit.
+#
+# ENFORCED: hosts/lib/tests/test_builder_component.py.
+users:
+  # Declared by uid only (h7-delete-ansible.md, item 17, ruling 1): the install adopts the live
+  # accounts, and a rebuilt host gets groups with gid equal to uid.
+  - {name: homelab-builder, uid: 995, home: /var/lib/homelab-builder, shell: /usr/sbin/nologin, comment: Homelab package builder}
+  - {name: homelab-signer, uid: 994, home: /var/lib/homelab-signer, shell: /usr/sbin/nologin, comment: Homelab repository signer}
+defaults:
+  builder_repo_port: 8791
+  builder_github_repo: DanielH2018/server
+  # Loopback first: Prometheus publishes loopback only on its own node. The second entry is
+  # roles/k8s/observability/defaults/main.yml:observability_prometheus_cluster_ip, and a test holds
+  # the two equal.
+  builder_prom_urls:
+    - http://127.0.0.1:9090
+    - http://10.43.39.218:9090
+depends:
+  - git
+  - apt-utils
+  - gnupg
+credentials:
+  - homelab_builder_github_token
+files:
+  - {lib: host_package_builder.py, dst: /usr/lib/homelab/builder/host_package_builder.py, mode: "0755"}
+  - {lib: homelab_repo_sign.py, dst: /usr/lib/homelab/builder/homelab_repo_sign.py, mode: "0755"}
+  - {lib: homelab_tool_fetch.py, dst: /usr/lib/homelab/builder/homelab_tool_fetch.py, mode: "0755"}
+  - {lib: builder_ci_grade.py, dst: /usr/lib/homelab/builder/builder_ci_grade.py, mode: "0755"}
+  - {lib: builder_rollout_gate.py, dst: /usr/lib/homelab/builder/builder_rollout_gate.py, mode: "0755"}
+  - {lib: host_lib.py, dst: /usr/lib/homelab/builder/host_lib.py, mode: "0755"}
+  - {lib: kuma_push.py, dst: /usr/lib/homelab/builder/kuma_push.py, mode: "0755"}
+  - {lib: publish-textfile, dst: /usr/lib/homelab/publish-textfile, mode: "0755"}
+  - {lib: builder-fingerprint, dst: /usr/lib/homelab/builder-fingerprint, mode: "0755"}
+  - {src: templates/builder.conf.j2, dst: /usr/lib/homelab/builder/builder.conf}
+  - {src: tmpfiles.d/homelab-builder.conf, dst: /usr/lib/tmpfiles.d/homelab-builder.conf}
+  - {src: units/homelab-builder.service.j2, dst: /usr/lib/systemd/system/homelab-builder.service}
+  - {src: units/homelab-builder.timer, dst: /usr/lib/systemd/system/homelab-builder.timer}
+  - {src: units/homelab-repo-sign.service.j2, dst: /usr/lib/systemd/system/homelab-repo-sign.service}
+  - {src: units/homelab-apt-repo.service.j2, dst: /usr/lib/systemd/system/homelab-apt-repo.service}
+enable:
+  homelab-builder.timer: timers.target
+  homelab-apt-repo.service: multi-user.target
+# DECIDED: the two rules admit every pod on daniel-server as well as the host itself. Flannel
+# masquerades a pod's traffic to an address outside the pod CIDR to that node's LAN IP, so a pod
+# arrives as daniel-server's `server_ip` and matches the allow. The repository serves only signed,
+# public packages, so the wider reach exposes no data, and nothing at L3 tells the host apart from
+# its pods.
+ufw:
+  rules:
+    - {id: apt-repo-daniel-server, spec: "allow from {{ hostvars['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
+    - {id: apt-repo-daniel-pi, spec: "allow from {{ hostvars['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
+  # The Ansible rules carried the comment 'homelab apt repository'. A spec holds no quote, so the
+  # comment goes in its own key. The arm relabels the live rule in place, so a rule that a declaration
+  # shares is never deleted.
+  legacy:
+    - {spec: "allow from {{ hostvars['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-server}
+    - {spec: "allow from {{ hostvars['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-pi}
+# What the homelab_builder role installed before H7.41b. Reconcile retires each once the package's
+# units are in place. The six unit files and the two enable links shadow the packaged units of the
+# same name, so reconcile hands them off with one daemon-reload and restarts each unit that differed.
+legacy:
+  - {path: /etc/systemd/system/homelab-builder.service}
+  - {path: /etc/systemd/system/homelab-builder.timer}
+  - {path: /etc/systemd/system/homelab-repo-sign.service}
+  - {path: /etc/systemd/system/homelab-apt-repo.service}
+  - {path: /etc/systemd/system/timers.target.wants/homelab-builder.timer}
+  - {path: /etc/systemd/system/multi-user.target.wants/homelab-apt-repo.service}
+  # The per-service alert units become `homelab-alert@.service`.
+  - {unit: homelab-builder-alert.service}
+  - {unit: homelab-repo-sign-alert.service}
+  - {path: /etc/homelab-builder/alert-webhook.env}
+  # The old settings file, which held the token. The package ships builder.conf under
+  # /usr/lib/homelab/builder instead, with no secret in it.
+  - {path: /etc/homelab-builder/config.env}
+  - {path: /opt/homelab-builder/host_package_builder.py}
+  - {path: /opt/homelab-builder/homelab_repo_sign.py}
+  - {path: /opt/homelab-builder/homelab_tool_fetch.py}
+  - {path: /opt/homelab-builder/builder_ci_grade.py}
+  - {path: /opt/homelab-builder/builder_rollout_gate.py}
+  - {path: /opt/homelab-builder/publish-textfile}
+  - {path: /opt/homelab-builder/host_lib.py}
+  - {path: /opt/homelab-builder/kuma_push.py}
+  - {path: /opt/homelab-builder/bin/uv}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/homelab-builder}
+  - {path: /var/lib/homelab/setup-render-manifest.d/homelab-builder}

@@ -16,10 +16,6 @@ spec:
       app: ical-proxy
   template:
     metadata:
-      annotations:
-        # D7's live drill: a pod-template change that rolls the pod and nothing else
-        # (docs/target-architecture/deploy/d7-superseding-promotions.md, *Verification*).
-        homelab/d7-drill: "2026-10-24"
       labels:
         app: ical-proxy
         netpol-baseline: enforced

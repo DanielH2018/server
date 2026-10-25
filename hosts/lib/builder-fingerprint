@@ -1,0 +1,54 @@
+#!/bin/sh
+# Write the archive signing key's fingerprint where the builder reads it.
+#
+# The builder refuses every build with reason="keyring" when archive-key.fpr is absent or differs
+# from the rendered keyring. It cannot read the signer's 0700 GnuPG home, so this script reads the
+# key as homelab-signer and writes the file as root. homelab-builder.service runs it from an
+# `ExecStartPre=+` line, so a restored key regenerates the file on the builder's next run with no
+# Ansible apply.
+#
+# A home with no signing key removes the file and exits 0, so the builder then refuses with
+# reason="keyring". A home with two or more keys exits 1, because the file names exactly one.
+#
+# The write is M3's rule: mktemp in the directory, chmod 0644, then mv. A bare mktemp file is 0600.
+#
+# HOMELAB_SIGNER_GNUPG, HOMELAB_FPR_FILE and HOMELAB_RUNAS override the home, the file and the
+# user switch for the tests; the unit sets none. `-h` or `--help` prints this header.
+set -eu
+
+case " $* " in
+  *" -h "* | *" --help "*)
+    awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"
+    exit 0
+    ;;
+esac
+
+home=${HOMELAB_SIGNER_GNUPG:-/var/lib/homelab-signer/gnupg}
+out=${HOMELAB_FPR_FILE:-/etc/homelab-builder/archive-key.fpr}
+runas=${HOMELAB_RUNAS-runuser -u homelab-signer --}
+
+# --list-keys reads the public keyring only, so it starts no gpg-agent. $runas is unquoted on
+# purpose so that it splits into words; an empty value runs gpg as the caller.
+# shellcheck disable=SC2086
+listing=$($runas gpg --homedir "$home" --batch --with-colons --list-keys) || {
+  echo "builder-fingerprint: gpg could not list $home" >&2
+  exit 1
+}
+keys=$(printf '%s\n' "$listing" | grep -c '^pub:' || true)
+if [ "$keys" -eq 0 ]; then
+  rm -f "$out"
+  echo "builder-fingerprint: $home holds no signing key; removed $out"
+  exit 0
+fi
+if [ "$keys" -ne 1 ]; then
+  echo "builder-fingerprint: $home holds $keys keys; the fingerprint file names exactly one" >&2
+  exit 1
+fi
+# The first fpr line follows the pub line, so it is the primary key's fingerprint.
+fpr=$(printf '%s\n' "$listing" | awk -F: '$1 == "fpr" { print $10; exit }')
+tmp=$(mktemp "$(dirname "$out")/.archive-key.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+printf '%s\n' "$fpr" >"$tmp"
+chmod 0644 "$tmp"
+mv "$tmp" "$out"
+trap - EXIT

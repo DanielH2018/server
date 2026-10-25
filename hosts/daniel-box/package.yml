@@ -8,7 +8,7 @@
 # `ups_secondary_push_token`, and its upsmon.conf output reads `nut_monitor_password`, both from
 # the same SOPS file.
 #
-# The builder, the repository and every daniel-box timer stay with Ansible until H7. The
+# The builder and the repository moved in H7.41b (hosts/components/builder). Other timers stay with Ansible until H7. The
 # `windowed` mark for k3s.service arrives in H6.4a with the first k3s.service drop-in, because the
 # renderer refuses a unit policy that no package installs or drops in on (item 5, Amended
 # 2026-10-24).
@@ -31,6 +31,8 @@ components:
   - secret-rotation
   - loki-route-witness
   - apt-github-cli
+  - failure-alert
+  - builder
 credentials:
   - k3s_readonly_token
   - ups_secondary_push_token
