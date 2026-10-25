@@ -457,6 +457,12 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
       A rotation re-sets that secret too, with `gh secret set DEPLOY_DISCORD_WEBHOOK -R
       DanielH2018/server` reading the new value from stdin (**operator-only**). A stale copy
       fails the next stateful hold's post red, with the hold already written.
+    - A key that a host file carries needs one more step after `sops set`: the operator runs
+      `uv run python scripts/secrets_mgmt/host_secrets.py sync <host>` (**operator-only**,
+      because it decrypts) and commits the host file in the same PR. `monitor_discord_webhook_url`
+      is such a key since H5.7: autoheal on `daniel-pi` reads it through the package's Compose
+      env file. `secret_rotation.py consumers <name>` names the host package and prints the
+      `sync` command, and the Pi installs the new value when the package's next version lands.
 - `mullvad_account`: Mullvad account panel. The value is all digits, so it has a Secret of its
   own, `qbittorrent-mullvad-account`, rendered from
   `ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes

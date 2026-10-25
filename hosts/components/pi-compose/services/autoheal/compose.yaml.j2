@@ -1,6 +1,44 @@
-{% from 'autokuma.yml.j2' import labels as kuma with context %}
-{% from 'networks.yml.j2' import service_networks, external_networks with context %}
-{% from 'resources.yml.j2' import resources %}
+{#- autoheal (H5.7, docs/target-architecture/host/h5-pi-compose.md). It was an Ansible role's
+    compose file until H5.7. The macros that file imported (networks, resources, autokuma labels)
+    are written out here, because a service tree has no ansible/templates on its search path.
+    The values are the ones the macros rendered for the Pi. This header holds what the role's
+    CLAUDE.md said; the DECIDED marker and the environment comments below carry the rest.
+
+    - It watches Docker healthchecks and restarts any container reporting `unhealthy`. Pod
+      restarts on the k3s nodes are Kubernetes' own job, so no k8s counterpart exists, and
+      daniel-pi is the only host that runs it (Docker was uninstalled on daniel-server on
+      2026-08-14).
+    - No web UI: nothing to route and nothing for Authelia to gate.
+    - AUTOHEAL_CONTAINER_LABEL=all monitors every container that defines a `healthcheck`, with
+      no `autoheal=true` label required. A service is therefore self-healing only if its
+      healthcheck fails when it is broken. qBittorrent's check probes external egress, not only
+      loopback, so an orphaned VPN netns is caught (see the `qbittorrent` role).
+    - Every restart posts to Discord, and the payload key is the load-bearing half. The image
+      POSTs {"<WEBHOOK_JSON_KEY>": "<message>"} and defaults the key to `text`. Discord reads
+      `content` and rejects `text` with a 400. Nothing else sees that failure: autoheal discards
+      the response, the container stays healthy and the deploy reads green. ENFORCED by
+      hosts/lib/tests/test_pi_compose_autoheal.py. The channel is the shared
+      `monitor_discord_webhook_url`. It reaches this file as a `${monitor_discord_webhook_url}`
+      reference, which Compose fills from the project's env file (the pi-compose component's
+      `outputs:` entry). The Pi's SOPS file must hold that key (`host_secrets.py sync
+      daniel-pi`, operator-only).
+    - autoheal carries no healthcheck of its own, on purpose. The DECIDED marker below has the
+      evidence (#1789). ENFORCED by hosts/lib/tests/test_pi_compose_autoheal.py.
+    - AUTOHEAL_START_PERIOD is a startup sleep, not a per-container grace period. Docker
+      already suppresses `unhealthy` during a container's own `healthcheck.start_period`. The
+      sleep covers the Pi rebooting, when autoheal and everything it watches start together. It
+      also blinds autoheal for that long after any deploy that recreates it, which is why it is
+      120s.
+    - `lifecycle` is its only network: it reaches the write-capable docker-proxy-lifecycle
+      there and never joins the broad networks.
+    - `depends_on: docker-proxy-lifecycle` replaces the Ansible play's list-order rule. The
+      docker-proxy service file in this project declares the sub-proxy. For the seconds between
+      compose-adopt removing a container and `up` creating it, no container restarts on an
+      unhealthy check.
+    - The Watchtower `depends-on` label is not carried over. Watchtower was retired (35c0dc8d)
+      and nothing reads the label. -#}
+---
+
 services:
   autoheal:
     restart: unless-stopped
@@ -8,7 +46,7 @@ services:
     tty: true
     container_name: autoheal
     # Read-only rootfs: `docker diff` shows zero writes (busybox sh polling the lifecycle
-    # proxy; jq streams in memory) — no tmpfs needed. Host-agnostic, so this covers the Pi too.
+    # proxy; jq streams in memory) — no tmpfs needed.
     read_only: true
     cap_drop:
       - ALL
@@ -56,14 +94,30 @@ services:
       # same failed-start shape. Nothing is lost by dropping the probe: `pgrep` only ever
       # detected a dead process, which `restart: unless-stopped` and the cron's `docker start`
       # both already cover, and a wedged-but-running shell loop passed it anyway. ENFORCED by
-      # ansible/tests/services/test_autoheal_does_not_watch_itself.py.
+      # hosts/lib/tests/test_pi_compose_autoheal.py.
       disable: true
-    {{ service_networks() }}
+    depends_on:
+      - docker-proxy-lifecycle
+    networks:
+{% for net in container_item.networks %}
+      - {{ net }}
+{% endfor %}
     labels:
-      # Watchtower
-      - "com.centurylinklabs.watchtower.depends-on=docker-proxy-lifecycle"
-      {{ kuma(container_item.name) }}
+      # Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false), so the
+      # autokuma macro emitted this inert label.
+      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('0.25', '64M', '0.05', '16M') }}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
 
-{{ external_networks() }}
+networks:
+{% for net in container_item.networks %}
+  {{ net }}:
+    external: true
+{% endfor %}
