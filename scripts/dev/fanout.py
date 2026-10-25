@@ -7,6 +7,7 @@ Usage::
     fanout.py place launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--no-review]
     fanout.py place status <run-id>
     fanout.py probe [--describe] <run-id>...
+    fanout.py headroom [--describe] [--batches N] [--host HOST]
     fanout.py review --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
     fanout.py stats [--dir DIR ...] [--since YYYY-MM-DD] [--json]
     fanout.py land-server [--dry-run]
@@ -36,6 +37,7 @@ from lib.exit_codes import USAGE_ERROR
 COMMANDS = {
     "place": "fanout_lib.place",
     "probe": "fanout_lib.wait_probe",
+    "headroom": "fanout_lib.headroom_probe",
     "review": "fanout_lib.review_unit",
     "stats": "fanout_lib.review_stats",
     "land-server": "fanout_lib.autoland",
@@ -44,6 +46,7 @@ COMMANDS = {
 _HELP = {
     "place": "place, claim, watch, stop and clean fan-out batches",
     "probe": "the `fanout` source for cc-wait",
+    "headroom": "the `fanout-headroom` source for cc-wait",
     "review": "run one `launch --review` batch: implement, review, fix, land",
     "stats": "sum the fan-out review records",
     "land-server": "land the safe PRs of finished daniel-server batches",
