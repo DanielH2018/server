@@ -72,7 +72,9 @@ which prints each complaint as a `::warning::` annotation and exits zero. On a p
 the same variance lands a module near the bound on either side of it from run to run, so an
 unweighted module between the two bounds annotates there too (#4010). A pull request's author
 can repair only a module the PR's diff adds or changes, so CI passes the diff as
-`--changed-files` and every other module's complaint annotates there as well (#5480).
+`--changed-files` and every other module's complaint annotates there as well (#5480). A change
+to the table widens that to every module, unless it only drops rows of deleted modules, which
+`--base-weights` lets the gate see (#5989).
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -480,10 +482,13 @@ def main(argv=None) -> int:
         "--changed-files",
         type=Path,
         metavar="LIST",
-        help=(
-            "a file listing the paths a pull request's diff adds or modifies, one per line: "
-            "--check-durations then fails only for a module in it and annotates the rest"
-        ),
+        help="the paths a PR's diff adds or modifies: only those modules fail the gate",
+    )
+    parser.add_argument(
+        "--base-weights",
+        type=Path,
+        metavar="JSON",
+        help="the weight table at the PR's merge base: dropping retired rows keeps the scope",
     )
     parser.add_argument(
         "--threshold",
@@ -495,10 +500,7 @@ def main(argv=None) -> int:
         "--fail-above",
         type=float,
         default=RUNNER_HEAVY_FAIL_SECONDS,
-        help=(
-            "seconds an unweighted module may measure under --check-durations before the "
-            "gate fails rather than annotates"
-        ),
+        help="seconds an unweighted module may measure before --check-durations fails",
     )
     parser.add_argument(
         "--stale-ratio",
@@ -510,9 +512,7 @@ def main(argv=None) -> int:
 
     if args.check_durations:
         report = args.check_durations.read_text(errors="replace")
-        changed = None
-        if args.changed_files:
-            changed = set(args.changed_files.read_text().split())
+        changed = args.changed_files and set(args.changed_files.read_text().split())
         problems, warnings = gate_complaints(
             report,
             load_weights(),
@@ -520,6 +520,7 @@ def main(argv=None) -> int:
             threshold=args.threshold,
             ratio=args.stale_ratio,
             fail_above=args.fail_above,
+            base_weights=args.base_weights and load_weights(args.base_weights),
         )
         if args.warn_only:
             warnings, problems = warnings + problems, []
