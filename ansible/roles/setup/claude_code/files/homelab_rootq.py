@@ -24,6 +24,10 @@ assignment the value is kept only when it is a number, a duration, a boolean, an
 or a colon list of them; anything else becomes `<value>`. A systemd directive such as `Type=simple` passes, except
 Environment=, whose assignments are filtered. Output stops at OUT_MAX bytes.
 
+It runs under /usr/bin/python3, Ubuntu 24.04's 3.12, not uv's pinned interpreter: that one sits
+under a user's home, and root never executes a file a user can write. `-I` keeps PYTHONPATH,
+the user site and the working directory out of the interpreter.
+
 Exit codes: 0 the verb ran; 1 its command exited non-zero; 2 the request was refused; 3 the
 host lacks the command.
 """

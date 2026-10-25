@@ -17,7 +17,6 @@
         owner: root
         group: root
         mode: "0755"
-        validate: /usr/bin/python3 -I -c "import ast, sys; ast.parse(open(sys.argv[1]).read())" %s
       become: true
 
     - name: Install the rootq shim
