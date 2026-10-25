@@ -142,6 +142,15 @@ through Flux (H1.8b). `k3s_longhorn_version` records where it stands. Four lesso
   (not required) anti-affinity. The role's `longhorn-global-manager.yaml` patch cuts it to two,
   one per node, and gives it a memory request (#5968).
 
+- **The manager DaemonSet rolls one pod at a time** (#6009). Upstream ships
+  `maxUnavailable: 100%`, and the role's `longhorn-manager-update-strategy.yaml` patch sets
+  `1`. The manager pods serve the admission webhook that every claim's dry run calls. On
+  the v1.13.0 hop both pods went down at once, and four claim-holding tags posted `failure`
+  for two minutes. The patch header has the evidence that 100% is not needed for an upgrade.
+  A new manager turns Ready before it waits for the old pods to go, so a hop cannot stall
+  with one pod down. The cost is that a hop runs the old and new webhooks side by side for
+  one pod's start.
+
 ### Expected-red node conditions
 
 Two node-CR conditions read `False` here and neither is an upgrade failure:
