@@ -68,6 +68,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "ha",
         "health",
         "landing_blockers",
+        "landing_verdicts",
         "longhorn",
         "metrics",
         "monitors",
