@@ -425,13 +425,20 @@ one row per path:
 with a `cron_file`). It follows every task import, including the shared
 `{{ role_path }}/../common/tasks/` files with the import's `vars:`, and an import loop once per
 item. A `copy` with `remote_src` is compared by metadata only, because its source is on the
-host. It lists the tasks it skips with the reason: a `when:` it cannot read for the host, a
-loop over a list that is not literal, a path that does not render, or an `include_role`. An
-import whose path does not render to a file in the tree prints as `UNCHECKED`, naming the task
-file and the expression, because none of the tasks in it were read. It exits 1 on any
-`DRIFT`. It exits 75 when a path was `unread`, an import was `UNCHECKED` or nothing was
-compared, and stderr says coverage was partial for an `UNCHECKED` import. It exits 0
-otherwise.
+host. It evaluates each `when:` as Jinja against the host's merged inventory vars, with
+Jinja-valued vars resolved and an import's `vars:` on top. A gate that reads a value only the
+run sets, such as a `set_fact`, a `register` or an `ansible_*` fact, cannot be read. The
+gate's names decide this, so a test or filter such as `is defined` or `default()` around a
+run-time name leaves it unreadable. A name with a default that the role also sets at run time
+counts as run-time. It lists
+the tasks it skips with the reason: a `when:` it cannot read for the host, a loop over a list
+that is not literal, a path that does not render, or an `include_role`. A task file it cannot
+read prints as `UNCHECKED`, naming the importing file and the reason, because none of the
+tasks in it were read. That is an import whose path does not render to a file in the tree, or
+whose `when:` or loop it cannot read (#6356). An import whose `when:` is false for the host
+prints as skipped. It exits 1 on any `DRIFT`. It exits 75 when a path was `unread`, a task
+file was `UNCHECKED` or nothing was compared, and stderr says coverage was partial for an
+`UNCHECKED` task file. It exits 0 otherwise.
 
 ### `ha …`
 
