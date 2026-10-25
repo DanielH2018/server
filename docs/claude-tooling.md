@@ -417,7 +417,9 @@ one row per path:
   hash.
 - `ok-meta` means the same, except that the content was not compared. The row names why: a
   render holding a secret leaves a `STUB`, or `rootq` refuses to hash a credential file. `rootq`
-  refuses even `stat` on a `*.env` path, so such a row carries no mode or owner.
+  refuses even `stat` on a `*.env` path before it checks that the path exists, so such a row
+  says its existence, mode and owner went unverified. An absent arm's path that `rootq`
+  refuses this way reads `unread`, because its removal cannot be confirmed.
 - `DRIFT` means missing, present where an absent arm removes it, or different.
 - `unread` means this user cannot stat the path and `rootq` did not answer for it: the path is
   not on `rootq`'s `PATHS`, or the host has no `rootq`.

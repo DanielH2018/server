@@ -8,7 +8,8 @@ playbook entry admits in one `host_reader` call per host, and prints one row per
 - `ok`: present with the declared mode, owner and group, and the content hash of the render;
 - `ok-meta`: the same, except that the content was not compared, with the reason. A render
   holding a secret leaves a `STUB`, and rootq refuses to hash a credential file. A credential
-  path rootq refuses even to stat, such as a `*.env` file, reads `ok-meta` with no metadata;
+  path rootq refuses even to stat, such as a `*.env` file, reads `ok-meta` and says its
+  existence, mode and owner went unverified; an absent arm's such path reads `unread`;
 - `DRIFT`: missing, present where an absent arm removes it, or a declared field or the
   content differs;
 - `unread`: the path could not be stat'ed as this user, and rootq did not answer for it,
@@ -129,8 +130,16 @@ def compare(want: Want, live: dict, user: str) -> tuple[str, str]:
     """(status, detail) for one path; `live` is `host_reader`'s stat row for it."""
     status = live.get("status")
     if status not in ("ok", "absent"):
-        if (reason := credential_refusal(live)) is not None:
-            return "ok-meta", f"not stat'ed: rootq refused: {reason}"
+        # rootq checks the deny list before the path exists, so its refusal says nothing about
+        # the file. A present want reads ok-meta, as the operator ruled for credential files
+        # (#6357), and says so. An absent arm's removal cannot be confirmed at all.
+        if (reason := credential_refusal(live)) is not None and want.present:
+            return (
+                "ok-meta",
+                f"existence, mode and owner unverified: rootq refused: {reason}",
+            )
+        if reason is not None:
+            return "unread", f"removal unverified: rootq refused: {reason}"
         return "unread", f"cannot stat as {user}: {live.get('error', status)}"
     if not want.present:
         return (

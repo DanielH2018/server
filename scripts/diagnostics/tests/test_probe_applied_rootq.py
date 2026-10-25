@@ -199,3 +199,30 @@ def test_a_root_only_file_rootq_does_not_list_stays_unread_with_its_reason(
     assert status == "unread", line
     assert "not on the allowlist" in line, line
     assert code == PROBE_UNREADABLE
+
+
+ENV_ABSENT_TASK = """\
+- name: Remove the old webhook env file
+  ansible.builtin.file: {path: "@L@/old.env", state: absent}
+"""
+
+
+def test_a_credential_file_an_absent_arm_removes_is_unread_not_ok_meta(
+    tmp_path, monkeypatch, capsys
+):
+    """rootq refuses the deny list before it looks, so the removal stays unconfirmed."""
+    tasks = SCRIPT_TASK + ENV_ABSENT_TASK
+    rig = _rig(tmp_path, monkeypatch, tasks, {"@L@/x.sh": AS_RENDERED})
+    code, rows = _run(rig, capsys)
+    status, line = rows[f"{rig.locked}/old.env"]
+    assert status == "unread", line
+    assert "removal unverified" in line, line
+    assert code == PROBE_UNREADABLE
+
+
+def test_a_present_credential_file_says_its_existence_went_unverified(
+    tmp_path, monkeypatch, capsys
+):
+    rig = _rig(tmp_path, monkeypatch, SCRIPT_TASK + ENV_TASK, {"@L@/x.sh": AS_RENDERED})
+    _, rows = _run(rig, capsys)
+    assert "existence, mode and owner unverified" in rows[f"{rig.locked}/hook.env"][1]
