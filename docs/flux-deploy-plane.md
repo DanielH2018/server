@@ -961,7 +961,7 @@ notification-controller posts on T:
 - **Superseded.** Each poll reads `prod`'s digest before T's statuses, and once more before
   a `failed` verdict. When `prod` names another digest, a later run moved it past T, and
   `verify` prints `superseded` and exits 0. A failed read keeps the wait going and never reads
-  as superseded. No run supersedes another until D7 turns `SUPERSEDE` on
+  as superseded. A run is superseded only while `promote.SUPERSEDE` is on
   (`docs/target-architecture/deploy/d7-superseding-promotions.md`).
 - **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
   run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
@@ -1046,7 +1046,8 @@ the conditions `scripts/deploy_tools/promote_lib/supersede.py` states. T's verif
 expects the names T changes against `last-good`, which covers the superseded commit's
 changes too, and `tag` tags T `superseding` so it is not superseded in turn. `decide` prints
 `<T> supersedes the verification of <P>`. Any failed condition prints why and waits as before.
-`SUPERSEDE` is `False` until the operator rules on D7.6.
+The operator turned `SUPERSEDE` on in D7.6. Setting it back to `False` restores the wait for
+every run.
 
 **A verdict counts only while `prod` names its target** (D7.1). `settle` reads `prod`'s
 digest before it writes anything, and again before its reset. When a later run has moved
@@ -1054,8 +1055,9 @@ digest before it writes anything, and again before its reset. When a later run h
 dispatches nothing. A failed read applies the verdict as before. `tag` reads `DEPLOY_HOLD`
 again just before it moves `prod`, and moves nothing unless it still reads the value `decide`
 read: `none`, or the `failed=` hold the revert rule passed. A superseding `tag` also moves
-nothing once `last-good` has moved since `decide` read it (D7.7). No run supersedes another until D7 turns `SUPERSEDE` on
-(`docs/target-architecture/deploy/d7-superseding-promotions.md`), so both reads are inert
+nothing once `last-good` has moved since `decide` read it (D7.7). A run is superseded only
+while `SUPERSEDE` is on (`docs/target-architecture/deploy/d7-superseding-promotions.md`),
+and otherwise both reads are inert
 until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
 binaries.
 

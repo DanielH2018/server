@@ -1,0 +1,22 @@
+# Shipped by homelab-daniel-box.
+[Unit]
+Description=Homelab apt repository (serves the signer's published tree over HTTP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# apt trusts the signature on InRelease, not the transport, so the server needs no identity
+# of its own: a throwaway user that can only read the tree.
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ExecStart=/usr/bin/python3 -m http.server --bind {{ server_ip }} {{ builder_repo_port }} --directory /var/lib/homelab-signer/repo
+Restart=on-failure
+RestartSec=5
+SyslogLevel=notice
+
+[Install]
+WantedBy=multi-user.target

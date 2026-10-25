@@ -58,6 +58,27 @@ EXIT_UNREACHABLE = 1
 EXIT_BAD_ARGS = 2
 EXIT_DRIFT = 3
 
+# The patterns behind `excluded_file_names` below; that key's comment says why each is here.
+EXCLUDED_FILE_NAMES = (
+    "*.exe",
+    "*.scr",
+    "*.com",
+    "*.pif",
+    "*.bat",
+    "*.cmd",
+    "*.msi",
+    "*.lnk",
+    "*.vbs",
+    "*.ps1",
+    "*.7z",
+    "*.zip",
+    "*.zipx",
+    "*.arj",
+    "*.iso",
+    "*.rar",
+    "*.r[0-9][0-9]",
+)
+
 # The desired values, keyed by the qBittorrent WebUI API v2 preference names.
 #
 # Every one is chosen for a client that CANNOT ACCEPT INBOUND CONNECTIONS. Mullvad
@@ -65,7 +86,7 @@ EXIT_DRIFT = 3
 # so qBittorrent only ever pairs with peers it dials itself. That single fact is what
 # makes the connection-related values worth raising: reach is bounded by how fast and how
 # widely we dial, not by how many peers find us.
-DESIRED: dict[str, bool | int] = {
+DESIRED: dict[str, bool | int | str] = {
     # Outbound connection attempts per second. The ramp rate for a dial-only client, and
     # the largest single win here — 30 is the stock value and assumes peers dial back.
     "connection_speed": 100,
@@ -109,6 +130,19 @@ DESIRED: dict[str, bool | int] = {
     "preallocate_all": True,
     # Group piece requests by file extent, reducing write scatter. Modest on NVMe, free.
     "enable_piece_extent_affinity": True,
+    # NOT A THROUGHPUT SETTING. qBittorrent marks a file matching one of these patterns
+    # "do not download" when the torrent is added, so a fake episode that is only an
+    # executable or an archive downloads and seeds nothing (issue #6274). Indexers served
+    # three shapes in 2026-10: a release holding a `.exe`, a single `.7z` wrapping a padded
+    # `.exe`, and (2023) a `.iso` inside a folder named `.mkv`. Sonarr still flags the empty
+    # download, so the Arr Queue Warnings monitor still pages and a human still removes it.
+    # `.iso` is safe to exclude because the BR-DISK custom format already scores full-disc
+    # releases out of every profile. RAR volumes (`.rar`, `.r00`...) are excluded because
+    # nothing in this stack unpacks them, so Sonarr cannot import a RAR release whether or
+    # not it downloads. The operator had `*.rar` set in the WebUI before this list existed.
+    "excluded_file_names_enabled": True,
+    # The WebUI API joins and splits this list on "\n" (appcontroller.cpp).
+    "excluded_file_names": "\n".join(EXCLUDED_FILE_NAMES),
 }
 
 

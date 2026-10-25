@@ -26,6 +26,7 @@ from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import (
     MAXIMAL_ROLE_GATED_TAGS,
     agent_join_cmds,
+    agent_pin_cmds,
     PLAYBOOK_CMD,
     owed_clear_cmd,
     server_tags,
@@ -364,7 +365,8 @@ def _role_command(
 
     The server-play command and then one join command per agent host, split through
     `server_tags` and `agent_join_cmds` as the `DECIDED:` marker at `AGENT_JOIN_TAGS` says. A
-    row reaching only the agent half prints the join alone.
+    row reaching only the agent half prints the join alone. A row reaching the pin play gets
+    one `agent_pin_cmds` command per agent host after them, naming the host it runs on.
     """
     role_tag = setup_role_tag(role)
     narrowed = _narrowed_tags(role, narrow_tags)
@@ -382,8 +384,16 @@ def _role_command(
     # <clear command>" after this list, and an unbracketed warning made that clause read
     # as a continuation of the warning's own last sentence.
     out = [f"{cmd} (WARNING: {warning})" if warning else cmd] if server else []
-    agents = agent_join_cmds(role, playbook, selected, setup_role_agent_hosts(role))
-    return " and ".join([*out, *(f"`{a}`" for a in agents)])
+    agent_hosts = setup_role_agent_hosts(role)
+    agents = agent_join_cmds(role, playbook, selected, agent_hosts)
+    pins = agent_pin_cmds(role, playbook, selected, agent_hosts)
+    return " and ".join(
+        [
+            *out,
+            *(f"`{a}`" for a in agents),
+            *(f"`{cmd}` (run on {host})" for host, cmd in pins),
+        ]
+    )
 
 
 def _consumers_command(role: str) -> str:

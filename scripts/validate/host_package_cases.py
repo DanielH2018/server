@@ -33,8 +33,11 @@ installs a package that owns a conffile, then the `conffile` fixture, whose line
 that conffile, and upgrades the owner twice under `--force-confold`: once with its conffile
 unchanged and once changed. Each upgrade records whether dpkg kept the local file or held the
 package back, and the line must survive to the next reconcile (#6088; `validate_lib/conffile_case.py`).
-The last case installs the three apt-source components over seeded copies of the files the roles
-wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`).
+Another installs the three apt-source components over seeded copies of the files the roles
+wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). The last cases run
+`hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
+branch with a break-glass kit, and the kit's two red fixtures (H7.15a;
+`validate_lib/bootstrap_case.py`).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
@@ -82,7 +85,9 @@ from validate.validate_lib.host_container import (
     expect,
     list_problems,
     release_fetched,
+    success_timestamp,
 )
+from validate.validate_lib import bootstrap_case
 from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
@@ -538,14 +543,6 @@ class Cases:
             c.remove()
 
 
-def success_timestamp(prom: str) -> str:
-    """The value of the success-timestamp series in a homelab_host.prom, or ""."""
-    for line in prom.splitlines():
-        if line.startswith("homelab_host_update_success_timestamp_seconds{"):
-            return line.rsplit(" ", 1)[1]
-    return ""
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--image", required=True, help="the test image's tag")
@@ -578,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
     conffile_case.run(cases)
     shadow_case.run(cases)
     repos_case.run(cases)
+    bootstrap_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

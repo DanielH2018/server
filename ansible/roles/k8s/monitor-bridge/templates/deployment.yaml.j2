@@ -33,6 +33,7 @@ spec:
       containers:
         - name: monitor-bridge
           image: {{ monitor_bridge_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command: ["python", "/app/cli.py"]
           ports:
             - name: metrics

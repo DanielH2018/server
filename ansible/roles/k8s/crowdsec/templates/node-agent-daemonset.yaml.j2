@@ -29,6 +29,7 @@ spec:
         # crowdsec-config Secret — one source for all stacks).
         - name: config-install
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -60,6 +61,7 @@ spec:
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
         - name: wait-for-lapi
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -85,6 +87,7 @@ spec:
       containers:
         - name: crowdsec-agent
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           env:
             - name: TZ
               value: "{{ tz }}"

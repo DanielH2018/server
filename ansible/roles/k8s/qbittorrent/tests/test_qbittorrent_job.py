@@ -204,7 +204,11 @@ def test_a_second_apply_writes_nothing(webui, capsys):
     assert webui.writes == [{"connection_speed": 100, "preallocate_all": True}]
     assert qbittorrent_job.main([], env) == 0
     assert len(webui.writes) == 1
-    assert "9 preferences already match; nothing to do" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert (
+        f"{len(qbittorrent_job.DESIRED)} preferences already match; nothing to do"
+        in out
+    )
 
 
 def test_an_ignored_write_fails_the_apply(webui, capsys):

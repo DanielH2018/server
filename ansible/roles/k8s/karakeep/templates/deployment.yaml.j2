@@ -65,6 +65,7 @@ spec:
       containers:
         - name: karakeep
           image: {{ karakeep_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
           # Drop ALL with no cap_add — a Node app on a high port. The seeded tree is

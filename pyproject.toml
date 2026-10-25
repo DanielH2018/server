@@ -81,9 +81,10 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # -p leakguard fails any test that reaches the network, the cluster or the host. It is
 # registered here rather than from a conftest so it covers every `testpaths` entry at once;
 # ansible/tests is on `pythonpath` below, which is what makes the bare module name resolve.
-# -p xdist_width narrows `-n auto` to the run's selection: one worker per 15 test modules,
-# capped at the core count, so one file runs on one worker rather than sixteen. The whole
-# suite and a CI shard keep every core. Its module docstring has the measurements.
+# -p xdist_width narrows `-n auto` to the run's selection: its recorded seconds over its heaviest
+# module's, from scripts/dev/pytest_shard_weights.json, capped at the core count, so one file
+# runs on one worker rather than sixteen and five heavy ones get three. The whole suite and a CI
+# shard keep every core. Its module docstring has the measurements.
 #
 # -p render_share lets the workers of one run share a single placeholder render of the fleet
 # instead of one per module (6 modules, 10-16s each). The cache lives only as long as the run;
@@ -190,7 +191,7 @@ extend-exclude = [
 # hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar. The
 # repository signer runs under daniel-box's /usr/bin/python3 for the same reason, and
 # ansible/roles/setup/homelab_builder/tests/test_repo_signer.py holds it to the same grammar.
-per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "ansible/roles/setup/homelab_builder/files/homelab_repo_sign.py" = "py312" }
+per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -352,7 +353,6 @@ extra-paths = [
   "ansible/roles/setup/hypervisor/files",
   "ansible/roles/setup/renovate_notify/files",
   "ansible/roles/setup/renovate_agent/files",
-  "ansible/roles/setup/homelab_builder/files",
   "ansible/roles/setup/claude_code/files",
   "ansible/roles/k8s/home-assistant/files",
   "ansible/roles/k8s/tdarr/files",

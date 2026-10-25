@@ -62,8 +62,8 @@ PLANES = [
     Plane(
         "containers",
         CONTAINER_ROLES,
-        floor=5,
-        members=frozenset({"wg-easy", "common", "alloy", "autoheal", "docker-proxy"}),
+        floor=4,
+        members=frozenset({"wg-easy", "common", "alloy", "autoheal"}),
     ),
 ]
 PLANE_IDS = [p.name for p in PLANES]

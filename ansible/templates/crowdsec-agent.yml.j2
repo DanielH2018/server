@@ -79,6 +79,7 @@
         # as. A staged hub directory of mode 000 would lock the agent out of it.
         - name: crowdsec-hub-install
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -131,6 +132,7 @@
         # Assistant's config seed. Owning the file by creating it sidesteps the capability.
         - name: crowdsec-config-install
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -194,6 +196,7 @@
         # these copies instead.
         - name: crowdsec-data-install
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -242,6 +245,7 @@
         # agent.
         - name: crowdsec-agent
           image: {{ crowdsec_k8s_image }}
+          imagePullPolicy: IfNotPresent
           env:
             - name: TZ
               value: "{{ tz }}"

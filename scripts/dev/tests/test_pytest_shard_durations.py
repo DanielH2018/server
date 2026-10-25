@@ -18,6 +18,7 @@ would leave them all green over a parser that had stopped matching anything.
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_durations.py
 """
 
+import json
 import sys
 
 import pytest
@@ -371,12 +372,85 @@ def test_a_pull_request_only_annotates_a_bad_weight_outside_its_diff(tmp_path, c
     assert "parsed no durations" not in printed
 
 
-def test_a_pull_request_editing_the_weight_table_fails_on_every_module():
-    """A PR that re-records weights changes only the table, so a bad row it wrote belongs to a
-    module outside its diff. Its author can still repair it, so the gate runs unscoped."""
-    changed = {"scripts/dev/pytest_shard_weights.json"}
+@pytest.mark.parametrize(
+    "changed",
+    [
+        pytest.param({shard_weight_gate.WEIGHTS_TABLE}, id="table-without-base"),
+        pytest.param({"scripts/dev/shard_weight_gate.py"}, id="gate-code"),
+    ],
+)
+def test_an_edit_the_gate_cannot_scope_fails_on_every_module(changed):
+    """A table edit with no base table to compare rows against, or a change to the bounds,
+    leaves no way to tell which modules the author owns, so the gate runs unscoped."""
     problems, _ = shard_weight_gate.gate_complaints(REPORT, RECORDED, changed)
     assert len(problems) == 1 and NEW_MODULE in problems[0]
+
+
+RETIRED = "scripts/gone/tests/test_retired.py"
+
+
+@pytest.mark.parametrize(
+    "base",
+    [
+        pytest.param(
+            {**RECORDED, "scripts/dev/tests/test_run_as_cron.py": 9.0},
+            id="another-row-changed",
+        ),
+        pytest.param({**RECORDED, RETIRED: 1.5}, id="deleted-module-row-dropped"),
+    ],
+)
+def test_a_table_edit_only_annotates_a_module_whose_row_it_did_not_write(base):
+    """#6266: the PR re-recorded one row, or dropped a retired module's row (#5989), and a heavy
+    module another PR merged without a weight ran in the same shard. That row is not the
+    author's, so it annotates."""
+    problems, warnings = shard_weight_gate.gate_complaints(
+        REPORT, RECORDED, {shard_weight_gate.WEIGHTS_TABLE}, base_weights=base
+    )
+    assert problems == []
+    assert any(
+        NEW_MODULE in w and shard_weight_gate.OUTSIDE_DIFF_NOTE in w for w in warnings
+    )
+
+
+@pytest.mark.parametrize(
+    "weights, base",
+    [
+        pytest.param(UNDER_RECORDED, RECORDED, id="added-too-low"),
+        pytest.param(
+            UNDER_RECORDED, {**RECORDED, NEW_MODULE: 25.0}, id="changed-too-low"
+        ),
+        pytest.param(
+            RECORDED, {**RECORDED, NEW_MODULE: 25.0}, id="dropped-but-present"
+        ),
+    ],
+)
+def test_a_table_edit_fails_on_a_bad_row_it_wrote(weights, base):
+    """The fail half: the PR added, changed or dropped the heavy module's own row, so the bad
+    weight that leaves it is the author's to re-record."""
+    problems, _ = shard_weight_gate.gate_complaints(
+        REPORT, weights, {shard_weight_gate.WEIGHTS_TABLE}, base_weights=base
+    )
+    assert len(problems) == 1 and NEW_MODULE in problems[0]
+
+
+def test_the_cli_hands_the_base_table_to_the_gate(tmp_path, capsys):
+    """CI passes `--base-weights`; without it the same retire-only edit fails on every module."""
+    (tmp_path / "changed.txt").write_text(f"{shard_weight_gate.WEIGHTS_TABLE}\n")
+    (tmp_path / "base.json").write_text(
+        json.dumps({**pytest_shard.load_weights(), RETIRED: 1.5})
+    )
+    (tmp_path / "durations.log").write_text(REPORT)
+    argv = [
+        "--check-durations",
+        str(tmp_path / "durations.log"),
+        "--changed-files",
+        str(tmp_path / "changed.txt"),
+    ]
+    assert pytest_shard.main(argv) == 1
+    assert (
+        pytest_shard.main([*argv, "--base-weights", str(tmp_path / "base.json")]) == 0
+    )
+    assert shard_weight_gate.OUTSIDE_DIFF_NOTE in capsys.readouterr().out
 
 
 def test_the_diff_scopes_the_recorded_weight_arms_too():

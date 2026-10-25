@@ -141,10 +141,6 @@ def test_discover_templates_finds_the_known_set():
     names = frozenset(p.name for p in v.discover_templates())
     assert {
         "deploy-ui.service.j2",
-        "homelab-apt-repo.service.j2",
-        "homelab-builder.service.j2",
-        "homelab-builder.timer.j2",
-        "homelab-repo-sign.service.j2",
         "gitops-deploy.service.j2",
         "gitops-deploy.timer.j2",
         "renovate-agent.timer.j2",
@@ -157,6 +153,7 @@ def test_discover_templates_finds_the_known_set():
         "claude-fanout-server-lander.timer.j2",
         "claude-clone-sync.service.j2",
         "claude-dotfiles-sync.service.j2",
+        "claude-bg-resume.service.j2",
         "node_exporter.service.j2",
         "kuma-check.service.j2",
         "kuma-check-boot.service.j2",
@@ -165,7 +162,7 @@ def test_discover_templates_finds_the_known_set():
         "worktree-holders.socket.j2",
         "worktree-holders@.service.j2",
     } <= names
-    assert len(names) == 37
+    assert len(names) == 34
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

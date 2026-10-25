@@ -55,6 +55,7 @@ spec:
         # second image to pin and no version skew.
         - name: fix-acme-permissions
           image: {{ traefik_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
@@ -71,6 +72,7 @@ spec:
       containers:
         - name: traefik
           image: {{ traefik_k8s_image }}
+          imagePullPolicy: IfNotPresent
           args:
             - --configFile=/config/traefik.yml
           ports:
@@ -234,6 +236,7 @@ spec:
         # container restart here would gain nothing a shell loop can't already do.
         - name: access-log-rotate
           image: {{ traefik_k8s_logrotate_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
             - -c
