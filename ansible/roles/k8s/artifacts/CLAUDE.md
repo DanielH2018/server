@@ -73,11 +73,12 @@ Consequences worth knowing before debugging a missing artifact:
   not a fault. A session on daniel-box mounts its own tree directly and never waits.
 - **The cron runs as `sys_user`, not root**, and only on `claude_code_artifacts_node`
   (daniel-box). An `artifacts` deploy neither renders the script nor installs the cron.
-- **A failed run goes to the journal; only a sustained outage mails.** Read it with
-  `journalctl -t sync-artifacts` on daniel-box — every failed run logs there, with the
-  consecutive-failure count, and a recovery logs the streak it ended. cron mail carries one
-  message per outage: the run that reaches `claude_code_artifacts_sync_alert_after_failures`
-  consecutive failures is the only one that writes to stderr. The script's `DECIDED:` comment has why (#2467).
+- **Every failed run goes to the journal, and a sustained outage adds one more line.** Read it
+  with `journalctl -t sync-artifacts` on daniel-box. Every failed run logs there, with the
+  consecutive-failure count, and a recovery logs the streak it ended. The run that reaches
+  `claude_code_artifacts_sync_alert_after_failures` consecutive failures is the only one that
+  writes to stderr. The cron pipes that stderr to the same tag rather than to mail (#6162).
+  The script's `DECIDED:` comment has why (#2467).
 - **The ssh transport passes `ClearAllForwardings=yes`.** `ssh` reads `~/.ssh/config` for every
   connection, so a `LocalForward` on the peer's host entry applies to this one too, and a bind
   collision on its local port fails the whole connection. rsync needs no forward, so the sync
