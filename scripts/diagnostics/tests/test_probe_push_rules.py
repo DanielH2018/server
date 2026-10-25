@@ -94,14 +94,10 @@ def test_an_anonymous_read_reports_the_bypass_unknown():
     assert "REFUSES" in report and "bypass unknown" in report
 
 
-def test_unsigned_commits_reads_the_signature_header():
-    signed = "tree t\nauthor a\ngpgsig -----BEGIN SSH SIGNATURE-----\n x\n\nmsg\n"
-    plain = "tree t\nauthor a\n\nmsg mentioning gpgsig in the body\n"
-    batch = (
-        f"{SIGNED} commit {len(signed)}\n{signed}\n"
-        f"{UNSIGNED} commit {len(plain)}\n{plain}\n"
-    )
-    assert push_rules.unsigned_commits(batch) == [UNSIGNED]
+def test_signature_status_counts_only_n_as_unsigned():
+    # `E` is a signature this checkout cannot verify, which GitHub still may.
+    log = f"{SIGNED} G\n{UNSIGNED} N\n{'d' * 40} E\n"
+    assert push_rules.signature_status(log) == ([UNSIGNED], [SIGNED, "d" * 40])
 
 
 @pytest.mark.parametrize(
@@ -115,7 +111,9 @@ def test_repo_slug_reads_both_remote_shapes(url):
     assert push_rules.repo_slug(url) == "DanielH2018/server"
 
 
-def _transport(gh_fails=False, branch_exists=True, ancestor=True, signed=False):
+def _transport(
+    gh_fails=False, branch_exists=True, ancestor=True, signed=False, rules_body=None
+):
     """A `subprocess.run` answering every read `run_push_rules` makes for a fenced branch."""
     remote_head = "c" * 40
     rules = [rule("update"), rule("required_signatures", CI)]
@@ -123,7 +121,7 @@ def _transport(gh_fails=False, branch_exists=True, ancestor=True, signed=False):
         FENCE: ruleset("agent branch fence"),
         CI: ruleset("CI gate"),
     }
-    commit = "tree t\ngpgsig x\n\nmsg\n" if signed else "tree t\n\nmsg\n"
+    rules_json = json.dumps(rules) if rules_body is None else rules_body
 
     def run(argv, *args, input=None, **kwargs):
         def ok(out=""):
@@ -138,7 +136,7 @@ def _transport(gh_fails=False, branch_exists=True, ancestor=True, signed=False):
             if argv[2] == "user":
                 return ok("DanielClaudeBot\n")
             if "/rules/branches/" in argv[2]:
-                return ok(json.dumps(rules))
+                return ok(rules_json)
             return ok(json.dumps(bodies[int(argv[2].rsplit("/", 1)[1])]))
         if cmd.startswith("git ls-remote"):
             return ok(f"{remote_head}\trefs/heads/topic\n" if branch_exists else "")
@@ -148,10 +146,8 @@ def _transport(gh_fails=False, branch_exists=True, ancestor=True, signed=False):
             return subprocess.CompletedProcess(argv, 0 if ancestor else 1, "", "")
         if cmd.startswith("git rev-list --merges"):
             return ok("")
-        if cmd.startswith("git rev-list"):
-            return ok(f"{UNSIGNED}\n")
-        if cmd.startswith("git cat-file"):
-            return ok(f"{UNSIGNED} commit {len(commit)}\n{commit}\n")
+        if cmd.startswith("git log"):
+            return ok(f"{UNSIGNED} {'G' if signed else 'N'}\n")
         raise AssertionError(f"unexpected command: {cmd}")
 
     return run
@@ -174,7 +170,23 @@ def test_a_push_no_rule_binds_exits_0(monkeypatch, capsys):
     # A new branch of signed commits trips neither `update` nor `required_signatures`.
     monkeypatch.setattr(subprocess, "run", _transport(branch_exists=False, signed=True))
     assert probe.main(["push-rules", "topic"]) == PROBE_OK
-    assert "no active ruleset rule binds this push" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "no active ruleset rule binds this push" in out
+    # A signed commit under required_signatures passes only if GitHub holds the key.
+    assert "caveat    required_signatures: 1 signed commit(s)" in out
+
+
+def test_an_unsigned_push_gets_no_signature_caveat(monkeypatch, capsys):
+    monkeypatch.setattr(subprocess, "run", _transport(branch_exists=False))
+    probe.main(["push-rules", "topic"])
+    assert "caveat" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("body", ['{"message": "Not Found"}', '["update"]'])
+def test_a_rules_response_of_the_wrong_shape_exits_75(body, monkeypatch, capsys):
+    monkeypatch.setattr(subprocess, "run", _transport(rules_body=body))
+    assert probe.main(["push-rules", "topic"]) == PROBE_UNREADABLE
+    assert "could not read" in capsys.readouterr().err
 
 
 def test_a_failed_rules_read_exits_75_with_the_error_on_stderr(monkeypatch, capsys):

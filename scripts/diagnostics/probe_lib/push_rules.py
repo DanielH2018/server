@@ -18,10 +18,11 @@ This reads, in order:
   probe then reports the bypass as unknown and counts the rule as refusing.
 - Local git state for the push itself: whether the branch is on the remote (`creation` versus
   `update`), whether the remote head is an ancestor of the pushed revision (`non_fast_forward`),
-  and which commits not on any remote-tracking ref carry no signature header
-  (`required_signatures`). GitHub verifies a signature against the pusher's registered key; a
-  commit with no `gpgsig` header fails that check whatever key it would have used, so the
-  header's absence is the part a local read can decide.
+  and which commits not on any remote-tracking ref carry no signature at all
+  (`required_signatures`), read as `git log --format='%H %G?'`. `N` is the one status git
+  gives without verifying anything, so it holds whatever keys this checkout trusts. GitHub
+  verifies a signature against the pusher's registered key, which a local read cannot see, so
+  a signed commit under that rule is reported with a caveat rather than as passing.
 
 Exit codes: 0 when no rule refuses the push (bypassed rules are listed, since GitHub still
 prints them as `Bypassed rule violations` on a push that lands), 1 when at least one rule
@@ -67,6 +68,7 @@ class PushFacts:
     exists: bool
     fast_forward: bool
     unsigned: list[str] = field(default_factory=list)
+    signed: list[str] = field(default_factory=list)
     merges: list[str] = field(default_factory=list)
 
 
@@ -79,16 +81,15 @@ def _checked(argv, proc):
     return proc.stdout
 
 
-def run_git(*args, input=None, ok_codes=(0,)):
+def run_git(*args, ok_codes=(0,)):
     """Run one git read; an exit outside `ok_codes` raises `Unreadable` with its stderr."""
     try:
-        proc = git(*args, check=False, timeout=30, input=input)
+        proc = git(*args, check=False, timeout=30)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise Unreadable(f"git {' '.join(args[:2])}: {exc}") from exc
     if proc.returncode not in ok_codes:
-        _checked(
-            ["git", *args], proc
-        )  # raises: a code outside ok_codes is never 0 here
+        # A code outside ok_codes is never 0 here, so this raises.
+        _checked(["git", *args], proc)
     return proc
 
 
@@ -107,23 +108,18 @@ def repo_slug(remote_url):
     return match.group("slug") if match else None
 
 
-def unsigned_commits(raw_batch):
-    """The SHAs in `git cat-file --batch` output whose commit object carries no signature.
+def signature_status(log_text):
+    """Split `git log --format='%H %G?'` output into (unsigned, signed) SHA lists.
 
-    An SSH or GPG signature is a `gpgsig` (or `gpgsig-sha256`) header line, which sits before
-    the blank line that ends the header block.
+    `N` means the commit carries no signature. Every other status (`G`, `U`, `E`, `B` and the
+    rest) means it carries one, which GitHub may or may not verify.
     """
-    unsigned = []
-    pos = 0
-    while pos < len(raw_batch):
-        eol = raw_batch.index("\n", pos)
-        sha, _kind, size = raw_batch[pos:eol].split(" ")
-        body = raw_batch[eol + 1 : eol + 1 + int(size)]
-        pos = eol + 1 + int(size) + 1
-        headers = body.split("\n\n", 1)[0].splitlines()
-        if not any(h.startswith(("gpgsig ", "gpgsig-sha256 ")) for h in headers):
-            unsigned.append(sha)
-    return unsigned
+    unsigned, signed = [], []
+    for line in log_text.splitlines():
+        sha, _, status = line.partition(" ")
+        if sha:
+            (unsigned if status.strip() == "N" else signed).append(sha)
+    return unsigned, signed
 
 
 def read_push_facts(branch, rev, remote):
@@ -142,15 +138,14 @@ def read_push_facts(branch, rev, remote):
         except Unreadable as exc:
             raise Unreadable(f"{exc} (fetch {remote} first)") from exc
         fast_forward = probe.returncode == 0
-    new = run_git("rev-list", pushed, "--not", f"--remotes={remote}").stdout.split()
-    unsigned = []
-    if new:
-        batch = run_git("cat-file", "--batch", input="\n".join(new) + "\n")
-        unsigned = unsigned_commits(batch.stdout)
+    log = run_git("log", "--format=%H %G?", pushed, "--not", f"--remotes={remote}")
+    unsigned, signed = signature_status(log.stdout)
     merges = run_git(
         "rev-list", "--merges", pushed, "--not", f"--remotes={remote}"
     ).stdout.split()
-    return PushFacts(branch, remote_head is not None, fast_forward, unsigned, merges)
+    return PushFacts(
+        branch, remote_head is not None, fast_forward, unsigned, signed, merges
+    )
 
 
 def why_it_binds(rule_type, facts):
@@ -204,8 +199,23 @@ def evaluate(rules, rulesets, facts):
     return refusing, bypassed
 
 
-def format_report(facts, refusing, bypassed, login, remote_url):
-    """The text view: one line per binding rule, then who the bypass answers were for."""
+def signature_rule_applies(rules, rulesets):
+    """True when an active ruleset puts `required_signatures` on the branch."""
+    return any(
+        r["type"] == "required_signatures"
+        and rulesets[r["ruleset_id"]].get("enforcement") == "active"
+        for r in rules
+    )
+
+
+def format_report(
+    facts, refusing, bypassed, login, remote_url, signatures_required=False
+):
+    """The text view: one line per binding rule, then who the bypass answers were for.
+
+    With `signatures_required`, a push carrying signed commits gets a caveat line: the probe
+    sees that each is signed, never whether GitHub holds the key that signed it.
+    """
     state = "on the remote" if facts.exists else "not on the remote (a push creates it)"
     lines = [f"branch {facts.branch}: {state}"]
     if not refusing and not bypassed:
@@ -221,6 +231,12 @@ def format_report(facts, refusing, bypassed, login, remote_url):
         )
     for name, rid, rtype, reason, _bypass in bypassed:
         lines.append(f"  bypassed  ruleset {name!r} ({rid}) rule {rtype}: {reason}")
+    if signatures_required and facts.signed:
+        lines.append(
+            f"  caveat    required_signatures: {len(facts.signed)} signed commit(s) pass "
+            "only if GitHub holds the signing key on the pushing account; this probe cannot "
+            "check that, so a refusal here means an unregistered key."
+        )
     if bypassed:
         lines.append(
             "GitHub still prints a bypassed rule as `remote: Bypassed rule violations for "
@@ -249,13 +265,18 @@ def run_push_rules(ns) -> int:
             for rid in dict.fromkeys(r["ruleset_id"] for r in rules)
         }
         facts = read_push_facts(ns.branch, ns.rev, ns.remote)
-    except (Unreadable, json.JSONDecodeError, KeyError) as exc:
+        refusing, bypassed = evaluate(rules, rulesets, facts)
+        signatures_required = signature_rule_applies(rules, rulesets)
+    # A response of an unexpected shape (not a list, an item that is not a dict) is a read
+    # that answered nothing, never a verdict: exit 1 would read as "a rule refuses".
+    except (Unreadable, ValueError, TypeError, KeyError, AttributeError) as exc:
         print(f"probe push-rules: could not read: {exc}", file=sys.stderr)
         return PROBE_UNREADABLE
     try:
         login = run_gh("api", "user", "--jq", ".login").strip()
     except Unreadable:
         login = ""
-    refusing, bypassed = evaluate(rules, rulesets, facts)
-    print(format_report(facts, refusing, bypassed, login, remote_url))
+    print(
+        format_report(facts, refusing, bypassed, login, remote_url, signatures_required)
+    )
     return PROBE_FAILED if refusing else PROBE_OK

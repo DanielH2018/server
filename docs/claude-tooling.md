@@ -346,7 +346,9 @@ bypasses it, and names neither the ruleset nor the reason. The probe reads the r
 the branch from `rules/branches/<branch>`, then each ruleset's name, enforcement and
 `current_user_can_bypass`. It evaluates each rule against the push from local git state: whether
 the branch exists on the remote, whether the push is a fast-forward, and which new commits carry
-no signature header. It prints each rule that binds as `REFUSES` or `bypassed`.
+no signature (`%G?` of `N`). It prints each rule that binds as `REFUSES` or `bypassed`. A signed
+commit under `required_signatures` prints as a caveat instead: GitHub verifies the signature
+against the pushing account's registered key, which the probe cannot read.
 
 The bypass answer is for the `gh` login, which the probe prints beside the push remote's URL,
 because `git push` may authenticate as another account. Exit 1 means at least one rule refuses
