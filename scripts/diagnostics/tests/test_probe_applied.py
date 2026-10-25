@@ -67,6 +67,10 @@ EXTRA = """\
     - name: Write the box marker
       ansible.builtin.copy: {content: "box {{ port }}\\n", dest: /etc/x/box}
 """
+GATED_FILE = """\
+- name: Write the gated file
+  ansible.builtin.copy: {content: gated, dest: /etc/x/gated}
+"""
 CTX = {"port": 8080}
 SCRIPT = "#!/bin/sh\nexec x --port {{ port }}\n"
 
@@ -76,6 +80,7 @@ def _role(tmp_path, tasks=TASKS):
     for sub, name, text in (
         ("tasks", "main.yml", tasks),
         ("tasks", "extra.yml", EXTRA),
+        ("tasks", "gated.yml", GATED_FILE),
         ("templates", "x.sh.j2", SCRIPT),
         ("templates", "secret.j2", "token={{ x_api_token }}\n"),
         ("files", "lib.py", "print('x')\n"),
@@ -332,11 +337,6 @@ GATED = """\
     ids=["inventory-true", "inventory-false", "run-time-fact"],
 )
 def test_an_import_gate_is_evaluated_against_the_host_vars(tmp_path, capsys, when, ctx, code, line):  # fmt: skip
-    role = _role(tmp_path, GATED.format(when=when))
-    (role / "tasks" / "gated.yml").write_text(
-        "- name: Write the gated file\n"
-        "  ansible.builtin.copy: {content: gated, dest: /etc/x/gated}\n"
-    )
     assert _run(tmp_path, _as_wanted, GATED.format(when=when), ctx) == code
     out = capsys.readouterr().out
     assert line in out
@@ -352,7 +352,10 @@ def test_a_set_fact_name_is_not_read_from_a_default_of_the_same_name(tmp_path):
     _, skips = applied_tasks.expected(
         _role(tmp_path, tasks), "daniel-box", {"x_list": []}
     )
-    assert [s.unchecked for s in skips if "gated.yml" in s.task] == [True]
+    gated = [s for s in skips if "gated.yml" in s.task]
+    assert [(s.unchecked, "`x_list` has no value" in s.reason) for s in gated] == [
+        (True, True)
+    ]
 
 
 def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):
