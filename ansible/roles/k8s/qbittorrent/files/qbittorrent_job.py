@@ -53,7 +53,7 @@ from collections.abc import Callable, Mapping
 from flux_job_connect import Request, open_url, refused
 
 # A copy of `apply_prefs.DESIRED`; that file carries the reason for each value.
-DESIRED: dict[str, bool | int] = {
+DESIRED: dict[str, bool | int | str] = {
     "connection_speed": 100,
     "max_connec": 1000,
     "max_connec_per_torrent": 200,
@@ -63,6 +63,26 @@ DESIRED: dict[str, bool | int] = {
     "checking_memory_use": 128,
     "preallocate_all": True,
     "enable_piece_extent_affinity": True,
+    "excluded_file_names_enabled": True,
+    "excluded_file_names": "\n".join(
+        (
+            "*.exe",
+            "*.scr",
+            "*.com",
+            "*.pif",
+            "*.bat",
+            "*.cmd",
+            "*.msi",
+            "*.lnk",
+            "*.vbs",
+            "*.ps1",
+            "*.7z",
+            "*.zip",
+            "*.zipx",
+            "*.arj",
+            "*.iso",
+        )
+    ),
 }
 
 # The socket timeout of each WebUI or egress request, in seconds, as `apply_prefs.py` uses.

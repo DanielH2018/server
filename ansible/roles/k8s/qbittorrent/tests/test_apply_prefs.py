@@ -6,12 +6,19 @@ without a socket. Testing the HTTP transport instead would prove only that urlli
 and would leave the comparison — the part with the trap in it — unexercised.
 """
 
+import fnmatch
 import io
 from email.message import Message
 import urllib.error
 
 import apply_prefs
 import pytest
+
+
+def _int_pref(key: str) -> int:
+    value = apply_prefs.DESIRED[key]
+    assert isinstance(value, int)
+    return value
 
 
 def test_no_changes_when_everything_matches() -> None:
@@ -34,10 +41,40 @@ def test_absent_key_counts_as_a_change() -> None:
 
 
 def test_extra_keys_in_current_are_ignored() -> None:
-    # The live API returns ~200 preferences; this script owns eight of them and must not
-    # report the rest as drift.
+    # The live API returns ~200 preferences; this script owns only the DESIRED keys and
+    # must not report the rest as drift.
     current = dict(apply_prefs.DESIRED) | {"web_ui_port": 8080, "dht": True}
     assert apply_prefs.diff_prefs(current, apply_prefs.DESIRED) == {}
+
+
+@pytest.mark.parametrize(
+    ("filename", "excluded"),
+    [
+        # The three fake-episode shapes indexers served (#6274).
+        ("isooy2.exe", True),
+        ("VisionQuest S01E05 Firewall 1080p WEB H264-EZTV.7z", True),
+        ("[SubsPlease] Kimetsu no Yaiba - 05 (1080p) [57D14100].iso", True),
+        ("Setup.EXE", True),
+        # What a real release carries must still download.
+        ("Show.S01E05.1080p.WEB.H264-GRP.mkv", False),
+        ("Show.S01E05.1080p.WEB.H264-GRP.mp4", False),
+        ("[shincaps] Show - 12 (AT-X 1440x1080 MPEG2 AAC).ts", False),
+        ("Show.S01E05.en.srt", False),
+        ("Show.S01E05.ass", False),
+        ("show.s01e05.rar", False),
+        ("show.s01e05.r00", False),
+        ("show.s01e05.nfo", False),
+    ],
+)
+def test_excluded_file_names_skip_fakes_and_keep_real_releases(
+    filename: str, excluded: bool
+) -> None:
+    # qBittorrent matches each pattern as a case-insensitive wildcard against the file
+    # name; fnmatch on lowered strings is the same match for these `*.ext` patterns.
+    assert apply_prefs.DESIRED["excluded_file_names_enabled"] is True
+    patterns = apply_prefs.EXCLUDED_FILE_NAMES
+    matched = any(fnmatch.fnmatchcase(filename.lower(), p.lower()) for p in patterns)
+    assert matched is excluded
 
 
 def test_every_desired_key_is_reported_when_current_is_empty() -> None:
@@ -48,15 +85,16 @@ def test_every_desired_key_is_reported_when_current_is_empty() -> None:
 def test_desired_values_are_scalars_the_api_accepts() -> None:
     # setPreferences serialises to JSON, and qBittorrent silently ignores a key whose type
     # it does not expect — which the read-back in main() would then report as NOT APPLIED.
-    # Catch a bad literal here instead.
+    # Catch a bad literal here instead. The one string is the "\n"-joined pattern list.
     for key, value in apply_prefs.DESIRED.items():
-        assert isinstance(value, bool | int), f"{key} is {type(value).__name__}"
+        expected = str if key == "excluded_file_names" else bool | int
+        assert isinstance(value, expected), f"{key} is {type(value).__name__}"
 
 
 def test_hashing_threads_stays_within_the_container_cpu_limit() -> None:
     # qbittorrent_k8s_cpu_limit is "2" in the role defaults. More hashing threads than
     # that buys nothing and invites throttling, since the CPU REQUEST is only 100m.
-    assert apply_prefs.DESIRED["hashing_threads"] <= 2
+    assert _int_pref("hashing_threads") <= 2
 
 
 def test_memory_working_set_fits_the_container_memory_limit() -> None:
@@ -67,7 +105,7 @@ def test_memory_working_set_fits_the_container_memory_limit() -> None:
     # asserting: the setting is inert on Linux (see the DESIRED comment), so it cannot
     # actually exceed anything. Kept so a future edit can't raise it past the container
     # limit on the assumption that it works.
-    assert apply_prefs.DESIRED["memory_working_set_limit"] <= 1536
+    assert _int_pref("memory_working_set_limit") <= 1536
 
 
 def test_checking_memory_use_leaves_room_under_the_container_memory_limit() -> None:
@@ -76,7 +114,7 @@ def test_checking_memory_use_leaves_room_under_the_container_memory_limit() -> N
     # limit — with mmap page cache already growing to fill it, since memory_working_set_limit
     # bounds nothing here — a large value turns a routine post-restore recheck into the one
     # operation that can push the cgroup over. 256 keeps it to an eighth of the limit.
-    assert apply_prefs.DESIRED["checking_memory_use"] <= 256
+    assert _int_pref("checking_memory_use") <= 256
 
 
 class _StubClient(apply_prefs.QbtClient):

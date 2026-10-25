@@ -48,8 +48,7 @@ UNIT_DIR = "/usr/lib/systemd/system"
 LINK = f"{UNIT_DIR}/timers.target.wants/{RECOVERY_TIMER}"
 
 # The watch set the rendered script must carry: every containers_list and compose_services name
-# on daniel-pi, plus the sub-proxy the docker-proxy role's compose file declares beside its list
-# entry. Named rather than counted so the failure says which container the script stopped
+# on daniel-pi, plus the sub-proxy the docker-proxy service file declares beside its entry. Named rather than counted so the failure says which container the script stopped
 # watching.
 PI_CONTAINERS = [entry["name"] for entry in pi_entries_in(PI_HOST_VARS)]
 EXPECTED_WATCH_SET = {*PI_CONTAINERS, "docker-proxy-lifecycle"}

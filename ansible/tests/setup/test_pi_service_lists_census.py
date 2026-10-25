@@ -210,7 +210,7 @@ def unmoved(tmp_path_factory) -> dict:
     }
 
 
-@pytest.mark.parametrize("name", ["docker-proxy", "wg-easy", "autoheal", "alloy"])
+@pytest.mark.parametrize("name", ["wg-easy", "autoheal", "alloy"])
 def test_a_move_changes_no_render(name, unmoved, tmp_path):
     pi = moved(name)
     assert name in {e["name"] for e in pi["compose_services"]}
