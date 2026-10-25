@@ -374,7 +374,7 @@ def test_host_sets_names_every_host_check_rule():
     hosts = ("daniel-box", "daniel-server", "daniel-pi")
     every_host = (
         "TextfileCollectorError AideCheckFailed AideCheckNotReporting RkhunterScanFailed "
-        "RkhunterScanNotReporting HostCheckOverdue"
+        "RkhunterScanNotReporting"
     ).split()
     box_only = (
         "FanoutSlotsIdleWithFreeWork ArtifactsSyncFailed ArtifactsSyncNotReporting "
@@ -394,7 +394,7 @@ def test_host_sets_names_every_host_check_rule():
         "DiskHealthNotReporting/daniel-box",
     } | {
         f"{alert}/{host}"
-        for alert in ("HostReconcileFailed", "HostRebootOverdue")
+        for alert in ("HostReconcileFailed", "HostRebootOverdue", "HostCheckOverdue")
         for host in hosts
     }
 

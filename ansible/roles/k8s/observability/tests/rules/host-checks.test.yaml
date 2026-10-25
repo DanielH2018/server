@@ -1411,7 +1411,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's new-producer check is past its own deadline.
               description: >-
