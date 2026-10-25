@@ -519,6 +519,10 @@ groups:
       # NotReporting rule's stale arm, at the same threshold, so an Alertmanager inhibit keyed on
       # `check` and `origin` (alertmanager-secret.yaml.j2) mutes it wherever a pair exists. It
       # pages alone only for a producer with no pair (#6186), and so it carries no `shadow`.
+      # The `for: 2m` lets the pair fire first. Most pairs sit in another group, which Prometheus
+      # evaluates at its own offset inside the 1m evaluation interval, so a pair can start up to
+      # a minute after this rule crosses. Without the hold, this rule's page would flush after
+      # group_wait, before the inhibit's source exists.
       - alert: HostCheckOverdue
         expr: |
           (
@@ -527,6 +531,7 @@ groups:
               homelab_check_deadline_seconds{job="node",origin="daniel-box"}
           )
           unless on (origin) (up{job="node"} == 0)
+        for: 2m
         labels:
           severity: warning
           service: daniel-box
@@ -545,6 +550,7 @@ groups:
               homelab_check_deadline_seconds{job="node",origin="daniel-server"}
           )
           unless on (origin) (up{job="node"} == 0)
+        for: 2m
         labels:
           severity: warning
           service: daniel-server
@@ -563,6 +569,7 @@ groups:
               homelab_check_deadline_seconds{job="node-pi",origin="daniel-pi"}
           )
           unless on (origin) (up{job="node-pi"} == 0)
+        for: 2m
         labels:
           severity: warning
           service: daniel-pi

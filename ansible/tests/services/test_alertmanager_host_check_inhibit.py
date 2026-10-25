@@ -170,3 +170,14 @@ def test_the_same_check_overdue_on_another_origin_still_pages():
     target = overdue_alert("aide-check", "daniel-server")
     assert not inhibited(target, [source, target])
     assert BLACKHOLE not in [r["receiver"] for r in reached(route_tree(), target)]
+
+
+def test_host_check_overdue_holds_past_a_cross_group_pairs_first_evaluation():
+    # A pair in another rule group starts firing up to one evaluation interval (Prometheus's
+    # default 1m; prometheus.yaml.j2 sets none) after HostCheckOverdue crosses. The hold must
+    # outlast that, or the target's page flushes before the inhibit's source exists.
+    assert {r["labels"]["service"]: r.get("for") for r in overdue_rules()} == {
+        "daniel-box": "2m",
+        "daniel-server": "2m",
+        "daniel-pi": "2m",
+    }

@@ -1385,7 +1385,7 @@ tests:
                 host.
 
   # A check no per-check rule names stops writing at time 0 with a 600s deadline. HostCheckOverdue
-  # stays quiet at 9m and fires at 11m from its own deadline series. A pod exporter's check with
+  # crosses its own deadline series at 11m, holds pending through 12m and fires at 13m. A pod exporter's check with
   # the same origin and an older timestamp is pods.yaml's to page, so it never appears here.
   - interval: 1m
     input_series:
@@ -1403,7 +1403,10 @@ tests:
       - eval_time: 9m
         alertname: HostCheckOverdue
         exp_alerts: []
-      - eval_time: 11m
+      - eval_time: 12m
+        alertname: HostCheckOverdue
+        exp_alerts: []
+      - eval_time: 13m
         alertname: HostCheckOverdue
         exp_alerts:
           - exp_labels:
