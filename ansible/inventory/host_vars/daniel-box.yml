@@ -1207,7 +1207,7 @@ containers_list:
     owner: flux
   # system-upgrade-controller, its CRD and the two k3s Plans (docs/target-architecture/host/
   # h6-k3s-suc.md, H6.1b). Born Flux-owned, so every Ansible path skips it from its first commit.
-  # The Plans select the nodes in `system_upgrade_nodes` (daniel-box since H6.3c). No port and no
+  # The Plans select no node until H6.3c and H6.3d widen `system_upgrade_nodes`. No port and no
   # hostname: nothing dials the controller, and the namespace denies all ingress.
   - name: system-upgrade
     platform: k8s

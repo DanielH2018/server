@@ -322,7 +322,8 @@ the node config, and makes three gated tasks reachable. Each is gated, so the ta
 control plane down rather than always doing so:
 
 - `Install or reconfigure the k3s server` runs the installer, which restarts k3s, when
-  `k3s_server_args` gained an argument or `k3s_version` moved.
+  `k3s_server_args` gained an argument or the binary is missing. A moved `k3s_version` does not
+  trigger it, because SUC writes the server's version (H6.3c).
 - `Restart k3s so the log drop-in takes effect` restarts the unit when the drop-in changed and
   the installer did not run.
 - `Rotate the encryption key and re-encrypt Secrets already stored in etcd` runs `k3s

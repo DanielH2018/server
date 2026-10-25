@@ -89,6 +89,7 @@ kubectl -n longhorn-system get volumes.longhorn.io \
   -o custom-columns='NAME:.metadata.name,STATE:.status.state,ROBUST:.status.robustness'
 kubectl get svc -A --field-selector spec.type=LoadBalancer -o wide
 uv run python scripts/diagnostics/probe.py monitors
+systemctl show k3s -p ExecMainStartTimestamp
 ```
 
 ## Before the Plan first selects a node (**operator-only**)
@@ -131,6 +132,10 @@ kubectl get nodes -L plan.upgrade.cattle.io/k3s-server
 kubectl -n system-upgrade get jobs -o custom-columns=NAME:.metadata.name,DONE:.status.completionTime
 systemctl show k3s -p ExecMainStartTimestamp
 ```
+
+A **minor** bump first passes the guest rehearsal of
+`docs/target-architecture/host/h6-k3s-suc.md` (*Rehearsal in a drill guest*, H6.1b2), and its PR
+body quotes the result. A patch bump needs no rehearsal.
 
 Verify before touching the agent:
 
@@ -226,9 +231,9 @@ uv run python scripts/diagnostics/probe.py monitors
 
 A pin change no longer reaches the deployer's setup plane. The pin lives in the Flux-owned
 `system-upgrade` role (H6.1b), so a bump routes to the `system-upgrade` tag, which `land.sh`
-waits on through promotion, and the deployer writes no `manual_plane` line for `k3s`. The two
-Plans select no node until H6.3c, so merging the pin upgrades nothing: this runbook's hand apply
-is still the upgrade, and no line reminds you that it is owed. Another change under
+waits on through promotion, and the deployer writes no `manual_plane` line for `k3s`. The
+`k3s-server` Plan selects daniel-box since H6.3c, so merging the pin upgrades the server through
+SUC and no hand apply is owed for it. The agent keeps the hand apply until H6.3d. Another change under
 `ansible/roles/setup/k3s/` still takes the setup plane's path. `k3s` is routed to
 `k3s-bringup.yml`, not to `initial_setup.yml` (`deploy_setup_roles.py:roles_outside_initial_setup_in`),
 so `tick_applies_setup_role` returns false for it. `handle_broad` (`deploy_handlers.py`) then
