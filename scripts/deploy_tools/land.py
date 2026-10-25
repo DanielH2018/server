@@ -232,7 +232,13 @@ def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
             file=sys.stderr,
         )
         return LAND_BAD_ARGS
-    land = functools.partial(handoff.land_through_unit, opts.pr, unit, tools.systemctl)
+    land = functools.partial(
+        handoff.land_through_unit,
+        opts.pr,
+        unit,
+        tools.systemctl,
+        follow=tools.follow_journal,
+    )
     return _detached(opts, land) if opts.detach else land()
 
 

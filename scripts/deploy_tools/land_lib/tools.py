@@ -382,6 +382,30 @@ def systemctl(*args: str, timeout: float) -> subprocess.CompletedProcess[str]:
     )
 
 
+def follow_journal(unit: str, since: float) -> subprocess.Popen[str]:
+    """`journalctl -f` on `unit` from `since` (epoch seconds), one message per line on stdout.
+
+    `-o cat` prints the message alone, so a relayed `== ` phase line reads as the unit wrote it.
+    `-f` reads only the current boot, which holds every unit this landing starts.
+    """
+    return subprocess.Popen(
+        [
+            "journalctl",
+            "-u",
+            unit,
+            "-f",
+            "-o",
+            "cat",
+            "--no-pager",
+            f"--since=@{int(since)}",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+
+
 def lock_holder() -> str:
     """The tree lock's holder as `pid <pid> (etimes, command): <etimes> <command>`, or ''.
 
@@ -569,6 +593,8 @@ class Tools:
     lock_holder: Callable[[], str] = lock_holder
     # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
+    # Its other boundary: follows the unit's journal, so its phase lines reach the handoff's log.
+    follow_journal: Callable[[str, float], subprocess.Popen[str]] = follow_journal
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog
     sleep: Callable[[float], None] = time.sleep
