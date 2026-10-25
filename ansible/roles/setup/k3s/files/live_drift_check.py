@@ -144,6 +144,21 @@ PATCH_MAINTAINED = {
     ),
 }
 
+# Objects a host script creates with `kubectl create`, outside any apply, so they never carry
+# an apply baseline and would read as "no apply baseline" for as long as they exist.
+#
+# Same shape as PATCH_MAINTAINED, for the same reason: each entry names the script and the
+# function that writes the object, so the entry reads as stale if that script ever switches to
+# `apply`. Switching it is not the fix: an applied object would need a manifest, which the
+# manifest-prune check would then look for.
+HOST_SCRIPT_WRITTEN = {
+    ("configmap", "homelab", "registry-gc-ghcr-mirror-keep"): (
+        "written by `kubectl create configmap` in write_mirror_keep_set of "
+        "roles/setup/k8s_host_files/templates/registry-gc.sh.j2 (the weekly registry GC), "
+        "which deletes and recreates it each run"
+    ),
+}
+
 # The residue manager `kubectl` writes when it migrates a client-side-applied object to
 # server-side apply. It carries operation "Apply" but owns only the last-applied annotation,
 # so it does NOT mean the object is server-side managed.
@@ -251,7 +266,9 @@ def is_foreign(kind: str, namespace: str, name: str) -> str | None:
     a wrong reason on a live exemption is worse than a coarse one, because the entry that
     holds the true reason becomes unreachable and rots unnoticed.
     """
-    specific = PATCH_MAINTAINED.get((kind, namespace, name))
+    specific = PATCH_MAINTAINED.get((kind, namespace, name)) or HOST_SCRIPT_WRITTEN.get(
+        (kind, namespace, name)
+    )
     if specific:
         return specific
     if name in CONTROLLER_OBJECTS:

@@ -16,6 +16,7 @@ import re
 import syslog
 
 import live_drift_check as ldc
+from _shell_render import rendered_shell_text
 
 
 def _applied(**spec) -> dict:
@@ -186,6 +187,31 @@ def test_the_patch_maintained_exemption_names_its_mechanism():
     # to `apply` makes the exemption obviously wrong rather than permanently true.
     reason = ldc.is_foreign("configmap", "longhorn-system", "longhorn-storageclass")
     assert reason and "patch" in reason
+
+
+def test_the_registry_gc_keep_set_is_exempt_and_names_its_writer():
+    # The weekly registry GC writes this ConfigMap with `kubectl create`, so it never has a
+    # baseline. Exempt, it no longer holds the tile down after every Sunday run (#6280).
+    reason = ldc.is_foreign("configmap", "homelab", "registry-gc-ghcr-mirror-keep")
+    assert reason and "registry-gc.sh" in reason and "create" in reason
+
+
+def test_an_unexempted_configmap_beside_it_is_still_checked():
+    # The exemption is by identity, not by namespace: another baseline-less ConfigMap in
+    # homelab must still read as a pruning risk.
+    assert ldc.is_foreign("configmap", "homelab", "registry-gc-something-else") is None
+
+
+def test_the_host_script_exemption_matches_what_the_script_writes():
+    # The entry holds only while the script still creates this name with `kubectl create` in
+    # the namespace it lists. A rename or a switch to `apply` fails here, not on the live tile.
+    script = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
+    assert set(ldc.HOST_SCRIPT_WRITTEN) == {
+        ("configmap", "homelab", "registry-gc-ghcr-mirror-keep")
+    }
+    assert "MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep" in script
+    assert '$KUBECTL create configmap "$MIRROR_KEEP_CM"' in script
+    assert 'NS="homelab"' in script and 'KUBECTL="k3s kubectl -n ${NS}"' in script
 
 
 def test_routing_and_policy_kinds_are_covered():
