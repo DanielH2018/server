@@ -21,6 +21,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib.arr import ARR_PORTS
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
 from diagnostics.probe_lib.flux import FLUX_HELP, FLUX_TAGS_HELP
+from diagnostics.probe_lib.landing_verdicts import VERDICTS_HELP, add_verdicts_args
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE, contract
 from lib.kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
@@ -511,11 +512,9 @@ def _build_parser():
             "something blocks",
         ),
     )
-    _flag(
-        landing,
-        "--json",
-        "one JSON document, the shape the deck mod in .claude/plugins/deck/ reads",
-    )
+    _flag(landing, "--json", "the JSON document the deck mod reads")
+    # The add_parser literal stays here because test_setup_wiring.py scans this file for it.
+    add_verdicts_args(sub.add_parser("landing-verdicts", help=VERDICTS_HELP))
     gitops_state = sub.add_parser(
         "gitops-state",
         **_verdict_help(

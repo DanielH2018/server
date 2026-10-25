@@ -74,7 +74,7 @@ class FakeFollower:
 
 def _hand_off(tmp_path, follow=None, **fake):
     systemctl = FakeSystemctl(tmp_path / UNIT / f"{PR}.verdict", **fake)
-    rc = handoff.land_through_unit(
+    rc, _line = handoff.land_through_unit(
         PR,
         UNIT,
         systemctl,
@@ -250,6 +250,22 @@ def test_the_follower_is_stopped_however_the_start_ends(tmp_path, fake):
 
     _hand_off(tmp_path, follow=follow, **fake)
     assert started and started[0].poll() is not None
+
+
+def test_a_handed_off_landing_is_recorded_in_this_users_verdict_log(
+    monkeypatch, tmp_path, capsys
+):
+    """The unit records in the operator's file, which the handing-off user cannot read."""
+    from deploy_tools.land_lib import verdict_log
+
+    monkeypatch.setenv(HANDOFF_ENV, UNIT)
+    systemctl = FakeSystemctl(tmp_path / "unused", stderr="Access denied")
+    assert land.main(["--pr", PR], tools=Tools(systemctl=systemctl)) == 1
+    printed = capsys.readouterr().out.splitlines()[-1]
+    assert printed.startswith("VERDICT: refused (PR #3633")
+    assert [(e["pr"], e["rc"], e["line"]) for e in verdict_log.latest()] == [
+        (PR, 1, printed)
+    ]
 
 
 _VERDICT_LINE = re.compile(r"^VERDICT: (\S+) \(", re.MULTILINE)

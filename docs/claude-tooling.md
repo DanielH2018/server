@@ -322,6 +322,20 @@ agrees. Each fact comes from a reader that already exists:
 A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
 on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.
 
+### `landing-verdicts [<pr>] [--json] [--limit N]`
+
+`landing-verdicts` prints the newest `VERDICT:` line of each PR you landed, newest first,
+with its time and land.sh's exit code (#6325). Given a PR, it prints that PR's line alone and
+exits 1 when it has none. Read it instead of grepping a background task's output file for
+`VERDICT`, which is a harness internal that disappears with the session.
+
+Every landing appends its line as it exits, plain, `--detach` or crashed, to
+`$XDG_STATE_HOME/homelab/landing-verdicts.jsonl` (`~/.local/state/` by default;
+`$LAND_VERDICT_LOG` overrides it). A handed-off landing is recorded by the user that handed
+it off as well as by the lander unit. The file is per user and per host, so a landing run on
+daniel-box reads back only on daniel-box. `land_lib/verdict_log.py` owns the format and the
+trim.
+
 ### `gitops-state [--json]`
 
 `gitops-state` prints every marker the GitOps deployer keeps, without ticking (#3931). It reads
