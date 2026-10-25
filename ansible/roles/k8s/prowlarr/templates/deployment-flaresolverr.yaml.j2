@@ -54,6 +54,7 @@ spec:
       containers:
         - name: flaresolverr
           image: {{ prowlarr_k8s_flaresolverr_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ prowlarr_k8s_flaresolverr_port }}
           # The comment below is what makes this assertable where its LSIO siblings are not:

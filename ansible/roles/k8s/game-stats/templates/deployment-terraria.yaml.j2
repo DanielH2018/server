@@ -29,6 +29,7 @@ spec:
       containers:
         - name: terraria-stats
           image: {{ game_stats_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command: ["python", "/app/stats.py"]
 {{ hardened_security_context(read_only=true) }}
           env:

@@ -41,6 +41,7 @@ spec:
       containers:
         - name: gpu-exporter
           image: {{ gpu_exporter_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - python
             - /opt/gpu-exporter/gpu_exporter.py

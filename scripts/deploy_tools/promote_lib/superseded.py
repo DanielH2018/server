@@ -7,7 +7,7 @@ before T's statuses, and once more before a `failed` verdict, because a soak tha
 revision superseded posts `failure` on T at once (#5704).
 
 A failed read of `prod` keeps the wait going and never reads as superseded, so an unreadable
-registry cannot end a verification. No run supersedes another until `promote.SUPERSEDE` is
+registry cannot end a verification. A run is superseded only while `promote.SUPERSEDE` is
 on. docs/target-architecture/deploy/d7-superseding-promotions.md has the design.
 
 Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_superseded.py`

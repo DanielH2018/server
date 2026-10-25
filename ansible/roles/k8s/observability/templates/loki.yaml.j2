@@ -97,6 +97,7 @@ spec:
       containers:
         - name: loki
           image: {{ observability_k8s_loki_image }}
+          imagePullPolicy: IfNotPresent
           args: ["-config.file=/etc/loki/loki.yaml"]
 {{ hardened_security_context(non_root=true) }}
           ports:

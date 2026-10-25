@@ -9,14 +9,14 @@ and the role readers this module shares.
 import pathlib
 
 import yaml
-from deployer_lib.deploy_changes import ChangeSet
-from deployer_lib.deploy_inventory import route_not_ansible_owned, service_owners
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.repo_paths import ALL_VARS
 
 from _role_tasks import in_role_wait_s
 from test_gitops_deploy_timeout_budgets import (
     _DEFAULTS,
     _K8S_ROLES_DIR,
+    _ansible_owned,
+    _live_owners,
     _rollout_timeout_s,
 )
 
@@ -39,16 +39,6 @@ from test_gitops_deploy_timeout_budgets import (
 # since the D5 flips, so the live set is empty; `_ROLLBACK_MUST_FIND` is what shows the
 # derivation still reads the tree, and the fixture pair that the deployer's filter still bites.
 _ROLLBACK_MUST_FIND = "prowlarr"
-
-
-def _ansible_owned(roles: set[str], owners: dict[str, str]) -> set[str]:
-    cs = ChangeSet(k8s=set(roles))
-    route_not_ansible_owned(cs, owners)
-    return cs.k8s
-
-
-def _live_owners() -> dict[str, str]:
-    return service_owners((HOST_VARS / "daniel-box.yml").read_text())
 
 
 def _rollback_terms() -> tuple[int, int, int]:

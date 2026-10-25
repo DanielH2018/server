@@ -56,6 +56,7 @@ template:
     containers:
       - name: verify
         image: {{ flux_job_image }}
+        imagePullPolicy: IfNotPresent
         command:
           - python3
           - {{ script_dir }}/{{ script_name }}

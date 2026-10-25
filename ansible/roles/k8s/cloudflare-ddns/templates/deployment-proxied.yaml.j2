@@ -25,6 +25,7 @@ spec:
       containers:
         - name: cloudflare-ddns
           image: {{ cloudflare_ddns_k8s_image }}
+          imagePullPolicy: IfNotPresent
           # Same image and same measurement as the direct deployment beside this one.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000) }}
           env:
