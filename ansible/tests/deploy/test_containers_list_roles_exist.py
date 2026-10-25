@@ -37,7 +37,7 @@ NOT_SERVICES = frozenset({"common", "archive"})
 
 # Two services the Pi runs, so an emptied census fails by name
 # rather than passing on `set() == set()`.
-KNOWN_PI_SERVICES = frozenset({"wg-easy", "docker-proxy"})
+KNOWN_PI_SERVICES = frozenset({"wg-easy", "alloy"})
 
 
 def _entries():

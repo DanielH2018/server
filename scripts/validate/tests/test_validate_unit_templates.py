@@ -153,6 +153,7 @@ def test_discover_templates_finds_the_known_set():
         "claude-fanout-server-lander.timer.j2",
         "claude-clone-sync.service.j2",
         "claude-dotfiles-sync.service.j2",
+        "claude-bg-resume.service.j2",
         "node_exporter.service.j2",
         "kuma-check.service.j2",
         "kuma-check-boot.service.j2",
@@ -161,7 +162,7 @@ def test_discover_templates_finds_the_known_set():
         "worktree-holders.socket.j2",
         "worktree-holders@.service.j2",
     } <= names
-    assert len(names) == 33
+    assert len(names) == 34
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

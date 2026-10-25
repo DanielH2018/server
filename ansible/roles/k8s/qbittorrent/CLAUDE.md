@@ -77,9 +77,17 @@ threads and the libtorrent working-set bound live in `qBittorrent.conf` on the `
 PVC, so **a WebUI change to any of them is live state no Ansible run reproduces and a volume restore
 silently reverts.**
 
-`files/apply_prefs.py` is the repo-side source of truth for the eight settings tuned for throughput
-on 2026-08-26. It diffs before writing, sends only the keys that differ, and reads back to prove the
+`files/apply_prefs.py` is the repo-side source of truth for the settings tuned for throughput on
+2026-08-26. It diffs before writing, sends only the keys that differ, and reads back to prove the
 write, so a second run reports "nothing to do".
+
+**`DESIRED` also holds the excluded-file-name list, which is not a throughput setting.**
+qBittorrent marks a file matching `*.exe`, `*.7z`, `*.iso` or another listed pattern "do not
+download" when a torrent is added (#6274). A fake episode that is only such a file then
+downloads and seeds nothing. Sonarr still flags the empty download, so Arr Queue Warnings still
+pages and a human still removes it. RAR volumes are on the list too, because nothing in this
+stack unpacks them, so a RAR release cannot be imported anyway. The comment above the keys in
+`apply_prefs.py` has the observed fake shapes.
 
 **Flux applies `DESIRED` on every revision that rolls the pod.** The `prefs.yaml.j2` Job in
 `qbittorrent-verify` (below) runs the apply once the `qbittorrent` Kustomization reads Ready, so a

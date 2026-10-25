@@ -22,7 +22,7 @@ KNOWN_SERVICES = frozenset(
 KNOWN_SETUP_ROLES = frozenset(
     {"gitops_deploy", "k3s", "renovate_agent", "initial_setup"}
 )
-KNOWN_PI_SERVICES = frozenset({"alloy", "wg-easy", "docker-proxy", "autoheal"})
+KNOWN_PI_SERVICES = frozenset({"alloy", "wg-easy"})
 
 
 # --- facts -------------------------------------------------------------------------------

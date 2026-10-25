@@ -218,10 +218,12 @@ def pod_logs(name: str, namespace: str = "homelab", tail: int = 100) -> str:
         raise ValueError("invalid pod name")
     if not k8s_reads.k8s_name_valid(namespace):
         raise ValueError("invalid namespace")
-    return _kube_get(
-        f"/api/v1/namespaces/{namespace}/pods/{name}/log",
-        params={"tailLines": str(tail), "limitBytes": str(256 * 1024)},
-        raw=True,
+    return safe_reads.redact_log_secrets(
+        _kube_get(
+            f"/api/v1/namespaces/{namespace}/pods/{name}/log",
+            params={"tailLines": str(tail), "limitBytes": str(256 * 1024)},
+            raw=True,
+        )
     )
 
 
@@ -284,7 +286,7 @@ def container_logs(name: str, tail: int = 100) -> str:
         params={"stdout": "1", "stderr": "1", "tail": str(tail)},
     )
     r.raise_for_status()
-    return _demux_docker_logs(r.content)
+    return safe_reads.redact_log_secrets(_demux_docker_logs(r.content))
 
 
 @mcp.tool()

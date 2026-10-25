@@ -1,7 +1,7 @@
 # sshd hardening (H7.6d, docs/target-architecture/host/h7-delete-ansible.md, *In-place edits*).
 # initial_setup edited the file named by `ssh_config_path` with `lineinfile` and `blockinfile`.
-# That path is /etc/ssh/sshd_config on daniel-box and daniel-server and cloud-init's
-# 50-cloud-init.conf on daniel-pi. Two drop-ins replace the edits:
+# That path is /etc/ssh/sshd_config on daniel-server and cloud-init's 50-cloud-init.conf on
+# daniel-pi and daniel-box. Two drop-ins replace the edits:
 #
 # - 10-homelab.conf holds the settings. sshd keeps the first value it reads, and `10-` sorts
 #   before 50-cloud-init.conf, so the package's value wins over the lines Ansible left there.

@@ -1,11 +1,17 @@
-{% from 'autokuma.yml.j2' import labels as kuma with context %}
-{% from 'networks.yml.j2' import service_networks, external_networks with context %}
-{% from 'resources.yml.j2' import resources %}
-{# Only stand up the code-server read proxy on the host that runs code-server — gated on the
-   has_code_server host_var (group_vars/all.yml), not containers_list: a tagged
-   `deploy.yml --tags docker-proxy` set_facts containers_list to the filtered dependency closure
-   (docker-proxy + deps, no code-server), so a containers_list probe would render False and drop
-   the service. has_code_server is a plain host_var, stable across that filtering. -#}
+{#- docker-proxy and its sub-proxies (H5.6, docs/target-architecture/host/h5-pi-compose.md). The
+    three services were one Ansible role's compose file until H5.6; the macros that file imported
+    (networks, resources, autokuma labels) are written out here, because a service tree has no
+    ansible/templates on its search path. The values are the ones the macros rendered for the Pi.
+    docker-proxy-codeserver renders only under has_code_server, which the recovery heartbeat
+    (hosts/components/pi-heartbeats) reads for the same gate. Both are false on the Pi.
+
+    A dockerd restart replaces /var/run/docker.sock with a new inode. A container that bind-mounts
+    the socket keeps the old inode, which has no listener, so the proxy answers 503 until it is
+    recreated, and autoheal (which restarts only an unhealthy container) cannot see the fault.
+    Fix: `docker compose -p homelab up -d --force-recreate docker-proxy docker-proxy-lifecycle`.
+    The tell is `stat -c %i /var/run/docker.sock` differing from the same command inside the
+    container. Alloy's docker_sd stops finding targets and AutoKuma stops syncing. The engine
+    upgrade play recreates every project for this reason (#1961). -#}
 ---
 
 services:
@@ -25,9 +31,16 @@ services:
       - VOLUMES=1
       - NETWORKS=1
       - EVENTS=1
-    {{ service_networks() }}
+    networks:
+{% for net in container_item.networks %}
+      - {{ net }}
+{% endfor %}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro # Mounted as read-only
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+        bind: {create_host_path: false}
     read_only: true
     tmpfs:
       - /run
@@ -49,9 +62,18 @@ services:
     labels:
       # Disable watchtower update
       - "com.centurylinklabs.watchtower.enable=false"
-      {{ kuma(container_item.name) }}
+      # Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false), so the
+      # autokuma macro emitted this inert label.
+      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('0.50', '128M', '0.05', '16M') }}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
 
   # Write-capable proxy for lifecycle automation only — Autoheal, and nothing else since
   # Watchtower was retired (35c0dc8d, Renovate owns image updates). It lives solely on the
@@ -91,7 +113,11 @@ services:
     networks:
       - lifecycle
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+        bind: {create_host_path: false}
     read_only: true
     tmpfs:
       - /run
@@ -110,9 +136,18 @@ services:
       start_period: 10s
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
-      {{ kuma('docker-proxy-lifecycle') }}
+      # Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false), so the
+      # autokuma macro emitted this inert label.
+      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('0.50', '128M', '0.05', '16M') }}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
 
 {% if has_code_server %}
   # Read-only proxy dedicated to code-server's in-IDE `docker` CLI (Security M1). Same
@@ -139,7 +174,11 @@ services:
     networks:
       - codeserver
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+        bind: {create_host_path: false}
     read_only: true
     tmpfs:
       - /run
@@ -158,12 +197,25 @@ services:
       start_period: 10s
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
-      {{ kuma('docker-proxy-codeserver') }}
+      # Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false), so the
+      # autokuma macro emitted this inert label.
+      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    {{ resources('0.50', '128M', '0.05', '16M') }}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
 {% endif %}
 
-{{ external_networks() }}
+networks:
+{% for net in container_item.networks %}
+  {{ net }}:
+    external: true
+{% endfor %}
   lifecycle:
     external: true
 {% if has_code_server %}

@@ -52,10 +52,11 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
   (#3740). `ansible/tests/services/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
-- **One `stage.replace` redacts a credential on the way in:** Home Assistant's cast
-  `refresh_token`, which HA logs in plaintext on a failed cast (issue #3015). It substitutes the
-  capture group only, so the `_handle_signal_show_view` marker the fault is detected by survives.
-  `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` fails on either half. The stage is
+- **Two `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
+  `refresh_token`, which HA logs on a failed cast (issue #3015), and Prowlarr's `apikey=` in the
+  *arr Torznab error URLs (#6276). Each substitutes the capture group only, so the rest of the
+  record survives. `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` and
+  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` fail on either half. The stage is
   prospective: a record shipped before it still carries the token for the 744h retention window.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).

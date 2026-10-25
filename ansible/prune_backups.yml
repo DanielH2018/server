@@ -64,6 +64,12 @@
     # success.
     prune_repo: "{{ playbook_dir | dirname }}"
     prune_drain_live_file: /tmp/longhorn-live-volumes.txt
+    # The dry run saves its B2 listing here and the `prune_apply=true` run reuses it for up to an
+    # hour (b2_drain.py LISTING_MAX_AGE_SECONDS), so the two-step flow pays for one listing.
+    # `-e prune_fresh_listing=true` makes the apply list afresh. /tmp matches the live-volume
+    # file above and stays outside the repo checkout, where an untracked file parks the deployer.
+    prune_drain_listing_file: /tmp/longhorn-b2-listing.json
+    prune_fresh_listing: false
   pre_tasks:
     # The preamble's first task refuses this local-connection play when it runs anywhere but
     # daniel-box. Without it, a run from daniel-server drains B2 from there under a daniel-box

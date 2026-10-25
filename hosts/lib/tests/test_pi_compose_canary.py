@@ -1,10 +1,10 @@
 """The real Pi package runs the canary through the Compose project (H5.2b).
 
 The censuses in `test_pi_compose_census.py` run over fixture services. This file runs them over
-the real render of `hosts/daniel-pi/package.yml`, whose only service is `pi-canary`: the first
-service the package runs. The canary reads no secret, so the package declares no `compose.env`
-output and the include names no `env_file:` (operator ruling 2026-10-24, h5-pi-compose.md
-*Open questions* 7).
+the real render of `hosts/daniel-pi/package.yml`, which runs `pi-canary` (H5.2b) and, since H5.6,
+`docker-proxy`, and since H5.7 `autoheal`. The canary reads no secret and gets the domain at
+build time (operator ruling 2026-10-24, h5-pi-compose.md *Open questions* 7). The package's
+Compose env file holds only the keys autoheal reads.
 
 Run: uv run pytest hosts/lib/tests/test_pi_compose_canary.py
 """
@@ -66,9 +66,11 @@ def test_every_packaged_compose_file_asks_the_daemon_for_at_least_6_mib(package)
 
 def test_the_canary_reads_no_secret_and_gets_the_domain_at_build_time(package):
     includes = project_of(package)["includes"]
-    assert [i["path"] for i in includes] == [f"{COMPOSE}/pi-canary/compose.yaml"]
-    assert not any("env_file" in i for i in includes)
-    assert not [o for o in package.outputs if o["destination"].endswith("compose.env")]
+    assert [i["path"] for i in includes] == [
+        f"{COMPOSE}/autoheal/compose.yaml",
+        f"{COMPOSE}/docker-proxy/compose.yaml",
+        f"{COMPOSE}/pi-canary/compose.yaml",
+    ]
     body = text(package, f"{COMPOSE}/pi-canary/compose.yaml")
     assert "HOMELAB_DOMAIN=" in body
     assert "${" not in body and "{{" not in body
@@ -117,8 +119,12 @@ def test_a_service_directory_line_without_its_parents_is_flagged():
     ]
 
 
-def test_a_canary_with_a_placeholder_would_need_the_env_output(package):
-    """REJECT: the censuses reject a project that reads `${key}` with no matching output."""
-
+def test_the_env_output_must_carry_exactly_the_keys_the_project_reads(package):
+    """ACCEPT the key autoheal reads, REJECT a key the output does not declare."""
+    check_env_output(package, REAL, frozenset({"monitor_discord_webhook_url"}))
     with pytest.raises(RenderRefused, match="declares"):
-        check_env_output(package, REAL, frozenset({"monitor_discord_webhook_url"}))
+        check_env_output(
+            package,
+            REAL,
+            frozenset({"monitor_discord_webhook_url", "alloy_pi_http_password"}),
+        )

@@ -134,6 +134,19 @@ loki.process "pods" {
       replace    = "<redacted>"
     }
   }
+
+  // Redact Prowlarr's API key out of the *arr lines (issue #6276). Sonarr and Radarr log every
+  // failed Torznab call with its full request URL, and that URL carries Prowlarr's key as
+  // `apikey=<32 hex>`. As above, only the capture group goes, so the indexer name and the search
+  // type a Torznab failure is diagnosed by survive. The class takes upper-case hex as well.
+  // Prospective only: probe.py redacts the records already in Loki on the way out.
+  stage.match {
+    selector = "{container=~\"sonarr|radarr|prowlarr|bazarr\"}"
+    stage.replace {
+      expression = "apikey=([0-9a-fA-F]{32})"
+      replace    = "<redacted>"
+    }
+  }
 }
 
 // ---- Host files. Root + DAC_READ_SEARCH in the DaemonSet exist for these. ---------------

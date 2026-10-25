@@ -106,7 +106,7 @@ from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
 
 from diagnostics.probe_lib.cli_parser import ENTRY_POINT, _build_parser
-from diagnostics.probe_lib.curl_pipeline import plan, stream_pipeline
+from diagnostics.probe_lib.curl_pipeline import output_redaction, plan, stream_pipeline
 from diagnostics.probe_lib.health import (
     inspect_argv,
     k8s_deploy_args,
@@ -255,7 +255,7 @@ def _dispatch(ns, argv, plan):
         for stage in stages:
             print(" ".join(stage))
         return 0
-    return stream_pipeline(stages)
+    return stream_pipeline(stages, redact=output_redaction(ns.cmd))
 
 
 if __name__ == "__main__":
