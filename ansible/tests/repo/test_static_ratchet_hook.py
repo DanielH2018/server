@@ -270,23 +270,28 @@ def _pinned_width(entry: str) -> int | None:
     return None
 
 
-def _left_to_auto(hooks: list[dict]) -> list[str]:
-    """The ids of multi-module hooks whose width `-n auto` sizes at one worker."""
+def _left_to_auto(
+    hooks: list[dict], weights: dict[str, float] | None = None
+) -> list[str]:
+    """The ids of multi-module hooks whose width `-n auto` sizes at one worker.
+
+    `weights` defaults to the committed table, which is what `-n auto` reads.
+    """
+    if weights is None:
+        weights = xdist_width.load_weights(REPO) or {}
     return [
         h["id"]
         for h in hooks
         if len(_modules(h)) > 1
         and _pinned_width(h["entry"]) is None
-        and xdist_width.workers_for(_recorded_seconds(h), SESSION_CEILING) <= 1
+        and xdist_width.workers_for(
+            xdist_width.module_seconds(
+                [REPO / m for m in sorted(_modules(h))], REPO, weights
+            ),
+            SESSION_CEILING,
+        )
+        <= 1
     ]
-
-
-def _recorded_seconds(hook: dict) -> list[float]:
-    """What `xdist_width` charges each module the entry names."""
-    modules = [REPO / m for m in sorted(_modules(hook))]
-    return xdist_width.module_seconds(
-        modules, REPO, xdist_width.load_weights(REPO) or {}
-    )
 
 
 def test_no_multi_module_pytest_hook_leaves_its_width_to_auto():
@@ -319,4 +324,7 @@ def test_every_unpinned_exemption_still_applies():
     ],
 )
 def test_the_guard_flags_only_an_unpinned_multi_module_entry(entry, flagged):
-    assert _left_to_auto([{"id": "h", "entry": entry}]) == (["h"] if flagged else [])
+    # A fixed table, so the cron's twice-daily rewrite of the real one cannot flip a row.
+    weights = {"a.py": 0.5, "b.py": 0.5, "c.py": 0.5}
+    hooks = [{"id": "h", "entry": entry}]
+    assert _left_to_auto(hooks, weights) == (["h"] if flagged else [])

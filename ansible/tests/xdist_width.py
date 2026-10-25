@@ -45,8 +45,9 @@ That gives the first two rows above 3 and 4, the fastest width measured for each
 third 1, where a second worker saved under half a second in one round of two. The seconds
 come from `scripts/dev/pytest_shard_weights.json`, which the shard split already keeps current.
 A module the table does not hold is charged the table's mean. A run that names no path (the
-whole suite, from `testpaths`) is left to xdist, which gives it every core. A CI shard holds
-about 220 modules, around 240 recorded seconds, on a 4-core runner, so it keeps 4.
+whole suite, from `testpaths`) is left to xdist, which gives it every core. Each of CI's six
+shards holds about 254 modules and 157-180 recorded seconds, its heaviest module 13.5-30.4s, on
+a 4-core runner, so each keeps 4.
 
 `PYTEST_XDIST_AUTO_NUM_WORKERS`, when set, replaces the core count as the ceiling rather than
 being the answer. The user-level Claude Code settings set it to 4 for every session, fan-out
@@ -69,8 +70,10 @@ from pathlib import Path
 
 import pytest
 
-# Below this many recorded seconds a worker costs more to start than it saves: four files
-# recorded at 0.3s ran in 1.4s on one worker and 1.7s on four (the 2026-10-18 table).
+# Below this many recorded seconds a worker costs more to start than it saves. Four
+# `scripts/dev/tests` files ran in 1.4s serial and 1.7s on four workers (the 2026-10-18 table),
+# and four files recorded at 0.3s saved under half a second on two (the 2026-10-25 table). It
+# sits under the 2.22s heaviest module of the `-python` hook's five, which run fastest on 3.
 MIN_SECONDS_PER_WORKER = 2.0
 
 WEIGHTS_TABLE = Path("scripts/dev/pytest_shard_weights.json")

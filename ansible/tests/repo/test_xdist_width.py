@@ -12,6 +12,10 @@ import pytest
 
 import xdist_width
 
+# A literal rather than `xdist_width.WEIGHTS_TABLE`, so these tests run against a module that
+# never read the table and fail on its behaviour rather than on a missing name.
+WEIGHTS_TABLE = "scripts/dev/pytest_shard_weights.json"
+
 
 def _tree(root: Path, modules: int, weights: dict[str, float] | None = None) -> Path:
     tests = root / "suite" / "tests"
@@ -19,7 +23,7 @@ def _tree(root: Path, modules: int, weights: dict[str, float] | None = None) -> 
     for n in range(modules):
         (tests / f"test_m{n}.py").write_text("")
     (tests / "_helper.py").write_text("")
-    table = root / xdist_width.WEIGHTS_TABLE
+    table = root / WEIGHTS_TABLE
     table.parent.mkdir(parents=True)
     table.write_text(json.dumps(weights or {"suite/tests/test_m0.py": 0.1}))
     return tests
@@ -111,7 +115,7 @@ def test_a_few_heavy_modules_get_more_than_one_worker_through_the_hook(
 
 def test_a_missing_weight_table_is_left_to_xdist(tmp_path):
     _tree(tmp_path, 2)
-    (tmp_path / xdist_width.WEIGHTS_TABLE).unlink()
+    (tmp_path / WEIGHTS_TABLE).unlink()
     config = _config(["suite/tests"], pytest.Config.ArgsSource.ARGS, tmp_path, tmp_path)
     assert xdist_width.pytest_xdist_auto_num_workers(config) is None
 
