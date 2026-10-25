@@ -28,6 +28,8 @@ _KEYS = (
     "loki_route_witness_push_token: x\n"
     "ups_secondary_push_token: x\n"
     "nut_monitor_password: x\n"
+    "homelab_builder_github_token: x\n"
+    "gitops_deploy_discord_webhook: x\n"
 )
 
 COMPONENT = REPO / "hosts/components/k3s-restart"

@@ -1,0 +1,14 @@
+# The builder's settings (h3-pi-pilot.md, builder step 4). The builder reads them from here only,
+# never from a path in its clone, because the clone holds the commit it is judging.
+#
+# No secret lives here. The read-only GitHub token arrives as the unit's github_token credential,
+# because the builder never polls GitHub anonymously: anonymous reads share one quota with the
+# tick's gate.
+GITHUB_REPO={{ builder_github_repo }}
+# The deployer's own gate and walk bound, from group_vars/all.yml. An empty list, or a bound that is
+# not a positive integer, builds nothing (reason="ci").
+CI_CONTEXTS={{ ci_required_contexts | join(',') }}
+CI_ANCESTOR_WALK_MAX={{ ci_ancestor_walk_max }}
+# Prometheus, loopback first and then the pinned ClusterIP, space-separated. The rollout gate
+# asks the first that answers whether the canary applied its version (*Staged rollout*).
+PROMETHEUS_URLS={{ builder_prom_urls | join(' ') }}

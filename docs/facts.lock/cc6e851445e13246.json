@@ -1,0 +1,15 @@
+{
+  "checksum": "df12c2c9d1245928ed44a246651b719293b85ccc00b4e9de92733981a08fd5ed",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/homelab_builder/CLAUDE.md#Where the work went",
+  "row": {
+    "atoms": {
+      "hosts/components/builder/": "eb35c51502f9bef2c8d78a2fa0888618f409ca5c5becf8d04f7b3ccfbd3d8032",
+      "hosts/components/builder/CLAUDE.md": "9310d6babce7a859fbc8011c6c2b323122c42d3a99845040399fb1784983cd2e",
+      "hosts/components/failure-alert/": "f656a80e385a421fd9d88b35f6f49c4cbbb4cc15cd9fc14c28baea488ac06e12",
+      "hosts/lib/": "aee97ede131631156330f0120fe4b64226a77c507ef96ddc63bcd3db949e64ac"
+    },
+    "python": "3.14",
+    "verified_sha": "a41b8b1bd"
+  }
+}

@@ -165,13 +165,11 @@
     },
     {
       "customType": "regex",
-      "description": "The nfpm binary CI's `host_packages` job builds the host packages with (target slice H3, PR H3.3a). It is pinned by version and by the sha256 of `nfpm_<version>_Linux_x86_64.tar.gz`, and this manager moves both in one PR. The github-release-attachments datasource computes the new digest: it finds the release asset holding the pinned digest, the release's checksums.txt, and reads the same asset's line from the new release. ONE matchString spans the `# renovate:` annotation, the `NFPM_VERSION` line and the `NFPM_SHA256` line of the job's env, so currentValue and currentDigest come from one match. The job fetches nfpm and checks the digest on every run, ahead of its render diff, so a bump PR that changes no render still fetches the new version and checks the new digest. The `.github/workflows/**` packageRule gives it its own `{{depName}}` group. The first matchString reads the same pin from the `homelab_builder` role's defaults, the nfpm the builder on daniel-box builds with (H3.5a); that packageRule names the defaults file too, so both copies move in one PR, and `ansible/roles/setup/homelab_builder/tests/test_builder_units.py` holds them equal.",
+      "description": "The nfpm binary CI's `host_packages` job builds the host packages with (target slice H3, PR H3.3a). It is pinned by version and by the sha256 of `nfpm_<version>_Linux_x86_64.tar.gz`, and this manager moves both in one PR. The github-release-attachments datasource computes the new digest: it finds the release asset holding the pinned digest, the release's checksums.txt, and reads the same asset's line from the new release. ONE matchString spans the `# renovate:` annotation, the `NFPM_VERSION` line and the `NFPM_SHA256` line of the job's env, so currentValue and currentDigest come from one match. The job fetches nfpm and checks the digest on every run, ahead of its render diff, so a bump PR that changes no render still fetches the new version and checks the new digest. The `.github/workflows/**` packageRule gives it its own `{{depName}}` group. The builder on daniel-box builds with the nfpm in `hosts/packages/homelab-tools/package.yml`, whose own manager moves that pin, and `hosts/lib/tests/test_builder_component.py` holds the two equal.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/",
-        "/(^|/)ansible/roles/setup/homelab_builder/defaults/main\\.yml$/"
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
       "matchStrings": [
-        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=goreleaser/nfpm[ \\t]*\\nhomelab_builder_nfpm_version:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\nhomelab_builder_nfpm_sha256:[ \\t]*(?<currentDigest>[a-f0-9]{64})",
         "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=goreleaser/nfpm[ \\t]*\\n[ \\t]+NFPM_VERSION:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+NFPM_SHA256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
       ],
       "depNameTemplate": "goreleaser/nfpm",
@@ -513,7 +511,6 @@
         ".github/actions/**",
         ".vale.ini",
         "ansible/roles/setup/initial_setup/tasks/host-basics.yml",
-        "ansible/roles/setup/homelab_builder/defaults/main.yml",
         "hosts/packages/homelab-tools/package.yml"
       ],
       "groupName": "{{depName}}"
