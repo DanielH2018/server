@@ -2298,8 +2298,8 @@ The steps merged in this order.
       `keep-unmarked`, which already tests the marker's form under `Orphan`. The PR body
       quotes all three cases, and the revision-1 wait that shows all three tags Ready, so
       every fixture PVC bound under kind's `WaitForFirstConsumer` class.
-    - **Not a required check.** Making the job a required check changes GitHub settings, so
-      it is **operator-only** (Open question 10). Until then, D6.7's merge waits on the job
+    - **A required check since 2026-10-25.** The operator made the job a required check in
+      the "master CI gate" ruleset (Open question 10). Before that, D6.7's merge waited on the job
       because its PR body must quote a green run.
     - **The two-writer rule (C4)** has nothing to check. The drill's cluster is not
       production, and no `containers_list` entry changes.
@@ -2947,7 +2947,9 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
 10. **Does `flux-deletion-drill` become a required check?** As a required check, it would
     hold a `flux_version` bump that changes deletion behaviour, not only D6.7. Resolution: the
     operator decides in D6.7a's review (**operator-only**, a GitHub settings change). The job
-    scopes itself, so a required check never sticks at "Expected".
+    scopes itself, so a required check never sticks at "Expected". **Ruled 2026-10-25: yes**
+    (#6042). The ruleset requires `flux-deletion-drill`, and
+    `gitops_deploy_expected_ruleset_contexts` lists it so the daily drift check agrees.
 11. **Can the drill reach the renderer's prune stamping and Kustomization writer as
     functions?** C1 defines only the CLI, which renders the repo's own tree. Resolution: the
     drill imports both steps from the renderer's library, which leaves C1 unchanged. A

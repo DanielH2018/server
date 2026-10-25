@@ -335,7 +335,8 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
   no `workflow` scope, so the operator pushes any change under `.github/workflows/`. The
   required contexts are `gitops_deploy_expected_ruleset_contexts` in
   `ansible/roles/setup/gitops_deploy/defaults/main.yml`: `prek (lint + validate + tests +
-  secrets)`, `pull + boot changed images` and `renovate config validator`. The docstring of
+  secrets)`, `pull + boot changed images`, `renovate config validator` and
+  `flux-deletion-drill` (since 2026-10-25, #6042). The docstring of
   `ansible/tests/repo/test_every_ci_job_is_gated.py` says a job outside the merge gate "runs
   advisory-only".
 

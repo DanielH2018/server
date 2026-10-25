@@ -31,6 +31,7 @@ DECLARED = [
     "prek (lint + validate + tests + secrets)",
     "pull + boot changed images",
     "renovate config validator",
+    "flux-deletion-drill",
 ]
 
 # kuma_push, recording instead of pushing. Signature from
