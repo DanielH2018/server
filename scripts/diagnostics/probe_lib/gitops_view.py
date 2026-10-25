@@ -58,6 +58,7 @@ from gitops_markers import (
     MARKERS,
     PLAYBOOK_CMD,
     agent_join_cmds,
+    agent_pin_cmds,
     by_hand,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
@@ -116,12 +117,22 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
         agents = (
             [] if hand else agent_join_cmds(e.role, e.playbook, selected, e.agent_hosts)
         )
+        pins = (
+            []
+            if hand
+            else [
+                f"{cmd} (run on {host})"
+                for host, cmd in agent_pin_cmds(
+                    e.role, e.playbook, selected, e.agent_hosts
+                )
+            ]
+        )
         rows[OWED_MANUAL_PLANE].append(
             {
                 "subject": e.role,
                 "origin": e.origin,
                 "age_s": int(now - e.at),
-                "do": " and ".join([*apply, *agents]),
+                "do": " and ".join([*apply, *agents, *pins]),
                 "clear": owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             }
         )

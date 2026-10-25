@@ -31,6 +31,15 @@ with no server command. `templates/registries.yaml.j2` narrows to `k3s_server` p
 The deployer records the hosts on the line as `agent_hosts`, so the SessionStart banner,
 `probe.py gitops` and monitor-bridge print the same commands from the row.
 
+**`--tags node-address` pins daniel-box alone.** `tasks/static-address.yml` also runs from the
+opt-in pin play, which matches no host without `-e pin_agent_address=<host>` and runs ON the
+agent. So a change reaching that file, and the whole-role tag, also print
+`uv run ansible-playbook ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address`
+for each agent host, with the host to run it on. The server command keeps `node-address`,
+because `tasks/main.yml` imports the same file. The data is
+`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:AGENT_PIN_TAGS`, and the commands
+come from `ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_pin_cmds`.
+
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`;
