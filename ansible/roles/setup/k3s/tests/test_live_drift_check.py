@@ -196,10 +196,24 @@ def test_the_registry_gc_keep_set_is_exempt_and_names_its_writer():
     assert reason and "registry-gc.sh" in reason and "create" in reason
 
 
-def test_an_unexempted_configmap_beside_it_is_still_checked():
-    # The exemption is by identity, not by namespace: another baseline-less ConfigMap in
-    # homelab must still read as a pruning risk.
-    assert ldc.is_foreign("configmap", "homelab", "registry-gc-something-else") is None
+def test_only_the_unexempted_baseline_less_configmap_is_flagged():
+    # The exemption is by identity, not by namespace: a run that sees both baseline-less
+    # ConfigMaps in homelab must report the neighbour and stay silent about the keep set.
+    def configmap(name):
+        return {"metadata": {"namespace": "homelab", "name": name, "annotations": {}}}
+
+    sweep = ldc.Sweep()
+    sweep.add(
+        "configmap",
+        [
+            configmap("registry-gc-ghcr-mirror-keep"),
+            configmap("registry-gc-something-else"),
+        ],
+    )
+    assert sweep.unannotated == ["configmap homelab/registry-gc-something-else"]
+    code, message = ldc.verdict(sweep.drifted, sweep.unannotated, sweep.errors)
+    assert code == 1 and "1 with no apply baseline" in message
+    assert "registry-gc-ghcr-mirror-keep" not in message
 
 
 def test_the_host_script_exemption_matches_what_the_script_writes():
