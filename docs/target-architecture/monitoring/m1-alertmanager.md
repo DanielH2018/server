@@ -1558,13 +1558,26 @@ Each risk names its class from `docs/failure-classes.md`.
       head series and 2,766 samples a second. The series-budget read in *Verification* is
       therefore red.
 
-   The operator chooses among a lower budget with a cardinality cut, a larger claim with the
-   cap at the same ratio, and a shorter retention (**operator-only**,
-   [#6311](https://github.com/DanielH2018/server/issues/6311)). The operator also rules
-   whether C7 restates the budget in samples a second
-   ([#4756](https://github.com/DanielH2018/server/issues/4756)). Both models now predict that
-   the size cap binds, so this read does not settle that unit. Until the rulings, the budget
-   stays 140,000.
+   **Ruled on 2026-10-25: a cardinality cut, and the budget stays 140,000**
+   ([#6311](https://github.com/DanielH2018/server/issues/6311)). The operator chose it over a
+   larger claim and a shorter retention.
+    - The cut adds three apiserver histogram families to `control_plane_bucket_drop()` in
+      `prometheus.yaml.j2`: `apiserver_watch_events_dispatch_duration_seconds`,
+      `apiserver_storage_list_duration_seconds` and
+      `apiserver_watch_cache_initialization_duration_seconds`. Their `_bucket` series held
+      21,206 of 148,552 live series, and nothing in the repo read them.
+    - Both control-plane jobs scrape every minute, so the cut removes about 350 samples a
+      second. That leaves the rate near 2,400 a second, still above the samples model's
+      2,000. The read after the deploy says whether the store reaches 30 days.
+    - The larger lever is a duplicate. On daniel-box the `kubernetes-kubelet` scrape returns
+      the same 35,686 series as the `kubernetes-apiserver` scrape, because k3s serves both
+      from one registry. Removing the copy changes which job label some readers see, so it is
+      a separate operator ruling
+      ([#6331](https://github.com/DanielH2018/server/issues/6331)).
+
+   The operator also rules whether C7 restates the budget in samples a second
+   ([#4756](https://github.com/DanielH2018/server/issues/4756)). Both models predict that the
+   size cap binds, so this read does not settle that unit.
 10. **A down Alertmanager pages 30 minutes in.** Kuma paged it 10 to 15 minutes in, and the
     Watchdog check's 600s period and 1200s grace page it up to 30 minutes in (RA-8).
     Recommendation: accept the 30 minutes, because a shorter check would page on most weekly
