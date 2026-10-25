@@ -144,6 +144,21 @@ PATCH_MAINTAINED = {
     ),
 }
 
+# Objects a host script creates with `kubectl create`, outside any apply, so they never carry
+# an apply baseline and would read as "no apply baseline" for as long as they exist.
+#
+# Same shape as PATCH_MAINTAINED, for the same reason: each entry names the script and the
+# function that writes the object, so the entry reads as stale if that script ever switches to
+# `apply`. Switching it is not the fix: an applied object would need a manifest, which the
+# manifest-prune check would then look for.
+HOST_SCRIPT_WRITTEN = {
+    ("configmap", "homelab", "registry-gc-ghcr-mirror-keep"): (
+        "written by `kubectl create configmap` in write_mirror_keep_set of "
+        "roles/setup/k8s_host_files/templates/registry-gc.sh.j2 (the weekly registry GC), "
+        "which deletes and recreates it each run"
+    ),
+}
+
 # The residue manager `kubectl` writes when it migrates a client-side-applied object to
 # server-side apply. It carries operation "Apply" but owns only the last-applied annotation,
 # so it does NOT mean the object is server-side managed.
@@ -251,7 +266,9 @@ def is_foreign(kind: str, namespace: str, name: str) -> str | None:
     a wrong reason on a live exemption is worse than a coarse one, because the entry that
     holds the true reason becomes unreachable and rots unnoticed.
     """
-    specific = PATCH_MAINTAINED.get((kind, namespace, name))
+    specific = PATCH_MAINTAINED.get((kind, namespace, name)) or HOST_SCRIPT_WRITTEN.get(
+        (kind, namespace, name)
+    )
     if specific:
         return specific
     if name in CONTROLLER_OBJECTS:
@@ -286,6 +303,51 @@ def is_server_side_applied(meta: dict) -> bool:
         and not (handed_back and entry.get("manager") == _FLUX_MANAGER)
         for entry in meta.get("managedFields") or []
     )
+
+
+class Sweep:
+    """What one run found, sorted into the buckets the verdict and the log lines read.
+
+    Attributes:
+        drifted: (kind, namespace, name, diffs) for each object that differs from its baseline.
+        unannotated: "kind namespace/name" for each client-side object with no apply baseline.
+        errors: fetch and parse failures, each of which makes the run exit 2.
+        server_side: "kind namespace/name" for each object skipped as server-side applied.
+        checked: how many objects were compared against a baseline.
+    """
+
+    def __init__(self) -> None:
+        self.drifted: list[tuple[str, str, str, list]] = []
+        self.unannotated: list[str] = []
+        self.errors: list[str] = []
+        self.server_side: list[str] = []
+        self.checked = 0
+
+    def add(self, kind: str, items: list[dict]) -> None:
+        """Sort one kind's fetched objects, skipping each one is_foreign exempts."""
+        for obj in items:
+            meta = obj.get("metadata", {})
+            namespace, name = meta.get("namespace", ""), meta.get("name", "")
+            if is_foreign(kind, namespace, name):
+                continue
+            if is_server_side_applied(meta):
+                self.server_side.append(f"{kind} {namespace}/{name}")
+                continue
+            baseline = (meta.get("annotations") or {}).get(LAST_APPLIED)
+            if not baseline:
+                self.unannotated.append(f"{kind} {namespace}/{name}")
+                continue
+            self.checked += 1
+            try:
+                applied = json.loads(baseline)
+            except json.JSONDecodeError as exc:
+                self.errors.append(
+                    f"{kind} {namespace}/{name}: unparseable baseline: {exc}"
+                )
+                continue
+            diffs = subset_diff(obj, applied)
+            if diffs:
+                self.drifted.append((kind, namespace, name, diffs))
 
 
 def fetch(kind: str) -> tuple[list[dict], str | None]:
@@ -475,55 +537,32 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    drifted: list[tuple[str, str, str, list]] = []
-    unannotated: list[str] = []
-    errors: list[str] = []
-    server_side: list[str] = []
-    checked = 0
-
+    sweep = Sweep()
     for kind in KINDS:
         items, error = fetch(kind)
         if error:
-            errors.append(f"{kind}: {error}")
+            sweep.errors.append(f"{kind}: {error}")
             continue
-        for obj in items:
-            meta = obj.get("metadata", {})
-            namespace, name = meta.get("namespace", ""), meta.get("name", "")
-            if is_foreign(kind, namespace, name):
-                continue
-            if is_server_side_applied(meta):
-                server_side.append(f"{kind} {namespace}/{name}")
-                continue
-            baseline = (meta.get("annotations") or {}).get(LAST_APPLIED)
-            if not baseline:
-                unannotated.append(f"{kind} {namespace}/{name}")
-                continue
-            checked += 1
-            try:
-                applied = json.loads(baseline)
-            except json.JSONDecodeError as exc:
-                errors.append(f"{kind} {namespace}/{name}: unparseable baseline: {exc}")
-                continue
-            diffs = subset_diff(obj, applied)
-            if diffs:
-                drifted.append((kind, namespace, name, diffs))
+        sweep.add(kind, items)
 
-    code, message = verdict(drifted, sorted(unannotated), errors, len(server_side))
+    code, message = verdict(
+        sweep.drifted, sorted(sweep.unannotated), sweep.errors, len(sweep.server_side)
+    )
 
-    for kind, namespace, name, diffs in drifted:
+    for kind, namespace, name, diffs in sweep.drifted:
         print(f"[DRIFT] {kind} {namespace}/{name}", file=sys.stderr)
         for path, live, applied in diffs[:5]:
             print(
                 f"    {path}: live={live!r} last-applied={applied!r}", file=sys.stderr
             )
-    for entry in sorted(unannotated):
+    for entry in sorted(sweep.unannotated):
         print(f"[NO-BASELINE] {entry}", file=sys.stderr)
-    for entry in sorted(server_side):
+    for entry in sorted(sweep.server_side):
         print(f"[SERVER-SIDE] {entry}", file=sys.stderr)
-    for error in errors:
+    for error in sweep.errors:
         print(f"[ERROR] {error}", file=sys.stderr)
     print(
-        f"{checked} object(s) compared against their last-applied baseline. {message}"
+        f"{sweep.checked} object(s) compared against their last-applied baseline. {message}"
     )
 
     record_textfile(code, int(time.time()))
