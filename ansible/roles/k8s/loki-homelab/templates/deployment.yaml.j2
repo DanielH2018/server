@@ -26,6 +26,7 @@ spec:
       containers:
         - name: loki
           image: {{ loki_homelab_k8s_image }}
+          imagePullPolicy: IfNotPresent
           args: ["-config.file=/etc/loki/loki.yaml"]
           # No readOnlyRootFilesystem: Loki writes its WAL and compactor scratch outside the
           # /loki mount, and the fleet-standard pair is what actually closes the gap here.

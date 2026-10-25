@@ -58,6 +58,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
+from lib.ansible_jinja_env import ansible_local_temp
 from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.narrow_git import CannotNarrow, show_at
@@ -188,7 +189,9 @@ _MAGIC_VARS = frozenset(
 
 def _ansible_reads(name: str) -> bool:
     """Whether Ansible itself reads the variable `name`, so no grep can find its reader."""
-    from ansible.vars.reserved import get_reserved_names
+    # The first ansible-core import creates its local temp directory (#5904).
+    with ansible_local_temp():
+        from ansible.vars.reserved import get_reserved_names
 
     return (
         name.startswith("ansible_")

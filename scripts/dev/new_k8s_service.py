@@ -160,6 +160,7 @@ spec:
       containers:
         - name: {name}
           image: {{{{ {prefix}_k8s_image }}}}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{{{ container_item.port }}}}
 {{{{ hardened_security_context(read_only=true, non_root=true) }}}}

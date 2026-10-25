@@ -653,8 +653,9 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 # workers than they take, and each worker repeats the module-scoped render (checksum 3.5s
 # against 4.3-5.0s, the Renovate pair 4.1-4.4s against 4.8-5.4s, back to back on 2026-10-17).
 # The `-python` hook pins `-n 4` rather than taking pyproject.toml's `-n auto`, because
-# ansible/tests/xdist_width.py sizes `auto` at one worker per 15 modules, which put its five
-# modules on a single worker (#5917). Measured on daniel-server on 2026-10-22, three rounds
+# ansible/tests/xdist_width.py then sized `auto` at one worker per 15 modules, which put its five
+# modules on a single worker (#5917). It sizes `auto` from recorded seconds since #5967, which
+# gives these five 3; the pin stays because it is the width measured here. Measured on daniel-server on 2026-10-22, three rounds
 # interleaved at load average 4.3-5.4: `-n 4` 6.7-8.5s, `-n auto` 13.3-16.6s. `-n 3`, `-n 5`
 # and `-n 4 --dist load` measured no faster than `-n 4`. Under `--dist loadscope` each module
 # stays on one worker, so the slowest module, test_prek_files_cover_entry_imports.py at about

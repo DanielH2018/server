@@ -213,6 +213,13 @@ def test_a_pull_request_fails_only_on_modules_its_diff_changes():
         r'\[ "\$EVENT" = pull_request \]; then mode=\(--changed-files "\$RUNNER_TEMP/changed\.txt"\)',
         gate,
     ), "a pull_request must scope the gate to the diff pr_changed_files.sh wrote"
+    assert "base_weights.json" in runs[collect], (
+        "the base table must be read before the suite"
+    )
+    assert re.search(
+        r'\[ "\$EVENT" = pull_request \]; then mode\+=\(--base-weights "\$RUNNER_TEMP/base_weights\.json"\)',
+        gate,
+    ), "a pull_request must hand the gate the table at its merge base (#5989)"
 
 
 def test_the_workflow_derives_the_shard_count_from_the_matrix():

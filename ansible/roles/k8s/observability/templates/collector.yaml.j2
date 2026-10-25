@@ -109,6 +109,7 @@ spec:
       containers:
         - name: otel-collector
           image: {{ observability_k8s_collector_image }}
+          imagePullPolicy: IfNotPresent
           args: ["--config=/conf/config.yaml"]
           # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
           # kubelet refuses a container whose image names its user instead of numbering it.

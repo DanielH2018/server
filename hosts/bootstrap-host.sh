@@ -415,7 +415,8 @@ else
     count=$(git -C "$clone" rev-list --count --first-parent HEAD)
     HOMELAB_VERSION="0.$count+g$(printf '%s' "$sha" | cut -c1-12)"
     export HOMELAB_VERSION
-    for dir in "$work/render/packages/homelab-tools" "$work/render/packages/homelab-updater" \
+    # homelab-tools renders one tree per architecture, because it carries binaries.
+    for dir in "$work/render/packages/homelab-tools/$arch" "$work/render/packages/homelab-updater" \
         "$work/render/hosts/$host"; do
         [ -f "$dir/nfpm.yaml" ] || die "the render holds no $dir/nfpm.yaml"
         (cd "$dir" && "$work/bin/nfpm" package --config nfpm.yaml --packager deb \

@@ -1,0 +1,67 @@
+# Shipped by homelab-daniel-box. homelab-builder.timer starts it every 2 minutes.
+[Unit]
+Description=Homelab host-package builder (stages packages from the newest green master commit)
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+OnFailure=homelab-alert@%n.service
+# Every run that exits 0 starts the signer, a held run included, so the signer re-signs the
+# published tree daily while this timer runs.
+OnSuccess=homelab-repo-sign.service
+# A builder start waits for a signer still running, so the builder never rewrites staged/
+# while the signer reads it. The signer carries no After= back, which would be a cycle.
+After=homelab-repo-sign.service
+
+[Service]
+Type=oneshot
+User=homelab-builder
+Group=homelab-builder
+# staged/ is setgid homelab-signer, so 0027 leaves each staged file readable by the signer.
+UMask=0027
+# Sandboxing (h3-pi-pilot.md, *The builder and the repository*, Sandboxing). The run executes the
+# chosen commit's renderer, so it may write its own state directory and nothing else.
+# hosts/lib/tests/test_builder_component.py holds each directive.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+# systemd creates the directory and sets its mode. The subdirectories come from
+# tmpfiles.d/homelab-builder.conf.
+StateDirectory=homelab-builder
+StateDirectoryMode=0711
+ReadWritePaths=/var/lib/homelab-builder
+# The token arrives as a credential. config.env holds no secret.
+LoadCredential=github_token:/run/credstore/homelab_builder_github_token
+Environment=HOME=/var/lib/homelab-builder
+Environment=PYTHONDONTWRITEBYTECODE=1
+# The interpreter and the cache live in the state directory. ExecStartPre= installs the
+# interpreter, so rebuilding the host needs no Ansible apply.
+Environment=UV_CACHE_DIR=/var/lib/homelab-builder/uv-cache
+Environment=UV_PYTHON_INSTALL_DIR=/var/lib/homelab-builder/python
+Environment=HOMELAB_UV=/usr/lib/homelab/bin/uv
+Environment=HOMELAB_PYTHON={{ host_python_version }}
+Environment=HOMELAB_NFPM=/usr/lib/homelab/bin/nfpm
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout and
+# stderr log at notice, or a failed run's traceback never reaches the journal.
+SyslogLevel=notice
+TimeoutStartSec=20min
+# `+` runs a line as root outside the sandbox. The first creates the directories in
+# tmpfiles.d/homelab-builder.conf, which the fingerprint script and the signer need.
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-builder.conf
+# The second reads the signing key's fingerprint from the signer's GnuPG home, which the builder
+# cannot read, and writes archive-key.fpr for the builder to compare with the rendered keyring. A
+# home with no key leaves no file, so the builder then refuses with reason="keyring". A failing
+# ExecStartPre= line ends the run before ExecStart=.
+ExecStartPre=+/usr/lib/homelab/builder-fingerprint
+# Downloads the pinned interpreter. This line does not set UV_PYTHON_DOWNLOADS=never, which would
+# refuse the install, and it does nothing once the version is present.
+ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_version }}
+# `env` sets UV_PYTHON_DOWNLOADS=never for this line only, so a run never downloads Python.
+ExecStart=/usr/bin/env UV_PYTHON_DOWNLOADS=never /usr/lib/homelab/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/builder/host_package_builder.py
+# `+` runs the copy as root outside the sandbox, `-` keeps a failed copy from failing the unit.
+ExecStopPost=-+/bin/sh /usr/lib/homelab/publish-textfile homelab_builder_ /var/lib/homelab-builder/homelab_builder.prom

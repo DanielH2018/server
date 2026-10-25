@@ -76,6 +76,7 @@ from gitops_markers import (
     k8s_unapplied_remedy,
     parse_contention,
     agent_join_cmds,
+    agent_pin_cmds,
     by_hand,
     maximal_apply_warning,
     owed_clear_cmd,
@@ -213,6 +214,8 @@ class ManualPlaneRemedy:
         warning: what `apply` arms beyond the change, or "".
         agents: the join-play commands that apply the role's agent half after `apply`, from
             `agent_join_cmds`, or () for a role or a row with no agent half (#5627).
+        pins: the pin-play commands, as `(host to run it on, command)`, from
+            `agent_pin_cmds`, or () for a row that does not reach the pin play (#5918).
         clear: the `clear-owed` command to run once the role is applied.
     """
 
@@ -222,6 +225,7 @@ class ManualPlaneRemedy:
     by_hand: str
     warning: str
     agents: tuple[str, ...]
+    pins: tuple[tuple[str, str], ...]
     clear: str
 
 
@@ -263,6 +267,11 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
                     if not hand
                     else ()
                 ),
+                pins=tuple(
+                    agent_pin_cmds(e.role, e.playbook, selected, e.agent_hosts)
+                    if not hand
+                    else ()
+                ),
                 clear=owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             )
         )
@@ -296,6 +305,7 @@ def manual_plane_lines(owed, now):
                 f"apply `{r.apply}` by hand"
                 + (f" (WARNING: {r.warning})" if r.warning else "")
                 + "".join(f" and `{a}`" for a in r.agents)
+                + "".join(f" and `{cmd}` (run on {host})" for host, cmd in r.pins)
             )
         else:
             how = "apply " + " and ".join(f"`{a}`" for a in r.agents) + " by hand"
