@@ -1042,7 +1042,7 @@
  "scripts/deploy_tools/tests/test_narrow_setup_facts.py": 1.89,
  "scripts/deploy_tools/tests/test_narrow_setup_plugins.py": 0.81,
  "scripts/deploy_tools/tests/test_narrow_setup_task_file_kinds.py": 0.99,
- "scripts/deploy_tools/tests/test_narrow_setup_vars_walk.py": 1.67,
+ "scripts/deploy_tools/tests/test_narrow_setup_vars_walk.py": 5.39,
  "scripts/deploy_tools/tests/test_order_only.py": 1.75,
  "scripts/deploy_tools/tests/test_promote_ci_contexts.py": 0.0,
  "scripts/deploy_tools/tests/test_promote_decide.py": 1.07,
