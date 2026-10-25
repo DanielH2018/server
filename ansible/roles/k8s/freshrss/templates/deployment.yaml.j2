@@ -29,6 +29,7 @@ spec:
       containers:
         - name: freshrss
           image: {{ freshrss_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
           # The s6 privilege-drop set plus NET_BIND_SERVICE for :80.

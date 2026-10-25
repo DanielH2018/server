@@ -16,6 +16,10 @@ spec:
       app: bento-pdf
   template:
     metadata:
+      annotations:
+        # D7's live drill: a pod-template change that rolls the pod and nothing else
+        # (docs/target-architecture/deploy/d7-superseding-promotions.md, *Verification*).
+        homelab/d7-drill: "2026-10-24"
       labels:
         app: bento-pdf
         netpol-baseline: enforced
@@ -25,6 +29,7 @@ spec:
       containers:
         - name: bento-pdf
           image: {{ bento_pdf_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}

@@ -468,7 +468,14 @@ The ledger's readers ignore unknown keys, which is why the tags live on the line
 **Every task file in a setup role carries its own tags**, so the derivation maps a changed path to
 the tags of the tasks that read it:
 
-- `tasks/<f>.yml` maps to the tags on its own tasks.
+- `tasks/<f>.yml` maps to the tags on its own tasks. When the role's `tasks/main` imports the file
+  statically, an edit maps to the tags of the top-level tasks the range added or changed, read at
+  the new ref, and of the tasks it deleted, read at the old ref (#6234). A deleted task's tag must
+  still select a task at the new ref, or the derivation refuses. H1.4 deleted the `coredns`
+  instance from `setup/k3s`'s `stale-checkout-guard.yml`, and the whole-file answer had named the
+  surviving Longhorn instances' tags instead. A file that sets a fact, runs `include_vars` or
+  `register:`s a result keeps the tags of every task in it, because an edited task can read a
+  variable that an unchanged task sets under another tag.
 - `templates/<f>` or `files/<f>` maps to the tags of every task file naming `<f>`, following a
   template another template includes or imports. A host script's template is usually named in a
   `defaults/` data structure rather than a task's `src:` (`setup/k3s` collects them in
@@ -1729,8 +1736,9 @@ under-sized.
   failure-driven worst cases cannot stack; the residual is a slow but successful run cut short.
 - Forward and rollback run sequentially in one activation: `TimeoutStartSec` in
   `gitops-deploy.service.j2` is `max(broad, k8s + rollback)` plus the flock wait.
-- **The FORWARD cap is derived from the worst promoted role** (#2397), and it cannot be raised
-  alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
+- **The FORWARD cap is derived from the worst promoted, Ansible-owned role** (#2397). A
+  flux-owned role is skipped, as the deployer skips it, so since the D5 flips the cap is sized
+  for a role handed back to Ansible: prowlarr at 960 s. It cannot be raised alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
   Under-sized, a cap kill lands MID-DRAIN and routes to `_rollback_k8s`.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
   `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 3840 s, and

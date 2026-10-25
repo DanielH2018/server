@@ -15,7 +15,7 @@ from deployer_lib.deploy_changes import services_from_changed_paths
 from deployer_lib.deploy_remediation import broad_remediation, manual_plane_remediation
 from lib import yaml_fast
 from deployer_lib.deploy_setup_roles import setup_role_playbook
-from gitops_markers import AGENT_JOIN_TAGS
+from gitops_markers import AGENT_JOIN_TAGS, AGENT_PIN_TAGS
 from lib.repo_paths import ALL_VARS, REPO
 
 K3S = "ansible/roles/setup/k3s"
@@ -136,3 +136,55 @@ def test_every_tag_a_play_include_alone_reaches_is_an_agent_join_tag():
                 assert tags <= {AGENT_JOIN_TAGS.get(role)}, (playbook.name, rel, tags)
                 seen.add((role, rel))
     assert ("k3s", "tasks/agent.yml") in seen, seen
+
+
+def test_a_static_address_change_prints_the_pin_play_beside_the_server():
+    """#5918's Verify-by: `tasks/static-address.yml` runs from the server play AND the pin play.
+
+    `tasks/main.yml` imports it, so the row keeps `node-address` on the server command for
+    daniel-box's own pin. The pin play matches no host without `-e pin_agent_address=`, so
+    each agent node needs its own command, which runs on that node. `broad_remediation`,
+    with no row, prints the pin beside the whole-role tag, which never reaches that play.
+    """
+    path = f"{K3S}/tasks/static-address.yml"
+    cs = services_from_changed_paths([path])
+    row = _index().tags_of(path.removeprefix(f"{K3S}/"))
+    assert row == {"node-address"}
+    pins = [
+        f"k3s-bringup.yml -e pin_agent_address={host} --tags node-address` "
+        f"(run on {host})"
+        for host in _agent_hosts()
+    ]
+    ledger = manual_plane_remediation(cs.setup_roles, {"k3s": row})
+    _ordered(
+        ledger,
+        "k3s-bringup.yml --tags node-address`",
+        *pins,
+        "clear-owed manual_plane k3s --applied node-address`",
+    )
+    assert "join_agent" not in ledger, ledger
+    broad = broad_remediation(
+        cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks
+    )
+    _ordered(broad, "k3s-bringup.yml --tags k3s`", *pins)
+
+
+def test_every_file_both_plays_reach_carries_the_pin_tag():
+    """A file the server play imports and an opt-in play also runs needs the pin command.
+
+    The narrowing reads such a file off `tasks/main`, so its row prints the server command
+    alone unless its tag is `AGENT_PIN_TAGS[role]`. `static-address.yml` is the member the
+    census must find.
+    """
+    seen = set()
+    for playbook in sorted((REPO / "ansible").glob("*.yml")):
+        text = playbook.read_text()
+        if "tasks_from" not in text:
+            continue
+        for role in narrow_setup_index.playbook_roles(text):
+            index = narrow_setup_index.RoleIndex(role, "HEAD", str(REPO), text)
+            for rel in sorted(set(index.play_included) & index.reachable):
+                tags = index.play_included[rel]
+                assert tags == {AGENT_PIN_TAGS.get(role)}, (playbook.name, rel, tags)
+                seen.add((role, rel))
+    assert ("k3s", "tasks/static-address.yml") in seen, seen

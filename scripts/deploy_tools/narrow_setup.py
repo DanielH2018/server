@@ -13,6 +13,9 @@ to the tags of the tasks that read it:
 
   - `tasks/<f>.yml`: the tags on its own tasks. One whose parsed tasks are the same at both
     refs, once a static import's `name:` is dropped, reaches no host and adds no tag (#5930).
+    One `tasks/main` imports statically maps to the tags of the top-level tasks the range
+    added or changed, at `new`, and of those it deleted, at `old` (#6234). A file that sets a
+    fact, loads vars or registers a result keeps the tags of every task in it.
   - `templates/<f>` or `files/<f>`: the tags of every task file naming `<f>`, following a
     template that another template includes or imports.
   - `defaults/main.yml` or `vars/<f>.yml`: the top-level keys whose value changed, then the
@@ -114,7 +117,7 @@ from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_
 from deploy_tools.narrow_lib.foreign_keys import keys_reaching
 from deploy_tools.narrow_lib.setup_index import SETUP_TREE, RoleIndex, foreign_tags
 from deploy_tools.narrow_lib.setup_playbook import playbook_applies_role
-from deploy_tools.narrow_lib.task_walk import runs_the_same
+from deploy_tools.narrow_lib.task_walk import changed_task_tags, runs_the_same
 
 # The directories under a role a changed path can be narrowed from. Everything else in the
 # role — `handlers/` (whose tasks run under the notifying task's tags), `meta/`, `tests/`,
@@ -214,7 +217,7 @@ class OldRole:
             self._read = (RoleIndex(role, self.old, self.repo, playbook_text), live)
         return self._read
 
-    def _still_live(self, what: str, tags: frozenset[str]) -> frozenset[str]:
+    def still_live(self, what: str, tags: frozenset[str]) -> frozenset[str]:
         gone = tags - self._before_and_live()[1]
         if gone:
             raise CannotNarrow(
@@ -230,7 +233,7 @@ class OldRole:
             CannotNarrow: nothing reads the key at `old` either, or one of its old readers'
                 tags selects nothing at `new`.
         """
-        return self._still_live(key, self._before_and_live()[0].key_readers(key))
+        return self.still_live(key, self._before_and_live()[0].key_readers(key))
 
     def path_tags(self, rel: str) -> frozenset[str]:
         """The tags a deleted `tasks/`, `templates/` or `files/` path had at `old`, or a refusal.
@@ -241,7 +244,7 @@ class OldRole:
         """
         before = self._before_and_live()[0]
         got = path_tags(rel, before, self.old, self.new, self.repo, self)
-        return self._still_live(rel, got)
+        return self.still_live(rel, got)
 
 
 def path_tags(
@@ -288,6 +291,26 @@ def path_tags(
         # into the whole-role `--tags k3s` (#4384).
         return frozenset(tags)
     raise CannotNarrow(f"{rel} is not in a directory this can narrow from")
+
+
+def edited_task_file_tags(
+    rel: str, index: RoleIndex, old: str, now: str, repo: str, deleted: OldRole
+) -> frozenset[str]:
+    """The tags of the tasks an edit to a task file present at both refs changed (#6234).
+
+    `index.tags_of` runs first, so every refusal it makes still refuses, and its whole-file
+    answer stands wherever `changed_task_tags` declines. Only a file `tasks/main` imports
+    statically narrows per task: there each task's own tags select it, while an included
+    file's tasks are selected by the include site's tags.
+    """
+    whole = index.tags_of(rel)
+    if rel not in index.reachable:
+        return whole
+    diff = changed_task_tags(show_at(old, f"{index.prefix}{rel}", repo) or "", now)
+    if diff is None:
+        return whole
+    added, gone = diff
+    return added | (deleted.still_live(rel, gone) if gone else frozenset())
 
 
 def foreign_key_tags(
@@ -466,6 +489,8 @@ def role_tags(
                 show_at(old, path, repo) or "", now or ""
             ):
                 got = frozenset()
+            elif rel.startswith("tasks/"):
+                got = edited_task_file_tags(rel, index, old, now or "", repo, deleted)
             else:
                 got = path_tags(rel, index, old, new, repo, deleted)
         elif path in plugins:

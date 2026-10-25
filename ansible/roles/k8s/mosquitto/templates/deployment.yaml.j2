@@ -37,6 +37,7 @@ spec:
       initContainers:
         - name: config-copy
           image: {{ mosquitto_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
@@ -55,6 +56,7 @@ spec:
       containers:
         - name: mosquitto
           image: {{ mosquitto_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 1883
 {{ hardened_security_context(read_only=true, non_root=true) }}

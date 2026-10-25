@@ -29,6 +29,7 @@ spec:
       containers:
         - name: autofix-bridge
           image: {{ autofix_bridge_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command: ["python", "/app/autofix.py"]
           ports:
             - name: checks

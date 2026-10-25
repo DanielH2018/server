@@ -63,6 +63,24 @@ environment writes there. A child given an environment built from scratch inheri
 `lib.proc_testing.run` carries `TEXTFILE_DIR` into such an environment itself, and a test that
 calls `subprocess` directly passes `TEXTFILE_DIR` in its own `env`.
 
+## Ansible's local temp directory points at a temp directory
+
+Importing ansible-core's constants creates `ansible-local-<pid><8 chars>` under
+`~/.ansible/tmp` and registers only an atexit handler to remove it. A pytest run killed by a
+signal runs no atexit handler, so it leaves one empty directory per process that imported
+ansible: one per xdist worker, within a fraction of a second, with consecutive pids. That is
+the shape found on daniel-box after #4893 (#5904). A harness that kills a background
+`git commit` when its session ends kills prek's pytest hooks with it, and a timed-out Bash
+call kills a run the same way.
+
+At import, before any conftest can import ansible and before xdist spawns its workers, this
+plugin sets `ANSIBLE_LOCAL_TEMP` to `ANSIBLE_LOCAL_TEMP_DIR`, overriding any exported value.
+That directory sits under the system temp directory and carries the uid in its name, so two
+users' runs never share it. Each process that loads the plugin also removes every
+`ansible-local-<pid>*` there whose process is gone, so a killed run's directories last only
+until the next run starts. The dead-pid test is what makes the sweep safe while other
+sessions' runs are live in the same directory.
+
 ## What is deliberately NOT shimmed
 
 `git` — too central to intercept safely. Every write verb targets a `tmp_path` repo through `git -C`, no child environment
@@ -98,6 +116,7 @@ cache those harnesses once fenced off is gone: ansible.cfg keeps none since #327
 """
 
 import os
+import re
 import shutil
 import socket
 import tempfile
@@ -203,9 +222,47 @@ def strip_env(environ, names) -> list[str]:
     return removed
 
 
+ANSIBLE_LOCAL_TEMP_DIR = (
+    Path(tempfile.gettempdir()) / f"pytest-ansible-local-{os.getuid()}"
+)
+
+# `tempfile.mkdtemp(prefix="ansible-local-%s" % os.getpid())` appends 8 random characters.
+_ANSIBLE_LOCAL = re.compile(r"ansible-local-(\d+)[a-z0-9_]{8}")
+
+
+def sweep_dead_ansible_local(parent: Path) -> list[str]:
+    """Remove each `ansible-local-<pid>*` in `parent` whose process is gone.
+
+    Returns the names removed, sorted. Any other entry, and the directory of a live process,
+    is left alone. Never raises: a test run must not fail over housekeeping.
+    """
+    removed = []
+    try:
+        entries = sorted(parent.iterdir())
+    except OSError:
+        return removed
+    for entry in entries:
+        match = _ANSIBLE_LOCAL.fullmatch(entry.name)
+        if match is None or Path(f"/proc/{match.group(1)}").exists():
+            continue
+        shutil.rmtree(entry, ignore_errors=True)
+        if not entry.exists():
+            removed.append(entry.name)
+    return removed
+
+
+def use_ansible_local_temp(environ, parent: Path) -> None:
+    """Point ansible-core's local temp directory at `parent`, after sweeping it."""
+    parent.mkdir(mode=0o700, exist_ok=True)
+    sweep_dead_ansible_local(parent)
+    environ["ANSIBLE_LOCAL_TEMP"] = str(parent)
+
+
 # At import rather than in a hook: the controller strips before xdist spawns its workers, each
-# worker strips again as it loads the plugin, and no session fixture runs first.
+# worker strips again as it loads the plugin, and no session fixture runs first. The same
+# holds for ansible's temp directory, which a conftest's ansible import would create.
 strip_env(os.environ, GIT_HOOK_VARS | AGENT_PROFILE_VARS)
+use_ansible_local_temp(os.environ, ANSIBLE_LOCAL_TEMP_DIR)
 
 
 def _is_exempt() -> bool:

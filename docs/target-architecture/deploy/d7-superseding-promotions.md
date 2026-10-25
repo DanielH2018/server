@@ -1,8 +1,9 @@
 # D7 — Superseding promotions
 
 Status: PLANNED. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in #6145, D7.4 in
-#6156, the refactor D7.5 needed in #6159, D7.5 in #6193, and D7.7. `SUPERSEDE` stays
-`False` until the operator rules on D7.6.
+#6156, the refactor D7.5 needed in #6159, D7.5 in #6193, D7.7 in #6200, and the hold
+attribution #6199 asked for in #6204. The operator turned `SUPERSEDE` on in D7.6 on
+2026-10-24; the live pair in *Verification* is the drill that follows it.
 
 Depends on: D5, through #5704's soak fix (the soak Job exits once `homelab` no longer
 holds its revision). D2.5's in-flight guard and D5.2b1's hold without a reset are the

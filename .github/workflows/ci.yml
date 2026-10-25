@@ -1174,10 +1174,12 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
           CASE_INPUTS: |
+            hosts/bootstrap-host.sh
             hosts/lib/tests/container/
             scripts/validate/host_package_cases.py
             scripts/validate/host_packages.py
             scripts/validate/validate_lib/host_container.py
+            scripts/validate/validate_lib/bootstrap_case.py
             scripts/validate/validate_lib/conffile_case.py
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/package_roots.py
@@ -1375,8 +1377,9 @@ jobs:
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
     runs-on: ubuntu-26.04
     # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
-    # apt's retries can take minutes, and the cases boot three containers per leg.
-    timeout-minutes: 30
+    # apt's retries can take minutes. Each leg boots a container per case, and four of the
+    # bootstrap cases render and build the host packages from a clone (H7.15a).
+    timeout-minutes: 45
     strategy:
       # Each leg reports its own conclusion, so one release's failure does not hide the other's.
       fail-fast: false

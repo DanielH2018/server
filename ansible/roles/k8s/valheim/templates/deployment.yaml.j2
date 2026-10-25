@@ -98,6 +98,7 @@ spec:
       containers:
         - name: valheim
           image: {{ valheim_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - name: game
               containerPort: 2456
