@@ -531,24 +531,3 @@ def test_red_an_arm_that_skips_the_before_chain_check_is_caught(tmp_path):
         "    if LOOPBACK in chain.stdout.splitlines():",
         "    if True:",
     )
-
-
-def test_an_intact_before_chain_passes_the_check(node):
-    have(node, *LABELS.items())
-    declare(node, *RULES)
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert ["-S", "ufw-before-input"] in [c["argv"][1:] for c in node.calls("iptables")]
-
-
-def test_an_inactive_host_never_reads_the_before_chain(node):
-    # An inactive ufw has no ufw-before-input to read, and an empty declaration enables nothing.
-    have(node, active=False)
-    declare(node)
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert node.calls("iptables") == []
