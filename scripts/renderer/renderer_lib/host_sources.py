@@ -38,7 +38,7 @@ SHARED_FILES = {
 # daniel-server*). The role keeps owning the file until H7.8 moves daniel-box, so a package
 # renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
 # SHARED_FILES, so a component cannot read any other role.
-ROLE_SOURCES = frozenset({"nut_host"})
+ROLE_SOURCES = frozenset({"common", "nut_host"})
 # A `src` with this prefix names a template of the component's `role:`, not of the component.
 ROLE_SRC = "role:"
 

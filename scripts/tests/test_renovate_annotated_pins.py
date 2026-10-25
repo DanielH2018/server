@@ -10,8 +10,9 @@ A pinned artifact is declared to Renovate by one annotation above its `_version:
 - The annotated-pin packageRule sitting after a per-package rule it should yield to, which
   strips `k8s_autodeploy: false` from the crowdsec bouncer plugin's title so the unattended
   agent lands a traefik redeploy.
-- The Pi's node_exporter pin and the cluster image splitting into two PRs. A test holds the
-  two equal, so each PR would stay red until the other merged.
+- The Pi's node_exporter pin (a `homelab-tools` tool since H7.25) and the cluster image
+  splitting into two PRs. A test holds the two equal, so each PR would stay red until the
+  other merged.
 
 Run: uv run pytest scripts/tests/test_renovate_annotated_pins.py
 """
@@ -45,7 +46,6 @@ KNOWN_ANNOTATED = frozenset(
         "docker-ce",
         "maxlerebourg/crowdsec-bouncer-traefik-plugin",
         "node",
-        "prometheus/node_exporter",
     }
 )
 
@@ -62,7 +62,7 @@ _ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)
 
 SOPS_DEFAULTS = "ansible/roles/setup/sops_setup/defaults/main.yml"
 TRAEFIK_DEFAULTS = "ansible/roles/k8s/traefik/defaults/main.yml"
-PI_DEFAULTS = "ansible/roles/setup/optimize_pi/defaults/main.yml"
+PI_TOOL_PINS = "hosts/packages/homelab-tools/package.yml"
 NODE_EXPORTER_DEFAULTS = "ansible/roles/k8s/node-exporter/defaults/main.yml"
 CROWDSEC_PLUGIN = "maxlerebourg/crowdsec-bouncer-traefik-plugin"
 DENYLIST_MARKER = "k8s_autodeploy: false"
@@ -154,7 +154,6 @@ def test_every_version_a_pin_renders_from_is_tracked():
     assert {
         "sops_setup_binary_amd64",
         "k3s_install_script",
-        "optimize_pi_node_exporter",
     } <= {p.name for p in with_versions}
     problems = untracked_pin_versions(
         with_versions, _MANAGERS, _read, UNTRACKED_BY_DECISION
@@ -248,11 +247,11 @@ def test_the_annotated_pin_rule_moved_last_would_strip_the_marker():
 
 # ── the two node_exporter pins move in one PR ─────────────────────────────────────────────
 
-# The cluster image and the Pi's annotated tarball pin, which
+# The cluster image and the Pi's `homelab-tools` pin, which
 # ansible/tests/setup/test_pi_node_exporter_host_unit.py holds equal.
 NODE_EXPORTER_TWINS = (
     ("prom/node-exporter", NODE_EXPORTER_DEFAULTS, "docker", None),
-    ("prometheus/node_exporter", PI_DEFAULTS, "github-releases", DEP_TYPE),
+    ("prometheus/node_exporter", PI_TOOL_PINS, "github-release-attachments", None),
 )
 
 
@@ -269,16 +268,18 @@ def test_the_node_exporter_twins_share_one_manual_group():
         f"the two node_exporter pins resolve to {groups}; split PRs each go red on the "
         "equality test until the other merges"
     )
-    assert "asset_pins.py --refresh prometheus/node_exporter" in str(groups.pop())
+    assert "homelab-tools node-exporter pin" in str(groups.pop())
     for dep, path, ds, dt in NODE_EXPORTER_TWINS:
         automerge = _resolve_setting("automerge", dep, path, "minor", ds, dep_type=dt)
         assert automerge is False, f"{dep} automerges a version bump: {automerge}"
 
 
-def test_the_twin_rule_moved_before_the_annotated_pin_rule_splits_them():
-    """The red half: the annotated-pin rule then overrides the Pi pin's groupName."""
+def test_the_twin_rule_moved_before_the_homelab_tools_rule_splits_them():
+    """The red half: the homelab-tools rule then overrides the Pi pin's groupName."""
     at = next(
-        i for i, r in enumerate(_PACKAGE_RULES) if r.get("matchDepTypes") == [DEP_TYPE]
+        i
+        for i, r in enumerate(_PACKAGE_RULES)
+        if PI_TOOL_PINS in r.get("matchFileNames", [])
     )
     twin = next(
         i

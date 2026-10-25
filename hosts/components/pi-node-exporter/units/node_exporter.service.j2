@@ -13,8 +13,12 @@ Group=node_exporter
 # The collector set the container ran, minus the --path.* remaps a container needed to see the
 # host's /proc, /sys and /, and with the textfile collector on for homelab-updater's
 # homelab_host.prom (H3.6). The listen address is the LAN IP, as the container's published port
-# was; a UFW allow in the role admits the LAN to it.
-ExecStart=/usr/local/bin/node_exporter \
+# was; a UFW allow for the LAN admits it (H7.30 declares that rule). The binary is homelab-tools'
+# node-exporter, the version the cluster's DaemonSet pins.
+# +: the directory is created outside the unit's ProtectSystem=strict sandbox, as H7.10a's
+# docs-refresh unit does. systemd-tmpfiles-setup.service applies the same file at boot.
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-node-exporter.conf
+ExecStart=/usr/lib/homelab/bin/node-exporter \
   --web.listen-address={{ server_ip }}:9100 \
   --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($|/) \
   --no-collector.arp \

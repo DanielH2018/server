@@ -10,7 +10,6 @@ Run: uv run pytest ansible/tests/repo/test_census_rows_text.py
 
 import re
 from functools import cache
-from pathlib import PurePosixPath
 
 import pytest
 from _workflow_rows import WORKFLOW_ROWS
@@ -23,9 +22,8 @@ from _deploy_sh_callers_row import (
 )
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
-from lib import yaml_fast
-from renderer.renderer_lib import host as host_mode
 from lib.facts.citations import macro_citations
+from _host_package_units import host_package_units as _host_package_units
 from _row_table import (
     Census,
     Subject,
@@ -106,26 +104,6 @@ INLINE_REFLAG_LIST = re.compile(r"Honor accepted designs \(don't re-flag\):")
 
 
 # ── Units the host packages ship ─────────────────────────────────────────────────────
-
-
-def _host_package_units() -> list[Subject]:
-    """One subject per unit a host spec ships: its name as `rel`, the spec's path as `text`.
-
-    A unit is a file directly under `UNIT_DIR` with a unit suffix, as `Package.units()` reads
-    it, or a unit an `enable:` map links from a `<target>.wants/` directory. A drop-in under
-    `<unit>.d/` is not one: it may extend another package's unit, which keeps its own name.
-    """
-    units = []
-    for rel in tracked("hosts/*package.yml", "hosts/*component.yml"):
-        spec = yaml_fast.safe_load((REPO / rel).read_text()) or {}
-        units.extend(Subject(str(unit), rel) for unit in spec.get("enable") or {})
-        for entry in spec.get("files") or []:
-            dst = PurePosixPath(str(entry.get("dst", "")))
-            if dst.parent == host_mode.UNIT_DIR and dst.name.endswith(
-                host_mode.UNIT_SUFFIXES
-            ):
-                units.append(Subject(dst.name, rel))
-    return units
 
 
 def _namespace_dir_files() -> list[str]:

@@ -1,0 +1,12 @@
+{
+  "checksum": "6157f94cec6b612ab63afeb619c348dffd5e00bcabb5bcc2a90a307a727db37d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/pi-peer-backup/CLAUDE.md#Editing",
+  "row": {
+    "atoms": {
+      "hosts/components/pi-peer-backup-target/component.yml": "a4f9ca89f2971d92321d82081f397a4b5b3c3aafef428181d4e228822c239ae0"
+    },
+    "python": "3.14",
+    "verified_sha": "7ed18d48f"
+  }
+}

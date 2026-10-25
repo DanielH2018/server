@@ -14,7 +14,8 @@ The pairs are DERIVED: every copied key that a `roles/k8s/*` defaults file or
 `group_vars/all.yml` also defines. `EXPECTED_PAIRS` names them, so a new pair joins the census
 by name. artifacts' conversion PR added four, and
 media-volume's added `media_volume_host_path` with the `group_vars` keys `puid` and `pgid`,
-and pi-peer-backup's flip added `pi_peer_backup_src_dir`.
+and pi-peer-backup's flip added `pi_peer_backup_src_dir`, which H7.25 moved into the Pi package;
+hosts/lib/tests/test_pi_tuning_component.py holds that copy equal to the k8s default.
 
 The docs-refresh component's copy of `docs_host_site_dir` is held equal to docs' default by
 `hosts/lib/tests/test_docs_refresh_component.py` since H7.10a moved the directory out of this role.
@@ -49,7 +50,6 @@ EXPECTED_PAIRS: frozenset[str] = frozenset(
         "artifacts_stars_dir",
         "media_volume_host_path",
         "pgid",
-        "pi_peer_backup_src_dir",
         "puid",
         "registry_k8s_gc_cron_hour",
         "registry_k8s_gc_cron_minute",

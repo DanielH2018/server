@@ -1,19 +1,23 @@
 # Pi host tuning record
 
-What each step of the `optimize_pi` role does on daniel-pi, and the measurements behind the
-numbers it sets. `ansible/roles/setup/optimize_pi/CLAUDE.md` carries the rules a session must
-not break and indexes the steps; this page is the working-out, read when you edit one of them.
-The three heartbeats below left the role in H3.8b. The `homelab-daniel-pi` package ships them
+What each step of the Pi's tuning does on daniel-pi, and the measurements behind the numbers it
+sets. Since H7.25 the `optimize_pi` role is empty and `homelab-daniel-pi` ships the steps:
+`hosts/components/pi-tuning/` (zram, Log2Ram, the watchdog, earlyoom, the log caps, the apt
+timers), `pi-node-exporter/`, `pi-resolver/` and `pi-peer-backup-target/`. Each `component.yml`
+header carries the rules a session must not break; this page is the working-out, read when you
+edit one of them. The task and tag names below name the Ansible-era steps, which the git history
+keeps (`git show 4e5d0b8f9:ansible/roles/setup/optimize_pi/tasks/main.yml`). The three
+heartbeats below left the role in H3.8b. The `homelab-daniel-pi` package ships them
 from `hosts/components/pi-heartbeats/`, whose `component.yml` header carries the recovery
 heartbeat's Autonomous-role contract.
 
 The board is a Raspberry Pi Zero 2 W with 512 MB of RAM, so nearly every number here was
 picked against a memory ceiling rather than a CPU one.
 
-## Granular tag rules
+## Granular tag rules (Ansible era)
 
-The role's tags let one section run without the whole role, and three cases make a task carry a
-tag it does not obviously belong to:
+Until H7.25 the role's tags let one section run without the whole role, and three cases made a
+task carry a tag it did not obviously belong to:
 
 - The shared prep tasks are dual-tagged: `Set variables` is `[gpu-mem, zram]`, and the
   config.txt path detection is `[gpu-mem, watchdog]`, so a scoped run still gets the facts it
@@ -79,11 +83,10 @@ starts. The empty `/var/hdd.log` and a start that exited after 1.1s with status 
 guard. `systemctl status` dated the failure 2026-07-28, which is the Pi's clock before NTP sync,
 not the real date. The fix is a file-count cap in the journald drop-in, described below.
 
-**Recovering from a refused start takes a reboot.** Applying `--tags log2ram` restarts
-journald, which trims the journal on the card, but nothing in the role starts the failed
-`log2ram.service`. log2ram mounts its tmpfs only at boot, and the role's `Reboot Pi` handler
-fires only when the package or `/etc/log2ram.conf` changes. Reboot the Pi by hand after the
-apply. Then check that `systemctl is-active log2ram` prints `active` and that
+**Recovering from a refused start takes a reboot.** Installing the journald cap restarts
+journald, which trims the journal on the card, but nothing starts the failed `log2ram.service`.
+log2ram mounts its tmpfs only at boot, and reconcile marks the host reboot-pending only when
+`/etc/log2ram.conf` changes. Reboot the Pi by hand after the install. Then check that `systemctl is-active log2ram` prints `active` and that
 `findmnt /var/log` shows a tmpfs.
 
 ## Watchdog and debloat
@@ -114,8 +117,8 @@ Together these reclaimed about 17 MB on 2026-07-06.
 
 ## The log RAM budget
 
-`/var/log` is log2ram's RAM-backed tmpfs, and the role declares its size rather than
-inheriting it, with `LOG_DISK_SIZE`, `ZL2R` and `COMP_ALG` beside it:
+`/var/log` is log2ram's RAM-backed tmpfs, and the `pi-tuning` component declares its size rather
+than inheriting it, with `LOG_DISK_SIZE`, `ZL2R` and `COMP_ALG` beside it:
 
 --8<-- "assets/generated/fragments/pi-log2ram.md"
 
@@ -127,11 +130,11 @@ duplicate `JOURNALD_AWARE=true` is upstream's own bug at 1.7.2, fixed on master.
 
 **The duplicate line stays.** Both copies read `true`, log2ram sources the file, so the last
 assignment wins and the duplicate is inert — while deleting a shipped line would make the
-conffile dpkg-MODIFIED and manufacture the apt-upgrade conffile prompt #2714 wanted gone. What
-the role checks instead is that the copies AGREE (#2726): a task counts the DISTINCT
-`JOURNALD_AWARE=` values and fails on anything but one, so two lines that disagree — where the
-effective value is silently whichever sits last — stop the play, and a later log2ram that ships
-the line once passes unchanged.
+conffile dpkg-MODIFIED and manufacture the apt-upgrade conffile prompt #2714 wanted gone. Until
+H7.25 a task also counted the DISTINCT `JOURNALD_AWARE=` values and failed on anything but one
+(#2726), so two lines that disagree — where the effective value is silently whichever sits last
+— stopped the play. The line arm edits only the four keys above and never touches
+`JOURNALD_AWARE`, so that read went with the role.
 
 The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
 
@@ -178,8 +181,8 @@ container.
 
 ## apt timers pinned to the quiet hour
 
-A drop-in per timer (`apt-timers`, `optimize_pi_apt_timers`) pins each timer to one daily time,
-±10 min:
+A drop-in per timer (`hosts/components/pi-tuning/templates/apt-daily*-quiet-hour.conf`) pins
+each timer to one daily time, ±10 min:
 
 --8<-- "assets/generated/fragments/pi-apt-timers.md"
 
@@ -187,19 +190,22 @@ Ubuntu's default fires the
 update half twice a day at any hour (`6,18:00` plus 12 h of randomness), and on this box each
 firing is a four-minute 60 MB burst: measured 2026-09-18 at 15:05Z, memory PSI `full avg10`
 45%, load 9.9, an RCU stall (#2007). The drop-in clears the packaged schedule with an empty
-`OnCalendar=` first, and `ansible/tests/setup/test_pi_apt_timers_pinned.py` requires that line
+`OnCalendar=` first, and `hosts/lib/tests/test_pi_tuning_component.py` requires that line
 and the window. The Pi memory budget review of 2026-09-18 has the host's numbers.
 
 ## node_exporter as a host unit
 
-`node-exporter-host` and the `optimize_pi_node_exporter_*` vars install the upstream v1.12.1
-arm64 tarball, checksum-pinned, under `/opt`, with `/usr/local/bin/node_exporter` a symlink to
-the pinned version — a bump moves the link, which restarts `node_exporter.service`. It runs as
+The `pi-node-exporter` component ships the unit, and `homelab-tools` ships the upstream v1.12.1
+binary at `/usr/lib/homelab/bin/node-exporter`, checksum-pinned per architecture. A bump is a new
+`homelab-tools` version, and reconcile restarts `node_exporter.service` when the unit changes.
+Until H7.25 the `node-exporter-host` tag installed the tarball under `/opt`, with
+`/usr/local/bin/node_exporter` a symlink to the pinned version. The unit runs as
 the `node_exporter` system user on the LAN IP's port 9100 with the collector flags the
 container ran, plus a UFW allow from `lan_subnet`. H3.6 turned the textfile collector on over
-`/var/lib/node-exporter-textfile`, where `homelab-updater` writes `homelab_host.prom`. The same
-tag creates that directory with M3's owner contract: owner root, group `sys_user`, mode 2775.
-Nothing else creates it on the Pi, and the updater fails without it.
+`/var/lib/node-exporter-textfile`, where `homelab-updater` writes `homelab_host.prom`. A
+`tmpfiles.d` line creates that directory with M3's owner contract: owner root, group `sys_user`,
+mode 2775. The unit's `ExecStartPre=+` and `systemd-tmpfiles-setup.service` apply it. Nothing
+else creates it on the Pi, and the updater fails without it.
 
 It replaced the `node-exporter` container on 2026-09-18 (#2005; the retired role is at
 `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/node-exporter/`).
@@ -376,7 +382,9 @@ directions, with no daemon watching anything.
 its upstreams at container START, so a changed host resolv.conf leaves every running container
 forwarding to whatever was there before. Nothing goes unhealthy and no monitor fires: on the
 2026-09-01 cutover the Pi's log shipper stopped resolving its Loki push URL and nothing else
-changed. The role restarts the running containers whenever it rewrites resolv.conf, and a restart
+changed. Until H7.25 the role restarted the running containers whenever it rewrote resolv.conf.
+The package does not, so after a change to the file the operator restarts the Compose project
+(`docker compose up -d --force-recreate`) or the containers recreate on their next `up`. A restart
 is enough, since Docker regenerates the container's file from the host's on start.
 
 **The cost:** one 2s timeout per lookup while Pi-hole is down, because `attempts` counts rounds
@@ -389,9 +397,9 @@ a `10.42.x` one.
 invocation, and the Pi's image shipped no `/etc/hosts` line for it — so the lookup fell through
 to the Pi-hole VIP above and every `sudo` printed `unable to resolve host daniel-pi: Name or
 service not known` (2026-09-27, #2724). During a cluster or Pi-hole outage that lookup waits on
-the resolver timeout first, which is exactly when an operator needs this host. The role now
-declares `127.0.1.1 {{ ansible_hostname }}` with `lineinfile`, bringing the Pi up to what
-daniel-server and daniel-box already carry.
+the resolver timeout first, which is exactly when an operator needs this host. The
+`pi-resolver` component now declares `127.0.1.1 <hostname>` through the line arm, bringing the Pi
+up to what daniel-server and daniel-box already carry.
 
 **cloud-init does not own that file here**, checked on the live host 2026-09-27:
 `manage_etc_hosts` is set in neither `/etc/cloud/cloud.cfg` nor `/etc/cloud/cloud.cfg.d/`, and
@@ -427,7 +435,7 @@ Query each figure on its own. PromQL `or` drops a series whose labels match one 
 
 ## See also
 
-- `ansible/roles/setup/optimize_pi/CLAUDE.md` — the rules, the granular tags and the
-  container-recovery contract.
+- `hosts/components/pi-heartbeats/component.yml` — the container-recovery contract.
+- `ansible/roles/setup/optimize_pi/CLAUDE.md` — where each step of the emptied role went.
 - [Security tools](security-tools.md) — the triage rows for `sar`, `lastcomm` and `ausearch`,
   whose retention the log RAM budget caps.

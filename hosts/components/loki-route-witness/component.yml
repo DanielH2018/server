@@ -36,7 +36,8 @@
 #   runs (#1712).
 #
 # ENFORCED: ansible/tests/setup/test_loki_route_witness.py (the script's behaviour against
-# stubs) and hosts/lib/tests/test_loki_route_witness_component.py (the units and legacy entries).
+# stubs), hosts/lib/tests/test_loki_route_witness_component.py (the units and legacy entries)
+# and hosts/lib/tests/test_component_retired_stamp_fragments.py (the manifest fragment names).
 credentials:
   - loki_route_witness_push_token
 files:
@@ -49,7 +50,9 @@ enable:
   homelab-loki-route-witness.timer: timers.target
   homelab-loki-route-witness-boot.service: multi-user.target
 # What initial_setup installed on daniel-box before H7.36. Reconcile retires each once the timer
-# above has started, so the witness never runs twice or not at all.
+# above has started, so the witness never runs twice or not at all. The two manifest fragments
+# carry the names the role's stamp tasks give them, which differ: the render stamp is
+# `loki-route-witness` and the deployed stamp is `loki-route-health` (#6279).
 legacy:
   - {unit: kuma-check-loki-read-route.timer}
   - {unit: kuma-check-loki-read-route.service}
@@ -60,4 +63,4 @@ legacy:
   - {path: /opt/loki-route-health/loki_route_health.py}
   - {path: /var/lib/kuma-check/loki-read-route.down}
   - {path: /var/lib/homelab/setup-render-manifest.d/loki-route-witness}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/loki-route-witness}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/loki-route-health}

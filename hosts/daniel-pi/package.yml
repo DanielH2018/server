@@ -26,8 +26,14 @@
 # Since H7.27 it ships the first three subjects of initial_setup: apt's unattended upgrades, the
 # sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup skips each on
 # this host through `initial_setup_packaged_hosts`. No file here needs a credential.
+#
+# Since H7.25 it ships the optimize_pi role's subjects: the memory, log and watchdog tuning
+# (pi-tuning), the node exporter unit and its textfile directory (pi-node-exporter), the resolver
+# and hostname line (pi-resolver), and pi-peer-backup's forced-command wrapper and key
+# (pi-peer-backup-target). The interim heartbeat token files are legacy entries below. No file
+# here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token
@@ -41,3 +47,11 @@ files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
 enable:
   homelab-updater.timer: timers.target
+legacy:
+  # The Pi's three heartbeats read their push tokens from /run/credstore since H4.5, and nothing
+  # reads the interim copies optimize_pi staged (pi-heartbeats/component.yml). H4.6's retirement
+  # lands here with the role that wrote them.
+  - {path: /etc/homelab/interim/pi_sd_health_push_token}
+  - {path: /etc/homelab/interim/pi_recovery_push_token}
+  # The Pi-only Kuma push helper that the packaged heartbeats superseded.
+  - {path: /usr/local/lib/pi-kuma-push-lib.sh}

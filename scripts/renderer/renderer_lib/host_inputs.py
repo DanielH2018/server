@@ -32,6 +32,9 @@ HOST_INPUTS = (
     "ansible/roles/setup/nut_host/defaults/main.yml",
     "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2",
     "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
+    # The resolver template the Pi's pi-resolver component renders through `role: common` (H7.25),
+    # shared with the k3s role until H7.20a moves it.
+    "ansible/roles/setup/common/templates/resolv.conf.j2",
     # Past the plan's list, found by the audit test: ansible-core reads `ansible.cfg` from the
     # render's working directory, and `homelab_render.py` imports the other two at load, for
     # cluster mode.
