@@ -161,23 +161,28 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 # Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds — the FORWARD
 # deploy only; the rollback redeploy has its own budget below.
 #
-# DERIVED from the worst promoted role. The same terms the rollback budget below sums,
-# minus the revert ones, run inside this one budget in sequence: claims x volume_snapshot_timeout
-# (the pre-apply snapshot) + the role's OWN in-role waits + manifests_rollout_timeout +
-# k8s_rollout_stabilise_seconds. prowlarr is the worst at 120 + 0 + 780 + 60 = 960s, since its
-# flip deleted the 300s isolation probe that made it 1260s when this cap was sized (#5594). The
-# rollout term is counted only for a role that queues one: netpol-baseline has the most in-role
-# waiting in the repo (one probe Job at `--timeout=310s`) and passes `manifests_rollout: ""`,
-# so it pays 370s rather than the 970s its own rollout budget would suggest.
+# DERIVED from the worst promoted, Ansible-owned role. The same terms the rollback budget below
+# sums, minus the revert ones, run inside this one budget in sequence: claims x
+# volume_snapshot_timeout (the pre-apply snapshot) + the role's OWN in-role waits +
+# manifests_rollout_timeout + k8s_rollout_stabilise_seconds. The rollout term is counted only for
+# a role that queues one (a role passing `manifests_rollout: ""` waits for no rollout).
+#
+# Only an Ansible-owned role counts, because the deployer moves every flux-owned tag to cs.flux
+# and never applies it. Every promoted role is flux-owned since the D5 flips, so no image bump
+# reaches this budget today; its one other reader is the broad arm's deferral check below. The
+# value is kept for a role handed back to Ansible. prowlarr is the worst such role at
+# 120 + 0 + 780 + 60 = 960s, since its flip deleted the 300s isolation probe that made it 1260s
+# when this cap was sized (#5594).
 #
 # On top of the role terms the tick pays two things no role declares:
 #   - the service-lock wait, spent out of this same budget (`deploy_locks.locked_budget`). 90s
 #     allowance: a sonarr tick showed a 70s gap consistent with one.
 #   - playbook overhead (start-up, facts, renders). 60s allowance: a sonarr tick was 27.8s in
 #     total, of which the snapshot was 4.74s and the probe 0.27s.
-# The cap was sized at 1260 + 90 + 60 = 1410, rounded up to 1440, and prowlarr's 960s leaves 300s
-# more. A cap under the worst sum lands as a killpg MID-DRAIN that routes to _rollback_k8s, and
-# it binds before prowlarr's own 780s rollout timeout does.
+# The cap was sized at 1260 + 90 + 60 = 1410, rounded up to 1440, and prowlarr handed back would
+# need 960 + 90 + 60 = 1110s. A cap under the worst sum lands as a killpg MID-DRAIN that routes
+# to _rollback_k8s, and it binds before the role's own rollout timeout does. Shrinking the cap
+# moves `_worst_lock_hold` and the four waiters below with it, so it is a change of its own.
 #
 # Every second here is inside `_worst_lock_hold` (600 + 120 + 1440 + 1620 = 3780s), so raising
 # this moves four other values with it, in the same change: the tree-lock waits of secret-rotate,
