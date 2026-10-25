@@ -27,16 +27,25 @@ under-report what has to go, and reading `action == "upload"` as "still live" ma
 deletion look like a no-op. Current state is the FIRST version returned for a name; the rest
 are retained history.
 
+WHY AN APPLY REUSES THE DRY RUN'S LISTING. The whole-store listing is up to 200 Class C pages
+against a 2,500/day free tier, and the operator flow runs it twice: a dry run, then `--apply`.
+With --listing-file the dry run saves the listing it paid for and the apply reads it back while
+it is younger than LISTING_MAX_AGE_SECONDS and matches the same prefix and bucket. The per-volume
+verification re-read after each delete is never skipped.
+
 Usage (credentials come from the environment; ansible/prune_backups.yml -e prune_mode=b2-drain
 supplies them):
     B2_KEY_ID=... B2_APP_KEY=... uv run python scripts/backup/b2_drain.py \
         --live-volumes-file /tmp/live.txt --volumes pvc-aaa,pvc-bbb [--apply]
 """
 
+import json
 import os
 import sys
+import tempfile
 from collections import defaultdict
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path as _Path
 
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
@@ -53,6 +62,14 @@ BACKUPSTORE_PREFIX = "longhorn/backupstore/volumes/"
 # A listing still unfinished after this many pages (200,000 versions) is refused rather than
 # acted on: a drain that deleted from a partial view could not verify it had finished.
 MAX_PAGES = 200
+# How old a saved listing may be before an apply lists afresh. An hour covers an operator reading
+# the dry run, checking `probe.py b2-spend` and re-running, while bounding how far the store can
+# drift from what the listing shows. Drift is safe either way (see the reuse site in main), so
+# this is a cost/staleness trade, not a correctness gate.
+LISTING_MAX_AGE_SECONDS = 60 * 60
+LISTING_FORMAT = 1
+# B2's error code for deleting a version that is already gone.
+FILE_NOT_PRESENT = "file_not_present"
 
 
 class DrainError(Exception):
@@ -154,6 +171,68 @@ def read_live_volumes(path: str) -> set[str]:
         raise DrainError(f"cannot read the live-volume list at {path}: {exc}") from exc
 
 
+def save_listing(
+    path: str, versions: list[dict], prefix: str, bucket_id: str, account_id: str
+) -> None:
+    """Write the listing atomically (temp file + rename), readable only by this user."""
+    document = {
+        "format": LISTING_FORMAT,
+        "prefix": prefix,
+        "bucket_id": bucket_id,
+        "account_id": account_id,
+        "listed_at": datetime.now(timezone.utc).isoformat(),
+        "versions": versions,
+    }
+    directory = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".b2-listing-")  # mode 0600
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(document, handle)
+        os.replace(tmp, path)
+    except BaseException:
+        _Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def load_listing(
+    path: str, prefix: str, bucket_id: str, account_id: str
+) -> tuple[list[dict] | None, str]:
+    """(versions, description) of a reusable saved listing, or (None, why not).
+
+    Any doubt returns None, which makes the caller list afresh: a missing, unreadable, foreign-
+    owned, symlinked, malformed, other-bucket, other-prefix or too-old file is never trusted.
+    The path is in a shared directory, and the listing decides which fileIds get deleted.
+    """
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return None, "no saved listing exists"
+    except OSError as exc:
+        return None, f"the saved listing cannot be stat'd: {exc}"
+    if not os.path.isfile(path) or os.path.islink(path) or info.st_uid != os.getuid():
+        return None, "the saved listing is not a regular file owned by this user"
+    try:
+        with open(path, encoding="utf-8") as handle:
+            document = json.load(handle)
+        listed_at = datetime.fromisoformat(document["listed_at"])
+        versions = document["versions"]
+        if document["format"] != LISTING_FORMAT or not isinstance(versions, list):
+            return None, "the saved listing has an unknown format"
+        same_store = (
+            document["prefix"] == prefix
+            and document["bucket_id"] == bucket_id
+            and document["account_id"] == account_id
+        )
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, f"the saved listing is unreadable: {exc}"
+    if not same_store:
+        return None, "the saved listing is for a different prefix or bucket"
+    age = (datetime.now(timezone.utc) - listed_at).total_seconds()
+    if age < 0 or age > LISTING_MAX_AGE_SECONDS:
+        return None, f"the saved listing is {int(age // 60)} min old"
+    return versions, f"{int(age // 60)} min old, {len(versions)} versions"
+
+
 def main(
     argv: list[str] | None = None,
     open_session: Callable[[str, str], B2Session] = B2Session,
@@ -186,6 +265,16 @@ def main(
         action="store_true",
         help="actually delete; without it the run only reports what it would do",
     )
+    parser.add_argument(
+        "--listing-file",
+        help="a dry run saves its store listing here and --apply reuses it while it is fresh "
+        f"(under {LISTING_MAX_AGE_SECONDS // 60} min, same bucket and prefix); omit to always list",
+    )
+    parser.add_argument(
+        "--fresh-listing",
+        action="store_true",
+        help="list the store afresh even when a reusable saved listing exists",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -208,6 +297,7 @@ def main(
         print("no volumes were named", file=sys.stderr)
         return B2_DRAIN_BAD_ARGS
 
+    deleted_any = False
     try:
         live = read_live_volumes(args.live_volumes_file)
         b2 = open_session(key_id, app_key)
@@ -221,9 +311,33 @@ def main(
                 "success while deleting nothing"
             )
 
-        everything = b2.list_files(
-            BACKUPSTORE_PREFIX, versions=True, max_pages=MAX_PAGES
-        )
+        everything = None
+        if args.apply and args.listing_file and not args.fresh_listing:
+            # Reusing the dry run's listing is safe when the store has moved since, because both
+            # kinds of drift fail closed. A version deleted since is reported by B2 as
+            # file_not_present, which the delete loop treats as already gone. A version created
+            # since is absent from the listing, so the verification re-read of the volume's own
+            # prefix finds it and raises DrainError. The re-read is never skipped.
+            everything, why = load_listing(
+                args.listing_file, BACKUPSTORE_PREFIX, b2.bucket_id, b2.account_id
+            )
+            if everything is None:
+                print(f"listing: fresh, because {why}")
+            else:
+                print(f"listing: reused {args.listing_file} ({why})")
+        if everything is None:
+            everything = b2.list_files(
+                BACKUPSTORE_PREFIX, versions=True, max_pages=MAX_PAGES
+            )
+            if not args.apply and args.listing_file:
+                save_listing(
+                    args.listing_file,
+                    everything,
+                    BACKUPSTORE_PREFIX,
+                    b2.bucket_id,
+                    b2.account_id,
+                )
+                print(f"listing: saved to {args.listing_file} for an --apply")
         by_volume: dict[str, list[dict]] = defaultdict(list)
         for version in everything:
             name = volume_of(version["fileName"])
@@ -245,7 +359,15 @@ def main(
                 continue
             own_prefix = volume_prefix(versions[0]["fileName"])
             for version in versions:
-                b2.delete(version["fileName"], version["fileId"])
+                try:
+                    b2.delete(version["fileName"], version["fileId"])
+                except B2Error as exc:
+                    # Already gone is the state the delete was after, so it is not a failure.
+                    # Any other B2 error still stops the run.
+                    if exc.code != FILE_NOT_PRESENT:
+                        raise
+                    print(f"  already gone: {version['fileId']}")
+            deleted_any = True
             # Verify by re-reading rather than by counting our own deletes: a drain that trusts
             # its own tally already reported "1,676/1,676 deleted" here while leaving five
             # volumes over retention.
@@ -264,6 +386,11 @@ def main(
     except (DrainError, B2Error) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return B2_DRAIN_ERRORED
+    finally:
+        # A listing that has driven deletes no longer describes the store, so the next apply
+        # must follow a new dry run rather than replay deletes of versions already gone.
+        if args.apply and args.listing_file and deleted_any:
+            _Path(args.listing_file).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
