@@ -113,13 +113,11 @@
   become: true
   failed_when: false
 
-- name: Read the installed k3s version
+- name: Read the installed k3s binary
   tags: [k3s_server]
-  # The args guard below cannot see a version bump: changing k3s_version leaves every
-  # argument identical, so the guard reads false and the installer never runs — the pin moves
-  # while the node stays put, and the play still reports ok. `check_mode: false` because a
-  # skipped command leaves this register undefined and the guard consuming it several tasks
-  # later is what breaks, not the read.
+  # SUC owns the server's version since H6.3c, so this read only tells a missing binary from a
+  # present one. `check_mode: false` because a skipped command leaves this register undefined
+  # and the guard consuming it several tasks later is what breaks, not the read.
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s --version
   register: k3s_installed_version
@@ -130,34 +128,29 @@
 
 - name: Install or reconfigure the k3s server
   tags: [k3s_server]
-  # Guarded on the unit's arguments and the installed version, not on /usr/local/bin/k3s
-  # existing. A `creates:` guard means a change to k3s_server_args never reaches an
-  # already-installed host: the play reports ok while the unit keeps its original ExecStart,
-  # and the node IP stays pinned to a NIC that has been removed. The installer rewrites the
-  # unit, daemon-reloads and restarts k3s itself, so no handler is needed.
+  # Guarded on the unit's arguments and on the binary's absence, not on the version: SUC's
+  # k3s-server Plan is the only writer of the server's version (H6.3c). A missing binary runs
+  # the full install. A missing argument re-runs the installer with INSTALL_K3S_SKIP_DOWNLOAD,
+  # which rewrites the unit and never the binary, so a flag change still reaches daniel-box
+  # until H6.4b moves the flags into a package.
   #
   # Quotes are stripped from the unit before matching because the installer single-quotes
   # each argument. This detects arguments that are missing, which covers adding or changing
   # a flag; it does not detect one that was *removed* from k3s_server_args, so a removal
   # needs the installer re-run by hand. Deliberate: a stricter set comparison that
   # misjudged the unit's quoting would restart k3s on every play.
-  #
-  # The second clause covers the version. `k3s --version` prints "k3s version v1.36.2+k3s1
-  # (<hash>)", and the pin carries its +k3sN suffix, so a substring test cannot collide the
-  # way a bare "v1.36.2" in "v1.36.20" would. An unreadable binary yields an empty string,
-  # which reads as "not installed at this version" and runs the installer — the right
-  # direction on a fresh host.
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-install.sh
   environment:
     INSTALL_K3S_EXEC: "{{ k3s_server_args }}"
     INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_SKIP_DOWNLOAD: "{{ 'true' if (k3s_installed_version.rc | default(1)) == 0 else 'false' }}"
   become: true
   when: >-
     (k3s_server_args.split() | reject('equalto', 'server')
      | difference(k3s_unit.content | default('') | b64decode | replace("'", "") | split())
      | length > 0)
-    or (k3s_version not in (k3s_installed_version.stdout | default('')))
+    or ((k3s_installed_version.rc | default(1)) != 0)
   changed_when: true
   register: k3s_server_install
 
