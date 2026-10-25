@@ -515,9 +515,14 @@ groups:
       # is why M3 keeps the deadline out of every rule's verdict
       # (docs/target-architecture/monitoring/m3-textfile-timer.md, "Three series"). Both sides
       # are restricted to the node jobs, because the pod exporters' rules in pods.yaml and
-      # pod-producers.yaml already compare against the deadline. SHADOW, because it fires beside
-      # every per-check NotReporting rule's first arm; an Alertmanager inhibit keyed on `check`
-      # and `origin` would let it page alone.
+      # pod-producers.yaml already compare against the deadline. It fires beside every per-check
+      # NotReporting rule's stale arm, at the same threshold, so an Alertmanager inhibit keyed on
+      # `check` and `origin` (alertmanager-secret.yaml.j2) mutes it wherever a pair exists. It
+      # pages alone only for a producer with no pair (#6186), and so it carries no `shadow`.
+      # The `for: 2m` lets the pair fire first. Most pairs sit in another group, which Prometheus
+      # evaluates at its own offset inside the 1m evaluation interval, so a pair can start up to
+      # a minute after this rule crosses. Without the hold, this rule's page would flush after
+      # group_wait, before the inhibit's source exists.
       - alert: HostCheckOverdue
         expr: |
           (
@@ -526,10 +531,10 @@ groups:
               homelab_check_deadline_seconds{job="node",origin="daniel-box"}
           )
           unless on (origin) (up{job="node"} == 0)
+        for: 2m
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's {{ $labels.check }} check is past its own deadline.
           description: >-
@@ -545,10 +550,10 @@ groups:
               homelab_check_deadline_seconds{job="node",origin="daniel-server"}
           )
           unless on (origin) (up{job="node"} == 0)
+        for: 2m
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's {{ $labels.check }} check is past its own deadline.
           description: >-
@@ -564,10 +569,10 @@ groups:
               homelab_check_deadline_seconds{job="node-pi",origin="daniel-pi"}
           )
           unless on (origin) (up{job="node-pi"} == 0)
+        for: 2m
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's {{ $labels.check }} check is past its own deadline.
           description: >-

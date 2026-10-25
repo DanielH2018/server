@@ -156,8 +156,9 @@ One rule per host compares each check's timestamp with the
 `homelab_check_deadline_seconds` the check declares, so a new producer is covered before
 its own `Failed`/`NotReporting` pair exists (#6166). It cannot see a file that is gone,
 because only a check's name says which series should exist, and it fires beside every
-pair's stale arm. It stays shadow until an Alertmanager inhibit keyed on `check` and
-`origin` lets it page alone. The per-check literals and their pin tests stay, for the
+pair's stale arm. An Alertmanager inhibit keyed on `check` and `origin` mutes it wherever a
+`*NotReporting` pair fires, shadow or not, so it pages alone only for a producer with no
+pair (#6186). The per-check literals and their pin tests stay, for the
 reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
 series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
 change from `homelab_host_reboot_pending_since_seconds`, which a later package change never
