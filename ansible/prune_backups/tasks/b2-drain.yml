@@ -44,6 +44,8 @@
               + (['--volumes-file', prune_volumes_file]
                  if (prune_volumes_file | default('')) | length > 0
                  else ['--volumes', prune_volumes])
+              + ['--listing-file', prune_drain_listing_file]
+              + (['--fresh-listing'] if prune_fresh_listing | bool else [])
               + (['--apply'] if prune_apply | bool else []) }}"
     chdir: "{{ prune_repo }}"
   environment:

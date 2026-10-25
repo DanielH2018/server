@@ -294,9 +294,9 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
 Run `prek run --all-files` to check before committing. **That does not run the suite.** No
 hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests` and
-its `static-ratchet-tests-*` siblings: at commit time it runs twenty-three static ratchet, lock
+its `static-ratchet-tests-*` siblings: at commit time it runs twenty-nine static ratchet, lock
 and census test files, which caused most of the PR reds that the author's own code did not
-(#3605, #4008, #4904, #5481). Each sibling carries its own `files` gate, so a commit runs
+(#3605, #4008, #4904, #5481, and six more measured 2026-10-25). Each sibling carries its own `files` gate, so a commit runs
 only the siblings whose inputs it touches. CI's `pytest` job runs the
 suite whole on every PR, and `land.sh` waits on that job before it merges. To see a red test
 before CI does, run `uv run pytest` yourself. A fan-out batch is the exception: it names test

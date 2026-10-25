@@ -13,6 +13,7 @@ from safe_reads import (
     parse_metric,
     parse_targets,
     path_is_denied,
+    redact_log_secrets,
     resolve_within_jail,
     strip_container_fields,
     summarize_container_list,
@@ -376,3 +377,28 @@ def test_cert_target_honours_a_second_zone_and_port():
         "a.other.net", 8443, "example.com, other.net", "443,8443"
     )
     assert not cert_target_allowed("a.other.net", 443, "example.com", "443,8443")
+
+
+# Prowlarr's key (32 hex chars) and HA's cast token (64), with no entropy for gitleaks.
+_APIKEY = "f" * 32
+_TORZNAB = (
+    f"Torznab failed: http://prowlarr:9696/21/api?t=tvsearch&apikey={_APIKEY}&limit=100"
+)
+
+
+def test_parse_loki_redacts_the_torznab_apikey():
+    """A `query_logs` row over a *arr line shipped before the Alloy stage (#6276)."""
+    resp = {
+        "data": {
+            "result": [{"stream": {"container": "sonarr"}, "values": [["1", _TORZNAB]]}]
+        }
+    }
+    [row] = parse_loki(resp)
+    assert _APIKEY not in row["line"]
+    assert row["line"] == _TORZNAB.replace(_APIKEY, "<redacted>")
+
+
+def test_redact_log_secrets_covers_the_cast_refresh_token():
+    token = "f" * 64
+    out = redact_log_secrets(f"cast failed: {{'refresh_token': '{token}'}}")
+    assert out == "cast failed: {'refresh_token': '<redacted>'}"

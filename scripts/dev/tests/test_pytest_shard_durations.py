@@ -372,10 +372,16 @@ def test_a_pull_request_only_annotates_a_bad_weight_outside_its_diff(tmp_path, c
     assert "parsed no durations" not in printed
 
 
-def test_a_pull_request_editing_the_weight_table_fails_on_every_module():
-    """A PR that re-records weights changes only the table, so a bad row it wrote belongs to a
-    module outside its diff. Its author can still repair it, so the gate runs unscoped."""
-    changed = {"scripts/dev/pytest_shard_weights.json"}
+@pytest.mark.parametrize(
+    "changed",
+    [
+        pytest.param({shard_weight_gate.WEIGHTS_TABLE}, id="table-without-base"),
+        pytest.param({"scripts/dev/shard_weight_gate.py"}, id="gate-code"),
+    ],
+)
+def test_an_edit_the_gate_cannot_scope_fails_on_every_module(changed):
+    """A table edit with no base table to compare rows against, or a change to the bounds,
+    leaves no way to tell which modules the author owns, so the gate runs unscoped."""
     problems, _ = shard_weight_gate.gate_complaints(REPORT, RECORDED, changed)
     assert len(problems) == 1 and NEW_MODULE in problems[0]
 
@@ -383,16 +389,22 @@ def test_a_pull_request_editing_the_weight_table_fails_on_every_module():
 RETIRED = "scripts/gone/tests/test_retired.py"
 
 
-def test_a_table_edit_that_only_drops_deleted_modules_keeps_the_scope(tmp_path):
-    """Retiring a module has to drop its row, so the PR edits the table without writing one
-    (#5989). The bad weight outside its diff annotates, as it would with the table untouched."""
-    base = {**RECORDED, RETIRED: 1.5}
+@pytest.mark.parametrize(
+    "base",
+    [
+        pytest.param(
+            {**RECORDED, "scripts/dev/tests/test_run_as_cron.py": 9.0},
+            id="another-row-changed",
+        ),
+        pytest.param({**RECORDED, RETIRED: 1.5}, id="deleted-module-row-dropped"),
+    ],
+)
+def test_a_table_edit_only_annotates_a_module_whose_row_it_did_not_write(base):
+    """#6266: the PR re-recorded one row, or dropped a retired module's row (#5989), and a heavy
+    module another PR merged without a weight ran in the same shard. That row is not the
+    author's, so it annotates."""
     problems, warnings = shard_weight_gate.gate_complaints(
-        REPORT,
-        RECORDED,
-        {shard_weight_gate.WEIGHTS_TABLE},
-        base_weights=base,
-        root=tmp_path,
+        REPORT, RECORDED, {shard_weight_gate.WEIGHTS_TABLE}, base_weights=base
     )
     assert problems == []
     assert any(
@@ -401,28 +413,22 @@ def test_a_table_edit_that_only_drops_deleted_modules_keeps_the_scope(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "base",
+    "weights, base",
     [
+        pytest.param(UNDER_RECORDED, RECORDED, id="added-too-low"),
         pytest.param(
-            {**RECORDED, "scripts/dev/tests/test_run_as_cron.py": 9.0}, id="changed"
+            UNDER_RECORDED, {**RECORDED, NEW_MODULE: 25.0}, id="changed-too-low"
         ),
-        pytest.param({"scripts/dev/tests/test_run_as_cron.py": 0.05}, id="added"),
-        pytest.param({**RECORDED, RETIRED: 1.5}, id="dropped-but-present"),
+        pytest.param(
+            RECORDED, {**RECORDED, NEW_MODULE: 25.0}, id="dropped-but-present"
+        ),
     ],
 )
-def test_a_table_edit_that_writes_or_drops_a_live_row_fails_on_every_module(
-    tmp_path, base
-):
-    """The counterpart: a changed or added row, or a dropped row whose module is still in the
-    tree, is the PR author's row, so the gate stays unscoped."""
-    (tmp_path / RETIRED).parent.mkdir(parents=True)
-    (tmp_path / RETIRED).write_text("")
+def test_a_table_edit_fails_on_a_bad_row_it_wrote(weights, base):
+    """The fail half: the PR added, changed or dropped the heavy module's own row, so the bad
+    weight that leaves it is the author's to re-record."""
     problems, _ = shard_weight_gate.gate_complaints(
-        REPORT,
-        RECORDED,
-        {shard_weight_gate.WEIGHTS_TABLE},
-        base_weights=base,
-        root=tmp_path,
+        REPORT, weights, {shard_weight_gate.WEIGHTS_TABLE}, base_weights=base
     )
     assert len(problems) == 1 and NEW_MODULE in problems[0]
 

@@ -279,8 +279,8 @@ def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
 
 
 def test_live_tree_includes_the_autoheal_marker_in_the_roles_containers_plane():
-    """A named member for the Pi's compose templates (H5.2b). The marker sits in the role's
-    template until H5.7 moves it into the package component, and the plane follows it."""
+    """A named member for the Pi's compose templates (H5.2b). Since H5.7 the marker sits in the package
+    component, and the plane follows it."""
     matches = [
         r
         for r in _live_rows()

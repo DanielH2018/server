@@ -356,3 +356,28 @@ def test_curl_pipeline_module_names_no_resolve_ip():
         source = fh.read()
     assert _resolve_ip_names(ast.parse(source)) == []
     assert "resolve_ip" not in (curl_pipeline.plan.__doc__ or "")
+
+
+# `loki-query --json` streams the raw Loki body, which carries Prowlarr's `apikey=` from every
+# *arr Torznab line shipped before the Alloy stage (#6276). The key is 32 hex chars of no entropy.
+_TORZNAB_JSON = (
+    '{"values": [["1", "Torznab failed: http://prowlarr:9696/21/api?apikey='
+    + "f" * 32
+    + '&t=search"]]}'
+)
+
+
+def test_stream_pipeline_redacts_the_loki_query_body(capfd):
+    rc = curl_pipeline.stream_pipeline(
+        [["printf", "%s", _TORZNAB_JSON]],
+        redact=curl_pipeline.output_redaction("loki-query"),
+    )
+    out = capfd.readouterr().out
+    assert rc == 0
+    assert "f" * 32 not in out
+    assert "apikey=<redacted>&t=search" in out
+
+
+def test_only_loki_query_output_is_redacted():
+    assert curl_pipeline.output_redaction("loki-query") is core.redact_log_secrets
+    assert curl_pipeline.output_redaction("metric") is None

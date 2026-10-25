@@ -24,8 +24,9 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # per-host spelling of `[defaults] timeout`; there is no become-specific timeout var in the
 # pinned core. A retry loop is the wrong shape: the wait is the whole cost.
 ansible_ssh_timeout: 30
-# No GitOps auto-deploy path to the Pi (accepted) — memory-constrained and driven
-# manually over SSH. See gitops_deploy CLAUDE.md.
+# No Ansible GitOps auto-deploy path to the Pi (accepted) — memory-constrained, and its Ansible-era
+# services are driven manually over SSH. The package path (homelab-updater, H3 and H5) deploys the
+# services in compose_services without this key. See gitops_deploy CLAUDE.md.
 # Kept explicit even though group_vars/all.yml defaults it false: the deployer's own refusal
 # (`deploy_inventory.declares_no_gitops`) greps THIS file's text for a top-level
 # `has_gitops: false` and fails open when the key is absent, so deleting the line would disarm
@@ -74,12 +75,6 @@ container_healthcheck_interval: 60s
 container_healthcheck_timeout: 60s
 container_healthcheck_retries: 5
 containers_list:
-  # Read-only Docker socket proxy — serves Alloy's docker_sd log discovery;
-  # the hardcoded docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.
-  - name: docker-proxy
-    use_authelia: false
-    networks:
-      - proxy
   - name: wg-easy
     port: 51821
     udp_port: 51822
@@ -91,13 +86,6 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-  # MUST follow docker-proxy: it restarts containers through docker-proxy-lifecycle, which
-  # docker-proxy's compose project creates. The Docker play deploys in this list's order.
-  - name: autoheal
-    use_authelia: false
-    networks:
-      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
-      - lifecycle
   # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
   # host unit from roles/setup/optimize_pi (section 10), on the LAN IP and port 9100 the
   # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
@@ -108,9 +96,9 @@ containers_list:
   # in monitor-bridge's check.py) because check_pi_pressure already owns Pi disk and memory
   # against thresholds sized for a 456 MB box.
   #
-  # Container logs to loki-homelab. MUST follow docker-proxy: discovery goes through that
-  # read-only proxy rather than the raw Docker socket, and it needs the `proxy` network to
-  # reach it.
+  # Container logs to loki-homelab. Needs docker-proxy, which the package's `homelab` project runs
+  # (compose_services below): discovery goes through that read-only proxy rather than the raw
+  # Docker socket, and it needs the `proxy` network to reach it.
   #
   # Sized carefully — this is a 456 MB Zero 2 W. GOMEMLIMIT/GOMAXPROCS are set in the compose
   # template and the cap is 96M; if the measured RSS sits near the cap rather than near
@@ -124,7 +112,7 @@ containers_list:
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
 # A service lives in exactly one of this key and containers_list: Ansible's Docker play
 # deploys containers_list, and the package deploys this key. Entries keep containers_list's
-# field names. It holds only the canary until H5.6 moves the first service. Every reader of the
+# field names. It holds the canary, docker-proxy (H5.6) and autoheal (H5.7). Every reader of the
 # Pi's services reads both keys and fails on a missing one, so keep the key even when it is
 # empty. The cluster templates that read it are named in
 # docs/target-architecture/host/h5-pi-compose.md (The service list).
@@ -133,3 +121,19 @@ compose_services:
   # included file receives a value from the Compose env file. It has no Ansible-era counterpart,
   # so no legacy entry names it. H5.10 removes it.
   - name: pi-canary
+  # The read-only Docker socket proxy, which serves Alloy's docker_sd log discovery. The
+  # package's service file also declares the docker-proxy-lifecycle sub-proxy (restart-only,
+  # serves autoheal), and docker-proxy-codeserver under has_code_server. Legacy entry:
+  # /home/ubuntu/server/containers/docker-proxy/docker-compose.yml (project `docker-proxy`).
+  - name: docker-proxy
+    use_authelia: false
+    networks:
+      - proxy
+  # Restarts unhealthy containers through docker-proxy-lifecycle, which the docker-proxy service
+  # file declares, so its service file carries `depends_on: docker-proxy-lifecycle`. Legacy entry:
+  # /home/ubuntu/server/containers/autoheal/docker-compose.yml (project `autoheal`).
+  - name: autoheal
+    use_authelia: false
+    networks:
+      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
+      - lifecycle

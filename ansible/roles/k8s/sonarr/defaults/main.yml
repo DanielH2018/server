@@ -94,3 +94,36 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ sonarr_k8s_claim }}"
     storage_class: "{{ sonarr_k8s_storage_class }}"
     size: "{{ sonarr_k8s_size }}"
+
+# ── the air-date guard (templates/air-date-guard-cronjob.yaml.j2) ───────────────────────────
+# Removes and blocklists a queued grab whose release was published before its episode aired,
+# Sonarr v5's Release Profile rule applied after the grab on v4. files/sonarr_air_date_guard.py
+# holds the rule and what it leaves alone. Retire this CronJob once Sonarr v5 stable ships and
+# a Release Profile's "do not download before air date" replaces it.
+sonarr_k8s_air_date_guard_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+# Every 5 minutes, matching monitor-bridge's Arr Queue Warnings cycle, so a fake is usually
+# removed before the warning it causes pages.
+sonarr_k8s_air_date_guard_schedule: "*/5 * * * *"
+sonarr_k8s_air_date_guard_deadline_seconds: 240
+# v5's grace period of -1 day. Backtested on 2026-10-25 over this library's history from
+# 2023-04: for standard series it would have removed 13 of the 16 grabs marked failed by hand,
+# and 1 of the releases Sonarr imported (a Rick and Morty episode published 4 days before
+# air). At 3h it removes all 16 and 5 imported ones, all Netflix or Disney+ drops whose TVDB
+# air date is a later broadcast.
+sonarr_k8s_air_date_guard_grace_hours: 24
+# TVDB air dates for anime are off by hours to a week: at any grace up to 48h the rule removed
+# at least 18 imported anime releases for 2 fakes.
+sonarr_k8s_air_date_guard_skip_series_types: [anime]
+# A Sonarr series tag that exempts a show whose real releases come out early.
+sonarr_k8s_air_date_guard_exempt_tag: allow-early
+# More removals than this in one run means the dates are wrong, not that fakes arrived.
+sonarr_k8s_air_date_guard_max_removals: 5
+# False makes every run, the deploy gate's included, a dry-run report.
+sonarr_k8s_air_date_guard_apply: true
+
+# The renderer copies this CronJob's jobTemplate into `sonarr-verify` as
+# `sonarr-air-date-guard-deploy-gate-<spec digest8>`, a real pass once per revision.
+flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+  sonarr-air-date-guard:
+    kind: mutation
+    rerun_safe: ansible/roles/k8s/sonarr/tests/test_sonarr_air_date_guard.py::test_a_second_run_removes_nothing
