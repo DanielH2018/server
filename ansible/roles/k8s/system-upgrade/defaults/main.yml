@@ -1,6 +1,6 @@
 ---
 # system-upgrade-controller (SUC) and the two Plans that upgrade k3s (target slice H6). Flux
-# applies this role. The Plans select no node until H6.3c and H6.3d widen `system_upgrade_nodes`.
+# applies this role. The Plans select the nodes in `system_upgrade_nodes`: daniel-box since H6.3c, daniel-server at H6.3d.
 #
 # THE K3S PIN LIVES HERE. `k3s_version`, `k3s_install_script_url` and `k3s_install_script_sha256`
 # moved from roles/setup/k3s/defaults/main.yml, so a pin change routes to this Flux-owned tag and
