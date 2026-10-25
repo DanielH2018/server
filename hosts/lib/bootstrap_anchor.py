@@ -8,6 +8,7 @@ under `uv run --frozen`, because it reads the required CI contexts from the tree
 touches `.git` only.
 
 Usage: bootstrap_anchor.py <clone> <sha> --repo OWNER/NAME
+`--help` prints this text and exits 0.
 Exit codes: 0 anchored; 1 refused, naming the half (`first-parent` or `ci`); 64 usage.
 """
 
@@ -100,6 +101,9 @@ def judge(
 
 
 def main(argv: list[str]) -> int:
+    if "--help" in argv or "-h" in argv:
+        print(__doc__)
+        return 0
     if len(argv) != 4 or argv[2] != "--repo":
         print(__doc__, file=sys.stderr)
         return 64
