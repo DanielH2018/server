@@ -306,6 +306,9 @@ def test_the_real_node_crons_gate_resolves_for_each_host():
         node_crons = [s for s in skips if "node_crons.yml" in s.task]
         assert all("does not apply" in s.reason for s in node_crons), (host, node_crons)
     assert any("node_crons" in s.task for s in walked["daniel-server"][1])
+    # The three task files #6359 tracks read set_fact values; a fourth must not appear unseen.
+    for host, (_, skips) in walked.items():
+        assert sorted(s.task.rsplit("/", 1)[-1] for s in skips if s.unchecked) == ["main.yml: import agent.yml", "stamp_deployed.yml", "stamp_deployed.yml"], host  # fmt: skip
 
 
 GATED = """\
@@ -317,24 +320,18 @@ GATED = """\
 """
 
 
+# fmt: off
+GATE_CASES = {
+    "inventory-true": ("x_enabled", {"x_enabled": True}, PROBE_OK, "ok       /etc/x/gated"),
+    "inventory-false": ("x_node == inventory_hostname", {"x_node": "daniel-pi"}, PROBE_OK, "skipped  import gated.yml: its when: is false for daniel-box"),
+    "false-before-a-fact": ("[x_on, 'x_facts | length > 0']", {"x_on": False}, PROBE_OK, "skipped  import gated.yml: its when: is false for daniel-box"),
+    "run-time-fact": ("x_facts | length > 0", {}, PROBE_UNREADABLE, "UNCHECKED tasks/main.yml: import gated.yml: its when: cannot be read for daniel-box (`x_facts` has no value"),
+}
+# fmt: on
+
+
 @pytest.mark.parametrize(
-    ("when", "ctx", "code", "line"),
-    [
-        ("x_enabled", {"x_enabled": True}, PROBE_OK, "ok       /etc/x/gated"),
-        (
-            "x_node == inventory_hostname",
-            {"x_node": "daniel-pi"},
-            PROBE_OK,
-            "skipped  import gated.yml: its when: is false for daniel-box",
-        ),  # fmt: skip
-        (
-            "x_facts | length > 0",
-            {},
-            PROBE_UNREADABLE,
-            "UNCHECKED tasks/main.yml: import gated.yml: its when: cannot be read for daniel-box (`x_facts` has no value",
-        ),  # fmt: skip
-    ],
-    ids=["inventory-true", "inventory-false", "run-time-fact"],
+    ("when", "ctx", "code", "line"), GATE_CASES.values(), ids=GATE_CASES
 )
 def test_an_import_gate_is_evaluated_against_the_host_vars(tmp_path, capsys, when, ctx, code, line):  # fmt: skip
     assert _run(tmp_path, _as_wanted, GATED.format(when=when), ctx) == code
@@ -392,4 +389,4 @@ def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_pat
     wants, _ = applied_tasks.expected(role, "daniel-box", ctx)
     assert {w.path for w in wants} == {"/etc/a", "/etc/b"}
     _, skips = applied_tasks.expected(role, "daniel-box", {})
-    assert [s.reason for s in skips] == ["it loops over a list that is not literal"]
+    assert [(s.reason, s.unchecked) for s in skips] == [("it loops over a list that is not literal", True)]  # fmt: skip

@@ -13,22 +13,17 @@ imports, through `block`, `rescue` and `always`, and turns each file-writing tas
   line itself, so the content is not compared;
 - the same five spelled `ansible.builtin.*`.
 
-A `when:` (its own, or a block's) is evaluated as Jinja against the walk's context: the
-host's merged inventory vars with every Jinja-valued var resolved, plus an import's `vars:`.
-A gate that reads a name with no value before the run (a `set_fact`, a `register`, `item`, an
-`ansible_*` fact) cannot be read. A `set_fact` or `register` name is dropped from the context
-when the walk passes its task, so a default of the same name is not read in its place.
+A `when:` (its own, or a block's) is Jinja over the walk's context: the host's merged vars,
+Jinja-valued ones resolved, plus an import's `vars:`. A name with no value before the run (a
+`set_fact` or `register` the walk has passed, `item`, an `ansible_*` fact) makes the gate
+unreadable only if evaluating it reaches that name. A gate that reads false drops the task.
 
-A task is SKIPPED, with the reason, rather than guessed at: its `when:` cannot be read for the
-host; it loops over a list that is not literal; a field still holds Jinja or a `STUB` after
-the render; or it writes from a variable the light render cannot resolve. An `import_role` or
-`include_role` is skipped the same way. A task FILE the walk cannot read is UNCHECKED rather
-than skipped: an import whose path does not render to a file in the tree, whose `when:` cannot
-be read, or whose loop is not literal. The file may install anything, so the probe cannot call
-the role clean, and `applied` exits 75 for it. An import whose `when:` reads false for the host
-is listed as not applicable. A `copy` with `remote_src` is compared by metadata only, because
-its source is on the host. A task whose `when:` reads false for the host is dropped, as
-Ansible would.
+A task is SKIPPED, with the reason, when its `when:` cannot be read, its loop is not literal,
+a field still holds Jinja or a `STUB` after the render, or it includes a role. A task FILE the
+walk cannot read is UNCHECKED: an import whose path does not render to a file, or whose `when:`
+or loop cannot be read. It may install anything, so `applied` exits 75 for it. An import whose
+`when:` is false is listed as not applicable. A `copy` with `remote_src` is compared by
+metadata only, because its source is on the host.
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
@@ -44,7 +39,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from jinja2 import StrictUndefined, TemplateSyntaxError, meta
+from jinja2 import StrictUndefined, TemplateSyntaxError, Undefined, meta
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, template_env
 from lib.render_guard import render_or_error
@@ -62,6 +57,42 @@ _LOOPS = ("loop", "with_items", "with_list")
 _SET_FACTS = ("set_fact", "ansible.builtin.set_fact", "ansible.legacy.set_fact")
 # Names Ansible fills in only while the play runs. Every `ansible_*` name is one too.
 _RUN_TIME = frozenset({"item", "hostvars", "groups", "group_names", "play_hosts"})
+
+
+class _Unreadable(Exception):
+    """A gate used a value the walk does not have; the message says which."""
+
+
+class _Unknown:
+    """Stands in for a gate name with no value before the run, and raises when it is used.
+
+    Not a Jinja `Undefined`, so `is defined` cannot call it False. A gate that never reaches
+    it, such as `false and fact.rc == 0`, still evaluates, as Ansible's `and` short-circuits.
+    """
+
+    def __init__(self, why: str):
+        self.why = why
+
+    def _use(self, *_args, **_kwargs):
+        raise _Unreadable(self.why)
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        self._use()
+
+    __bool__ = __len__ = __iter__ = __contains__ = __getitem__ = __hash__ = _use
+    __eq__ = __ne__ = __lt__ = __le__ = __gt__ = __ge__ = __str__ = __int__ = _use
+    __add__ = __radd__ = __call__ = _use
+
+
+def _defined_test(want: bool):
+    def test(value) -> bool:
+        if isinstance(value, _Unknown):
+            value._use()
+        return isinstance(value, Undefined) != want
+
+    return test
 
 
 @dataclass(frozen=True)
@@ -158,15 +189,16 @@ class _Walk:
         self.file = "tasks/main.yml"
         self.text_env = make_ansible_env([role_dir / "templates"])
         self.gate_env = make_ansible_env(undefined_cls=StrictUndefined)
+        self.gate_env.tests["defined"] = _defined_test(True)
+        self.gate_env.tests["undefined"] = _defined_test(False)
         # Names a `set_fact` or `register` the walk has passed sets during the run.
         self.run_time: set[str] = set()
 
     def gate(self, whens: list) -> str | None:
         """None when the task runs on the host, `"no"` when it does not, else the reason.
 
-        The `when:` is Jinja, evaluated against the walk's context the way Ansible evaluates
-        it against the host's vars. Every name it reads must hold a resolved value first, so
-        a fact the run sets is never read as undefined, which `is defined` would call False.
+        The `when:` is Jinja over the walk's context. A name with no resolved value is an
+        `_Unknown`, so the gate is unreadable only when evaluating it reaches that name.
         """
         if not whens:
             return None
@@ -179,19 +211,16 @@ class _Walk:
             )
         except TemplateSyntaxError as exc:
             return f"{unreadable} (`{expr}` does not parse: {exc.message})"
-        for name in sorted(names):
-            value = ns.get(name)
-            if (
-                name in _RUN_TIME
-                or name in self.run_time
-                or name.startswith("ansible_")
-                or name not in ns
-            ):
-                return f"{unreadable} (`{name}` has no value before the run)"
-            if isinstance(value, str) and ("{{" in value or STUB in value):
-                return f"{unreadable} (`{name}` does not resolve before the run)"
+        run_time = _RUN_TIME | self.run_time
+        for name in names:
+            if name in run_time or name.startswith("ansible_") or name not in ns:
+                ns[name] = _Unknown(f"`{name}` has no value before the run")
+            elif any(m in str(ns[name]) for m in ("{{", STUB)):
+                ns[name] = _Unknown(f"`{name}` does not resolve before the run")
         try:
-            runs = self.gate_env.compile_expression(expr)(**ns)
+            runs = bool(self.gate_env.compile_expression(expr)(**ns))
+        except _Unreadable as exc:
+            return f"{unreadable} ({exc})"
         except Exception as exc:
             return f"{unreadable} (`{expr}`: {exc})"
         return None if runs else "no"
