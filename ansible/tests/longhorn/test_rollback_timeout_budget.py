@@ -54,6 +54,8 @@ derivation that counts the drain alone undercounts. `_role_tasks.in_role_wait_s`
 excludes an inline `rollout status` gate, which waits for a rollout the drain also waits for.
 """
 
+from collections.abc import Callable
+
 from lib import yaml_fast
 from _helpers import ALL_VARS, manifests_rollout_timeout_s
 from _helpers import REPO as _REPO
@@ -150,6 +152,36 @@ def _promoted_claim_roles() -> list[tuple[str, int]]:
     return out
 
 
+def _worst_batch(
+    promoted: list[tuple[str, int]],
+    cap: int,
+    per_claim: int,
+    stabilise: int,
+    in_role_s: Callable[[str], int],
+    rollout_s: Callable[[str], int],
+) -> tuple[list[str], int]:
+    """The `cap` most expensive services in `promoted`, and what reverting them together costs.
+
+    The cost key is the whole per-service cost, not the claim count alone. Every promoted
+    claim-declaring role declares exactly one claim, so a claims-only key leaves every
+    candidate tied and `sorted` picks the alphabetically first — bazarr, at the shared
+    rollout default — while prowlarr costs 180s more. test_rollback_worst_batch_selection.py
+    holds the red proof, on a fixture longer than the cap with distinct costs.
+    """
+
+    def cost(role: str, claims: int) -> int:
+        return claims * per_claim + in_role_s(role) + rollout_s(role)
+
+    by_cost = sorted(promoted, key=lambda rc: cost(*rc), reverse=True)[:cap]
+    batch = [role for role, _ in by_cost]
+    revert = sum(claims * per_claim for _, claims in by_cost)
+    # Each role waits for its own Jobs and addresses before the drain runs, so sum() here.
+    in_role = sum(in_role_s(role) for role in batch)
+    # Deduped across the batch by k8s/manifests/tasks/drain.yml, so max() not sum().
+    rollout = max(rollout_s(role) for role in batch)
+    return batch, revert + in_role + rollout + stabilise
+
+
 def test_batch_of_claim_services_fits_the_rollback_budget():
     """The multi-service axis the per-claim test above structurally cannot see.
 
@@ -189,28 +221,18 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
         "vacuously — check the reader before trusting a green run"
     )
 
-    # The worst batch the cap still permits: the `cap` most expensive claim-declaring services.
-    #
-    # The cost key is the whole per-service cost, not the claim count alone. Every promoted
-    # claim-declaring role declares exactly one claim, so a claims-only key leaves every
-    # candidate tied and `sorted` picks the alphabetically first — bazarr, at the shared
-    # rollout default — while prowlarr costs 180s more.
     per_claim = snapshot_timeout + 3 * (state_timeout + api_timeout)
-
-    def cost(role: str, claims: int) -> int:
-        return claims * per_claim + in_role_wait_s(role) + _rollout_timeout_s(role)
-
-    by_cost = sorted(promoted, key=lambda rc: cost(*rc), reverse=True)[:cap]
+    batch, worst_batch = _worst_batch(
+        promoted, cap, per_claim, stabilise, in_role_wait_s, _rollout_timeout_s
+    )
+    by_cost = [(role, claims) for role, claims in promoted if role in batch]
     batch_revert = sum(claims * per_claim for _, claims in by_cost)
-    # Each role waits for its own Jobs and addresses before the drain runs, so sum() here.
-    batch_in_role = sum(in_role_wait_s(role) for role, _ in by_cost)
-    # Deduped across the batch by k8s/manifests/tasks/drain.yml, so max() not sum().
-    batch_rollout = max(_rollout_timeout_s(role) for role, _ in by_cost)
-    worst_batch = batch_revert + batch_in_role + batch_rollout + stabilise
+    batch_in_role = sum(in_role_wait_s(role) for role in batch)
+    batch_rollout = max(_rollout_timeout_s(role) for role in batch)
 
     assert worst_batch <= rollback_timeout, (
         f"the worst batch the cap permits ({cap} claim-declaring service(s): "
-        f"{[r for r, _ in by_cost]}) costs {worst_batch}s "
+        f"{batch}) costs {worst_batch}s "
         f"(revert {batch_revert}s + in-role waits {batch_in_role}s + rollout {batch_rollout}s "
         f"+ stabilise {stabilise}s), over "
         f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s). Past that budget run()'s "
