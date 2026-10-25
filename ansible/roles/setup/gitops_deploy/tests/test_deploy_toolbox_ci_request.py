@@ -27,6 +27,7 @@ from email.message import Message
 import pytest
 
 from deployer_lib import deploy_toolbox
+from deployer_lib.deploy_git import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
 
 SHA = "a" * 40
 REPO = "DanielH2018/server"
@@ -221,3 +222,82 @@ def test_a_read_short_of_total_count_defers(monkeypatch):
         total=150,
     )
     assert _verdict() == "pending"
+
+
+def _stub_cancelled_run(monkeypatch, suite_conclusion: str) -> list:
+    """A run cancelled mid-sweep whose `always()` gate then failed, routed by listing (#6007).
+
+    The check-runs are the gate and its needs in suite 7, a shard cancelled and the rest green.
+    The check-suites listing answers suite 7 with `suite_conclusion`.
+    """
+    shard = next(n for n in sorted(CI_GATE_NEEDS_JOBS) if "shard" in n)
+    runs = [
+        {
+            "name": name,
+            "status": "completed",
+            "conclusion": "cancelled" if name == shard else "success",
+            "check_suite": {"id": 7},
+        }
+        for name in sorted(CI_GATE_NEEDS_JOBS)
+    ] + [
+        {
+            "name": CI_GATE_NAME,
+            "status": "completed",
+            "conclusion": "failure",
+            "check_suite": {"id": 7},
+        }
+    ]
+    suites = [{"id": 7, "status": "completed", "conclusion": suite_conclusion}]
+    bodies = {
+        "check-runs": {"total_count": len(runs), "check_runs": runs},
+        "check-suites": {"total_count": 1, "check_suites": suites},
+    }
+    urls: list = []
+
+    class _Resp:
+        def __init__(self, body):
+            self._body = json.dumps(body).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return self._body
+
+    def fake_urlopen(req, timeout=None):
+        urls.append(req.full_url)
+        listing = req.full_url.split("?")[0].rsplit("/", 1)[1]
+        return _Resp(bodies[listing])
+
+    monkeypatch.setenv("GH_TOKEN", TOKEN)
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    return urls
+
+
+def test_a_gate_failed_by_its_own_runs_cancellation_defers_the_tick(monkeypatch):
+    """The tick reads the commit's check-suites to excuse the gate, as `await_ci.py` does."""
+    urls = _stub_cancelled_run(monkeypatch, "cancelled")
+    assert (
+        deploy_toolbox.fetch_ci_verdict(
+            SHA, require_ci=True, repo=REPO, contexts=frozenset({CI_GATE_NAME})
+        )
+        == "pending"
+    )
+    assert urls[-1] == (
+        f"https://api.github.com/repos/{REPO}/commits/{SHA}"
+        "/check-suites?per_page=100&page=1"
+    )
+
+
+def test_a_cancelled_need_in_a_suite_that_was_not_cancelled_stays_red(monkeypatch):
+    """A job past its `timeout-minutes` reads `cancelled` in a suite that concluded `failure`."""
+    _stub_cancelled_run(monkeypatch, "failure")
+    assert (
+        deploy_toolbox.fetch_ci_verdict(
+            SHA, require_ci=True, repo=REPO, contexts=frozenset({CI_GATE_NAME})
+        )
+        == "fail"
+    )

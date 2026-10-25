@@ -657,6 +657,8 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   - `cancelled`/`stale` count as **no verdict, not failure**: `ci.yml` sets
     `concurrency: cancel-in-progress` on `github.ref`, so two quick pushes cancel the first run,
     and mapping that to a failure would page on an ordinary back-to-back push.
+    The `always()` gate job that fails on those cancelled needs is no verdict either, once the
+    commit's check-suites show its own run concluded `cancelled` (#5931, #6007).
   - `CI_CONTEXTS` holds GitHub check-run **names**, which must match `ci.yml`'s `name:` exactly.
     An empty list or repo **disarms** the gate with a log line rather than passing everything,
     the same fail-closed shape as the k8s denylist. Set `gitops_deploy_require_ci: false` to turn
