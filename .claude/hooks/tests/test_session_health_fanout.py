@@ -14,6 +14,7 @@ import json
 import os
 import shutil
 import subprocess
+from datetime import UTC, datetime, timedelta
 
 _HOOKS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _HOOK = os.path.join(_HOOKS, "session-health.py")
@@ -22,6 +23,7 @@ _spec = importlib.util.spec_from_file_location("session_health", _HOOK)
 assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
+_LAUNCH = datetime(2026, 9, 9, 20, 30, tzinfo=UTC)
 
 
 def test_a_missing_hooklib_still_leaves_a_banner_naming_it(tmp_path):
@@ -82,11 +84,60 @@ def test_remote_fanout_lines_name_each_batch_on_another_host(tmp_path):
             }
         )
     )
-    lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
+    lines = _mod.remote_fanout_lines(
+        manifest_dir=tmp_path, local_host="daniel-box", now=_LAUNCH + timedelta(hours=1)
+    )
     assert lines == [
-        "🛰 fan-out worktrees on other hosts "
+        "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
         "  • daniel-server worktree-fanout-1345 — #1345 (run 20260909T203000Z)",
+    ]
+
+
+def _aged_manifest(tmp_path):
+    (tmp_path / "r.json").write_text(
+        json.dumps(
+            {
+                "run_id": "r6",
+                "batches": [
+                    {
+                        "host": "daniel-server",
+                        "branch": f"worktree-fanout-{n}",
+                        "issues": [n],
+                        "launched_at": _LAUNCH.isoformat(),
+                    }
+                    for n in (1, 2)
+                ],
+            }
+        )
+    )
+
+
+def test_a_batch_under_a_day_old_is_named(tmp_path):
+    _aged_manifest(tmp_path)
+    lines = _mod.remote_fanout_lines(
+        manifest_dir=tmp_path,
+        local_host="daniel-box",
+        now=_LAUNCH + timedelta(hours=23),
+    )
+    assert lines[1:] == [
+        "  • daniel-server worktree-fanout-1 — #1 (run r6)",
+        "  • daniel-server worktree-fanout-2 — #2 (run r6)",
+    ]
+
+
+def test_batches_over_a_day_old_fold_into_one_count_per_host(tmp_path):
+    # A run nobody ran `clean` on stays in the manifest forever; naming every batch put
+    # 35 finished worktrees into each session's context (2026-10-25).
+    _aged_manifest(tmp_path)
+    lines = _mod.remote_fanout_lines(
+        manifest_dir=tmp_path,
+        local_host="daniel-box",
+        now=_LAUNCH + timedelta(hours=25),
+    )
+    assert lines[1:] == [
+        "  • daniel-server: 2 uncleaned from runs over a day old "
+        "(fanout.py place runs; place clean <run-id> removes the merged ones)",
     ]
 
 
@@ -152,7 +203,7 @@ def test_remote_fanout_lines_skips_a_malformed_manifest_but_keeps_the_rest(tmp_p
     )
     lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
     assert lines == [
-        "🛰 fan-out worktrees on other hosts "
+        "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
         "  • daniel-server b — #2 (run r2)",
     ]
@@ -174,7 +225,7 @@ def test_remote_fanout_lines_skips_a_malformed_batch_but_keeps_its_sibling(tmp_p
     )
     lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
     assert lines == [
-        "🛰 fan-out worktrees on other hosts "
+        "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
         "  • daniel-server b — #2 (run r3)",
     ]
@@ -207,7 +258,7 @@ def test_a_cleaned_batch_leaves_the_banner_once_its_worktree_is_gone(tmp_path):
     )
     lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
     assert lines == [
-        "🛰 fan-out worktrees on other hosts "
+        "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
         "  • daniel-server worktree-fanout-2 — #2 (run r4)",
     ]

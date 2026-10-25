@@ -8,7 +8,14 @@ own import comment).
 
 import json
 import socket
+from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+# A batch launched longer ago than this is past any run's working life: an agent lands or
+# stops within hours. What remains is a worktree `clean` was never run on, so the banner
+# counts those rather than naming each one in every session's context.
+FANOUT_LIVE_FOR = timedelta(hours=24)
 
 
 def fanout_manifest_dir() -> Path:
@@ -49,7 +56,19 @@ def _batch_line(batch, run_id, me):
         return None
 
 
-def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None):
+def _launched_before(batch, cutoff):
+    """Whether `batch` launched before `cutoff`; False when `launched_at` is absent or bad.
+
+    An unreadable launch time reads as recent, so a batch is named in full rather than
+    folded into a count on a guess.
+    """
+    try:
+        return datetime.fromisoformat(batch["launched_at"]) < cutoff
+    except KeyError, TypeError, ValueError:
+        return False
+
+
+def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None, now=None):
     """Fan-out worktrees on the OTHER host: git worktree list here cannot see them.
 
     Reads the run manifests `fanout.py place` writes under ~/.claude/fanout/ instead of
@@ -63,15 +82,19 @@ def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None):
             `fanout_manifest_dir()`, resolved here rather than at import — see that
             function on why the default cannot be a module constant.
         local_host: this host's name (a test passes a fixed value).
+        now: the current time, aware (a test passes a fixed value).
 
     Returns:
         Ready-to-print banner lines, or [] on any read/parse error, or with no batches
-        on another host.
+        on another host. A batch launched more than `FANOUT_LIVE_FOR` ago is not named;
+        one closing line per host counts those instead.
     """
     if manifest_dir is None:
         manifest_dir = fanout_manifest_dir()
     me = local_host or socket.gethostname()
+    cutoff = (now or datetime.now(UTC)) - FANOUT_LIVE_FOR
     found = []
+    uncleaned = Counter()
     for path in sorted(manifest_dir.glob("*.json")):
         try:
             data = json.loads(path.read_text())
@@ -83,12 +106,21 @@ def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None):
             continue
         for batch in batches:
             line = _batch_line(batch, run_id, me)
-            if line:
+            if not line:
+                continue
+            if _launched_before(batch, cutoff):
+                uncleaned[batch["host"]] += 1
+            else:
                 found.append(line)
+    found += [
+        f"  • {host}: {n} uncleaned from runs over a day old "
+        "(fanout.py place runs; place clean <run-id> removes the merged ones)"
+        for host, n in sorted(uncleaned.items())
+    ]
     if not found:
         return []
     return [
-        "\U0001f6f0 fan-out worktrees on other hosts "
+        "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
         *found,
     ]
