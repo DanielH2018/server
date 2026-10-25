@@ -20,15 +20,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
 from land_lib import verdict_log
 
 
-def add_verdicts_parser(sub) -> None:
-    """Add the `landing-verdicts` subparser to probe.py's subparsers `sub`."""
-    verdicts = sub.add_parser(
-        "landing-verdicts",
-        help=(
-            "the newest recorded VERDICT line of each PR this user landed on this host, "
-            "newest first; exit 1 when PR has no record"
-        ),
-    )
+VERDICTS_HELP = (
+    "the newest recorded VERDICT line of each PR this user landed on this host, "
+    "newest first; exit 1 when PR has no record"
+)
+
+
+def add_verdicts_args(verdicts) -> None:
+    """Add `landing-verdicts`' arguments to `verdicts`, the subparser cli_parser.py made."""
     verdicts.add_argument("pr", nargs="?", help="only this PR's newest verdict")
     verdicts.add_argument(
         "--limit", type=int, default=20, help="PRs to list without PR (default 20)"
