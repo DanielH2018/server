@@ -139,11 +139,14 @@ def test_daniel_pi_moves_every_upstream_no_later_than_its_downstream():
     assert _order_violations(listed, packaged, PI_ORDERING, depends) == []
 
 
-def test_the_census_finds_docker_proxy_packaged_and_its_downstreams_listed():
+def test_the_census_finds_docker_proxy_and_autoheal_packaged_and_alloy_listed():
+    """Named members: autoheal exercises the packaged-downstream `depends_on` branch (H5.7)."""
     listed, packaged = _pi_lists()
 
-    assert "docker-proxy" in packaged
-    assert {"autoheal", "alloy"} <= set(listed)
+    assert {"docker-proxy", "autoheal"} <= set(packaged)
+    assert "alloy" in listed
+    depends = {n: _service_depends_on(n) for n in packaged if n in PI_DEPENDS_ON}
+    assert "docker-proxy-lifecycle" in depends["autoheal"]
 
 
 def test_an_upstream_listed_after_its_downstream_is_a_violation():
