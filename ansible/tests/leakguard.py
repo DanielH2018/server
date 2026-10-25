@@ -59,8 +59,9 @@ defaults to `/var/lib/node-exporter-textfile`, which node_exporter scrapes. On d
 the deploy user can write there, so a test that ran a check script published its fake verdict
 as a production metric (#6191). `pytest_configure` sets `TEXTFILE_DIR` to a directory under the
 stub directory, overriding any exported value, so every child that inherits this process's
-environment writes there. A child given an environment built from scratch inherits nothing,
-and its test passes `TEXTFILE_DIR` itself, as `test_eval_sweep_cron.py` does.
+environment writes there. A child given an environment built from scratch inherits nothing:
+`lib.proc_testing.run` carries `TEXTFILE_DIR` into such an environment itself, and a test that
+calls `subprocess` directly passes `TEXTFILE_DIR` in its own `env`.
 
 ## What is deliberately NOT shimmed
 
