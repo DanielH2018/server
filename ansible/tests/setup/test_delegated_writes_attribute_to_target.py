@@ -6,11 +6,11 @@ census never compared such a task with the Pi package, and a package could take 
 the task still wrote it (H5.14, docs/target-architecture/host/h5-pi-compose.md).
 `test_host_package_two_writers.ansible_writes` attributes the write to the delegate host.
 
-- **Named member.** pi-peer-backup's block, the one live `delegate_to: daniel-pi` task in the
-  setup plane, must land on daniel-pi and nowhere else.
-- **Red proof.** A fixture role whose block has the shape crowdsec's probe timer had, delegated to
-  daniel-pi, collides with a Pi package retiring that unit. The same block without the delegation
-  is attributed to daniel-box, and flags nothing.
+- **Red proof.** No live setup task delegates to daniel-pi since H7.25 moved pi-peer-backup's
+  block into the Pi package, so a fixture carries the whole proof. A fixture role whose block has
+  the shape crowdsec's probe timer had, delegated to daniel-pi, collides with a Pi package
+  retiring that unit. The same block without the delegation is attributed to daniel-box, and
+  flags nothing.
 
 Run: uv run pytest ansible/tests/setup/test_delegated_writes_attribute_to_target.py
 """
@@ -18,16 +18,13 @@ Run: uv run pytest ansible/tests/setup/test_delegated_writes_attribute_to_target
 from pathlib import Path
 
 import pytest
-from _role_census import task_files_by_role
 from deploy_tools.setup_lib.setup_gates import HOSTS
 from test_host_package_two_writers import (
-    SETUP,
     ansible_writes,
     collisions,
     package_writes,
 )
 
-WRAPPER = ("path", "/usr/local/bin/pi-peer-backup-shell")
 TIMER = "/etc/systemd/system/crowdsec-edge-probe.timer"
 
 BLOCK = """\
@@ -40,12 +37,6 @@ BLOCK = """\
         src: probe.timer.j2
         dest: /etc/systemd/system/crowdsec-edge-probe.timer
 """
-
-
-def test_the_pi_peer_backup_block_is_written_on_the_pi_only():
-    ansible = ansible_writes(task_files_by_role(SETUP), HOSTS)
-    assert WRAPPER in ansible["daniel-pi"]
-    assert WRAPPER not in ansible["daniel-box"]
 
 
 def _collisions(tmp_path: Path, delegation: str) -> tuple[list[str], dict]:

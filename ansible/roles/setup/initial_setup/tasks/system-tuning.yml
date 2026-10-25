@@ -180,14 +180,16 @@
   # Tens of GB of RAM with swap sitting unused — prefer reclaiming page cache over
   # swapping service heaps. True of daniel-server and of daniel-box, whose control
   # plane holds etcd, Longhorn and Prometheus heaps. The Pi runs the OPPOSITE
-  # tuning (swappiness=130, zram-eager) in optimize_pi — 512 MB + zram needs eager swap.
+  # tuning (swappiness=130, zram-eager) in hosts/components/pi-tuning — 512 MB + zram needs eager swap.
   ansible.posix.sysctl:
     name: vm.swappiness
     value: "10"
     state: present
     sysctl_set: true
   become: true
-  when: has_ample_ram
+  when:
+    - has_ample_ram
+    - inventory_hostname not in initial_setup_packaged_hosts['sysctl']
   tags: [tuning]
 
 # ── Debloat (daniel-server) ──────────────────────────────────────────────────

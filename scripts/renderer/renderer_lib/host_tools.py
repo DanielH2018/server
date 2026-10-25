@@ -20,7 +20,7 @@ module derives. The spec lists, for each tool and each architecture::
 
 Each architecture block carries its own `version` and annotation, because the Renovate manager
 moves one version and one digest per match. A tool's versions must agree across architectures.
-`{version}` in a `url` is the pin as written (`v3.13.3`); `{bare}` is the pin without its `v`.
+`{version}` in a `url` or a `member` is the pin as written (`v3.13.3`); `{bare}` is the pin without its `v`.
 
 A binary installs at `BIN_DIR/<tool>`. The spec cannot name another path, so a tool never lands
 on `PATH`. The renderer writes one tree per architecture, `<package>/<arch>/`, each with a
@@ -128,6 +128,11 @@ def _pin(where: str, entry: object) -> Pin:
             f"{where}: url {url!r} must be https, and may hold only {{version}} and {{bare}}"
         )
     member = entry.get("member")
+    if isinstance(member, str):
+        # node_exporter's tarball names its directory after the release.
+        member = member.replace("{version}", version).replace(
+            "{bare}", version.lstrip("v")
+        )
     if member is not None and (
         not isinstance(member, str) or not _MEMBER.fullmatch(member)
     ):

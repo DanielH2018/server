@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+
+. /etc/log2ram.conf
+
+if [ -z "$PATH_DISK" ]; then
+    PATH_DISK='/var/log'
+fi
+
+LOG_NAME='log2ram.log'
+NO_RSYNC=${USE_RSYNC#true}
+NOTIFICATION_COMMAND=${NOTIFICATION_COMMAND:=mail -s "Log2Ram Error on $HOSTNAME" root}
+NOTIFICATION=${NOTIFICATION:=true}
+
+## @fn is_safe()
+## @brief Check if hdd log exists
+is_safe() {
+    [ -d "$HDD_LOG" ] || echo "ERROR: $HDD_LOG/ doesn't exist! Can't sync."
+    [ -d "$HDD_LOG" ] || exit 1
+}
+
+## @fn journald_logrotate()
+## @brief Logrotate the journal if the current RAM_LOG path is part of the journald directory
+journald_logrotate() {
+    if ! [ -x "$(command -v journalctl)" ] || ! [ "$JOURNALD_AWARE" = true ]; then
+        return 1
+    fi
+
+    if journalctl --header | grep "File path" | grep "$RAM_LOG" >/dev/null 2>&1; then
+        journalctl --rotate
+        return 0
+    else
+        return 1
+    fi
+}
+
+## @fn sync_to_disk()
+## @brief Sync memory back to hard disk
+sync_to_disk() {
+    is_safe
+
+    optional_params=()
+
+    if journald_logrotate; then
+        optional_params+=("--include=journal/*/*@*.journal")
+        optional_params+=("--exclude=journal/*/*")
+    fi
+
+    if [ -z "${NO_RSYNC}" ] && [ -x "$(command -v rsync)" ]; then
+        rsync -aXv --sparse --inplace --no-whole-file --delete-after "${optional_params[@]}" "$RAM_LOG"/ "$HDD_LOG"/ 2>&1 |
+            tee -a "$LOG2RAM_LOG"
+    else
+        cp -rfup --sparse=always "$RAM_LOG"/ -T "$HDD_LOG"/ 2>&1 | tee -a "$LOG2RAM_LOG"
+    fi
+}
+
+## @fn sync_from_disk()
+## @brief Sync hard disk to memory
+sync_from_disk() {
+    is_safe
+
+    TP_SIZE=$SIZE
+    if [ "$ZL2R" = true ]; then
+        TP_SIZE=$LOG_DISK_SIZE
+    fi
+
+    if [ -n "$(du -sh -t "$TP_SIZE" "$HDD_LOG"/ | cut -f1)" ]; then
+        echo "ERROR: RAM disk for \"$HDD_LOG/\" too small. Can't sync."
+        echo -e "File(s) causing issues\n: $(du -sh -t "$TP_SIZE" "$HDD_LOG"/*)"
+        umount -l "$RAM_LOG"/
+        umount -l "$HDD_LOG"/
+        if [ "$NOTIFICATION" = true ]; then
+            echo "LOG2RAM : No place on RAM for \"$HDD_LOG/\" anymore, fallback on the disk" | $NOTIFICATION_COMMAND
+        fi
+        exit 1
+    fi
+
+    if [ -z "${NO_RSYNC}" ] && [ -x "$(command -v rsync)" ]; then
+        rsync -aXv --sparse --inplace --no-whole-file --delete-after "$HDD_LOG"/ "$RAM_LOG"/ 2>&1 | tee -a "$LOG2RAM_LOG"
+    else
+        cp -rfup --sparse=always "$HDD_LOG"/ -T "$RAM_LOG"/ 2>&1 | tee -a "$LOG2RAM_LOG"
+    fi
+
+}
+
+## @fn wait_for()
+## @brief Wait for directory and create test file to make sure the directory exists
+## @param param1 path to the directory
+wait_for() {
+    WAIT_PATH="$1"
+    while ! findmnt "$WAIT_PATH" >/dev/null; do
+        sleep 0.1
+    done
+
+    while [ ! -f "$WAIT_PATH/log2ram.test" ]; do
+        touch "$WAIT_PATH/log2ram.test"
+        sleep 0.1
+    done
+    rm "$WAIT_PATH/log2ram.test"
+}
+
+## @fn create_zram_log_drive()
+## @brief Create zram log device
+create_zram_log_drive() {
+    # Check Zram Class created
+    if [ ! -d "/sys/class/zram-control" ]; then
+        modprobe zram
+        RAM_DEV='0'
+    else
+        RAM_DEV=$(cat /sys/class/zram-control/hot_add)
+    fi
+    echo "$COMP_ALG" >"/sys/block/zram${RAM_DEV}/comp_algorithm"
+    echo "$LOG_DISK_SIZE" >"/sys/block/zram${RAM_DEV}/disksize"
+    echo "$SIZE" >"/sys/block/zram${RAM_DEV}/mem_limit"
+    mke2fs -t ext4 "/dev/zram${RAM_DEV}"
+}
+
+case "$1" in
+start)
+    IFS=';'
+    for i in $PATH_DISK; do
+        # Skip the path if the folder doesn't exist
+        [ ! -d "$i" ] && continue
+
+        PATH_FIRST_PART="${i%/*}"
+        PATH_LAST_PART="${i##/*/}"
+        RAM_LOG="$i"
+        HDD_LOG="${PATH_FIRST_PART}/hdd.${PATH_LAST_PART}"
+        LOG2RAM_LOG="${RAM_LOG}/${LOG_NAME}"
+
+        [ -d "$HDD_LOG" ] || mkdir "$HDD_LOG"
+
+        mount --bind "$RAM_LOG"/ "$HDD_LOG"/
+        mount --make-private "$HDD_LOG"/
+        wait_for "$HDD_LOG"
+
+        if [ "$ZL2R" = true ]; then
+            create_zram_log_drive
+            mount -t ext4 -o nosuid,noexec,noatime,nodev,user=log2ram "/dev/zram${RAM_DEV}" "$RAM_LOG"/
+        else
+            mount -t tmpfs -o "nosuid,noexec,noatime,nodev,mode=0755,size=${SIZE}" log2ram "$RAM_LOG"/
+        fi
+        wait_for "$RAM_LOG"
+        sync_from_disk
+    done
+    exit 0
+    ;;
+
+stop)
+    IFS=';'
+    for i in $PATH_DISK; do
+        PATH_FIRST_PART="${i%/*}"
+        PATH_LAST_PART="${i##/*/}"
+        RAM_LOG="$i"
+        HDD_LOG="${PATH_FIRST_PART}/hdd.${PATH_LAST_PART}"
+        LOG2RAM_LOG="${RAM_LOG}/${LOG_NAME}"
+
+        sync_to_disk
+        #ZRAM_LOG=$(awk '$2 == "/var/log" {print $1}' /proc/mounts)
+        #ZRAM_LOG=$(echo ${ZRAM_LOG} | grep -o -E '[0-9]+')
+        umount -l "$RAM_LOG"/
+        umount -l "$HDD_LOG"/
+        # Unsure as even with Root permision denied
+        #echo ${ZRAM_LOG} > /sys/class/zram-control/hot_remove
+    done
+    exit 0
+    ;;
+
+write)
+    IFS=';'
+    for i in $PATH_DISK; do
+        PATH_FIRST_PART="${i%/*}"
+        PATH_LAST_PART="${i##/*/}"
+        RAM_LOG="$i"
+        HDD_LOG="${PATH_FIRST_PART}/hdd.${PATH_LAST_PART}"
+        LOG2RAM_LOG="${RAM_LOG}/${LOG_NAME}"
+
+        sync_to_disk
+    done
+    exit 0
+    ;;
+
+*)
+    echo 'Usage: log2ram {start|stop|write}' >&2
+    exit 1
+    ;;
+esac

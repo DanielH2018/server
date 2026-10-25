@@ -19,6 +19,10 @@ PENDING = "/run/homelab-secrets/pending.json"
 LOCK = "/run/homelab-secrets/pending.lock"
 DIGESTS = "/var/lib/homelab-secrets/.digests"
 KEY = "/var/lib/homelab-secrets/.hmac-key"
+# Plaintext the state files must never hold. Long, because KEY is 32 random bytes: a two-byte
+# marker such as "t1" turns up in it about once in 2,100 runs, which failed CI (#6297).
+NUT_PW_MARKER = "nut-pw-plaintext-marker-6297"
+TOK_MARKER = "tok-plaintext-marker-6297"
 
 
 @pytest.fixture
@@ -53,7 +57,7 @@ def drain(host):
 
 
 def test_a_first_run_queues_every_dependent_and_records_the_state(host):
-    two_outputs(host, nut_pw="pw1", tok="t1")
+    two_outputs(host, nut_pw=NUT_PW_MARKER, tok=TOK_MARKER)
 
     assert host.run() == 0
 
@@ -72,8 +76,8 @@ def test_a_first_run_queues_every_dependent_and_records_the_state(host):
         "/var/lib/homelab-secrets/etc/nut/upsmon.conf",
     ]
     for state in (DIGESTS, KEY, PENDING):
-        assert b"pw1" not in host.path(state).read_bytes()
-        assert b"t1" not in host.path(state).read_bytes()
+        assert NUT_PW_MARKER.encode() not in host.path(state).read_bytes()
+        assert TOK_MARKER.encode() not in host.path(state).read_bytes()
 
 
 def test_an_unchanged_value_adds_nothing(host):

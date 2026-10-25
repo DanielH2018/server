@@ -2,8 +2,8 @@
 
 A key authorized on daniel-pi with no options gives anyone who can read the
 `pi-peer-backup-ssh` Secret a shell as a NOPASSWD-sudo user there. The key is pinned
-to `pi-peer-backup-shell.sh`, which `setup/k8s_host_files` installs on the Pi since
-pi-peer-backup's flip to Flux. The wrapper re-derives one `sudo rsync --server --sender` of the
+to `pi-peer-backup-shell.sh`, which the `pi-peer-backup-target` component of
+`homelab-daniel-pi` installs on the Pi since H7.25. The wrapper re-derives one `sudo rsync --server --sender` of the
 wg-easy directory from SSH_ORIGINAL_COMMAND and refuses everything else. The wrapper is run
 for real here with `sudo` shadowed by a stub on PATH that prints its argv, so the assertions
 are on what the Pi would execute, not on the wrapper's text.
@@ -13,15 +13,15 @@ import os
 import re
 
 import pytest
-from lib import yaml_fast
-from lib.k8s_context import resolve_vars
-from lib.render_context import render_context
 from lib.proc_testing import fake_bin, path_with, run
-from _helpers import ROLES, stub_logger_on_path
+from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
+from _helpers import stub_logger_on_path
 from _k8s_render import rendered_docs
 
-HOST_FILES = ROLES / "setup/k8s_host_files"
-WRAPPER = HOST_FILES / "files/pi-peer-backup-shell.sh"
+COMPONENT = REPO / "hosts/components/pi-peer-backup-target"
+WRAPPER = COMPONENT / "pi-peer-backup-shell.sh"
+KEY_FILE = "/home/ubuntu/.ssh/authorized_" + "keys"
 SRC = "/home/ubuntu/server/containers/wg-easy/config/"
 
 # The request rsync 3.2.7 sends for the CronJob's exact client invocation
@@ -106,20 +106,18 @@ def test_a_rejection_is_logged_through_the_stub(fake_sudo, logger_calls):
     )
 
 
-def test_the_key_is_pinned_to_the_wrapper_installed_one_task_earlier():
-    (block,) = yaml_fast.safe_load(
-        (HOST_FILES / "tasks/pi-peer-backup.yml").read_text()
-    )
-    tasks = block["block"]
-    names = [t.get("name") for t in tasks]
-    install = tasks[names.index("Install the forced-command wrapper on daniel-pi")]
-    authorize = tasks[names.index("Authorize the pull key on daniel-pi")]
-    assert names.index(install["name"]) < names.index(authorize["name"])
-    dest = install["ansible.builtin.copy"]["dest"]
-    options = resolve_vars(
-        {"key_options": authorize["ansible.posix.authorized_key"]["key_options"]},
-        render_context(HOST_FILES, overrides=block["vars"], strict=True),
-    )["key_options"]
+def test_the_key_is_pinned_to_the_wrapper_the_package_installs():
+    package = host_mode.render_host("daniel-pi")
+    (edit,) = [e for e in package.lines if e["path"] == KEY_FILE]
+    dest = "/usr/local/bin/pi-peer-backup-shell"
+    assert package.files[dest] == (WRAPPER.read_bytes(), 0o755)
+    # The line is the tracked public half behind the pinned options, and a rotated key
+    # replaces it, because the anchor is the key comment and not the key.
+    options, _, key = edit["line"].partition(" ssh-ed25519 ")
+    public = (COMPONENT / "pi-peer-backup.pub").read_text().strip()
+    assert f"ssh-ed25519 {key}" == public
+    assert re.search(edit["regexp"], edit["line"])
+    assert edit["mode"] == "0600"
     assert options.startswith("restrict,")
     pinned = re.fullmatch(rf'restrict,command="{re.escape(dest)} (\S+)"', options)
     assert pinned, options

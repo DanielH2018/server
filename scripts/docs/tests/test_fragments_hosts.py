@@ -41,16 +41,12 @@ def test_pi_apt_timers_render_the_unit_and_time():
     assert "| `x.timer` | `01:02` |" in body
 
 
-def test_pi_log2ram_renders_each_conf_key_with_its_var_and_value():
-    d = {
-        "optimize_pi_log2ram_size": "64M",
-        "optimize_pi_log2ram_zram_backed": "true",
-        "optimize_pi_log2ram_disk_size": "1G",
-        "optimize_pi_log2ram_comp_alg": "zstd",
-    }
-    body = h.render_pi_log2ram(d)
-    assert "| `SIZE` | `optimize_pi_log2ram_size` | `64M` |" in body
-    assert "| `COMP_ALG` | `optimize_pi_log2ram_comp_alg` | `zstd` |" in body
+def test_pi_log2ram_renders_each_conf_key_with_its_value():
+    body = h.render_pi_log2ram(
+        {"SIZE": "64M", "ZL2R": "true", "LOG_DISK_SIZE": "1G", "COMP_ALG": "zstd"}
+    )
+    assert "| `SIZE` | `64M` |" in body
+    assert "| `COMP_ALG` | `zstd` |" in body
 
 
 def test_valheim_mods_list_enabled_before_disabled():

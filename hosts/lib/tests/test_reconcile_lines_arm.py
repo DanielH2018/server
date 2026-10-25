@@ -243,6 +243,61 @@ def test_red_an_arm_that_rewrites_with_a_default_mode_would_break_sshd_strictmod
     )
 
 
+# The Pi's key file: pi-peer-backup's forced-command key beside the operator's own.
+
+KEY_FILE = "/home/ubuntu/.ssh/authorized_" + "keys"
+OPERATOR = "ssh-ed25519 AAAAoperator ubuntu@laptop\n"
+FORCED = 'restrict,command="/usr/local/bin/pi-peer-backup-shell /d/" ssh-ed25519'
+OLD_KEY = f"{FORCED} AAAAold pi-peer-backup-cronjob"
+NEW_KEY = f"{FORCED} AAAAnew pi-peer-backup-cronjob"
+KEY_EDIT = {
+    "path": KEY_FILE,
+    "line": NEW_KEY,
+    "regexp": "pi-peer-backup-cronjob",
+    "mode": "0600",
+}
+
+
+def test_a_rotated_key_replaces_the_line_anchored_on_its_comment_and_keeps_the_operators(
+    node,
+):
+    write(node, KEY_FILE, f"{OPERATOR}{OLD_KEY}\n", 0o600)
+    declare(node, KEY_EDIT)
+
+    assert node.run().returncode == 0
+    assert read(node, KEY_FILE) == f"{OPERATOR}{NEW_KEY}\n"
+
+
+def create_under_a_missing_directory(node: Node) -> None:
+    write(node, "/home/ubuntu/.keep", "")
+    declare(node, KEY_EDIT)
+
+    assert node.run().returncode == 0
+    assert read(node, KEY_FILE) == f"{NEW_KEY}\n"
+    key_file = node.root / KEY_FILE.lstrip("/")
+    ssh, home = key_file.parent, key_file.parent.parent
+    assert ssh.stat().st_mode & 0o7777 == 0o700
+    assert key_file.stat().st_mode & 0o7777 == 0o600
+    # Both belong to the home's owner, the Pi user, and not to the root reconcile runs as.
+    assert (ssh.stat().st_uid, key_file.stat().st_uid) == (home.stat().st_uid,) * 2
+
+
+def test_a_missing_key_file_is_created_0600_under_a_0700_ssh_directory(node):
+    create_under_a_missing_directory(node)
+
+
+def test_red_an_arm_that_makes_the_ssh_directory_with_a_default_mode_would_break_strictmodes(
+    tmp_path,
+):
+    red(
+        tmp_path,
+        create_under_a_missing_directory,
+        ARM,
+        "made.mkdir(mode=0o700)",
+        "made.mkdir(mode=0o755)",
+    )
+
+
 # Order: the edit comes before the activation that reads it, and before ufw.
 
 
