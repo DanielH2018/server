@@ -127,8 +127,9 @@ def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarg
         origin if is_diverged(origin, local, origin_ahead, local_ahead) else None,
     )
     # Only spend the GitHub call on a tick that would otherwise deploy. These conditions mirror
-    # next_action's own short-circuits above it, so a noop/dirty/held tick costs no API request —
-    # which keeps the gate's share of the GitHub rate limit at one request per 30 min.
+    # next_action's own short-circuits above it, so a noop/dirty/held tick costs no API request.
+    # A tick that would deploy costs one request for the tip. The 10-min timer makes that up to
+    # 6 an hour. An authenticated tick whose tip is not green adds the ancestor walk below.
     ci = "pass"
     tip, tip_ci = origin, "pass"
     if not dirty and origin_ahead and origin != local and origin != hold:

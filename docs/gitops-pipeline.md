@@ -476,11 +476,19 @@ the tags of the tasks that read it:
   only there maps to the tags of whatever reads that KEY.
 - `defaults/main.yml` or `vars/<f>.yml` maps to the top-level keys whose value changed between the
   two refs, then the tags of every task file and template naming one of those keys.
+- A key, task file, template or file the range deletes together with its last reader maps to
+  the tags its readers carried at the old ref (#5930). It refuses if any of those tags selects
+  no task at the new ref. H1.4 deleted `k3s_cluster_dns_ip` and `templates/coredns-corefile.j2`
+  with the `tasks/coredns.yml` tasks that read them. Before this rule, the deployer refused that
+  range and recorded `"tags": []` where `--tags coredns` was enough.
 
 A path that reaches no host is SKIPPED, not refused: a `.md` outside `files/` and `templates/`
 (one inside them can be copied or rendered onto a host, so it narrows), and a role-local `tests/`
 directory. A `defaults/` or `vars/` edit that moves no parsed key's value, which is every
 comment-only edit, is skipped the same way (#4384): Ansible reads the file only through its values.
+So is a task file whose parsed tasks are unchanged once each static import's `name:` is dropped
+(#5930). An import runs no task of its own, so its name reaches no host. Any other task's name
+still counts, because `stale-checkout-guard.yml`'s rows match tasks by name.
 Refusing on those would leave the narrowing almost never firing, because most ranges
 touching `setup/k3s` carry the role's own `CLAUDE.md`. A range of nothing but such paths is an
 answer rather than a narrowing: `narrow_setup.py` exits 3 printing `narrowed-to-nothing`, since
@@ -620,7 +628,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `GH_TOKEN`/`GITHUB_TOKEN` in the environment win) and degrades to anonymous when gh is logged
   out. The anonymous limit is 60 requests an hour per source IP, shared with every landing's
   `await_ci.py` poll on the host, and an exhausted quota reads as "CI not finished." The
-  authenticated limit is 5000 an hour per token.
+  authenticated limit is 5000 an hour per token. An anonymous `await_ci.py` polls every 90s
+  rather than every 20s and never walks descendants, so land.sh's 1200s CI budget costs at
+  most 30 of the 60 requests (`await_ci.ANONYMOUS_INTERVAL_S`, #6148). A poll costs 2
+  requests until a required run registers. On an anonymous host, a merge commit GitHub never
+  ran CI for ends the wait on exit 75 and asks for `gh auth login`.
   - **A tip that is not green sends the gate walking, and the tick deploys the newest GREEN
     ancestor instead of deferring the range.** *What a tick does* has the steps.
     `deploy_phases.assess` reads `git rev-list --first-parent <local>..<origin>` newest first,
@@ -657,6 +669,8 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   - `cancelled`/`stale` count as **no verdict, not failure**: `ci.yml` sets
     `concurrency: cancel-in-progress` on `github.ref`, so two quick pushes cancel the first run,
     and mapping that to a failure would page on an ordinary back-to-back push.
+    The `always()` gate job that fails on those cancelled needs is no verdict either, once the
+    commit's check-suites show its own run concluded `cancelled` (#5931, #6007).
   - `CI_CONTEXTS` holds GitHub check-run **names**, which must match `ci.yml`'s `name:` exactly.
     An empty list or repo **disarms** the gate with a log line rather than passing everything,
     the same fail-closed shape as the k8s denylist. Set `gitops_deploy_require_ci: false` to turn

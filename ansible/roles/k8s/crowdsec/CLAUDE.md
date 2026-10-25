@@ -203,6 +203,12 @@ prune unless a `k8straefik*` row pulled in the last 50 minutes**, because prunin
 makes LAPI answer 403 to the edge. Read a run with
 `probe.py loki-query '{container="crowdsec-jobs"} |= "crowdsec-bouncer-prune"'`.
 
+Any other client of the bouncer key would add rows too, and a fresh `last_pull` on one of them
+would satisfy that survivor check while the edge is not pulling. traefik's bouncer-key
+precheck sends `HEAD /v1/decisions` for that reason: LAPI answers a HEAD from the key's hash
+alone, adding no row and stamping no `last_pull`. The `DECIDED:` note in
+`ansible/roles/k8s/traefik/files/traefik_bouncer_key_precheck.py` cites the upstream code.
+
 ### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
 The tailer read a Traefik access-log line before Traefik finished writing it. Each occurrence is
 one request the WAF never sees, about 0.05% of traffic. Nothing here fixes it, and the syslog

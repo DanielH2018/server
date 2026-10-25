@@ -466,6 +466,13 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/cluster_pins.py --base HEAD^1
 
+      # The k3s version and its binary sum move together (H6.3e). The `binary` gate mode
+      # compares each node's binary with the sum, so a bump that keeps the old one is refused.
+      - name: k3s binary sum co-change
+        if: github.event_name == 'pull_request'
+        timeout-minutes: 2
+        run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
+
   # ansible-lint alone. It is the biggest single piece of the hook sweep — 106s against 26s for
   # all twenty other hooks together, measured on daniel-server — so it gets the job
   # and `hooks` gets the remainder. The reasoning and the numbers are in the DECIDED block
