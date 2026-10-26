@@ -10,12 +10,14 @@ one xdist worker so a module-scoped fixture is built once. Splitting a module ac
 would rebuild those fixtures per shard and give the saving straight back.
 
 WHY WEIGHTS, AND NOT A HASH. A stable hash of the module path is the obvious split and it
-balances badly here: the suite's cost is concentrated, not flat. Measured against a
-serial `--durations=0` run of the whole suite (103.6s over 505 files), projected pole shard at
-N=4 was 42.7s for a sha256 split and 39.8s for a greedy split weighted by the number of `def
-test_` in each file, against 24.9s for a greedy split weighted by measured per-file seconds —
-an even split being 25.9s. File byte size fared no better than the hash (36.2s). So the split
-is longest-processing-time bin packing over recorded per-file durations.
+balances badly here: the suite's cost is concentrated, not flat. Measured against a serial
+`--durations=0` run of the whole suite (103.6s over 505 files), projected pole shard at N=4 was
+42.7s for a sha256 split and 39.8s for a greedy split weighted by the number of `def test_` in
+each file, against 24.9s for a greedy split weighted by measured per-file seconds — an even
+split being 25.9s. File byte size fared no better than the hash (36.2s). So the split is
+longest-processing-time bin packing over per-file durations. It packs the runner seconds in
+`pytest_shard_runner_weights.json` where that table has the module, and scales the recorded
+weight otherwise; `shard_weight_gate.RUNNER_WEIGHTS_PATH` says why there are two tables.
 
 STALENESS IS GRACEFUL, WHICH IS WHY THE RECORDED FILE IS SAFE TO COMMIT. A path with no
 recorded weight is given the median of the recorded ones, and a recorded path that no longer
@@ -25,8 +27,7 @@ in exactly one shard, so a stale table makes CI slower, never wrong.
 THE MEDIAN IS A BAD GUESS FOR A HEAVY FILE, AND THE TABLE CANNOT KNOW WHICH FILES ARE HEAVY.
 The suite's median is 0.0s, so an unweighted file is packed as the lightest thing in the
 suite and placed last, into whichever shard happened to be least loaded. One unrecorded 30s
-module landing that way skews the four CI shards to 65/99/99/68s against
-a 43s projection for every one.
+module landing that way skews the four CI shards to 65/99/99/68s against a 43s projection.
 
 ONE GATE GUARDS THE TABLE, AND IT IS A CI STEP: `--check-durations`. It reads the durations
 report CI's own test step already wrote, so it measures each module by running it. That is what
@@ -71,7 +72,10 @@ which prints each complaint as a `::warning::` annotation and exits zero. On a p
 the same variance lands a module near the bound on either side of it from run to run, so an
 unweighted module between the two bounds annotates there too (#4010). A pull request's author
 can repair only a module the PR's diff adds or changes, so CI passes the diff as
-`--changed-files` and every other module's complaint annotates there as well (#5480).
+`--changed-files` and every other module's complaint annotates there as well (#5480). A change
+to the table widens that to the rows it adds, changes or drops, which `--base-weights` lets
+the gate read, and no further: a row the PR did not write is not its author's (#6266). A
+change to the gate's own code widens it to every module.
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -106,9 +110,12 @@ from lib.repo_paths import REPO
 from shard_weight_gate import (
     RUNNER_HEAVY_FAIL_SECONDS,
     RUNNER_HEAVY_SECONDS,
+    RUNNER_WEIGHTS_PATH,
     STALE_WEIGHT_RATIO,
     gate_complaints,
+    packing_table,
     parse_durations,
+    write_runner_weights,
 )
 
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
@@ -218,7 +225,7 @@ def shard_files(shard: int, shards: int, files=None, weights=None) -> list[str]:
     if not 1 <= shard <= shards:
         raise ValueError(f"shard {shard} is outside 1..{shards}")
     files = census() if files is None else files
-    weights = load_weights() if weights is None else weights
+    weights = packing_table(load_weights()) if weights is None else weights
     placed = assign(files, shards, weights)
     return sorted(f for f, i in placed.items() if i == shard - 1)
 
@@ -401,14 +408,14 @@ def refresh_drifted_weights(
 
 
 def _summary(shards: int) -> str:
-    files, weights = census(), load_weights()
+    files, weights = census(), packing_table(load_weights())
     placed = assign(files, shards, weights)
     lines = []
     for i in range(shards):
         members = [f for f, s in placed.items() if s == i]
         cost = sum(weights.get(f, 0.0) + _PER_FILE_SECONDS for f in members)
         lines.append(
-            f"  shard {i + 1}: {len(members):>4} files, {cost:6.1f}s projected"
+            f"  shard {i + 1}: {len(members):>4} files, {cost:6.1f} runner seconds projected"
         )
     unknown = sum(1 for f in files if f not in weights)
     lines.append(f"  {len(files)} files, {unknown} with no recorded weight")
@@ -449,6 +456,13 @@ def main(argv=None) -> int:
         ),
     )
     parser.add_argument(
+        "--record-runner",
+        nargs="+",
+        type=Path,
+        metavar="LOG",
+        help="rewrite the runner table from CI shard logs, each module at its median",
+    )
+    parser.add_argument(
         "--check-durations",
         type=Path,
         metavar="LOG",
@@ -469,10 +483,13 @@ def main(argv=None) -> int:
         "--changed-files",
         type=Path,
         metavar="LIST",
-        help=(
-            "a file listing the paths a pull request's diff adds or modifies, one per line: "
-            "--check-durations then fails only for a module in it and annotates the rest"
-        ),
+        help="the paths a PR's diff adds or modifies: only those modules fail the gate",
+    )
+    parser.add_argument(
+        "--base-weights",
+        type=Path,
+        metavar="JSON",
+        help="the weight table at the PR's merge base: only the rows a table edit wrote fail",
     )
     parser.add_argument(
         "--threshold",
@@ -484,10 +501,7 @@ def main(argv=None) -> int:
         "--fail-above",
         type=float,
         default=RUNNER_HEAVY_FAIL_SECONDS,
-        help=(
-            "seconds an unweighted module may measure under --check-durations before the "
-            "gate fails rather than annotates"
-        ),
+        help="seconds an unweighted module may measure before --check-durations fails",
     )
     parser.add_argument(
         "--stale-ratio",
@@ -499,9 +513,7 @@ def main(argv=None) -> int:
 
     if args.check_durations:
         report = args.check_durations.read_text(errors="replace")
-        changed = None
-        if args.changed_files:
-            changed = set(args.changed_files.read_text().split())
+        changed = args.changed_files and set(args.changed_files.read_text().split())
         problems, warnings = gate_complaints(
             report,
             load_weights(),
@@ -509,6 +521,7 @@ def main(argv=None) -> int:
             threshold=args.threshold,
             ratio=args.stale_ratio,
             fail_above=args.fail_above,
+            base_weights=args.base_weights and load_weights(args.base_weights),
         )
         if args.warn_only:
             warnings, problems = warnings + problems, []
@@ -556,13 +569,18 @@ def main(argv=None) -> int:
             f"weight(s){': ' + ', '.join(moved) if moved else ''} in {WEIGHTS_PATH}"
         )
         return 0
+    if args.record_runner:
+        reports = [log.read_text(errors="replace") for log in args.record_runner]
+        written = write_runner_weights(reports, census())
+        print(f"recorded {len(written)} runner weights to {RUNNER_WEIGHTS_PATH}")
+        return 0
     if args.summary:
         print(_summary(args.of))
         return 0
     if args.shard is None:
         parser.error(
             "one of --shard, --summary, --record, --record-missing, --record-files, "
-            "--refresh-drifted or --check-durations is required"
+            "--refresh-drifted, --record-runner or --check-durations is required"
         )
 
     files = shard_files(args.shard, args.of)

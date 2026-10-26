@@ -55,7 +55,9 @@ def rendered_jobs(containers_list: list[dict] | None = None) -> dict[str, dict]:
     overrides = None
     if containers_list is not None:
         hostvars = copy.deepcopy(host_context()["hostvars"])
+        # The job reads both service keys, so the override replaces both.
         hostvars["daniel-pi"]["containers_list"] = containers_list
+        hostvars["daniel-pi"]["compose_services"] = []
         overrides = {"hostvars": hostvars}
     text = render_role_template("observability", "prometheus.yaml.j2", overrides)
     configmap = next(
@@ -77,7 +79,9 @@ def targets(job: str, containers_list: list[dict] | None = None) -> dict[str, di
 
 
 def pi_containers() -> list[dict]:
-    return copy.deepcopy(host_context()["hostvars"]["daniel-pi"]["containers_list"])
+    """Every Pi service entry, from `containers_list` and the package's `compose_services`."""
+    pi = host_context()["hostvars"]["daniel-pi"]
+    return copy.deepcopy([*pi["containers_list"], *pi["compose_services"]])
 
 
 def tile_address(tile: dict) -> str:

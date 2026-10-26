@@ -22,7 +22,7 @@ KNOWN_SERVICES = frozenset(
 KNOWN_SETUP_ROLES = frozenset(
     {"gitops_deploy", "k3s", "renovate_agent", "initial_setup"}
 )
-KNOWN_PI_SERVICES = frozenset({"alloy", "wg-easy", "docker-proxy", "autoheal"})
+# H5.9 moved wg-easy, the last Pi service, into the host package, so no Pi role takes a block.
 
 
 # --- facts -------------------------------------------------------------------------------
@@ -290,6 +290,11 @@ def test_render_doc_creates_the_heading_after_the_intro_when_the_doc_has_no_sect
     assert g.render_doc(out, BLOCK, create_heading=True) == out
 
 
+def test_the_k8s_banner_names_the_reconcile_role_as_the_tier_lists_home():
+    assert "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml" in g.BEGIN
+    assert "k3s role" not in g.BEGIN
+
+
 def test_render_doc_refuses_an_unterminated_block():
     broken = "## At a glance\n" + g.BEGIN + "\n- x\n\n## Traps\n"
     with pytest.raises(ValueError, match="no `<!-- /generated_from -->`"):
@@ -327,7 +332,7 @@ def test_the_gate_covers_the_known_setup_roles_and_pi_services():
     assert KNOWN_SETUP_ROLES <= setup, sorted(KNOWN_SETUP_ROLES - setup)
     assert "common" not in setup
     pi = {e["name"] for e in g.Estate().pi_entries()}
-    assert KNOWN_PI_SERVICES <= pi, sorted(KNOWN_PI_SERVICES - pi)
+    assert pi == set(), sorted(pi)
 
 
 def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):

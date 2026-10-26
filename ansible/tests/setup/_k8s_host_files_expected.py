@@ -33,7 +33,7 @@ CROWDSEC_ARMS: dict[str, tuple[str, dict[str, str | bool]]] = {
 
 # {task file: {task name: (module, its args)}}, one file per source role. The args are the
 # task's whole argument map, so an owner, group or mode change fails the row as well as a path:
-# docs' directory exists to be owned by sys_user, which the docs-refresh build writes as.
+# the artifacts directories exist to be owned by sys_user, which the artifacts sync writes as.
 EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
     "artifacts.yml": {
         "Ensure the local artifacts directory exists": (
@@ -81,44 +81,6 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
         "Remove the retired configarr health reader from the host": (
             "ansible.builtin.file",
             {"path": "{{ item }}", "state": "absent"},
-        ),
-    },
-    "docs.yml": {
-        "Ensure the built docs site directory exists": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ docs_host_site_dir }}",
-                "state": "directory",
-                "owner": "{{ sys_user }}",
-                "group": "{{ sys_user }}",
-                "mode": "0755",
-            },
-        ),
-    },
-    # The wrapper first, then the key pinned to it: the reverse order leaves a forced command
-    # that does not exist. Both run on daniel-pi through the block's `delegate_to`.
-    "pi-peer-backup.yml": {
-        "Install the forced-command wrapper on daniel-pi": (
-            "ansible.builtin.copy",
-            {
-                "src": "pi-peer-backup-shell.sh",
-                "dest": "/usr/local/bin/pi-peer-backup-shell",
-                "owner": "root",
-                "group": "root",
-                "mode": "0755",
-            },
-        ),
-        "Authorize the pull key on daniel-pi": (
-            "ansible.posix.authorized_key",
-            {
-                "user": "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}",
-                "key": "{{ lookup('file', 'pi-peer-backup.pub') }}",
-                "key_options": (
-                    'restrict,command="/usr/local/bin/pi-peer-backup-shell '
-                    '{{ pi_peer_backup_src_dir }}"'
-                ),
-                "state": "present",
-            },
         ),
     },
     "crowdsec.yml": CROWDSEC_ARMS,
@@ -210,7 +172,8 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
                 "minute": "{{ registry_k8s_gc_cron_minute }}",
                 "hour": "{{ registry_k8s_gc_cron_hour }}",
                 "user": "root",
-                "job": "/usr/local/bin/registry-gc.sh",
+                # The journal pipe is #6162's, added after the move.
+                "job": "/usr/local/bin/registry-gc.sh 2>&1 | logger -t registry-gc",
                 "cron_file": "registry-gc",
             },
         ),

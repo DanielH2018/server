@@ -1,0 +1,15 @@
+# Managed by the homelab host package. This file sorts last so its Match block cannot reach a
+# setting in another drop-in.
+Match User {{ sys_user }}
+    # `all`, not `local`: the clipboard bridge (chezmoi home/dot_local/bin/executable_clip-bridge)
+    # opens ONE reverse forward, a unix socket on this host. sshd refuses every remote forward,
+    # unix-domain ones included, when AllowTcpForwarding excludes remote listens, before
+    # AllowStreamLocalForwarding is consulted. This user already has a full shell, so the
+    # widening is bounded. GatewayPorts stays at its default, so the forward binds loopback only.
+    AllowTcpForwarding all
+    # Narrows the streamlocal side back to the one direction the bridge needs.
+    AllowStreamLocalForwarding remote
+    # sshd creates and removes the socket for a REMOTE forward. Without this, a tunnel killed
+    # uncleanly leaves the socket behind and the next bind fails on it.
+    StreamLocalBindUnlink yes
+    DisableForwarding no

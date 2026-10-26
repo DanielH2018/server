@@ -6,7 +6,7 @@
 # host logs automatically. The config it runs is templates/config/config.alloy.j2.
 #
 # This is NOT the only shipper: daniel-pi runs its own Docker copy
-# (roles/containers/promtail/) and pushes over the LAN through ingressroute-push.yaml.j2.
+# (roles/containers/alloy/) and pushes over the LAN through ingressroute-push.yaml.j2.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -56,6 +56,7 @@ spec:
       containers:
         - name: alloy
           image: {{ loki_homelab_k8s_alloy_image }}
+          imagePullPolicy: IfNotPresent
           args:
             - run
             - /etc/alloy/config.alloy

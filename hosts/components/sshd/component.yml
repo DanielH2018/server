@@ -1,0 +1,19 @@
+# sshd hardening (H7.6d, docs/target-architecture/host/h7-delete-ansible.md, *In-place edits*).
+# initial_setup edited the file named by `ssh_config_path` with `lineinfile` and `blockinfile`.
+# That path is /etc/ssh/sshd_config on daniel-server and cloud-init's 50-cloud-init.conf on
+# daniel-pi and daniel-box. Two drop-ins replace the edits:
+#
+# - 10-homelab.conf holds the settings. sshd keeps the first value it reads, and `10-` sorts
+#   before 50-cloud-init.conf, so the package's value wins over the lines Ansible left there.
+# - 90-homelab-match.conf holds the `Match User <sys_user>` block, in its own file.
+#
+# The Ansible-era lines stay in the old file as harmless duplicates with the same values; the PR
+# body names them for removal by hand. Each file activates `reload:ssh.service`, which runs
+# `sshd -t` first, so a config sshd rejects leaves the running daemon untouched and holds the host.
+#
+# The `ssh-users` group and the sys user's membership stay Ansible tasks until the users arm
+# declares them: AllowGroups admits only that group, so a rebuilt host needs both before sshd
+# reloads.
+files:
+  - {src: templates/10-homelab.conf, dst: /etc/ssh/sshd_config.d/10-homelab.conf, activate: "reload:ssh.service"}
+  - {src: templates/90-homelab-match.conf.j2, dst: /etc/ssh/sshd_config.d/90-homelab-match.conf, activate: "reload:ssh.service"}

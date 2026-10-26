@@ -61,7 +61,7 @@ prints when it could not take the lock, and
 `scripts/docs/tests/test_fragments_deploy.py` fails when that message omits a holder in the table.
 
 The three crons take the lock through one Jinja macro,
-`ansible/roles/setup/initial_setup/templates/git-tree-lock.j2`, which owns the wait and the
+`ansible/templates/git-tree-lock.j2`, which owns the wait and the
 alert a skip raises.
 
 ## Exit codes are resume points
@@ -177,8 +177,15 @@ kubectl -n longhorn-system get backupvolumes.longhorn.io | grep <pvc-name>
 
 - On `default` (B2), drain the whole prefix through the B2 API with
   `ansible/prune_backups.yml -e prune_mode=b2-drain -e prune_volumes=<pvc-name>`. A dry run
-  comes first, then the same command with `-e prune_apply=true`. The run costs one store
-  listing, and its target sync drops the BackupVolume and Backup CRs.
+  comes first, then the same command with `-e prune_apply=true`. The dry run lists the store
+  once and saves the listing to `/tmp/longhorn-b2-listing.json` on daniel-box. The apply reuses
+  that listing for up to 60 minutes and prints `listing: reused` with its age. After 60 minutes,
+  or for a different bucket, it prints `listing: fresh, because <reason>` and lists again. Add
+  `-e prune_fresh_listing=true` to force a fresh listing. The apply re-reads each volume's own
+  prefix after deleting it, so a version created since the dry run stops the drain with an
+  error, and a version already deleted is skipped as `already gone`. The apply removes the
+  saved listing once it has deleted anything, so a second apply needs a new dry run. Its
+  target sync drops the BackupVolume and Backup CRs.
 - On `r2`, `b2-drain` cannot reach the backups. Use
   `scripts/backup/longhorn_reap.py backups --apply-deleted-volumes`, which deletes a
   deleted volume's backups through Longhorn.

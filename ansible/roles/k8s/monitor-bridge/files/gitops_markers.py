@@ -399,6 +399,51 @@ def agent_join_cmds(role: str, playbook: str, tags, agent_hosts) -> list[str]:
     ]
 
 
+# Setup roles whose playbook re-runs a task file the server play also reaches, on each agent
+# node through a second opt-in play, and the tag that selects it there. `k3s-bringup.yml`'s
+# pin play imports `tasks/static-address.yml` under `node-address` and matches no host without
+# `-e pin_agent_address=<host>`, so `--tags node-address` pins daniel-box alone (#5918).
+#
+# DECIDED: the pin command goes BESIDE the server command, never in place of it. `tasks/main.yml`
+# imports the same file, so the server play under `node-address` is daniel-box's own pin, and
+# `server_tags` keeps the tag. Unlike the join, the pin play runs ON the agent: hosts.ini gives
+# it `ansible_connection=local`, and its preamble refuses one run from another machine. Every
+# printer therefore names the host to run it on. Pinned by
+# test_deploy_remediation_agent.py::test_a_static_address_change_prints_the_pin_play_beside_the_server.
+AGENT_PIN_TAGS: dict[str, str] = {"k3s": "node-address"}
+
+
+def agent_pin_cmds(
+    role: str, playbook: str, tags, agent_hosts
+) -> list[tuple[str, str]]:
+    """The pin-play commands for `role`'s agent nodes, as `(host to run it on, command)`.
+
+    Args:
+        role: the role, under the `--tags` value that selects it.
+        playbook: the playbook the server-half command names.
+        tags: the role's row, or `{role}` for the whole-role tag.
+        agent_hosts: the hosts the opt-in plays apply the agent half to, the same list
+            `agent_join_cmds` reads.
+
+    The whole-role tag gets them, and so does a row holding `AGENT_PIN_TAGS[role]`. The
+    server command keeps that tag, as the `DECIDED:` marker above says. A role with no known
+    agent host gets the `<agent host>` placeholder `agent_join_cmds` prints.
+    """
+    tags = frozenset(tags)
+    if role not in AGENT_PIN_TAGS or (
+        tags != {role} and AGENT_PIN_TAGS[role] not in tags
+    ):
+        return []
+    return [
+        (
+            host,
+            f"{PLAYBOOK_CMD} {playbook} -e pin_agent_address={host} "
+            f"--tags {AGENT_PIN_TAGS[role]}",
+        )
+        for host in (tuple(agent_hosts) or ("<agent host>",))
+    ]
+
+
 # How long a contention streak may run before monitor-bridge pages on it and the SessionStart
 # banner names it: the deployer's longest apply budget, `gitops_deploy_broad_timeout_s` =
 # 1800 s, so a holder past it has outlived every legitimate deploy. The bridge's own default

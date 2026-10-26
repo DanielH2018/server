@@ -7,10 +7,18 @@
 # (hosts/components/nut-secondary, H4.3c).
 # ansible/vars/hosts/daniel-server.sops.yaml carries every key this tree names, and
 # `host_secrets.py sync daniel-server` rewrites it (operator-only).
+# Since H7.28 it ships the first three subjects of initial_setup, the same components as daniel-pi:
+# apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits and login hardening.
+# initial_setup skips each on this host through `initial_setup_packaged_hosts`. No file needs a
+# credential. The rsyslog info filter stays an Ansible task gated on has_rsyslog.
 description: daniel-server's homelab host package
-components: [reconcile, secrets-unit, kuma-push, nut-secondary]
+components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning]
 credentials:
   - ups_secondary_daniel_server_push_token
 maintainer_scripts: [preinst, postinst, prerm]
 enable:
   homelab-updater.timer: timers.target
+# H7.24a: daniel-server installs `gh` by hand. The apt-github-cli component ships the source, and
+# the hand-installed github-cli.list names the same repository, so reconcile retires it.
+legacy:
+  - {path: /etc/apt/sources.list.d/github-cli.list}

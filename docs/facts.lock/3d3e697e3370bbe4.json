@@ -1,5 +1,5 @@
 {
-  "checksum": "d78e4bcf15e7018386c46e45530cd920d1cc5e67f44e8c985721dd1befc5ea03",
+  "checksum": "a2b151903274b64a142ddafbefc35df20ce304bd0d19e3dc52f96e89aa74cc9b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/gitops_deploy/CLAUDE.md#Autonomous-role contract (it deploys to production with no human in the loop)",
   "row": {
@@ -9,6 +9,6 @@
       "ansible/tests/services/test_gitops_check_rule_literals.py": "03f594d6a3c7e1afdf8a5d5174be39769608f0ed81ed9a929cbc028efd62a11d"
     },
     "python": "3.14",
-    "verified_sha": "0ed30cfde"
+    "verified_sha": "d3de3ecf5"
   }
 }

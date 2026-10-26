@@ -126,14 +126,14 @@ def check_pvc_fullness(cfg: Config, src: Sources) -> tuple[bool, str]:
     Reads the CLUSTER Prometheus like check_restarts, so it belongs to CLUSTER_DEPENDENT
     rather than PROM_DEPENDENT — the gate has to be the one watching this check's own source.
 
-    `max by (namespace, persistentvolumeclaim)` — not `sum` or `avg` — because daniel-box's
-    claims are scraped TWICE. k3s serves the kubelet's metric registry on the supervisor's
-    /metrics as well, so the same series arrives under job="kubernetes-kubelet" and under
-    job="kubernetes-apiserver" (measured 2026-09-01: 43 + 27 = 70 series over 43 claims).
-    `max` of two copies of one ratio is that ratio, so the double scrape is harmless; `sum`
-    would report a double-scraped claim at twice its real fullness and `avg` would silently
-    change meaning the day one job's coverage moved. Grouping is also what makes the count
-    below a claim census rather than a scrape-job artifact.
+    `max by (namespace, persistentvolumeclaim)` — not `sum` or `avg` — so a claim reads as one
+    value however many series carry it. k3s serves the kubelet's registry on the supervisor's
+    /metrics too, so until #6331 daniel-box's claims arrived under job="kubernetes-kubelet" and
+    job="kubernetes-apiserver" (measured 2026-09-01: 43 + 27 = 70 series over 43 claims). The
+    apiserver job now keeps only `apiserver_` and `etcd_` families, so the kubelet job is the
+    claims' one source, and a dead kubelet job empties the census below rather than thinning
+    it. `sum` would double a claim if a second copy came back. Grouping is also what makes the
+    count a claim census rather than a scrape-job artifact.
     """
     floors = parse_pvc_floors(cfg.PVC_MIN_FREE)
     if cfg.PVC_MIN_FREE.strip() and not floors:

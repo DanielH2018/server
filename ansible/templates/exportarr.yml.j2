@@ -28,6 +28,7 @@
 {% macro exportarr(app, image, app_port, metrics_port=9707, additional_metrics=false) -%}
 - name: exportarr
           image: {{ image }}
+          imagePullPolicy: IfNotPresent
           # The subcommand selects the API dialect — sonarr/radarr/prowlarr speak different
           # versions (v3/v3/v1) and expose different collectors.
           #

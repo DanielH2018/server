@@ -79,6 +79,13 @@ MUST_DROP = [
     ("kube-state-metrics", "kube_job_status_ready"),
     ("flux", "gotk_reconcile_duration_seconds_bucket"),
     ("flux", "workqueue_queue_duration_seconds_bucket"),
+    ("kubernetes-apiserver", "apiserver_watch_events_dispatch_duration_seconds_bucket"),
+    ("kubernetes-apiserver", "apiserver_storage_list_duration_seconds_bucket"),
+    (
+        "kubernetes-apiserver",
+        "apiserver_watch_cache_initialization_duration_seconds_bucket",
+    ),
+    ("kubernetes-kubelet", "apiserver_watch_events_dispatch_duration_seconds_bucket"),
 ]
 
 # (job, metric, why it matters) — the half that catches a rule widened past its intent.
@@ -159,6 +166,16 @@ MUST_KEEP = [
         "controller_runtime_reconcile_errors_total",
         "a counter one family from the dropped histograms; a widened regex would take it",
     ),
+    (
+        "kubernetes-apiserver",
+        "etcd_request_duration_seconds_bucket",
+        "kept by decision: etcd write latency is what the control-plane scrape exists for",
+    ),
+    (
+        "kubernetes-apiserver",
+        "apiserver_watch_events_dispatch_duration_seconds_count",
+        "_sum and _count survive the bucket drop, so dispatch rates stay available",
+    ),
 ]
 
 
@@ -217,4 +234,59 @@ def test_the_kubelet_family_all_scrapes_at_one_minute():
     assert not inheriting, (
         f"{inheriting} inherit the 15s global. These are the largest series producers in the "
         "config and the retention cap is on BYTES — see the interval note at kube-state-metrics."
+    )
+
+
+def _kept(job_name: str, labels: dict[str, str]) -> bool:
+    """Whether a series with `labels` survives the job's keep and drop rules, as Prometheus runs them.
+
+    Prometheus joins `source_labels` with `separator` (default `;`) and anchors the regex; a
+    label the series lacks reads as the empty string.
+    """
+    for rule in _scrape_jobs()[job_name].get("metric_relabel_configs") or []:
+        action = rule.get("action", "replace")
+        if action not in ("keep", "drop"):
+            continue
+        sources = rule.get("source_labels", [])
+        value = rule.get("separator", ";").join(labels.get(s, "") for s in sources)
+        matched = re.fullmatch(rule["regex"], value) is not None
+        if (action == "drop") == matched:
+            return False
+    return True
+
+
+SERVER = {"node_role_kubernetes_io_control_plane": "true"}
+
+
+@pytest.mark.parametrize(
+    "job,extra,name,kept",
+    [
+        ("kubernetes-apiserver", {}, "apiserver_request_total", True),
+        ("kubernetes-apiserver", {}, "etcd_request_duration_seconds_bucket", True),
+        ("kubernetes-apiserver", {}, "kubelet_volume_stats_capacity_bytes", False),
+        ("kubernetes-apiserver", {}, "process_start_time_seconds", False),
+        ("kubernetes-kubelet", SERVER, "apiserver_storage_size_bytes", False),
+        ("kubernetes-kubelet", SERVER, "etcd_request_duration_seconds_bucket", False),
+        ("kubernetes-kubelet", SERVER, "kubelet_volume_stats_capacity_bytes", True),
+        ("kubernetes-kubelet", SERVER, "process_start_time_seconds", True),
+        (
+            "kubernetes-kubelet",
+            {},
+            "apiserver_client_certificate_expiration_seconds_count",
+            True,
+        ),
+        ("kubernetes-kubelet", {}, "kubelet_volume_stats_capacity_bytes", True),
+    ],
+)
+def test_the_server_node_registry_is_kept_once_across_the_two_jobs(
+    job, extra, name, kept
+):
+    """#6331: the apiserver job keeps `apiserver_` and `etcd_`, the server's kubelet the rest.
+
+    An agent node's kubelet carries no control-plane label, so it keeps its own `apiserver_`
+    client series.
+    """
+    assert _kept(job, {"__name__": name, **extra}) is kept, (
+        f"{name} on {job} with {extra or 'no node labels'} should be "
+        f"{'kept' if kept else 'dropped'}"
     )

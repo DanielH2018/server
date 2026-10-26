@@ -6,7 +6,7 @@ nightly into a Longhorn PVC; the Saturday weekly shard (weekly-backup-d6) carrie
 replaced the retired Kopia scope for the Pi.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=pi-peer-backup` with exit 5
 - **Image:** `ghcr.io/danielh2018/pi-peer-backup` (`pi_peer_backup_k8s_image`)
@@ -25,14 +25,13 @@ replaced the retired Kopia scope for the Pi.
   `ghcr.io/danielh2018/pi-peer-backup` under its content tag. The defaults name
   `<k8s_registry_pull_host>`; the renderer rewrites the ref to GHCR with `imagePullPolicy:
   IfNotPresent`. The image is 8.9 MB, so a cold pull is short.
-- **The Pi half is in the setup plane.** The forced-command wrapper and the authorized public
-  key are installed on daniel-pi by `setup/k8s_host_files`
-  (`ansible/roles/setup/k8s_host_files/tasks/pi-peer-backup.yml`), which the GitOps tick
-  applies through `initial_setup.yml`, delegated to daniel-pi. Both files moved there at the
-  flip, and that task holds a copy of `pi_peer_backup_src_dir`, which
-  `ansible/tests/setup/test_k8s_host_files_pairs.py` holds equal to this role's default.
+- **The Pi half is in the Pi's host package.** The forced-command wrapper and the authorized
+  public key are installed on daniel-pi by the `pi-peer-backup-target` component of
+  `homelab-daniel-pi` (`hosts/components/pi-peer-backup-target/`) since H7.25. The component's
+  authorized-key line holds a copy of `pi_peer_backup_src_dir`, which
+  `hosts/lib/tests/test_pi_tuning_component.py` holds equal to this role's default.
 - **Auth:** dedicated ed25519 key (`pi_peer_backup_ssh_key` in SOPS; public half
-  authorized on the Pi by `setup/k8s_host_files`). The private key has a Secret of its own,
+  authorized on the Pi by the `pi-peer-backup-target` component). The private key has a Secret of its own,
   `pi-peer-backup-ssh-key`, rendered from `templates/ssh-key-secret.yaml.j2`, because Flux
   strips the newlines from a placeholder's value (target slice R2, PR 6). The role lists that
   file in `render_sops_manifests`, so a placeholder render leaves it out. The CronJob projects
@@ -45,7 +44,7 @@ replaced the retired Kopia scope for the Pi.
   applies the new `pi-peer-backup-ssh` Secret.
 - **The key is pinned to one operation.** sshd authorizes it with
   `restrict,command="/usr/local/bin/pi-peer-backup-shell <src dir>"`; the wrapper
-  (`ansible/roles/setup/k8s_host_files/files/pi-peer-backup-shell.sh`, root-owned on the Pi) re-derives one
+  (`hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh`, root-owned on the Pi) re-derives one
   `sudo rsync --server --sender` of `pi_peer_backup_src_dir` from `SSH_ORIGINAL_COMMAND` and
   refuses a login, a receiver, another path, any long option but `--timeout=N`, and `-s`
   (`--secluded-args`, which re-reads the path from the protocol stream and would bypass the
@@ -114,4 +113,4 @@ replaced the retired Kopia scope for the Pi.
   and `promote` builds the image and runs the gate).
 - Gate: `flux_cronjob_gates` in `defaults/main.yml`. `tasks/main.yml` keeps the image-builder
   and manifests includes for a handback, and no Flux path runs them.
-- Pi half: `ansible/roles/setup/k8s_host_files/tasks/pi-peer-backup.yml`, with its two files.
+- Pi half: `hosts/components/pi-peer-backup-target/component.yml`, with its two files.

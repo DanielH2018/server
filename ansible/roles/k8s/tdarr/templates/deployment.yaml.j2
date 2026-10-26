@@ -49,6 +49,7 @@ spec:
       initContainers:
         - name: vaapi-encode
           image: {{ tdarr_k8s_image }}
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
@@ -70,6 +71,7 @@ spec:
       containers:
         - name: tdarr
           image: {{ tdarr_k8s_image }}
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ tdarr_k8s_webui_port }}
           # FOWNER and DAC_OVERRIDE stay here, unlike jellyfin where they were dropped with

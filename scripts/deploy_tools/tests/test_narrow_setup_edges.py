@@ -16,7 +16,16 @@ import pytest
 import narrow_setup
 
 from _narrow_fixtures import _refs
-from _setup_role_fixtures import ALPHA, DEFAULTS, MAIN, ROLE, Tree, build, narrow
+from _setup_role_fixtures import (
+    ALPHA,
+    DEFAULTS,
+    MAIN,
+    ROLE,
+    Tree,
+    build,
+    narrow,
+    touched,
+)
 
 DEFAULTS_WITH_A_DERIVED_KEY = DEFAULTS + 'demo_derived: "x{{ demo_alpha_mode }}"\n'
 
@@ -203,13 +212,13 @@ def _with_delta(tree: Tree, delta: str) -> str:
 
 def test_a_tag_carried_only_by_a_block_narrows_to_that_tag(tree):
     old = _with_delta(tree, DELTA_TAGGED_BLOCK)
-    tree.write(f"{ROLE}/tasks/delta.yml", DELTA_TAGGED_BLOCK + "# touched\n")
+    tree.write(f"{ROLE}/tasks/delta.yml", touched(DELTA_TAGGED_BLOCK))
     assert narrow(tree, old, tree.commit("touch delta")) == frozenset({"delta"})
 
 
 def test_a_block_no_tag_reaches_is_flagged(tree):
     old = _with_delta(tree, DELTA_UNTAGGED_BLOCK)
-    tree.write(f"{ROLE}/tasks/delta.yml", DELTA_UNTAGGED_BLOCK + "# touched\n")
+    tree.write(f"{ROLE}/tasks/delta.yml", touched(DELTA_UNTAGGED_BLOCK))
     with pytest.raises(narrow_setup.CannotNarrow, match="carries no tags of its own"):
         narrow(tree, old, tree.commit("touch delta"))
 
@@ -219,7 +228,7 @@ def test_a_block_no_tag_reaches_is_flagged(tree):
 
 def test_a_task_file_that_parses_narrows(tree):
     """The accepting half of the pair below: the same edit, well-formed."""
-    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA + "# a trailing comment\n")
+    tree.write(f"{ROLE}/tasks/alpha.yml", touched(ALPHA))
     assert narrow(tree, *_refs(tree)) == frozenset({"alpha"})
 
 

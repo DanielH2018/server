@@ -36,10 +36,11 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 # 13:57Z, gate check-run 119868712075 concluded `failure`, and `land.sh` ended `pr-ci-red` on a head
 # that no job had failed on. `ci_verdict` leaves that gate out once its `read_suites` reader shows
 # the gate's check suite concluded `cancelled`. A cancelled need alone does not prove it: GitHub
-# reports a job past its `timeout-minutes` as `cancelled` too, on a run nobody cancelled. The
-# deployer's reader passes no `read_suites`, so its gate keeps such a gate red. The rule lives in
-# THIS module because it is the one module both runtimes import: the deployer ships only its role's `files/`, so a rule under `scripts/`
-# would not exist on the host, while `scripts/deploy_tools/await_ci.py` already imports this file.
+# reports a job past its `timeout-minutes` as `cancelled` too, on a run nobody cancelled. Both
+# readers pass `read_suites`: `await_ci.verdict_for` and the deployer's `fetch_ci_verdict` (#6007).
+# The rule lives in THIS module because it is the one module both runtimes import: the deployer
+# ships only its role's `files/`, so a rule under `scripts/` would not exist on the host, while
+# `scripts/deploy_tools/await_ci.py` already imports this file.
 # ENFORCED: `ansible/tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
 # to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
 # `jobs_verdict`.
@@ -51,6 +52,7 @@ CI_PROVE_JOB = "prove the pushed tree was tested"
 CI_GATE_NEEDS_JOBS = frozenset(
     {
         "hooks (lint + validate + secrets + docs)",
+        "PR gates (cross-plane order + cluster pins)",
         "pytest (shard 1 of 6)",
         "pytest (shard 2 of 6)",
         "pytest (shard 3 of 6)",
@@ -61,6 +63,7 @@ CI_GATE_NEEDS_JOBS = frozenset(
         "deck mod (claude plugin validate + test)",
         "flux round trip (placeholder render against stub render)",
         "sops-manifest-type-proof (an all-digit stringData value stays a string)",
+        "build the host packages (render, nfpm, lint)",
         "host_packages (24.04, 3.12)",
         "host_packages (26.04, 3.14)",
         "host_tools_arm64",

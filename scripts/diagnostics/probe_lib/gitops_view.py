@@ -38,6 +38,8 @@ import json
 import time
 from pathlib import Path
 
+from diagnostics.probe_lib import core, gitops_why
+from diagnostics.probe_lib.host_reader import read_host
 from lib.deployer_park import _age_phrase
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -58,6 +60,7 @@ from gitops_markers import (
     MARKERS,
     PLAYBOOK_CMD,
     agent_join_cmds,
+    agent_pin_cmds,
     by_hand,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
@@ -116,12 +119,22 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
         agents = (
             [] if hand else agent_join_cmds(e.role, e.playbook, selected, e.agent_hosts)
         )
+        pins = (
+            []
+            if hand
+            else [
+                f"{cmd} (run on {host})"
+                for host, cmd in agent_pin_cmds(
+                    e.role, e.playbook, selected, e.agent_hosts
+                )
+            ]
+        )
         rows[OWED_MANUAL_PLANE].append(
             {
                 "subject": e.role,
                 "origin": e.origin,
                 "age_s": int(now - e.at),
-                "do": " and ".join([*apply, *agents]),
+                "do": " and ".join([*apply, *agents, *pins]),
                 "clear": owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             }
         )
@@ -296,7 +309,7 @@ def format_text(snap: dict) -> str:
         lines.append(
             f"behind_since: {behind['origin'] or 'garbled'}, not fast-forwarded for "
             f"{_span(behind['age_s'])}  <-- the tick clears it once it "
-            "converges; `journalctl -t gitops-deploy` says why it has not"
+            "converges; `journalctl -u gitops-deploy.service` says why it has not"
         )
     else:
         lines.append("behind_since: none (converged with origin)")
@@ -344,15 +357,25 @@ def format_text(snap: dict) -> str:
 
 
 def run_gitops_state(
-    ns, state_dir: str | Path = STATE_DIR, now: float | None = None
+    ns, state_dir: str | Path = STATE_DIR, now: float | None = None, read=read_host
 ) -> int:
     """Print the snapshot, as text or with `--json` as one document; exit 75 on an unread marker.
 
     What could not be read also goes to stderr, so a `--json` caller sees it without parsing.
-    `state_dir` and `now` exist for a test; `probe.py` passes neither.
+    `--why` adds `gitops_why`'s section, and a journal it could not read is 75 as well.
+    `state_dir`, `now` and `read` exist for a test; `probe.py` passes none of them.
     """
     snap = collect(state_dir, now)
-    print(json.dumps(snap) if ns.json else format_text(snap))
+    why = getattr(ns, "why", False) and snap["directory"] != ABSENT
+    if why:
+        try:
+            snap["why"] = gitops_why.explain(snap, read=read)
+        except core.Unreadable as exc:
+            snap["why"] = {"unreadable": exc.message}
+    text = format_text(snap) + (
+        f"\n{gitops_why.format_why(snap['why'])}" if why else ""
+    )
+    print(json.dumps(snap) if ns.json else text)
     if snap["directory"] == ABSENT:
         print(
             f"gitops-state: no state directory at {snap['state_dir']}", file=_sys.stderr
@@ -364,5 +387,7 @@ def run_gitops_state(
             f"{snap['state_dir']}",
             file=_sys.stderr,
         )
+        return PROBE_UNREADABLE
+    if why and snap["why"] and "unreadable" in snap["why"]:
         return PROBE_UNREADABLE
     return 0

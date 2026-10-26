@@ -1,6 +1,6 @@
 ---
 # system-upgrade-controller (SUC) and the two Plans that upgrade k3s (target slice H6). Flux
-# applies this role. The Plans select no node until H6.3c and H6.3d widen `system_upgrade_nodes`.
+# applies this role. The Plans select the nodes in `system_upgrade_nodes`: daniel-box since H6.3c, daniel-server at H6.3d.
 #
 # THE K3S PIN LIVES HERE. `k3s_version`, `k3s_install_script_url` and `k3s_install_script_sha256`
 # moved from roles/setup/k3s/defaults/main.yml, so a pin change routes to this Flux-owned tag and
@@ -22,6 +22,12 @@ k3s_version: v1.37.1+k3s1  # noqa var-naming[no-role-prefix]
 #   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"  # noqa var-naming[no-role-prefix]
 k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b  # noqa var-naming[no-role-prefix]
+# The `k3s` line of that release's sha256sum-amd64.txt. The `binary` mode of
+# hosts/lib/k3s_gates.py compares each node's /usr/local/bin/k3s with it, and
+# scripts/validate/k3s_binary_sum.py refuses a change to k3s_version that leaves it. Finish it on
+# the version-bump PR with the line from
+#   gh release download <k3s_version> -R k3s-io/k3s -p sha256sum-amd64.txt -D <empty dir>
+k3s_binary_sha256_amd64: 92b94582eb7b34a8cf532e6006842b9ed215a6783cf56a3dd6271fd35243b2c0  # noqa var-naming[no-role-prefix]
 
 # The controller manifest and the Plan CRD are in-tree copies under files/upstream/, byte for
 # byte what each item's `url` serves. No render may fetch a URL (D5, C1), so the renderer
@@ -60,7 +66,7 @@ system_upgrade_gate_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d3
 # one node at a time (H6.3c: daniel-box, H6.3d: daniel-server), and setting it back to empty is
 # the durable pause. The immediate pause is an operator write: label a node
 # `homelab/k3s-upgrade-paused` and SUC skips it at once.
-system_upgrade_nodes: []
+system_upgrade_nodes: [daniel-box]
 
 # Each Plan's Job deadline. SUC starts both Jobs when the Plans resolve, so the agent's deadline
 # covers the server's 60 minutes plus 30 for Longhorn's recovery and the agent's own upgrade.
@@ -68,6 +74,10 @@ system_upgrade_nodes: []
 # files/patches/system-upgrade-controller-env.yaml sets to 5400.
 system_upgrade_server_deadline_secs: 3600
 system_upgrade_agent_deadline_secs: 5400
+
+# Job pods a failing `prepare` may start before the Job reads Failed, minus one. See the
+# comment in files/patches/system-upgrade-controller-env.yaml.
+system_upgrade_job_backoff_limit: 2
 
 # DECIDED: this tag renders prune: false. Its render holds the Plan CRD, and the CRD census
 # (scripts/renderer/tests/test_renderer_crd_census.py) refuses a CRD under prune: deleting the

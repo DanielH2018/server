@@ -14,7 +14,6 @@ import subprocess
 
 import pytest
 from lib import kubectl as kubectl_lib
-from lib import yaml_fast
 
 import gen_infra_map as g
 from infra_map import live
@@ -177,21 +176,12 @@ def test_refresh_cron_sets_kubeconfig():
 
 
 def _refresh_cron_job():
-    # main.yml is a list of import_tasks, so scan every task file in the directory — the cron
-    # lives in crons.yml, not the entry point.
-    task_dir = REPO_ROOT / "ansible/roles/setup/initial_setup/tasks"
-    if not task_dir.is_dir():
-        pytest.skip("ansible role tree not present")
-    loaded = []
-    for path in sorted(task_dir.glob("*.yml")):
-        loaded += yaml_fast.safe_load(path.read_text()) or []
-    jobs = [
-        t["ansible.builtin.cron"]["job"]
-        for t in loaded
-        if isinstance(t, dict) and "infra-map" in (t.get("tags") or [])
-    ]
-    assert jobs, "the infra-map refresh cron has gone missing"
-    return jobs[0]
+    # Since H7.10 the refresh is a timer's service in the infra-map component; its
+    # Environment= lines carry what the cron job line carried.
+    unit = REPO_ROOT / "hosts/components/infra-map/units/homelab-infra-map.service.j2"
+    if not unit.is_file():
+        pytest.skip("host component tree not present")
+    return unit.read_text()
 
 
 def test_refresh_cron_puts_usr_local_bin_on_the_path():

@@ -1,0 +1,15 @@
+{#
+  The identity of traefik's bouncer-key precheck, `bouncer-key.yaml.j2` beside it. It renders
+  even when `traefik_k8s_bouncer_key_precheck` is false, so `traefik-precheck` exists, and
+  `traefik` depends on it, before the Job does.
+
+  It is a ServiceAccount with no Role: the Job talks to the LAPI over HTTP and calls no
+  Kubernetes API, so its pod mounts no token.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traefik-precheck
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false

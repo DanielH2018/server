@@ -13,15 +13,14 @@ direction, a row coming back to its k8s role, is the host-write census's
 (`ansible/tests/repo/_host_write_rows.py`): the move drops the role's `allow` entry, so a host
 write there fails `k8s-role-tasks-write-no-host`.
 
-pi-peer-backup's two rows write daniel-pi, and the play runs on daniel-box, so
-`rows_on_the_wrong_host` also holds each to `delegate_to: daniel-pi`, and crowdsec's absent arms,
-which clean daniel-box, to no delegation. crowdsec's edge probe rows left for the Pi package in
-H5.14.
+No row writes daniel-pi any more: crowdsec's edge probe rows left for the Pi package in H5.14,
+and pi-peer-backup's wrapper and key in H7.25. The play runs on daniel-box, so
+`rows_on_the_wrong_host` holds every row, crowdsec's absent arms among them, to no delegation.
 
 Red-proof: a fixture role under `tmp_path` whose `main.yml` no longer imports the file, one
 whose task writes a different path, one whose task drops its owner, one whose loop drops a
-directory, one whose absent arm turns back into an install, one whose Pi block drops its
-delegation, and one whose crowdsec arm gains it, must each be flagged; a faithful copy must not.
+directory, one whose absent arm turns back into an install, and one whose crowdsec arm gains a
+delegation, must each be flagged; a faithful copy must not.
 
 Run: uv run pytest ansible/tests/setup/test_k8s_host_files_rows.py
 """
@@ -80,13 +79,10 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "crowdsec.yml: Remove the retired crowdsec cron scripts from the host",
         "crowdsec.yml: Remove the retired home allowlist cron",
         "crowdsec.yml: Remove the retired remote-allowlist cron",
-        "docs.yml: Ensure the built docs site directory exists",
         "janitorr.yml: Remove the retired janitorr error heartbeat cron",
         "janitorr.yml: Remove the retired janitorr health reader from the host",
         "media-volume.yml: Create the media volume directories on the node",
         "observability.yml: Remove the retired dashboard staging trees",
-        "pi-peer-backup.yml: Authorize the pull key on daniel-pi",
-        "pi-peer-backup.yml: Install the forced-command wrapper on daniel-pi",
         "qbittorrent.yml: Remove the retired qbittorrent prefs drift check cron",
         "qbittorrent.yml: Remove the retired qbittorrent prefs-check script from the host",
         "registry.yml: Create the registry garbage-collection state directory",
@@ -98,24 +94,6 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "traefik.yml: Remove the Cloudflare IP drift cron",
         "traefik.yml: Remove the Cloudflare IP drift script",
         "uptime-kuma.yml: Remove the k8s/volume-claim staging directory autokuma-data left behind",
-    ]
-
-
-def test_a_row_writing_another_path_is_flagged(tmp_path):
-    role_dir = _fixture_role(tmp_path)
-    docs = role_dir / "tasks" / "docs.yml"
-    docs.write_text(docs.read_text().replace("docs_host_site_dir", "docs_other_dir"))
-    assert missing_rows(role_dir) == [
-        "docs.yml: Ensure the built docs site directory exists"
-    ]
-
-
-def test_a_row_that_drops_its_owner_is_flagged(tmp_path):
-    role_dir = _fixture_role(tmp_path)
-    docs = role_dir / "tasks" / "docs.yml"
-    docs.write_text(docs.read_text().replace('    owner: "{{ sys_user }}"\n', ""))
-    assert missing_rows(role_dir) == [
-        "docs.yml: Ensure the built docs site directory exists"
     ]
 
 
@@ -164,12 +142,9 @@ def test_a_media_volume_row_that_drops_a_directory_from_its_loop_is_flagged(tmp_
     ]
 
 
-# {task file: the rows in it that write on daniel-pi}. Every other row there runs on the play's
-# host, daniel-box.
-PI_ROWS = {
-    "crowdsec.yml": set(),
-    "pi-peer-backup.yml": set(EXPECTED_ROWS["pi-peer-backup.yml"]),
-}
+# {task file: the rows in it that write on daniel-pi}. Every row runs on the play's host,
+# daniel-box.
+PI_ROWS: dict[str, set[str]] = {"crowdsec.yml": set()}
 
 
 def rows_on_the_wrong_host(role_dir: Path = ROLE) -> list[str]:
@@ -189,7 +164,7 @@ def rows_on_the_wrong_host(role_dir: Path = ROLE) -> list[str]:
     return found
 
 
-def test_the_daniel_pi_rows_run_on_daniel_pi():
+def test_no_row_runs_on_daniel_pi():
     assert rows_on_the_wrong_host() == []
 
 
@@ -204,18 +179,6 @@ def test_a_crowdsec_arm_delegated_to_the_pi_is_flagged(tmp_path):
     )
     assert rows_on_the_wrong_host(role_dir) == [
         "crowdsec.yml: Remove the retired home allowlist cron"
-    ]
-
-
-def test_a_pi_peer_backup_block_that_drops_its_delegation_is_flagged(tmp_path):
-    role_dir = _fixture_role(tmp_path)
-    pi = role_dir / "tasks" / "pi-peer-backup.yml"
-    line = "  delegate_to: daniel-pi\n"
-    assert line in pi.read_text()
-    pi.write_text(pi.read_text().replace(line, ""))
-    assert rows_on_the_wrong_host(role_dir) == [
-        "pi-peer-backup.yml: Install the forced-command wrapper on daniel-pi",
-        "pi-peer-backup.yml: Authorize the pull key on daniel-pi",
     ]
 
 

@@ -1,15 +1,16 @@
 {
-  "checksum": "79f6d833112b4e9ee12f4141d75d952bfe6bb40026d8fae012ae001f14e286fd",
+  "checksum": "5ebf931a12163fd0322f00eceb929b296812b7fb3528c9c41040563bbbb038d4",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/sonarr/CLAUDE.md#Notable",
   "row": {
     "atoms": {
       "ansible/roles/k8s/arr-notification/CLAUDE.md": "2f2e547e8f675251883d6805f1a991e7d01cf462fd72a294124db423bac52f7f",
       "ansible/roles/k8s/sonarr/defaults/main.yml:manifests_rollout_timeout": "44f22a5e6c06543837b972c2ca072717fa3a36c01738d4cf38c9fb819fcf5bb7",
+      "ansible/roles/k8s/sonarr/tests/test_sonarr_air_date_guard.py::test_a_second_run_removes_nothing": "09f8da6bfffc32ff30ff0fe5289f76824cb28601cec8b6af6ce60a65a161e31a",
       "ansible/templates/arr-deployment.yml.j2": "ec3201dd86336ad41a5b5f6946395cd3280018dbc6c5644601913a94347a57e8",
       "ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep": "f3e695a6d3fd29e04faa710d3b029d1d85bac8aede4ae2e6f29dea3287ba842d"
     },
     "python": "3.14",
-    "verified_sha": "dc22417c5"
+    "verified_sha": "d102f40c6"
   }
 }

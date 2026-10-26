@@ -15,7 +15,7 @@
 # no targets and this host's container logs stop reaching Loki, while Alloy keeps running
 # with zero targets. Kuma sees wg-easy from outside; docker-proxy-lifecycle it does not.
 # This heartbeat watches EVERY container the host deploys (containers_list and compose_services,
-# plus the docker-proxy role's sub-proxies, which are services inside its compose file rather than list entries)
+# plus docker-proxy's sub-proxies, which are services inside its compose file rather than list entries)
 # and pushes `up` only while all of them run, to the static "Daniel Pi Recovery" Kuma push
 # monitor (uptime-kuma role), every 5 min.
 # Dead-man's-switch: an explicit `down` names the dead container fast, while a dead timer/host
@@ -58,8 +58,8 @@ PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
     lists (containers_list, which Ansible's Docker play deploys, and compose_services, which the
     package deploys; a service sits in exactly one), sorted by name, so a move between the
     lists leaves the script unchanged. Neither key has a default, so a missing one fails the
-    render. The set also holds the sub-proxies the docker-proxy role's compose file declares
-    beside its list entry
+    render. The set also holds the sub-proxies the docker-proxy service file
+    (hosts/components/pi-compose/services/docker-proxy) declares beside its list entry
     (docker-proxy-lifecycle always; docker-proxy-codeserver only under has_code_server, the
     same gate the compose template uses). A blanket `docker ps -a --filter status=exited`
     would catch those for free and also resurrect a container an operator `docker stop`ped
@@ -220,9 +220,10 @@ kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recove
 # It goes to a FILE rather than to `logger`, because daniel-pi ships no journal: rsyslog is
 # masked here on purpose (see the debloat section of optimize_pi's tasks — journald is the log
 # of record, and a second text logger would write into the RAM-backed /var/log), and the
-# Pi's promtail scrapes only container logs. `logger` would reach the local journal and stop.
-# The Pi's promtail tails this path under `job="syslog"` instead, matching the label the
-# server's own syslog stream carries so one parser reads both estates.
+# Pi's Alloy (roles/containers/alloy/) ships container logs and /var/log/pi-health/*.log, never
+# the journal. `logger` would reach the local journal and stop. Alloy tails this path under
+# `job="syslog"` instead, matching the label the server's own syslog stream carries so one
+# parser reads both estates.
 #
 # The LINE SHAPE is load-bearing: `_SYSLOG_LINE_RE` wants exactly two whitespace-free tokens
 # before the tag. `date -Is` is one token; traditional syslog format ("Aug 29 19:12:26 host")

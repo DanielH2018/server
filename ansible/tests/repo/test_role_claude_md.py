@@ -57,13 +57,14 @@ PLANES = [
         floor=12,
         members=frozenset({"gitops_deploy", "k3s", "common", "nut_host"}),
     ),
-    # `wg-easy` is the role a broken glob would stop measuring; `common` is the include-only
-    # shared deploy path, the member a deploy-tag arm would wrongly fail.
+    # `common` is the include-only shared deploy path, the member a deploy-tag arm would wrongly
+    # fail. It is the only role left since H5.9 moved wg-easy, the last Pi service, into the
+    # package; H5.12 deletes it and this plane with it.
     Plane(
         "containers",
         CONTAINER_ROLES,
-        floor=5,
-        members=frozenset({"wg-easy", "common", "alloy", "autoheal", "docker-proxy"}),
+        floor=1,
+        members=frozenset({"common"}),
     ),
 ]
 PLANE_IDS = [p.name for p in PLANES]

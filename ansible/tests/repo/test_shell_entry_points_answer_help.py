@@ -32,17 +32,19 @@ EXEMPT = {
     "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
     "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
     "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh",
+    # Sourced by login shells, never executed.
+    "hosts/components/pi-tuning/templates/homelab-profile.sh",
 }
 
 # Non-vacuity: one of each shape. A forced command, a hook launcher, a host cron template, a
 # cluster-side template, and the template that pushes to GitHub.
 MUST_FIND = frozenset(
     {
-        "ansible/roles/setup/k8s_host_files/files/pi-peer-backup-shell.sh",
+        "hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh",
         ".claude/hooks/run-hook.sh",
         "setup/k3s/longhorn-backup-health.sh.j2",
         "setup/k8s_host_files/registry-gc.sh.j2",
-        "setup/initial_setup/docs-refresh.sh.j2",
+        "components/docs-refresh/docs-refresh.sh.j2",
     }
 )
 

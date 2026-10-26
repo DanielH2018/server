@@ -320,6 +320,20 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   `DECIDED: a verification in flight is guarded by two checks`. Any other job that moves
   `prod` or `last-good`, such as D5's `reset_to_last_good` dispatch, must hold both checks
   true or state why it may break them. *The reset input* holds both.
+- **A superseding promotion** (D7). With `promote.SUPERSEDE` on, `decide` may promote T over
+  P, `prod`'s commit, while P's verification is in flight, instead of waiting.
+  `promote_lib/supersede.py` holds the conditions: `DEPLOY_HOLD` reads `none`, `prod` is
+  not the `held` or the `superseding` digest, P has no failure yet, T's own change is
+  disjoint from P's changed set, neither touches `longhorn`, `flux` or `cluster-vars` nor
+  widened, and T names no forward-only tag or snapshot role. Any failed condition leaves
+  the wait above in place.
+    - T's changed set, its record of statuses and its reboot-window timeout are taken
+      against `last-good` rather than `prod`, so T's verification covers P's changes too.
+    - `tag` tags T `superseding` before it moves `prod`, so a verification is superseded at
+      most once.
+    - A verdict on T counts only while `prod` names T's digest. P's `verify` prints
+      `superseded` once `prod` moves past it, and `settle` writes neither `last-good`, the
+      hold, `held` nor the reset for a run whose T `prod` no longer names (D7.1, D7.2).
 - **The reset input.** A `reset_to_last_good` dispatch input moves `prod` to `last-good` and
   does nothing else. It runs in its own concurrency group, `promote-reset`, and ignores the
   reboot window. It refuses unless `DEPLOY_HOLD` holds a hold: `none`, an empty value and a
@@ -513,8 +527,11 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 - **Package names:**
   - `homelab-<hostname>`, one per host;
-  - `homelab-updater`, the pull timer;
-  - `homelab-repos`, the third-party apt sources and keyrings.
+  - `homelab-updater`, the pull timer.
+
+  The third-party apt sources and keyrings ship in the host packages that use them, as the
+  `apt-docker`, `apt-azlux` and `apt-github-cli` components (operator ruling, 2026-10-24). No
+  shared `homelab-repos` package exists, because no source is used by every host.
 - **Version.** `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`,
   with `Architecture: all`. `<chosen>` is the commit the builder builds: the newest commit on
   `origin/master`'s first-parent chain with a green CI verdict, which can be older than the
@@ -643,8 +660,9 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 - **Host rules.** H3 adds `HostReconcileFailed` and `HostUpdateStale` to M1's rules
   directory. `HostReconcileFailed` fires on `homelab_host_reconcile_ok` at 0 for 15 minutes.
   The PR that adds the two rules waits on M1. They survive M6, and H5 relies on them.
-- **Series budget.** M1 sets a fleet-wide series budget. Each slice that adds a scrape, a
-  probe target or a label states its series delta against that budget.
+- **Series budget.** M1 sets a fleet-wide series budget, stated in samples a second
+  (#4756). Each slice that adds a scrape, a probe target or a label states the samples a
+  second it adds against that budget.
 - **Traces.** No slice adds tracing. The deploy timeline comes from commit-status timestamps
   and from the deploy-pipeline exporter's ages. `design.md` records why.
 - **Check producers.** A host producer follows M3's producer metric contract (M3 *The
@@ -781,13 +799,6 @@ No request on the slice index is open.
       `timeout-minutes` with the derived timeout. Otherwise D2.5's 25-minute
       `timeout-minutes` stops a longer `verify` first, and `settle` writes a false
       `<T> unverified` hold (D4 *The cap*).
-
-- **Superseding promotions** (D7 *Requested amendment*). *Verification* takes the changed
-  set against the base, `last-good` unless `prod` names `held`. *On failure* applies a
-  verdict only while `prod` names T's digest, and `verify` gains the verdict `superseded`.
-  *A verification in flight blocks the next promotion* gains the exception that D7's
-  `supersedable` defines. Gate: before D7.5 merges. It overlaps the request above: if
-  `verify` changes shape first, the `superseded` read moves with it.
 
 ### Requests on C3
 
@@ -1301,6 +1312,11 @@ Applied to this page:
   `service="observability"` alongside it. This clears the gate before M2's PR 4b merges.
 
 ### Applied requests (2026-10-24)
+
+- **Superseding promotions** (D7 *Requested amendment*). C2 gains *A superseding
+  promotion*. The operator approved D7 as planned on 2026-10-24, which clears the gate
+  before D7.5 merges. The request on the shape of `verify` stays open; if `verify` changes
+  shape, the `superseded` read moves with it.
 
 - **A prune exemption for a ConfigMap that holds state no render restores** (H2 Open
   question 12). C3 *Prune exemptions* gains "and a ConfigMap that holds state no render

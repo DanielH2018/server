@@ -247,7 +247,9 @@ observability_dashboard_folders:
 # prints. Alloy ships both to loki-homelab, and every dashboard gets one annotation query per
 # source injected at render time by the grafana_deploy_annotated filter
 # (ansible/filter_plugins/grafana_dashboards.py). No Grafana API call, so no pinned ClusterIP and
-# no standing write credential — see the emit_deploy_annotation comments.
+# no standing write credential — see the emit_deploy_annotation comments. Every line carries
+# `result=ok|fail|rollback` (hosts/lib/host_lib.py:deploy_event, #6164), and the marker's title
+# shows it, so a failed deploy draws a marker that says so.
 #
 # The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one
 # does not error: Grafana renders the annotation query against nothing and the board shows no
@@ -366,14 +368,6 @@ observability_expected_hosts:
 # ansible/tests/services/test_observability_config_rolls_one_workload.py holds equal to the
 # Secrets each pod reads. `origin-pull-secret.yaml` restarts nothing, because only a Traefik
 # middleware reads it.
-#
-# DECIDED: no rolled_by_role on these entries. The shared role drops every entry carrying
-# `rolled_by_role` from the pod-template fingerprints (the task "List the workloads whose pod
-# template is fingerprinted" in roles/k8s/manifests/tasks/main.yml), and the renderer's restart
-# target does not exempt such an entry either. The ruling dates from the Ansible restart,
-# where the skip of a workload the apply already rolled needed the fingerprints (#3115); the
-# entries stay unmarked so a handback to Ansible keeps that skip. The M1 plan
-# (docs/target-architecture/monitoring/m1-alertmanager.md), PR 5, has the original ruling.
 observability_stabilise_workloads:
   - { kind: deploy, name: loki, restart_on: [] }
   - kind: deploy

@@ -24,7 +24,7 @@ Job census and fails it on the collector render with its `hostIP` removed.
 The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=observability` with exit 5
 - **Images:** `otel/opentelemetry-collector-contrib` (`observability_k8s_collector_image`),
@@ -98,9 +98,6 @@ would restart Prometheus.
 renders the flipped role and holds both values still across such an edit.
 
 Every entry declares `restart_on: []`, which the renderer ignores for a self-rollout entry.
-The entries carry no `rolled_by_role`, because the shared role drops a marked entry from the
-pod-template fingerprints (#3115). The ruling is
-`ansible/roles/k8s/observability/defaults/main.yml:DECIDED: no rolled_by_role`.
 
 **Widen the capture when you add a `data:` key.** Every capture but Grafana's holds ONE key's
 body, so a second key in `prometheus.yaml.j2` lands outside the hash and the pod never rolls.
@@ -127,7 +124,7 @@ are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
 
 **The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
 the Discord and email bodies, and `ansible/roles/k8s/observability/tests/alertmanager/` holds
-three alert groups with the text each body must render for them.
+four alert groups with the text each body must render for them.
 `scripts/validate/notification_renders.py:render_problems` fails any difference. To change the
 text, edit the template, run `uv run python scripts/validate/alert_rules.py --write-renders`,
 and review the rewritten `.txt` files.
@@ -153,6 +150,21 @@ module holds that set to host_vars, so a node that pins a new link needs a rule 
 It also carries `FanoutSlotsIdleWithFreeWork`, in shadow until #5658 is ruled: free issues
 for an hour with no fan-out batch live on either node, read from the server lander's
 `findings_issues` gauge and the per-batch cgroup series.
+
+**`HostCheckOverdue` is the host checks' catch-all deadman, never a replacement for a pair.**
+One rule per host compares each check's timestamp with the
+`homelab_check_deadline_seconds` the check declares, so a new producer is covered before
+its own `Failed`/`NotReporting` pair exists (#6166). It cannot see a file that is gone,
+because only a check's name says which series should exist, and it fires beside every
+pair's stale arm. An Alertmanager inhibit keyed on `check` and `origin` mutes it wherever a
+`*NotReporting` pair fires, shadow or not, so it pages alone only for a producer with no
+pair (#6186). The per-check literals and their pin tests stay, for the
+reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
+series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
+change from `homelab_host_reboot_pending_since_seconds`, which a later package change never
+moves, and requires that time to follow `node_boot_time_seconds`: the updater rewrites the
+reconcile file only when a package changes, so a stale `homelab_host_reboot_pending 1`
+survives the reboot that cleared it.
 
 **`ScrapeTargetDown` is one rule per owning role, and a new scrape job needs a line in one.**
 `files/rules/scrape-targets.yaml` gives each rule a literal `service`, because a static scrape

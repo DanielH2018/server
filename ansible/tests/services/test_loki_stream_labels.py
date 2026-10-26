@@ -28,7 +28,6 @@ import re
 
 import pytest
 
-from _compose_render import rendered_text
 from _helpers import ALL_VARS, load_yaml
 from _k8s_render import render_pod_env, render_role_template
 from _loki_streams import (
@@ -39,6 +38,7 @@ from _loki_streams import (
 )
 from lib import yaml_fast
 from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
 
 OWNER = load_yaml(ALL_VARS)["loki_streams"]
 OWNER_JOBS = {labels["job"] for labels in OWNER.values()}
@@ -77,10 +77,16 @@ def _selected_jobs(expr: str) -> set[str]:
     return jobs
 
 
+def _pi_alloy_config() -> str:
+    """The config the Pi installs, from the rendered package (H5.8), not a role template."""
+    package = host_mode.render_host("daniel-pi")
+    return package.files["/usr/lib/homelab/compose/alloy/config.alloy"][0].decode()
+
+
 def _alloy_configs() -> dict[str, str]:
     return {
         "loki-homelab": render_role_template("loki-homelab", "config/config.alloy.j2"),
-        "alloy (daniel-pi)": rendered_text("alloy", "config.alloy.j2"),
+        "alloy (daniel-pi)": _pi_alloy_config(),
     }
 
 
@@ -216,6 +222,8 @@ def test_the_consumer_census_finds_its_named_members():
         "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
         "homelab-logs.yaml WorkloadLogErrors",
+        "homelab-logs.yaml HostLogErrors",
+        "homelab-logs.yaml HostOutOfMemoryKill",
         "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent",
         "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent",
     ):
@@ -303,6 +311,41 @@ def test_a_loki_rule_on_an_app_label_is_flagged():
     }
 
 
+def _unknown_grouping(exprs: dict[str, str]) -> dict[str, list[str]]:
+    """Each rule's `by (...)` labels that no stream carries.
+
+    A `sum by` on an absent label still fires, with that label empty, so the alert names no
+    program or container and nothing else reads as wrong.
+    """
+    found = {}
+    for name, expr in exprs.items():
+        grouped = {
+            label.strip()
+            for clause in re.findall(r"\bby\s*\(([^)]*)\)", expr)
+            for label in clause.split(",")
+            if label.strip()
+        }
+        if grouped - LOKI_STREAM_LABELS:
+            found[name] = sorted(grouped - LOKI_STREAM_LABELS)
+    return found
+
+
+def test_loki_rules_group_by_stream_labels_is_clean():
+    exprs = _loki_rule_exprs()
+    assert "by (machine, program)" in exprs["homelab-logs.yaml HostLogErrors"], (
+        "HostLogErrors no longer groups by program, so this check no longer reads it"
+    )
+    assert not _unknown_grouping(exprs), (
+        "a Loki rule groups by a label the Alloy streams do not carry, so its alert fires "
+        "with that label empty"
+    )
+
+
+def test_a_loki_rule_grouping_by_an_absent_label_is_flagged():
+    expr = 'sum by (machine, tag) (count_over_time({job="syslog"}[1h])) > 3'
+    assert _unknown_grouping({"r": expr}) == {"r": ["tag"]}
+
+
 def _unknown_machines(exprs: dict[str, str]) -> dict[str, list[str]]:
     return {
         name: sorted(_label_values(expr, "machine") - OWNER_MACHINES)
@@ -330,6 +373,7 @@ def test_a_loki_rule_on_an_unknown_machine_is_flagged():
 # container by that name. A value with no entry here fails, so a new rule adds its mapping.
 _RULE_CONTAINERS = {
     "uptime-kuma": ("uptime-kuma", "deployment.yaml.j2"),
+    "discord-relay": ("uptime-kuma", "deployment.yaml.j2"),
     # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
     # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
     "cloudflare-ddns": ("cloudflare-ddns", "deployment-direct.yaml.j2"),

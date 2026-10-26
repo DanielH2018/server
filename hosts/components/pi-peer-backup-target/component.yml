@@ -1,0 +1,34 @@
+# pi-peer-backup's half on daniel-pi (H7.25, old step H7.4; docs/target-architecture/host/
+# h7-delete-ansible.md). D5 moved both writes into setup/k8s_host_files with `delegate_to:
+# daniel-pi`; this component replaces them, and the same PR deletes them.
+#
+# The k8s CronJob pulls the Pi's wg-easy peer configs over ssh with a dedicated key that sshd
+# pins to one forced command. Both halves of the pin live on the Pi:
+#
+# - The wrapper ships as /usr/local/bin/pi-peer-backup-shell, root-owned 0755, so the key holder,
+#   who reaches only this script, cannot rewrite what it allows. It re-derives one
+#   `sudo rsync --server --sender` of the pinned directory from SSH_ORIGINAL_COMMAND and refuses
+#   everything else (issue #1927).
+# - The key joins the Pi user's authorized_keys through the line arm, anchored on the key comment
+#   `pi-peer-backup-cronjob`, with the options the Ansible task set. `restrict` drops pty, port,
+#   agent and X11 forwarding and user-rc; `command=` replaces whatever the client asked for. The
+#   arm keeps the file's owner and mode when it rewrites it, and creates a missing file 0600,
+#   because sshd's StrictModes rejects a key file with the wrong ones, and the same file holds the
+#   operator's own login key. The arm never removes a line, so a rotated key's old line stays
+#   until an operator removes it by hand (docs/secret-rotation.md).
+#
+# The key is the tracked public half in pi-peer-backup.pub, so the package carries no secret. A
+# rotated `pi_peer_backup_ssh_key` reaches the Pi as a new homelab-daniel-pi version: the operator
+# commits the new public half over that file, and the line below follows it. A test holds the two
+# equal. The anchor matches the key comment, so a rotated key replaces the line, not appends.
+#
+# The source directory is the wg-easy config directory under the Pi user's checkout. The CronJob's
+# PI_SRC reads roles/k8s/pi-peer-backup's copy, and the wrapper refuses any other path, so
+# ansible/tests/setup/test_k8s_host_files_pairs.py holds the two equal.
+files:
+  - {src: pi-peer-backup-shell.sh, dst: /usr/local/bin/pi-peer-backup-shell, mode: "0755"}
+lines:
+  - path: "/home/{{ sys_user }}/.ssh/authorized_keys"
+    line: 'restrict,command="/usr/local/bin/pi-peer-backup-shell /home/{{ sys_user }}/server/containers/wg-easy/config/" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK63nnFWIHuAWTJKouRHt2mQWHcyGomXtRmStS5K4/IV pi-peer-backup-cronjob'
+    regexp: 'pi-peer-backup-cronjob'
+    mode: "0600"

@@ -182,7 +182,7 @@ def test_pinned_tools_are_built_once_per_architecture_from_a_scratch_copy(lab):
 
 
 def test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools(lab):
-    # fact: ansible/roles/setup/homelab_builder/CLAUDE.md#The `homelab-tools` step (H3.11)
+    # fact: hosts/components/builder/CLAUDE.md#The `homelab-tools` step (H3.11)
     origin, state, _, _, record = lab
     pinned = good_files()
     served = {**pinned, URLS["sops", "arm64"]: b"tampered"}
@@ -273,6 +273,12 @@ def test_a_tar_member_is_read_by_exact_name(tmp_path):
     assert tf.tool_bytes(archive, {"member": "chezmoi"}) == b"payload"
 
 
+def test_a_member_one_directory_down_is_read(tmp_path):
+    archive = tmp_path / "a.tar.gz"
+    archive.write_bytes(tarball(member="uv-x86_64-unknown-linux-gnu/uv", data=b"uv"))
+    assert tf.tool_bytes(archive, {"member": "uv-x86_64-unknown-linux-gnu/uv"}) == b"uv"
+
+
 @pytest.mark.parametrize(
     ("member", "kind"),
     [
@@ -280,6 +286,9 @@ def test_a_tar_member_is_read_by_exact_name(tmp_path):
         ("chezmoi", tarfile.SYMTYPE),
         ("../chezmoi", tarfile.REGTYPE),
         ("/etc/passwd", tarfile.REGTYPE),
+        ("a/b/c", tarfile.REGTYPE),
+        ("a/../chezmoi", tarfile.REGTYPE),
+        ("a//chezmoi", tarfile.REGTYPE),
     ],
 )
 def test_a_missing_linked_or_path_shaped_member_is_refused(tmp_path, member, kind):

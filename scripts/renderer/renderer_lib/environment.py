@@ -3,8 +3,6 @@
 `cluster.render_tag` renders a role's templates here, and `task_inputs.derived_facts`
 evaluates the expressions a role's `set_fact` tasks hold. Both read one environment, so a
 template and a task expression see the same filters and the same `lookup`.
-`ansible_local_temp` keeps ansible-core's local temp directory out of the home directory for
-the length of a render.
 
 Typical usage example:
 
@@ -17,11 +15,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-import os
-import tempfile
 import warnings
-from collections.abc import Generator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
@@ -135,24 +129,3 @@ def evaluate(env: jinja2.Environment, expression: str, variables: dict) -> objec
         return pad_to_source_newlines(
             expression, env.from_string(expression).render(variables)
         )
-
-
-@contextmanager
-def ansible_local_temp() -> Generator[None]:
-    """Point ansible-core's local temp directory at the system temp directory for the block.
-
-    ansible-core creates its local temp directory when the render first imports its
-    constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
-    directory untouched, and ansible-core removes its own subdirectory at exit. A value the
-    caller already set is left alone. The block restores the environment on exit, so an
-    in-process caller such as a pytest worker does not hand the variable to every later
-    test and subprocess (#5002).
-    """
-    if "ANSIBLE_LOCAL_TEMP" in os.environ:
-        yield
-        return
-    os.environ["ANSIBLE_LOCAL_TEMP"] = tempfile.gettempdir()
-    try:
-        yield
-    finally:
-        os.environ.pop("ANSIBLE_LOCAL_TEMP", None)

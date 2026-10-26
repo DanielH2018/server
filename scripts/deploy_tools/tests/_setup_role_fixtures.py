@@ -104,3 +104,12 @@ def build(tmp_path) -> Tree:
 def narrow(tree: Tree, old: str, new: str) -> frozenset[str]:
     """`narrow_setup.role_tags` for the demo role, against this tree and its playbook."""
     return narrow_setup.role_tags("demo", "demo", old, new, str(tree.root), PLAYBOOK)
+
+
+def touched(text: str) -> str:
+    """`text` with its first task renamed, an edit that runs differently.
+
+    A comment appended to a task file runs nothing new, so the narrowing reads it as reaching
+    no host (#5930). A test that needs the file to count as changed renames a task instead.
+    """
+    return text.replace("- name: ", "- name: Edited ", 1)

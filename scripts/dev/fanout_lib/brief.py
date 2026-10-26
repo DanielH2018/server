@@ -301,6 +301,12 @@ REPO_GUARDS = (
     "ansible/tests/k8s/test_checksum_annotations_documented.py",
     "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py",
     "ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py",
+    "evals/tests/test_eval_cases.py",
+    "ansible/tests/setup/test_k8s_host_files_pairs.py",
+    "ansible/tests/deploy/test_landing_annotations.py",
+    "ansible/tests/deploy/test_gitops_deploy_imports.py",
+    "scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean",
+    "scripts/validate/tests/test_validate_unit_templates.py::test_discover_templates_finds_the_known_set",
 )
 
 REPO_GUARD_STEP = f"""## Before you open the PR

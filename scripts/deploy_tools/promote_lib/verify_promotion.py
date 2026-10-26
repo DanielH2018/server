@@ -124,7 +124,8 @@ POLL_S = 30
 # a newer one cancels it, so a pending `settle` could be evicted with its hold unwritten.
 # Unguarded, a second run could move `prod` past a T that `verify` still waits on, Flux would
 # never post T's statuses, and the timeout would write a false hold and reset `prod` under the
-# second run's verified commit. So `decide` waits while `prod` differs from `last-good`, which
+# second run's verified commit. So `decide` waits while `prod` differs from `last-good` (unless
+# `promote_lib/supersede.py` lets T supersede the run, D7), which
 # it does only between a run's `tag` and its `settle`, at two HEADs a poll. And `tag` moves
 # `prod` only while it still names the digest `decide` read, which closes the gap between one
 # run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that never settles stalls promotion as `current`, which D2.6d's
@@ -528,12 +529,16 @@ class Settled:
         held: the revertible hold as `(commit, names)`, or None when DEPLOY_HOLD is `none`.
         prod: `prod`'s digest, or None when the tag is absent.
         last_good: `last-good`'s digest, or None when the tag is absent.
+        hold: the DEPLOY_HOLD value read, which `tag` compares before it moves `prod`.
+        in_flight: `prod`'s run is still verifying, and `supersedable` let T take it over.
     """
 
     stop: tuple[str, str] | None = None
     held: tuple[str, frozenset[str]] | None = None
     prod: str | None = None
     last_good: str | None = None
+    hold: str = "none"
+    in_flight: bool = False
 
 
 # DECIDED: a hold without a reset (H1.1b) leaves `prod` on the failed T while `last-good` stays
@@ -548,6 +553,7 @@ def wait_settled(
     sleep: Callable[[float], None],
     clock: Callable[[], float],
     revert_rule: bool,
+    supersedable: Callable[[str], bool] | None = None,
 ) -> Settled:
     """Read DEPLOY_HOLD, then wait while `prod` and `last-good` name different digests.
 
@@ -560,6 +566,8 @@ def wait_settled(
         sleep: waits the given seconds.
         clock: monotonic seconds.
         revert_rule: whether a `failed=` hold may be passed.
+        supersedable: whether T may take over the run that `prod`'s digest names (D7). When
+            it answers True under a `none` hold, the wait ends at once with `in_flight`.
 
     Raises:
         Whatever `hold` and `digest` raise.
@@ -577,9 +585,11 @@ def wait_settled(
             return Settled(("held", f"{forge.HOLD_VARIABLE}={value}"))
         prod, last_good = digest(PROD_TAG), digest(LAST_GOOD_TAG)
         if last_good is None or prod is None or prod == last_good:
-            return Settled(None, held, prod, last_good)
+            return Settled(None, held, prod, last_good, value)
         if digest(HELD_TAG) == prod:
-            return Settled(None, held, prod, last_good)
+            return Settled(None, held, prod, last_good, value)
+        if supersedable is not None and value == "none" and supersedable(prod):
+            return Settled(None, held, prod, last_good, value, in_flight=True)
         waited = int(clock() - started)
         if waited >= IN_FLIGHT_WAIT_S:
             return Settled(

@@ -230,6 +230,11 @@ FLOOR = [
     "ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2",
     "ansible/roles/setup/claude_code/files/claude_triage_run.py",
     "ansible/roles/setup/claude_code/files/claude_triage_poll.py",
+    # The root inspector joined the floor with its grant (#6323).
+    "ansible/roles/setup/claude_code/files/homelab_rootq.py",
+    "ansible/roles/setup/claude_code/files/rootq.sh",
+    "ansible/roles/setup/claude_code/tasks/rootq.yml",
+    "ansible/roles/setup/claude_code/templates/claude-rootq.sudoers.j2",
     "scripts/deploy_tools/land",
     "pyproject.toml",
     "uv.lock",

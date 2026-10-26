@@ -76,6 +76,19 @@ uptime_kuma_k8s_autokuma_mem_limit: 128Mi
 uptime_kuma_k8s_autokuma_cpu_request: "20m"
 uptime_kuma_k8s_autokuma_mem_request: 32Mi
 
+# The discord-relay sidecar (#5657, files/discord_relay.py). The port is on the pod's loopback
+# and is the "Homelab Alerts" notification's webhookURL. The deadline bounds how long one
+# message may wait and retry before the relay logs it as dropped: 900s covers a 100-message
+# flip at Discord's 5-per-2s webhook bucket many times over, and is still short enough that an
+# alert it does deliver arrives within the window the operator reads it in.
+uptime_kuma_k8s_discord_relay_port: 8091
+uptime_kuma_k8s_discord_relay_deadline_seconds: 900
+uptime_kuma_k8s_discord_relay_max_queue: 500
+uptime_kuma_k8s_discord_relay_cpu_limit: "100m"
+uptime_kuma_k8s_discord_relay_mem_limit: 64Mi
+uptime_kuma_k8s_discord_relay_cpu_request: "5m"
+uptime_kuma_k8s_discord_relay_mem_request: 16Mi
+
 # Consecutive DOWN heartbeats before Kuma re-notifies about a monitor that is STILL down. Kuma's
 # own default is 0, which means "notify once on the down transition and then never again" — so
 # a static push monitor would produce exactly one Discord message per outage, however long it

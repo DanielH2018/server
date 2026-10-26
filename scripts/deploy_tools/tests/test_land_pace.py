@@ -1,0 +1,119 @@
+"""--await-merge holds a green head's merge while master CI has a backlog (#5526).
+
+Run: uv run pytest scripts/deploy_tools/tests/test_land_pace.py
+"""
+
+import subprocess
+from datetime import UTC, datetime
+
+import pytest
+
+from _land_fakes import Fakes
+from deploy_tools.land_lib import merge
+from deploy_tools.land_lib.outcome import Outcome
+
+HEAD = "a" * 40
+# The fakes' wall clock.
+NOW = 1_000_000.0
+
+
+def _run(status: str, age_s: int) -> dict[str, str]:
+    created = datetime.fromtimestamp(NOW - age_s, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {"status": status, "created_at": created}
+
+
+# Two master sweeps still running: the 2026-10-24 pile in miniature.
+BACKLOG = [_run("queued", 600), _run("in_progress", 1800)]
+
+
+def _landing(landing, polls: int, master_runs, **opts):
+    """A landing whose head reads green on every one of `polls` polls before MERGED."""
+    views = [{"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": HEAD}] * polls
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,mergeable,headRefOid": [
+                    *views,
+                    {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": HEAD},
+                ]
+            },
+            master_runs=master_runs,
+        ),
+        **opts,
+    )
+    ln.direct_merge_subject = "Pace the merges"
+    return ln, calls
+
+
+def _merges(calls) -> int:
+    return sum(1 for name, args, _ in calls if name == "gh" and "PUT" in args)
+
+
+def test_a_master_backlog_holds_the_merge_until_it_drains(landing, capsys):
+    ln, calls = _landing(landing, 3, [BACKLOG, BACKLOG, []])
+    merge.await_merge(ln)
+    names = [c[0] for c in calls]
+    # Two held polls, then the merge on the third, after the backlog read that found room.
+    assert names.count("gh:master-runs") == 3
+    assert _merges(calls) == 1
+    assert names.index("gh") > max(
+        i for i, n in enumerate(names) if n == "gh:master-runs"
+    )
+    out = capsys.readouterr().out
+    assert out.count("pacing the merge: 2 master CI run(s) unfinished") == 1
+
+
+def test_completed_and_wedged_runs_do_not_hold_the_merge(landing):
+    runs = [
+        _run("in_progress", 600),
+        _run("completed", 300),
+        _run("completed", 900),
+        # Unfinished past the 2-hour cutoff: wedged, not queued.
+        _run("queued", 3 * 60 * 60),
+    ]
+    # A cap of 2 admits the one run that counts, so the merge proves the other three are
+    # not counted.
+    ln, calls = _landing(landing, 1, [runs], pace_master_runs=2)
+    merge.await_merge(ln)
+    assert _merges(calls) == 1
+
+
+def test_an_unreadable_backlog_merges_without_pacing(landing, capsys):
+    failure = subprocess.CalledProcessError(1, "gh", stderr="HTTP 502")
+    ln, calls = _landing(landing, 1, [failure])
+    merge.await_merge(ln)
+    assert _merges(calls) == 1
+    assert "merging without pacing" in capsys.readouterr().out
+
+
+def test_a_cap_of_zero_turns_pacing_off(landing):
+    ln, calls = _landing(landing, 1, [BACKLOG * 3], pace_master_runs=0)
+    merge.await_merge(ln)
+    assert _merges(calls) == 1
+    assert not [c for c in calls if c[0] == "gh:master-runs"]
+
+
+def test_a_backlog_that_never_drains_ends_at_merge_timeout_naming_the_pacing(landing):
+    ln, calls = _landing(landing, 5, [BACKLOG], merge_timeout=1, merge_poll=1)
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.verdict == "merge-timeout"
+    assert "pacing the merge" in exc.value.error
+    assert _merges(calls) == 0
+
+
+def test_the_cap_reads_from_the_environment(monkeypatch):
+    from deploy_tools.land_lib import options
+
+    monkeypatch.setenv(options.PACE_ENV, "0")
+    assert options.parse_args(["--pr", "1"], "").pace_master_runs == 0
+    monkeypatch.delenv(options.PACE_ENV)
+    assert options.parse_args(["--pr", "1"], "").pace_master_runs == 1
+
+
+def test_by_default_one_unfinished_master_run_holds_the_merge(landing, capsys):
+    ln, calls = _landing(landing, 2, [[_run("in_progress", 600)], []])
+    merge.await_merge(ln)
+    assert _merges(calls) == 1
+    out = capsys.readouterr().out
+    assert out.count("pacing the merge: 1 master CI run(s) unfinished") == 1

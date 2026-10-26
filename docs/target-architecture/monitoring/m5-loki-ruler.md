@@ -12,6 +12,17 @@ PR 3, the log rules in shadow and the ruler-watching alerts: [#4821](https://git
 
 Soak read, [#4824](https://github.com/DanielH2018/server/issues/4824): passed on 2026-10-21, over the operator's shortened window of 2026-10-13T04:15:51Z to 2026-10-18T08:15Z ([the read](https://github.com/DanielH2018/server/issues/4824#issuecomment-6326741916)). `LokiHostLogsSilent`, `LokiPiLogsSilent` and `LokiPodLogsSilent` each returned no silent sample. `KumaNotificationDropped` fired in one episode (2026-10-16 18:55 to 22:00) that matches 185 minutes of `Kuma Notification Delivery` DOWN. `LokiRulerEvaluationFailing` and `Loki Reachable` were both empty, and neither bridge tile was ever DOWN. The Sunday reboot opened no silent window. PR 4a is unblocked.
 
+The read ran `LokiPodLogsSilent`'s expression with `--step 5m` in five chunks of at most one day each, using the `--until` and `--timeout` flags from [#5810](https://github.com/DanielH2018/server/pull/5810). Each chunk ran in 2.0 to 2.5 s, scanned 2.2 to 2.7 million lines, and returned no series. The whole window in one query also returned empty, in 10.8 s with `--timeout 120`. A positive control, `absent_over_time({job="no-such-job"}[30m])`, returned a `1` at every step, so an empty result means no absent sample rather than a failed query.
+
+A second read on 2026-10-25 ran the other three rules over the same window with `--step 5m --timeout 300`, in one query each:
+
+- `LokiHostLogsSilent`: empty, in 3.0 s over 2,236,615 lines.
+- `LokiPiLogsSilent`: empty, in 1.0 s over 1,000,620 lines.
+- `KumaNotificationDropped`: one series of 38 samples from 2026-10-16 18:55 to 22:00, in 0.09 s over 25,145 lines. This matches the day-5 read.
+- The control `absent_over_time({job="no-such-job"}[3h])` returned 1,490 samples across the whole window.
+
+The plan expected one episode at the Sunday reboot, and none appeared. The same read explains why. The nodes booted at 07:36:06Z (daniel-pi), 07:38:22Z (daniel-server) and 07:40:11Z (daniel-box), by `node_boot_time_seconds`. The Loki and Uptime Kuma pods both started at 07:42:49Z. All of these fall inside the `weekly-reboot` mute (Sunday 07:25 to 08:15 UTC). Per-minute line counts show no ingested line from 07:36 to 07:41Z for the host and k8s streams, and from 07:36 to 07:38Z for the Pi stream. At most four minutes were empty, which is far shorter than the 30m and 3h ranges, so no absent sample was possible. Loki's volume kept the lines from before the reboot, so the first evaluations after the restart still found them in range. Kuma was down for the same minutes, so it could not have recorded a DOWN tile. Prometheus stored no sample from 2026-10-13T06:15:16Z to 06:16:45Z, when M4 PR 3's deploy restarted it ([the gap](https://github.com/DanielH2018/server/issues/4824#issuecomment-6139754318)). No episode falls near that gap.
+
 PR 4a, the Kuma side goes (PR 5 is its own PR, by the operator's ruling of 2026-10-22): [#5852](https://github.com/DanielH2018/server/pull/5852).
 
 PR 5, the token retirement, a draft until 4a's `monitor-bridge` deploy plus 7 days: [#5856](https://github.com/DanielH2018/server/pull/5856).
@@ -694,7 +705,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
   Each roster keeps at least one member, so none can pass on an empty set.
 - Rewrite the text that names a removed key as a live consumer: the comments in
   `test_check_loki.py` and the stream-label helper that call `LOKI_STREAM` the checked
-  selector, and the module docstring of `ansible/tests/services/test_alloy_pi_config_labels.py`,
+  selector, and the module docstring of `hosts/lib/tests/test_pi_compose_alloy.py`,
   which names `LOKI_PI_STREAM` where `LokiPiLogsSilent` now selects `{job="pi"}`.
 - Remove `"Kuma Notification Delivery"` and its comment from `EMAIL_TIER` in
   `ansible/tests/services/test_kuma_static_monitors.py`. The tile renders from the
@@ -1457,7 +1468,7 @@ offered. Refuted: none.
   `test_the_selector_roster_covers_the_known_selectors` also holds `HA_BAN_SELECTOR`, which
   stays. PR 4a names each roster and its remaining set, and the tree lists both test files. A
   `grep -rlE` for the six removed keys also found the module docstring of
-  `ansible/tests/services/test_alloy_pi_config_labels.py`, which names `LOKI_PI_STREAM`. PR 4a
+  `hosts/lib/tests/test_pi_compose_alloy.py`, which names `LOKI_PI_STREAM`. PR 4a
   rewrites it.
 - **M5-c3-04 (medium). The rules ConfigMap needed a `fileglob` the offline renderer lacks.**
   Fixed with a role default, `loki_homelab_rule_groups`, which `rules-configmap.yaml.j2` loops

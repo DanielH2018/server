@@ -40,6 +40,13 @@ approved: the update would void the approval, so `land.sh` refuses it and names 
 which is to rebase onto origin/master, push and get the new head approved.
 `land_lib/merge.py`'s module docstring owns the rule.
 
+**A master CI backlog holds the merge.** While any master `ci.yml` run is unfinished,
+a green PR waits to merge and `land.sh` prints `pacing the merge: …`. Merging faster than
+master CI clears only deepens the runner queue every landing waits on (#5526). The wait counts
+against the merge budget, so a backlog that never drains ends at `merge-timeout`, a resume
+point. `LAND_PACE_MASTER_RUNS` sets the cap and `0` turns pacing off; `land_lib/pace.py` owns
+the rule.
+
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
@@ -47,6 +54,10 @@ not: the PR landed, and the next tick applies it, so there is nothing to re-run.
 wake the session, run the command with `run_in_background: true`. A headless `claude -p` agent
 cannot be woken once its turn ends, so it runs the command in the foreground with
 `timeout: 600000` and does not end its turn on it.
+
+**To read a verdict after the wait, run `probe.py landing-verdicts <n>`**, never a grep of a
+task's output file. Every landing records its `VERDICT:` line there as it exits, and the
+record outlives the session.
 
 The landing runs outside the caller's process tree, so a Bash call killed at its time limit does
 not kill it. Started from a systemd user unit, such as a

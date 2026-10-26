@@ -2,7 +2,7 @@
 """A booted test container for the host_packages container cases, driven with `docker exec`.
 
 `scripts/validate/host_package_cases.py` runs the cases through it. The container runs the
-test image with systemd as PID 1 and hostname daniel-pi, and serves the repository
+test image with systemd as PID 1 and hostname daniel-pi unless told otherwise, and serves the repository
 `host_fixtures.publish` writes with `python3 -m http.server` on 127.0.0.1:8791.
 """
 
@@ -54,6 +54,14 @@ def list_problems(names: list[str], box: str) -> list[str]:
     return problems
 
 
+def success_timestamp(prom: str) -> str:
+    """The value of the success-timestamp series in a homelab_host.prom, or ""."""
+    for line in prom.splitlines():
+        if line.startswith("homelab_host_update_success_timestamp_seconds{"):
+            return line.rsplit(" ", 1)[1]
+    return ""
+
+
 class CaseFailed(Exception):
     """A case's assertion that did not hold; the message says what was found instead."""
 
@@ -66,10 +74,31 @@ def expect(condition: bool, message: str) -> None:
 class Container:
     """One booted test container, driven with `docker exec`."""
 
-    def __init__(self, image: str, name: str, work: Path) -> None:
+    def __init__(
+        self,
+        image: str,
+        name: str,
+        work: Path,
+        hostname: str = HOST,
+        mounts: tuple[str, ...] = (),
+        network: str | None = None,
+    ) -> None:
+        """Name a container that `boot` starts.
+
+        Args:
+            image: The test image's tag.
+            name: The container's name.
+            work: The cases' scratch directory, whose `repo` and `debs` the container mounts.
+            hostname: The container's hostname, which bootstrap-host.sh's step 1 reads.
+            mounts: Further `docker run -v` arguments.
+            network: A `docker run --network` value, such as `none`; None keeps Docker's default.
+        """
         self.image = image
         self.name = name
         self.work = work
+        self.hostname = hostname
+        self.mounts = mounts
+        self.network = network
 
     def boot(self, python: str) -> None:
         """Start the container and wait for systemd to finish starting up.
@@ -80,7 +109,9 @@ class Container:
         subprocess.run(["docker", "rm", "-f", self.name], capture_output=True)
         subprocess.run(
             ["docker", "run", "-d", "--name", self.name, "--privileged"]
-            + ["--cgroupns=host", "--hostname", HOST]
+            + ["--cgroupns=host", "--hostname", self.hostname]
+            + (["--network", self.network] if self.network else [])
+            + [arg for mount in self.mounts for arg in ("-v", mount)]
             + ["-v", f"{self.work / 'repo'}:/srv/repo:ro"]
             + ["-v", f"{self.work / 'debs'}:/srv/debs:ro", self.image],
             check=True,

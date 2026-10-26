@@ -193,10 +193,19 @@ the same three series over HTTP.
       push cannot age it.
     - `homelab_check_deadline_seconds`: the longest legitimate gap between two writes. The
       producer's template renders it from the same variable as its schedule. It is for readers,
-      such as dashboards and a rule's `description`. No rule's verdict reads it, because a file
-      that lost the series would silently disable a rule built on it (class 3). Each rule
-      carries the deadline as a literal, and a pytest pins that literal to the rendered value
-      (M1 convention 1).
+      such as dashboards and a rule's `description`. No per-check rule's verdict reads it,
+      because a file that lost the series would silently disable a rule built on it (class 3).
+      Each per-check rule carries the deadline as a literal, and a pytest pins that literal to
+      the rendered value (M1 convention 1). One rule does read it: `HostCheckOverdue` in
+      `host-checks.yaml`, one per host, is a backstop that covers a producer before its own
+      pair exists (#6166). An Alertmanager inhibit mutes it wherever the pair fires, so it
+      pages only for a producer with no pair (#6186). It cannot replace the pairs, because it has no `absent_over_time`
+      arm and inherits the class-3 gap.
+- **A fourth series from the shared library.** `write_check_textfile` in
+  `homelab-check-lib.sh` also writes `homelab_check_duration_seconds`, the run's seconds up to
+  its verdict, for trend boards (#6166). It reads bash's `$SECONDS` unless the caller sets
+  `CHECK_DURATION_S`, so every library caller gains it with no change. A producer that writes
+  its own file may leave it out, and no rule reads it.
 - **Optional detail gauges** carry what a message would have said, for example
   `homelab_disk_root_used_ratio`. A rule's `description` may read them. No rule depends on
   one.
@@ -251,7 +260,7 @@ otherwise:
 |---|---|---|---|
 | `DiskHealthFailed` | `critical` | `daniel-box` | PR 5 |
 | `DiskHealthNotReporting` | `critical` | `daniel-box` | PR 5 |
-| `TextfileCollectorError`, one rule per k3s node, `for: 10m` | `warning` | the node name | M6's A1 cutover |
+| `TextfileCollectorError`, one rule per host whose node_exporter runs the textfile collector (daniel-pi's since #6166), `for: 10m` | `warning` | the host name | M6's A1 cutover |
 
 `DiskHealthFailed` is `homelab_check_success{check="disk-health",origin="daniel-box"} == 0`.
 Its `description` quotes the detail gauge and the 75% Longhorn scheduling threshold from the

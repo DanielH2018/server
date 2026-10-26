@@ -5,7 +5,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 — merging would give the verbatim-prompts store this role's LAN route, which it must not have.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=loki-homelab` with exit 5
 - **Images:** `grafana/loki` (`loki_homelab_k8s_image`), `grafana/alloy`
@@ -52,11 +52,19 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
   (#3740). `ansible/tests/services/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
-- **One `stage.replace` redacts a credential on the way in:** Home Assistant's cast
-  `refresh_token`, which HA logs in plaintext on a failed cast (issue #3015). It substitutes the
-  capture group only, so the `_handle_signal_show_view` marker the fault is detected by survives.
-  `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` fails on either half. The stage is
+- **Two `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
+  `refresh_token`, which HA logs on a failed cast (issue #3015), and Prowlarr's `apikey=` in the
+  *arr Torznab error URLs (#6276). Each substitutes the capture group only, so the rest of the
+  record survives. `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` and
+  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` fail on either half. The stage is
   prospective: a record shipped before it still carries the token for the 744h retention window.
+- **Host lines carry a `program` label, and the line itself is untouched.** The
+  `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
+  `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
+  `HostOutOfMemoryKill` pages on the first host-wide OOM kill. The stage runs
+  only `stage.regex` and `stage.labels`, because probe.py and the alert-history dashboard parse
+  the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
+  label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.
 
 ## Ruler
 

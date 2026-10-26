@@ -1,13 +1,14 @@
 # registry — in-cluster Docker image cache
 
-A local `registry` (`registry_k8s_image`) that stores images `k8s/image-builder` builds in-cluster, so
-n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup, code-server, terraria, valheim and
-karakeep pull
-without a public
-registry round trip. See repo-root `CLAUDE.md` for shared conventions.
+A local `registry` (`registry_k8s_image`), the push store, that holds images
+`k8s/image-builder` builds in-cluster for an Ansible-owned consumer. Every consumer is
+flux-owned and pulls from GHCR, so the store serves only the verify Job's seed, and break-glass
+pushes its artifact there. It still holds the images it served n8n, homelab-mcp, ical-proxy, nut,
+pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. See repo-root
+`CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=registry` with exit 5
 - **Images:** `registry` (`registry_k8s_image`), `gcr.io/go-containerregistry/crane`
@@ -113,8 +114,12 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
     85%, and `registry-data` is not in its `PVC_EXCLUDE`. On 2026-10-24 the claim was 38% full
     (3.98 GB), so at about 1 GiB a year of pins it pages years before the claim fills.
     `ansible/tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page`
-    fails if the claim joins the exclusion. No runbook for a page exists yet. A collection
-    must not race Flux on `spec.replicas`, and #6114 tracks the options.
+    fails if the claim joins the exclusion. When it pages, `docs/registry-push-store-gc.md` is
+    the procedure. The operator untags what nothing runs while the registry serves, then
+    suspends the `registry` Kustomization before scaling `deploy/registry` to zero, so Flux
+    cannot restore the pod mid-GC. A plain `garbage-collect` Job runs, and the resume scales
+    the registry back up. On 2026-10-25 the store held one seed, and the bytes were ten
+    repositories of images built before their roles moved to GHCR.
 - **A sidecar on every node proves the mirror serves pulls** (#5542). containerd falls back
   to `ghcr.io` past a broken mirror, so nothing else notices one while the WAN is up.
   node-exporter's `ghcr-mirror-pull` sidecar

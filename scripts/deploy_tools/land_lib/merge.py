@@ -75,7 +75,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object
 from lib import removes_object
-from deploy_tools.land_lib import gh_read, pin_gate, policy
+from deploy_tools import await_ci
+from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
@@ -95,6 +96,10 @@ _CANONICAL_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#\d+[.,;:)\]]*\s*", re.IGNOR
 # reference at all inside one.
 _DECORATION = re.compile(r"^[\s>*_#`~-]+|[\s>*_#`~-]+$")
 _SENTENCE_END = re.compile(r"[.!?]$")
+# How long a head whose every CI run skipped as a draft waits for a ready run before the PR is
+# read for its draft state (#6077). GitHub registered PR #6069's ready run 3s after the flip
+# at 02:09:58 on 2026-10-24, and the push-delivery grace await_ci already allows is far wider.
+DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
 
 
 def _reference_is_deliberate(prefix: str) -> bool:
@@ -474,6 +479,24 @@ def arm_merge(ln: Landing) -> None:
     _leave_for_a_direct_merge(ln, subject)
 
 
+def _draft_skipped_dead_end(ln: Landing, head: str) -> str:
+    """Why a ready PR whose head's CI skipped as a draft cannot merge; "" while it is a draft.
+
+    PR #6069 was marked ready one second after its push, and GitHub created only the push's
+    draft-era run (#6077). No run followed the ready flip, so nothing would ever supply a
+    verdict. A PR still a draft gets its run once someone marks it ready, so the wait goes on.
+    """
+    if ln.view("isDraft").get("isDraft") is not False:
+        return ""
+    pr = ln.opts.pr
+    return (
+        f"PR #{pr} is ready, but {head[:8]}'s only CI ran while it was a draft and skipped "
+        "every job, and GitHub started no run on the ready flip; a re-run replays the draft "
+        f"event and skips again. Convert it to draft and back (`gh pr ready --undo {pr}`, "
+        f"then `gh pr ready {pr}`) or push, then re-run this"
+    )
+
+
 def await_merge(ln: Landing) -> None:
     """Poll until merged, merging directly once CI is green. Bail early on two dead ends.
 
@@ -486,8 +509,13 @@ def await_merge(ln: Landing) -> None:
 
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
     reads its head green, unless master moved past the PR's base: then the branch is updated
-    once and the merge waits for the updated head to go green. Without --arm-merge this only
-    polls, for a PR merged some other way.
+    once and the merge waits for the updated head to go green. A green head also waits while
+    master CI has a backlog (`pace.hold`). Without --arm-merge this only polls, for a PR merged
+    some other way.
+
+    A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
+    it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft ends the wait
+    (`_draft_skipped_dead_end`).
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -495,6 +523,8 @@ def await_merge(ln: Landing) -> None:
     last_refusal = ""
     # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
     ci_pending = ""
+    # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
+    paced = ""
     # The head this landing updated the branch from; empty until it does.
     updated_from = ""
     # The head the handback refusal and the pin gate last passed, so a merge GitHub refuses
@@ -503,6 +533,9 @@ def await_merge(ln: Landing) -> None:
     handback_checked = ""
     # The forward-only pins that head bumps, whose land rule is read again before each retry.
     gated_pins: list[str] = []
+    # The head await_ci last read as skipped in a draft, and the `waited` it was first read at.
+    draft_head = ""
+    draft_since = 0
     while True:
         view = ln.view("state,mergeable,headRefOid")
         state = view.get("state", "")
@@ -537,6 +570,15 @@ def await_merge(ln: Landing) -> None:
         if head:
             rc, line = t.await_ci(head, 0)
             ci_pending = line if rc == CI_PENDING else ""
+            if await_ci.DRAFT_SKIPPED not in ci_pending:
+                draft_head = ""
+            elif head != draft_head:
+                draft_head, draft_since = head, waited
+                say(f"{line}; waiting up to {DRAFT_SKIPPED_GRACE_S}s for a ready run")
+            elif waited - draft_since >= DRAFT_SKIPPED_GRACE_S:
+                dead_end = _draft_skipped_dead_end(ln, head)
+                if dead_end:
+                    ln.die(dead_end, 75, Verdict.MERGE_TIMEOUT)
             if rc == CI_RED:
                 ln.die(
                     f"PR #{o.pr} cannot merge — its own CI is red ({line}); fix it, push, "
@@ -548,7 +590,11 @@ def await_merge(ln: Landing) -> None:
             # never fire on a disarmed gate; a merge made some other way keeps the wait.
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
-            if rc == CI_GREEN and ln.direct_merge_subject:
+            hold = pace.hold(ln) if rc == CI_GREEN and ln.direct_merge_subject else ""
+            if hold and hold != paced:
+                say(hold)
+            paced = hold
+            if rc == CI_GREEN and ln.direct_merge_subject and not hold:
                 moved = [] if updated_from else _stale_paths(ln, head)
                 if moved:
                     _update_branch(ln, head, moved)
@@ -570,15 +616,18 @@ def await_merge(ln: Landing) -> None:
                         )
                         last_refusal = refusal
         if waited >= o.merge_timeout:
-            # A run cancelled on the head, or skipped because the PR was a draft, never
-            # supplies a verdict on its own (#5931).
-            why = (
-                f"its head has no CI verdict ({ci_pending}); if its run was cancelled or "
-                "skipped as a draft, none arrives on its own: re-run the cancelled run with "
-                "`gh run rerun <run-id>`, or mark the PR ready or push"
-                if ci_pending
-                else "look at its checks or the queue"
-            )
+            # A run cancelled on the head never supplies a verdict on its own (#5931). A run
+            # skipped as a draft names its own remedy in await_ci's line, because a re-run of
+            # it skips again (#6077).
+            if draft_head:
+                why = f"its head has no CI verdict ({ci_pending})"
+            elif ci_pending:
+                why = (
+                    f"its head has no CI verdict ({ci_pending}); if its run was cancelled, "
+                    "none arrives on its own: re-run it with `gh run rerun <run-id>`, or push"
+                )
+            else:
+                why = paced or "look at its checks or the queue"
             ln.die(
                 f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; {why}",
                 75,

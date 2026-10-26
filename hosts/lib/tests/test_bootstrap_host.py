@@ -12,55 +12,13 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from lib.repo_paths import REPO
-
-SCRIPT = REPO / "hosts" / "bootstrap-host.sh"
-KEYRING = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
-INSTALLED_KEYRING = "usr/share/keyrings/homelab-archive-keyring.gpg"
-SOURCES = "etc/apt/sources.list.d/homelab.sources"
-AGE_KEY = "etc/homelab/age.key"
-
-
-class FakeHost:
-    """A scratch directory holding the script, its keyring, stub commands and a HOMELAB_ROOT."""
-
-    def __init__(self, tmp_path: Path, hostname: str = "daniel-pi") -> None:
-        self.dir = tmp_path / "copy"
-        self.dir.mkdir()
-        shutil.copy(SCRIPT, self.dir / SCRIPT.name)
-        self.keyring = self.dir / KEYRING.name
-        shutil.copy(KEYRING, self.keyring)
-        self.root = tmp_path / "root"
-        self.root.mkdir()
-        self.calls = tmp_path / "apt-get.calls"
-        self.bin = tmp_path / "bin"
-        self.bin.mkdir()
-        self._stub("hostname", f"echo {hostname}")
-        self._stub("apt-get", f'echo "$*" >> {self.calls}')
-
-    def _stub(self, name: str, body: str) -> None:
-        stub = self.bin / name
-        stub.write_text(f"#!/bin/sh\n{body}\n")
-        stub.chmod(0o755)
-
-    def run(self, *argv: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["/bin/sh", str(self.dir / SCRIPT.name), *argv],
-            env={
-                "PATH": f"{self.bin}:/usr/bin:/bin",
-                "HOMELAB_ROOT": str(self.root),
-            },
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-
-    def apt_calls(self) -> list[str]:
-        return self.calls.read_text().splitlines() if self.calls.exists() else []
-
-    def written(self) -> list[Path]:
-        return [path for path in self.root.rglob("*") if path.is_file()]
+from _bootstrap_host import (
+    AGE_KEY,
+    INSTALLED_KEYRING,
+    KEYRING,
+    SOURCES,
+    FakeHost,
+)
 
 
 @pytest.fixture
@@ -108,12 +66,14 @@ def test_the_named_host_gets_the_keyring_the_source_and_both_packages(host):
     # test_lan_facts_have_one_source.py holds the address itself.
     assert [line for line in sources if line.startswith("URIs: http://")]
     assert f"Signed-By: /{INSTALLED_KEYRING}" in sources
-    update, install = host.apt_calls()
+    update, tools, install = host.apt_calls()
     assert update.startswith("update --error-on=any ")
     assert "-o Dir::Etc::sourcelist=sources.list.d/homelab.sources" in update
     assert "-o Dir::Etc::sourceparts=-" in update
     assert "-o APT::Get::List-Cleanup=0" in update
+    assert tools == "install -y homelab-tools"
     assert install == "install -y homelab-updater homelab-daniel-pi"
+    assert "tmpfiles --create" in host.commands()
 
 
 def test_another_host_is_refused_before_anything_is_written(host):
@@ -122,6 +82,38 @@ def test_another_host_is_refused_before_anything_is_written(host):
     assert result.returncode == 1
     assert "this host is daniel-pi, not daniel-server" in result.stderr
     assert host.written() == []
+    assert host.apt_calls() == []
+
+
+def test_a_host_the_script_does_not_know_is_refused_before_anything_is_written(
+    tmp_path,
+):
+    host = FakeHost(tmp_path, hostname="daniel-laptop")
+
+    result = host.run("daniel-laptop")
+
+    assert result.returncode == 1
+    assert "not a host this script knows" in result.stderr
+    assert host.written() == []
+    assert host.apt_calls() == []
+
+
+def test_a_missing_keyring_is_refused_before_anything_is_written(host):
+    host.keyring.unlink()
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 1
+    assert "cannot read" in result.stderr
+    assert host.written() == []
+    assert host.apt_calls() == []
+
+
+def test_until_stops_after_the_named_step(host):
+    result = host.run("daniel-pi", "--until", "3")
+
+    assert result.returncode == 0, result.stderr
+    assert (host.root / AGE_KEY).exists()
     assert host.apt_calls() == []
 
 
@@ -196,7 +188,7 @@ def test_a_host_without_age_keygen_and_without_a_key_is_refused(host):
         assert found
         (host.bin / tool).symlink_to(found)
     result = subprocess.run(
-        ["/bin/sh", str(host.dir / SCRIPT.name), "daniel-pi"],
+        ["/bin/sh", str(host.dir / "bootstrap-host.sh"), "daniel-pi"],
         env={"PATH": str(host.bin), "HOMELAB_ROOT": str(host.root)},
         capture_output=True,
         text=True,

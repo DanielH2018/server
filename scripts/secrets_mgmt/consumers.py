@@ -22,6 +22,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.rotation_tools import REPO
+from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST, host_vars_file
 from lib.k8s_roles import tag_owners
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -233,6 +234,12 @@ _ROLE_PLANES = {
 # Directories whose hits are not consumers. `collections/` is vendored third-party; the
 # registry and secrets file name every secret by definition, so including them would make
 # every census non-empty and the check vacuous.
+# The host packages (H5.7). A file under `hosts/components/<component>/` that names a secret
+# makes every host package listing that component a consumer, on this plane. A host package is
+# not a role: `deploy.sh` cannot reach it, and the host's SOPS file carries the value, which
+# only the operator's `host_secrets.py sync` rewrites.
+HOST_PLANE = "host"
+_COMPONENTS = os.path.join("hosts", "components")
 _CENSUS_SKIP = ("collections",)
 # The manifests role's standalone-value guard map names about 150 keys and renders none of
 # them: the guard reads each value at deploy time and writes nothing, so a rotation owes the
@@ -304,7 +311,51 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
             rel = os.path.relpath(os.path.join(dirpath, filename), ansible_dir)
             for reader in sorted(lookups.get(rel, ())):
                 corpus.append((text, reader, _ROLE_PLANES["k8s"]))
+    corpus.extend(_host_package_corpus(repo))
     return tuple(corpus)
+
+
+def _packages_by_component(repo: str) -> dict[str, list[str]]:
+    """Component name -> the host packages whose `package.yml` lists it, sorted by host."""
+    listed: dict[str, list[str]] = {}
+    hosts_dir = os.path.join(repo, "hosts")
+    for host in sorted(os.listdir(hosts_dir)) if os.path.isdir(hosts_dir) else ():
+        spec_path = os.path.join(hosts_dir, host, "package.yml")
+        if not os.path.isfile(spec_path):
+            continue
+        with open(spec_path, encoding="utf-8") as handle:
+            spec = yaml_fast.safe_load(handle.read())
+        for component in (spec or {}).get("components") or []:
+            listed.setdefault(str(component), []).append(host)
+    return listed
+
+
+def _host_package_corpus(repo: str) -> list[tuple[str, str, str]]:
+    """(text, host package, `HOST_PLANE`) per file of `hosts/components/` and per package listing it.
+
+    The second walk root of the census. The first covers `ansible/roles/`; H5.7 moved the first
+    secret consumer, autoheal's webhook, out of it. A component no host package lists
+    contributes nothing, because no package would carry its file.
+    """
+    out: list[tuple[str, str, str]] = []
+    packages = _packages_by_component(repo)
+    root = os.path.join(repo, _COMPONENTS)
+    for dirpath, _dirnames, filenames in os.walk(root):
+        component = os.path.relpath(dirpath, root).split(os.sep)[0]
+        for host in packages.get(component, ()):
+            for filename in filenames:
+                if filename.endswith(_CENSUS_SKIP_SUFFIXES):
+                    continue
+                try:
+                    with open(
+                        os.path.join(dirpath, filename),
+                        encoding="utf-8",
+                        errors="ignore",
+                    ) as handle:
+                        out.append((handle.read(), host, HOST_PLANE))
+                except OSError:
+                    continue
+    return out
 
 
 def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
@@ -323,7 +374,9 @@ def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
     consumers can hold a dead key until someone finds them.
 
     Returns a plane per role because the repair command differs by plane and one of them is
-    unreachable from `deploy.sh` — see `_ROLE_PLANES`.
+    unreachable from `deploy.sh` — see `_ROLE_PLANES`. A host package that carries the secret
+    through a component under `hosts/components/` is a consumer on `HOST_PLANE`, named by its
+    host.
     """
     found: dict[str, str] = {}
     for text, role, plane in _census_corpus(repo):
@@ -381,6 +434,7 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     deploy_tags = [r for r in deploy_roles if r not in owners]
     owned_tags = [r for r in deploy_roles if r in owners]
     setup_roles = sorted(r for r, plane in consumers.items() if plane == "setup")
+    host_packages = sorted(r for r, plane in consumers.items() if plane == HOST_PLANE)
     # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by two crons, and
     # `reference/scripts.py` classifies a script as `scheduled` when a scheduled script's
     # text invokes it — so a bare `./scripts/deploy.sh ...` literal here would reclassify the
@@ -394,6 +448,12 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     for role in setup_roles:
         commands.append(
             "`uv run ansible-playbook ansible/initial_setup.yml --tags %s`" % role
+        )
+    for host in host_packages:
+        commands.append(
+            "`uv run python scripts/secrets_mgmt/host_secrets.py sync %s` (operator-only: "
+            "it decrypts) rewrites the SOPS file that the package `hosts/%s/package.yml` "
+            "carries" % (host, host)
         )
     for tag in owned_tags:
         if owners[tag] == "flux":

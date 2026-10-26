@@ -220,9 +220,9 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
-          curl --retry 3 -fsSLO \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLO \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
-          curl --retry 3 -fsSLo checksums.txt \
+          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo checksums.txt \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt
           # --ignore-missing skips the other platforms' lines; a run that verifies no file fails.
           sha256sum -c --ignore-missing --strict checksums.txt
@@ -530,6 +530,7 @@ jobs:
       no_reset: ${{ steps.decide.outputs.no_reset }}
       stateful: ${{ steps.decide.outputs.stateful }}
       supersedes: ${{ steps.decide.outputs.supersedes }}
+      hold_read: ${{ steps.decide.outputs.hold_read }}
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
@@ -658,6 +659,8 @@ jobs:
           SEED: ${{ needs.promote.outputs.seed }}
           PRIOR_DIGEST: ${{ needs.promote.outputs.prior_digest }}
           SUPERSEDES: ${{ needs.promote.outputs.supersedes }}
+          HOLD_READ: ${{ needs.promote.outputs.hold_read }}
+          RESET_DIGEST: ${{ needs.promote.outputs.reset_digest }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
@@ -670,8 +673,9 @@ jobs:
 
           hold="$(gh variable get DEPLOY_HOLD -R "$GITHUB_REPOSITORY")" \
             || { echo "::error::DEPLOY_HOLD could not be read, so this run moves nothing"; exit 1; }
-          if [ "$hold" != none ]; then
-            echo "::warning::DEPLOY_HOLD reads '$hold', written after decide read it, so this run moves nothing and verifies nothing"
+          # The value decide read: `none`, or the `failed=` hold the revert rule passed.
+          if [ "$hold" != "${HOLD_READ:-none}" ]; then
+            echo "::warning::DEPLOY_HOLD reads '$hold', not the '${HOLD_READ:-none}' decide read, so this run moves nothing and verifies nothing"
             exit 0
           fi
 
@@ -709,6 +713,19 @@ jobs:
           # verify ignores any older status on T, such as one an earlier promotion left.
           moved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           if [ -n "${SUPERSEDES:-}" ]; then
+            # T's base and reset digest are last-good's as decide read it. A settle of the
+            # superseded run that moved last-good since then would leave T resetting past a
+            # verified revision, so T moves nothing and that settle's dispatch promotes again.
+            lg_status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+              | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
+                -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
+                "https://ghcr.io/v2/$name/manifests/last-good")"
+            [ "$lg_status" = 200 ] || { echo "::error::HEAD last-good answered HTTP $lg_status"; exit 1; }
+            lg="$(tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')"
+            if [ "$lg" != "$RESET_DIGEST" ]; then
+              echo "::warning::last-good is at '$lg', not the '$RESET_DIGEST' decide read: the run $SUPERSEDES settled first, so this run moves nothing"
+              exit 0
+            fi
             flux tag artifact "oci://$repo:sha-$TARGET" --tag superseding
             echo "tagged sha-$TARGET superseding: it supersedes the verification of $SUPERSEDES"
           fi
@@ -840,6 +857,7 @@ jobs:
           CLEARS_HOLD: ${{ needs.promote.outputs.clears_hold }}
           NO_RESET: ${{ needs.promote.outputs.no_reset }}
           STATEFUL: ${{ needs.promote.outputs.stateful }}
+          SUPERSEDES: ${{ needs.promote.outputs.supersedes }}
           VERDICT: ${{ needs.verify.outputs.verdict }}
           FAILED_NAMES: ${{ needs.verify.outputs.failed }}
           GH_ACTOR: ${{ github.actor }}
@@ -855,26 +873,27 @@ jobs:
           # A verdict on T counts only while `prod` still names T's digest (D7.1). Once a
           # later run has moved `prod` past T, that run owns the cluster, and this one writes
           # neither `last-good`, the hold, `held` nor the reset, and dispatches nothing.
-          # `live_prod` is the `tag` job's HEAD of `prod`. It prints the digest, nothing when
-          # the tag is absent, and fails when the read fails.
-          live_prod() {
+          # `live_tag <tag>` is the `tag` job's HEAD of a tag. It prints the digest, nothing
+          # when the tag is absent, and fails when the read fails.
+          live_tag() {
             local name=danielh2018/homelab-manifests token heads status
             token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
               | curl --retry 3 -fsS -K - \
                 "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
               | jq -r '.token // empty')" || return 1
             [ -n "$token" ] || return 1
-            heads="$RUNNER_TEMP/prod-head.txt"
+            heads="$RUNNER_TEMP/$1-head.txt"
             status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
               | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
                 -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
-                "https://ghcr.io/v2/$name/manifests/prod")" || return 1
+                "https://ghcr.io/v2/$name/manifests/$1")" || return 1
             case "$status" in
               200) tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }' ;;
               404) ;;
               *) return 1 ;;
             esac
           }
+          live_prod() { live_tag prod; }
           # A failed read keeps today's behaviour, the safe direction: a hold stops promotion,
           # and a later run that verifies moves `last-good` again.
           owns_prod() {
@@ -956,8 +975,26 @@ jobs:
           problems=()
           if gh variable set DEPLOY_HOLD --body "$hold" -R "$GITHUB_REPOSITORY"; then
             echo "DEPLOY_HOLD set to '$hold'"
+            # The hold names T alone; a T that superseded a run carries that run's change too.
+            [ -z "${SUPERSEDES:-}" ] || echo "::warning::sha-$TARGET superseded the verification of $SUPERSEDES, so the failure may be that commit's change"
           else
             problems+=("writing DEPLOY_HOLD='$hold' failed")
+          fi
+          # A superseding T's `tag` checked `last-good` before its move, but the superseded
+          # run's `settle` can have read `prod` before that move and moved `last-good` after
+          # it (#6268). The reset then goes to the live `last-good`: RESET_DIGEST would roll
+          # back a verified revision and leave `prod` behind `last-good`, which `decide`
+          # reads as a verification in flight. Only that settle moves `last-good` while T is
+          # in flight, so a run that supersedes nothing keeps RESET_DIGEST.
+          if [ -n "${SUPERSEDES:-}" ] && printf '%s' "$RESET_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
+            if lg="$(live_tag last-good)" && printf '%s' "$lg" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
+              if [ "$lg" != "$RESET_DIGEST" ]; then
+                echo "::warning::last-good moved from the $RESET_DIGEST decide read to $lg: the superseded run of $SUPERSEDES settled good after this run's move, so prod resets to $lg"
+                RESET_DIGEST="$lg"
+              fi
+            else
+              echo "::warning::last-good could not be read, so prod resets to the $RESET_DIGEST decide read"
+            fi
           fi
           if ! printf '%s' "$RESET_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
             problems+=("decide read no last-good digest to reset to, so prod stays on sha-$TARGET")

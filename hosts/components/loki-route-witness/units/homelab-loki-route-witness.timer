@@ -1,0 +1,15 @@
+# Shipped by homelab-daniel-box with its enable link. Hourly at minute 23, which keeps it off the
+# :00 and :30 slots the */10 and */30 health checks already crowd.
+[Unit]
+Description=Loki read-route witness (timer)
+
+[Timer]
+OnCalendar=*-*-* *:23:00
+# Persistent=true, decided 2026-09-19. Cron skips a slot that falls inside an outage, and the
+# tile then stays red until the next slot because nothing pushed a fresh verdict. A slot that
+# never fired runs once at boot; a check that went red before a reboot already fired its slot,
+# so homelab-loki-route-witness-boot.service reruns it instead (#4495).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

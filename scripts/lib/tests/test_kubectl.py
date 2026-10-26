@@ -275,6 +275,7 @@ SCRIPTS = REPO / "scripts"
 # scan stops matching (the pattern `test_probe_boundaries.py` sets).
 KNOWN_CALLERS = frozenset(
     {
+        "diagnostics/probe_lib/flux.py",
         "diagnostics/probe_lib/health.py",
         "diagnostics/probe_lib/takeover.py",
         "diagnostics/probe_lib/vip_placement.py",

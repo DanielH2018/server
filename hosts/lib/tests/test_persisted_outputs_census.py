@@ -14,9 +14,17 @@ from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.host_outputs import OUTPUT_ROOTS
 
 HOSTS = REPO / "hosts"
-PERSISTED = {"homelab-daniel-server:/var/lib/homelab-secrets/etc/nut/upsmon.conf"}
+PERSISTED = {
+    "homelab-daniel-server:/var/lib/homelab-secrets/etc/nut/upsmon.conf",
+    "homelab-daniel-box:/var/lib/homelab-secrets/etc/nut/upsmon.conf",
+}
 # Packages the census must find, so a glob that stops matching cannot empty it.
-MEMBERS = {"homelab-daniel-server", "homelab-daniel-pi", "homelab-updater"}
+MEMBERS = {
+    "homelab-daniel-server",
+    "homelab-daniel-box",
+    "homelab-daniel-pi",
+    "homelab-updater",
+}
 
 
 def rendered_packages() -> list[host_mode.Package]:

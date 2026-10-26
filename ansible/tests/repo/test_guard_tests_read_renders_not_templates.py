@@ -83,6 +83,10 @@ SCANNED = (
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
 TEMPLATE_SOURCE_READERS = {
+    "setup/test_docs_refresh_failure_path.py": (
+        "the tmpfiles `d` line's owner and mode are the subject, and the file is a one-line "
+        "package path, not a shell script with a render to run"
+    ),
     "k8s/test_priority_class_is_derived_from_tier.py": (
         "whether a tiered role's `pod_shell(...)` call passes a literal class or the derived "
         "one — both render the same `priorityClassName`, so only the source tells them apart"
@@ -134,6 +138,11 @@ TEMPLATE_SOURCE_READERS = {
         "the shared alert template IS rendered, but with each caller's import `vars:`, which "
         "no role-scoped render context carries; the `OnFailure=<name>-alert.service` scan "
         "reads a literal unit name that no variable feeds"
+    ),
+    "setup/test_setup_crons_write_a_textfile.py": (
+        "a census over every setup role's timer and service templates, asking whether one "
+        "calls write_check_textfile or imports the macro that does. A render needs each "
+        "role's host context and a guess at loop items, and the call is the same text either way"
     ),
     "deploy/test_setup_render_manifest.py": (
         "hashes the template's raw BYTES — a trailing newline and a truncated-read "

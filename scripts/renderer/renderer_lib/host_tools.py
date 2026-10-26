@@ -20,7 +20,7 @@ module derives. The spec lists, for each tool and each architecture::
 
 Each architecture block carries its own `version` and annotation, because the Renovate manager
 moves one version and one digest per match. A tool's versions must agree across architectures.
-`{version}` in a `url` is the pin as written (`v3.13.3`); `{bare}` is the pin without its `v`.
+`{version}` in a `url` or a `member` is the pin as written (`v3.13.3`); `{bare}` is the pin without its `v`.
 
 A binary installs at `BIN_DIR/<tool>`. The spec cannot name another path, so a tool never lands
 on `PATH`. The renderer writes one tree per architecture, `<package>/<arch>/`, each with a
@@ -45,7 +45,8 @@ PINS_FILE = "tools.json"
 _NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 _VERSION = re.compile(r"v?\d+\.\d+\.\d+")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-_MEMBER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+# One optional directory segment: uv ships `uv-x86_64-unknown-linux-gnu/uv`.
+_MEMBER = re.compile(r"(?:[A-Za-z0-9][A-Za-z0-9._-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*")
 _ENTRY_KEYS = frozenset({"version", "url", "sha256", "member"})
 
 
@@ -127,6 +128,11 @@ def _pin(where: str, entry: object) -> Pin:
             f"{where}: url {url!r} must be https, and may hold only {{version}} and {{bare}}"
         )
     member = entry.get("member")
+    if isinstance(member, str):
+        # node_exporter's tarball names its directory after the release.
+        member = member.replace("{version}", version).replace(
+            "{bare}", version.lstrip("v")
+        )
     if member is not None and (
         not isinstance(member, str) or not _MEMBER.fullmatch(member)
     ):

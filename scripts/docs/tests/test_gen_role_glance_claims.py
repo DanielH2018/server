@@ -1,7 +1,7 @@
 """Tests for the Claims line of a k8s role's "At a glance" block: each claim and its tier.
 
 Split from test_gen_role_glance.py for the module-length cap. The tier comes from
-`catalog_backup.claim_tiers` over the k3s role's Longhorn tier lists, so each test moves a
+`catalog_backup.claim_tiers` over the longhorn-reconcile role's tier lists, so each test moves a
 claim between lists and checks the line moves with it.
 """
 

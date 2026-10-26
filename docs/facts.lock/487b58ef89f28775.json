@@ -1,0 +1,13 @@
+{
+  "checksum": "3641af29caab1a656c9bce28b36076ef924ce9853aa471d9c48a8b031036bcde",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/optimize_pi/CLAUDE.md#optimize_pi — emptied; the Pi's host package owns the tuning",
+  "row": {
+    "atoms": {
+      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439",
+      "ansible/roles/setup/optimize_pi/tasks/main.yml": "f7c4333f72956c4284c670c87a25fcbf88bad1252a0f54b30fd96ff07f78a2c9"
+    },
+    "python": "3.14",
+    "verified_sha": "7ed18d48f"
+  }
+}

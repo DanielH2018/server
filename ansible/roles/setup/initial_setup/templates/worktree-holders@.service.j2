@@ -10,6 +10,8 @@ CollectMode=inactive-or-failed
 
 [Service]
 Type=simple
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
 ExecStart=/usr/local/libexec/worktree-holders
 StandardInput=socket
 # Only the helper's own sendall reaches the socket. A traceback on stdout or stderr would

@@ -152,10 +152,11 @@ def test_an_alert_template_change_names_only_an_importer_rendering_it_elsewhere(
 
 
 def test_a_role_gated_off_the_tick_host_is_left_to_the_plane_note():
-    """`optimize_pi` runs only on daniel-pi, so the tick applies it nowhere (#3933).
-    `plane_note` names its command; naming it here as well printed it twice."""
+    """`optimize_pi` is gated to daniel-pi, so the tick applies it nowhere (#3933), and its
+    `end_role` stub (H7.25) leaves it no host to name. `plane_note` names a command for a gated
+    role; naming it here as well printed it twice."""
     files = ["ansible/roles/setup/optimize_pi/tasks/main.yml"]
-    assert land_reach.setup_role_hosts("optimize_pi") == {"daniel-pi"}
+    assert land_reach.setup_role_hosts("optimize_pi") == frozenset()
     assert land_reach.remaining_setup_hosts_note(files, "daniel-box") == ""
 
 

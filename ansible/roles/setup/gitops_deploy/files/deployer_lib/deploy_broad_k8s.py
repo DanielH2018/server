@@ -290,6 +290,7 @@ def apply_broad_k8s(
     # annotation for services that deployed once.
     applied = cs.k8s_deploy - bumps
     if bumps:
+        started = time.monotonic()
         try:
             deploy_io.deploy_k8s(
                 config.repo, bumps, deadline - time.monotonic(), run=tools.run
@@ -314,6 +315,10 @@ def apply_broad_k8s(
             state.hold_failed_apply(origin, DEPLOY_PLAYBOOK, sorted(bumps))
             if applied:
                 tools.emit_deploy_annotation(applied, origin)
+            # Nothing rolls a broad tick's bumps back, so the failure is `fail` (#6164).
+            tools.emit_deploy_annotation(
+                bumps, origin, "fail", time.monotonic() - started
+            )
             # The range is merged either way, so a hand-edited or denylisted k8s role in it has
             # no page but this one. Before the failure post, which stays the tick's last word.
             # The secrets page rides this exit for the reason the `DECIDED:` in

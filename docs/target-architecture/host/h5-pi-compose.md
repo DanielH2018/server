@@ -224,8 +224,9 @@ The exit criterion is three observations:
   scrape usually holds one sample, and `rate()` over it returns nothing. alloy's compose
   template records the Pi's swap-in rate as `rate(node_vmstat_pswpin{job="node-pi"}[1d])` at
   136-181/s for 2026-09-03 to 09-17.
-- **The Pi is the backup WireGuard endpoint.** `ansible/roles/containers/wg-easy/CLAUDE.md`
-  records the Pi's UDP 51822 as the fallback entry when the cluster's wg-easy, in
+- **The Pi is the backup WireGuard endpoint.** The header of
+  `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2` (the deleted role's
+  `CLAUDE.md` before H5.9) records the Pi's UDP 51822 as the fallback entry when the cluster's wg-easy, in
   `ansible/roles/k8s/wg-easy/` on 51820, is unreachable.
 - **ADR-0013 names the deploy path H5 replaces.** `docs/adr/0013-daniel-pi-stays-on-docker.md`
   decides that the Pi "is driven remotely over SSH with `-e target=daniel-pi`". Its *Governs*
@@ -1380,8 +1381,9 @@ upstream, revert its downstreams before it.
   exited. From H5.2b its compose arm also pushes `down` while the result reads 0, which
   covers a failed run that leaves every container running. H3's `HostReconcileFailed`
   (PR H3.5d, C7) pages for a Pi held with `homelab_host_reconcile_ok` at 0 for 15 minutes,
-  whatever caused the hold. Nothing pages for a stale compose result, and *Open questions*
-  5 asks M1 for that rule.
+  whatever caused the hold. `ComposeUpStale` (#6187) pages a compose result older than the
+  Pi's last boot, once the boot is older than the unit's `TimeoutStartSec` plus 300 s. A
+  restart by reconcile that writes no result leaves the stale value until the next boot.
 - **A compose run lengthens the Pi's reconcile.** One run takes up to the unit's derived
   `TimeoutStartSec`, 1390 s or about 23 minutes at `70591c307`'s healthcheck values. That is
   inside reconcile's `TimeoutStartSec=30min`, and the unit-timeout test holds the relation.
@@ -1531,9 +1533,9 @@ upstream, revert its downstreams before it.
       operator declines, exit observation 2 becomes a hand-written digest bump through the
       same pipeline.
     - Either way, wg-easy's pin sits in a manual group, and the two alloy pins move together.
-2. **When does C5's dependency rule reach Docker?** C5 says third-party sources such as
-   Docker's ship in `homelab-repos`. H5 keeps the engine under `docker_install`, so H5 adds
-   no `Depends: docker-ce`. Resolution: H7 moves the engine and creates `homelab-repos`.
+2. **When does C5's dependency rule reach Docker?** C5 said third-party sources such as
+   Docker's ship in `homelab-repos`; the 2026-10-24 ruling puts each in the component of the host that uses it. H5 keeps the engine under `docker_install`, so H5 adds
+   no `Depends: docker-ce`. Resolution: H7 moves the engine, and Docker's source goes to the `apt-docker` component of `homelab-daniel-pi`.
 3. **Who owns pi-peer-backup's two writes on the Pi?** R4's open question 4 expects H5's
    package to list them. They are an authorized key and a forced-command wrapper, not Compose
    services, so H5 does not move them. D5 moves the two tasks into `k8s_host_files` with
@@ -1610,8 +1612,14 @@ upstream, revert its downstreams before it.
     - **M1.** Ask for two rules, each labelled `service="daniel-pi"` per C7:
       `homelab_compose_up_result == 0`, and a stale `homelab_compose_up_timestamp_seconds`
       with a bound M1 derives from the updater's schedule. H3's `HostReconcileFailed`
-      (H3.5d) covers `homelab_host_reconcile_ok == 0`. Until M1's two land, the recovery
-      heartbeat's compose arm covers the first, and nothing covers the stale result.
+      (H3.5d) covers `homelab_host_reconcile_ok == 0`. `ComposeUpFailed` (#6166) is the
+      first, in shadow while the recovery heartbeat's compose arm pages the same 0.
+      `ComposeUpStale` (#6187) is the second. Its bound comes from boot, not from the
+      updater's schedule: reconcile restarts the unit only when the unit's file changes, so
+      a package change that leaves the project alone writes no result. Every boot does run
+      the enabled unit, and its `TimeoutStartSec` caps that run.
+      `hosts/lib/tests/test_pi_compose_unit.py` pins the rule's literals to the rendered
+      unit.
     - **G2.** G2 says H5.7 adds a Renovate manager. H5.11 adds the Pi's.
 
    Resolution: each owning slice confirms the item or amends its plan, before H5.2a1. The

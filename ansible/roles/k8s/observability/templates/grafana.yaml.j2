@@ -172,6 +172,7 @@ spec:
         # that quietly stops working.
         - name: admin-password
           image: {{ observability_k8s_grafana_image }}
+          imagePullPolicy: IfNotPresent
 {{ hardened_security_context(non_root=true) }}
           command:
             - sh
@@ -190,6 +191,7 @@ spec:
       containers:
         - name: grafana
           image: {{ observability_k8s_grafana_image }}
+          imagePullPolicy: IfNotPresent
 {{ hardened_security_context(non_root=true) }}
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD

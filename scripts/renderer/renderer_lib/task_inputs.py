@@ -18,6 +18,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import copy
+import functools
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -63,6 +65,19 @@ _INCLUDE_MODULES = (
 )
 
 
+def _parsed(path: Path) -> object:
+    """`path` parsed as YAML, a fresh copy on each call so a caller cannot alter the cache."""
+    return copy.deepcopy(_parsed_text(path.read_text()))
+
+
+# Keyed on the text rather than the path, as `render_guard._parsed_mapping` is, so an edit
+# between two renders reaches the second one. A render reads the same tasks files once per
+# role and again per build, and parsing them again was most of the module's YAML (#5900).
+@functools.lru_cache(maxsize=512)
+def _parsed_text(text: str) -> object:
+    return yaml_fast.safe_load(text)
+
+
 def _tasks(nodes: list) -> list[dict]:
     """Every task in a tasks file, the ones inside `block`, `rescue` and `always` included."""
     found = []
@@ -79,7 +94,7 @@ def include_vars(role_dir: Path) -> dict:
     """The `manifests_*` vars `role_dir`'s tasks pass to the `k8s/manifests` include that renders.
 
     That is the include with no `tasks_from`, or `tasks_from: main`. Another entry point, such
-    as configarr's `drain.yml` or pihole's `rollout_amend.yml`, renders nothing. The values are
+    as configarr's `drain.yml`, renders nothing. The values are
     read as written, so a Jinja value is still a string for the caller to resolve.
 
     Raises:
@@ -87,7 +102,7 @@ def include_vars(role_dir: Path) -> dict:
     """
     found = []
     for path in sorted((role_dir / "tasks").glob("*.yml")):
-        for task in _tasks(yaml_fast.safe_load(path.read_text())):
+        for task in _tasks(cast(list, _parsed(path))):
             for module in _INCLUDE_MODULES:
                 args = task.get(module)
                 if not isinstance(args, dict) or args.get("name") != "k8s/manifests":
@@ -125,7 +140,7 @@ def image_builder_sites(role_dir: Path) -> list[BuildSite]:
     """Every `k8s/image-builder` include in `role_dir`'s tasks files, in file order."""
     sites = []
     for path in sorted((role_dir / "tasks").glob("*.yml")):
-        for task in _tasks(yaml_fast.safe_load(path.read_text())):
+        for task in _tasks(cast(list, _parsed(path))):
             for module in _INCLUDE_MODULES:
                 args = task.get(module)
                 if isinstance(args, dict) and args.get("name") == "k8s/image-builder":
@@ -150,7 +165,7 @@ def set_fact_task(path: Path, fact: str) -> tuple[str, dict]:
     """
     found = [
         (task["ansible.builtin.set_fact"][fact], dict(task.get("vars") or {}))
-        for task in _tasks(yaml_fast.safe_load(path.read_text()))
+        for task in _tasks(cast(list, _parsed(path)))
         if fact in (task.get("ansible.builtin.set_fact") or {})
     ]
     if len(found) != 1:
@@ -183,9 +198,7 @@ def site_variables(site: BuildSite, ctx: dict) -> dict:
     image-builder's own defaults sit under the calling role's variables, and the include's
     `vars:` over both, with `playbook_dir` resolving to `ansible/`.
     """
-    defaults = yaml_fast.safe_load(
-        (IMAGE_BUILDER / "defaults" / "main.yml").read_text()
-    )
+    defaults = cast(dict, _parsed(IMAGE_BUILDER / "defaults" / "main.yml"))
     variables = {**defaults, **ctx, "playbook_dir": str(ANSIBLE)}
     env = renderer_env(IMAGE_BUILDER / "templates", variables)
     return {**variables, **_template_vars(env, site.vars, variables)}

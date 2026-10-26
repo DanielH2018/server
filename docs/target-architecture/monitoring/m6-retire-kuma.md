@@ -630,6 +630,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | B6b pod producers | crowdsec remote allowlist, AppSec verify and home allowlist (the `crowdsec-jobs` sidecar); `configarr-health` and `janitorr-health` (CronJobs) | Exporter for the sidecar, CronJob for the two (*B6b*) | Flux, through `promote` (`crowdsec`, `configarr`, `janitorr`, `observability`, `netpol-baseline`) | The operator ruled on 2026-10-23 that a pod exports through a metrics endpoint. The sidecar serves `homelab_check_*` on a new `crowdsec-jobs` scrape job. Each CronJob patches its verdict onto a ConfigMap it owns, which kube-state-metrics exports. | 5 |
 | B7 pods | autofix-bridge; cloudflare-ddns direct and proxied; pi-peer-backup | Exporter, CronJob, a Prometheus rule plus a LogQL rule | `land.sh` | See *B7*. | 4 |
 | B8 probes | the 14 hand-written monitors, plus one `tcp_connect` probe per Pi published port | M4 | `land.sh` | See *B8*. Cuts over the `pi_pressure` row. | 1 |
+| B9 integrity scans | the weekly AIDE check and rkhunter scan, one tile each per host (#6168) | M3 | the tick (initial_setup) on daniel-box; a hand on daniel-server and the Pi: `initial_setup.yml --tags "aide,rkhunter"`, the Pi's with `-e target=daniel-pi` (**operator-only**) | Both scripts call `write_check_textfile` as `aide-check` and `rkhunter-check`, with a `DEADLINE_S` equal to the tile's interval (626400s and 612000s). `host-checks.yaml` carries `AideCheckFailed`, `AideCheckNotReporting`, `RkhunterScanFailed` and `RkhunterScanNotReporting` for each host, in shadow, and `test_integrity_scan_rule_literals.py` pins the deadline literals. The shadow PR adds six `CheckWithoutPager` terms: `[348h10m]` for the AIDE tiles and `[340h10m]` for rkhunter. Cutover-1b drops `shadow`, and Cutover-1a deletes the six tiles and their tokens. | 6 |
 
 Phase A retires 77 push tokens: 41 from bridge rows and 36 from other producers. Phase C
 retires the 78th, `kuma_status_page_sync_push_token`, together with Kuma's three other
@@ -2477,6 +2478,20 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    `1792078185`, 6.4s after `process_start_time_seconds{job="prometheus"}` read
    `1792078178.57`. Its activation therefore reset at the last restart, so B-1 keeps the
    "age unknown" message.
+   **Recorded on 2026-10-25 (#5333): the value moves, so the message stays.** Prometheus
+   restarted at 07:42:40 UTC, and `process_start_time_seconds{job="prometheus"}` went from
+   `1792858430.65` to `1792914160.96`. `AideCheckNotReporting{origin="daniel-box"}` has no
+   `for:` and fired on both sides of the restart. Before it, an `@ 1792913500` query read its
+   `ALERTS_FOR_STATE` as `1792885066` (23:37:46 UTC on 2026-10-24), 7.4h after that process
+   started. After it, the value read `1792914226`, 65s after the new start. Every other alert
+   that fired across the restart reset the same way, the Watchdog from `1792858485` to
+   `1792914225`. None of those rules carries a `for:`. So the reading shows the reset for a
+   short-`for:` rule and says nothing about restoration for a `for:` longer than the grace
+   period. The pair for `AideCheckNotReporting{origin="daniel-box"}`:
+    - Before the restart: `ALERTS_FOR_STATE` `1792885066`, `process_start_time_seconds`
+      `1792858430.65`.
+    - After the restart: `ALERTS_FOR_STATE` `1792914226`, `process_start_time_seconds`
+      `1792914160.96`.
 10. **Owner of the `workload_log_errors` port** (M2 Open question 6). M5's text keeps
     `with_log_errors` and does not retire the row's token, and M2 names M6 as the fallback
     owner. Resolution: M6 owns it as A7. If M5's text adopts the port before A7's shadow PR,

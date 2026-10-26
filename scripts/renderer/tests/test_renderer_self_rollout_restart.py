@@ -149,7 +149,7 @@ def test_every_role_that_rolls_its_own_workloads_is_a_named_member():
 
 
 def test_a_self_rollout_is_a_target_whatever_its_restart_on_names(tmp_path):
-    """observability declares `restart_on: []`, and pihole-2 `rolled_by_role: true`."""
+    """observability declares `restart_on: []`, which narrows nothing for a self rollout."""
     (tmp_path / "fixture" / "tasks").mkdir(parents=True)
     (tmp_path / "fixture" / "tasks" / "main.yml").write_text(
         "- name: Deploy fixture\n"
@@ -159,11 +159,11 @@ def test_a_self_rollout_is_a_target_whatever_its_restart_on_names(tmp_path):
         "    manifests_rollout: ''\n"
         "    manifests_self_rollouts:\n"
         "      - { name: quiet, kind: deploy, restart_on: [] }\n"
-        "      - { name: marked, kind: deploy, rolled_by_role: true }\n"
+        "      - { name: secret_only, kind: deploy, restart_on: [secret] }\n"
     )
     both = frozenset({"ConfigMap", "Secret"})
     assert restart_targets("fixture", {}, roles=tmp_path) == {
-        "marked": both,
+        "secret_only": both,
         "quiet": both,
     }
 

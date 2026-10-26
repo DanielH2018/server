@@ -1,0 +1,14 @@
+{
+  "checksum": "e25c7f283403b301d16f0d8fd4403a40398867d59cc3104a5a0035aafa0ed2a2",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/builder/CLAUDE.md#The rollout gate (H3.12)",
+  "row": {
+    "atoms": {
+      "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86",
+      "hosts/lib/builder_rollout_gate.py": "d6c086fca9a78adb650d0050bf5c9d9a01e8d5c61ff901dc967f27771c24e76d",
+      "hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_two_prometheus_urls": "0a14176322c20ac86d13874d46c445a07de425884a644f33bbe8e91407e5fe20"
+    },
+    "python": "3.14",
+    "verified_sha": "a41b8b1bd"
+  }
+}

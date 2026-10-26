@@ -51,10 +51,12 @@ SCOPED_STEPS = frozenset(
 KNOWN_JOBS = frozenset(
     {
         "hooks",
+        "pr_gates",
         "ansible_lint",
         "pytest",
         "deck_mod",
         "sops_manifest_type_proof",
+        "host_packages_build",
         "host_packages",
         "prek",
         "renovate-config",

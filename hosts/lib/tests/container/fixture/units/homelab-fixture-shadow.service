@@ -1,0 +1,9 @@
+# The packaged copy of a unit an Ansible-era copy under /etc/systemd/system shadows (H7.41a).
+[Unit]
+Description=Fixture unit the packaged copy of which replaces its shadowing copy
+
+[Service]
+ExecStart=/usr/bin/sleep infinity
+
+[Install]
+WantedBy=multi-user.target

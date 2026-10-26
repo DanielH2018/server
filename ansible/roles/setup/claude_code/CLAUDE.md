@@ -1,7 +1,8 @@
 # `setup/claude_code` — Claude Code install + the Remote Control host
 
-Four things live here: the **install** (native installer, per-user, auto-updating),
+Five things live here: the **install** (native installer, per-user, auto-updating),
 **`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone,
+**`claude-bg-resume.service`**, which respawns the operator's background sessions at boot,
 **`claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to daniel-server,
 and **the artifacts node's two crons**, the peer artifact sync and the OTLP-door heartbeat.
 
@@ -57,6 +58,15 @@ directory.
   opaquely, check `gitops_deploy_discord_webhook` is in scope.
 - **It pages a login dead at start, not one that dies mid-run**, which leaves the host
   `active`. `docs/claude-code-rc-caps.md` has why (#4618).
+- **A timer that stops firing pages through a textfile, because `OnFailure=` sees only a failed
+  run** (#6165). The clone, dotfiles and memory syncs, the triage poller and the fan-out server
+  lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.
+  Observability's `host-checks.yaml` pages a stale file as `Claude<Check>NotReporting` on each
+  host that arms the timer. The deadline derives from the timer's period, which must stay
+  `<N>min`. ENFORCED: `ansible/tests/setup/test_claude_timer_rule_literals.py`. A timer's flag
+  set false makes its rule fire, so the PR that disarms a timer deletes its rule.
+  `claude-rc-restart` writes no file, and `ansible/tests/setup/test_setup_crons_write_a_textfile.py`
+  holds the reason in its `EXEMPT`.
 
 ## Traps already paid for
 
@@ -89,6 +99,50 @@ directory.
 `user.slice`, their shared parent; `claude_code_fleet_caps_enabled: false` removes both.
 `docs/claude-code-rc-caps.md` has the derivation. **The `Slice=` line takes effect at the next
 start**, so the deploy that changes it drops the RC host's sessions.
+
+## Background sessions come back at boot
+
+`claude-bg-resume.service` runs `files/bg_session_resume.py` once at boot as
+`claude_code_bg_resume_user` (the operator). Claude Code's background supervisor runs on demand,
+and nothing starts it at boot. After a reboot it shows each background session the shutdown
+killed as failed until someone attaches, replies or runs `claude respawn`. Until then the
+session has no process, so its Remote Control entry on the phone is dead. On 2026-10-25 the
+sessions waited five hours, until the operator ran `claude agents`.
+
+- **What it respawns:** each worker in `~/.claude/daemon/roster.json` that
+  `claude agents --json --all` lists as a background session with no `pid`. The roster holds
+  the workers the previous supervisor last recorded as running, so a session it had already
+  stopped for idling stays stopped. A roster older than 48 hours is skipped, matching
+  upstream's own prompt before it resumes a session that old.
+- **The script reads every candidate before the first respawn.** The first `claude respawn`
+  starts a supervisor, and that supervisor rewrites the roster with only its live workers.
+- **A respawned session keeps its Remote Control entry.** Its `bridgeSessionId` is kept in
+  the job's state, so the phone shows the same session rather than a new one.
+- **An interrupted turn may continue on its own.** Upstream says a session restarted after a
+  crash "is told it was restarted". Whether it then resumes mid-task work is not verified.
+- **`KillMode=process` and `RemainAfterExit=yes` are load-bearing.** The supervisor the script
+  starts lives in this unit's cgroup, under the fleet bound on `user.slice`, and hosts every
+  later dispatch until it idles out. Under the default kill the unit would take every
+  session down when it finished or stopped.
+- **The role enables the unit and never starts it.** Its job is the next boot.
+  `claude_code_bg_resume_enabled: false` stops, disables and removes it, and no session dies.
+  ENFORCED: `ansible/tests/setup/test_claude_bg_resume_unit.py`.
+- **To see what it would do,** run `uv run --no-project /usr/local/lib/claude-bg-resume/bg_session_resume.py
+  --claude ~/.local/bin/claude --dry-run`. On a running box it prints 0 sessions. After a boot,
+  `journalctl -b -u claude-bg-resume` shows what it respawned.
+
+What it does not restore:
+
+- **Sessions `claude-rc.service` spawned.** The host comes back by `Restart=always` and spawns
+  new sessions. `claude rc --session-id` cannot be combined with `--spawn`.
+- **Interactive sessions that ran `/remote-control`.** They end with their process. Resume one
+  with `claude --resume <id>`, then `/remote-control`.
+- **The login environment.** The unit sets `HOME`, `PATH`, `KUBECONFIG` and the pytest cap.
+  A respawned session has no `SSH_AUTH_SOCK`, D-Bus session or `XDG_RUNTIME_DIR`, because no
+  one is logged in at boot. `gh` reads its token from `~/.config/gh/hosts.yml`, so it works.
+- **Monitoring.** A failed run pages nothing; `systemctl status claude-bg-resume` shows it.
+  `claude-cgroup-metrics` reads `user-<uid>.slice` and `claude-rc.service`, so it does not
+  count the sessions in this unit's cgroup.
 
 ## The agent user
 
@@ -160,7 +214,8 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   stops the timer and removes its units.
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.
 - **Evidence:** `journalctl -u claude-memory-sync` lists each file a run changed or deleted;
-  a failure pages Discord.
+  a failure pages Discord, and `claude-memory-sync.prom` pages a timer that stopped. A run the
+  empty-index condition skips writes no file either, so an empty store pages too.
 
 ## Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
 
@@ -182,7 +237,7 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately, and a
   poller failure pages at most once an hour. In shadow
   mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u claude-triage-poll` list each
-  run the poller would have started.
+  run the poller would have started. `claude-triage-poll.prom` pages a poller that stopped.
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
   what the runs diagnosed and what they cost.
 
@@ -193,7 +248,10 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Mode:** the agent's `state` and `dotfiles`; off removes its `<name>-*-sync` units.
 - **Abort valve:** the clone sync skips unless the clone is a clean `master`; the dotfiles sync
   refuses a source without the agent variant.
-- **Evidence:** `journalctl -u <name>-{clone,dotfiles}-sync`; a failure pages Discord.
+- **Evidence:** `journalctl -u <name>-{clone,dotfiles}-sync`; a failure pages Discord, and
+  `<name>-{clone,dotfiles}-sync.prom` pages a timer that stopped. A clone left dirty or off
+  `master` skips with exit 0 and still writes its file, so the file says the timer runs, not
+  that the clone is current.
 
 ## Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)
 
@@ -233,7 +291,8 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   `homelab_awaiting_operator{reason}` and its `_oldest_seconds` twin to
   `/var/lib/node-exporter-textfile/fanout_operator_waits.prom`: the PRs and batches that wait
   on a person, and the owed manual-plane applies (`scripts/dev/fanout_lib/operator_waits.py`).
-  Disarming removes the file.
+  Disarming removes the file. Each clean run also writes `claude-fanout-server-lander.prom`,
+  which pages a timer that stopped.
 - **Next-run review:** before raising the pace cap or widening the rule, read a week of
   `ineligible` reasons and the verdicts of the landings it started.
 
@@ -265,3 +324,65 @@ only, where `claude_code_takeover_check_enabled` is true.
   role removes the sudoers file, the wrapper, the flux copy and the state directory, in that
   order.
 - **To widen who holds it,** add to `claude_code_takeover_check_users`; one line per user.
+
+## The root inspector
+
+`rootq` reads root-only host state for a session that has no general sudo. It runs
+`/usr/local/sbin/homelab-rootq` (`files/homelab_rootq.py`) as root, behind one `NOPASSWD`
+line in `/etc/sudoers.d/claude-rootq` (issue #6323). The operator approved the shape on
+2026-10-25 and reviews the grant before it lands. It exists where `claude_code_rootq_enabled`
+is true: daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
+only, where fan-out batches and the operator's sessions run. The agent user stays without
+sudo: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297), and
+`NoNewPrivileges=yes` in `claude-rc.service` stops sudo there anyway. The four files that
+decide what the grant reaches are on the lander's approval list.
+
+Everything rootq accepts is an explicit allowlist, and anything not listed is refused. The
+list is deliberately minimal: the files and sources #6323's sessions needed. It grows only when
+a need appears.
+
+- **Tier 1 prints no file content.** `stat PATH` prints mode, type, owner, group, size and
+  mtime. `sha256 PATH` prints the hash. `matches PATH REPO_FILE` exits 0 when the live file is
+  byte-identical to REPO_FILE in the caller's checkout, and 1 when it differs. The shim
+  (`files/rootq.sh`) hashes REPO_FILE as the caller and passes only the hash. Root therefore
+  receives `matches PATH HEX` and never opens a caller-named file. The shim refuses a REPO_FILE
+  that is absolute, holds `..`, or resolves outside the checkout. It also takes the 64-hex
+  SHA-256 in place of REPO_FILE and passes it on as it is, which gains the caller nothing a
+  file in a checkout could not. `probe.py applied` asks that way, on hosts with no checkout,
+  for each installed file it cannot stat or open, and uses only `stat` and `matches` (#6357).
+- **Tier 2 prints, from fixed sources only:** `nft list ruleset`, `ufw status verbose`,
+  `sshd -T`, `crontab -l -u root`, and `cat` of `/etc/netplan/*.yaml`. Every argv is written
+  in `ansible/roles/setup/claude_code/files/homelab_rootq.py:COMMANDS`, and no caller flag
+  reaches any of them. There is no general `cat`.
+- **Which paths:** `ansible/roles/setup/claude_code/files/homelab_rootq.py:PATHS` lists the
+  files tier 1 takes, as a directory plus a glob over one file name, and `CAT` lists the ones
+  tier 2 prints. A path must resolve to itself, so a symlink, `..` or `//` is refused. Every
+  directory above it must be root-owned and writable by root alone. It must also miss every
+  pattern in `DENY`, an independent second layer. `/var/lib/gitops-deploy` is not listed,
+  because `sys_user` owns it and the caller already reads it.
+- **A DENY path answers `stat` alone, and only when `PATHS` names it.** The operator ruled
+  this on 2026-10-26 (#6369). `stat` of such a path prints its mode, type, owner and group,
+  plus `deny=yes`. It never prints size or mtime, because a size gives away a secret's
+  length. A missing one is refused as "does not exist". `cat`, `sha256` and `matches` still
+  refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
+  before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
+  it exists or not. The one DENY entry in `PATHS` is the exact path
+  `/etc/claude-rc/alert-webhook.env`. homelab-ui's `credentials.json` sits in the agent
+  user's home, which root does not own, so rootq cannot stat it. `probe.py applied` reports it
+  `UNCHECKED`.
+- **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a
+  webhook URL, is withheld whole. The rest is redacted by default. A value prints only when it
+  matches one of the token classes the script defines in one block, such as a number of up to
+  seven digits, a duration, an address, a port, an interface name, a path under a standard
+  root, or a keyword of the printing program's grammar. Under a key whose name could name a
+  credential, such as `pass`, `pin`, `auth`, `key` or `token`, the value is always replaced,
+  digits included. A crontab command keeps its binary, flag names and paths, and every other
+  argument becomes `<arg>`. A line with no key, list or cron structure becomes `<line>`.
+  Output stops at 256 KiB.
+- **To expand it:** a new tier-1 path needs a `PATHS` entry, a must-pass case and a
+  must-refuse neighbour case in `tests/test_rootq.py`: a sibling the new entry still does not
+  admit. A new tier-2 source also needs a structural argument, written at `CAT` or `COMMANDS`,
+  for why the filter redacts its grammar cleanly, with must-pass and must-redact cases in
+  `tests/test_rootq_redaction.py`.
+- **To take it back:** set `claude_code_rootq_enabled: false` and apply the role. The role
+  removes the sudoers file, the shim and the script, in that order.

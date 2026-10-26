@@ -69,16 +69,13 @@ def test_broad_remediation_uses_the_roles_real_tag():
 
 
 def test_broad_remediation_for_a_role_no_playbook_includes_names_its_consumers():
-    """setup/common is read by two roles on two hosts and applied by no playbook of its own."""
+    """setup/common is applied by no playbook of its own; k3s renders its resolver since H7.25."""
     cmd = broad_remediation(False, True, {"common"})
     assert "applied by no playbook of its own" in cmd
     assert (
         "`uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s` (WARNING:" in cmd
     )
-    assert (
-        "`uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`"
-        in cmd
-    )
+    assert "optimize_pi" not in cmd
 
 
 def test_a_role_gated_off_the_tick_host_goes_to_manual_plane_with_its_target():

@@ -14,6 +14,7 @@ Run: uv run pytest scripts/dev/tests/test_new_k8s_service.py
 
 import pytest
 
+import gen_role_glance
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 from lib.k8s_roles import (
@@ -118,6 +119,18 @@ def test_the_generated_deployment_renders_and_pins_a_uid(args, tmp_path):
     assert container["ports"][0]["containerPort"] == 8080
 
 
+def test_the_generated_container_pulls_if_not_present(args, tmp_path):
+    """A digest-pinned image must not re-pull on restart: the image row refuses it (#6136)."""
+    text = scaffold.deployment_template(args.name, args.strategy, args.priority_class)
+    doc = next(
+        d
+        for d in _render(tmp_path, text, args.name, args.port, _defaults(args))
+        if d["kind"] == "Deployment"
+    )
+    container = doc["spec"]["template"]["spec"]["containers"][0]
+    assert container.get("imagePullPolicy") == "IfNotPresent"
+
+
 def _entry(args) -> dict:
     return yaml_fast.safe_load(
         scaffold.entry_lines(
@@ -146,6 +159,12 @@ def test_the_doc_leaves_the_glance_facts_to_the_generator(args):
     assert "ingressroute-default.yaml.j2" in prose
     unrouted = scaffold.role_doc(args.name, route=False)
     assert "ingressroute-default.yaml.j2" not in unrouted
+
+
+def test_the_doc_opens_its_block_with_the_generators_banner(args):
+    """A banner the generator would rewrite fails the role's first commit once."""
+    doc = scaffold.role_doc(args.name, route=True)
+    assert gen_role_glance.BEGIN in doc.splitlines()
 
 
 def test_the_entry_earns_the_shared_defaults_without_a_template(args, tmp_path):

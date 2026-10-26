@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-10-24 14:25 UTC
-generated_sha: 409537e7c
+generated_at: 2026-10-25 18:17 UTC
+generated_sha: 341de7656
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 409537e7c
 
 # Scheduled jobs
 
-29 cron entrie(s) installed across the roles.
+22 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -23,24 +23,17 @@ generated_sha: 409537e7c
 | B2 deletion accounting | `10 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Claude Code telemetry health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/claude_code/tasks/node_crons.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Clear ansible log file | `0 6 * * 0` | conditional (has_repo_checkout) | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Full etcd restore drill in a throwaway guest | `20 11 1 * *` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/hypervisor/tasks/etcd_drill.yml` |
-| Homelab eval sweep | `0 2 * * 0` | daniel-box | `ubuntu` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Longhorn backup health | `*/10 * * * *` | every host in the play | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn filesystem trim | `10 6 * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Off-box etcd snapshot | `45 2 * * *` | every host in the play | `root` | yes (snapshot) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Refresh generated docs | `17 6,18 * * *` | daniel-box | `ubuntu` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Refresh homelab infrastructure map | `*/15 * * * *` | daniel-box | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Release staleness drift check | `*/30 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Sync peer Claude artifacts | `*/5 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/claude_code/tasks/node_crons.yml` |
-| UPS secondary watchdog | `*/10 * * * *` | conditional (nut_host_watchdog_armed \| bool) | `root` | read the script | `ansible/roles/setup/nut_host/tasks/main.yml` |
 | Weekly AIDE file integrity check | `0 3 * * 1` | every host in the play | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly apt autoremove | `0 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
 | Weekly dpkg purge orphaned configs | `15 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
 | Weekly firmware update | `0 7 * * 0` | conditional (initial_setup_fwupdmgr.stat.exists) | `root` | yes (reboot) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Weekly git object-store repair | `20 4 * * 0` | daniel-box | `ubuntu` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Weekly rkhunter malware scan | `0 2 * * 3` | every host in the play | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
-| Weekly secret rotation (auto tier) | `0 9 * * 0` | the gitops host | `ubuntu` | yes (rotate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Weekly system restart | `30 7 * * 0` | every host in the play | `root` | yes (reboot, restart) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | daniel-box disk health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | etcd restore drill | `20 10 * * 1` | conditional (has_repo_checkout) | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |

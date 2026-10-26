@@ -116,8 +116,13 @@ the `gh` census and the return path:
 
 ```bash
 RENOVATE_AGENT_CONFIG=/tmp/agent-test.env \
+  PYTHONPATH=hosts/lib:ansible/roles/setup/gitops_deploy/files \
   uv run python ansible/roles/setup/renovate_agent/files/renovate_agent.py
 ```
+
+The `PYTHONPATH` stands in for the deploy-time copy. The role's `tasks/code.yml` installs
+`host_lib.py` from `hosts/lib/` and the `gitops_*` modules from `gitops_deploy/files/` beside
+the script in `/opt/renovate-agent/`, so a run from the repo cannot import them without it.
 
 The override exists for exactly this. Without it the first armed tick would be the first time this
 code ever ran.

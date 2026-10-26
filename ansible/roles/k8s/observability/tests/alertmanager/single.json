@@ -1,0 +1,25 @@
+{
+  "receiver": "discord",
+  "status": "firing",
+  "groupLabels": {"alertname": "HostReconcileFailed", "service": "daniel-server"},
+  "commonLabels": {"alertname": "HostReconcileFailed", "service": "daniel-server", "severity": "critical"},
+  "commonAnnotations": {
+    "summary": "daniel-server's homelab package reconcile failed, so it installs no newer package.",
+    "description": "homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes. Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-server.",
+    "runbook_url": "https://docs.local.example.com/host-packages/"
+  },
+  "externalURL": "http://alertmanager.observability:9093",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {"alertname": "HostReconcileFailed", "service": "daniel-server", "severity": "critical"},
+      "annotations": {
+        "summary": "daniel-server's homelab package reconcile failed, so it installs no newer package.",
+        "description": "homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes. Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-server.",
+        "runbook_url": "https://docs.local.example.com/host-packages/"
+      },
+      "startsAt": "2026-10-24T14:03:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    }
+  ]
+}

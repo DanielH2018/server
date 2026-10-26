@@ -306,10 +306,286 @@ groups:
             `up` series at all. Kuma still pages every check that has not moved to an alert rule, so
             a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get pods` and the
             pod's log.
+      # M6 BATCH B9, SHADOW UNTIL ITS CUTOVER-1B (#6168). The weekly AIDE and rkhunter scans run on
+      # every host and write the textfile beside their Kuma push, and the "AIDE Integrity" and
+      # "rkhunter Scan" tiles page the same verdicts. Each host gets the DiskHealth pair for each
+      # scan. A NotReporting rule's two literals equal the DEADLINE_S its script renders, which
+      # equals the tile's interval: ansible/tests/setup/test_integrity_scan_rule_literals.py
+      # pins all three. daniel-pi's rules read the `node-pi` job. Every tile notifies Discord
+      # only, so the rules are `warning`. Each NotReporting rule fires from its deploy until the
+      # scan's first run writes the file, up to a week, which pages nobody while it is shadow.
+      - alert: AideCheckFailed
+        expr: homelab_check_success{check="aide-check",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's weekly AIDE check did not complete.
+          description: >-
+            aide-check.sh on daniel-box ended with status=down: AIDE exited with an error and
+            checked nothing, or the previous week's run still held the lock. Differences from
+            the baseline read up. Run `journalctl -t aide-check` and `journalctl -t aide` on
+            daniel-box.
+      - alert: AideCheckNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="aide-check",origin="daniel-box"} > 626400
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="aide-check",origin="daniel-box"}[626400s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's weekly AIDE check has stopped reporting.
+          description: >-
+            No aide-check verdict newer than 626400s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the file-integrity scan still runs. Read the
+            `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+            /var/lib/node-exporter-textfile/aide-check.prom on the host.
+      - alert: AideCheckFailed
+        expr: homelab_check_success{check="aide-check",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's weekly AIDE check did not complete.
+          description: >-
+            aide-check.sh on daniel-server ended with status=down: AIDE exited with an error and
+            checked nothing, or the previous week's run still held the lock. Differences from
+            the baseline read up. Run `journalctl -t aide-check` and `journalctl -t aide` on
+            daniel-server.
+      - alert: AideCheckNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="aide-check",origin="daniel-server"} > 626400
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="aide-check",origin="daniel-server"}[626400s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's weekly AIDE check has stopped reporting.
+          description: >-
+            No aide-check verdict newer than 626400s reached Prometheus from daniel-server's
+            textfile collector, so nothing confirms the file-integrity scan still runs. Read the
+            `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+            /var/lib/node-exporter-textfile/aide-check.prom on the host.
+      - alert: AideCheckFailed
+        expr: homelab_check_success{check="aide-check",origin="daniel-pi"} == 0
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's weekly AIDE check did not complete.
+          description: >-
+            aide-check.sh on daniel-pi ended with status=down: AIDE exited with an error and
+            checked nothing, or the previous week's run still held the lock. Differences from
+            the baseline read up. Run `journalctl -t aide-check` and `journalctl -t aide` on
+            daniel-pi.
+      - alert: AideCheckNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="aide-check",origin="daniel-pi"} > 626400
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="aide-check",origin="daniel-pi"}[626400s])
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's weekly AIDE check has stopped reporting.
+          description: >-
+            No aide-check verdict newer than 626400s reached Prometheus from daniel-pi's
+            textfile collector, so nothing confirms the file-integrity scan still runs. Read the
+            `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+            /var/lib/node-exporter-textfile/aide-check.prom on the host.
+      - alert: RkhunterScanFailed
+        expr: homelab_check_success{check="rkhunter-check",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's weekly rkhunter scan warned or did not complete.
+          description: >-
+            rkhunter-check.sh on daniel-box ended with status=down: rkhunter raised a warning, a
+            suspect file or a possible rootkit, or the scan wrote no summary. An account change
+            clears when the script is run again by hand. Read /var/log/rkhunter.log and
+            `journalctl -t rkhunter-check` on daniel-box.
+      - alert: RkhunterScanNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="rkhunter-check",origin="daniel-box"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="rkhunter-check",origin="daniel-box"}[612000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+          shadow: "true"
+        annotations:
+          summary: daniel-box's weekly rkhunter scan has stopped reporting.
+          description: >-
+            No rkhunter-check verdict newer than 612000s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the malware scan still runs. Read the
+            `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`, then
+            /var/lib/node-exporter-textfile/rkhunter-check.prom on the host.
+      - alert: RkhunterScanFailed
+        expr: homelab_check_success{check="rkhunter-check",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's weekly rkhunter scan warned or did not complete.
+          description: >-
+            rkhunter-check.sh on daniel-server ended with status=down: rkhunter raised a
+            warning, a suspect file or a possible rootkit, or the scan wrote no summary. An
+            account change clears when the script is run again by hand. Read
+            /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-server.
+      - alert: RkhunterScanNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="rkhunter-check",origin="daniel-server"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="rkhunter-check",origin="daniel-server"}[612000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+          shadow: "true"
+        annotations:
+          summary: daniel-server's weekly rkhunter scan has stopped reporting.
+          description: >-
+            No rkhunter-check verdict newer than 612000s reached Prometheus from daniel-server's
+            textfile collector, so nothing confirms the malware scan still runs. Read the
+            `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`, then
+            /var/lib/node-exporter-textfile/rkhunter-check.prom on the host.
+      - alert: RkhunterScanFailed
+        expr: homelab_check_success{check="rkhunter-check",origin="daniel-pi"} == 0
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's weekly rkhunter scan warned or did not complete.
+          description: >-
+            rkhunter-check.sh on daniel-pi ended with status=down: rkhunter raised a warning, a
+            suspect file or a possible rootkit, or the scan wrote no summary. An account change
+            clears when the script is run again by hand. Read /var/log/rkhunter.log and
+            `journalctl -t rkhunter-check` on daniel-pi.
+      - alert: RkhunterScanNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="rkhunter-check",origin="daniel-pi"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="rkhunter-check",origin="daniel-pi"}[612000s])
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's weekly rkhunter scan has stopped reporting.
+          description: >-
+            No rkhunter-check verdict newer than 612000s reached Prometheus from daniel-pi's
+            textfile collector, so nothing confirms the malware scan still runs. Read the
+            `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`, then
+            /var/lib/node-exporter-textfile/rkhunter-check.prom on the host.
+      # The catch-all deadman (#6166), one rule per host so `service` stays a literal. It reads
+      # each check's own homelab_check_deadline_seconds, so a producer that writes the textfile
+      # is covered the day it ships, before anyone writes its NotReporting pair. It is the
+      # backstop, never the rule a check relies on, for two reasons the per-check literals keep:
+      # it cannot carry an absent_over_time arm, because only a check's name says which series
+      # should exist, and a file that loses its deadline series silently drops out of it, which
+      # is why M3 keeps the deadline out of every rule's verdict
+      # (docs/target-architecture/monitoring/m3-textfile-timer.md, "Three series"). Both sides
+      # are restricted to the node jobs, because the pod exporters' rules in pods.yaml and
+      # pod-producers.yaml already compare against the deadline. It fires beside every per-check
+      # NotReporting rule's stale arm, at the same threshold, so an Alertmanager inhibit keyed on
+      # `check` and `origin` (alertmanager-secret.yaml.j2) mutes it wherever a pair exists. It
+      # pages alone only for a producer with no pair (#6186), and so it carries no `shadow`.
+      # The `for: 2m` lets the pair fire first. Most pairs sit in another group, which Prometheus
+      # evaluates at its own offset inside the 1m evaluation interval, so a pair can start up to
+      # a minute after this rule crosses. Without the hold, this rule's page would flush after
+      # group_wait, before the inhibit's source exists.
+      - alert: HostCheckOverdue
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{job="node",origin="daniel-box"}
+            > on (check, origin)
+              homelab_check_deadline_seconds{job="node",origin="daniel-box"}
+          )
+          unless on (origin) (up{job="node"} == 0)
+        for: 2m
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's {{ $labels.check }} check is past its own deadline.
+          description: >-
+            The {{ $labels.check }} textfile on daniel-box holds a verdict older than the
+            homelab_check_deadline_seconds it declares, so its producer stopped writing. Read
+            /var/lib/node-exporter-textfile/{{ $labels.check }}.prom on the host, then the
+            journal of the cron or timer that writes it.
+      - alert: HostCheckOverdue
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{job="node",origin="daniel-server"}
+            > on (check, origin)
+              homelab_check_deadline_seconds{job="node",origin="daniel-server"}
+          )
+          unless on (origin) (up{job="node"} == 0)
+        for: 2m
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's {{ $labels.check }} check is past its own deadline.
+          description: >-
+            The {{ $labels.check }} textfile on daniel-server holds a verdict older than the
+            homelab_check_deadline_seconds it declares, so its producer stopped writing. Read
+            /var/lib/node-exporter-textfile/{{ $labels.check }}.prom on the host, then the
+            journal of the cron or timer that writes it.
+      - alert: HostCheckOverdue
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{job="node-pi",origin="daniel-pi"}
+            > on (check, origin)
+              homelab_check_deadline_seconds{job="node-pi",origin="daniel-pi"}
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        for: 2m
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's {{ $labels.check }} check is past its own deadline.
+          description: >-
+            The {{ $labels.check }} textfile on daniel-pi holds a verdict older than the
+            homelab_check_deadline_seconds it declares, so its producer stopped writing. Read
+            /var/lib/node-exporter-textfile/{{ $labels.check }}.prom on the host, then the
+            journal of the cron or timer that writes it.
       # SHADOW UNTIL M6's BATCH A1. A malformed claude_cgroup.prom already pages through
       # check_mem's cgroup arm, and a malformed disk-health.prom through DiskHealthNotReporting,
       # so a paging collector alert would page twice for one cause. Until A1 its value is the
-      # diagnosis it leaves in ALERTS. One rule per k3s node, so `service` stays a literal.
+      # diagnosis it leaves in ALERTS. One rule per host whose node_exporter runs the textfile
+# collector, so `service` stays a literal: the two k3s nodes, and daniel-pi, whose host unit
+# reads the same directory (optimize_pi/templates/node_exporter.service.j2, #6166).
       - alert: TextfileCollectorError
         expr: node_textfile_scrape_error{origin="daniel-box"} == 1
         for: 10m
@@ -338,6 +614,20 @@ groups:
             a file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
             series in it is gone. Read node_textfile_mtime_seconds for the files it still sees,
             and the node-exporter pod's log.
+      - alert: TextfileCollectorError
+        expr: node_textfile_scrape_error{origin="daniel-pi"} == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: node_exporter on daniel-pi cannot read a textfile.
+          description: >-
+            node_exporter's textfile collector on daniel-pi has failed for 10 minutes, so a
+            file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
+            series in it is gone. Read node_textfile_mtime_seconds for the files it still sees,
+            and `journalctl -u node_exporter` on daniel-pi.
       # A replaced Longhorn instance-manager leaves the iSCSI sessions it served in the kernel,
       # FREE with a failed connection, and the next attach of such a volume on that node loops
       # (#5826). The node-exporter DaemonSet's `iscsi-sessions` sidecar writes one
@@ -409,6 +699,149 @@ groups:
             No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-server's
             textfile collector, so nothing is watching the node's iSCSI sessions. Read the
             log of the node-exporter pod's `iscsi-sessions` container on daniel-server.
+      # The claude_code timers (#6165). Each service writes its file from an ExecStartPost=, which
+      # systemd runs only after a clean ExecStart=, so the file only ever says success 1 and these
+      # rules have no Failed twin: OnFailure= pages a crash at once, and NotReporting catches a
+      # timer that stopped firing, which pages nothing else. Not shadow, because no Kuma tile
+      # watches these timers. One rule per host whose host_vars arm the timer. Setting the
+      # timer's flag false stops it, and the rule then fires on purpose: delete the rule in the
+      # same PR. Each deadline is the one the service renders through
+      # roles/setup/claude_code/templates/timer-textfile.j2, and
+      # ansible/tests/setup/test_claude_timer_rule_literals.py pins both literals to it.
+      - alert: ClaudeCloneSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="daniel-box"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="daniel-box"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The agent clone sync on daniel-box has stopped reporting.
+          description: >-
+            No claude-clone-sync verdict newer than 2100s reached Prometheus from daniel-box's textfile
+            collector, so the agent's clone fast-forward has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on daniel-box. If `claude_code_agent_user_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeCloneSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="daniel-server"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-clone-sync",origin="daniel-server"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The agent clone sync on daniel-server has stopped reporting.
+          description: >-
+            No claude-clone-sync verdict newer than 2100s reached Prometheus from daniel-server's textfile
+            collector, so the agent's clone fast-forward has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on daniel-server. If `claude_code_agent_user_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeDotfilesSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="daniel-box"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="daniel-box"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The agent dotfiles sync on daniel-box has stopped reporting.
+          description: >-
+            No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from daniel-box's textfile
+            collector, so the agent's dotfiles apply has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync` on daniel-box. If `claude_code_agent_dotfiles` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeDotfilesSyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="daniel-server"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-sync",origin="daniel-server"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The agent dotfiles sync on daniel-server has stopped reporting.
+          description: >-
+            No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from daniel-server's textfile
+            collector, so the agent's dotfiles apply has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync` on daniel-server. If `claude_code_agent_dotfiles` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeMemorySyncNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-memory-sync",origin="daniel-box"} > 2100
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-memory-sync",origin="daniel-box"}[2100s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The Claude memory sync from daniel-box has stopped reporting.
+          description: >-
+            No claude-memory-sync verdict newer than 2100s reached Prometheus from daniel-box's textfile
+            collector, so the memory store copy to daniel-server has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-memory-sync.timer` and `journalctl -u claude-memory-sync` on daniel-box. If `claude_code_memory_sync_enabled` was set false on purpose,
+            delete this rule. A run the ExecCondition skips, because daniel-box's MEMORY.md is
+            empty, writes nothing either, and an empty store is not a healthy state.
+      - alert: ClaudeTriagePollNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="daniel-box"} > 660
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="daniel-box"}[660s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The triage poller on daniel-box has stopped reporting.
+          description: >-
+            No claude-triage-poll verdict newer than 660s reached Prometheus from daniel-box's textfile
+            collector, so the monitor triage poll has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-triage-poll.timer` and `journalctl -u claude-triage-poll` on daniel-box. If `claude_code_triage_enabled` was set false on purpose,
+            delete this rule.
+      - alert: ClaudeFanoutLanderNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-fanout-server-lander",origin="daniel-box"} > 3300
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-fanout-server-lander",origin="daniel-box"}[3300s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The fan-out server lander on daniel-box has stopped reporting.
+          description: >-
+            No claude-fanout-server-lander verdict newer than 3300s reached Prometheus from daniel-box's textfile
+            collector, so the fan-out server lander has not completed a clean run: the timer stopped firing, or
+            every run since failed and OnFailure has posted to Discord. Read `systemctl status
+            claude-fanout-server-lander.timer` and `journalctl -u claude-fanout-server-lander` on daniel-box. If `claude_code_fanout_server_lander_enabled` was set false on purpose,
+            delete this rule.
       # One rule per k3s node whose host_vars set k3s_node_static_link, reading that link. Each
       # such node falls back to WiFi when the link drops (docs/k3s-node-plane-crons-and-incidents.md),
       # so it stays Ready on a slower link and nothing else reports it. The carrier arm catches
@@ -504,6 +937,128 @@ groups:
             reconcile and clears the hold if it passes, and `sudo
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
+      # The Pi's Compose project (H5). compose-run writes homelab_compose_up_result each time
+      # homelab-reconcile starts homelab-compose.service, and a failed `up --wait` writes 0. The
+      # Pi's recovery heartbeat pages the same 0 through its Kuma tile, so this rule is SHADOW
+      # until that arm retires (h5-pi-compose.md, open question 5, "M1"). ComposeUpStale below
+      # is its stale-time twin.
+      - alert: ComposeUpFailed
+        expr: homelab_compose_up_result{origin="daniel-pi"} == 0
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: The Pi's last Compose run did not bring the project up.
+          description: >-
+            compose-run on daniel-pi wrote homelab_compose_up_result 0 at package
+            {{ $labels.sha }}: a key check, the config check, an image pull, compose-adopt or
+            `docker compose up --wait` failed. Read `journalctl -u homelab-compose` and
+            `docker ps -a` on daniel-pi.
+      # No schedule bounds the age of the compose result: reconcile restarts the unit only when
+      # its file changes, so a quiet week leaves the timestamp a week old (#6187). Boot does
+      # bound it. The unit is enabled for multi-user.target, so every boot runs compose-run
+      # once, and TimeoutStartSec caps that run. A timestamp older than node_boot_time_seconds,
+      # once the boot is older than the cap, means the boot run never wrote: the unit was
+      # masked, systemd killed the run at its timeout, or the write failed. The second arm
+      # catches a file that is gone. Both arms need node_boot_time_seconds, which goes stale
+      # with every failed scrape, so a dead exporter leaves this quiet for ScrapeTargetDown.
+      #
+      # 1690s is the TimeoutStartSec that homelab-compose.service renders from the Pi's
+      # healthcheck variables, 1390s, plus 300s for boot to reach the unit and for one scrape.
+      # The boot run of 2026-10-25 wrote 94s after boot. Both literals are pinned to the
+      # rendered unit by hosts/lib/tests/test_pi_compose_unit.py.
+      - alert: ComposeUpStale
+        expr: |
+          (
+              homelab_compose_up_timestamp_seconds{origin="daniel-pi"}
+              < on (origin) group_left node_boot_time_seconds{origin="daniel-pi"}
+            or
+              absent_over_time(homelab_compose_up_timestamp_seconds{origin="daniel-pi"}[1690s])
+          )
+          and on (origin)
+            time() - node_boot_time_seconds{origin="daniel-pi"} > 1690
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: The Pi's Compose project has not run since daniel-pi booted.
+          description: >-
+            daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
+            still predates that boot or is missing, so the boot's compose-run never wrote its
+            result. The unit is masked or disabled, systemd killed the run at its
+            TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
+            failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+            homelab-compose` on daniel-pi.
+      # One rule per inventory host, so `service` stays a literal (#6166). Reconcile writes
+      # homelab_host_reboot_pending 1 when a package change needs a reboot, and the weekly
+      # reboot is what applies it. homelab_host_reboot_pending_since_seconds is when the host
+      # first owed that reboot, the flag's mtime, which a later change never moves. The age is
+      # read from it rather than from the file's mtime, because every later package change
+      # rewrites the file. The `> node_boot_time_seconds` arm drops a 1 left in the file from
+      # before the last boot: the updater runs reconcile only when a package changes, so the
+      # file can outlive the boot that cleared the flag. 691200s is 8 days, a weekly reboot
+      # slot plus a day.
+      - alert: HostRebootOverdue
+        expr: |
+          (
+              homelab_host_reboot_pending{origin="daniel-box"} == 1
+            and on (origin)
+              homelab_host_reboot_pending_since_seconds{origin="daniel-box"}
+              > on (origin) node_boot_time_seconds{origin="daniel-box"}
+            and on (origin)
+              time() - homelab_host_reboot_pending_since_seconds{origin="daniel-box"} > 691200
+          )
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box has owed a reboot for more than 8 days.
+          description: >-
+            Reconcile recorded a reboot-class package change on daniel-box more than 8 days
+            ago, and the host has not booted since, so the weekly reboot did not run or was
+            refused. Read `journalctl -t weekly-restart` on daniel-box and docs/host-packages.md,
+            "Reboot-pending and activation-pending", then reboot the host.
+      - alert: HostRebootOverdue
+        expr: |
+          (
+              homelab_host_reboot_pending{origin="daniel-server"} == 1
+            and on (origin)
+              homelab_host_reboot_pending_since_seconds{origin="daniel-server"}
+              > on (origin) node_boot_time_seconds{origin="daniel-server"}
+            and on (origin)
+              time() - homelab_host_reboot_pending_since_seconds{origin="daniel-server"} > 691200
+          )
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server has owed a reboot for more than 8 days.
+          description: >-
+            Reconcile recorded a reboot-class package change on daniel-server more than 8 days
+            ago, and the host has not booted since, so the weekly reboot did not run or was
+            refused. Read `journalctl -t weekly-restart` on daniel-server and docs/host-packages.md,
+            "Reboot-pending and activation-pending", then reboot the host.
+      - alert: HostRebootOverdue
+        expr: |
+          (
+              homelab_host_reboot_pending{origin="daniel-pi"} == 1
+            and on (origin)
+              homelab_host_reboot_pending_since_seconds{origin="daniel-pi"}
+              > on (origin) node_boot_time_seconds{origin="daniel-pi"}
+            and on (origin)
+              time() - homelab_host_reboot_pending_since_seconds{origin="daniel-pi"} > 691200
+          )
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi has owed a reboot for more than 8 days.
+          description: >-
+            Reconcile recorded a reboot-class package change on daniel-pi more than 8 days
+            ago, and the host has not booted since, so the weekly reboot did not run or was
+            refused. Read `journalctl -t weekly-restart` on daniel-pi and docs/host-packages.md,
+            "Reboot-pending and activation-pending", then reboot the host.
       # SHADOW UNTIL #5658's ruling on unattended launches decides whether idle slots page
       # anyone (#5672). No batch ran for 16.4h on the night of 2026-10-13 while 9 filed issues
       # waited, and nothing said so. The server lander writes findings_issues from issue labels

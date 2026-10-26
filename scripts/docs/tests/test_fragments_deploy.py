@@ -94,6 +94,15 @@ def test_tree_lock_holders_lists_a_cron_unit_and_the_wrapper_and_skips_a_bystand
     ]
 
 
+def test_tree_lock_holders_finds_a_cron_script_shipped_in_a_host_component(tmp_path):
+    root = _lock_tree(tmp_path, cron_body="echo none\n", unit_exec=_UNIT_WITH_LOCK)
+    component = root / fd.HOST_COMPONENTS / "nightly-sweep" / "templates"
+    component.mkdir(parents=True)
+    (component / "sweep.sh.j2").write_text(_CRON_WITH_LOCK.replace("nightly", "sweep"))
+    holder = next(h for h in fd.tree_lock_holders(root) if h["job"] == "sweep")
+    assert holder["source"] == "hosts/components/nightly-sweep/templates/sweep.sh.j2"
+
+
 def test_tree_lock_holders_skips_a_unit_that_does_not_wrap_flock(tmp_path):
     root = _lock_tree(
         tmp_path,

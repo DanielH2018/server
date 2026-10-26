@@ -134,9 +134,18 @@ def test_no_ansible_edit_touches_a_line_a_host_package_declares():
 
 
 @pytest.mark.parametrize("host", HOSTS)
-def test_the_ansible_side_finds_the_hardening_key_initial_setup_sets(host):
-    ansible, _ = _tree()
-    assert ("sysctl", "net.core.bpf_jit_harden") in ansible[host]
+def test_the_ansible_side_skips_the_hardening_key_on_a_host_whose_package_owns_it(host):
+    # Since H7.29 every host's package owns the key, so no host has an Ansible-owned hardening key.
+    ansible, packages = _tree()
+    assert ("sysctl", "net.core.bpf_jit_harden") not in ansible[host]
+    assert ("sysctl", "net.core.bpf_jit_harden") in packages[host]
+
+
+def test_the_ansible_side_finds_the_hardening_task_where_no_map_guards_it(tmp_path):
+    # Red proof for the test above: with the guard removed, the same task is found on every host.
+    task = SYSCTL_TASK.replace("vm.swappiness", "net.core.bpf_jit_harden")
+    ansible, _ = _fixture(tmp_path, task)
+    assert all(("sysctl", "net.core.bpf_jit_harden") in ansible[h] for h in HOSTS)
 
 
 def test_the_ansible_side_finds_a_lineinfile_task_by_its_path():

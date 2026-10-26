@@ -7,6 +7,7 @@ render, so the fixtures below stand in for both; the operator adds the real ones
 
 import json
 import re
+import shutil
 
 import jinja2
 import pytest
@@ -18,6 +19,20 @@ from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_sources import lib_source
 
+# Every key the daniel-box package names: a credential outside secrets.yml fails the render.
+_KEYS = (
+    "k3s_readonly_token: x\n"
+    "docs_refresh_push_token: x\n"
+    "homelab_eval_push_token: x\n"
+    "anthropic_api_key: x\n"
+    "secret_rotation_push_token: x\n"
+    "loki_route_witness_push_token: x\n"
+    "ups_secondary_push_token: x\n"
+    "nut_monitor_password: x\n"
+    "homelab_builder_github_token: x\n"
+    "gitops_deploy_discord_webhook: x\n"
+)
+
 COMPONENT = REPO / "hosts/components/k3s-restart"
 SYSTEM = "/usr/lib/systemd/system/"
 SERVICE = f"{SYSTEM}homelab-k3s-restart.service"
@@ -28,9 +43,9 @@ TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-restart.conf"
 @pytest.fixture(scope="module")
 def package(tmp_path_factory):
     root = tmp_path_factory.mktemp("box")
-    (root / "secrets.yml").write_text("k3s_readonly_token: x\n")
+    (root / "secrets.yml").write_text(_KEYS)
     (root / "sops").mkdir()
-    (root / "sops/daniel-box.sops.yaml").write_text("k3s_readonly_token: x\n")
+    (root / "sops/daniel-box.sops.yaml").write_text(_KEYS)
     return host_mode.render_host(
         "daniel-box", secrets=root / "secrets.yml", sops_dir=root / "sops"
     )
@@ -106,7 +121,8 @@ def test_a_host_without_a_window_fails_the_render():
 
 def test_the_timer_is_enabled_from_timers_target(package):
     link = f"{SYSTEM}timers.target.wants/homelab-k3s-restart.timer"
-    assert package.links == {link: "../homelab-k3s-restart.timer"}
+    # The UPS watchdog timer (H7.33) is a second enable link, so only this one is held.
+    assert package.links[link] == "../homelab-k3s-restart.timer"
 
 
 def test_the_credential_and_the_secrets_unit_are_in_the_package(package):
@@ -167,3 +183,35 @@ def test_a_top_level_module_is_a_valid_lib_entry(name):
 def test_a_lib_entry_outside_the_grammar_is_refused(name):
     with pytest.raises(RenderRefused):
         lib_source(REPO / "hosts/lib", name)
+
+
+UPDATER_LINK = f"{SYSTEM}timers.target.wants/homelab-updater.timer"
+
+
+def test_daniel_box_arms_the_updater_timer(package):
+    # #6218: without the link, every daniel-box package change waits for a hand start.
+    assert package.links[UPDATER_LINK] == "../homelab-updater.timer"
+
+
+def test_a_daniel_box_package_without_the_link_leaves_the_updater_unarmed(tmp_path):
+    hosts = tmp_path / "hosts"
+    shutil.copytree(REPO / "hosts", hosts)
+    # Sources outside hosts/ resolve against the root's parent.
+    for name in ("ansible", "scripts", "docs"):
+        (tmp_path / name).symlink_to(REPO / name)
+    spec_path = hosts / "daniel-box/package.yml"
+    spec = yaml.safe_load(spec_path.read_text())
+    del spec["enable"]["homelab-updater.timer"]
+    spec_path.write_text(yaml.safe_dump(spec))
+    (tmp_path / "secrets.yml").write_text(_KEYS)
+    (tmp_path / "sops").mkdir()
+    (tmp_path / "sops/daniel-box.sops.yaml").write_text(_KEYS)
+
+    unarmed = host_mode.render_host(
+        "daniel-box",
+        hosts,
+        secrets=tmp_path / "secrets.yml",
+        sops_dir=tmp_path / "sops",
+    )
+
+    assert UPDATER_LINK not in unarmed.links

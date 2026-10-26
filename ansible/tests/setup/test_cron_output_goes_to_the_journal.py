@@ -1,8 +1,8 @@
-"""The crons that print on a successful run send that output to the journal, not to mail.
+"""Every cron sends its output to the journal or discards it on purpose, never to mail.
 
-cron mails whatever a job writes to /var/mail/ubuntu, and nothing opens that spool. A per-run
-success line there is not a record — it is one more message a real failure has to be found
-among.
+cron mails whatever a job writes to /var/mail/<user>, and nothing ships or opens that spool. A
+per-run success line there is not a record, and a failure's stderr there (a kubectl or curl
+error, a `set -e` death) is lost (#6162).
 
 Each routed cron sends BOTH streams through `logger -t <tag>`, not stdout alone: a Python job's
 log line comes from `logging.basicConfig`, which writes to stderr, so a stdout-only redirect
@@ -10,15 +10,14 @@ would change nothing. None of them loses an alert, because none alerted by mail 
 reasoning per cron is at its own task.
 
 The class check reads every `ansible.builtin.cron` task that installs a job, on both planes.
-Each job must route both streams of every stage, or appear in `MAILS_ONLY_ON_FAILURE` with the
-reason its healthy run prints nothing. The allowlist fails in both directions: an entry whose
-cron is gone, or whose job is now routed, is stale.
+Each job must route both streams of every stage. There is no allowlist: a script whose healthy
+run prints nothing still prints when it fails, and that is the output worth keeping.
 
 The judge splits a job at top-level `;`, `&&` and `||`, so an unbraced chain is judged stage
 by stage rather than by its last pipe. It does not judge the stderr of a pipeline's earlier
-stages, which prints only on failure. It cannot see inside a script, so an allowlist reason is
-a claim about the script that a person checked. The Kuma and Healthchecks crons route curl's
-stderr away at both surfaces, and `ansible/tests/services/test_healthchecks_pings.py` holds
+stages, which prints only on failure. A `>/dev/null 2>&1` stage passes it, so the crons that
+must keep their output are named in `JOURNAL_ROUTED` as well. The Kuma and Healthchecks crons
+route curl's stderr away at both surfaces, and `ansible/tests/services/test_healthchecks_pings.py` holds
 the ping half.
 
 Run: uv run pytest ansible/tests/setup/test_cron_output_goes_to_the_journal.py
@@ -35,11 +34,21 @@ from _role_census import task_files
 # subject by pattern reads empty the day a file moves, and every job then passes by default.
 # A rename fails `test_every_named_cron_still_exists` below rather than going quiet.
 JOURNAL_ROUTED = {
-    "Weekly secret rotation (auto tier)": "secret-rotate",
-    "Refresh generated docs": "docs-refresh",
     "Longhorn filesystem trim": "longhorn-trim-cron",
-    # The branch sweep's `--gc` job prints a line per removed worktree and deleted branch.
-    "Weekly git object-store repair": "worktree-sweep",
+    # The Kuma-verdict crons: silent when healthy, but their failure stderr is the evidence.
+    "Sync peer Claude artifacts": "sync-artifacts",
+    "Claude Code telemetry health": "claude-otel-health",
+    "fake-remux health": "fake-remux-health",
+    "Longhorn backup health": "longhorn-backup-health",
+    "daniel-box disk health": "disk-health",
+    "Release staleness drift check": "release-staleness-check",
+    "Off-box etcd snapshot": "etcd-snapshot-offbox",
+    "Registry garbage collection": "registry-gc",
+    # The fake-remux workers discarded both streams to /dev/null until #6162, which the
+    # every-cron judge below accepts, so naming them here is what holds them to the journal.
+    "fake-remux scan": "fake-remux-scan",
+    "fake-remux reconcile": "fake-remux-reconcile",
+    "mkv attachment repair": "mkv-attachment-repair",
 }
 
 
@@ -66,7 +75,7 @@ def _cron_jobs() -> dict[str, str]:
 
 
 def test_every_named_cron_still_exists():
-    """The census names four crons; all four are installed by the task files it reads."""
+    """Every cron the census names is installed by the task files it reads."""
     assert set(JOURNAL_ROUTED) <= set(_cron_jobs())
 
 
@@ -83,63 +92,19 @@ def test_a_stdout_only_redirect_does_not_satisfy_the_check():
     )
 
 
-def test_the_braced_chain_pipes_the_whole_worktree_sweep_job():
-    """`|` binds tighter than `&&`, so an unbraced chain would pipe only its last stage.
-
-    The worktree-sweep job is a chain rather than one command, and it is where getting this
-    wrong reads as fixed while the `cd` stage keeps mailing.
-    """
-    job = _cron_jobs()["Weekly git object-store repair"]
-    assert job.startswith("{ cd "), job
-    assert "; } 2>&1 | logger -t worktree-sweep" in job, job
-
-
 # ── every cron ───────────────────────────────────────────────────────────────
-
-_KUMA = "prints nothing on a healthy run; its verdict is a Kuma push"
-
-# Crons whose job routes nowhere, each with the reason its healthy run prints nothing. A cron
-# that prints a success line does not belong here: route it instead.
-MAILS_ONLY_ON_FAILURE = {
-    "Sync peer Claude artifacts": (
-        "rsync -a without -v and ssh in BatchMode print nothing on success, and a failure goes "
-        "to logger -t sync-artifacts; only the run that reaches "
-        "claude_code_artifacts_sync_alert_after_failures consecutive failures writes to stderr, "
-        "so a peer that stays down mails once per outage rather than every 5 minutes (#2467); "
-        "its verdict is a Kuma push (#2516)"
-    ),
-    "Claude Code telemetry health": _KUMA,
-    "Registry garbage collection": _KUMA + ", plus a Healthchecks /fail ping",
-    "fake-remux health": _KUMA,
-    "Longhorn backup health": _KUMA + ", plus a Healthchecks /fail ping",
-    "daniel-box disk health": _KUMA + ", plus a Healthchecks /fail ping",
-    "Release staleness drift check": _KUMA,
-    "Off-box etcd snapshot": _KUMA + ", plus a Healthchecks /fail ping",
-    "UPS secondary watchdog": _KUMA,
-    "Homelab eval sweep": (
-        "writes its output to log files; the EXIT trap reports to logger and Kuma"
-    ),
-    "Refresh homelab infrastructure map": (
-        "stdout (`Wrote ...`) is discarded and stderr carries only a failure, for which the "
-        "mail is the only alert (the job pings no Healthchecks check)"
-    ),
-    "Clear ansible log file": (
-        "truncate prints nothing unless it fails, and then the mail is the only alert"
-    ),
-}
 
 # Named members from both planes and from the files the census reads, so a glob that
 # stops matching fails here rather than passing over an empty census.
 KNOWN_CRONS = frozenset(
     {
         "Sync peer Claude artifacts",  # roles/k8s
-        "Refresh generated docs",  # setup/initial_setup/tasks/crons.yml
         "Longhorn filesystem trim",  # setup/k3s/tasks/health-crons.yml
-        "UPS secondary watchdog",  # setup/nut_host
         "Weekly AIDE file integrity check",  # setup/initial_setup/tasks/integrity.yml
     }
 )
-_CENSUS_FLOOR = 30
+# 23 after H7.36 moved the checkout crons into host components (it was 29).
+_CENSUS_FLOOR = 23
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 
@@ -205,26 +170,15 @@ def test_no_two_installed_crons_share_a_name():
     assert len(names) == len(set(names)), sorted(n for n in names if names.count(n) > 1)
 
 
-def test_every_cron_routes_its_output_or_says_why_it_mails():
+def test_every_cron_routes_its_output():
     offenders = [
         f"{name!r} mails whatever these stages print: {stages}"
         for name, job in sorted(_cron_jobs().items())
-        if (stages := unrouted_stages(job)) and name not in MAILS_ONLY_ON_FAILURE
+        if (stages := unrouted_stages(job))
     ]
-    assert not offenders, (
-        "Route each to `2>&1 | logger -t <tag>`, or add it to MAILS_ONLY_ON_FAILURE with the "
-        "reason its healthy run prints nothing:\n" + "\n".join(offenders)
+    assert not offenders, "Route each to `2>&1 | logger -t <tag>`:\n" + "\n".join(
+        offenders
     )
-
-
-def test_every_allowlist_entry_is_an_installed_cron_that_still_mails():
-    jobs = _cron_jobs()
-    stale = [
-        name
-        for name in MAILS_ONLY_ON_FAILURE
-        if name not in jobs or not unrouted_stages(jobs[name])
-    ]
-    assert not stale, f"gone, or routed since and no longer needing an entry: {stale}"
 
 
 @pytest.mark.parametrize(
@@ -234,7 +188,7 @@ def test_every_allowlist_entry_is_an_installed_cron_that_still_mails():
         "{ cd /srv && uv run python watch.py; } 2>&1 | logger -t watch",
         # Each stage routed on its own, without braces (fwupd).
         "fwupdmgr refresh >/dev/null 2>&1 ; fwupdmgr update 2>&1 | /usr/bin/logger -t fwupd",
-        # The fallback stage is logger itself (fake-remux).
+        # The fallback stage is logger itself.
         "flock -w 600 /l scan.py >/dev/null 2>&1 || logger -t scan 'scan wrapper failed'",
         # A `cd` prints only on failure (the B2 crons).
         "cd /srv && PATH=/bin uv run probe.py b2-budget 2>&1 | logger -t b2-budget",

@@ -9,6 +9,7 @@ the thin FastMCP wiring on top; the risky decisions are all in this module.
 from __future__ import annotations
 
 import hmac
+import re
 import ssl
 from pathlib import Path, PurePosixPath
 
@@ -86,14 +87,32 @@ def parse_targets(resp: dict) -> list[dict]:
     return rows
 
 
+# Credentials the apps write into their own log lines: Home Assistant's cast `refresh_token`
+# (#3015) and Prowlarr's `apikey=` in the *arr Torznab error URLs (#6276). Alloy redacts new
+# records on the way into Loki, but the older records stay for its 744h retention and a pod's
+# live log never passes through Alloy. The image imports no first-party module, so these copy
+# `scripts/diagnostics/probe_lib/core.py:redact_log_secrets` rather than import it.
+_LOG_SECRET_RES = (
+    re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}"),
+    re.compile(r"(apikey=)[0-9a-fA-F]{32}"),
+)
+
+
+def redact_log_secrets(text: str) -> str:
+    """Return `text` with the logged credential values replaced by `<redacted>`."""
+    for pattern in _LOG_SECRET_RES:
+        text = pattern.sub(r"\g<1><redacted>", text)
+    return text
+
+
 def parse_loki(resp: dict) -> list[dict]:
-    """Flatten a Loki query_range response to {stream, ts, line} rows."""
+    """Flatten a Loki query_range response to {stream, ts, line} rows, credentials redacted."""
     result = (resp.get("data") or {}).get("result") or []
     rows = []
     for stream in result:
         labels = stream.get("stream") or {}
         for ts, line in stream.get("values") or []:
-            rows.append({"labels": labels, "ts": ts, "line": line})
+            rows.append({"labels": labels, "ts": ts, "line": redact_log_secrets(line)})
     return rows
 
 

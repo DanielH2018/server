@@ -48,7 +48,12 @@ class Decision:
             suspended-tag check, else empty.
         bundles: `prod`'s and T's bundle files by `prod` and `target`, for `--bundle-dir`.
         recorded: the newest status on `prod`'s commit for each name in T's changed set, by
-            name, for `--bundle-dir`. Empty when the set holds no dependent.
+            name, for `--bundle-dir`. Empty when the set holds no dependent. On `last-good`'s
+            commit when T supersedes.
+        supersedes: P, `prod`'s commit, when T is promoted over P's verification in flight
+            (D7.5); `tag` then tags T `superseding` before it moves `prod`. Else empty.
+        hold_read: the DEPLOY_HOLD value `decide` read: `none`, or the `failed=` hold the
+            revert rule passed. `tag` moves `prod` only while DEPLOY_HOLD still reads it.
     """
 
     verdict: str
@@ -66,6 +71,8 @@ class Decision:
     hold: str = ""
     bundles: dict[str, dict[str, bytes] | None] = field(default_factory=dict)
     recorded: dict[str, str] = field(default_factory=dict)
+    supersedes: str = ""
+    hold_read: str = "none"
 
 
 def _promotion(
@@ -80,6 +87,8 @@ def _promotion(
     target_bundle: dict[str, bytes] | None,
     prod_bundle: dict[str, bytes] | None,
     last_good_bundle: dict[str, bytes] | None = None,
+    supersedes: str = "",
+    hold_read: str = "none",
 ) -> Decision:
     """The `promote` decision for T, with the two bundle pulls `verify` reuses.
 
@@ -89,6 +98,9 @@ def _promotion(
     reads `last-good`'s bundle only when `last-good` and `prod` name different digests. And it
     records `prod`'s statuses for `verify`'s excuse (`verify.prior_statuses`), before the move.
     And it names the snapshot roles T changes against the same bundle (`stateful.record`).
+    When T `supersedes` P's verification in flight (D7.5), T's changed set, its record of
+    statuses and its reboot-window timeout are taken against `last-good` rather than `prod`,
+    so `verify` covers P's changes and T's.
 
     Raises:
         ReadError: T's bundle, or `prod`'s, vanished between its HEAD and its pull, or a
@@ -98,10 +110,15 @@ def _promotion(
     target_bundle = target_bundle or _pull(reads, digest, f"sha-{target}")
     if prod_bundle is None and prod_digest is not None:
         prod_bundle = _pull(reads, prod_digest, "prod's bundle")
+    # The bundle and commit T's changed set is taken against: `prod`'s, or `last-good`'s when
+    # T supersedes, whose verification then covers P's changes too.
+    against, against_commit = (
+        (last_good_bundle, lower) if supersedes else (prod_bundle, prod)
+    )
     # After every other read, so no wait separates the clock from the move (D5.2b2).
     if why := reboot_window.deferral(
         reads.reboot,
-        lambda: verify.expected_set(target_bundle, prod_bundle).timeout_s,
+        lambda: verify.expected_set(target_bundle, against).timeout_s,
         reads.now,
     ):
         return Decision("deferred", reason=f"{target} is {why}")
@@ -125,14 +142,15 @@ def _promotion(
         digest,
     )
     recorded: dict[str, str] = {}
-    if prod is not None and prod_bundle is not None:
+    if against_commit is not None and against is not None:
         recorded = verify.prior_statuses(
-            target_bundle, prod_bundle, lambda: reads.statuses(prod)
+            target_bundle, against, lambda: reads.statuses(against_commit)
         )
         if recorded:
             states = ", ".join(f"flux/{n}={s}" for n, s in sorted(recorded.items()))
             print(
-                f"promote.py: recorded on prod's commit {prod}: {states}",
+                f"promote.py: recorded on {'last-good' if supersedes else 'prod'}'s "
+                f"commit {against_commit}: {states}",
                 file=_sys.stderr,
             )
     return Decision(
@@ -147,8 +165,10 @@ def _promotion(
         no_reset=tuple(sorted(no_reset)),
         stateful=tuple(record["stateful"]),
         stateful_record=record,
-        bundles={"prod": prod_bundle, "target": target_bundle},
+        bundles={"prod": against, "target": target_bundle},
         recorded=recorded,
+        supersedes=supersedes,
+        hold_read=hold_read,
     )
 
 

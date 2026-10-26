@@ -253,8 +253,24 @@ def _cap_comment() -> list[str]:
     return block
 
 
+@pytest.fixture(scope="module")
+def published_bundle(tmp_path_factory) -> tuple[list[dict], set[str]]:
+    """The published tags' rendered Flux Kustomizations, and every name but `soak`'s.
+
+    A placeholder render, module-scoped because the render is the cost of both tests below: about 60s each on a
+    CI runner (run 40215966021), and neither edits what it reads.
+    """
+    out = tmp_path_factory.mktemp("published") / "out"
+    assert homelab_render.cluster(out, published_tags(), None) == RENDER_OK
+    files = {
+        str(p.relative_to(out)): p.read_bytes() for p in out.rglob("*") if p.is_file()
+    }
+    bundle = vp.flux_kustomizations(files)
+    return bundle, {d["metadata"]["name"] for d in bundle} - {vp.SOAK}
+
+
 def test_the_published_bundles_chain_fits_the_cap_or_a_decided_marker_keeps_the_clamp(
-    tmp_path,
+    published_bundle,
 ):
     """Every published tag changed but `soak` (#5868).
 
@@ -264,13 +280,7 @@ def test_the_published_bundles_chain_fits_the_cap_or_a_decided_marker_keeps_the_
     returns the smaller of the chain and the cap, so a result below the cap is the chain
     itself, and one at the cap is a clamp.
     """
-    out = tmp_path / "out"
-    assert homelab_render.cluster(out, published_tags(), None) == RENDER_OK
-    files = {
-        str(p.relative_to(out)): p.read_bytes() for p in out.rglob("*") if p.is_file()
-    }
-    bundle = vp.flux_kustomizations(files)
-    names = {d["metadata"]["name"] for d in bundle} - {vp.SOAK}
+    bundle, names = published_bundle
     assert {"bento-pdf", "code-server", "karakeep"} <= names, sorted(names)
     timeout = ct.promote_timeout(bundle, names)
     decided = [line for line in _cap_comment() if "# DECIDED:" in line]
@@ -280,7 +290,9 @@ def test_the_published_bundles_chain_fits_the_cap_or_a_decided_marker_keeps_the_
     )
 
 
-def test_the_decided_clamp_records_a_chain_no_shorter_than_the_published_one(tmp_path):
+def test_the_decided_clamp_records_a_chain_no_shorter_than_the_published_one(
+    published_bundle,
+):
     """The `# DECIDED:` at VERIFY_CAP_S records the all-changed chain it accepts (#5868).
 
     The clamp hides the chain from every capped reading, so this lifts the cap and holds the
@@ -295,13 +307,7 @@ def test_the_decided_clamp_records_a_chain_no_shorter_than_the_published_one(tmp
     assert recorded > ct.VERIFY_CAP_S, (
         "the marker records a chain the cap does not clamp"
     )
-    out = tmp_path / "out"
-    assert homelab_render.cluster(out, published_tags(), None) == RENDER_OK
-    files = {
-        str(p.relative_to(out)): p.read_bytes() for p in out.rglob("*") if p.is_file()
-    }
-    bundle = vp.flux_kustomizations(files)
-    names = {d["metadata"]["name"] for d in bundle} - {vp.SOAK}
+    bundle, names = published_bundle
     chain = ct.promote_timeout(bundle, names, cap_s=10**9)
     assert chain <= recorded, (
         f"the published bundle's all-changed chain is {chain}s, past the {recorded}s the "

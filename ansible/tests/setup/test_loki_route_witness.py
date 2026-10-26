@@ -281,3 +281,91 @@ def test_the_verdict_reads_the_body_rather_than_the_exit_code():
 def test_the_boot_grace_is_shorter_than_the_cron_period():
     """kuma-push-lib's contract: at most one slot may ever be skipped."""
     assert ALL_VARS_VALUES["loki_route_witness_boot_grace_s"] < HOURLY_S
+
+
+# --- The packaged copy (H7.36) ----------------------------------------------------------------
+# daniel-box's witness is the `loki-route-witness` component since H7.36. daniel-server keeps the
+# Ansible-era script above until its package moves it, so both copies exist and these hold what
+# separates them: the credential directory replaces the env file, and the reader's code is the
+# same.
+
+PACKAGED = ("components", "loki-route-witness", "loki-read-route-health.sh.j2")
+PACKAGED_READER = (
+    ANSIBLE.parent
+    / "hosts"
+    / "components"
+    / "loki-route-witness"
+    / "loki_route_health.py"
+)
+ROLE_READER = (
+    ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "loki_route_health.py"
+)
+
+
+def _run_packaged(tmp_path, route_rc: int, token: str | None):
+    body = render_shell_script(
+        *PACKAGED,
+        overrides={"loki_route_witness_boot_grace_s": 0, "sys_user": "ubuntu"},
+    )
+    lib = tmp_path / "kuma-push-lib.sh"
+    lib.write_text(
+        'kuma_push() { printf \'%s %s\\n\' "$1" "$3" > "$KUMA_PUSH_OUT"; return 0; }\n'
+        "boot_grace_active() { return 1; }\n"
+    )
+    uv = write_exec(
+        tmp_path / "uv",
+        "#!/usr/bin/env bash\n"
+        'case "$*" in *loki_route_health.py*) echo verdict; exit "$STUB_ROUTE_RC" ;;'
+        " *) echo body ;; esac\n",
+    )
+    for needle in ("/usr/lib/homelab/kuma-push-lib.sh", "/usr/local/bin/uv"):
+        assert needle in body, f"{needle} is no longer in the packaged witness"
+    body = (
+        body.replace("/usr/lib/homelab/kuma-push-lib.sh", str(lib))
+        .replace("/usr/lib/homelab/homelab-check-lib.sh", str(CHECK_LIB))
+        .replace("/home/ubuntu/.local/bin/uv", str(uv))
+        .replace("/usr/local/bin/uv", str(uv))
+    )
+    creds = tmp_path / "creds"
+    creds.mkdir()
+    if token is not None:
+        (creds / "loki_route_witness_push_token").write_text(token)
+    (tmp_path / "textfile").mkdir()
+    pushed = tmp_path / "pushed"
+    result = run(
+        [str(write_exec(tmp_path / "witness.sh", body))],
+        env={
+            **os.environ,
+            "PATH": path_with(fake_bin(tmp_path / "bin", logger="#!/bin/sh\nexit 0\n")),
+            "KUMA_PUSH_OUT": str(pushed),
+            "STUB_ROUTE_RC": str(route_rc),
+            "TEXTFILE_DIR": str(tmp_path / "textfile"),
+            "CREDENTIALS_DIRECTORY": str(creds),
+        },
+        check=False,
+    )
+    return result.returncode, pushed.read_text().strip() if pushed.exists() else ""
+
+
+def test_the_packaged_witness_pushes_to_the_url_its_credential_names(tmp_path):
+    code, pushed = _run_packaged(tmp_path, route_rc=1, token="boxtoken")
+    assert code == 1
+    assert pushed.startswith("down https://uptime-kuma.local.")
+    assert pushed.endswith("/api/push/boxtoken")
+
+
+def test_a_packaged_witness_without_its_credential_skips_the_push(tmp_path):
+    """Rejecting half: no credential means no URL to push, and the verdict still decides the exit."""
+    code, pushed = _run_packaged(tmp_path, route_rc=0, token=None)
+    assert (code, pushed) == (0, "")
+
+
+def test_the_packaged_reader_runs_the_same_code_as_the_roles_reader():
+    """Until the daniel-server PR deletes the role's copy, a fix to one belongs in both. The two
+    differ only in the docstring paragraph that says where the file is installed."""
+    marker = "\nimport json\n"
+    packaged = PACKAGED_READER.read_text().split(marker, 1)[1]
+    assert packaged == ROLE_READER.read_text().split(marker, 1)[1], (
+        "loki_route_health.py drifted between hosts/components/loki-route-witness/ and the "
+        "initial_setup role"
+    )

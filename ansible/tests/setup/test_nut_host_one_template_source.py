@@ -30,7 +30,8 @@ from lib.repo_paths import REPO
 
 ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
 TEMPLATES = ROLE / "templates"
-TASKS = (ROLE / "tasks" / "main.yml").read_text()
+COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
+COMPONENT_TEXT = COMPONENT.read_text()
 # The two templates daniel-server's package renders from the role's directory.
 SHARED = ("host-upsmon.conf.j2", "ups-secondary-health.sh.j2")
 # `{% if nut_host_watchdog_packaged %}` ... `{% else %}` ... `{% endif %}`, each tag alone on
@@ -46,9 +47,9 @@ _ARM = re.compile(
 WATCHDOG_ARMS = 3
 
 
-def role_template_names(tasks_text: str) -> set[str]:
-    """Every `.j2` file the role's tasks name as a `src:`."""
-    return set(re.findall(r"^\s*src:\s*(\S+\.j2)\s*$", tasks_text, re.MULTILINE))
+def role_template_names(component_text: str) -> set[str]:
+    """Every role template the component names as a `role:<name>.j2` source (H7.33)."""
+    return set(re.findall(r"role:([\w.-]+\.j2)", component_text))
 
 
 def second_sources(hosts_root: Path) -> list[Path]:
@@ -86,7 +87,7 @@ def branch_whitespace_problems(
 
 
 def test_the_role_renders_both_shared_templates():
-    assert set(SHARED) <= role_template_names(TASKS)
+    assert set(SHARED) <= role_template_names(COMPONENT_TEXT)
     for name in SHARED:
         assert (TEMPLATES / name).is_file()
 
@@ -103,7 +104,9 @@ def test_a_copy_of_a_shared_template_under_hosts_is_flagged(tmp_path):
 
 
 def test_a_template_the_role_stopped_rendering_is_flagged():
-    without_watchdog = TASKS.replace("src: ups-secondary-health.sh.j2", "src: other.j2")
+    without_watchdog = COMPONENT_TEXT.replace(
+        "role:ups-secondary-health.sh.j2", "role:other.j2"
+    )
     assert not set(SHARED) <= role_template_names(without_watchdog)
 
 

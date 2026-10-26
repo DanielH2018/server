@@ -38,6 +38,10 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.outcome import CAUSES, Cause
+from lib.repo_paths import HOST_LIB_FILES
+
+_sys.path.insert(0, str(HOST_LIB_FILES))
+from host_lib import logfmt
 
 
 @dataclass
@@ -85,14 +89,27 @@ def annotation_line(ledger: Ledger, rc: int, total: float) -> str:
 
     `lock` counts the waits a wrapper rode out inside its own flock as well as the attempts
     that lost it, so it is non-zero on a landing whose every attempt exited 0.
+
+    `host_lib.logfmt` quotes it (#6161). `holder` is quoted even when empty, because the
+    line has always written it that way.
     """
-    return (
-        f"event=landing pr={ledger.pr or 'unknown'} sha={ledger.merge_sha[:8]} "
-        f"verdict={ledger.verdict or 'aborted'} cause={ledger.cause} exit={rc} "
-        f"wait_merge={_phase(ledger.t_start, ledger.t_merged)} "
-        f"wait_ci={_phase(ledger.t_merged, ledger.t_ci)} "
-        f"tick={_phase(ledger.t_ci, ledger.t_tick)} "
-        f"deploy={_phase(ledger.t_tick, ledger.t_deploy)} "
-        f"total={int(total)} tags={ledger.tags_label or 'none'} "
-        f'lock={ledger.lock_waited} holder="{ledger.lock_holder}" kick={ledger.kick}'
+    return logfmt(
+        {
+            "event": "landing",
+            "pr": ledger.pr or "unknown",
+            "sha": ledger.merge_sha[:8],
+            "verdict": ledger.verdict or "aborted",
+            "cause": ledger.cause,
+            "exit": rc,
+            "wait_merge": _phase(ledger.t_start, ledger.t_merged),
+            "wait_ci": _phase(ledger.t_merged, ledger.t_ci),
+            "tick": _phase(ledger.t_ci, ledger.t_tick),
+            "deploy": _phase(ledger.t_tick, ledger.t_deploy),
+            "total": int(total),
+            "tags": ledger.tags_label or "none",
+            "lock": ledger.lock_waited,
+            "holder": ledger.lock_holder,
+            "kick": ledger.kick,
+        },
+        always_quote=("holder",),
     )

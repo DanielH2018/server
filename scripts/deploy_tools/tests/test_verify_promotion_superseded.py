@@ -111,3 +111,21 @@ def test_a_soak_failure_on_r_after_homelab_moved_past_r_keeps_waiting_is_flagged
     sim.polls = [at(M, "bento-pdf"), at(D, "bento-pdf")]
     result = sim.wait()
     assert result.verdict == "settled" and result.revision == D
+
+
+# -- who a hold points at (#6199) -------------------------------------------------------------
+
+
+def test_a_hold_naming_another_prs_service_says_so_is_flagged():
+    sim = _soak_sim(holds=[f"{D} failed=sonarr,soak"])
+    sim.polls = [at(D)]
+    result = sim.wait(services=("bento-pdf",))
+    assert (result.verdict, result.cause) == ("deploy-failed", "promote-held")
+    assert "None is this PR's (bento-pdf)" in result.detail
+
+
+def test_a_hold_naming_this_prs_service_says_so_is_clean():
+    sim = _soak_sim(holds=[f"{D} failed=bento-pdf-deferred"])
+    sim.polls = [at(D)]
+    result = sim.wait(services=("bento-pdf",))
+    assert "This PR's bento-pdf-deferred failed" in result.detail

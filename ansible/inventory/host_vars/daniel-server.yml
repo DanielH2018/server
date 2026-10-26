@@ -46,6 +46,9 @@ claude_code_rc_enabled: false
 # interactive `/login` as `claude` here, and its signing key registered on the agent's GitHub
 # account, after the first apply. False expires the account and keeps its home.
 claude_code_agent_user_enabled: true
+# The read-only root inspector, `rootq` (issue #6323), for the operator's account.
+# False removes the grant, the shim and the script.
+claude_code_rootq_enabled: true
 # daniel-box's agent logs in here as `claude` with the key agent_peers.yml generates there.
 # False removes the key and the ssh-users membership.
 claude_agent_ssh_login_enabled: true

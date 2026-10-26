@@ -24,8 +24,9 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # per-host spelling of `[defaults] timeout`; there is no become-specific timeout var in the
 # pinned core. A retry loop is the wrong shape: the wait is the whole cost.
 ansible_ssh_timeout: 30
-# No GitOps auto-deploy path to the Pi (accepted) — memory-constrained and driven
-# manually over SSH. See gitops_deploy CLAUDE.md.
+# No Ansible GitOps auto-deploy path to the Pi (accepted) — memory-constrained, and its Ansible-era
+# services are driven manually over SSH. The package path (homelab-updater, H3 and H5) deploys the
+# services in compose_services without this key. See gitops_deploy CLAUDE.md.
 # Kept explicit even though group_vars/all.yml defaults it false: the deployer's own refusal
 # (`deploy_inventory.declares_no_gitops`) greps THIS file's text for a top-level
 # `has_gitops: false` and fails open when the key is absent, so deleting the line would disarm
@@ -73,31 +74,10 @@ container_healthcheck_interval: 60s
 # once, the healthcheck only covers a wedged-but-running one.
 container_healthcheck_timeout: 60s
 container_healthcheck_retries: 5
-containers_list:
-  # Read-only Docker socket proxy — serves Alloy's docker_sd log discovery;
-  # the hardcoded docker-proxy-lifecycle sub-proxy (restart-only) serves autoheal.
-  - name: docker-proxy
-    use_authelia: false
-    networks:
-      - proxy
-  - name: wg-easy
-    port: 51821
-    udp_port: 51822
-    # DECIDED: no Authelia and no PASSWORD_HASH on the Pi's wg-easy UI (accepted risk
-    # 2026-06-23); the UI binds the LAN IP. See ansible/roles/containers/wg-easy/CLAUDE.md.
-    # LAN-only host, so the admin UI is open to anyone on the Pi's LAN (it's bound to the LAN
-    # IP, never internet-exposed or on the tunnel). To gate it, add a PASSWORD_HASH env from
-    # SOPS.
-    use_authelia: false
-    networks:
-      - proxy
-  # MUST follow docker-proxy: it restarts containers through docker-proxy-lifecycle, which
-  # docker-proxy's compose project creates. The Docker play deploys in this list's order.
-  - name: autoheal
-    use_authelia: false
-    networks:
-      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
-      - lifecycle
+# Empty since H5.9: every service moved to compose_services. The key stays, because every reader
+# of the Pi's services reads both keys and fails on a missing one (h5-pi-compose.md, *The service
+# list*). H5.12 drops the Ansible Compose path that read it.
+containers_list: []
   # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
   # host unit from roles/setup/optimize_pi (section 10), on the LAN IP and port 9100 the
   # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
@@ -107,13 +87,42 @@ containers_list:
   # origin reporting node_*, and this host is excluded from both (HOST_METRIC_ORIGIN_EXCLUDE
   # in monitor-bridge's check.py) because check_pi_pressure already owns Pi disk and memory
   # against thresholds sized for a 456 MB box.
+# The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
+# A service lives in exactly one of this key and containers_list: Ansible's Docker play
+# deploys containers_list, and the package deploys this key. Entries keep containers_list's
+# field names. It holds the canary, docker-proxy (H5.6), autoheal (H5.7), alloy (H5.8) and wg-easy (H5.9). Every
+# reader of the Pi's services reads both keys and fails on a missing one, so keep the key even
+# when it is empty. The cluster templates that read it are named in
+# docs/target-architecture/host/h5-pi-compose.md (The service list).
+compose_services:
+  # H5.2b's canary: a digest-pinned busybox that proves the package runs a service and that an
+  # included file receives a value from the Compose env file. It has no Ansible-era counterpart,
+  # so no legacy entry names it. H5.10 removes it.
+  - name: pi-canary
+  # The read-only Docker socket proxy, which serves Alloy's docker_sd log discovery. The
+  # package's service file also declares the docker-proxy-lifecycle sub-proxy (restart-only,
+  # serves autoheal), and docker-proxy-codeserver under has_code_server. Legacy entry:
+  # /home/ubuntu/server/containers/docker-proxy/docker-compose.yml (project `docker-proxy`).
+  - name: docker-proxy
+    use_authelia: false
+    networks:
+      - proxy
+  # Restarts unhealthy containers through docker-proxy-lifecycle, which the docker-proxy service
+  # file declares, so its service file carries `depends_on: docker-proxy-lifecycle`. Legacy entry:
+  # /home/ubuntu/server/containers/autoheal/docker-compose.yml (project `autoheal`).
+  - name: autoheal
+    use_authelia: false
+    networks:
+      # lifecycle-only: reaches docker-proxy-lifecycle (write proxy), not the broad nets
+      - lifecycle
+  # Container logs to loki-homelab. Needs docker-proxy, which the docker-proxy service file in this
+  # project declares, so its service file carries `depends_on: docker-proxy`: discovery goes
+  # through that read-only proxy rather than the raw Docker socket, and it needs the `proxy`
+  # network to reach it. Legacy entries: /home/ubuntu/server/containers/alloy/docker-compose.yml and
+  # /home/ubuntu/server/containers/alloy/config/config.alloy (project `alloy`).
   #
-  # Container logs to loki-homelab. MUST follow docker-proxy: discovery goes through that
-  # read-only proxy rather than the raw Docker socket, and it needs the `proxy` network to
-  # reach it.
-  #
-  # Sized carefully — this is a 456 MB Zero 2 W. GOMEMLIMIT/GOMAXPROCS are set in the compose
-  # template and the cap is 96M; if the measured RSS sits near the cap rather than near
+  # Sized carefully — this is a 456 MB Zero 2 W. GOMEMLIMIT/GOMAXPROCS are set in the service
+  # file and the cap is 128M; if the measured RSS sits near the cap rather than near
   # 48 MiB, this host cannot afford a log shipper and the right answer is a syslog forwarder,
   # not a bigger limit. Host logs are deliberately NOT shipped: rsyslog is inactive here.
   - name: alloy
@@ -121,15 +130,17 @@ containers_list:
     use_authelia: false
     networks:
       - proxy
-# The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
-# A service lives in exactly one of this key and containers_list: Ansible's Docker play
-# deploys containers_list, and the package deploys this key. Entries keep containers_list's
-# field names. It holds only the canary until H5.6 moves the first service. Every reader of the
-# Pi's services reads both keys and fails on a missing one, so keep the key even when it is
-# empty. The cluster templates that read it are named in
-# docs/target-architecture/host/h5-pi-compose.md (The service list).
-compose_services:
-  # H5.2b's canary: a digest-pinned busybox that proves the package runs a service and that an
-  # included file receives a value from the Compose env file. It has no Ansible-era counterpart,
-  # so no legacy entry names it. H5.10 removes it.
-  - name: pi-canary
+  # The Pi's backup WireGuard endpoint and its admin UI. Legacy entry:
+  # /home/ubuntu/server/containers/wg-easy/docker-compose.yml (project `wg-easy`). The peer keys
+  # live in ./config under that directory, which the pi-peer-backup CronJob pulls nightly.
+  - name: wg-easy
+    port: 51821
+    udp_port: 51822
+    # DECIDED: no Authelia and no PASSWORD_HASH on the Pi's wg-easy UI (accepted risk
+    # 2026-06-23); the UI binds the LAN IP. See hosts/components/pi-compose/services/wg-easy/compose.yaml.j2.
+    # LAN-only host, so the admin UI is open to anyone on the Pi's LAN (it's bound to the LAN
+    # IP, never internet-exposed or on the tunnel). To gate it, add a PASSWORD_HASH env from
+    # SOPS.
+    use_authelia: false
+    networks:
+      - proxy

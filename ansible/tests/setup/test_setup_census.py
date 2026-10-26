@@ -81,7 +81,7 @@ NAMED_MEMBERS = [
     ("template", "Install the lander unit"),
     ("template", "Pin the node's LAN address in netplan"),
     ("get_url", "Download and install SOPS binary"),
-    ("systemd_service", "Enable and start the host upsmon service"),
+    ("systemd_service", "Disable the legacy performance-governor unit (daniel-server)"),
     ("sysctl", "Apply kernel security hardening"),
     ("ufw", "Enable UFW firewall"),
 ]
@@ -104,13 +104,6 @@ def test_a_shipped_file_and_a_target_are_both_searchable(real_tree):
     assert any(i.mentions("k3s/tasks/static-address.yml") for i in items)
     assert any(i.mentions("/usr/local/bin/sops") for i in items)
     assert any(i.mentions("net.core.bpf_jit_harden") for i in items)
-
-
-def test_the_pi_peer_backup_wrapper_counts_against_daniel_pi(real_tree):
-    wrapper = "/usr/local/bin/pi-peer-backup-shell"
-    on_pi = [i for i in real_tree["daniel-pi"] if i.target == wrapper]
-    assert on_pi
-    assert all(i.role == "k8s_host_files" for i in on_pi)
 
 
 # --- what an item is --------------------------------------------------------------------------

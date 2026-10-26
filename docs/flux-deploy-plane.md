@@ -365,6 +365,14 @@ a merge made outside `land.sh` bypasses it, and the `NotFound` in H2's body is t
 check. The Flux labels and `kustomize-controller`'s `managedFields` entry stay on the objects.
 No skip reads them alone, so they need no removal.
 
+**A CronJob that a gate Job cannot copy is gated on its schedule.** The restore drill is one:
+a copy of it runs a real restore beside the scheduled one. Such a role goes in
+`UNGATED_BY_DESIGN` in `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py`, and
+its CronJob carries the annotation `homelab/gate: schedule`. That test holds the two sets
+equal. `probe.py health` passes a marked CronJob with no Job for one schedule period after Flux
+first applied the revision, and fails it after that
+(`scripts/diagnostics/probe_lib/health_cronjob.py:format_schedule_gated`, #6128).
+
 **A role with a CronJob loses its deploy-time gate in H2.** A `flux_cronjob_gates` entry
 credits only a flux-owned role, because only the renderer writes its gate Job. Ansible's
 counterpart was the `k8s/cronjob-gate` role, retired in #5716 when no role included it. To
@@ -961,7 +969,7 @@ notification-controller posts on T:
 - **Superseded.** Each poll reads `prod`'s digest before T's statuses, and once more before
   a `failed` verdict. When `prod` names another digest, a later run moved it past T, and
   `verify` prints `superseded` and exits 0. A failed read keeps the wait going and never reads
-  as superseded. No run supersedes another until D7 turns `SUPERSEDE` on
+  as superseded. A run is superseded only while `promote.SUPERSEDE` is on
   (`docs/target-architecture/deploy/d7-superseding-promotions.md`).
 - **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
   run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
@@ -1040,13 +1048,24 @@ the variable with `prod`'s live digest and pages on a mismatch.
   and moves and verifies nothing. The first run's `settle` then dispatches one more run, so
   the second run's commit does not wait for the next merge (*Publishing and promotion*).
 
+**A superseding promotion skips the wait** (D7.5). With `promote.SUPERSEDE` on, a
+`decide` that finds a verification in flight may promote T over it instead of waiting, under
+the conditions `scripts/deploy_tools/promote_lib/supersede.py` states. T's verification then
+expects the names T changes against `last-good`, which covers the superseded commit's
+changes too, and `tag` tags T `superseding` so it is not superseded in turn. `decide` prints
+`<T> supersedes the verification of <P>`. Any failed condition prints why and waits as before.
+The operator turned `SUPERSEDE` on in D7.6. Setting it back to `False` restores the wait for
+every run.
+
 **A verdict counts only while `prod` names its target** (D7.1). `settle` reads `prod`'s
 digest before it writes anything, and again before its reset. When a later run has moved
 `prod` past T, `settle` writes neither `last-good`, the hold, `held` nor the reset, and
 dispatches nothing. A failed read applies the verdict as before. `tag` reads `DEPLOY_HOLD`
-again just before it moves `prod`, and moves nothing under a hold written after `decide`
-read it. No run supersedes another until D7 turns `SUPERSEDE` on
-(`docs/target-architecture/deploy/d7-superseding-promotions.md`), so both reads are inert
+again just before it moves `prod`, and moves nothing unless it still reads the value `decide`
+read: `none`, or the `failed=` hold the revert rule passed. A superseding `tag` also moves
+nothing once `last-good` has moved since `decide` read it (D7.7). A run is superseded only
+while `SUPERSEDE` is on (`docs/target-architecture/deploy/d7-superseding-promotions.md`),
+and otherwise both reads are inert
 until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
 binaries.
 

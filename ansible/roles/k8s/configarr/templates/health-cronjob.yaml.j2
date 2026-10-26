@@ -65,6 +65,7 @@ spec:
           initContainers:
             - name: kubectl
               image: {{ configarr_k8s_health_kubectl_image }}
+              imagePullPolicy: IfNotPresent
               command: ["cp", "/usr/bin/kubectl", "/kubectl/kubectl"]
 {{ job_hardened_security_context(read_only=true) }}
               volumeMounts:
@@ -74,6 +75,7 @@ spec:
           containers:
             - name: configarr-health
               image: {{ configarr_k8s_health_image }}
+              imagePullPolicy: IfNotPresent
               command: ["python3", "/config/configarr_health.py"]
               env:
                 - name: CONFIGARR_NAMESPACE

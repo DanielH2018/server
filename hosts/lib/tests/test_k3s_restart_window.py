@@ -26,6 +26,20 @@ from lib.estate import Estate
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib import host as host_mode
 
+# Every key the daniel-box package names: a credential outside secrets.yml fails the render.
+_KEYS = (
+    "k3s_readonly_token: x\n"
+    "docs_refresh_push_token: x\n"
+    "homelab_eval_push_token: x\n"
+    "anthropic_api_key: x\n"
+    "secret_rotation_push_token: x\n"
+    "loki_route_witness_push_token: x\n"
+    "ups_secondary_push_token: x\n"
+    "nut_monitor_password: x\n"
+    "homelab_builder_github_token: x\n"
+    "gitops_deploy_discord_webhook: x\n"
+)
+
 DEFAULT_ACCURACY_S = 60  # systemd's AccuracySec when a timer sets none
 # Mon 2 to Fri 6 November 2026: the weekdays the window runs on, none of them the 1st.
 DAYS = [date(2026, 11, 2) + timedelta(days=n) for n in range(5)]
@@ -45,6 +59,7 @@ EXEMPT = {
     "Sync peer Claude artifacts": "an ssh pull from daniel-server; reads no cluster state",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.
     "CronJob crowdsec */5 * * * *": "home-IP lookup; a missed run is not made up (backoffLimit 0)",
+    "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",
 }
 # Non-vacuity: each scan must find its member, or an empty scan would pass.
 CRON_MEMBER = "Release staleness drift check"
@@ -204,10 +219,10 @@ def job_schedules() -> tuple[list[Schedule], set[str], set[str]]:
 def box_package(tmp_path_factory):
     root = tmp_path_factory.mktemp("box")
     secrets = root / "secrets.yml"
-    secrets.write_text("k3s_readonly_token: x\n")
+    secrets.write_text(_KEYS)
     sops = root / "sops"
     sops.mkdir()
-    (sops / "daniel-box.sops.yaml").write_text("k3s_readonly_token: x\n")
+    (sops / "daniel-box.sops.yaml").write_text(_KEYS)
     return host_mode.render_host("daniel-box", secrets=secrets, sops_dir=sops)
 
 
@@ -277,7 +292,8 @@ def test_every_exemption_names_a_schedule_that_exists():
         for r in glance_facts.setup_role_dirs()
         for u, _ in glance_facts.timer_units(r)
     }
-    timers |= {"homelab-updater.timer"}
+    # The packaged timers: the updater's, and the builder's since H7.41b.
+    timers |= {"homelab-updater.timer", "homelab-builder.timer"}
     missing = sorted(set(EXEMPT) - crons - timers)
     assert missing == [], f"EXEMPT names that no schedule carries: {missing}"
 

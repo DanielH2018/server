@@ -26,6 +26,7 @@ from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import (
     MAXIMAL_ROLE_GATED_TAGS,
     agent_join_cmds,
+    agent_pin_cmds,
     PLAYBOOK_CMD,
     owed_clear_cmd,
     server_tags,
@@ -266,14 +267,14 @@ _K3S_NARROWER_TAGS = (
 # variable or a status string `roles/setup/k3s/tasks/server.yml` reads, pinned by
 # `test_every_gate_the_warning_names_is_read_by_the_role` so the warning cannot outlive the
 # task it describes.
-_K3S_CONTROL_PLANE_GATES = ("k3s_server_args", "k3s_version", "reencrypt_finished")
+_K3S_CONTROL_PLANE_GATES = ("k3s_server_args", "reencrypt_finished")
 
 _K3S_GATED_TASKS = (
     "two gated control-plane tasks: the "
     f"k3s installer, which restarts k3s when `{_K3S_CONTROL_PLANE_GATES[0]}` gained an "
-    f"argument or `{_K3S_CONTROL_PLANE_GATES[1]}` moved; and `k3s secrets-encrypt "
-    "rotate-keys`, which re-encrypts every Secret in etcd unless the cluster already reached "
-    f"`{_K3S_CONTROL_PLANE_GATES[2]}`"
+    "argument; and `k3s secrets-encrypt rotate-keys`, which re-encrypts every Secret in etcd "
+    "unless the cluster already reached "
+    f"`{_K3S_CONTROL_PLANE_GATES[1]}`"
 )
 
 _MAXIMAL_ROLE_TAGS: dict[str, str] = {
@@ -363,7 +364,8 @@ def _role_command(
 
     The server-play command and then one join command per agent host, split through
     `server_tags` and `agent_join_cmds` as the `DECIDED:` marker at `AGENT_JOIN_TAGS` says. A
-    row reaching only the agent half prints the join alone.
+    row reaching only the agent half prints the join alone. A row reaching the pin play gets
+    one `agent_pin_cmds` command per agent host after them, naming the host it runs on.
     """
     role_tag = setup_role_tag(role)
     narrowed = _narrowed_tags(role, narrow_tags)
@@ -381,8 +383,16 @@ def _role_command(
     # <clear command>" after this list, and an unbracketed warning made that clause read
     # as a continuation of the warning's own last sentence.
     out = [f"{cmd} (WARNING: {warning})" if warning else cmd] if server else []
-    agents = agent_join_cmds(role, playbook, selected, setup_role_agent_hosts(role))
-    return " and ".join([*out, *(f"`{a}`" for a in agents)])
+    agent_hosts = setup_role_agent_hosts(role)
+    agents = agent_join_cmds(role, playbook, selected, agent_hosts)
+    pins = agent_pin_cmds(role, playbook, selected, agent_hosts)
+    return " and ".join(
+        [
+            *out,
+            *(f"`{a}`" for a in agents),
+            *(f"`{cmd}` (run on {host})" for host, cmd in pins),
+        ]
+    )
 
 
 def _consumers_command(role: str) -> str:

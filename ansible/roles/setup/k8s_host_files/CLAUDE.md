@@ -1,7 +1,7 @@
 # `setup/k8s_host_files` — the host-side rows of k8s roles, applied through the setup plane
 
 This role holds the host writes that D5 moves out of the k8s roles before each role flips to
-Flux: docs's site directory, pi-peer-backup's two Pi writes, traefik's absent arm, registry's
+Flux: docs's site directory, traefik's absent arm, registry's
 ghcr-mirror GC, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
 artifacts' three directory tasks (the star list directory among them), media-volume's media
 directories, observability's retired dashboard staging trees, uptime-kuma's stale
@@ -32,8 +32,9 @@ The redirect is what a shell with non-blocking stdio needs.
 Each conversion PR adds one task file per source role, named after that role, and imports it
 from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static so the play's
 `k8s_host_files` tag reaches every task in the file. docs' conversion PR wrote the first,
-`tasks/docs.yml`, which creates the site directory docs' Deployment mounts as a hostPath of
-`type: Directory`. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
+`tasks/docs.yml`, which created the site directory docs' Deployment mounts as a hostPath of
+`type: Directory`. H7.10a moved that directory into the docs-refresh component's `tmpfiles.d`
+file (`hosts/components/docs-refresh/`) and deleted the task file. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
 artifacts' Deployment mounts the same way. media-volume's PR wrote `tasks/media-volume.yml`,
 which creates the directory media-volume's static PersistentVolume names and its `media/` and
 `torrents/` subdirectories, with no mode. configarr's PR wrote `tasks/configarr.yml`, the
@@ -41,9 +42,9 @@ absent arms that remove H2.5b's retired host health reader: its cron, its script
 directory and its drift fragment. observability's dashboard conversion wrote
 `tasks/observability.yml`, an absent arm over the three trees its old `tasks/dashboards.yml`
 staged under `/etc/rancher/k3s/`. janitorr's PR wrote `tasks/janitorr.yml`, which holds the absent arms for the retired health
-reader's host cron, its script and code directory, and its drift fragment. pi-peer-backup's flip wrote `tasks/pi-peer-backup.yml`,
-which installs the forced-command wrapper and authorizes the pull key on daniel-pi, and moved
-both files into `files/`. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which holds
+reader's host cron, its script and code directory, and its drift fragment. pi-peer-backup's flip wrote a task file for the forced-command wrapper
+and the pull key on daniel-pi. H7.25 moved both into the Pi package
+(`hosts/components/pi-peer-backup-target/`) and deleted the file. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which holds
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
 `tasks/traefik.yml`, the two absent arms that remove the retired Cloudflare IP drift cron and
 its script. uptime-kuma's PR wrote `tasks/uptime-kuma.yml`, the absent arm that removes
@@ -61,8 +62,8 @@ because `initial_setup.yml` has no dry-run mode.
 
 - **The playbook entry is gated to daniel-box by a literal.** `setup_routing.py` places a role
   whose gate admits only another host as a hand apply, so the tick could never run a Pi-gated
-  role. A row that writes on daniel-pi keeps `delegate_to: daniel-pi` inside a task here, as
-  pi-peer-backup's block does.
+  role. No row writes on daniel-pi any more: crowdsec's probe timer left in H5.14 and
+  pi-peer-backup's wrapper and key in H7.25. A Pi write belongs in the Pi package.
 - **A task moves with its sources and variables.** Role defaults and role-relative `src:` paths
   do not resolve across roles, so a conversion PR copies the role's host templates and files
   into this role's `templates/` and `files/`. A variable only the host files read moves to this
@@ -91,18 +92,15 @@ Two tests in `ansible/tests/setup/` hold those rules:
   the registry GC templates.
 - `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults or
   imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
-  that each copy equals its source. docs' PR added the first pair, `docs_host_site_dir`, and
-  artifacts' PR added `artifacts_host_dir`, `artifacts_peer_dir`, `artifacts_peer_sources`
+  that each copy equals its source. artifacts' PR added `artifacts_host_dir`, `artifacts_peer_dir`, `artifacts_peer_sources`
   and `artifacts_stars_dir`. media-volume's PR added `media_volume_host_path` and the
   `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
-  when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, the one
-  directory the wrapper lets the key read. It also holds
-  `docs-refresh.sh.j2`'s `SITE_DIR` equal to docs' default, the third copy of that path.
+  when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, which
+  H7.25 moved into the `pi-peer-backup-target` component's authorized-key line.
 
 A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or
-its path, owner, group or mode changes, and pins a looped row's `loop`. It also holds
-pi-peer-backup's two rows and crowdsec's four to `delegate_to: daniel-pi`. Each
+its path, owner, group or mode changes, and pins a looped row's `loop`. Each
 conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
 census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
 
@@ -113,7 +111,7 @@ script against a store tree built in `tmp_path`.
 
 The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
 that touches it. It holds host directories, the absent arms for configarr's, janitorr's and
-crowdsec's retired crons and pi-peer-backup's two daniel-pi writes.
+crowdsec's retired crons.
 
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a
@@ -121,8 +119,7 @@ crowdsec's retired crons and pi-peer-backup's two daniel-pi writes.
   above. One cron is the exception: `registry-gc.sh` runs weekly as root, scales
   `deploy/ghcr-mirror` and applies the Job manifest this role stages. The task installs the
   script and the cron and runs neither. The operator accepted that script as the one writer of
-  the mirror's `spec.replicas` (#5732). A daniel-pi write happens only through
-  `delegate_to: daniel-pi`.
+  the mirror's `spec.replicas` (#5732). No task writes on daniel-pi.
 - **Mode (explicit + reversible):** each row carries the arm variable its source role used.
   `registry_k8s_manage_gc: false` skips the whole registry GC block, as it did in the registry
   role. It only skips: a host that already has the cron keeps it, so disarming a host means

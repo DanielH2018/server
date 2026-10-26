@@ -10,9 +10,9 @@ Run: uv run pytest ansible/tests/repo/test_census_rows_text.py
 
 import re
 from functools import cache
-from pathlib import PurePosixPath
 
 import pytest
+from _workflow_rows import WORKFLOW_ROWS
 from _deploy_sh_callers_row import (
     DEPLOY_SH_CALLERS,
     DEPLOY_SH_ENTRY_POINTS,
@@ -22,9 +22,8 @@ from _deploy_sh_callers_row import (
 )
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
-from lib import yaml_fast
-from renderer.renderer_lib import host as host_mode
 from lib.facts.citations import macro_citations
+from _host_package_units import host_package_units as _host_package_units
 from _row_table import (
     Census,
     Subject,
@@ -82,8 +81,6 @@ def _missing_macro_offence(subject: Subject) -> list[str]:
 
 # ── Other selectors and predicates ────────────────────────────────────────────────────
 
-_RUNS_ON = re.compile(r"^\s*runs-on:\s*(.+?)\s*$", re.MULTILINE)
-_VERSIONED = re.compile(r"^[a-z]+-\d+(\.\d+)?(-[a-z]+)?$")
 
 # `.items()` anywhere on a line, unless that line also sorts.
 UNSORTED_ITEMS = re.compile(r"\.items\(\)(?![^\n]*\bsort\b)")
@@ -107,26 +104,6 @@ INLINE_REFLAG_LIST = re.compile(r"Honor accepted designs \(don't re-flag\):")
 
 
 # ── Units the host packages ship ─────────────────────────────────────────────────────
-
-
-def _host_package_units() -> list[Subject]:
-    """One subject per unit a host spec ships: its name as `rel`, the spec's path as `text`.
-
-    A unit is a file directly under `UNIT_DIR` with a unit suffix, as `Package.units()` reads
-    it, or a unit an `enable:` map links from a `<target>.wants/` directory. A drop-in under
-    `<unit>.d/` is not one: it may extend another package's unit, which keeps its own name.
-    """
-    units = []
-    for rel in tracked("hosts/*package.yml", "hosts/*component.yml"):
-        spec = yaml_fast.safe_load((REPO / rel).read_text()) or {}
-        units.extend(Subject(str(unit), rel) for unit in spec.get("enable") or {})
-        for entry in spec.get("files") or []:
-            dst = PurePosixPath(str(entry.get("dst", "")))
-            if dst.parent == host_mode.UNIT_DIR and dst.name.endswith(
-                host_mode.UNIT_SUFFIXES
-            ):
-                units.append(Subject(dst.name, rel))
-    return units
 
 
 def _namespace_dir_files() -> list[str]:
@@ -202,7 +179,7 @@ ROWS = (
         green=(Subject("a.md", '- Deploy: `./scripts/deploy.sh --tags "sonarr"`'),),
         must_find=frozenset(
             f"ansible/roles/{role}/CLAUDE.md"
-            for role in ("k8s/sonarr", "k8s/traefik", "containers/wg-easy", "setup/k3s")
+            for role in ("k8s/sonarr", "k8s/traefik", "k8s/authelia", "setup/k3s")
         ),
     ),
     Census(
@@ -229,59 +206,6 @@ ROWS = (
             ),
         ),
         must_find=frozenset({"CLAUDE.md"}),
-    ),
-    Census(
-        name="workflow-runners-are-pinned",
-        reason=(
-            "`runs-on: ubuntu-latest` floats: GitHub rolls the alias with no commit here, so a "
-            "`language: system` prek hook can change verdict between two runs of one SHA. A "
-            "versioned label (`ubuntu-24.04`) moves only through a Renovate PR, which runs the "
-            "hooks on the new image before merge (docs/adr/0018)."
-        ),
-        files=lambda: tracked(".github/workflows/*.yml"),
-        offence=lambda s: [
-            f"floating runner {label!r}"
-            for label in _RUNS_ON.findall(s.text)
-            if not _VERSIONED.match(label)
-        ],
-        red=(
-            Subject("a.yml", "jobs:\n  a:\n    runs-on: ubuntu-latest\n"),
-            Subject("b.yml", "jobs:\n  b:\n    runs-on: ${{ env.RUNNER }}\n"),
-            Subject("c.yml", "jobs:\n  c:\n    runs-on: self-hosted\n"),
-        ),
-        green=(Subject("a.yml", "jobs:\n  a:\n    runs-on: ubuntu-24.04\n"),),
-        must_find=frozenset(
-            f".github/workflows/{name}"
-            for name in ("ci.yml", "image-smoke.yml", "renovate-config-canary.yml")
-        ),
-    ),
-    Census(
-        name="workflows-fetch-through-the-shared-script",
-        reason=(
-            "The merge-base fetch needs a token in a one-shot `extraheader`, because every "
-            "checkout runs with persist-credentials: false. `scripts/dev/pr_changed_files.sh` "
-            "holds that fetch once, and image-smoke and the deck_mod job call it even though "
-            "they read none of its file lists (#3777). A workflow that inlines the header again "
-            "is a copy the next change to the fetch has to find by hand."
-        ),
-        files=lambda: tracked(".github/workflows/*.yml"),
-        offence=lines_matching(re.compile(r"extraheader")),
-        red=(
-            Subject(
-                "a.yml",
-                'run: |\n  git -c "http.https://github.com/.extraheader=AUTHORIZATION: x" '
-                "fetch origin main\n",
-            ),
-        ),
-        green=(
-            Subject(
-                "a.yml",
-                'run: |\n  "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"\n',
-            ),
-        ),
-        must_find=frozenset(
-            f".github/workflows/{name}" for name in ("ci.yml", "image-smoke.yml")
-        ),
     ),
     Census(
         name="templates-iterate-dicts-sorted",
@@ -456,6 +380,8 @@ ROWS = (
         ),
     ),
 )
+
+ROWS += WORKFLOW_ROWS
 
 _IDS = [row.name for row in ROWS]
 

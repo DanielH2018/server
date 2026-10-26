@@ -54,6 +54,30 @@ tests:
             exp_annotations:
               summary: Kuma's Homelab Evals tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Homelab Evals tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: AIDE Integrity (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's AIDE Integrity (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the AIDE Integrity (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: AIDE Integrity (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's AIDE Integrity (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the AIDE Integrity (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: AIDE Integrity (daniel-pi), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's AIDE Integrity (daniel-pi) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the AIDE Integrity (daniel-pi) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: rkhunter Scan (daniel-box), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's rkhunter Scan (daniel-box) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the rkhunter Scan (daniel-box) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: rkhunter Scan (daniel-server), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's rkhunter Scan (daniel-server) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the rkhunter Scan (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: rkhunter Scan (daniel-pi), service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's rkhunter Scan (daniel-pi) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the rkhunter Scan (daniel-pi) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Loki Read Route (daniel-box), service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Loki Read Route (daniel-box) tile is gone and no alert rule pages in its place.
@@ -387,6 +411,18 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
@@ -570,6 +606,18 @@ tests:
       - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x140'
@@ -764,6 +812,18 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
         values: '1x160'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x160'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x160'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
@@ -949,6 +1009,18 @@ tests:
       - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x1700'
@@ -1144,6 +1216,18 @@ tests:
       - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
         values: '1x5 _x3100'
       - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x3100'
@@ -1361,6 +1445,18 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
@@ -1564,6 +1660,18 @@ tests:
       - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x5 _x300'
@@ -1781,6 +1889,18 @@ tests:
       - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
         values: '1x760'

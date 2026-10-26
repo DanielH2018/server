@@ -28,22 +28,21 @@
 # `compose:` names the directory of per-service trees (host_compose.py), and the services come from
 # `compose_services` in the Pi's host_vars.
 #
-# The component declares no `outputs:` entry yet. The canary reads no secret (operator ruling
-# 2026-10-24, h5-pi-compose.md *Open questions* 7), so no compose file references `${key}`, the
-# includes carry no `env_file:`, and no compose.env is rendered. The first move that carries a
-# real secret (H5.7, autoheal's webhook) adds this entry, with `keys:` listing exactly the secrets
-# the compose files read:
-#
-#   outputs:
-#     - src: compose.env.j2
-#       path: /usr/lib/homelab/compose/compose.env
-#       owner: root
-#       group: root
-#       mode: "0600"
-#       keys: [monitor_discord_webhook_url]
-#       dependents: [homelab-compose.service]
-#       format: dotenv   # homelab-secrets refuses a `'` or a newline in a value
+# The `outputs:` entry below is the Compose env file. Since H5.7, autoheal's webhook is the first
+# secret a compose file reads, and since H5.8 alloy's HTTP password is the second. The includes
+# carry `env_file:` and `keys:` lists exactly the secrets the compose files read (operator ruling
+# 2026-10-24, h5-pi-compose.md *Open questions* 7).
+# The Pi's SOPS file must hold each key: the operator runs `host_secrets.py sync daniel-pi`.
 compose: services
+outputs:
+  - src: compose.env.j2
+    path: /usr/lib/homelab/compose/compose.env
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [alloy_pi_http_password, monitor_discord_webhook_url]
+    dependents: [homelab-compose.service]
+    format: dotenv   # homelab-secrets refuses a `'` or a newline in a value
 # The boot path, reconcile's step 2 and H4's restart set all need this link.
 enable:
   homelab-compose.service: multi-user.target
@@ -63,3 +62,16 @@ files:
   - {src: compose-adopt, dst: /usr/lib/homelab/compose-adopt, mode: "0755"}
   # Marked inputs_sha256: it renders after every other file, with the hash over the project's files.
   - {src: units/homelab-compose.service.j2, dst: /usr/lib/systemd/system/homelab-compose.service, inputs_sha256: true}
+# What the Ansible-era projects wrote. Reconcile removes each file in its step 4, after step 3 has
+# restarted homelab-compose.service, so a file goes only once the project has run its service. Each
+# move PR (H5.6 to H5.9) adds its service's docker-compose.yml here. A revert of the move restores
+# the role, and `deploy.sh -e target=daniel-pi` renders the file again.
+legacy:
+  - {path: /home/ubuntu/server/containers/docker-proxy/docker-compose.yml}
+  - {path: /home/ubuntu/server/containers/autoheal/docker-compose.yml}
+  # alloy's role rendered its config at 0640 beside the compose file. Its password now reaches the
+  # container through the Compose env file, and the package installs a config without it.
+  - {path: /home/ubuntu/server/containers/alloy/docker-compose.yml}
+  - {path: /home/ubuntu/server/containers/alloy/config/config.alloy}
+  # wg-easy's role rendered only its compose file. The peer keys in ./config are data, not legacy.
+  - {path: /home/ubuntu/server/containers/wg-easy/docker-compose.yml}

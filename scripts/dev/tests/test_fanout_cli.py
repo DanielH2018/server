@@ -6,6 +6,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_cli.py
 import json
 import subprocess
 
+import pytest
+
 
 from fanout_lib import brief as brief_mod
 from fanout_lib import launch as launch_mod
@@ -458,6 +460,21 @@ def test_a_reordered_or_narrowed_spec_cannot_slip_past_the_live_guard(tmp_path, 
         err = capsys.readouterr().err
         assert f"shares {shared} with batch 1345-1386" in err
         assert "on daniel-server" in err
+
+
+def test_an_interrupted_launch_leaves_a_manifest_naming_batch_1(tmp_path):
+    """#6341: batch 1 is running when the interrupt lands, so a manifest must name it."""
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    run.answers_by_call = [
+        ok(HEADROOM),  # headroom read
+        ok(""),  # health read
+        ok(""),  # batch 1: launch
+        KeyboardInterrupt(),  # batch 2: the launch is killed mid-call
+    ]
+    with pytest.raises(KeyboardInterrupt):
+        _launch(tools, tmp_path, "--batch", "1", "--batch", "2", "--host", "daniel-box")
+    written = json.loads(next(iter(tmp_path.glob("*.json"))).read_text())
+    assert [b["batch"] for b in written["batches"]] == ["1"]
 
 
 def test_a_first_batch_refused_writes_no_manifest_at_all(tmp_path, capsys):

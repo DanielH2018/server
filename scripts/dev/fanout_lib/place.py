@@ -101,7 +101,7 @@ from lib.exit_codes import (
     FANOUT_PLACE_PARTLY_LAUNCHED,
 )
 from lib.git import git
-from fanout_lib.placement import NoHeadroom, place
+from fanout_lib.placement import HostReading, NoHeadroom, place
 from fanout_lib.target import SERVER, for_launch, registered_repos, resolve
 from fanout_lib.transport import (
     HOSTS,
@@ -152,6 +152,65 @@ def cmd_read(args, tools: Tools) -> int:
     for msg in bad:
         warn(msg)
     return FANOUT_PLACE_OK if good else FANOUT_PLACE_NO_HOST_READABLE
+
+
+def candidate_readings(
+    tools: Tools, registered: frozenset[str], hosts: list[str], root: Path
+) -> list[HostReading] | int:
+    """The readings of the hosts a batch may go to, or the exit code that refuses the launch.
+
+    Warns on stderr for each host that drops out, and prints an error when none is left.
+    `launch` and the `fanout-headroom` wait source (`fanout_lib.headroom_probe`) both call
+    this, so the wait reads the hosts exactly as the launch it waits for will.
+
+    Args:
+        tools: the process boundary.
+        registered: the account's registered signing keys, as `registered_keys` read them.
+        hosts: the hosts to read, or the one `--host` pins.
+        root: the manifest directory, whose uncleaned batches' unit states ride the read.
+
+    Returns:
+        The readable hosts that sign verifiably, or `FANOUT_PLACE_NO_HOST_READABLE` or
+        `FANOUT_PLACE_NO_SIGNING_HOST`.
+    """
+    good, bad = _readings(tools, hosts, root)
+    for msg in bad:
+        warn(f"placing without {msg}")
+    if not good:
+        return FANOUT_PLACE_NO_HOST_READABLE
+    good, refusals = verified_hosts(good, registered)
+    for reason in refusals:
+        warn(f"not placing on {reason}")
+    if not good:
+        error(
+            "no candidate host signs commits GitHub verifies — a batch placed there "
+            "opens a PR that cannot merge"
+        )
+        return FANOUT_PLACE_NO_SIGNING_HOST
+    return good
+
+
+def placement(
+    batches: list[str],
+    good: list[HostReading],
+    pin: str | None,
+    root: Path,
+    multiplexed: bool,
+) -> list[tuple[str, str]] | None:
+    """Each batch's host, or None having printed why `launch` would place nothing.
+
+    Spends no ssh: it decides from `good`, the readings `candidate_readings` took, and the
+    manifests under `root`. The `fanout-headroom` wait source calls it with placeholder
+    batch names, which is why its verdict and `launch`'s exit 3 cannot disagree.
+    """
+    try:
+        placed = place(batches, good, pin=pin)
+    except NoHeadroom as exc:
+        error(str(exc))
+        return None
+    if over_ssh_budget(placed, multiplexed) or over_live_batch_cap(placed, root, good):
+        return None
+    return placed
 
 
 def _fetch_issues(
@@ -220,28 +279,13 @@ def cmd_launch(args, tools: Tools) -> int:
         error(f"{registered} — refusing to launch")
         return FANOUT_PLACE_NO_SIGNING_HOST
     hosts = [args.host] if args.host else list(HOSTS)
-    good, bad = _readings(tools, hosts, args.manifest_root)
-    for msg in bad:
-        warn(f"placing without {msg}")
-    if not good:
-        return FANOUT_PLACE_NO_HOST_READABLE
-    good, refusals = verified_hosts(good, registered)
-    for reason in refusals:
-        warn(f"not placing on {reason}")
-    if not good:
-        error(
-            "no candidate host signs commits GitHub verifies — a batch placed there "
-            "opens a PR that cannot merge"
-        )
-        return FANOUT_PLACE_NO_SIGNING_HOST
-    try:
-        placed = place(list(batches), good, pin=args.host)
-    except NoHeadroom as exc:
-        error(str(exc))
-        return FANOUT_PLACE_NOTHING_PLACED
-    if over_ssh_budget(placed, tools.multiplexed()) or over_live_batch_cap(
-        placed, args.manifest_root, good
-    ):
+    good = candidate_readings(tools, registered, hosts, args.manifest_root)
+    if isinstance(good, int):
+        return good
+    placed = placement(
+        list(batches), good, args.host, args.manifest_root, tools.multiplexed()
+    )
+    if placed is None:
         return FANOUT_PLACE_NOTHING_PLACED
     # Only the hosts a batch landed on. Reading every host placement looked at spends an ssh
     # connection (`ufw limit ssh` allows 5 per 30s) on a host the signing gate or a failed
@@ -275,6 +319,10 @@ def cmd_launch(args, tools: Tools) -> int:
                 tools, host, batch, brief, numbers, target, *flags
             )
             run.batches.append(launched)
+            # Saved per batch, not once after the loop: a launch killed between batches
+            # (a tool timeout, a ^C) otherwise leaves running agents no manifest names,
+            # so `status` and `clean` cannot find them (#6341).
+            manifest_mod.save(run, root=args.manifest_root)
         except launch_mod.LaunchError as exc:
             released = (
                 claims_mod.release_for_orchestrator(tools, numbers, holder)

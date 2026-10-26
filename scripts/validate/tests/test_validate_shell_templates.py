@@ -74,6 +74,7 @@ def test_discover_templates_finds_the_known_set():
         "rkhunter-check.sh.j2",
         "docs-refresh.sh.j2",
         "eval-run.sh.j2",
+        "worktree-sweep.sh.j2",
         "pi-sd-health.sh.j2",
         "pi-gz-integrity.sh.j2",
         "pi-recovery-health.sh.j2",
@@ -203,8 +204,9 @@ def test_component_defaults_and_host_reach_the_render_context():
     path = v.COMPONENTS / "pi-heartbeats" / "templates" / "pi-recovery-health.sh.j2"
     ctx = v.template_context(path)
     assert ctx["optimize_pi_recovery_restart_enabled"] is True
-    # wg-easy runs only on daniel-pi, so its containers_list proves the host layer is the Pi's.
-    assert any(c["name"] == "wg-easy" for c in ctx["containers_list"])
+    # wg-easy runs only on daniel-pi, so its compose_services entry proves the host layer is the
+    # Pi's. It left containers_list in H5.9.
+    assert any(c["name"] == "wg-easy" for c in ctx["compose_services"])
 
 
 def test_hostvars_carries_every_hosts_inventory_address():

@@ -3,6 +3,7 @@
 
 - name: Enable periodic unattended security upgrades
   tags: [unattended-upgrades]
+  when: inventory_hostname not in initial_setup_packaged_hosts['apt']
   ansible.builtin.copy:
     dest: /etc/apt/apt.conf.d/20auto-upgrades
     content: |
@@ -17,6 +18,7 @@
 
 - name: Set local unattended-upgrades policy
   tags: [unattended-upgrades]
+  when: inventory_hostname not in initial_setup_packaged_hosts['apt']
   # Security origins are enabled by the distro's 50unattended-upgrades. This local
   # drop-in pins the bits we care about: no surprise reboots (the weekly "Weekly
   # system restart" cron owns reboots) and cleanup of obsolete kernels/deps.
@@ -163,6 +165,7 @@
 
 - name: Configure SSH security settings
   tags: [ssh]
+  when: inventory_hostname not in initial_setup_packaged_hosts['sshd']
   ansible.builtin.lineinfile:
     path: "{{ ssh_config_path }}"
     regexp: "^#?{{ item.key }}"
@@ -196,6 +199,7 @@
 
 - name: Configure SSH Match block for sys user forwarding
   tags: [ssh]
+  when: inventory_hostname not in initial_setup_packaged_hosts['sshd']
   ansible.builtin.blockinfile:
     path: "{{ ssh_config_path }}"
     marker: "# {mark} ANSIBLE MANAGED BLOCK - sys user forwarding"

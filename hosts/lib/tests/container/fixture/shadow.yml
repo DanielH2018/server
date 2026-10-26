@@ -1,0 +1,14 @@
+# The fixture whose packaged unit has an Ansible-era copy under /etc/systemd/system with the same
+# name (H7.41a). `validate_lib/shadow_case.py` writes that copy, and an orphan the package does
+# not ship, before it installs this package. Reconcile must hand the first over to the packaged
+# unit and leave the orphan alone.
+description: Fixture host package whose unit shadows an Ansible-era copy, for the host_packages container cases
+components: [reconcile]
+maintainer_scripts: [preinst, postinst, prerm]
+files:
+  - {src: units/homelab-fixture-shadow.service, dst: /usr/lib/systemd/system/homelab-fixture-shadow.service}
+enable:
+  homelab-fixture-shadow.service: multi-user.target
+legacy:
+  - {path: /etc/systemd/system/homelab-fixture-shadow.service}
+  - {path: /etc/systemd/system/homelab-fixture-orphan.service}

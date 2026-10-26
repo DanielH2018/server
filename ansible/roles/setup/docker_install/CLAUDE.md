@@ -20,7 +20,7 @@ answers. This file keeps the rules a session must not break.
 - In `ansible/initial_setup.yml`, after [[sops_setup]] — every host, **unconditionally**.
   `tasks/main.yml` is a dispatcher: `has_docker: true` runs `install.yml` (everything below),
   `has_docker: false` runs `teardown.yml`.
-- **Granular tags:** `docker-repo` (APT repo + GPG + the cache refresh), `docker-engine`
+- **Granular tags:** `docker-repo` (the apt prerequisites and the cache refresh; the source and key come from the `apt-docker` component), `docker-engine`
   (install + hold + v1-wrapper removal), `docker-group`, `docker-daemon` (daemon.json +
   conditional restart), `docker-networks`, `docker-go-runtime` (both Go runtime drop-ins;
   `-dockerd` / `-containerd` select one). `docker-engine-upgrade` is `never`-tagged AND gated on
@@ -28,7 +28,7 @@ answers. This file keeps the rules a session must not break.
   is not enough — the role tag inherits onto the include and overrides it (#1998).
 
 ## The engine is held; `--tags docker-engine-upgrade` is how it moves
-`docker_engine_packages` (`group_vars/all.yml`) are `apt-mark hold`-equivalent on every
+`docker_engine_packages` (`group_vars/all.yml`) are held on every
 `has_docker` host, set by `ansible.builtin.dpkg_selections` in two places: [[initial_setup]]'s
 `host-basics.yml` immediately BEFORE its dist-upgrade (this role runs after that one, so a
 hold set only here would land one upgrade too late), and `install.yml` right after the
@@ -40,12 +40,20 @@ swapped under running containers.
 ```
 uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e docker_install_engine_upgrade=true -e target=daniel-pi
 ```
-It refuses a host with no `~/server` checkout, unholds, and asks apt in check mode whether
+It refuses a host with no `~/server` checkout. It then masks `homelab-updater.timer` (unless the
+operator already did) and waits until neither `homelab-updater.service` nor
+`homelab-reconcile.service` is active, because the play and reconcile both write the `homelab`
+project. The wait's limit is `docker_install_updater_wait_limit_s`, which exceeds the updater
+unit's `TimeoutStartSec`. The play unholds, and asks apt in check mode whether
 `docker_install_package_specs` would change anything. Nothing pending: re-hold and
-report. Otherwise it stops every Compose project in `containers_list` (reverse order),
-upgrades, re-holds in `always:` so a failed apt run leaves the hold in place, and brings every
-project back with `recreate: always` — the recreate docker-proxy needs to pick up the new
-socket inode. The Pi's containers are down for the apt run; use a LAN session.
+report. Otherwise it stops every Compose project in `containers_list` (reverse order) and then
+the `homelab` project, upgrades, re-holds in `always:` so a failed apt run leaves the hold in place, and brings
+`homelab` and then every other project back with `recreate: always` — the recreate docker-proxy
+needs to pick up the new socket inode. Its last task unmasks and starts the timer, unless the timer
+was masked before the play. **A failed play leaves the timer masked**, so the Pi installs no
+package until the operator reruns the play or runs `sudo systemctl unmask homelab-updater.timer`
+and `sudo systemctl start homelab-updater.timer`. The Pi's containers are down for the apt run; use
+a LAN session. ENFORCED by `ansible/tests/setup/test_engine_upgrade_holds_the_updater_timer.py`.
 
 **The four versions are pinned in `defaults/main.yml`, and Renovate carries the signal**
 (#2153), rendered into apt's `name=5:29.8.1-*~ubuntu.24.04~noble` form as
@@ -87,14 +95,16 @@ restarts Docker — see the first bullet under *Notable*.
   working.** Any `daemon.json` edit restarts dockerd, and the restart gives
   `/var/run/docker.sock` a new inode. A container that bind-mounts the file keeps the old
   inode, so docker-proxy stays up and answers 503 until it is recreated, and `autoheal` cannot
-  see the fault. The Traps section of `ansible/roles/containers/docker-proxy/CLAUDE.md` has the
+  see the fault. The header comment of
+  `hosts/components/pi-compose/services/docker-proxy/compose.yaml.j2` has the
   inode check and the recreate command. An engine upgrade also replaces the containerd shim
   under every running container. So `tasks/engine-upgrade.yml` stops every Compose project
   before apt runs and recreates each one afterwards; its header comment has the reasoning.
-- **The GPG key stays ASCII-armored at `/etc/apt/keyrings/docker.asc`.** Do **not** reintroduce
-  `gpg --dearmor` via `command`: it writes the file under the `027` umask [[initial_setup]] set
-  earlier in the same play, and apt then reports the repo as unsigned. Guarded by
-  `ansible/tests/setup/test_apt_keyring_permissions.py`.
+- **The Docker apt source and its key belong to `homelab-daniel-pi`, not this role.**
+  `hosts/components/apt-docker/` ships `docker.sources` and the ASCII-armored
+  `/etc/apt/keyrings/docker.asc`, and only the Pi's package lists it. A key task here would be
+  a second writer of that path. `scripts/renderer/tests/test_apt_source_components.py` holds the key's
+  sha256.
 - **Each daemon runs `GOGC=off` under a `GOMEMLIMIT`** (`tasks/go-runtime.yml`, sized at
   `docker_install_gomemlimit_<daemon>`). Apply a change by hand, one daemon per day.
   `docs/docker-engine-pins-and-runtime.md` has why a child's inherited environment forces the

@@ -19,8 +19,8 @@ notification-controller posts as `flux/soak`. In order, it:
    alert activated after T0.
 
 A pass prints the services it judged, then one `event=deploy` logfmt line, the cluster's deploy
-annotation. A failure writes `failed-services: <service>,...` to the termination message and
-exits 1. Every
+annotation. A failure prints the same line with `result=fail` and `duration_s`, writes
+`failed-services: <service>,...` to the termination message and exits 1. Every
 connection goes through `flux_job_connect.open_url`, which the Job census requires, and the
 API server's CA reaches `urlopen` through `SSL_CERT_FILE`, which the Job sets.
 
@@ -541,6 +541,17 @@ def live_reads(
     return Reads(api, lambda url: get(url, url), query, prometheus_start)
 
 
+def deploy_line(revision: str, services: str, result: str, duration_s=None) -> str:
+    """The `event=deploy` line, in `host_lib.deploy_event`'s shape, which this pod cannot import.
+
+    `test_flux_soak.py` holds the two byte-identical; a pass's line is the one before #6164.
+    """
+    line = f"event=deploy services={services} sha={revision[:8]} result={result}"
+    if duration_s is not None:
+        line += f" duration_s={int(duration_s)}"
+    return f"{line} source=flux"
+
+
 def main(argv: list[str] | None = None, reads: Reads | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--revision", required=True)
@@ -559,11 +570,13 @@ def main(argv: list[str] | None = None, reads: Reads | None = None) -> int:
         wait_seconds=args.wait_seconds,
         own_pod=os.environ.get("HOSTNAME", ""),
     )
+    started = time.monotonic()
     try:
         verdict = soak(reads or live_reads(args.prometheus), inputs)
     except SoakError as err:
         print(f"soak: {err}", file=sys.stderr)
         args.termination_log.write_text(f"error: {err}\n")
+        print(deploy_line(inputs.revision, "flux", "fail", time.monotonic() - started))
         return 1
     if not verdict.failures:
         if verdict.judged:
@@ -574,13 +587,13 @@ def main(argv: list[str] | None = None, reads: Reads | None = None) -> int:
             )
         # The cluster's deploy annotation (D5.3b3): observability's
         # `observability_flux_deploy_annotation_expr` reads this line from Loki.
-        print(
-            f"event=deploy services=flux sha={inputs.revision[:8]} result=ok source=flux",
-            flush=True,
-        )
+        print(deploy_line(inputs.revision, "flux", "ok"), flush=True)
         return 0
     for service, why in verdict.failures:
         print(f"soak: {service}: {why}", file=sys.stderr)
+    # The failure's annotation names the failed services (#6164).
+    duration = time.monotonic() - started
+    print(deploy_line(inputs.revision, ",".join(verdict.services()), "fail", duration))
     args.termination_log.write_text(
         f"failed-services: {','.join(verdict.services())}\n"
     )

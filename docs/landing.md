@@ -87,6 +87,44 @@ the call until its checks pass. A refused merge is printed once and the wait con
 merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both flags in one
 run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
+**A master CI backlog holds a green PR's merge.** Before the direct merge, `land_lib/pace.py`
+counts the master push runs of `ci.yml` that are not completed. At 1 or more it prints
+`pacing the merge: …` and waits for the next poll. A full sweep is about 18 jobs against the
+account's 20-job runner cap, so a second unfinished sweep already queues. On 2026-10-24, eight
+concurrent landings left six master runs unfinished, their jobs waited 8-17 minutes for a
+runner, and each landing waited 29-61 minutes for its merge commit's verdict (#5526).
+
+The cap was 2 until 2026-10-25. A landing that updated its branch merged into a master that
+had moved during the re-test, so its merge commit's tree was never tested and its push run
+swept all 18 jobs. One landing in a burst then paid three full runs. Merging only into an idle
+master makes the re-tested tree the merged tree more often, which lets `prove` skip the push
+sweep. The `DECIDED:` marker on `PACE_MASTER_RUNS` in `land_lib/options.py` has the
+measurement and the condition for reverting it.
+
+- The count is a read, not a lock. Two landings that read at the same poll can both merge.
+  Pacing lowers the average queue depth; it does not close the race that makes the `prove`
+  job's tested-tree skip miss.
+- A run unfinished more than 2 hours after its creation is wedged and not counted.
+- The wait counts against `merge_timeout`. A backlog that never drains ends at
+  `merge-timeout`, whose message names the pacing; re-run the same command.
+- A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
+- `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
+- A PR armed by hand with `gh pr merge --auto` merges without this check.
+
+**A head whose only CI skipped as a draft ends the wait once the PR is ready.** `ci.yml` runs
+no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`
+reads the head as pending. GitHub may start no run on a ready flip made seconds after the push.
+PR #6069 was marked ready at 01:39:31 on 2026-10-24, its head's only run was created at
+01:39:35 with every job skipped, and `land.sh` waited out its 1740s budget (#6077). No run was
+cancelled, so `ci.yml`'s concurrency group did not cause it.
+
+- The merge wait prints the cause on the first poll that reads such a head.
+- Once the head has stayed so for `DRAFT_SKIPPED_GRACE_S` (180s), the wait reads the PR's
+  draft state. A ready PR ends at `merge-timeout`, whose message names the remedy. A PR still
+  a draft keeps waiting, because marking it ready starts its run.
+- A re-run of the skipped run replays its draft event and skips again. The remedy is
+  `gh pr ready --undo <n>`, then `gh pr ready <n>`, or a push.
+
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
@@ -202,8 +240,8 @@ SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `hosts/lib/ci_verdict.py` is the
 merge was immediately followed by another reads `cancelled` permanently. The rule covers the
 gate job too: ci.yml runs `prek` under `always()`, so a cancelled run still runs the gate, which
 fails on its cancelled needs. `ci_verdict.ci_verdict` leaves that gate out unless a need in the
-same run failed outright (#5931). `await_ci.py` follows
-the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
+same run failed outright (#5931), and the deployer's tick reads it the same way (#6007).
+`await_ci.py` follows the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
 no verdict (cancelled/stale) — following the tip <tip>`, and it is normal. It also fires when
 the cancellation came before the `prek` job registered a check-run at all: the check-runs list
 then never carries the required name, so `await_ci.py` reads the SHA's check-suites (a
@@ -347,7 +385,10 @@ Instead it reads the cluster every 30 seconds:
   soak, which exits once `homelab` leaves R (#5704), and the wait reads that revision's soak
   instead (D7.2).
 - **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
-  line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
+  line names the held SHA and, for a `failed=` hold, the failed names, and says whether any
+  of them is one of this PR's services. The held SHA is the newest commit the promotion
+  carried, which may be another PR's, so a hold naming none of this PR's services was most
+  likely caused by another merge in it, or by a run it superseded (D7, #6199). Clearing the hold is
   the operator's decision, approved through the permission prompt the agent's clear raises. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
   its verification (`docs/flux-deploy-plane.md`, *Verification*).
 - **`nothing-to-deploy`, from land-wait's `suspended`, exit 0.** Every tag Flux applies for
@@ -434,7 +475,7 @@ and the deploy the exit-4 fallback runs.
 Until slice D5 ends, nothing orders an edge between a flux-owned role and an Ansible-owned one.
 `land.sh` applies the Ansible half after the merge, and `promote` applies the Flux half after
 CI. A PR that changes both halves lands them in whichever order the two pipelines finish.
-CI's **Cross-plane order gate** step, in the `hooks` job on pull requests only, refuses such a
+CI's **Cross-plane order gate** step, in the `pr_gates` job on pull requests only, refuses such a
 PR. It runs `scripts/validate/cross_plane_order.py --base HEAD^1`, which renders the cluster
 at the base and at the merge commit with `homelab-render cluster`. Each side renders with its
 own tree's renderer. The gate refuses two shapes:
@@ -502,7 +543,7 @@ fails without a verdict. Slice D6 deletes the gate once every role is flux-owned
 ### A cluster pin moves forward, one step, alone in its PR
 
 Merging `k3s_longhorn_version` or `k3s_metallb_version` is the upgrade, and neither upgrade
-runs backwards. CI's **Cluster pin checks** step, in the `hooks` job on pull requests only,
+runs backwards. CI's **Cluster pin checks** step, in the `pr_gates` job on pull requests only,
 runs `scripts/validate/cluster_pins.py --base HEAD^1`. It reads each pin from whichever role
 YAML file holds the key at the base and at the merge commit, and refuses five shapes:
 
@@ -685,7 +726,13 @@ Four things sit in that position:
   `initial_setup.yml`'s `hosts:` is one target per run, and the tick runs it on whichever host
   `land.sh` executes on — so a role with no `when:` gate (`initial_setup` itself, plus
   `config_files`, `sops_setup`, `docker_install`, `hypervisor`) reaches all three hosts, and a
-  role's own `when:` can reach more than one (`nut_host`: daniel-box and daniel-server). The
+  role's own `when:` can reach more than one (`claude_code`: daniel-box and daniel-server,
+  through `has_claude_code`). A `when:` that admits a host is not proof that the role changes
+  anything there. `nut_host`'s `when:` admits both cluster nodes, but its only task is the
+  unconditional `meta: end_role` under
+  `ansible/roles/setup/nut_host/tasks/main.yml:DECIDED: this role is emptied`, so an apply
+  changes nothing on either host. Each node's NUT client arrives through its host package
+  (`hosts/components/nut-secondary/`, in `homelab-daniel-box` and `homelab-daniel-server`). The
   tick converging says only that the LOCAL host is current; PR #1002 changed the shared Kuma
   push library, the tick converged on daniel-box, and `land.sh` read `settled` while
   daniel-server and daniel-pi kept the old library for three days. The line names each remaining
@@ -731,7 +778,8 @@ It ends `deferred` in three cases:
   that arrives in this merge arms nothing until an updater run installs it. The operator starts
   the updater by hand with `systemctl start homelab-updater.service` as root on that host, once
   the agent's Prometheus shows `homelab_repo_published_info` at the merge commit. They then
-  re-run the same `land.sh` command.
+  re-run the same `land.sh` command. daniel-box, daniel-server and the Pi ship the link, so
+  this case reaches only the merge that first adds a link (#6218 added daniel-box's).
 - The host's deadline is more than 45 minutes away. The deadline is the second updater fire
   after the merge plus 10 minutes, read from the first parent's rendered drop-in.
 - The host is still unsettled past its deadline. The line gives the host's last success
