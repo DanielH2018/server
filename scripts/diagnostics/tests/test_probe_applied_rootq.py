@@ -168,16 +168,17 @@ def test_a_root_only_file_that_differs_from_the_render_is_drift(
     assert code == PROBE_FAILED
 
 
-def test_a_credential_file_rootq_refuses_reads_ok_meta_with_the_reason(
+# #6372 overruled the red commit's premise: a refusal that verifies nothing is not ok-meta.
+def test_a_credential_file_rootq_refuses_to_stat_reads_unchecked_and_exits_75(
     tmp_path, monkeypatch, capsys
 ):
     """rootq's `*.env` DENY refuses even `stat`, so no mode or owner is pinned here."""
     rig = _rig(tmp_path, monkeypatch, SCRIPT_TASK + ENV_TASK, {"@L@/x.sh": AS_RENDERED})
     code, rows = _run(rig, capsys)
     status, line = rows[f"{rig.locked}/hook.env"]
-    assert status == "ok-meta", line
+    assert status == "UNCHECKED", line
     assert "deny list" in line or "credential" in line, line
-    assert code == PROBE_OK
+    assert code == PROBE_UNREADABLE
 
 
 def test_applied_asks_rootq_only_through_stat_and_matches(
@@ -207,22 +208,74 @@ ENV_ABSENT_TASK = """\
 """
 
 
-def test_a_credential_file_an_absent_arm_removes_is_unread_not_ok_meta(
+def test_a_credential_file_an_absent_arm_removes_is_unchecked_when_rootq_refuses_it(
     tmp_path, monkeypatch, capsys
 ):
-    """rootq refuses the deny list before it looks, so the removal stays unconfirmed."""
+    """A rootq that refuses the path before it looks leaves the removal unconfirmed."""
     tasks = SCRIPT_TASK + ENV_ABSENT_TASK
     rig = _rig(tmp_path, monkeypatch, tasks, {"@L@/x.sh": AS_RENDERED})
     code, rows = _run(rig, capsys)
     status, line = rows[f"{rig.locked}/old.env"]
-    assert status == "unread", line
-    assert "removal unverified" in line, line
+    assert status == "UNCHECKED", line
     assert code == PROBE_UNREADABLE
 
 
-def test_a_present_credential_file_says_its_existence_went_unverified(
+# rootq after #6369: `stat` answers a listed DENY path with type, mode, owner, group and
+# `deny=yes`, and "does not exist" for a missing one; every other verb still refuses it. A
+# table row of None is a missing file.
+DENY_STAT = """\
+if path.endswith(".env") and verb == "stat" and path in table:
+    row = table[path]
+    if row is None:
+        print(f"refused: {path} does not exist", file=sys.stderr)
+        sys.exit(2)
+    print(f"mode={row['mode']} type=file owner={row['owner']} group={row['group']} deny=yes")
+    sys.exit(0)
+"""
+ENV_AS_RENDERED = {"mode": "0600", "owner": "root", "group": "root", "content": "x"}
+
+
+def _deny_stat_rig(tmp_path, monkeypatch, tasks: str, live: dict):
+    rig = _rig(tmp_path, monkeypatch, tasks, {"@L@/x.sh": AS_RENDERED, **live})
+    body = FAKE_ROOTQ.replace(
+        'if path.endswith(".env"):', DENY_STAT + 'if path.endswith(".env"):'
+    )
+    body = body.replace("@PYTHON@", sys.executable).replace("@LOG@", str(rig.log))
+    write_exec(
+        tmp_path / "bin" / "rootq",
+        body.replace("@TABLE@", str(tmp_path / "table.json")),
+    )
+    return rig
+
+
+def test_a_credential_file_with_its_mode_and_owner_reads_ok_meta_and_exits_0(
     tmp_path, monkeypatch, capsys
 ):
-    rig = _rig(tmp_path, monkeypatch, SCRIPT_TASK + ENV_TASK, {"@L@/x.sh": AS_RENDERED})
-    _, rows = _run(rig, capsys)
-    assert "existence, mode and owner unverified" in rows[f"{rig.locked}/hook.env"][1]
+    live = {"@L@/hook.env": ENV_AS_RENDERED}
+    rig = _deny_stat_rig(tmp_path, monkeypatch, SCRIPT_TASK + ENV_TASK, live)
+    code, rows = _run(rig, capsys)
+    status, line = rows[f"{rig.locked}/hook.env"]
+    assert status == "ok-meta", line
+    assert line.endswith(
+        "0600 root:root (rootq), content not compared: credential file"
+    ), line
+    assert code == PROBE_OK
+
+
+@pytest.mark.parametrize(
+    "tasks, live",
+    [
+        (ENV_TASK, None),  # #6373: should be present, and is missing
+        (ENV_TASK, {**ENV_AS_RENDERED, "mode": "0644"}),
+        (ENV_ABSENT_TASK.replace("old.env", "hook.env"), ENV_AS_RENDERED),  # #6373
+    ],
+    ids=["missing", "mode-widened", "present-where-removed"],  # fmt: skip
+)
+def test_a_credential_file_that_differs_from_the_render_fails_the_run(
+    tmp_path, monkeypatch, capsys, tasks, live
+):
+    live_rows = {"@L@/hook.env": live}
+    rig = _deny_stat_rig(tmp_path, monkeypatch, SCRIPT_TASK + tasks, live_rows)
+    code, rows = _run(rig, capsys)
+    assert rows[f"{rig.locked}/hook.env"][0] == "DRIFT", rows
+    assert code == PROBE_FAILED

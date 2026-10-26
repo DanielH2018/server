@@ -1,13 +1,13 @@
 {
-  "checksum": "58c24634ee727fb2c980fb45b3a431431555c230ebd4e7c4dd03f36bb21891c7",
+  "checksum": "fc063338df86d40e316b8a73347188198c7e0b648ca05b5e1c993837562e6db0",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/claude_code/CLAUDE.md#The root inspector",
   "row": {
     "atoms": {
       "ansible/roles/setup/claude_code/files/homelab_rootq.py:COMMANDS": "1fe52bd37215fbe7d113af8deb75fc73b087c5c8d2e058907fd82b65b8fbf106",
-      "ansible/roles/setup/claude_code/files/homelab_rootq.py:PATHS": "ca1331ba4702fb62829ff506a8a786415f3698519c68c3ff2709c640edee6c8c"
+      "ansible/roles/setup/claude_code/files/homelab_rootq.py:PATHS": "c80590f972de318f31f00c1aad5b81443befeae2fdb9454cfd5d858597a612db"
     },
     "python": "3.14",
-    "verified_sha": "06c861abe"
+    "verified_sha": "a006c9712"
   }
 }

@@ -7,11 +7,13 @@ playbook entry admits in one `host_reader` call per host, and prints one row per
 
 - `ok`: present with the declared mode, owner and group, and the content hash of the render;
 - `ok-meta`: the same, except that the content was not compared, with the reason. A render
-  holding a secret leaves a `STUB`, and rootq refuses to hash a credential file. A credential
-  path rootq refuses even to stat, such as a `*.env` file, reads `ok-meta` and says its
-  existence, mode and owner went unverified; an absent arm's such path reads `unread`;
+  holding a secret leaves a `STUB`, and rootq refuses to hash a credential file, whose row
+  says `content not compared: credential file`. rootq's `stat` still answers mode and owner
+  for a credential file on its allowlist (#6369), so those are compared;
 - `DRIFT`: missing, present where an absent arm removes it, or a declared field or the
   content differs;
+- `UNCHECKED`: a credential file rootq refused even to stat, so nothing about it was
+  verified (#6372);
 - `unread`: the path could not be stat'ed as this user, and rootq did not answer for it,
   because the path is not on rootq's allowlist or the host has no rootq.
 
@@ -23,8 +25,9 @@ Both are tier 1 verbs, so no file content is printed, and `applied` calls no oth
 A task file the walk cannot read prints as `UNCHECKED` with the importing file and the reason,
 because nothing in it was read: its path does not resolve, or its `when:` or loop reads a
 value only the run sets. An import whose `when:` is false for the host prints as skipped.
-Exit 1 on any `DRIFT`, else 75 when a path was `unread`, a task file was `UNCHECKED` or nothing
-was compared, else 0. A 75 for an `UNCHECKED` task file says on stderr that coverage was partial.
+Exit 1 on any `DRIFT`, else 75 when a path was `unread`, a task file or a credential file was
+`UNCHECKED` or nothing was compared, else 0. A 75 for an `UNCHECKED` row says on stderr that
+coverage was partial.
 The render is the working tree's, so commit or stash first to check `HEAD`.
 """
 
@@ -57,8 +60,8 @@ SETUP = ANSIBLE / "roles" / "setup"
 # The playbooks that apply a setup role, in `setup_routing.PLAYBOOKS`' precedence order.
 PLAYBOOKS = ("initial_setup.yml", "k3s-bringup.yml", "bootstrap.yml")
 
-# rootq's refusals of a credential file, whose hash would be a guessing oracle for it. Such a
-# path reads ok-meta with the reason, because no read could compare its content.
+# rootq's refusals of a credential file, whose hash would be a guessing oracle for it. A
+# refused hash reads ok-meta, `credential file`; a refused stat reads UNCHECKED.
 CREDENTIAL_REFUSALS = ("is on the deny list", "matches a credential pattern")
 
 APPLIED_HELP = (
@@ -130,16 +133,11 @@ def compare(want: Want, live: dict, user: str) -> tuple[str, str]:
     """(status, detail) for one path; `live` is `host_reader`'s stat row for it."""
     status = live.get("status")
     if status not in ("ok", "absent"):
-        # rootq checks the deny list before the path exists, so its refusal says nothing about
-        # the file. A present want reads ok-meta, as the operator ruled for credential files
-        # (#6357), and says so. An absent arm's removal cannot be confirmed at all.
-        if (reason := credential_refusal(live)) is not None and want.present:
-            return (
-                "ok-meta",
-                f"existence, mode and owner unverified: rootq refused: {reason}",
-            )
-        if reason is not None:
-            return "unread", f"removal unverified: rootq refused: {reason}"
+        # A credential refusal of `stat` says nothing about the file: rootq refuses a DENY
+        # path off its allowlist before it looks. Nothing was verified, so the row never
+        # counts toward exit 0 (#6372).
+        if (reason := credential_refusal(live)) is not None:
+            return "UNCHECKED", f"credential file rootq would not stat: {reason}"
         return "unread", f"cannot stat as {user}: {live.get('error', status)}"
     if not want.present:
         return (
@@ -175,6 +173,8 @@ def compare(want: Want, live: dict, user: str) -> tuple[str, str]:
     why = want.why_no_content or f"content unreadable as {user}"
     if want.sha256 is not None:
         why = live.get("refused") or f"content unreadable as {user}"
+    if live.get("credential") or credential_refusal(live):
+        why = "credential file"
     return "ok-meta", f"{meta}, content not compared: {why}"
 
 
@@ -246,7 +246,8 @@ def run_applied(ns, read=read_host, setup: Path = SETUP, render_ctx=None) -> int
         return PROBE_FAILED
     if "UNCHECKED" in statuses:
         print(
-            f"applied: coverage partial: an UNCHECKED task file of {ns.role} was not read",
+            f"applied: coverage partial: an UNCHECKED task file or credential file of "
+            f"{ns.role} was not read",
             file=_sys.stderr,
         )
         return PROBE_UNREADABLE

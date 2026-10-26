@@ -416,11 +416,13 @@ one row per path:
 - `ok` means present with the declared mode, owner and group, and with the render's content
   hash.
 - `ok-meta` means the same, except that the content was not compared. The row names why: a
-  render holding a secret leaves a `STUB`, or `rootq` refuses to hash a credential file. `rootq`
-  refuses even `stat` on a `*.env` path before it checks that the path exists, so such a row
-  says its existence, mode and owner went unverified. An absent arm's path that `rootq`
-  refuses this way reads `unread`, because its removal cannot be confirmed.
-- `DRIFT` means missing, present where an absent arm removes it, or different.
+  render holding a secret leaves a `STUB`, or the file is a credential file, whose row says
+  `content not compared: credential file`. `rootq stat` still answers mode and owner for a
+  credential file on its allowlist (#6369), so `applied` compares those with the render.
+- `DRIFT` means missing, present where an absent arm removes it, or different. A credential
+  file counts too.
+- `UNCHECKED` means a credential file `rootq` refused even to stat, because it is not on
+  `rootq`'s allowlist. Nothing about it was verified, so the run exits 75 (#6372).
 - `unread` means this user cannot stat the path and `rootq` did not answer for it: the path is
   not on `rootq`'s `PATHS`, or the host has no `rootq`.
 
@@ -653,7 +655,9 @@ script through one `NOPASSWD` sudoers line, and its verbs come in two tiers:
 - **Tier 1 prints no content.** `stat PATH`, `sha256 PATH` and `matches PATH REPO_FILE` take
   a file on an explicit allowlist, such as `/etc/netplan/*.yaml`, `/etc/cron.d/*` or
   `/usr/local/bin/registry-gc.sh`. `matches` exits 0 when the live file is byte-identical to
-  REPO_FILE in your checkout. The shim hashes REPO_FILE, so root never opens it.
+  REPO_FILE in your checkout. The shim hashes REPO_FILE, so root never opens it. On a
+  credential path that matches `DENY`, only `stat` answers, with mode, type, owner and group
+  and never size or mtime. It answers only when the allowlist names the path.
 - **Tier 2 prints, redacted by default.** `nft`, `ufw`, `sshd`, `crontab` and
   `cat /etc/netplan/*.yaml` keep only the tokens their grammar makes provably plain, such as
   rule keywords, addresses, ports, paths and flag names. Every other value becomes a

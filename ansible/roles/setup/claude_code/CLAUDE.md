@@ -360,6 +360,16 @@ a need appears.
   directory above it must be root-owned and writable by root alone. It must also miss every
   pattern in `DENY`, an independent second layer. `/var/lib/gitops-deploy` is not listed,
   because `sys_user` owns it and the caller already reads it.
+- **A DENY path answers `stat` alone, and only when `PATHS` names it.** The operator ruled
+  this on 2026-10-26 (#6369). `stat` of such a path prints its mode, type, owner and group,
+  plus `deny=yes`. It never prints size or mtime, because a size gives away a secret's
+  length. A missing one is refused as "does not exist". `cat`, `sha256` and `matches` still
+  refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
+  before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
+  it exists or not. The one DENY entry in `PATHS` is the exact path
+  `/etc/claude-rc/alert-webhook.env`. homelab-ui's `credentials.json` sits in the agent
+  user's home, which root does not own, so rootq cannot stat it. `probe.py applied` reports it
+  `UNCHECKED`.
 - **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a
   webhook URL, is withheld whole. The rest is redacted by default. A value prints only when it
   matches one of the token classes the script defines in one block, such as a number of up to

@@ -20,7 +20,8 @@ keys:
 - `rootq`: `{path: sha256 or null}`, for `stat` paths this user may not stat or open. Such a
   path is asked of `rootq` on the host, through tier 1's `stat` and `matches PATH HEX` only,
   so no file content is printed. Its row carries `via: rootq`, and `match` when a hash was
-  compared, or `refused` with rootq's reason.
+  compared, or `refused` with rootq's reason. `credential: true` marks a DENY path rootq
+  answered `stat` for with mode and owner only (#6369); no hash is asked of it.
 
 ABSENT IS NOT UNREADABLE. A file, a log directory or a stat target reports `absent`,
 `unreadable` or `ok`, never an empty value for a read that failed. A journal read by a user
@@ -143,7 +144,10 @@ def rootq_stat(path, err):
     rc, said = rootq("stat", path)
     if rc == 0:
         meta = dict(w.split("=", 1) for w in said.split() if "=" in w)
+        # `deny=yes` marks a credential file: rootq withholds its size and mtime, and refuses
+        # every verb but stat, so no `matches` is asked of it.
         return {"status": "ok", "via": "rootq", "sha256": None,
+                "credential": meta.get("deny") == "yes",
                 **{k: meta.get(k) for k in ("mode", "owner", "group")}}
     # rootq resolves the path as root before any check but the deny list, so this refusal is
     # root's ENOENT: an absent arm's path under a directory this user cannot read.
@@ -170,7 +174,8 @@ def stat(path):
         if path not in asks:
             return {"status": "unreadable", "error": str(exc)}
         row = rootq_stat(path, exc)
-        return rootq_match(path, asks[path], row) if row["status"] == "ok" and asks[path] else row
+        ask = row["status"] == "ok" and asks[path] and not row.get("credential")
+        return rootq_match(path, asks[path], row) if ask else row
     row = {"status": "ok", "mode": "%04o" % (st.st_mode & 0o7777),
            "owner": _name(pwd.getpwuid, st.st_uid), "group": _name(grp.getgrgid, st.st_gid),
            "sha256": None}
