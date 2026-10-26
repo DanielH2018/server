@@ -19,7 +19,7 @@ from validate import setup_templates as v
 # outside the k3s role.
 MUST_FIND = frozenset(
     {
-        "roles/setup/k3s/templates/audit-policy.yaml.j2",
+        "roles/setup/k3s/templates/registries.yaml.j2",
         "roles/setup/k3s/templates/host-corefile.j2",
         "roles/setup/k3s/templates/kuma-push.env.j2",
         "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",

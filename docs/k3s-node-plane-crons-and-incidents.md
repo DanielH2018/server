@@ -152,7 +152,7 @@ and ship to Loki. `ansible/tests/setup/test_k3s_unit_logging.py` holds both node
 ## The apiserver's OIDC authenticator can wedge for the life of the boot
 
 Nothing pages when it does (#2749). `k3s_oidc_issuer_urls` in
-`ansible/roles/setup/k3s/defaults/main.yml` points the apiserver at two names Authelia serves
+`hosts/components/k3s-server/component.yml` points the apiserver at two names Authelia serves
 behind Traefik, so every boot races workloads this same apiserver schedules. `oidc.go` retries the
 discovery fetch every 10s, which normally makes the race free. It is not free when Traefik answers
 the first fetch with a 421: the connection keeps that answer, and the apiserver never redials. The
@@ -315,17 +315,15 @@ reads permanently green.
 **The drift checks and the prune check are staggered on purpose** (05:15 and 05:45) so two full
 kubectl sweeps do not land on the API server at once. Keep a new sweep off those minutes.
 
-## What opens the three control-plane gates under `--tags k3s`
+## What opens the two control-plane gates under `--tags k3s`
 
 The maximal tag reapplies Longhorn, the backup targets, the health crons, CoreDNS and
-the node config, and makes three gated tasks reachable. Each is gated, so the tag *can* take the
+the node config, and makes two gated tasks reachable. Each is gated, so the tag *can* take the
 control plane down rather than always doing so:
 
 - `Install or reconfigure the k3s server` runs the installer, which restarts k3s, when
   `k3s_server_args` gained an argument or the binary is missing. A moved `k3s_version` does not
   trigger it, because SUC writes the server's version (H6.3c).
-- `Restart k3s so the log drop-in takes effect` restarts the unit when the drop-in changed and
-  the installer did not run.
 - `Rotate the encryption key and re-encrypt Secrets already stored in etcd` runs `k3s
   secrets-encrypt rotate-keys` when the cluster has never reached `reencrypt_finished`, which on
   a converged cluster it has.

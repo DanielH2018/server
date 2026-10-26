@@ -4,7 +4,7 @@
 THE PROBLEM. The deployer's deferral remediation names the whole setup ROLE tag. For
 `roles/setup/k3s/` that is `ansible-playbook ansible/k3s-bringup.yml --tags k3s`, which
 reapplies MetalLB, Longhorn, the backup targets, the crons, CoreDNS and the node config, and
-arms three gated control-plane tasks. A three-line RBAC edit to
+arms two gated control-plane tasks. A three-line RBAC edit to
 `templates/readonly-rbac.yaml.j2` needed `--tags kubeconfig`, which is what was applied by
 hand on 2026-09-22 with ok=15 changed=2 (#2294, #2307).
 
