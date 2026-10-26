@@ -13,7 +13,7 @@ the GitOps deployer never runs itself, so every change here is a hand apply. The
 incidents are in `docs/k3s-node-plane-crons-and-incidents.md`.
 
 **`--tags k3s` is the MAXIMAL apply, not the one to reach for.** It reapplies every task, and
-three gated tasks that touch the control plane become reachable. `docs/k3s-node-plane-crons-and-incidents.md`
+two gated tasks that touch the control plane become reachable. `docs/k3s-node-plane-crons-and-incidents.md`
 names each gate and what trips it. Every task file carries its own tag, so most changes want one
 of those, such as `--tags kubeconfig` (`ansible/roles/setup/k3s/tasks/kubeconfig.yml`). The
 deployer prints this warning beside the command it suggests, from
@@ -116,7 +116,13 @@ role's `CLAUDE.md`.
   k3s's own output goes to `/var/log/k3s.log` (not the journal) where the apiserver's OIDC
   authenticator can wedge silently with every probe still green.
   `docs/k3s-node-plane-crons-and-incidents.md` has the detail and the incident evidence for each;
-  `ansible/tests/setup/test_k3s_unit_logging.py` holds the log drop-in.
+  `ansible/tests/setup/test_k3s_unit_logging.py` holds the agent's log drop-in.
+- **The server's same-path files are the `homelab-daniel-box` package's since H6.4a**, so no
+  task here writes them: the audit policy, the authentication config, `registries.yaml`, the
+  logging drop-in with its logrotate file, and the CoreDNS `.skip` marker. They live in
+  `hosts/components/k3s-server/`, and `homelab-k3s-restart` restarts k3s once per changed hash
+  of the ones k3s reads at startup. `ansible/tests/setup/test_k3s_server_component.py` holds
+  the component. The package is forward-only: a revert deletes files the flags name.
 - **Both drift checks know an object Flux applies, and neither reads its label alone.** The
   prune check skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a
   Kustomization `<n>` exists in `flux-system`. It reads that list once per run, and a failed

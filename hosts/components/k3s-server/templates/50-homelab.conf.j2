@@ -1,0 +1,14 @@
+# Shipped by the homelab-daniel-box package (hosts/components/k3s-server) -- edits here are
+# overwritten. Send k3s's own output to a file the journald cap cannot drop.
+#
+# journald stores nothing below notice on this host (`MaxLevelStore=notice`), and every line k3s
+# writes is priority info, so the journal keeps none of it. This file is where a crash loop's
+# reason lands. The logging lines equal setup/k3s's tasks/unit-logging.yml, which still writes
+# /etc/systemd/system/k3s-agent.service.d/10-log-to-file.conf on daniel-server. `append:` is
+# opened by systemd at exec, so logrotate must copytruncate (/etc/logrotate.d/k3s).
+#
+# A drop-in, not the unit: k3s-install.sh rewrites /etc/systemd/system/k3s.service wholesale, and
+# a `.d/` directory is the placement it leaves alone. H6.4b adds the ExecStart lines here.
+[Service]
+StandardOutput=append:{{ k3s_log_file }}
+StandardError=inherit

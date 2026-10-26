@@ -197,6 +197,10 @@
     group: root
   become: true
   register: k3s_agent_registries
+  # A host listed in `k3s_packaged_hosts['registries']` gets this file from its host package, so the
+  # task writes nothing there (the two-writer census reads this guard). daniel-box is the server
+  # and never runs this file; the guard keeps the census from placing the write on it.
+  when: inventory_hostname not in k3s_packaged_hosts['registries']
 
 # Safe for running pods: k3s restarts its embedded containerd, but the containerd-shims
 # keep the containers alive across it (same property the k3s upgrade path relies on).

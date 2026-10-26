@@ -41,7 +41,7 @@ karakeep_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # applies karakeep on a later retry. Only Flux reads it: the renderer adds the Kustomization
 # for a published tag alone, so an Ansible deploy ignores it.
 flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]
-karakeep_k8s_meili_image: getmeili/meilisearch:v1.54.3@sha256:e68913ab7d6f5b159529e472cfd362ce3c741fafd3c127961b2142abbe41b3c9
+karakeep_k8s_meili_image: getmeili/meilisearch:v1.55.0@sha256:ff546679970126f8822e15d1b6a06bfbff1f2ce2e43f810cfb5258012f92de5c
 # Built in-cluster. The base-image pin (uv `python3.14-bookworm-slim` digest) lives in
 # `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. All five
 # pinned pip deps below must resolve wheel-only under the base's interpreter, because

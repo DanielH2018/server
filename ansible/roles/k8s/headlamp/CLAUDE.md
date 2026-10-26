@@ -34,7 +34,7 @@ subjects: the ServiceAccount, and the `headlamp_k8s_oidc_group` Group. They are 
   authorise: it forwards the browser's `id_token` and the **API server** decides. The login
   arrives as a `User` in a `Group` carrying none of the SA's RBAC, which is why the Group is
   bound everywhere the SA is. The API server accepts those tokens from an
-  `AuthenticationConfiguration` trusting Authelia — `roles/setup/k3s`, applied by hand.
+  `AuthenticationConfiguration` trusting Authelia — the `homelab-daniel-box` package (`hosts/components/k3s-server/`).
 - **The SA is the fallback the other branch uses.** With `headlamp_k8s_oidc_enabled: false`,
   `-unsafe-use-service-account-token` makes the pod browse as its own account and the Authelia
   forward-auth Middleware on the IngressRoute is the perimeter in front of it. Keep the SA
@@ -49,11 +49,11 @@ subjects: the ServiceAccount, and the `headlamp_k8s_oidc_group` Group. They are 
 
 ## OIDC login (on)
 `headlamp_k8s_oidc_enabled: true` since 2026-09-10. Three pieces are live: the API server's
-trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
+trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and these defaults.
 `docs/headlamp-oidc-and-plugins.md` carries the measurements each rule below came from.
 
-- **This switch is not independently safe to flip.** It depends on state in `roles/setup/k3s`,
-  which the k8s deploy play never runs and a person applies through `k3s-bringup.yml`. Turning
+- **This switch is not independently safe to flip.** It depends on state in the `homelab-daniel-box`
+  package (`hosts/components/k3s-server/`), which the k8s deploy play never runs. Turning
   it on without that trust leaves a dashboard that logs in and Forbids every call; if the trust
   is ever removed, turn this off in the same change.
 - **On REPLACES the ServiceAccount identity, it does not add to it.** The Deployment branches

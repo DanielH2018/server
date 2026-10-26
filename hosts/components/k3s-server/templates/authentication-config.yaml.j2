@@ -1,7 +1,7 @@
 ---
 # The API server's JWT trust, read ONCE at startup from the path
 # `--kube-apiserver-arg=authentication-config=` names (k3s_authentication_config_path).
-# Managed by roles/setup/k3s — do not edit on the host, the next play overwrites it.
+# Shipped by the homelab-daniel-box package (hosts/components/k3s-server), do not edit on the host.
 #
 # This file exists because the flag path could not express it. `--oidc-issuer-url` takes
 # exactly one value, and Authelia derives `iss` from the host the authorization request
