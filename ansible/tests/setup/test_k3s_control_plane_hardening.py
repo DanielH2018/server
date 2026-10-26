@@ -25,16 +25,21 @@ Each test here encodes a way one of them fails while every surface still reads g
 Run: uv run pytest ansible/tests/setup/test_k3s_control_plane_hardening.py
 """
 
+import functools
+
 import jinja2
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ALL_VARS
 from _helpers import load_yaml, load_defaults
 from _k8s_render import render_role_template, rendered_k8s_text
-from _setup_render import rendered_setup_text, role_context
+from _setup_render import role_context
 from lib.repo_paths import K3S_ROLE
+from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.bundle import homelab_namespace_files
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
+
+AUDIT_POLICY = "/var/lib/rancher/k3s/server/audit.yaml"
 
 
 def _all_vars() -> dict:
@@ -89,14 +94,16 @@ def _task_index(predicate) -> int:
     return -1
 
 
+@functools.cache
 def _audit_policy() -> dict:
-    """The policy template as `_setup_render` renders it.
+    """The audit policy daniel-box's package ships, as host mode renders it (H6.4a).
 
-    Through the shared harness rather than a two-key context assembled here: the harness lays
-    down the whole resolved role context, so a value the policy starts reading cannot arrive as
-    `{{ ... }}` for want of a key this function forgot to pass (#3202).
+    The package ships the file before any k3s start can name it, so the old "written before the
+    installer runs" ordering test left with the task. `test_k3s_server_component.py` holds that
+    every file a flag names is a file the package ships.
     """
-    return yaml_fast.safe_load(rendered_setup_text("k3s", "audit-policy.yaml.j2"))
+    package = host_mode.render_host("daniel-box")
+    return yaml_fast.safe_load(package.files[AUDIT_POLICY][0].decode())
 
 
 # ── G1: secrets encryption ──────────────────────────────────────────────────────────────
@@ -175,36 +182,6 @@ def test_no_apiserver_argument_is_quoted():
         f"Quoted arguments in k3s_server_args: {offenders}. The install task strips quotes "
         "from the installed unit before comparing, so a quoted value never matches itself — "
         "k3s is reinstalled and the control plane restarted on every single play."
-    )
-
-
-def test_audit_policy_is_written_before_the_installer_runs():
-    """The apiserver refuses to start without the policy, and the installer restarts it."""
-    policy_at = _task_index(
-        lambda t: (
-            "audit-policy.yaml.j2"
-            in str(t.get("ansible.builtin.template", {}).get("src", ""))
-        )
-    )
-    logdir_at = _task_index(
-        lambda t: (
-            "k3s_audit_log_dir"
-            in str(t.get("ansible.builtin.file", {}).get("path", ""))
-        )
-    )
-    install_at = _task_index(
-        lambda t: (
-            "k3s-install.sh" in str(t.get("ansible.builtin.command", {}).get("cmd", ""))
-        )
-    )
-    assert policy_at >= 0, "No task writes audit-policy.yaml.j2."
-    assert logdir_at >= 0, "No task creates k3s_audit_log_dir."
-    assert install_at >= 0, "No task runs k3s-install.sh — the role was restructured."
-    assert policy_at < install_at and logdir_at < install_at, (
-        f"The audit policy (task {policy_at}) and log directory (task {logdir_at}) must both "
-        f"precede the k3s installer (task {install_at}). The installer rewrites the unit and "
-        "restarts k3s, and the apiserver refuses to start when the policy file named in its "
-        "arguments does not exist — on the node that also serves LAN DNS."
     )
 
 

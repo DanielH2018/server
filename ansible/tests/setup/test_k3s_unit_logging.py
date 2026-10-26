@@ -7,7 +7,8 @@ A k3s crash loop therefore leaves only systemd's `status=1/FAILURE` lines in the
 why k3s exited is unrecoverable.
 
 tasks/unit-logging.yml sends the unit's stdout and stderr to a logrotated file through a
-drop-in. Every failure here is silent — the unit runs, the journal looks as it always did, and
+drop-in, for the agent. Since H6.4a the server's equivalent is the homelab-daniel-box package's
+(hosts/components/k3s-server), and ansible/tests/setup/test_k3s_server_component.py holds it. Every failure here is silent — the unit runs, the journal looks as it always did, and
 the next crash loop is the first anyone learns the file stopped being written.
 """
 
@@ -20,12 +21,11 @@ UNIT_LOGGING = K3S_ROLE / "tasks" / "unit-logging.yml"
 DEFAULTS = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
 LOG_FILE = DEFAULTS["k3s_log_file"]
 
-# The unit each node type runs, and the task file that must import the drop-in for it. The
-# installer rewrites /etc/systemd/system/<unit>.service wholesale, so the drop-in is the only
-# placement that survives — and the agent is a separate host, so fixing the server alone is the
-# entry-points failure: a daniel-server crash loop would be exactly as unrecoverable.
+# The unit whose task file must import the drop-in. The installer rewrites
+# /etc/systemd/system/<unit>.service wholesale, so the drop-in is the only placement that
+# survives. The server's drop-in left this file for the package in H6.4a, so the agent is the
+# one unit left here: a daniel-server crash loop is as unrecoverable without it.
 UNITS = {
-    "k3s": K3S_ROLE / "tasks" / "server.yml",
     "k3s-agent": K3S_ROLE / "tasks" / "agent.yml",
 }
 

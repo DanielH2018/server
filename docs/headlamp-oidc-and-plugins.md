@@ -59,7 +59,7 @@ logins to a host an off-LAN browser cannot resolve; the public name works from e
 The cost is that a LAN login now traverses Cloudflare, so an edge outage takes it out.
 
 The API server trusts both Authelia issuers, which is why the issuer choice is no longer a
-lockout. `k3s_oidc_issuer_urls` (`roles/setup/k3s`) lists both, and an
+lockout. `k3s_oidc_issuer_urls` (`hosts/components/k3s-server/component.yml`) lists both, and an
 `AuthenticationConfiguration` file is the only kube-apiserver mechanism that accepts more
 than one — the `--oidc-*` flags took exactly one and are mutually exclusive with the file.
 

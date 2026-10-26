@@ -128,7 +128,7 @@ k3s_secrets_encryption: true
 # than failing — the same hang the --node-ip comment above describes. The validation is
 # stricter than it looks; `prefix` alone has two rules the flag path did not have (see the
 # template). `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` renders and shape-checks
-# it for that reason. Read `/var/log/k3s.log` (not `journalctl -u k3s`, which keeps none of
+# the component's template for that reason. Read `/var/log/k3s.log` (not `journalctl -u k3s`, which keeps none of
 # k3s's own lines — see k3s_log_file) before walking away.
 #
 # ROLLBACK IS BY HAND. The install task's guard detects an argument that was ADDED and never one
@@ -136,73 +136,14 @@ k3s_secrets_encryption: true
 # unit keeps it. Re-run /usr/local/bin/k3s-install.sh with the new INSTALL_K3S_EXEC. Do NOT
 # hand-edit the unit to "help" this along.
 
-# BOTH Authelia issuers, trusted at once, which is the whole reason this is a file. The `iss`
-# each name mints is measured, not assumed: `/.well-known/openid-configuration`
-# returns exactly these two strings on the two hostnames, and both answer 200 from daniel-box
-# (the API server fetches JWKS from each URL itself, so host reachability is a requirement and
-# not an incidental).
+# The `k3s_oidc_*` keys (both Authelia issuers, the client id, the two claims and the groups
+# prefix) moved to hosts/components/k3s-server/component.yml in H6.4a, with the template that
+# was their only reader. The long account of the 421 trap and the recovery is there too.
 #
-# REACHABILITY AT APISERVER-START TIME IS THE ONE THAT MATTERS, AND THE APISERVER STARTS
-# FIRST. kube-apiserver builds the JWT authenticator by fetching each issuer's
-# `/.well-known/openid-configuration` at startup, but both URLs are served by Authelia behind
-# Traefik — workloads this same apiserver has to schedule. Every boot therefore races, and
-# `oidc.go` retries every 10s until one succeeds, which is why the race normally costs nothing.
-#
-# THE RETRY LOOP CANNOT RECOVER FROM A 421, and that is the failure to recognise.
-# Traefik's SNICheck pins a connection's TLS-options name at handshake time, so a connection
-# opened while Traefik is still reconciling routes is answered 421 for as long as it lives.
-# Go's HTTP client reuses it, so the apiserver redials never. After a reboot the symptom is
-# `oidc.go:433 oidc authenticator: initializing plugin` errors in `/var/log/k3s.log`, unbroken,
-# walking DNS `Try again` -> `no route to host` -> `404 page not found` -> `421 Misdirected
-# Request` as the edge comes up around the two pinned connections. One connection per issuer
-# below: `auth.local.<domain>` over the VIP, `auth.<domain>` out through Cloudflare and back to
-# daniel-box's own global IPv6. The authenticator never initialises, so Headlamp login stays
-# dead while client-cert and ServiceAccount auth carry on untouched — which is why nothing pages.
-#
-# RECOVERY IS A SOCKET CLOSE, not a k3s restart: the apiserver redials on its next 10s tick.
-# CLOSE BOTH — there is one connection per issuer, and a filter written for the VIP misses the
-# public one entirely, which leaves half the errors running. `sudo ss -tnp | grep k3s-server`
-# on daniel-box names them: one to the ingress VIP on 443, one from the host's own global IPv6
-# to Cloudflare on 443. This is reasoned from the retry loop above and NOT yet measured —
-# confirm the `oidc.go:433` lines stop in `/var/log/k3s.log` and a Headlamp login mints a
-# token. A k3s restart also works and is the heavier option on a Type=notify unit with
-# `TimeoutStartSec=0`.
-#
-# Order does not matter; kube-apiserver selects the entry by the token's `iss`. Duplicates are
-# a validation error, so the two must stay distinct. NO TRAILING SLASH on either: the
-# comparison against `iss` is exact.
-k3s_oidc_issuer_urls:
-  - "https://auth.local.{{ domain }}"
-  - "https://auth.{{ domain }}"
-# Where the file above is written, read by the apiserver ONCE at startup. Under
-# /var/lib/rancher/k3s/server alongside the audit policy, which is root-only and on the same
-# disk as etcd.
+# Where the authentication config is written, read by the apiserver ONCE at startup. The package
+# ships it at this path (H6.4a), and `k3s_server_args` still names it until H6.4b deletes both.
+# ansible/tests/setup/test_k3s_server_component.py holds this copy equal to the component's.
 k3s_authentication_config_path: /var/lib/rancher/k3s/server/authentication-config.yaml
-# The audience. Authelia's default `id_token_audience_mode: specification` puts only the
-# client id in `aud`, so this is the Authelia client id, and one client cannot serve two
-# audiences here.
-k3s_oidc_client_id: headlamp
-# Authelia hydrates NEITHER of the two claims below into the ID token by default — the
-# provider docs call the `claims_policies.id_token` list "claims automatically copied to the
-# ID Token in addition to the standard ID Token claims". Headlamp forwards the ID token, so
-# the Authelia client MUST name a claims policy carrying both, or this API server sees a
-# token with no username claim and rejects it.
-k3s_oidc_username_claim: preferred_username
-k3s_oidc_groups_claim: groups
-# There is NO `k3s_oidc_username_prefix` here, and its absence is deliberate. The
-# flag path took `-` as a sentinel meaning "no prefix", because kube-apiserver otherwise
-# prefixed the username with the issuer URL plus `#` for any claim other than `email`. The
-# structured config does no implicit prefixing and honours no sentinel: `prefix` is required
-# whenever `claim` is set, and `""` disables it. The template writes that empty string
-# literally; a variable holding `-` would produce usernames prefixed with a hyphen, which is
-# the same class of bug the sentinel existed to avoid.
-#
-# Groups DO carry a prefix, for the opposite reason: it is what keeps an Authelia group name
-# from ever being read as a built-in `system:` group. `headlamp_k8s_oidc_group`
-# (roles/k8s/headlamp/defaults) is this prefix plus the Authelia group and must agree with it;
-# ansible/tests/setup/test_k3s_oidc_trusts_authelia.py fails when the two drift, because the
-# symptom is a login that succeeds onto an empty dashboard with nothing logged.
-k3s_oidc_groups_prefix: "oidc:"
 
 # ── apiserver audit logging (G2/G3) ─────────────────────────────────────────────────────
 # k3s writes no audit log by default, so there is no record of API writes at all. This
@@ -223,7 +164,8 @@ k3s_oidc_groups_prefix: "oidc:"
 # the file, and a role default is invisible to another role's templates. Same reason
 # k3s_metallb_ingress_vip sits there.
 
-# The policy the apiserver reads at startup. Role-local because only this role writes it.
+# The policy the apiserver reads at startup. The package ships it at this path (H6.4a), and
+# `k3s_server_args` still names it until H6.4b deletes both; the component holds a twin.
 k3s_audit_policy_path: /var/lib/rancher/k3s/server/audit.yaml
 
 # Rotation, and it is not optional. An unrotated audit log grows without bound on the disk
@@ -886,3 +828,11 @@ k3s_storage_smoke_size: 64Mi
 # Provisioning is fast when it works; this covers a cold csi-provisioner rather than a slow
 # volume. 24 tries at 5s is two minutes.
 k3s_storage_smoke_retries: 24
+
+# The hosts whose host package ships a file this role also writes for another node type
+# (docs/target-architecture/host/h3-pi-pilot.md, *The host handoff rule*). `registries` is
+# /etc/rancher/k3s/registries.yaml: daniel-box's package ships it (hosts/components/k3s-server),
+# while tasks/agent.yml still writes it on the agent. A task guarded by this map writes nothing on
+# a listed host, which keeps ansible/tests/setup/test_host_package_two_writers.py honest.
+k3s_packaged_hosts:
+  registries: [daniel-box]

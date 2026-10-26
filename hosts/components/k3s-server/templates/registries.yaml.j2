@@ -1,0 +1,33 @@
+# Shipped by the homelab-daniel-box package (hosts/components/k3s-server), do not edit on the host.
+#
+# Tells containerd how to reach the in-cluster registry. Without this entry containerd tries
+# HTTPS against localhost:5000, gets a plain-HTTP response, and every pod referencing a
+# locally-built image sits in ImagePullBackOff with a TLS handshake error that reads like a
+# certificate problem rather than a scheme mismatch.
+#
+# The mirror KEY is the same on every node, so one image reference
+# ({{ k8s_registry_pull_host }}/<name>:<tag>) is node-portable; the ENDPOINT differs:
+#   - {{ k8s_registry_node }} (runs the registry): the loopback hostPort — the traffic
+#     never crosses a wire, which is why plain HTTP was acceptable single-node.
+#   - agents: the Service's pinned ClusterIP over flannel — plain HTTP that DOES cross
+#     the LAN, inside the vxlan; accepted trade-off, see k8s_registry_cluster_ip in
+#     group_vars/all.yml.
+mirrors:
+  "{{ k8s_registry_pull_host }}":
+    endpoint:
+{% if inventory_hostname == k8s_registry_node %}
+      - "http://{{ k8s_registry_pull_host }}"
+{% else %}
+      - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}"
+{% endif %}
+  # The ghcr.io pull-through mirror, the registry pod's second listener (D5 Open question 2).
+  # containerd tries it first and then ghcr.io itself, because k3s keeps the default endpoint
+  # after every mirror endpoint. A mirror that is down or GC-scaled to zero therefore never
+  # blocks a pull while the WAN is up. Same per-node endpoint split as the entry above.
+  "ghcr.io":
+    endpoint:
+{% if inventory_hostname == k8s_registry_node %}
+      - "http://localhost:{{ k8s_registry_ghcr_mirror_port }}"
+{% else %}
+      - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_ghcr_mirror_port }}"
+{% endif %}

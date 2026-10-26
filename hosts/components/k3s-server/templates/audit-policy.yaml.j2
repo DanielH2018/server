@@ -1,8 +1,8 @@
 ---
-# kube-apiserver audit policy — managed by Ansible (k3s role); edits overwritten.
+# kube-apiserver audit policy — shipped by the homelab-daniel-box package (k3s-server component).
 #
 # The apiserver reads this ONCE, at startup. A change here does not take effect until k3s
-# restarts, which is why the task that writes it notifies the restart handler.
+# restarts, which is why homelab-k3s-restart restarts it inside the window.
 #
 # LEVELS, and why this one. `Metadata` records who did what to which object, without request
 # or response bodies. That answers the question this log exists for — "which session deleted
@@ -87,12 +87,12 @@ rules:
     verbs: ["get", "list", "watch"]
 
   # The readonly ServiceAccount Claude sessions authenticate as. It holds `get list watch`
-  # and nothing else (k3s_readonly_sa_name), so every request it makes except a Secret read
+  # and nothing else (k3s_server_readonly_sa_name), so every request it makes except a Secret read
   # is already covered by the read rule above; this is belt-and-braces against the SA ever
   # being widened by accident, which would otherwise flood the log rather than surface. Keep
   # it below the Secret-read rule: this SA's Secret attempts must stay logged, refused or not.
   - level: None
-    users: ["system:serviceaccount:{{ k3s_readonly_sa_namespace }}:{{ k3s_readonly_sa_name }}"]
+    users: ["system:serviceaccount:{{ k3s_server_readonly_sa_namespace }}:{{ k3s_server_readonly_sa_name }}"]
     verbs: ["get", "list", "watch"]
 
   # Kubelet and node-lease heartbeats: one write per node every few seconds, forever.

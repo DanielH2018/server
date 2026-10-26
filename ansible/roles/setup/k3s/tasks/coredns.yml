@@ -1,9 +1,10 @@
 ---
-# The host half of cluster DNS: release k3s's bundled CoreDNS addon to Flux (H1.4).
+# The host half of cluster DNS: the bounded read that precedes releasing k3s's bundled CoreDNS addon
+# to Flux (H1.4).
 #
 # Flux's `coredns` tag owns the Deployment, Service, RBAC and the Corefile key of the ConfigMap
-# (ansible/roles/k8s/coredns/). This file keeps the two tasks that act on the host and cannot
-# move into the cluster.
+# (ansible/roles/k8s/coredns/). The `.skip` marker itself is the homelab-daniel-box package's
+# since H6.4a (hosts/components/k3s-server), so this file keeps only the read.
 #
 # k3s ships CoreDNS as an Addon, so the `coredns` ConfigMap carries
 # `objectset.rio.cattle.io/owner-gvk: k3s.cattle.io/v1, Kind=Addon` and the deploy controller
@@ -18,11 +19,10 @@
 # and renders the Corefile, so a k3s bump that revises either reaches the cluster only when
 # someone ports it into that role. The k3s upgrade runbook (docs/k3s-upgrade.md) says how.
 
-# ORDER IS LOAD-BEARING: the read comes before the marker. On a new cluster Flux resolves GHCR
-# through cluster DNS, so CoreDNS must exist before Flux runs, and the marker must appear only
-# after k3s has first created it. A marker written before k3s's first apply would leave no
-# CoreDNS at all, and Flux could not fetch the bundle that would create one. The read waits for
-# the Deployment, and fails the play when it never appears.
+# The read waits for the Deployment and fails the play when it never appears. On a new cluster
+# Flux resolves GHCR through cluster DNS, so CoreDNS must exist before Flux runs. The marker the
+# package now ships (hosts/components/k3s-server) would leave no CoreDNS at all if it landed
+# before k3s's first apply, so a bare host installs the package after this read, not before it.
 #
 # `check_mode: false` because it reads one object and writes nothing, and the retry loop would
 # otherwise burn every try on a skip result under `--check`.
@@ -37,16 +37,3 @@
   retries: "{{ k3s_coredns_read_retries | int }}"
   delay: "{{ k3s_coredns_read_delay | int }}"
   until: k3s_coredns_deployment.rc == 0
-
-- name: Stop k3s reconciling its bundled CoreDNS addon
-  tags: [coredns]
-  ansible.builtin.file:
-    path: "{{ k3s_coredns_skip_marker }}"
-    state: touch
-    mode: "0644"
-    owner: root
-    group: root
-    # The marker's presence is the entire state, so don't let touch report changed forever.
-    access_time: preserve
-    modification_time: preserve
-  become: true
