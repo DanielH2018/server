@@ -10,7 +10,7 @@ karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:b069e4307dec06e
 #
 # `release` is a moving tag behind a digest, the same shape as karakeep_k8s_image above, so the
 # k8s-defaults manager's `matchUpdateTypes: [digest]` rule bumps it after its soak.
-karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:c51a8c8e6c3c1040a50fa0ecfd0b2fc298401b4229262636552458151f6f18fa
+karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:4ad61127638dd27bfe685222787c5780dd1d083d23a7658c39af657775814c44
 # The rollout budget for all four Deployments, declared once. Read as Flux's
 # health-check `timeout`, by the drain's `rollout status --timeout` and by `progressDeadlineSeconds` in every deployment template. The
 # deadline has to move with the timeout: at the 600s Kubernetes default, `rollout status` fails
