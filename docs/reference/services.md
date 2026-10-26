@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-10-25 18:17 UTC
-generated_sha: 341de7656
+generated_at: 2026-10-26 06:17 UTC
+generated_sha: 53cf25d7e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 341de7656
 
 # Services
 
-69 service(s) declared across 2 host(s).
+67 service(s) declared across 1 host(s).
 
 
 ## daniel-box
@@ -88,15 +88,6 @@ generated_sha: 341de7656
 | valheim | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target); no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | wg-easy | k8s | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | zigbee2mqtt | k8s | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | Authelia one_factor | daily -> R2 | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
-
-## daniel-pi
-
-2 service(s).
-
-| Service | Platform | Route | Auth | Backup tier | Auto-deploy |
-|---|---|---|---|---|---|
-| alloy | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
-| wg-easy | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 
 ## Underivable facts
 

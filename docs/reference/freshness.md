@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-10-25 18:17 UTC
-generated_sha: 341de7656
+generated_at: 2026-10-26 06:17 UTC
+generated_sha: 53cf25d7e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,88 +12,80 @@ generated_sha: 341de7656
 
 # Doc freshness
 
-116 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+117 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
-| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-10-22 | 189 | 104 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/host/h1-cluster-config-to-flux.md](../target-architecture/host/h1-cluster-config-to-flux.md) | 2026-10-23 | 125 | 55 | `scripts/validate/cluster_pins.py` (2026-10-25) |
-| [target-architecture/render/r4-delete-k8s-ansible-path.md](../target-architecture/render/r4-delete-k8s-ansible-path.md) | 2026-10-22 | 102 | 52 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/render/r2-secret-placeholders.md](../target-architecture/render/r2-secret-placeholders.md) | 2026-10-15 | 90 | 51 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-25) |
-| [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-10-14 | 74 | 47 | `ansible/roles/k8s/uptime-kuma/templates/deployment.yaml.j2` (2026-10-25) |
-| [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-10-24 | 114 | 46 | `scripts/deploy_tools/land_lib/host_wait.py` (2026-10-25) |
-| [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-10-18 | 70 | 45 | `CLAUDE.md` (2026-10-25) |
-| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-10-22 | 76 | 44 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-10-24 | 212 | 44 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-10-17 | 64 | 43 | `CLAUDE.md` (2026-10-25) |
+| [target-architecture/host/h1-cluster-config-to-flux.md](../target-architecture/host/h1-cluster-config-to-flux.md) | 2026-10-23 | 126 | 62 | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_defer.py` (2026-10-26) |
+| [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-10-24 | 114 | 53 | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_defer.py` (2026-10-26) |
+| [target-architecture/render/r2-secret-placeholders.md](../target-architecture/render/r2-secret-placeholders.md) | 2026-10-15 | 90 | 52 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-25) |
+| [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-10-14 | 74 | 48 | `ansible/inventory/host_vars/daniel-box.yml` (2026-10-25) |
+| [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-10-18 | 70 | 47 | `docs/gitops-pipeline.md` (2026-10-26) |
+| [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-10-22 | 80 | 45 | `docs/gitops-pipeline.md` (2026-10-26) |
+| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-10-17 | 64 | 44 | `docs/claude-tooling.md` (2026-10-26) |
 | [target-architecture/render/r3-remove-live-reads.md](../target-architecture/render/r3-remove-live-reads.md) | 2026-10-17 | 62 | 43 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-10-22 | 80 | 42 | `scripts/dev/new_k8s_service.py` (2026-10-25) |
-| [target-architecture/monitoring/m1-alertmanager.md](../target-architecture/monitoring/m1-alertmanager.md) | 2026-10-21 | 67 | 35 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-10-16 | 51 | 34 | `ansible/vars/cluster-vars.source` (2026-10-25) |
-| [target-architecture/deploy/d5-bulk-move.md](../target-architecture/deploy/d5-bulk-move.md) | 2026-10-24 | 116 | 34 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/host/h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md) | 2026-10-24 | 80 | 30 | `ansible/inventory/host_vars/daniel-pi.yml` (2026-10-25) |
-| [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-10-17 | 51 | 29 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-10-22 | 71 | 29 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/host/h2-shrink-host-plane.md](../target-architecture/host/h2-shrink-host-plane.md) | 2026-10-24 | 103 | 29 | `scripts/deploy_tools/narrow_setup.py` (2026-10-25) |
-| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-10-18 | 44 | 26 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-10-24 | 64 | 22 | `hosts/bootstrap-host.sh` (2026-10-25) |
-| [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-10-17 | 52 | 21 | `CLAUDE.md` (2026-10-25) |
-| [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-10-12 | 32 | 20 | `CLAUDE.md` (2026-10-25) |
-| [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-10-23 | 46 | 19 | `ansible/roles/k8s/monitor-bridge/CLAUDE.md` (2026-10-25) |
-| [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-10-24 | 47 | 19 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [claude-tooling.md](../claude-tooling.md) | 2026-10-24 | 76 | 16 | `CLAUDE.md` (2026-10-25) |
-| [target-architecture/design.md](../target-architecture/design.md) | 2026-10-22 | 29 | 15 | `scripts/diagnostics/probe.py` (2026-10-25) |
+| [target-architecture/deploy/d5-bulk-move.md](../target-architecture/deploy/d5-bulk-move.md) | 2026-10-24 | 113 | 42 | `ansible/tests/setup/test_k3s_control_plane_hardening.py` (2026-10-26) |
+| [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-10-16 | 51 | 35 | `ansible/vars/cluster-vars.source` (2026-10-25) |
+| [target-architecture/host/h2-shrink-host-plane.md](../target-architecture/host/h2-shrink-host-plane.md) | 2026-10-24 | 103 | 35 | `scripts/deploy_tools/narrow_setup.py` (2026-10-26) |
+| [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-10-17 | 51 | 29 | `docs/gitops-pipeline.md` (2026-10-26) |
+| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-10-18 | 44 | 26 | `docs/gitops-pipeline.md` (2026-10-26) |
+| [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-10-17 | 52 | 22 | `docs/claude-tooling.md` (2026-10-26) |
+| [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-10-12 | 32 | 20 | `docs/claude-tooling.md` (2026-10-26) |
+| [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-10-25 | 84 | 19 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-10-26) |
 | [target-architecture/docs-guard/g1-diff-notice.md](../target-architecture/docs-guard/g1-diff-notice.md) | 2026-10-17 | 28 | 14 | `CLAUDE.md` (2026-10-25) |
-| [homelab-render.md](../homelab-render.md) | 2026-10-23 | 60 | 13 | `scripts/renderer/homelab_render.py` (2026-10-25) |
-| [target-architecture/docs-guard/g3-freshness-reviewer.md](../target-architecture/docs-guard/g3-freshness-reviewer.md) | 2026-10-17 | 25 | 11 | `CLAUDE.md` (2026-10-25) |
-| [claude-agent-user.md](../claude-agent-user.md) | 2026-10-24 | 52 | 11 | `ansible/secret_rotation.yml` (2026-10-25) |
-| [python-code-organization.md](../python-code-organization.md) | 2026-10-24 | 38 | 11 | `hosts/lib/host_lib.py` (2026-10-25) |
-| [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-10-11 | 13 | 10 | `CLAUDE.md` (2026-10-25) |
-| [setup-role-loop-measurement.md](../setup-role-loop-measurement.md) | 2026-10-11 | 12 | 10 | `scripts/deploy_tools/narrow_setup.py` (2026-10-25) |
-| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-10-17 | 20 | 9 | `scripts/lib/worktrees.py` (2026-10-25) |
+| [homelab-render.md](../homelab-render.md) | 2026-10-23 | 60 | 14 | `scripts/renderer/homelab_render.py` (2026-10-25) |
+| [claude-agent-user.md](../claude-agent-user.md) | 2026-10-24 | 52 | 14 | `ansible/secret_rotation.yml` (2026-10-25) |
+| [python-code-organization.md](../python-code-organization.md) | 2026-10-24 | 38 | 14 | `hosts/lib/host_lib.py` (2026-10-25) |
+| [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-10-11 | 13 | 11 | `docs/claude-tooling.md` (2026-10-26) |
+| [target-architecture/docs-guard/g3-freshness-reviewer.md](../target-architecture/docs-guard/g3-freshness-reviewer.md) | 2026-10-17 | 25 | 11 | `docs/claude-tooling.md` (2026-10-26) |
+| [setup-role-loop-measurement.md](../setup-role-loop-measurement.md) | 2026-10-11 | 12 | 10 | `scripts/deploy_tools/narrow_setup.py` (2026-10-26) |
+| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-10-17 | 20 | 10 | `scripts/lib/worktrees.py` (2026-10-25) |
+| [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-10-23 | 33 | 10 | `ansible/roles/k8s/monitor-bridge/CLAUDE.md` (2026-10-25) |
 | [qbittorrent-vpn-and-prefs.md](../qbittorrent-vpn-and-prefs.md) | 2026-10-18 | 10 | 8 | `ansible/roles/k8s/qbittorrent/CLAUDE.md` (2026-10-25) |
-| [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-10-22 | 11 | 8 | `ansible/roles/k8s/navidrome/templates/deployment.yaml.j2` (2026-10-25) |
-| [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-10-23 | 33 | 8 | `ansible/roles/k8s/monitor-bridge/CLAUDE.md` (2026-10-25) |
-| [target-architecture/contracts.md](../target-architecture/contracts.md) | 2026-10-24 | 24 | 8 | `scripts/diagnostics/probe.py` (2026-10-25) |
-| [volume-revert-drill-and-sizing.md](../volume-revert-drill-and-sizing.md) | 2026-10-10 | 8 | 6 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` (2026-10-25) |
+| [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-10-22 | 11 | 8 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-10-26) |
+| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-10-24 | 21 | 8 | `docs/break-glass.md` (2026-10-25) |
+| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-10-25 | 189 | 7 | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py` (2026-10-26) |
+| [volume-revert-drill-and-sizing.md](../volume-revert-drill-and-sizing.md) | 2026-10-10 | 8 | 6 | `docs/gitops-pipeline.md` (2026-10-26) |
 | [alert-triggered-diagnosis.md](../alert-triggered-diagnosis.md) | 2026-10-12 | 8 | 6 | `scripts/diagnostics/probe.py` (2026-10-25) |
 | [authelia-sessions-and-crowdsec-init.md](../authelia-sessions-and-crowdsec-init.md) | 2026-10-18 | 14 | 6 | `ansible/roles/k8s/authelia/CLAUDE.md` (2026-10-25) |
 | [crowdsec-waf-record.md](../crowdsec-waf-record.md) | 2026-10-18 | 14 | 6 | `ansible/roles/k8s/crowdsec/CLAUDE.md` (2026-10-25) |
-| [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-10-21 | 14 | 6 | `ansible/roles/setup/fake_remux/tasks/main.yml` (2026-10-25) |
+| [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-10-21 | 14 | 6 | `ansible/roles/setup/k3s/tasks/agent.yml` (2026-10-26) |
 | [adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md](../adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) | 2026-10-23 | 8 | 6 | `ansible/vars/secrets.yml` (2026-10-25) |
-| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-10-24 | 21 | 6 | `docs/break-glass.md` (2026-10-25) |
+| [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-10-24 | 11 | 6 | `scripts/backup/etcd_restore_drill.sh` (2026-10-25) |
 | [observability-dashboards.md](../observability-dashboards.md) | 2026-10-18 | 13 | 5 | `ansible/roles/k8s/observability/CLAUDE.md` (2026-10-25) |
-| [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-10-24 | 11 | 5 | `scripts/backup/etcd_restore_drill.sh` (2026-10-25) |
+| [volume-snapshot-drills.md](../volume-snapshot-drills.md) | 2026-10-23 | 17 | 5 | `docs/monitor-bridge-checks.md` (2026-10-25) |
+| [autofix-bridge-actuators.md](../autofix-bridge-actuators.md) | 2026-10-24 | 13 | 5 | `ansible/roles/k8s/autofix-bridge/CLAUDE.md` (2026-10-25) |
+| [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-10-25 | 236 | 5 | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_defer.py` (2026-10-26) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-09-02 | 4 | 4 | `CLAUDE.md` (2026-10-25) |
-| [claude-memory-sync.md](../claude-memory-sync.md) | 2026-10-10 | 4 | 4 | `CLAUDE.md` (2026-10-25) |
+| [claude-memory-sync.md](../claude-memory-sync.md) | 2026-10-10 | 4 | 4 | `ansible/roles/setup/claude_code/CLAUDE.md` (2026-10-26) |
 | [homepage-widgets-and-layout.md](../homepage-widgets-and-layout.md) | 2026-10-10 | 10 | 4 | `ansible/roles/k8s/homepage/CLAUDE.md` (2026-10-25) |
 | [n8n-community-packages.md](../n8n-community-packages.md) | 2026-10-10 | 4 | 4 | `ansible/roles/k8s/n8n/CLAUDE.md` (2026-10-25) |
 | [adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md](../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) | 2026-10-17 | 4 | 4 | `docs/flux-deploy-plane.md` (2026-10-25) |
-| [k8s-manifest-cycle-record.md](../k8s-manifest-cycle-record.md) | 2026-10-23 | 34 | 4 | `scripts/diagnostics/probe.py` (2026-10-25) |
 | [renovate-notify-internals.md](../renovate-notify-internals.md) | 2026-10-24 | 10 | 4 | `ansible/roles/setup/renovate_notify/CLAUDE.md` (2026-10-25) |
+| [target-architecture/render/r4-delete-k8s-ansible-path.md](../target-architecture/render/r4-delete-k8s-ansible-path.md) | 2026-10-25 | 102 | 4 | `scripts/deploy_tools/narrow_setup.py` (2026-10-26) |
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-12 | 3 | 3 | `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` (2026-10-25) |
 | [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-10-03 | 4 | 3 | `ansible/vars/secrets.yml` (2026-10-25) |
 | [traefik-plugins-and-startup.md](../traefik-plugins-and-startup.md) | 2026-10-10 | 11 | 3 | `ansible/roles/k8s/traefik/CLAUDE.md` (2026-10-25) |
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-10-12 | 4 | 3 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` (2026-10-25) |
 | [security-tools.md](../security-tools.md) | 2026-10-12 | 6 | 3 | `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` (2026-10-24) |
 | [adr/0024-code-scanning-is-off.md](../adr/0024-code-scanning-is-off.md) | 2026-10-18 | 3 | 3 | `.github/workflows/ci.yml` (2026-10-25) |
-| [pihole-dns-continuity-record.md](../pihole-dns-continuity-record.md) | 2026-10-21 | 5 | 3 | `ansible/roles/k8s/pihole/CLAUDE.md` (2026-10-25) |
 | [adr/0007-backup-tiering-r2-daily-b2-weekly.md](../adr/0007-backup-tiering-r2-daily-b2-weekly.md) | 2026-10-22 | 3 | 3 | `docs/break-glass.md` (2026-10-25) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-10-23 | 4 | 3 | `ansible/vars/secrets.yml` (2026-10-25) |
-| [volume-snapshot-drills.md](../volume-snapshot-drills.md) | 2026-10-23 | 17 | 3 | `.github/workflows/promote.yml` (2026-10-25) |
-| [autofix-bridge-actuators.md](../autofix-bridge-actuators.md) | 2026-10-24 | 13 | 3 | `ansible/roles/k8s/autofix-bridge/CLAUDE.md` (2026-10-25) |
-| [headlamp-oidc-and-plugins.md](../headlamp-oidc-and-plugins.md) | 2026-10-24 | 8 | 3 | `ansible/roles/k8s/headlamp/CLAUDE.md` (2026-10-25) |
+| [adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md](../adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md) | 2026-10-24 | 8 | 3 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-10-26) |
 | [hypervisor-libvirt-internals.md](../hypervisor-libvirt-internals.md) | 2026-10-24 | 12 | 3 | `ansible/roles/setup/initial_setup/tasks/network.yml` (2026-10-25) |
+| [k3s-upgrade.md](../k3s-upgrade.md) | 2026-10-25 | 25 | 3 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-10-26) |
+| [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-10-25 | 47 | 3 | `docs/gitops-pipeline.md` (2026-10-26) |
+| [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-10-25 | 212 | 3 | `scripts/deploy_tools/narrow_setup.py` (2026-10-26) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-10-11) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-09-21 | 2 | 2 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-25) |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-28 | 3 | 2 | `docs/secret-rotation.md` (2026-10-25) |
-| [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-10-10 | 3 | 2 | `ansible/vars/secrets.yml` (2026-10-25) |
 | [adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md](../adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | 2026-10-11 | 5 | 2 | `scripts/dev/prune_worktrees.py` (2026-10-25) |
-| [claude-code-rc-caps.md](../claude-code-rc-caps.md) | 2026-10-12 | 4 | 2 | `ansible/roles/setup/claude_code/CLAUDE.md` (2026-10-25) |
+| [claude-code-rc-caps.md](../claude-code-rc-caps.md) | 2026-10-12 | 4 | 2 | `ansible/roles/setup/claude_code/CLAUDE.md` (2026-10-26) |
 | [adr/0019-fact-support-stops-at-the-repo-store.md](../adr/0019-fact-support-stops-at-the-repo-store.md) | 2026-10-17 | 3 | 2 | `CLAUDE.md` (2026-10-25) |
 | [adr/0023-fact-support-is-a-diff-notice.md](../adr/0023-fact-support-is-a-diff-notice.md) | 2026-10-17 | 5 | 2 | `CLAUDE.md` (2026-10-25) |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-10-22 | 10 | 2 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-10-25) |
-| [adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md](../adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md) | 2026-10-24 | 8 | 2 | `docs/k3s-upgrade.md` (2026-10-25) |
+| [target-architecture/design.md](../target-architecture/design.md) | 2026-10-25 | 29 | 2 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-10-26) |
+| [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-10-25 | 64 | 2 | `ansible/roles/setup/k3s/tasks/server.yml` (2026-10-26) |
 | [adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | 2026-08-24 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-10-25) |
 | [adr/0005-traefik-is-the-edge-with-ingressroute-crds.md](../adr/0005-traefik-is-the-edge-with-ingressroute-crds.md) | 2026-08-24 | 1 | 1 | `ansible/templates/ingressroute.yml.j2` (2026-10-01) |
 | [adr/0009-networkpolicy-default-deny-ingress.md](../adr/0009-networkpolicy-default-deny-ingress.md) | 2026-08-24 | 1 | 1 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-10-25) |
@@ -106,29 +98,38 @@ generated_sha: 341de7656
 | [uptime-robot-monitors.md](../uptime-robot-monitors.md) | 2026-10-18 | 4 | 1 | `docs/longhorn-disaster-recovery.md` (2026-10-24) |
 | [valheim-modding.md](../valheim-modding.md) | 2026-10-22 | 1 | 1 | `ansible/roles/k8s/valheim/CLAUDE.md` (2026-10-25) |
 | [adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md) | 2026-10-24 | 3 | 1 | `scripts/diagnostics/probe.py` (2026-10-25) |
+| [break-glass.md](../break-glass.md) | 2026-10-25 | 41 | 1 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-10-26) |
+| [deploying.md](../deploying.md) | 2026-10-25 | 16 | 1 | `docs/claude-tooling.md` (2026-10-26) |
+| [host-baseline-record.md](../host-baseline-record.md) | 2026-10-25 | 48 | 1 | `docs/k3s-node-plane-crons-and-incidents.md` (2026-10-26) |
+| [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-10-25 | 19 | 1 | `docs/k3s-node-plane-crons-and-incidents.md` (2026-10-26) |
+| [target-architecture/host/h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md) | 2026-10-25 | 80 | 1 | `docs/gitops-pipeline.md` (2026-10-26) |
+| [target-architecture/monitoring/m1-alertmanager.md](../target-architecture/monitoring/m1-alertmanager.md) | 2026-10-25 | 66 | 1 | `docs/claude-tooling.md` (2026-10-26) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [index.md](../index.md) | 2026-09-28 | 0 | 0 | — |
 | [adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | 2026-10-12 | 1 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-10-24 | 1 | 0 | — |
 | [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-10-25 | 9 | 0 | — |
 | [adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) | 2026-10-25 | 4 | 0 | — |
-| [break-glass.md](../break-glass.md) | 2026-10-25 | 41 | 0 | — |
-| [deploying.md](../deploying.md) | 2026-10-25 | 16 | 0 | — |
 | [docker-engine-pins-and-runtime.md](../docker-engine-pins-and-runtime.md) | 2026-10-25 | 7 | 0 | — |
 | [failure-classes.md](../failure-classes.md) | 2026-10-25 | 18 | 0 | — |
-| [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-10-25 | 95 | 0 | — |
-| [gitops-pipeline.md](../gitops-pipeline.md) | 2026-10-25 | 106 | 0 | — |
+| [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-10-25 | 96 | 0 | — |
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-10-25 | 20 | 0 | — |
-| [host-baseline-record.md](../host-baseline-record.md) | 2026-10-25 | 48 | 0 | — |
 | [host-packages.md](../host-packages.md) | 2026-10-25 | 30 | 0 | — |
-| [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-10-25 | 19 | 0 | — |
-| [k3s-upgrade.md](../k3s-upgrade.md) | 2026-10-25 | 24 | 0 | — |
+| [k8s-manifest-cycle-record.md](../k8s-manifest-cycle-record.md) | 2026-10-25 | 33 | 0 | — |
 | [landing.md](../landing.md) | 2026-10-25 | 52 | 0 | — |
-| [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-10-25 | 19 | 0 | — |
+| [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-10-25 | 46 | 0 | — |
 | [pi-host-tuning-record.md](../pi-host-tuning-record.md) | 2026-10-25 | 19 | 0 | — |
+| [pihole-dns-continuity-record.md](../pihole-dns-continuity-record.md) | 2026-10-25 | 4 | 0 | — |
+| [registry-push-store-gc.md](../registry-push-store-gc.md) | 2026-10-25 | 5 | 0 | — |
 | [renovate-agent-bounds-and-digest.md](../renovate-agent-bounds-and-digest.md) | 2026-10-25 | 27 | 0 | — |
-| [secret-rotation.md](../secret-rotation.md) | 2026-10-25 | 35 | 0 | — |
+| [secret-rotation.md](../secret-rotation.md) | 2026-10-25 | 36 | 0 | — |
+| [target-architecture/contracts.md](../target-architecture/contracts.md) | 2026-10-25 | 24 | 0 | — |
 | [target-architecture/deploy/d7-superseding-promotions.md](../target-architecture/deploy/d7-superseding-promotions.md) | 2026-10-25 | 10 | 0 | — |
-| [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-10-25 | 83 | 0 | — |
-| [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-10-25 | 236 | 0 | — |
+| [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-10-25 | 71 | 0 | — |
+| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-10-25 | 76 | 0 | — |
 | [uptime-kuma-autokuma-record.md](../uptime-kuma-autokuma-record.md) | 2026-10-25 | 25 | 0 | — |
+| [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-10-25 | 10 | 0 | — |
+| [claude-tooling.md](../claude-tooling.md) | 2026-10-26 | 86 | 0 | — |
+| [gitops-pipeline.md](../gitops-pipeline.md) | 2026-10-26 | 106 | 0 | — |
+| [headlamp-oidc-and-plugins.md](../headlamp-oidc-and-plugins.md) | 2026-10-26 | 9 | 0 | — |
+| [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-10-26 | 19 | 0 | — |
