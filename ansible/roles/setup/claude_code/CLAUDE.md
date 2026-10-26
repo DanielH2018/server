@@ -346,7 +346,10 @@ a need appears.
   byte-identical to REPO_FILE in the caller's checkout, and 1 when it differs. The shim
   (`files/rootq.sh`) hashes REPO_FILE as the caller and passes only the hash. Root therefore
   receives `matches PATH HEX` and never opens a caller-named file. The shim refuses a REPO_FILE
-  that is absolute, holds `..`, or resolves outside the checkout.
+  that is absolute, holds `..`, or resolves outside the checkout. It also takes the 64-hex
+  SHA-256 in place of REPO_FILE and passes it on as it is, which gains the caller nothing a
+  file in a checkout could not. `probe.py applied` asks that way, on hosts with no checkout,
+  for each installed file it cannot stat or open, and uses only `stat` and `matches` (#6357).
 - **Tier 2 prints, from fixed sources only:** `nft list ruleset`, `ufw status verbose`,
   `sshd -T`, `crontab -l -u root`, and `cat` of `/etc/netplan/*.yaml`. Every argv is written
   in `ansible/roles/setup/claude_code/files/homelab_rootq.py:COMMANDS`, and no caller flag
@@ -357,6 +360,16 @@ a need appears.
   directory above it must be root-owned and writable by root alone. It must also miss every
   pattern in `DENY`, an independent second layer. `/var/lib/gitops-deploy` is not listed,
   because `sys_user` owns it and the caller already reads it.
+- **A DENY path answers `stat` alone, and only when `PATHS` names it.** The operator ruled
+  this on 2026-10-26 (#6369). `stat` of such a path prints its mode, type, owner and group,
+  plus `deny=yes`. It never prints size or mtime, because a size gives away a secret's
+  length. A missing one is refused as "does not exist". `cat`, `sha256` and `matches` still
+  refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
+  before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
+  it exists or not. The one DENY entry in `PATHS` is the exact path
+  `/etc/claude-rc/alert-webhook.env`. homelab-ui's `credentials.json` sits in the agent
+  user's home, which root does not own, so rootq cannot stat it. `probe.py applied` reports it
+  `UNCHECKED`.
 - **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a
   webhook URL, is withheld whole. The rest is redacted by default. A value prints only when it
   matches one of the token classes the script defines in one block, such as a number of up to

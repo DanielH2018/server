@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import core, host_reader
+from lib.proc_testing import path_with, write_exec
 
 HERE = "daniel-box"
 
@@ -132,3 +133,46 @@ def test_a_log_directory_behind_an_untraversable_parent_is_unreadable_not_absent
     assert _local({"logs": [str(tmp_path / "gone"), "*", 0]})["logs"] == {
         "status": "absent"
     }
+
+
+def test_a_file_this_user_stats_but_cannot_open_is_hashed_by_rootq(
+    tmp_path, monkeypatch
+):
+    """Only `matches` is asked: the reader's own lstat already has the metadata (#6357)."""
+    bin_dir, log = tmp_path / "bin", tmp_path / "rootq.argv"
+    bin_dir.mkdir()
+    write_exec(bin_dir / "rootq", f'#!/bin/sh\necho "$*" >> {log}\necho match\n')
+    monkeypatch.setenv("PATH", path_with(bin_dir))
+    script = tmp_path / "x.sh"
+    script.write_text("exec x\n")
+    script.chmod(0o000)
+    digest = hashlib.sha256(b"exec x\n").hexdigest()
+    try:
+        if os.access(script, os.R_OK):
+            pytest.skip("running as root, which reads a 0000 file")
+        row = _local({"stat": [str(script)], "rootq": {str(script): digest}})
+    finally:
+        script.chmod(0o600)
+    row = row["stat"][str(script)]
+    assert (row["mode"], row["match"], "via" in row) == ("0000", True, False)
+    assert log.read_text().splitlines() == [f"matches {script} {digest}"]
+
+
+def test_a_path_rootq_finds_missing_is_absent_not_unreadable(tmp_path, monkeypatch):
+    """An absent arm's file under a directory this user cannot traverse (#6357)."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    refusal = 'echo "refused: $2 does not exist" >&2\nexit 2\n'
+    write_exec(bin_dir / "rootq", "#!/bin/sh\n" + refusal)
+    monkeypatch.setenv("PATH", path_with(bin_dir))
+    locked = tmp_path / "rules.d"
+    locked.mkdir()
+    locked.chmod(0)
+    gone = str(locked / "50-claude-land.rules")
+    try:
+        if os.access(locked, os.X_OK):
+            pytest.skip("running as root, which traverses a 0000 directory")
+        row = _local({"stat": [gone], "rootq": {gone: None}})["stat"][gone]
+    finally:
+        locked.chmod(0o700)
+    assert row == {"status": "absent", "via": "rootq"}

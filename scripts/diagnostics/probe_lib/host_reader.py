@@ -7,7 +7,7 @@ parses the one JSON document it prints. On the host itself that is a local proce
 else it is ONE ssh call, because `ufw limit ssh` refuses a sixth connection in 30 seconds.
 
 `READER` is stdlib-only. `read_host` writes the plan into it as a string literal, because
-`python3 -` reads the whole of stdin as the program. A plan is a JSON object with any of five
+`python3 -` reads the whole of stdin as the program. A plan is a JSON object with any of six
 keys:
 
 - `journal`: `{key: [unit, since, until]}`. Each read is `journalctl -u <unit> -o json`, and its
@@ -17,6 +17,11 @@ keys:
 - `logs`: `[directory, glob, since_epoch]`. Each match newer than the cutoff returns its
   `VERDICT:` line, its `.rc` text and whether the pid in its `.pid` is alive.
 - `stat`: paths whose existence, mode, owner, group and sha256 to return.
+- `rootq`: `{path: sha256 or null}`, for `stat` paths this user may not stat or open. Such a
+  path is asked of `rootq` on the host, through tier 1's `stat` and `matches PATH HEX` only,
+  so no file content is printed. Its row carries `via: rootq`, and `match` when a hash was
+  compared, or `refused` with rootq's reason. `credential: true` marks a DENY path rootq
+  answered `stat` for with mode and owner only (#6369); no hash is asked of it.
 
 ABSENT IS NOT UNREADABLE. A file, a log directory or a stat target reports `absent`,
 `unreadable` or `ok`, never an empty value for a read that failed. A journal read by a user
@@ -125,13 +130,52 @@ def logs(directory, pattern, since):
         rows.append(row)
     return {"status": "ok", "rows": rows}
 
+def rootq(*argv):
+    # Tier 1's `stat` and `matches` only: neither prints file content.
+    try:
+        p = subprocess.run(["rootq", *argv], capture_output=True, text=True, timeout=20,
+                           stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, str(exc)
+    said = p.stdout if p.returncode in (0, 1) and p.stdout.strip() else p.stderr
+    return p.returncode, " ".join(said.split()).removeprefix("refused: ")
+
+def rootq_stat(path, err):
+    rc, said = rootq("stat", path)
+    if rc == 0:
+        meta = dict(w.split("=", 1) for w in said.split() if "=" in w)
+        # `deny=yes` marks a credential file: rootq withholds its size and mtime, and refuses
+        # every verb but stat, so no `matches` is asked of it.
+        return {"status": "ok", "via": "rootq", "sha256": None,
+                "credential": meta.get("deny") == "yes",
+                **{k: meta.get(k) for k in ("mode", "owner", "group")}}
+    # rootq resolves the path as root before any check but the deny list, so this refusal is
+    # root's ENOENT: an absent arm's path under a directory this user cannot read.
+    if rc == 2 and said.endswith(" does not exist"):
+        return {"status": "absent", "via": "rootq"}
+    row = {"status": "unreadable", "error": "%s; rootq stat: %s" % (err, said)}
+    return {**row, "refused": said} if rc == 2 else row
+
+def rootq_match(path, sha, row):
+    rc, said = rootq("matches", path, sha)
+    if rc in (0, 1) and said in ("match", "differ"):
+        row["match"] = rc == 0
+    else:
+        row["refused" if rc == 2 else "content"] = "rootq matches: " + said
+    return row
+
 def stat(path):
+    asks = plan.get("rootq", {})
     try:
         st = os.lstat(path)
     except FileNotFoundError:
         return {"status": "absent"}
     except OSError as exc:
-        return {"status": "unreadable", "error": str(exc)}
+        if path not in asks:
+            return {"status": "unreadable", "error": str(exc)}
+        row = rootq_stat(path, exc)
+        ask = row["status"] == "ok" and asks[path] and not row.get("credential")
+        return rootq_match(path, asks[path], row) if ask else row
     row = {"status": "ok", "mode": "%04o" % (st.st_mode & 0o7777),
            "owner": _name(pwd.getpwuid, st.st_uid), "group": _name(grp.getgrgid, st.st_gid),
            "sha256": None}
@@ -140,6 +184,8 @@ def stat(path):
             row["sha256"] = hashlib.sha256(f.read()).hexdigest()
     except OSError as exc:
         row["content"] = str(exc)
+        if asks.get(path):
+            row = rootq_match(path, asks[path], row)
     return row
 
 def show(unit, props):

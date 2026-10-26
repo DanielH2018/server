@@ -45,6 +45,7 @@ DENIED = [
     "/var/lib/rancher/k3s/server/node-token",
     "/var/lib/rancher/k3s/server/cred/passwd",
     "/opt/app/credentials/db",
+    "/var/lib/claude/.config/homelab-ui/credentials.json",
     "/home/ubuntu/.config/sops/age/keys.txt",
     "/etc/backup.agekey",
     "/home/claude/.config/sops/age",
@@ -194,9 +195,11 @@ def test_a_hard_denied_path_is_refused(rig, capsys, verb, path) -> None:
     assert_refused(run(rig, capsys, verb, path), rig, "deny list")
 
 
-def test_a_hard_denied_file_matching_an_allowlist_glob_is_refused(rig, capsys) -> None:
+def test_a_hard_denied_file_matching_an_allowlist_glob_answers_only_stat(rig, capsys):
+    # The operator's #6369 ruling: stat answers a listed DENY path, with no size or mtime.
     path = rig.file("/etc/cron.d/agent.env", "TOKEN=sentinel\n")
-    assert_refused(run(rig, capsys, "stat", path), rig, "deny list")
+    rc, out, _ = run(rig, capsys, "stat", path)
+    assert rc == 0 and "size=" not in out and "mtime=" not in out, out
     assert_refused(run(rig, capsys, "matches", path, HEX), rig, "deny list")
 
 
@@ -359,6 +362,23 @@ def test_every_listed_path_is_admitted(rig, capsys, live) -> None:
     assert (rc, out) == (0, hashlib.sha256(b"hello\n").hexdigest() + "\n")
 
 
+# The root-only files `probe.py applied claude_code` read as `unread` on 2026-10-25 that
+# PATHS does not yet admit (#6357). The neighbour is a polkit rule the role does not install.
+POLKIT_RULES = [
+    "/etc/polkit-1/rules.d/50-claude-fanout-alert.rules",
+    "/etc/polkit-1/rules.d/50-claude-land.rules",
+    "/etc/polkit-1/rules.d/50-claude-triage.rules",
+]
+
+
+@pytest.mark.parametrize("live", POLKIT_RULES)
+def test_a_claude_polkit_rule_is_admitted_and_its_neighbour_is_not(rig, capsys, live):
+    rc, out, _ = run(rig, capsys, "sha256", rig.file(live))
+    assert (rc, out) == (0, hashlib.sha256(b"hello\n").hexdigest() + "\n")
+    neighbour = rig.file("/etc/polkit-1/rules.d/49-ubuntu-admin.rules")
+    assert_refused(run(rig, capsys, "sha256", neighbour), rig, "not on the allowlist")
+
+
 @pytest.mark.parametrize(
     "verb, output, logged",
     [
@@ -464,3 +484,43 @@ def test_the_root_script_parses_with_the_3_12_grammar() -> None:
     # The hosts run it under Ubuntu 24.04's python3, so a 3.14-only construct would fail every
     # run there and none here.
     ast.parse(Path(rootq.__file__).read_text(), feature_version=(3, 12))
+
+
+# The one DENY path PATHS names (#6369). stat answers it with exists, type, mode, owner and
+# group, never size or mtime, which give a secret's length. Every other verb refuses it, and
+# a DENY sibling off the list draws one refusal whether or not it exists.
+DENY_LISTED = "/etc/claude-rc/alert-webhook.env"
+
+
+def test_stat_of_a_listed_deny_path_prints_only_type_mode_owner_and_group(rig, capsys):
+    path = rig.file(
+        DENY_LISTED, "WEBHOOK=https://discord.com/api/webhooks/1/sentinel\n"
+    )
+    os.chmod(path, 0o600)
+    rc, out, _ = run(rig, capsys, "stat", path)
+    assert rc == 0
+    fields = dict(f.split("=", 1) for f in out.split())
+    assert set(fields) == {"mode", "type", "owner", "group", "deny"}
+    assert (fields["mode"], fields["type"], fields["deny"]) == ("0600", "file", "yes")
+    assert "sentinel" not in out
+
+
+@pytest.mark.parametrize("argv", [["cat"], ["sha256"], ["matches", HEX]])
+def test_a_listed_deny_path_refuses_every_verb_but_stat(rig, capsys, argv):
+    path = rig.file(DENY_LISTED, "WEBHOOK=sentinel\n")
+    assert_refused(run(rig, capsys, argv[0], path, *argv[1:]), rig, "deny list")
+
+
+def test_a_listed_deny_path_that_is_missing_does_not_exist(rig, capsys):
+    path = str(Path(rig.file("/etc/claude-rc/x")).parent / "alert-webhook.env")
+    assert_refused(run(rig, capsys, "stat", path), rig, "does not exist")
+
+
+def test_a_deny_sibling_off_the_list_is_refused_alike_whether_or_not_it_exists(
+    rig, capsys
+):
+    path = str(Path(rig.file("/etc/claude-rc/x")).parent / "other.env")
+    missing = run(rig, capsys, "stat", path)
+    assert_refused(missing, rig, "not on the allowlist")
+    rig.file("/etc/claude-rc/other.env")
+    assert run(rig, capsys, "stat", path) == missing
