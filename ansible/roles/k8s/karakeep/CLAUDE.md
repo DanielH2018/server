@@ -127,3 +127,9 @@ loop to auto-tag bookmarks.
   every process start. The `karakeep-chrome-write-paths-are-emptydirs` row of
   `ansible/tests/k8s/_workload_property_rows.py` is the guard; add a path to its
   `CHROME_WRITABLE_PATHS` when a chromium flag makes it write somewhere new.
+- **The app's `/run` is a Memory emptyDir** (#6387). Since 0.34.0 the image ships `/run`
+  owned by `node` (karakeep-app/karakeep#3114). s6-overlay's preinit chowns `/run` to the
+  container uid when the two differ, and the container runs as root with every capability
+  dropped, so the chown fails and the container exits 111 before the app starts. A
+  root-owned emptyDir leaves preinit nothing to change. The guard is the
+  `karakeep-run-is-an-emptydir` row of `ansible/tests/k8s/_image_property_rows.py`.
