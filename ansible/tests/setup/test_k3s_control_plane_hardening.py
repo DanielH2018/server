@@ -26,8 +26,6 @@ Run: uv run pytest ansible/tests/setup/test_k3s_control_plane_hardening.py
 """
 
 import functools
-import tempfile
-from pathlib import Path
 
 import jinja2
 from lib import yaml_fast
@@ -104,14 +102,7 @@ def _audit_policy() -> dict:
     installer runs" ordering test left with the task. `test_k3s_server_component.py` holds that
     every file a flag names is a file the package ships.
     """
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "secrets.yml").write_text("k3s_readonly_token: x\n")
-        (root / "sops").mkdir()
-        (root / "sops/daniel-box.sops.yaml").write_text("k3s_readonly_token: x\n")
-        package = host_mode.render_host(
-            "daniel-box", secrets=root / "secrets.yml", sops_dir=root / "sops"
-        )
+    package = host_mode.render_host("daniel-box")
     return yaml_fast.safe_load(package.files[AUDIT_POLICY][0].decode())
 
 

@@ -6,8 +6,9 @@ those entries, so the next window restarts k3s once. Every failure here is silen
 restart: a flag that names a file the package does not ship wedges the API server (the unit is
 Type=notify with TimeoutStartSec=0), and a file with no activation never reaches the hash.
 
-The package needs `k3s_readonly_token` in `secrets.yml` and a daniel-box SOPS file to render, so
-the fixtures stand in for both, as `hosts/lib/tests/test_k3s_restart_component.py` does.
+The renders read the tracked `secrets.yml` and daniel-box SOPS file, as
+`test_host_package_two_writers.py` does, so a credential another component adds to the package
+cannot refuse them.
 """
 
 import re
@@ -39,21 +40,9 @@ STARTUP_FILES = {
 MARKER = "/var/lib/rancher/k3s/server/manifests/coredns.yaml.skip"
 
 
-def _stage(root, hosts_root=HOSTS):
-    (root / "secrets.yml").write_text("k3s_readonly_token: x\n")
-    (root / "sops").mkdir()
-    (root / "sops/daniel-box.sops.yaml").write_text("k3s_readonly_token: x\n")
-    return host_mode.render_host(
-        "daniel-box",
-        hosts_root=hosts_root,
-        secrets=root / "secrets.yml",
-        sops_dir=root / "sops",
-    )
-
-
 @pytest.fixture(scope="module")
-def package(tmp_path_factory):
-    return _stage(tmp_path_factory.mktemp("box"))
+def package():
+    return host_mode.render_host("daniel-box")
 
 
 def text(package, dst: str) -> str:
@@ -153,9 +142,10 @@ def test_rotation_truncates_in_place_because_systemd_holds_the_fd(package):
 
 
 def test_the_legacy_entry_retires_ansibles_drop_in(package):
-    assert package.legacy == [
-        {"path": "/etc/systemd/system/k3s.service.d/10-log-to-file.conf"}
-    ]
+    legacy = {"path": "/etc/systemd/system/k3s.service.d/10-log-to-file.conf"}
+    assert legacy in package.legacy
+    spec = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
+    assert spec["legacy"] == [legacy]
 
 
 def test_the_coredns_marker_ships_empty(package):
@@ -171,10 +161,13 @@ def test_the_audit_log_directory_and_log_file_are_created_at_boot(package):
 def test_a_template_naming_an_undefined_key_fails_the_host_render(tmp_path):
     hosts = tmp_path / "hosts"
     shutil.copytree(HOSTS, hosts)
-    (tmp_path / "ok").mkdir()
-    _stage(tmp_path / "ok", hosts)  # the accept half: the copy renders as it stands
+    # Sources outside hosts/ resolve against the root's parent.
+    for name in ("ansible", "scripts", "docs"):
+        (tmp_path / name).symlink_to(REPO / name)
+    host_mode.render_host(
+        "daniel-box", hosts_root=hosts
+    )  # the accept half: the copy renders as it stands
     broken = hosts / "components/k3s-server/templates/50-homelab.conf.j2"
     broken.write_text("[Service]\nEnvironment=X={{ k3s_no_such_key }}\n")
-    (tmp_path / "bad").mkdir()
     with pytest.raises(RenderError, match="k3s_no_such_key"):
-        _stage(tmp_path / "bad", hosts)
+        host_mode.render_host("daniel-box", hosts_root=hosts)

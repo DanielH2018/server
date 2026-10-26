@@ -23,8 +23,6 @@ for why each value is what it is.
 
 import functools
 import re
-import tempfile
-from pathlib import Path
 
 import jinja2
 from lib import yaml_fast
@@ -111,14 +109,7 @@ def _component_defaults() -> dict:
 @functools.cache
 def _shipped_auth_config() -> str:
     """The authentication config daniel-box's package ships, as host mode renders it."""
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "secrets.yml").write_text("k3s_readonly_token: x\n")
-        (root / "sops").mkdir()
-        (root / "sops/daniel-box.sops.yaml").write_text("k3s_readonly_token: x\n")
-        package = host_mode.render_host(
-            "daniel-box", secrets=root / "secrets.yml", sops_dir=root / "sops"
-        )
+    package = host_mode.render_host("daniel-box")
     return package.files[AUTH_CONFIG][0].decode()
 
 
