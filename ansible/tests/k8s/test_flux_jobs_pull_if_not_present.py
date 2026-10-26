@@ -57,7 +57,11 @@ def flux_job_docs(tmp_path_factory) -> list[tuple[str, str, dict]]:
 
 
 def test_digest_pinned_flux_job_containers_pull_if_not_present(flux_job_docs):
-    (row,) = IMAGE_PROPERTIES
+    (row,) = [
+        p
+        for p in IMAGE_PROPERTIES
+        if p.name == "digest-pinned-images-pull-if-not-present"
+    ]
 
     # A rendered Job's name carries its spec digest, so the key names the template instead.
     def select(role: str, tpl: str, doc: dict):

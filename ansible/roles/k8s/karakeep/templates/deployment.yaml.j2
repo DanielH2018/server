@@ -72,6 +72,13 @@ spec:
           # root-owned and this image runs as root, so nothing
           # here needs CHOWN or DAC_OVERRIDE.
           #
+          # /run is an emptyDir (`karakeep-run` below) because of that missing CHOWN. Since
+          # 0.34.0 the image ships `/run` owned by `node` (karakeep-app/karakeep#3114).
+          # s6-overlay's preinit chowns /run to the container uid whenever the two differ, and
+          # without CHOWN that exits 111 before the app starts (#6387). kubelet creates an
+          # emptyDir owned by root, so preinit finds uid 0 on uid 0 and changes nothing. The
+          # image puts nothing else in /run, so the mount hides nothing.
+          #
           # DECIDED: no readOnlyRootFilesystem here, unlike the chrome sidecar and the
           # wait-for-deps init container above. Three facts, and the third is why this is
           # recorded rather than tried:
@@ -79,8 +86,9 @@ spec:
           #      process was measured as s6-svscan at uid 0 — see the ("karakeep",
           #      "karakeep") entry in _ENTRYPOINT_DROPS,
           #      ansible/tests/k8s/test_container_security_context.py). s6 rebuilds its whole
-          #      service tree under /run on every start, so a read-only root needs an emptyDir
-          #      at /run plus S6_READ_ONLY_ROOT=1, which changes how the init itself boots.
+          #      service tree under /run on every start. /run is already an emptyDir, but a
+          #      read-only root also needs S6_READ_ONLY_ROOT=1, which changes how the init
+          #      itself boots.
           #   2. The image hardcodes HOME=/root, so anything cache-writing lands on the root
           #      filesystem rather than a mounted path. That is its own open issue; it is not
           #      fixed here.
@@ -157,6 +165,8 @@ spec:
               mountPath: /data
             - name: karakeep-next-cache
               mountPath: /app/apps/web/.next/cache
+            - name: karakeep-run
+              mountPath: /run
           # `/` answers 307 (measured against the running container), and k8s counts 2xx-3xx as
           # success, so httpGet is safe here — unlike livesync, whose endpoints answer 401.
           readinessProbe:
@@ -184,3 +194,11 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 256Mi
+        # s6's runtime tree: the compiled service database, its control FIFOs and
+        # uncaught-logs, which s6-log rotates. Memory, because s6 expects a tmpfs at /run.
+        # 64Mi bounds it far above what that tree holds, and the pages count against the
+        # container's memory limit.
+        - name: karakeep-run
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi

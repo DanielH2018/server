@@ -1,4 +1,4 @@
-"""Rendered-manifest property rows about how a container's image is pulled.
+"""Rendered-manifest property rows about how a container's image is pulled, and what it needs.
 
 `test_rendered_properties.py` runs these rows beside its own. A row lives here only to keep that
 file under the test-module length cap; the rules for what makes a row are in its docstring.
@@ -33,7 +33,51 @@ def _pull_if_not_present_offence(role: str, container: dict) -> str | None:
     )
 
 
+def _karakeep_app(role: str, tpl: str, doc: dict):
+    if role == "karakeep" and doc.get("kind") == "Deployment":
+        if doc["metadata"]["name"] == "karakeep":
+            yield "karakeep", doc
+
+
+def _s6_run_offence(role: str, doc: dict) -> str | None:
+    spec = pod_spec(doc)
+    empty_dirs = {v["name"] for v in spec.get("volumes", []) if "emptyDir" in v}
+    for c in spec.get("containers", []):
+        if c["name"] == "karakeep":
+            for m in c.get("volumeMounts", []):
+                if m["mountPath"] == "/run" and m["name"] in empty_dirs:
+                    return None
+    return (
+        "/run is the image's node-owned directory, which s6 cannot chown without CHOWN"
+    )
+
+
+def _karakeep_with_run(volume: dict) -> dict:
+    mount = {"name": "karakeep-run", "mountPath": "/run"}
+    container = {"name": "karakeep", "volumeMounts": [mount]}
+    pod = {"volumes": [volume], "containers": [container]}
+    return {"spec": {"template": {"spec": pod}}}
+
+
 IMAGE_PROPERTIES = (
+    Property(
+        name="karakeep-run-is-an-emptydir",
+        reason=(
+            "karakeep's PID 1 is s6-overlay's /init at uid 0 with every capability dropped. "
+            "Since 0.34.0 the image ships /run owned by node (karakeep-app/karakeep#3114), and "
+            "s6's preinit chowns /run whenever its owner differs from the container uid. "
+            "Without CHOWN that exits 111 before the app starts, which took karakeep down on "
+            "2026-10-26 (#6387). A root-owned emptyDir at /run gives preinit nothing to chown."
+        ),
+        select=_karakeep_app,
+        offence=_s6_run_offence,
+        red=("karakeep", _karakeep_with_run({"name": "karakeep-run", "hostPath": {}})),
+        green=(
+            "karakeep",
+            _karakeep_with_run({"name": "karakeep-run", "emptyDir": {}}),
+        ),
+        must_find=frozenset({"karakeep"}),
+    ),
     Property(
         name="digest-pinned-images-pull-if-not-present",
         reason=(
