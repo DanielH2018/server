@@ -1,7 +1,7 @@
 ---
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest@sha256:5e61736b982b87d84a1120b4767c4deff0f2cc55ca3ee9dcb1dc58623039b5cb
+cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest@sha256:345b41895a8846d74c62d30bd27e61101a754f8ab8da10c68115823883803afb
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
