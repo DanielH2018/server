@@ -1,0 +1,61 @@
+# The k3s server's same-path files (H6.4a, docs/target-architecture/host/h6-k3s-suc.md,
+# *Flags move from the unit to a package drop-in*). Ansible's tasks/server.yml wrote each one
+# until H6.4a deleted its task, so dpkg takes over the path on the first install.
+#
+# The package ships the files and applies nothing. Each file k3s reads at startup carries
+# `activate: manual:k3s.service`, which puts it in the hash homelab-k3s-restart takes
+# (hosts/components/k3s-restart). The first window after an install that changes the hash
+# therefore restarts k3s once, behind the gates, and the host package marks k3s.service
+# `windowed` so reconcile never restarts it. A path k3s does not read at startup (logrotate,
+# tmpfiles.d, the CoreDNS marker) carries no activation.
+#
+# FORWARD-ONLY. A file here is named by a k3s flag (`audit-policy-file`, `authentication-config`)
+# or read at startup, and a missing authentication config wedges the API server on its next
+# start. Reverting the PR that added a file deletes it. Return a file to Ansible with the
+# attended procedure in the H6 plan's *Rollback*.
+#
+# ENFORCED: ansible/tests/setup/test_k3s_server_component.py.
+defaults:
+  # The log file k3s writes (setup/k3s's `k3s_log_file`, which the agent still reads). A test
+  # holds the two equal until H7 deletes the role.
+  k3s_log_file: /var/log/k3s.log
+  # The two paths k3s_server_args names, shipped at the literal paths below (a `dst:` is not
+  # rendered). setup/k3s keeps its twins until H6.4b deletes
+  # k3s_server_args, and the shipped-paths test holds each copy equal to its twin.
+  k3s_audit_policy_path: /var/lib/rancher/k3s/server/audit.yaml
+  k3s_authentication_config_path: /var/lib/rancher/k3s/server/authentication-config.yaml
+  # The read-only ServiceAccount the audit policy exempts. cluster-base holds the twins
+  # `cluster_base_readonly_sa_*`; a test holds the three members of each triple equal.
+  k3s_server_readonly_sa_name: homelab-readonly
+  k3s_server_readonly_sa_namespace: kube-system
+  # The API server's JWT trust in Authelia. Moved from setup/k3s (the template was its only
+  # reader). `k3s_oidc_issuer_urls` lists both hostnames Authelia answers on, with NO trailing
+  # slash, because the comparison against the token's `iss` is exact.
+  k3s_oidc_issuer_urls:
+    - "https://auth.local.{{ domain }}"
+    - "https://auth.{{ domain }}"
+  # The audience: the Authelia client id. Authelia puts only that id in `aud`.
+  k3s_oidc_client_id: headlamp
+  # Authelia hydrates neither claim into the ID token by default, so its client must name a
+  # claims policy carrying both. There is no username prefix variable: the template writes the
+  # empty string, which is how structured authentication config disables prefixing.
+  k3s_oidc_username_claim: preferred_username
+  k3s_oidc_groups_claim: groups
+  # The prefix that keeps an Authelia group from reading as a built-in `system:` group.
+  # `headlamp_k8s_oidc_group` is this prefix plus the Authelia group, and
+  # ansible/tests/setup/test_k3s_oidc_trusts_authelia.py fails when the two drift.
+  k3s_oidc_groups_prefix: "oidc:"
+files:
+  - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/50-homelab.conf, activate: "manual:k3s.service"}
+  - {src: templates/audit-policy.yaml.j2, dst: /var/lib/rancher/k3s/server/audit.yaml, mode: "0600", activate: "manual:k3s.service"}
+  - {src: templates/authentication-config.yaml.j2, dst: /var/lib/rancher/k3s/server/authentication-config.yaml, mode: "0600", activate: "manual:k3s.service"}
+  - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s.service"}
+  - {src: templates/logrotate-k3s.j2, dst: /etc/logrotate.d/k3s}
+  - {src: templates/tmpfiles-k3s.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-server.conf}
+  # An empty marker: the deploy controller skips an addon file whose name ends `.skip`, which
+  # releases k3s's bundled CoreDNS to Flux's `coredns` tag (H1.4). k3s reads it live.
+  - {src: templates/coredns.yaml.skip, dst: /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip}
+legacy:
+  # Ansible's logging drop-in. Its lines equal the package's, so both apply harmlessly until
+  # reconcile removes it.
+  - {path: /etc/systemd/system/k3s.service.d/10-log-to-file.conf}

@@ -63,26 +63,25 @@ headlamp_k8s_plugins:
     asset_prefix: "headlamp-k8s-"
 
 # The Kubernetes Group an OIDC login arrives as, bound in templates/rbac.yaml.j2 alongside the
-# ServiceAccount. TWO pieces concatenated, and both belong to roles/setup/k3s:
+# ServiceAccount. TWO pieces concatenated, and both belong to hosts/components/k3s-server:
 # `k3s_oidc_groups_prefix` + the Authelia group. The prefix exists so an Authelia group can
 # never collide with a built-in `system:` group; the API server applies it to every value of
 # the `groups` claim before RBAC sees it.
 #
 # Cross-role by necessity — the API server is the thing that mints the group name, and it is
-# configured in a role the k8s deploy play never runs (k3s-bringup.yml, applied by hand).
+# configured in a host package the k8s deploy play never runs (homelab-daniel-box, H6.4a).
 headlamp_k8s_oidc_group: "oidc:admins"
 
 # ── OIDC login ───────────────────────────────────────────────────────────────
 # Turning it on REPLACES the ServiceAccount identity with the browser's:
 # Headlamp forwards the `id_token` and the API SERVER decides, so this switch is only safe
 # while daniel-box's apiserver reads an `AuthenticationConfiguration` trusting Authelia. That
-# is `k3s_authentication_config_path` in `roles/setup/k3s`, applied by hand through
-# `k3s-bringup.yml` because `roles/setup/k3s` is in `_BROAD_MANUAL_PREFIXES` and no tick
-# applies it. (`--kube-apiserver-arg=oidc-*` flags and the file are mutually exclusive.)
+# is `hosts/components/k3s-server/templates/authentication-config.yaml.j2`, which the
+# homelab-daniel-box package ships and `homelab-k3s-restart` loads with one windowed restart of
+# k3s. (`--kube-apiserver-arg=oidc-*` flags and the file are mutually exclusive.)
 #
-# So this variable is NOT independently safe to flip: it depends on state in a role the k8s
-# deploy play never runs, and on a playbook a person runs. Read the k3s role's `k3s_oidc_*`
-# block before changing it, and if that trust is ever removed from the API server, turn this
+# So this variable is NOT independently safe to flip: it depends on state in a host package the
+# k8s deploy play never runs. Read the component's `k3s_oidc_*` block before changing it, and if that trust is ever removed from the API server, turn this
 # off in the same change — a token the API server does not trust leaves a dashboard that logs
 # in and Forbids every call.
 #
