@@ -42,68 +42,12 @@
     checksum: "sha256:{{ k3s_install_script_sha256 }}"
   become: true
 
-# ── audit logging: these two MUST precede the installer ─────────────────────────────────
-# The apiserver reads the audit policy at startup and refuses to start without it, and the
-# install task below rewrites the unit and restarts k3s itself. Writing the policy after it
-# would arm the flag against a file that does not exist yet, wedging the control plane on
-# the node that also serves LAN DNS. Both tasks are unconditional writes so an already-armed
-# host converges the same way a fresh one does.
-- name: Create the apiserver audit log directory
-  tags: [k3s_server]
-  ansible.builtin.file:
-    path: "{{ k3s_audit_log_dir }}"
-    state: directory
-    mode: "0700"
-    owner: root
-    group: root
-  become: true
-  when: k3s_audit_log_enabled | bool
-
-- name: Write the apiserver audit policy
-  tags: [k3s_server]
-  # Notifies the restart because the apiserver reads this once, at startup — an edited policy
-  # is otherwise inert until something else happens to restart k3s. On the arming run the
-  # installer restarts k3s too, so that run pays for two restarts; every later run pays for
-  # none, because the file does not change. Same pattern as registries.yaml below.
-  ansible.builtin.template:
-    src: audit-policy.yaml.j2
-    dest: "{{ k3s_audit_policy_path }}"
-    mode: "0600"
-    owner: root
-    group: root
-  become: true
-  when: k3s_audit_log_enabled | bool
-  notify:
-    - Restart k3s
-    - Wait for the node to report Ready again
-
-- name: Write the apiserver authentication configuration
-  tags: [k3s_server]
-  # ORDER IS LOAD-BEARING, exactly as for the audit policy above. The apiserver reads this
-  # file at STARTUP and refuses to start when it is missing or fails validation, so it must
-  # exist before the installer below rewrites the unit and restarts k3s. A missing file wedges
-  # the node rather than failing the play: the unit is Type=notify with TimeoutStartSec=0.
-  #
-  # Notifies the restart because the read happens once, at startup — an edited file is
-  # otherwise inert until something else restarts k3s. On the arming run the installer
-  # restarts k3s too, so that run pays for two restarts; every later run pays for none,
-  # because the file does not change.
-  ansible.builtin.template:
-    src: authentication-config.yaml.j2
-    dest: "{{ k3s_authentication_config_path }}"
-    mode: "0600"
-    owner: root
-    group: root
-  become: true
-  notify:
-    - Restart k3s
-    - Wait for the node to report Ready again
-
-- name: Keep k3s's own output in a file the journald cap cannot drop
-  ansible.builtin.import_tasks: unit-logging.yml
-  tags: [k3s_server]
-  vars:
-    k3s_log_unit: k3s
+# The audit log directory, audit policy, authentication config, registries.yaml and the logging
+# drop-in are the homelab-daniel-box package's since H6.4a (hosts/components/k3s-server), so no
+# task here writes them. The installer below names the audit policy and the authentication config
+# in its flags, and k3s refuses to start without them, so a host with no k3s yet needs the package's
+# files first. The package's CoreDNS marker is the exception: it belongs after the read in
+# coredns.yml. Both orders on a bare host are an attended procedure, which H6.4a does not change.
 
 - name: Read the installed k3s systemd unit
   tags: [k3s_server]
@@ -153,21 +97,6 @@
     or ((k3s_installed_version.rc | default(1)) != 0)
   changed_when: true
   register: k3s_server_install
-
-- name: Restart k3s so the log drop-in takes effect # noqa no-handler
-  tags: [k3s_server]
-  # A drop-in changes nothing until the unit next execs. Skipped when the installer just ran,
-  # because the installer restarts k3s itself and a second restart would take the API server
-  # away twice. Not a handler: the agent has the same task against its own unit, and a
-  # handler named `k3s` would fail on that host.
-  ansible.builtin.systemd_service:
-    name: k3s
-    state: restarted
-    daemon_reload: true
-  become: true
-  when:
-    - k3s_unit_logging_dropin is changed
-    - k3s_server_install is not changed
 
 - name: Wait for the node to report Ready
   tags: [k3s_server]
@@ -287,22 +216,6 @@
     - not ansible_check_mode
     - k3s_secrets_encryption | bool
     - "'reencrypt_finished' not in k3s_secrets_encrypt_status.stdout"
-
-# containerd reads this only at startup, so a change needs k3s restarted — see the restart
-# task below. Written here rather than in the registry role because it is node configuration,
-# not a workload, and because it has to exist before any pod references a built image.
-- name: Configure containerd's view of the in-cluster registry
-  tags: [k3s_server]
-  ansible.builtin.template:
-    src: registries.yaml.j2
-    dest: /etc/rancher/k3s/registries.yaml
-    mode: "0600"
-    owner: root
-    group: root
-  become: true
-  notify:
-    - Restart k3s
-    - Wait for the node to report Ready again
 
 - name: Read the node's registered internal IP
   tags: [k3s_server]

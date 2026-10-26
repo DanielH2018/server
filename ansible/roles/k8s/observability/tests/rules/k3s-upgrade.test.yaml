@@ -160,7 +160,7 @@ tests:
                 hand if it is down, then `sudo rm /var/lib/homelab-k3s-restart/failed.sha256`.
 
   # K3sConfigRestartPending fires only after 72 hours of `pending 1`. An absent series fires
-  # nothing here: K3sConfigRestartMetricsAbsent owns that case from H6.4a.
+  # nothing here: K3sConfigRestartMetricsAbsent owns that case.
   - interval: 1m
     input_series:
       - series: 'homelab_k3s_restart_pending{host="daniel-box"}'
@@ -191,3 +191,33 @@ tests:
       - eval_time: 80h
         alertname: K3sConfigRestartPending
         exp_alerts: []
+
+  # K3sConfigRestartMetricsAbsent fires one hour after daniel-box's series disappears, and stays
+  # quiet while it is present. daniel-server has no series and no term.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_k3s_restart_failed{host="daniel-box"}'
+        values: '0x30 stale'
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: K3sConfigRestartMetricsAbsent
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: K3sConfigRestartMetricsAbsent
+        exp_alerts: []
+      - eval_time: 91m
+        alertname: K3sConfigRestartMetricsAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: daniel-box
+              host: daniel-box
+            exp_annotations:
+              summary: homelab-k3s-restart has written no metrics for daniel-box in an hour.
+              description: >-
+                No homelab_k3s_restart_failed series carries host="daniel-box". The unit writes it
+                on every run, so either its textfile never reached Prometheus or the timer
+                stopped, and K3sConfigRestartFailed and K3sConfigRestartPending read empty
+                meanwhile. Read `systemctl list-timers homelab-k3s-restart.timer` and
+                `journalctl -u homelab-k3s-restart -p notice` on daniel-box, then the
+                node-exporter textfile collector.

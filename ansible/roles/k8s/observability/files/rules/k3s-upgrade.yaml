@@ -55,8 +55,8 @@ groups:
       # run, so a clean host reads 0 and an absent series is not a pass. Each rule names its host
       # as a literal `service`, the way host-checks.yaml does. daniel-box ships the unit first, and
       # daniel-server's two rules join when its package lists the component.
-      # K3sConfigRestartMetricsAbsent, which pages a host whose textfile stops reaching Prometheus,
-      # lands in H6.4a after a live query has shown the `host` label on the series.
+      # K3sConfigRestartMetricsAbsent pages a host whose textfile stops reaching Prometheus. H6.4a
+      # added it after `probe.py metric` showed the `host` label on daniel-box's series.
       #
       # `failed` is 1 after an attempt that did not bring k3s back, and after an attempt a kill
       # interrupted. The unit makes one attempt per hash, so this page stands until the operator
@@ -92,3 +92,23 @@ groups:
             for 72 hours. Read `journalctl -u homelab-k3s-restart -p notice` for the refusing
             gate, which is a Longhorn volume, a node, CoreDNS, a SUC run, a Flux promotion, the
             deployer's lock or hold, or an unreadable API.
+      # An absent series reads as clean on the two rules above, so this one pages it. daniel-box
+      # alone has a term: daniel-server ships no k3s-restart component yet (H6.3b, Amended
+      # 2026-10-24), and a term for it would fire at once. The follow-up that adds the component
+      # for daniel-server adds its term here. `absent()` keeps the equality matcher's label, so
+      # the alert carries `host`.
+      - alert: K3sConfigRestartMetricsAbsent
+        expr: absent(homelab_k3s_restart_failed{host="daniel-box"})
+        for: 1h
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: homelab-k3s-restart has written no metrics for daniel-box in an hour.
+          description: >-
+            No homelab_k3s_restart_failed series carries host="daniel-box". The unit writes it on
+            every run, so either its textfile never reached Prometheus or the timer stopped, and
+            K3sConfigRestartFailed and K3sConfigRestartPending read empty meanwhile. Read
+            `systemctl list-timers homelab-k3s-restart.timer` and
+            `journalctl -u homelab-k3s-restart -p notice` on daniel-box, then the node-exporter
+            textfile collector.

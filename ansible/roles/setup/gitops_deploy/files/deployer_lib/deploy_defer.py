@@ -328,7 +328,7 @@ def narrow_tags_for(
     `deploy_narrow._one_setup_role` gives: the script and this copy can be different ages.
 
     The role tag applies far more than any one change to it needs: `--tags k3s` reapplies
-    MetalLB, Longhorn, the crons, CoreDNS and the node config and arms three gated
+    MetalLB, Longhorn, the crons, CoreDNS and the node config and arms two gated
     control-plane tasks, where a `templates/readonly-rbac.yaml.j2` edit needs `--tags
     kubeconfig` (#2294, #2307). `scripts/deploy_tools/narrow_setup.py` maps the changed paths
     to the tags of the tasks that read them.
