@@ -55,3 +55,5 @@
 2.42.6	n8nio/runners	sha256:b78816286beb0a14e874abfda31eb4621d47f5ebb38f194271df7e39b7bd63a7	stable promoted 2.42.6; resolved from the image version label (Renovate #4119, raised 2026-10-10)
 2.43.7	n8nio/n8n	sha256:3db21366be1d3c77c1708963129c051948573019659e8873e0294be035ffc1b2	stable promoted 2.43.7; resolved from the image version label (Renovate #5767, raised 2026-10-19)
 2.43.7	n8nio/runners	sha256:3aaa4194b4ba84548bb04d1761b74df7c9cab36a0b20e74cfaa7bac39504f9ea	stable promoted 2.43.7; resolved from the image version label (Renovate #5767, raised 2026-10-19)
+2.44.6	n8nio/n8n	sha256:d02752c6ab446ae9db8deec2f9cc887c378f77cdcad31650814df936b7386dfb	stable promoted 2.44.6; resolved from the image version label (Renovate #6382, raised 2026-10-26)
+2.44.6	n8nio/runners	sha256:255e69ed23d8b3866e593f6e105e7e12cafc81c4d1966a8f8702115af1032461	stable promoted 2.44.6; resolved from the image version label (Renovate #6382, raised 2026-10-26)
