@@ -3,7 +3,7 @@
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 homepage_k8s_image: ghcr.io/gethomepage/homepage:latest@sha256:19c5c09184458a41b7b5915e71463a39f36cd33540f41bdbed008791b8182d5f
 # The seed-config initContainer just needs `cp`; alpine is the smallest image that has it.
-homepage_k8s_init_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+homepage_k8s_init_image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateless: RollingUpdate Deployment, no PVC — unlike freshrss/speedtest/zigbee2mqtt it declares
