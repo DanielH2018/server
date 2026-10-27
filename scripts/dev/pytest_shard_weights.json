@@ -39,7 +39,7 @@
  ".claude/hooks/tests/test_session_health_module_scope_import.py": 0.07,
  ".claude/hooks/tests/test_session_health_other_sessions.py": 0.0,
  ".claude/hooks/tests/test_session_health_parked_deployer.py": 0.0,
- ".claude/hooks/tests/test_setup_wiring.py": 11.61,
+ ".claude/hooks/tests/test_setup_wiring.py": 0.01,
  ".claude/hooks/tests/test_strip_cd_cwd.py": 0.0,
  ".claude/hooks/tests/test_uv_python.py": 0.06,
  "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py": 0.0,
