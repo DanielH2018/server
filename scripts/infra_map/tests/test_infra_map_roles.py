@@ -18,8 +18,8 @@ def test_load_roles_derives_ownership_from_the_role_trees():
         pytest.skip("role trees not present")
     # autoheal is an un-inventoried companion.
     assert roles.container_owners.get("autoheal") == "autoheal"
-    # The Pi package's canary (H5.2b) is owned by its service directory, in the second tree.
-    assert roles.container_owners.get("pi-canary") == "pi-canary"
+    # A Pi package service directory, in the second tree, owns a container it does not name.
+    assert roles.container_owners.get("docker-proxy-lifecycle") == "docker-proxy"
     # Both are CronJob-only k8s roles; the classification is derived from the k8s manifests.
     assert "configarr" in roles.batch_roles
     assert "pi-peer-backup" in roles.batch_roles
