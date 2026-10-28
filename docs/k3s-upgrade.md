@@ -20,8 +20,9 @@ The pin is `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`
 `ansible/roles/setup/k3s/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
 It covers both nodes.
 The system-upgrade-controller (SUC) writes both nodes' versions. Its `k3s-server` Plan selects
-daniel-box since H6.3c, and its `k3s-agent` Plan selects daniel-server since H6.3d. Each Plan
-replaces its node's binary. `server.yml` and `agent.yml` install k3s on a fresh host only. The installer is `install.sh` from that same release tag,
+daniel-box since H6.3c. Its `k3s-agent` Plan selects no node: H6.3d's selection of
+daniel-server is paused until daniel-server's package ships `k3s_gates.py`. Each Plan
+replaces its selected node's binary. `server.yml` and `agent.yml` install k3s on a fresh host only. The installer is `install.sh` from that same release tag,
 fetched with `checksum:` against `k3s_install_script_sha256` in the same file — so a bump has a
 second literal to finish, and a wrong one fails the download rather than the install:
 
@@ -249,9 +250,9 @@ uv run python scripts/diagnostics/probe.py monitors
 A pin change no longer reaches the deployer's setup plane. The pin lives in the Flux-owned
 `system-upgrade` role (H6.1b), so a bump routes to the `system-upgrade` tag, which `land.sh`
 waits on through promotion, and the deployer writes no `manual_plane` line for `k3s`. The
-`k3s-server` Plan selects daniel-box since H6.3c and the `k3s-agent` Plan selects daniel-server
-since H6.3d, so merging the pin upgrades both nodes through SUC and no hand apply is owed for
-either. Another change under
+`k3s-server` Plan selects daniel-box since H6.3c, so merging the pin upgrades daniel-box
+through SUC. The `k3s-agent` Plan selects no node while H6.3d is paused, so daniel-server's
+agent still needs the agent half of this runbook by hand. Another change under
 `ansible/roles/setup/k3s/` still takes the setup plane's path. `k3s` is routed to
 `k3s-bringup.yml`, not to `initial_setup.yml` (`deploy_setup_roles.py:roles_outside_initial_setup_in`),
 so `tick_applies_setup_role` returns false for it. `handle_broad` (`deploy_handlers.py`) then
