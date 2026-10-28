@@ -305,3 +305,14 @@ def test_a_prepull_scope_that_cannot_apply_is_a_problem(tmp_path, text, problem)
     assert found == {}
     [line] = problems
     assert problem in line
+
+
+def test_only_the_backoff_row_refuses_a_prepull_job_set_to_zero():
+    # The red test above accepts any row; this pins the one that holds the retry (#5552).
+    files = prepull_files("app", [({"nodeSelector": {"h": "a"}}, ["app:1"])])
+    configmap = yaml_fast.safe_load(files["configmap.yaml"])
+    job = yaml_fast.safe_load(files["job.yaml"])
+    job["spec"]["backoffLimit"] = 0
+    job["metadata"]["name"] = f"prepull-app-{job_spec_digest8(job)}"
+    offences = problems({"app-prepull": [job, configmap]})
+    assert {line.split(":", 1)[0] for line in offences} == {"backoff"}
