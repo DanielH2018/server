@@ -23,8 +23,9 @@ a range that edits `deploy_cross_role.py` with origin's copy of it, not the inst
 `kuma_check_timer.yml`, the task file that renders them (#3319), and the alert pair routes
 to the importers of `alert_unit.yml` the same way. No k8s role imports
 `install_host_lib.yml` or `stamp_deployed.yml` since H2.5c. A change to `host_lib.py`
-defer-and-alerts `configarr` and `janitorr`, whose health CronJobs stage the file into their
-ConfigMaps (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`, #3320). `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
+moves the render of `configarr` and `janitorr`, whose health CronJobs stage the file into their
+ConfigMaps (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`, #3320), and `promote` applies
+it; the tick applies no k8s role since D6.12. `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
 `deploy_cross_role` gives. For that, `land.sh` names each consumer's playbook and tag, then the
 `gitops_state.py clear-owed manual_plane common` that clears the deployer's marker.
 

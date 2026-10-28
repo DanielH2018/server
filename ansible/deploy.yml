@@ -111,7 +111,7 @@
     # Before the batches, so a retired service's IngressRoutes and claim are gone before any
     # role applies. Gated because it is a write, and a host with no k8s workloads has no staged
     # manifests to read. It serves only a service that was Ansible-owned on the PR's base:
-    # arm 4 of scripts/validate/render_diff_gates.py refuses a flux-owned name in
+    # arm 4 of scripts/validate/cross_plane_order.py refuses a flux-owned name in
     # k8s_retired_services, which retires by two PRs instead (docs/flux-deploy-plane.md,
     # *Retiring a flux-owned service*).
     - name: Tear down retired k8s services

@@ -1,5 +1,5 @@
 {
-  "checksum": "ba224caf38937a76faaefbf850307d9601e047f2dd12b5654214296468f7d532",
+  "checksum": "8c363c9d3acb6ec1e618bcc9dbf47e9a4e46f16493d19006fa775502e82f4f3a",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/common/CLAUDE.md#`setup/common` — task files the other setup roles import",
   "row": {
@@ -12,6 +12,6 @@
       "hosts/lib/tests/": "0d07fe612cd335ee9bdfac0e2a62ea4e263a35c7b0709fbcb0a24b2a6ed8024b"
     },
     "python": "3.14",
-    "verified_sha": "65b1917f5"
+    "verified_sha": "1f7a7fa46"
   }
 }
