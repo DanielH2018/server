@@ -12,7 +12,7 @@ import subprocess
 import pytest
 from dataclasses import replace
 
-from _land_fakes import MERGE_SHA, Fakes, receipt
+from _land_fakes import MERGE_SHA, Fakes
 from deploy_tools.land_lib import deploy, land_flux, merge, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Outcome
 from deploy_tools.promote_lib.wait import WaitResult
@@ -25,10 +25,16 @@ def _names(calls):
     return [c[0] for c in calls]
 
 
+# What land-wait answers when the changed set names bento-pdf.
+SETTLED_BENTO = WaitResult("settled", detail="1 applied", tags=("bento-pdf",))
+
+
 def _fakes(**kwargs: object) -> Fakes:
     """bento-pdf is flux-owned at the merge commit, and the PR reaches it alone."""
     fakes = Fakes(
-        derived=(["bento-pdf"], "pr"), owners={MERGE_SHA: {"bento-pdf": "flux"}}
+        derived=(["bento-pdf"], "pr"),
+        owners={MERGE_SHA: {"bento-pdf": "flux"}},
+        land_wait=[SETTLED_BENTO],
     )
     return replace(fakes, **kwargs)
 
@@ -37,12 +43,26 @@ def test_a_pr_whose_only_tag_is_flux_owned_never_reaches_deploy_sh(land_run):
     rc, out, _, calls, logline = land_run([], _fakes())
     assert rc == 0 and "VERDICT: settled" in out
     assert "deploy" not in _names(calls)
+    # The path-derived tag is not handed over: the changed set names it (D6.12).
+    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
+    # The gate runs on the changed set's tag, from the merge commit's snapshot.
+    assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
+    assert "tags=bento-pdf" in logline
+
+
+def test_a_tags_override_hands_its_flux_owned_tag_to_land_wait(land_run):
+    """`--tags` is the operator's list, not a path derivation, so it reaches the wait."""
+    _, _, _, calls, _ = land_run(["--tags", "bento-pdf"], _fakes())
     assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [
         (MERGE_SHA, ["bento-pdf"])
     ]
-    # The gate still runs on the published tag, from the merge commit's snapshot.
+
+
+def test_a_changed_set_name_flux_does_not_own_is_not_gated(land_run):
+    """A widened set names every Kustomization; only an `owner: flux` tag reaches the gate."""
+    widened = replace(SETTLED_BENTO, tags=("bento-pdf", "flux-bootstrap"))
+    _, _, _, calls, _ = land_run([], _fakes(land_wait=[widened]))
     assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
-    assert "tags=bento-pdf" in logline
 
 
 def test_a_pr_with_an_ansible_owned_tag_too_deploys_that_tag_alone(land_run):
@@ -53,25 +73,42 @@ def test_a_pr_with_an_ansible_owned_tag_too_deploys_that_tag_alone(land_run):
     assert [c[1] for c in calls if c[0] == "gate"] == [(["sonarr", "bento-pdf"],)]
 
 
-def test_an_ansible_owned_pr_never_waits_on_promotion(land_run):
+def test_an_ansible_owned_pr_deploys_and_then_waits_on_promotion(land_run):
+    """Every landing whose paths may move the bundle waits on land-wait (D6.12)."""
     rc, out, _, calls, _ = land_run([], Fakes())
     assert rc == 0 and "VERDICT: settled" in out
-    assert "land_wait" not in _names(calls)
     assert [c[1][1] for c in calls if c[0] == "deploy"] == [["sonarr"]]
+    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
+    assert _names(calls).index("deploy") < _names(calls).index("land_wait")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/landing.md",
+        "ansible/roles/k8s/sonarr/CLAUDE.md",
+        "scripts/lib/tests/test_x.py",
+    ],
+)
+def test_a_pr_of_documents_and_tests_alone_waits_on_no_promotion(land_run, path):
+    fakes = Fakes(
+        gh_views={"files,changedFiles": {"files": [{"path": path}], "changedFiles": 1}},
+        derived=([], "pr"),
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
+    assert "land_wait" not in _names(calls)
 
 
 def test_a_released_tag_waits_but_is_neither_published_nor_gated(land_run):
     """`owner: released` is mid-handback: no Ansible path applies it and Flux no longer
-    publishes it, so the wait covers the prune and the gate has nothing of it to grade.
-
-    The published list handed to land-wait is the one its annotation names, so an empty one
-    here is what keeps the tag out of `services=`."""
+    publishes it, so the wait covers the prune and the gate has nothing of it to grade."""
     fakes = _fakes(owners={MERGE_SHA: {"bento-pdf": "released"}})
     rc, _, _, calls, _ = land_run([], fakes)
     assert rc == 0
     assert "deploy" not in _names(calls)
     assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
-    assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
+    assert "gate" not in _names(calls)
 
 
 def test_a_held_promotion_is_deploy_failed_with_promote_held(land_run):
@@ -127,7 +164,12 @@ def test_a_suspended_tag_beside_an_ansible_owned_one_still_gates_that_one(land_r
 
 
 def test_a_settled_wait_that_names_a_suspended_tag_gates_the_rest(land_run):
-    settled = WaitResult("settled", detail="3 applied", suspended=("bento-pdf",))
+    settled = WaitResult(
+        "settled",
+        detail="3 applied",
+        suspended=("bento-pdf",),
+        tags=("bento-pdf", "texbrain"),
+    )
     fakes = _fakes(
         derived=(["bento-pdf", "texbrain"], "pr"),
         owners={MERGE_SHA: {"bento-pdf": "flux", "texbrain": "flux"}},
@@ -143,208 +185,6 @@ def test_an_unreadable_ownership_map_deploys_nothing(land_run):
     rc, out, _, calls, _ = land_run([], fakes)
     assert rc == 1 and "VERDICT: refused" in out
     assert "deploy" not in _names(calls) and "land_wait" not in _names(calls)
-
-
-# -- a deploy-plane PR the deployer narrows to a tag Flux applies (#5146) ------------------
-
-
-def _flip(**kwargs: object) -> Fakes:
-    """#5143's shape: one `host_vars` edit sets `owner: flux` on bento-pdf, and nothing else.
-
-    The edit is broad, so no tag is derived and the tick applies it; the deployer's narrowing
-    names bento-pdf and the tick drops it, leaving nothing applied."""
-    fakes = Fakes(
-        gh_views={
-            "files,changedFiles": {
-                "files": [{"path": "ansible/inventory/host_vars/daniel-box.yml"}],
-                "changedFiles": 1,
-            }
-        },
-        derived=([], "pr"),
-        self_applied=True,
-        narrowed="bento-pdf",
-        narrowed_rc=0,
-        owners={MERGE_SHA: {"bento-pdf": "flux"}},
-        state=receipt({"ansible/deploy.yml": ["narrowed-to-nothing"]}),
-        gate=(True, ["bento-pdf: healthy"]),
-    )
-    return replace(fakes, **kwargs)
-
-
-def test_an_inventory_flip_to_flux_waits_on_promotion(land_run):
-    rc, out, _, calls, _ = land_run([], _flip())
-    assert rc == 0 and "VERDICT: settled" in out
-    # Narrowed over the PR's own range, not `--since`.
-    assert ("narrow", "prbase", "prhead") in [
-        c[1] for c in calls if c[0] == "deploy_tags"
-    ]
-    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [
-        (MERGE_SHA, ["bento-pdf"])
-    ]
-    assert "deploy" not in _names(calls)
-    assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
-
-
-def test_an_inventory_flip_does_not_settle_before_the_promotion_verdict(land_run):
-    timed_out = WaitResult("gave-up", "promote-timeout", "no promotion covered it")
-    rc, out, _, _, _ = land_run([], _flip(land_wait=[timed_out]))
-    assert rc == 75 and "VERDICT: deferred" in out
-    assert "VERDICT: settled" not in out
-
-
-def test_a_narrowed_ansible_owned_tag_settles_on_the_tick(land_run):
-    rc, out, _, calls, _ = land_run([], _flip(owners={MERGE_SHA: {}}))
-    assert rc == 0 and "VERDICT: settled" in out
-    assert "land_wait" not in _names(calls) and "deploy" not in _names(calls)
-
-
-def test_a_narrowing_that_fails_settles_on_the_tick_as_before(land_run):
-    rc, out, _, calls, _ = land_run([], _flip(narrowed="", narrowed_rc=1))
-    assert rc == 0 and "VERDICT: settled" in out
-    assert "land_wait" not in _names(calls) and "owners_at" not in _names(calls)
-
-
-def test_an_unreadable_ownership_map_after_the_tick_is_not_a_refusal(land_run):
-    """The tick already applied the deploy-plane change, so the landing must not claim that
-    nothing was deployed; only whether a promotion owes the tag is unknown."""
-    fakes = _flip(owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")})
-    rc, out, _, calls, _ = land_run([], fakes)
-    assert rc == 1 and "VERDICT: needs-manual-apply" in out
-    assert "nothing was deployed" not in out
-    assert f"promote.py land-wait {MERGE_SHA}" in out
-    assert "land_wait" not in _names(calls) and "deploy" not in _names(calls)
-
-
-def test_an_unreadable_ownership_map_under_a_held_tick_reports_the_hold(land_run):
-    """The tick's broad apply failed, so the hold is the verdict, not only the land-wait hint."""
-    fakes = _flip(
-        owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")},
-        state={"hold_sha": "deadbeef"},
-    )
-    rc, out, _, _, logline = land_run([], fakes)
-    assert rc == 1 and "VERDICT: deploy-failed" in out
-    assert "holding deadbeef" in out
-    assert "gitops_state.py clear-hold deadbeef`" in out
-    assert f"promote.py land-wait {MERGE_SHA}" in out
-    assert "cause=tick-held" in logline
-
-
-def test_an_unreadable_ownership_map_keeps_the_plane_line(land_run):
-    fakes = _flip(
-        owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")},
-        plane="ansible/k3s-bringup.yml",
-        state={"hold_sha": "deadbeef"},
-    )
-    rc, out, _, _, _ = land_run([], fakes)
-    assert rc == 1 and "VERDICT: needs-manual-apply" in out
-    assert "it needs applying by hand: ansible/k3s-bringup.yml" in out
-    assert "holding deadbeef" in out
-
-
-def test_a_refused_bulk_flip_still_waits_on_the_tags_it_reached(land_run):
-    """`narrow` refuses a list covering most of the fleet, as D5's bulk move would, and still
-    prints the tags it reached."""
-    rc, _, _, calls, _ = land_run([], _flip(narrowed_rc=3))
-    assert rc == 0
-    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [
-        (MERGE_SHA, ["bento-pdf"])
-    ]
-
-
-def test_a_service_pr_that_also_flips_a_tag_waits_on_that_tag(land_run):
-    fakes = _flip(
-        derived=(["sonarr"], "pr"),
-        gh_views={
-            "files,changedFiles": {
-                "files": [
-                    {"path": "ansible/roles/k8s/sonarr/defaults/main.yml"},
-                    {"path": "ansible/inventory/host_vars/daniel-box.yml"},
-                ],
-                "changedFiles": 2,
-            }
-        },
-    )
-    rc, _, _, calls, _ = land_run([], fakes)
-    assert rc == 0
-    assert [c[1][1] for c in calls if c[0] == "deploy"] == [["sonarr"]]
-    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [
-        (MERGE_SHA, ["bento-pdf"])
-    ]
-
-
-# -- a PR that changes a cluster file waits on cluster-vars (D3.4) ---------------------------
-
-
-def _cluster_file_pr(*paths: str, **kwargs: object) -> Fakes:
-    """A PR changing `paths`, which touch no role, so no tag derives from them."""
-    fakes = Fakes(
-        gh_views={
-            "files,changedFiles": {
-                "files": [{"path": p} for p in paths],
-                "changedFiles": len(paths),
-            }
-        },
-        derived=([], "pr"),
-        gate=(True, []),
-    )
-    return replace(fakes, **kwargs)
-
-
-def test_a_pr_changing_only_the_cluster_source_waits_on_cluster_vars(land_run):
-    rc, out, _, calls, logline = land_run(
-        [], _cluster_file_pr("ansible/vars/cluster-vars.source")
-    )
-    assert rc == 0 and "VERDICT: settled" in out
-    waits = [c[1] for c in calls if c[0] == "land_wait"]
-    assert [(w[0], w[1], w[3]) for w in waits] == [
-        (MERGE_SHA, [], frozenset({"cluster-vars"}))
-    ]
-    assert "deploy" not in _names(calls)
-    # `cluster-vars` is no deploy tag, so the health gate is never asked about it.
-    assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
-    # The ledger still names what the landing waited on (#5175).
-    assert " tags=cluster-vars " in logline
-
-
-def test_a_rotation_pr_waits_on_cluster_vars_before_naming_the_ansible_half(land_run):
-    """D3.9's shape: `secrets.yml`, both cluster files and the registry, in one PR.
-
-    `secrets.yml` carries the rotation note, which ends the landing `needs-manual-apply`.
-    It must end there only after the promotion wait, not in place of it."""
-    fakes = _cluster_file_pr(
-        "ansible/vars/secrets.yml",
-        "ansible/vars/cluster-vars.sops.env",
-        "ansible/vars/cluster-vars.source",
-        "ansible/secret_rotation.yml",
-        plane="a secret's VALUE lives in no role's template",
-    )
-    rc, out, _, calls, _ = land_run([], fakes)
-    assert rc == 1 and "VERDICT: needs-manual-apply" in out
-    assert [c[1][3] for c in calls if c[0] == "land_wait"] == [
-        frozenset({"cluster-vars"})
-    ]
-
-
-def test_a_flux_owned_pr_touching_no_cluster_file_forces_no_name(land_run):
-    _, _, _, calls, _ = land_run([], _fakes())
-    assert [c[1][3] for c in calls if c[0] == "land_wait"] == [frozenset()]
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        # Near misses an over-broad rule would match: the same directory, a cluster
-        # manifest, the secrets file, and the registry's name under `vars/`.
-        "ansible/vars/secret_rotation.yml",
-        "ansible/vars/cluster-manifests/peanut.peanut-secrets.sops.yaml",
-        "ansible/vars/secrets.yml",
-        "ansible/vars/cluster-vars.source.bak",
-    ],
-)
-def test_a_pr_touching_no_cluster_file_and_no_tag_adds_no_wait(land_run, path):
-    rc, out, _, calls, _ = land_run([], _cluster_file_pr(path))
-    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
-    assert "land_wait" not in _names(calls)
 
 
 # -- the handback refusal --------------------------------------------------------------------
@@ -441,6 +281,9 @@ def test_the_deploy_end_is_stamped_before_the_promotion_wait(landing):
     """The re-gate reads a deploy started after this stamp as a later one, so a stamp taken
     after a 24-minute wait would hide another session's redeploy of the Ansible-owned tag."""
     ln, calls = landing(_fakes(derived=(["sonarr", "bento-pdf"], "pr")))
+    ln.classification = replace(
+        ln.classification, pr_paths=("ansible/roles/k8s/sonarr/defaults/main.yml",)
+    )
     ln.merge_sha = MERGE_SHA
     ln.resolved_tags = ["sonarr", "bento-pdf"]
     ln.tools.wall_clock = lambda: calls.append(("wall_clock", (), {})) or 5.0
@@ -482,17 +325,17 @@ def test_a_landing_deadline_caps_the_promotion_wait(land_run, monkeypatch):
     """`LAND_DEADLINE` less what the landing spent and the reserve for the gate (#5199)."""
     monkeypatch.setenv("LAND_DEADLINE", "5400")
     _, _, _, calls, _ = land_run([], _fakes())
-    (cap,) = [c[1][4] for c in calls if c[0] == "land_wait"]
+    (cap,) = [c[1][3] for c in calls if c[0] == "land_wait"]
     assert cap is not None and 0 < cap <= 5400 - promotion.DEADLINE_RESERVE_S
 
 
 def test_without_a_landing_deadline_the_promotion_wait_is_uncapped(land_run):
     _, _, _, calls, _ = land_run([], _fakes())
-    assert [c[1][4:] for c in calls if c[0] == "land_wait"] == [(None, 0)]
+    assert [c[1][3:] for c in calls if c[0] == "land_wait"] == [(None, 0)]
 
 
 def test_a_landers_window_grace_reaches_the_promotion_wait(land_run, monkeypatch):
     """`LAND_WINDOW_GRACE` is what the reboot window may add to the cap (#5457); unset is 0."""
     monkeypatch.setenv("LAND_WINDOW_GRACE", "22200")
     _, _, _, calls, _ = land_run([], _fakes())
-    assert [c[1][5] for c in calls if c[0] == "land_wait"] == [22200]
+    assert [c[1][4] for c in calls if c[0] == "land_wait"] == [22200]

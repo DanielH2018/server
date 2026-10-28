@@ -2,8 +2,8 @@
 
 The guard task in `manifests` reads `.get(manifests_service, [])` from the map and nothing
 else, so a change to the map alone reaches only the callers whose row moved. `land.sh` applies
-that rule (`land_shared.guard_map_rows`) and so does the deployer's owed-line check
-(`deploy_k8s_owed._guard_row_carries`); these tests hold `broad.narrow` to the same answer.
+that rule (`land_shared.guard_map_rows`), and the deployer's owed-line check did until
+D6.12; these tests hold `broad.narrow` to the same answer.
 
 Every test gives `manifests` all six declared services as callers, as the real fleet does, so
 a fan-out to every caller trips the coverage ceiling and reads as a refusal.

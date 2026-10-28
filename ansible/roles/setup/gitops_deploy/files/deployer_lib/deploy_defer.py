@@ -230,7 +230,8 @@ def drop_deleted_manual_plane(
 ) -> set[str]:
     """Drop each `manual_plane` line whose setup role is gone from `HEAD` (#4334).
 
-    The counterpart of `deploy_k8s_owed.drop_deleted_k8s_unapplied`. A line written before a
+    `deploy_k8s_owed.drop_deleted_k8s_unapplied` did the same for the k8s class until D6.12
+    deleted it. A line written before a
     later range deleted the role never clears: no play can apply the role, so `clear_applied`
     never matches it. `main()` runs this after the routing is adopted at `HEAD`, which the
     key check reads. An unreadable listing drops nothing, as `drop_deleted_setup_roles` does.

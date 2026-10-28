@@ -131,7 +131,7 @@ def deploy_io_tree() -> ast.Module:
 def deploy_io_fn(
     deploy_io_tree: ast.Module,
 ) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
-    """`deploy_io_fn("deploy_k8s")` is that FunctionDef; a missing name fails."""
+    """`deploy_io_fn("deploy_broad")` is that FunctionDef; a missing name fails."""
     return _fn_finder(deploy_io_tree, "deploy_io.py")
 
 
@@ -167,7 +167,7 @@ def handlers_tree() -> ast.Module:
 def handlers_fn(
     handlers_tree: ast.Module,
 ) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
-    """`handlers_fn("handle_k8s")` is that FunctionDef; a missing name fails."""
+    """`handlers_fn("handle_broad")` is that FunctionDef; a missing name fails."""
     return _fn_finder(handlers_tree, "deploy_handlers.py")
 
 
@@ -203,7 +203,7 @@ def tick(gitops_deploy: ModuleType, state, tmp_path) -> ScriptedTick:
     git, ansible-playbook, the CI verdict, the health gate, the clock and
     Discord all answer from the ScriptedTick through the `DeployTools` on `tick.tools`, and the
     state files live under `state_dir`. Nothing reaches a shell or the network, and nothing
-    patches a module: `deploy_io.deploy_k8s` and `deploy_broad` reach the scripted runner as
+    patches a module: `deploy_io.deploy_broad` reaches the scripted runner as
     `run=tools.run`.
 
     Call `gitops_deploy.main(tick.tools, tick.config, state)`. `tick.config` is

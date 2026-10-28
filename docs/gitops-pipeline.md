@@ -202,8 +202,8 @@ with the reason.
 A k8s role can read a `common` file too. `configarr` and `janitorr` stage `host_lib.py` and
 `kuma_push.py` into their health CronJobs' ConfigMaps, and `autofix-bridge` and `uptime-kuma`
 stage `kuma_push.py`. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.k8s` when a file
-it stages changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
-and records a `k8s_unapplied` line. The same test holds that table to the k8s roles' tasks.
+it stages changes. The deployer applies no k8s role since D6.12, so the role's moved render reaches
+the cluster through `promote`. The same test holds that table to the k8s roles' tasks.
 
 A k8s role's image can embed a file from outside every role, as homelab-mcp's embeds
 `scripts/diagnostics/probe_lib/obs_api.py`. An edit to it moves the image's content tag, so
@@ -219,36 +219,20 @@ role, `roles/setup/gitops_deploy/`, is not one of them: it applies itself as `in
 code runs from the next tick. The `DECIDED:` marker above `_BROAD_MANUAL_PREFIXES` in
 `deploy_changes.py` carries the evidence.
 
-### A deploy-plane change is narrowed before it is applied
+### A deploy-plane change applies nothing on the tick
 
-Run unscoped, the deploy arm would apply `ansible/deploy.yml` over every role for any change under
-`ansible/templates/` or `ansible/inventory/`. That costs about twenty minutes under the tree lock,
-and a failure on a gate belonging to a service the change never touched holds the fleet.
+Since D6.12 the tick runs no `ansible/deploy.yml`. A change under `ansible/templates/`,
+`ansible/inventory/` or another deploy-plane prefix fast-forwards the way a docs-only change
+does. It writes no ledger line and no receipt entry, because no apply is owed on this host: the
+renderer reads the change at the merge commit, `promote` publishes the bundle, and Flux applies
+it. `land.sh` waits on that promotion, and land-wait's changed set names the tags the landing
+gates (`docs/landing.md`).
 
-`deploy_handlers.handle_broad` asks `scripts/deploy_tools/deploy_tags.py narrow <local>
-<origin>` which services the range actually reaches, before the fast-forward and at the two refs
-the tick pinned. It runs as a subprocess because the derivation parses YAML and the unit runs
-under `uv run --no-project`. The journal names the outcome on every tick:
-
-- **tags**: `ansible/deploy.yml --tags <tags>`, recorded in the tick's receipt with those tags.
-- **no tags**: the range moves no rendered output (a comment-only inventory edit, a variable
-  nothing reads, a macro nothing imports). The fast-forward is the whole apply, and the receipt
-  records `narrowed-to-nothing` as the plane's tags.
-- **a refusal**: no playbook runs, and the plane is deferred (#4333). Anything the derivation
-  cannot map lands here: a variable the play itself reads, `hosts.ini`, a tag list covering
-  most of the fleet, or a crash in the derivation. Until #4333 a refusal ran the whole
-  `deploy.yml`. That run takes about twenty minutes, and the tick's budget is shared with the
-  wait for the service locks, so on 2026-10-10 it got 776s, timed out, and held every landing
-  until a hand cleared it. A refusal now fast-forwards and records each service it may reach
-  as a `k8s_unapplied` line, which names the `--tags` command and discharges itself once a
-  deploy carries the change. The fleet-coverage refusal prints the tags it reached beside its
-  exit 3, so only those are recorded; any other refusal records every declared service. The
-  receipt applies nothing for the plane and records the same services under `deferred`.
-  The tick writes that entry only after the ledger lines, so a read mid-tick never counts 0
-  owed (#4866), and writes none for a plane that owes no service this host declares (#4865).
-  `land.sh` reads that key, scoped to the range that crossed the PR. While any of those
-  services still holds a ledger line it reports `needs-manual-apply` and names the deferral
-  rather than a whole `deploy.yml`. Once none does, it reads the plane as applied (#4843).
+**HISTORY — until D6.12 the tick narrowed and applied the deploy plane.** `handle_broad` asked
+`deploy_tags.py narrow` which services the range reached and ran `ansible/deploy.yml --tags`
+over them. A refusal deferred the plane as `k8s_unapplied` lines (#4333), and a failed narrowed
+apply held the plane as `ansible/deploy.yml <tags>`. A `narrow-shadow:` line compared each
+service's applied digest with a render record.
 
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and what
 each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
@@ -281,24 +265,6 @@ each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
   `longhorn_backup_name`) rather than `--tags k3s`. An inventory value that calls a filter refuses, and so does a role
   that names none of them. A refusal falls back to the whole-role tag.
 
-**Every deploy-plane tick also logs a render-digest shadow line.** The `narrow-shadow:` line names
-the services whose applied digests differ from a render record of the commit being applied,
-counts the ones that match, and counts the ones with no usable record, grouped by reason. It
-applies nothing. It is meant to narrow a refused range by a digest diff, but it
-measures little: `setup/render_records` writes one record per service
-`scripts/deploy_tools/render_targets.py` lists, hourly at `:17`, from the newest commit on
-origin/master with green CI. A tick that has just fetched a merge applies a commit no render has
-seen, so the line usually reads `unknown: render is of another commit`.
-
-Until #4333 the full play measured itself, logging a `narrow measured:` line from the release
-records either side of it. A refusal runs no play now, so that line is gone with it.
-`deploy_release.digest_diff` is a stdlib restatement of `probe_lib/releases_render.py:digest_verdict` that
-`tests/test_deploy_release_digest.py` runs over the same records.
-
-A failed narrowed apply adds the plane it named to `hold_plane` as the entry
-`ansible/deploy.yml <tags>`. Only an apply covering those tags drops that entry: an untagged full
-run does, and a narrowed run covering a different service does not.
-
 ### A tag Flux applies is merged and skipped
 
 A `containers_list` entry that sets `owner` is not Ansible-owned. With `owner: flux`, Flux
@@ -312,19 +278,12 @@ applies, defers, alerts on or owes such a tag. D2's plan has the design:
   The range that sets `owner` therefore already skips its own tag. An unreadable file at
   origin falls back to the checkout, which carries every `owner` an earlier range merged.
 - **A changed path of such a role goes to `cs.flux`**, beside `cs.k8s`.
-  `deploy_inventory.route_not_ansible_owned` moves the tag out of `cs.k8s` before the
-  image-bump promotion, so an image bump to it is never promoted. The tag also leaves
-  `TickPlan.k8s_services`, so a refusal that names no tags does not owe it.
-- **The deploy plane drops such a tag before its empty check.** `deploy_narrow._deploy_plane`
-  logs `narrow: dropping <tag>: owned by <owner>` once per tag. A narrowed list that held only
-  such tags applies nothing and records `narrowed-to-nothing`, because an empty `--tags` value
-  would run the whole playbook.
-- **The journal names the tag, and the ledger drops it.** After `plan_tick`, `main()` calls
-  `deploy_k8s_owed.skip_not_ansible_owned`. It logs `flux: <tag>: owned by <owner>` with the
-  paths the range changed. It also clears a `k8s_unapplied` or `k8s_deferred` line that such
-  a service still holds from before the range that set `owner`, because no Ansible deploy
-  would ever discharge it.
-- **A shared role's `k8s_unapplied` line does not wait on such a caller** (#4986).
+  `deploy_inventory.route_not_ansible_owned` moves the tag out of `cs.k8s`.
+- **The journal names the tag.** `plan_tick` logs `flux: <tag>: owned by <owner>` with the
+  paths the range changed. A `k8s_unapplied` or `k8s_deferred` line an older tick wrote stays
+  until the operator's `gitops_state.py clear-owed`; no tick writes or discharges either class
+  since D6.12, and D6.6 deletes them.
+- **HISTORY — a shared role's `k8s_unapplied` line did not wait on such a caller** (#4986).
   `scripts/deploy_tools/shared_role_callers.py:main` leaves it out of the caller set
   `discharge_k8s_unapplied` reads. Such a caller gets no release record and no render record,
   so waiting on it would keep the line forever. A shared role whose every caller sets `owner`
@@ -1556,6 +1515,10 @@ claim list.
 
 ### The rollback timeout, derived
 
+**HISTORY — D6.12 deleted the tick's k8s rollback, and this budget with it.** The section
+records the derivation as it stood when every claim-declaring role was already flux-owned.
+D6.8a moves the k8s sections of this page to `docs/archive/`.
+
 The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
 (`k8s/volume-revert`), which is more work than the forward deploy. It gets its own timeout,
 `K8S_ROLLBACK_TIMEOUT_S` (`gitops_deploy_k8s_rollback_timeout_s`, 1620), rather than sharing
@@ -1577,9 +1540,9 @@ Job on top of a 780 s rollout, which made it the worst promoted service at 480 +
 Every promoted, claim-declaring role is flux-owned since the D5 flips, so nothing spends this
 budget until a role is handed back. prowlarr handed back would need 1320 s. An inline `rollout status` gate is not an in-role wait, because it waits for the same
 rollout the drain waits for.
-`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_k8s_rollback_budget.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
-computes the ceiling from role sources, so a rollout-timeout bump or a new promoted
-claim-declaring role fails it instead of silently under-sizing the budget.
+`test_gitops_deploy_k8s_rollback_budget.py` computed the ceiling from role sources until
+D6.12 deleted it with the rollback, so a rollout-timeout bump or a new promoted
+claim-declaring role failed it instead of silently under-sizing the budget.
 
 Three residual risks stay accepted:
 

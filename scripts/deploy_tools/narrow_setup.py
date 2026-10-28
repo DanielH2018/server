@@ -63,8 +63,8 @@ storage_smoke` selects only `always` tasks.
 
 WHO CALLS IT. Two callers, both through `deploy_narrow.narrow_setup_role`, which runs this
 as a SUBPROCESS because this module parses YAML and the deployer's unit runs under
-`uv run --no-project`, which cannot import yaml — the boundary `narrow_deploy_plane` already
-established for the deploy plane.
+`uv run --no-project`, which cannot import yaml. The deploy plane's narrowing crossed the
+same boundary until D6.12 deleted it.
 
 `deploy_defer.record` asks for a role the deployer CANNOT apply. The tags go in the role's
 `manual_plane` ledger line and in the tick's receipt, so the journal line, the Discord alert,

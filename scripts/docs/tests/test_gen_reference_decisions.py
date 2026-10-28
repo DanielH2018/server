@@ -267,23 +267,23 @@ def test_live_tree_yields_at_least_100_markers():
     assert len(rows) >= 100
 
 
-def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
+def test_live_tree_includes_the_gitops_deploy_lock_order_marker():
     """A named member the census must find, per the same CLAUDE.md rule.
 
     This is the marker CLAUDE.md's own "Review & Memory Hygiene" section cites as the
-    worked example (`origin[:8]` is a fixed slice ... a MINIMUM width). It sits in
-    `deploy_handlers.py`, beside `_rollback_k8s`, which is the code that makes the trade-off —
-    a marker travels with that code rather than with the module it was written in.
+    worked example (the lock order is `server-deploy-all.lock` first ...). It sits in
+    `deploy_locks.py`, beside the code that takes the locks. The `origin[:8]` marker held
+    the role until D6.12 deleted it with the tick's k8s rollback.
     """
     rows = _live_rows()
     matches = [
         r
         for r in rows
         if r["path"]
-        == "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py"
-        and "origin[:8]" in r["text"]
+        == "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py"
+        and "the lock order" in r["text"]
     ]
-    assert matches, "expected the origin[:8] marker in deploy_handlers.py"
+    assert matches, "expected the lock-order marker in deploy_locks.py"
 
 
 def test_live_tree_includes_the_autoheal_marker_in_the_roles_containers_plane():

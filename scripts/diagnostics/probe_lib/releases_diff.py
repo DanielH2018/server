@@ -291,7 +291,7 @@ def drop_comment_only_defaults(paths, commit, repo_root, ref):
     """`paths` minus every k8s role `defaults/` file whose `commit..ref` change is comments only.
 
     The deployer drops the same files before it classifies a tick
-    (`deploy_k8s.comment_only_k8s_defaults`), so it never defers or deploys a role for one.
+    (`deploy_changes.comment_only_k8s_defaults`), so it never defers or deploys a role for one.
     Left counting here, the role would read stale with nothing able to clear it but the no-op
     deploy #4460 exists to avoid. The two ends are compared whole, not per hunk: a
     `_hunk_is_inert` read would call a `#` line inside a block scalar a comment.

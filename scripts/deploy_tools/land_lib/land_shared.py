@@ -200,8 +200,8 @@ def narrowed_roles(
 
 # The standalone-value guard's map (#4932). `manifests/tasks/main.yml` reads only the row keyed
 # by `manifests_service`, so a row that changed can change no other caller's deploy.
-# `deploy_k8s_owed.STANDALONE_GUARD_MAP` is the same path, held equal by
-# `test_land_shared_guard_map.py`: importing it here would pull `host_lib` into `land.py`.
+# `narrow_lib/guard_map.py` holds the same path, and `test_land_shared_guard_map.py` holds the
+# two equal. The deployer's copy went with `deploy_k8s_owed.py` in D6.12.
 GUARD_MAP = "ansible/roles/k8s/manifests/files/standalone_secret_keys.json"
 
 
@@ -236,8 +236,8 @@ def guard_map_rows(files, pr_range: str, git) -> frozenset[str] | None:
     there would read as a role a hand must apply.
 
     The callers left undeployed owe the deployer nothing. The tick's `k8s_unapplied` line for
-    `manifests` asks the same question per caller (`deploy_k8s_owed._guard_row_carries`,
-    #5106). A caller whose row did not move carries the change from its release record, its
+    `manifests` asked the same question per caller until D6.12 deleted its discharge
+    (#5106). A caller whose row did not move carries the change from its release record, its
     matching render, or the matching render the line stored before the producer overwrote it
     (#5122), provided no other `manifests` change lands between that commit and the line's. The line then drops once the callers deployed here carry it, and does not wait for
     the untouched callers' render to reach the map change.

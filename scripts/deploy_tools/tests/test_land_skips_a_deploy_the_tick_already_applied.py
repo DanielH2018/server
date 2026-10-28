@@ -134,9 +134,10 @@ def test_the_predicate_reads_the_marker_the_deployer_writes():
     land_lib does not import across the deployer's `files/` boundary, and the markers the
     tests above build use the same spellings, so a rename on the deployer's side would leave
     both halves green while the skip silently stopped firing. This is what breaks instead.
+    No tick writes an `ansible/deploy.yml` receipt since D6.12, so the skip reads only an
+    older receipt; D6.3 deletes it with the k8s deploy arm.
     """
     src = _DEPLOY_NARROW.read_text()
-    assert "    playbook = DEPLOY_PLAYBOOK\n" in src
     markers = (_DEPLOYER / "gitops_markers.py").read_text()
     assert 'DEPLOY_PLAYBOOK = "ansible/deploy.yml"' in markers
     assert 'NARROWED_TO_NOTHING = "narrowed-to-nothing"' in src

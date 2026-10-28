@@ -174,10 +174,11 @@ def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
     assert land_tags.self_applied(files) is True
 
 
-def test_a_deploy_plane_change_is_the_ticks_to_apply():
+def test_a_deploy_plane_change_is_promotes_to_apply():
+    """The tick runs no `ansible/deploy.yml` since D6.12, so no hand and no tick owes it."""
     files = ["ansible/templates/resources.yml.j2"]
     assert land_tags.plane_note(files) == ""
-    assert land_tags.self_applied(files) is True
+    assert land_tags.self_applied(files) is False
 
 
 def test_a_bringup_playbook_is_still_owed_to_a_hand():

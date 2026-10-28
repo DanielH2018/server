@@ -330,35 +330,29 @@ the gate guessed a same-named cluster workload (issue #929).
 **It scopes the deploy to the PR's own file list rather than a SHA range**, so another session's
 merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to
 `--changed <since>` when the count disagrees — the only reason `--since` exists. That fallback
-refuses a range wholesale as soon as one path is broad, so since #2520 it then asks
-`deploy_tags.py narrow` the same range: `narrow` maps a broad path to the services whose render
-it reaches, and a list it returns is deployed rather than reported as broad. Only where `narrow`
-refuses too does the landing grade from the deployer's markers — and it refuses on a tag list
-covering more than half the fleet, so a `group_vars` key many roles read is graded from the
-markers rather than deployed. `--tags` overrides the scope entirely.
+refuses a range wholesale as soon as one path is broad. Since D6.12 such a range derives no tag
+and waits on the promotion, whose changed set names the k8s tags; a Pi Compose role it reaches
+is a `deploy.sh -e target=daniel-pi` by hand. `--tags` overrides the scope entirely.
 
-### A tag Flux applies waits on promotion
+### Every landing waits on promotion
 
 **A tag whose `containers_list` entry sets `owner` never reaches `deploy.sh`.** Step 5 reads
 ownership at the merge commit (`land_lib/promotion.py:split_owned`) and takes every such tag out
 of the list before `deploy_by_host` sees it. `deploy.sh` runs only for the Ansible-owned tags
-that remain. A PR whose only tag is flux-owned runs no `deploy.sh` at all. A deploy-plane PR
-that derives no tag, such as an inventory edit setting `owner: flux`, finds its tags in the
-deployer's narrowing of the PR's own range (`land_lib/promotion.py:owned_by_narrowing`) and
-waits on promotion for the ones that are not Ansible-owned. The gate then renders
-the merge commit from a snapshot, and `land.sh` kicks the tick to converge the primary checkout.
+that remain, which are the Pi's Compose tags.
 
-**A PR that changes a cluster file waits on promotion too.** A change to
-`ansible/vars/cluster-vars.sops.env` or `ansible/vars/cluster-vars.source` touches no role,
-so no tag derives from it. `land.sh` passes `--also cluster-vars` to the wait, which adds the
-`cluster-vars` Kustomization and every Kustomization that depends on it, read from the live
-`dependsOn` graph. A `.source`-only change moves no digest, so the changed set alone would
-not see it. A rotation PR that also changes `secrets.yml` waits first, then ends
-`needs-manual-apply` naming the Ansible half. The rule is
-`scripts/deploy_tools/land_lib/land_tags.py:CLUSTER_VARS_PATHS`, and it retires when `land.sh`
-reads its changed set from `digests.json` (slice D6).
+**The changed set names the k8s tags, not the PR's paths (D6.12).** A path-derived tag Flux
+applies is dropped (`land_lib/promotion.py:drop_path_derived`), unless `--tags` named it. Every
+PR with a path other than a document or a test waits on the promotion
+(`land_lib/promotion.py:moves_the_bundle`), and land-wait's changed set, joined with any
+`--tags`, names the `owner: flux` tags the gate grades and the annotation names. A shared
+template, an inventory edit or a `manifests` change therefore gates exactly the tags whose
+render moved. A PR that moves no bundle file waits on `homelab` alone and gates nothing. The
+gate renders the merge commit from a snapshot, and `land.sh` kicks the tick to converge the
+primary checkout. A `cluster-vars` change moves the footprint of every substituting tag, so
+D3.4's interim `--also cluster-vars` went in the same PR.
 
-For those tags `land.sh` runs `promote.py land-wait <merge commit>`. The wait never follows one
+`land.sh` runs `promote.py land-wait <merge commit>`. The wait never follows one
 `promote` run, because GitHub may evict a queued run and a later run may promote a newer commit.
 Instead it reads the cluster every 30 seconds:
 

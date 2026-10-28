@@ -26,13 +26,14 @@ from _setup_role_fixtures import ROLE, build
 
 from lib.repo_paths import REPO as REPO_ROOT
 
-# The `gitops_deploy` paths of a real PR, verbatim (`gh pr view <n> --json
-# files`). The `defaults/main.yml` entry is the one that widened the note.
+# The `gitops_deploy` paths of a real PR (`gh pr view <n> --json files`). The
+# `defaults/main.yml` entry is the one that widened the note. D6.12 deleted the PR's
+# `deploy_k8s.py`, so `deploy_phases.py`, a module beside it, stands in for it.
 _PR_2553_PATHS = [
     "ansible/roles/setup/gitops_deploy/CLAUDE.md",
     "ansible/roles/setup/gitops_deploy/defaults/main.yml",
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py",
-    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_k8s.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py",
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py",
     "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
     "ansible/roles/setup/gitops_deploy/tests/test_deploy_config.py",

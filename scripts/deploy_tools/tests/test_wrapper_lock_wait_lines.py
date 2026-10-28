@@ -78,7 +78,7 @@ case "$*" in
 esac
 """.replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
-# `_UV` exits 0 for the playbook, so deploy.sh reaches `emit_deploy_annotation`, which writes
+# `_UV` exits 0 for the playbook, so deploy.sh reaches its deploy annotation, which writes
 # an `event=deploy` line through `logger`. conftest's autouse `_no_syslog` already intercepts
 # that directory-wide, and measurement confirms no test run reached /var/log/syslog. This stub
 # is here so the property does not depend on a fixture in another file: a test that writes to

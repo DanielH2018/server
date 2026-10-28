@@ -7,20 +7,13 @@ Two readers need the tags that DO run it.
 
 WHO CALLS IT. `deploy_run` reads `expand_shared_tags` to turn `deploy.sh --tags
 volume-snapshot` into a deploy of every caller, and `land_tags` reads `caller_tags` to deploy a
-shared role's callers instead of reporting `needs-manual-apply`. The deployer runs
-`main` as a SUBPROCESS through `deploy_narrow.shared_role_callers`, because this parses YAML
-and the unit runs under `uv run --no-project` — the boundary `narrow_setup.py` sits behind for
-the same reason. It prints one JSON object with two keys. `callers` maps each role to its
-sorted `caller_tags`, and `deploy_k8s_owed.discharge_k8s_unapplied` drops a shared role's
-`k8s_unapplied` line once every one of those tags carries the change. A tag whose entry sets
-`owner` is not in `callers`, because no Ansible deploy can prove it carries anything.
-`owned_only` lists the roles that some tag runs but only such tags run, so the deployer can tell
-them from a role no tag runs (#5052). How a tag proves it carries a change, by its release
-record or by a matching render, is the deployer's question; this module only names the tags.
+shared role's callers instead of reporting `needs-manual-apply`. `main` prints one JSON
+object with two keys: `callers` maps each role to its sorted `caller_tags`, and `owned_only`
+lists the roles that some tag runs but only `owner`-setting tags run (#5052). The deployer
+ran it as a subprocess to discharge a shared role's `k8s_unapplied` line until D6.12 deleted
+that discharge; no caller reads the CLI since, and D6.4 deletes the module.
 
-THE THREE READERS DIFFER, and `smoke_caller` is why. The deployer's discharge needs every
-caller, because the question it asks is whether the change is applied everywhere. A
-hand-typed `deploy.sh --tags manifests` deploys every caller too, which the operator ruled on
+THE READERS DIFFER, and `smoke_caller` is why. A hand-typed `deploy.sh --tags manifests` deploys every caller too, which the operator ruled on
 in #2717. The landing narrows a deploy-run-only change to ONE caller, and the `# DECIDED:` at
 `smoke_caller` holds that ruling.
 
@@ -77,8 +70,8 @@ def caller_tags(
 
 
 # The shared roles whose whole effect on a caller is the manifests it renders, so one caller
-# can smoke-test a change to how it renders them. `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` draws
-# the same line for the same reason and names only `manifests` too — the two are pinned
+# can smoke-test a change to how it renders them. `gitops_markers.RENDER_PROOF_SHARED_ROLES`
+# draws the same line for the same reason and names only `manifests` too — the two are pinned
 # together by `tests/test_shared_role_smoke_caller.py`, so neither can widen alone.
 #
 # Every other shared role acts per caller and needs all of them: `arr-notification` writes
@@ -104,15 +97,14 @@ SMOKE_TESTABLE_SHARED_ROLES = frozenset({"manifests"})
 #
 # WHY ONE IS ENOUGH. `manifests` acts through the bytes it renders, so the other 56 callers
 # re-read the new task logic on their own next deploy with nothing left behind — and the
-# deployer's `k8s_unapplied` line for `manifests` discharges on a render-digest match without
-# any deploy at all (`deploy_k8s_owed.DIGEST_PROVABLE_ROLES`, #3057). That marker already accepts
-# the one gap this shares: a change to HOW `manifests` applies can leave live state different
+# deployer's `k8s_unapplied` line for `manifests` discharged on a render-digest match without
+# any deploy at all until D6.12 (#3057). That marker accepted the one gap this shares: a change to HOW `manifests` applies can leave live state different
 # from what the change would produce while no digest moves.
 #
 # THE ASYMMETRY IS DELIBERATE. `expand_shared_tags` — the hand-typed `deploy.sh --tags
 # manifests` — still deploys every caller, because there the operator asked for the fleet
-# (#2717), and `deploy_k8s_owed.discharge_k8s_unapplied` still reads every caller, because its
-# question is whether the change is applied everywhere rather than whether it runs.
+# (#2717), as the deployer's discharge did until D6.12, because its question was whether
+# the change is applied everywhere rather than whether it runs.
 #
 # WHY THE COST KEY IS A PROXY AND STAYS ONE (#3149). Hosts, then rendered templates, counts
 # objects, and rollout wait usually dominates a k8s deploy. It does not dominate this one. The

@@ -15,7 +15,6 @@ from deployer_lib.deploy_changes import setup_roles_for
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib import classify
-from deploy_tools.land_lib.land_shared import GUARD_MAP
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -70,55 +69,14 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
     )
 
 
-def test_classify_deploys_the_callers_of_a_shared_role(landing):
-    """Only a shared role changed, so the landing deploys its callers."""
+def test_classify_joins_no_shared_role_caller(landing):
+    """Every caller is flux-owned, so the promotion's changed set names it (D6.12)."""
     ln, _ = landing(
         Fakes(derived=([], "pr"), shared_callers={"helper": {"sonarr", "radarr"}})
     )
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert ln.tags_csv == "radarr,sonarr"
-
-
-def test_a_guard_map_row_change_deploys_only_the_callers_whose_row_moved(landing):
-    """#4932: `manifests` reaches every caller, but its guard map is read one row per caller."""
-    ln, _ = landing(
-        Fakes(
-            derived=([], "pr"),
-            shared_callers={"manifests": {"sonarr", "radarr"}},
-            gh_views={
-                "files,changedFiles": {
-                    "files": [{"path": GUARD_MAP}],
-                    "changedFiles": 1,
-                }
-            },
-            diff_paths=[GUARD_MAP],
-            show_at={
-                "prbase": '{"radarr": []}',
-                "prhead": '{"radarr": [], "sonarr": []}',
-            },
-        )
-    )
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.tags_csv == "sonarr"
-
-
-def test_classify_records_which_tags_only_the_caller_graph_named(landing):
-    """Those tags route to a `platform: k8s` entry alone, so the deploy phase has
-    to be able to tell them from the ones a changed path named."""
-    ln, _ = landing(
-        Fakes(
-            derived=(["sonarr"], "pr"),
-            shared_callers={"helper": {"sonarr", "wg-easy"}},
-        )
-    )
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert (ln.resolved_tags, ln.k8s_only) == (
-        ["sonarr", "wg-easy"],
-        ["wg-easy"],
-    )
+    assert ln.tags_csv == ""
 
 
 def test_classify_leaves_the_tags_alone_when_no_shared_role_changed(landing):
@@ -136,21 +94,6 @@ def test_classify_records_the_tags_a_changed_path_proves_are_k3s(landing):
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.k8s_only == ["wg-easy"]
-
-
-def test_both_provenances_land_in_one_list(landing):
-    """The caller graph and the path derivation answer for different tags, and `deploy_by_host`
-    routes the union: recording one over the other loses the restriction for the other."""
-    ln, _ = landing(
-        Fakes(
-            derived=(["wg-easy"], "pr"),
-            path_k8s_only=["wg-easy"],
-            shared_callers={"helper": {"sonarr"}},
-        )
-    )
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.k8s_only == ["sonarr", "wg-easy"]
 
 
 def test_a_truncated_file_list_proves_nothing_about_a_platform(landing):

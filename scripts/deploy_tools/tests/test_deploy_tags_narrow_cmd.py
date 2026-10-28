@@ -1,8 +1,8 @@
 """The `deploy_tags.py narrow` command wrapper: what reaches stdout, stderr and the exit code.
 
 Split out of `test_deploy_tags_narrow.py` when that module crossed its 500-line cap. The
-rules themselves are tested there; this covers only `narrow_cmd`'s contract with
-`deploy_narrow.narrow_deploy_plane`, which reads stdout straight: the tag list and nothing
+rules themselves are tested there; this covers only `narrow_cmd`'s stdout contract, which
+the deployer's deploy-plane narrowing read until D6.12 and `land.sh` reads still: the tag list and nothing
 else on exit 0, an empty stdout for "reaches no rendered output", and `DEPLOY_BROAD` with
 the reason on stderr for every refusal, plus the reached tags on stdout for the fleet-wide one. The checkout is `_narrow_fixtures.build_tree`.
 

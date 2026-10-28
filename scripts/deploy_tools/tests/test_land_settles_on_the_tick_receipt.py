@@ -10,6 +10,10 @@ comparison would report
 `needs-manual-apply` for a PR the tick applied alongside somebody else's merge. That is the
 converged-but-unapplied failure arriving from the other side.
 
+No tick writes an `ansible/deploy.yml` entry since D6.12, and a deploy-plane PR needs none
+from it (`land_tags.self_applied_playbooks`), so #4333's deferred-plane pair went with that
+apply. The receipt reads below stay until D6.3 deletes the landing's k8s deploy arm.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_land_settles_on_the_tick_receipt.py
 """
 
@@ -69,33 +73,6 @@ def test_a_receipt_recording_no_apply_of_this_pr_still_needs_a_hand(
     outcome = _verdict(landing, state, is_ancestor_rc)
     assert outcome.verdict == "needs-manual-apply"
     assert "converged without recording an apply" in outcome.detail
-
-
-@pytest.mark.parametrize(
-    "applied, verdict",
-    [
-        ({"ansible/initial_setup.yml": ["gitops_deploy"]}, "needs-manual-apply"),
-        (
-            {
-                "ansible/initial_setup.yml": ["gitops_deploy"],
-                "ansible/deploy.yml": ["sonarr"],
-            },
-            "settled",
-        ),
-    ],
-    ids=["deploy-plane-deferred", "both-planes-applied"],
-)
-def test_a_deploy_plane_pr_settles_only_on_a_deploy_plane_apply(
-    landing, applied, verdict
-):
-    """#4333: a refused narrowing defers the deploy plane and writes no entry for it.
-
-    A setup plane applied in the same tick still writes its own, so "any plane" read this
-    deploy-plane PR as settled while its services sat in `k8s_unapplied`.
-    """
-    paths = ("ansible/inventory/group_vars/all.yml",)
-    outcome = _verdict(landing, receipt(applied), pr_paths=paths)
-    assert outcome.verdict == verdict
 
 
 def test_the_receipt_is_read_from_the_file_the_tick_writes(landing, tmp_path):
