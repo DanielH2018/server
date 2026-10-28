@@ -162,9 +162,9 @@ pair (#6186). The per-check literals and their pin tests stay, for the
 reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
 series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
 change from `homelab_host_reboot_pending_since_seconds`, which a later package change never
-moves, and requires that time to follow `node_boot_time_seconds`: the updater rewrites the
-reconcile file only when a package changes, so a stale `homelab_host_reboot_pending 1`
-survives the reboot that cleared it.
+moves. `homelab-reconcile-metrics.service` rewrites the reconcile file at boot, so a
+`homelab_host_reboot_pending 1` does not outlive the reboot that cleared it (#6188). The rule's
+15-minute `for` covers the scrapes between the boot and that unit.
 
 **`ScrapeTargetDown` is one rule per owning role, and a new scrape job needs a line in one.**
 `files/rules/scrape-targets.yaml` gives each rule a literal `service`, because a static scrape
