@@ -1,6 +1,7 @@
 # D6 — Delete the old deploy path; ADR superseding 0010
 
-Status: PLANNED
+Status: IN PROGRESS. D6.11 merged as `996eef2440`. D6.12 is drafted as #6432, waiting on M2 Open
+question 1's label amendment and M6's C-2b, live.
 
 Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
 dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
