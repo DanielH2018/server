@@ -1001,6 +1001,7 @@
  "scripts/deploy_tools/tests/test_deploy_tree_lock_hold_is_bounded.py": 2.53,
  "scripts/deploy_tools/tests/test_digest_covers.py": 3.19,
  "scripts/deploy_tools/tests/test_digest_covers_order_only.py": 9.64,
+ "scripts/deploy_tools/tests/test_digest_covers_order_only_signature.py": 1.36,
  "scripts/deploy_tools/tests/test_digest_covers_order_only_unseen_state.py": 15.69,
  "scripts/deploy_tools/tests/test_digest_provable.py": 0.0,
  "scripts/deploy_tools/tests/test_forge_check_run_pages.py": 0.0,
