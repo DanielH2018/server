@@ -118,11 +118,12 @@
   become: true
   failed_when: false
 
-- name: Read the installed k3s-agent version
+- name: Read the installed k3s-agent binary
   tags: [k3s_agent]
-  # See the server install for why the args guard alone cannot see a version bump. The agent
-  # needs its own read: it is a separate host, so the server's reading says nothing about it,
-  # and an agent left a minor behind its server is the skew k3s does not support.
+  # SUC owns the agent's version since H6.3d, so this read only tells a missing binary from a
+  # present one. The agent needs its own read: it is a separate host, so the server's reading
+  # says nothing about it. `check_mode: false` because a skipped command leaves this register
+  # undefined and the guard consuming it is what breaks, not the read.
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s --version
   register: k3s_agent_installed_version
@@ -133,9 +134,12 @@
 
 - name: Install or reconfigure the k3s agent
   tags: [k3s_agent]
-  # Same unit-args-plus-version guard as the server install (see main.yml): detects
-  # missing/changed flags, not removed ones. The installer writes K3S_URL/K3S_TOKEN into
-  # /etc/systemd/system/k3s-agent.service.env (0600 root), rewrites the unit,
+  # Same guard as the server install (server.yml): the unit's arguments and the binary's
+  # absence, not the version. SUC's k3s-agent Plan is the only writer of the agent's version
+  # (H6.3d). A missing binary runs the full install. A missing argument re-runs the installer
+  # with INSTALL_K3S_SKIP_DOWNLOAD, which rewrites the unit and never the binary. The guard
+  # detects missing or changed flags, not removed ones. The installer writes K3S_URL/K3S_TOKEN
+  # into /etc/systemd/system/k3s-agent.service.env (0600 root), rewrites the unit,
   # daemon-reloads and restarts the agent itself.
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-install.sh
@@ -144,13 +148,14 @@
     INSTALL_K3S_VERSION: "{{ k3s_version }}"
     K3S_URL: "{{ k3s_server_join_url }}"
     K3S_TOKEN: "{{ k3s_join_token }}"
+    INSTALL_K3S_SKIP_DOWNLOAD: "{{ 'true' if (k3s_agent_installed_version.rc | default(1)) == 0 else 'false' }}"
   become: true
   no_log: true  # K3S_TOKEN is a cluster credential
   when: >-
     (k3s_agent_args.split() | reject('equalto', 'agent')
      | difference(k3s_agent_unit.content | default('') | b64decode | replace("'", "") | split())
      | length > 0)
-    or (k3s_version not in (k3s_agent_installed_version.stdout | default('')))
+    or ((k3s_agent_installed_version.rc | default(1)) != 0)
   changed_when: true
   register: k3s_agent_install
 

@@ -1,8 +1,8 @@
 # H6 — system-upgrade-controller for k3s
 
-Status: IN PROGRESS. Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)) and H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)).
+Status: IN PROGRESS. Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)), H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)) and H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)).
 In flight: H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)) is open and held until Monday 2026-10-26.
-In flight: H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)) is open.
+In flight: H6.3d ([#6403](https://github.com/DanielH2018/server/pull/6403)) is open.
 Depends on: D2, H1.1a to H1.8, H4, M1 (the contracts.md row; *Open questions* 2 says why
 each edge exists).
 Unblocks: H7

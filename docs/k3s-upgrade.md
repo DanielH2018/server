@@ -19,9 +19,9 @@ the schema.
 The pin is `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`, moved there from
 `ansible/roles/setup/k3s/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
 It covers both nodes.
-Since H6.3c the system-upgrade-controller (SUC) writes daniel-box's version: its `k3s-server` Plan
-selects the node and replaces the binary. `server.yml` installs k3s on a fresh host only, and
-`agent.yml` still installs daniel-server until H6.3d. The installer is `install.sh` from that same release tag,
+The system-upgrade-controller (SUC) writes both nodes' versions. Its `k3s-server` Plan selects
+daniel-box since H6.3c, and its `k3s-agent` Plan selects daniel-server since H6.3d. Each Plan
+replaces its node's binary. `server.yml` and `agent.yml` install k3s on a fresh host only. The installer is `install.sh` from that same release tag,
 fetched with `checksum:` against `k3s_install_script_sha256` in the same file — so a bump has a
 second literal to finish, and a wrong one fails the download rather than the install:
 
@@ -31,16 +31,17 @@ curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<new tag>/install.sh" |
 
 ## Sequence at a glance
 
-Merging the pin upgrades the server (H6.3c), so the merge comes before the server verification.
-The agent then follows by hand until H6.3d. An agent newer than its server is unsupported, so
-never upgrade daniel-server first. Merging does not park the deployer: see *After merging the pin* below.
+Merging the pin upgrades both nodes through SUC, so the merge comes before either verification.
+An agent newer than its server is unsupported. The `k3s-agent` Plan's `prepare` therefore runs in
+`agent` mode, which waits for the `k3s-server` Plan before it lets daniel-server upgrade.
+Merging does not park the deployer: see *After merging the pin* below.
 
 1. Pass the gates.
 2. Record pre-upgrade state.
-3. Merge the pin. SUC upgrades daniel-box. The pin writes no `manual_plane` line (H6.1b), so only a
-   change elsewhere under `ansible/roles/setup/k3s/` leaves one to clear.
+3. Merge the pin. SUC upgrades daniel-box, then daniel-server. The pin writes no `manual_plane`
+   line (H6.1b), so only a change elsewhere under `ansible/roles/setup/k3s/` leaves one to clear.
 4. Verify the server by its node label and version.
-5. Upgrade the agent node by hand, then verify.
+5. Verify the agent by its node label and version.
 
 ## The gates — before any install
 
@@ -90,6 +91,7 @@ kubectl -n longhorn-system get volumes.longhorn.io \
 kubectl get svc -A --field-selector spec.type=LoadBalancer -o wide
 uv run python scripts/diagnostics/probe.py monitors
 systemctl show k3s -p ExecMainStartTimestamp
+ssh daniel-server 'systemctl show k3s-agent -p ExecMainStartTimestamp; sha256sum /usr/local/bin/k3s'
 ```
 
 ## Before the Plan first selects a node (**operator-only**)
@@ -196,13 +198,28 @@ Until step 3, `probe.py landing` lists each object that still carries the annota
 
 ## Upgrade the agent node
 
-```bash
-uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent
-```
+SUC upgrades daniel-server. The `k3s-agent` Plan resolves the same version as the server Plan.
+Its `prepare` container runs the gates in `agent` mode, which first waits for the `k3s-server`
+Plan to finish, and then the upgrade container replaces the binary. No Ansible command is part
+of the upgrade.
 
-**Then confirm the version moved on daniel-server specifically.** `hosts.ini` pins both nodes
-`connection=local`, so a play aimed at the wrong host installs on the one you ran from behind a
-green recap. `kubectl get nodes -o wide` is the only evidence that settles it.
+Do not run `k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent` to upgrade. Its
+install guard has no version clause since H6.3d. A missing binary runs the full install. A
+missing argument re-runs the installer with `INSTALL_K3S_SKIP_DOWNLOAD=true`, which rewrites the
+unit and never the binary. A flag change therefore still reaches daniel-server through that play.
+
+The evidence is the node, as for the server: its `plan.upgrade.cattle.io/k3s-agent` label equals
+the agent Plan's `status.latestHash`, the Job shows a `completionTime`, and
+`kubectl get nodes -o wide` shows daniel-server on the new version. A selector-only change, such
+as H6.3d itself, also leaves the agent's `ExecMainStartTimestamp` where it was.
+
+```bash
+kubectl -n system-upgrade get plans -o custom-columns='NAME:.metadata.name,HASH:.status.latestHash,VERSION:.status.latestVersion'
+kubectl get nodes -L plan.upgrade.cattle.io/k3s-agent
+kubectl -n system-upgrade get jobs -o custom-columns=NAME:.metadata.name,DONE:.status.completionTime
+kubectl get nodes -o wide
+ssh daniel-server 'systemctl show k3s-agent -p ExecMainStartTimestamp'
+```
 
 Restarting the agent is ungraceful from Longhorn's point of view: `kubectl drain` and `cordon` are
 write verbs, and the ServiceAccount available here is read-only, so there is no drain step to run.
@@ -232,8 +249,9 @@ uv run python scripts/diagnostics/probe.py monitors
 A pin change no longer reaches the deployer's setup plane. The pin lives in the Flux-owned
 `system-upgrade` role (H6.1b), so a bump routes to the `system-upgrade` tag, which `land.sh`
 waits on through promotion, and the deployer writes no `manual_plane` line for `k3s`. The
-`k3s-server` Plan selects daniel-box since H6.3c, so merging the pin upgrades the server through
-SUC and no hand apply is owed for it. The agent keeps the hand apply until H6.3d. Another change under
+`k3s-server` Plan selects daniel-box since H6.3c and the `k3s-agent` Plan selects daniel-server
+since H6.3d, so merging the pin upgrades both nodes through SUC and no hand apply is owed for
+either. Another change under
 `ansible/roles/setup/k3s/` still takes the setup plane's path. `k3s` is routed to
 `k3s-bringup.yml`, not to `initial_setup.yml` (`deploy_setup_roles.py:roles_outside_initial_setup_in`),
 so `tick_applies_setup_role` returns false for it. `handle_broad` (`deploy_handlers.py`) then
@@ -260,12 +278,12 @@ those commits were due ([gitops-pipeline.md](gitops-pipeline.md), "The tree is d
 ## Rollback
 
 SUC's `upgrade.sh` refuses an older binary, so a lowered Plan fails its Job and a re-pin alone
-does not downgrade the server. Pause SUC (`homelab/k3s-upgrade-paused` on the node, or an empty `system_upgrade_nodes`), downgrade
-daniel-box by hand, then land a PR that lowers `k3s_version` and sets `k3s_downgrade_acknowledged`
-to the same value in `ansible/roles/k8s/system-upgrade/defaults/main.yml`. Without the key,
-`scripts/validate/cluster_pins.py` refuses the decrease. `k3s_version` is shared, so until
-H6.3d a downgrade of the agent follows the same procedure: pause daniel-box, downgrade by hand,
-then land the acknowledged decrease.
+does not downgrade either node. Pause SUC on both nodes (`homelab/k3s-upgrade-paused` on each
+node, or an empty `system_upgrade_nodes`). Downgrade daniel-server by hand first, then daniel-box,
+so the agent is never newer than its server. Then land a PR that lowers `k3s_version` and sets
+`k3s_downgrade_acknowledged` to the same value in
+`ansible/roles/k8s/system-upgrade/defaults/main.yml`. Without the key,
+`scripts/validate/cluster_pins.py` refuses the decrease.
 
 This holds **within a minor version**. Across a minor it does not: Kubernetes does not support
 downgrading the control plane, and a stored-object schema written by the newer apiserver may not be
