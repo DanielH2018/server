@@ -342,3 +342,47 @@ def test_the_guard_flags_only_an_unpinned_multi_module_entry(entry, flagged):
     weights = {"a.py": 0.5, "b.py": 0.5, "c.py": 0.5}
     hooks = [{"id": "h", "entry": entry}]
     assert _left_to_auto(hooks, weights) == (["h"] if flagged else [])
+
+
+# #5599's bar: the hook takes under 15s on daniel-server at a load average near 3.
+SERVER_BUDGET_SECONDS = 15.0
+NEAR_LOAD_3 = 4.0
+_RANGE = r"(\d+(?:\.\d+)?)(?:[-–](\d+(?:\.\d+)?))?"
+_LOAD_THEN_TIME = re.compile(rf"load(?: average)? {_RANGE},? (?:it )?took {_RANGE}s")
+_TIME_THEN_LOAD = re.compile(rf"{_RANGE}s at load(?: average)? {_RANGE}")
+
+
+def _cost_comment() -> str:
+    """The comment block directly above the hook's `[[repos.hooks]]` table, joined to prose."""
+    lines = (REPO / "prek.toml").read_text().splitlines()
+    at = lines.index(f'id = "{HOOK_ID}"') - 1
+    block = list(
+        itertools.takewhile(lambda line: line.startswith("#"), lines[at - 1 :: -1])
+    )
+    return " ".join(line.lstrip("# ") for line in reversed(block))
+
+
+def _server_figures(comment: str) -> list[tuple[float, float]]:
+    """(lowest load, slowest seconds) for each measurement a daniel-server sentence quotes."""
+    out = []
+    for sentence in re.split(r"(?<=\.)\s+", comment):
+        if "daniel-server" not in sentence:
+            continue
+        for lo, _, t1, t2 in _LOAD_THEN_TIME.findall(sentence):
+            out.append((float(lo), float(t2 or t1)))
+        for t1, t2, lo, _ in _TIME_THEN_LOAD.findall(sentence):
+            out.append((float(lo), float(t2 or t1)))
+    return out
+
+
+def test_the_cost_comment_quotes_a_daniel_server_run_under_budget_near_load_3():
+    """The slowest census module bounds the hook, so the fix must bring a measured run under 15s."""
+    figures = _server_figures(_cost_comment())
+    assert figures, (
+        f"the {HOOK_ID} cost comment quotes no daniel-server load and seconds"
+    )
+    near = [(load, secs) for load, secs in figures if load <= NEAR_LOAD_3]
+    assert any(secs < SERVER_BUDGET_SECONDS for _, secs in near), (
+        f"no daniel-server run at load <= {NEAR_LOAD_3} under {SERVER_BUDGET_SECONDS}s "
+        f"in the {HOOK_ID} cost comment; quoted (load, seconds): {figures}"
+    )
