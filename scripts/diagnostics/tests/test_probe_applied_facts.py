@@ -104,7 +104,7 @@ def test_a_vars_lookup_reads_the_vars_or_a_stub_for_a_secret(tmp_path):
 def _run(tmp_path, template, live):
     """`run_applied` over one template task, with the host reading `live` for its path."""
     main = REGISTER + "- name: Write it\n  ansible.builtin.template: {src: t.j2, dest: /etc/x/t, mode: '0644'}\n"  # fmt: skip
-    ctx = {"x_port": 8080}
+    ctx = {"x_port": 8080, "hostvars": {"daniel-box": {"x_ip": "10.0.0.2"}}}
     _walk(tmp_path, main, ctx, {"templates/t.j2": template})
 
     def read(plan, host):
@@ -118,6 +118,7 @@ def _run(tmp_path, template, live):
 TEMPLATE_CASES = {
     "run-time-name": ("port={{ x_out.stdout }}\n", {"mode": "0644"}, PROBE_UNREADABLE, "UNCHECKED /etc/x/t  0644 None:None, content not compared: it reads run-time name(s) x_out"),
     "run-time-name-mode-differs": ("port={{ x_out.stdout }}\n", {"mode": "0600"}, PROBE_FAILED, "DRIFT    /etc/x/t  mode 0600 (want 0644)"),
+    "hostvars-the-context-supplies": ("ip={{ hostvars['daniel-box'].x_ip }}\n", {"mode": "0644", "sha256": "0" * 64}, PROBE_FAILED, "DRIFT    /etc/x/t  content differs from the render"),
     "inventory-name": ("port={{ x_port }}\n", {"mode": "0644", "sha256": "0" * 64}, PROBE_FAILED, "DRIFT    /etc/x/t  content differs from the render"),
 }
 # fmt: on

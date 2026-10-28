@@ -85,7 +85,11 @@ def late_names(
     """
     late = set()
     for n in names:
-        if n in run_time or n in RUN_TIME:
+        if n in run_time:
+            late.add(n)
+        # A template renders a magic var the static context supplies, such as `hostvars`
+        # with every host's inventory vars, as the run does. A gate keeps it late (#6356).
+        elif n in RUN_TIME and (missing_is_late or n not in ns):
             late.add(n)
         elif n.startswith("ansible_") and n not in STATIC_ANSIBLE:
             late.add(n)
