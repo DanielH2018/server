@@ -12,7 +12,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import leakguard
 from _helpers import REPO
 
 _CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
@@ -35,12 +34,14 @@ def test_a_scratch_env_child_writes_its_textfile_under_the_temp_directory() -> N
     assert (textfile_dir / "leakguard-scratch.prom").is_file()
 
 
-def test_carry_vars_fills_only_what_the_env_lacks_and_copies_it() -> None:
-    environ = {"TEXTFILE_DIR": "/tmp/lg", "LEAKGUARD_CALLS": "/tmp/calls", "HOME": "/h"}
-    env = {"PATH": "/bin", "TEXTFILE_DIR": "/tmp/own"}
-    assert leakguard.carry_vars(env, environ) == {
-        "PATH": "/bin",
-        "TEXTFILE_DIR": "/tmp/own",
-        "LEAKGUARD_CALLS": "/tmp/calls",
-    }
-    assert env == {"PATH": "/bin", "TEXTFILE_DIR": "/tmp/own"}
+def test_a_scratch_env_child_keeps_its_own_textfile_dir(tmp_path: Path) -> None:
+    """The wrapper fills only what the env lacks: the child's own TEXTFILE_DIR wins."""
+    own = str(tmp_path / "own")
+    seen = subprocess.run(
+        ["sh", "-c", 'echo "$TEXTFILE_DIR $LEAKGUARD_CALLS"'],
+        env={"PATH": "/usr/bin:/bin", "TEXTFILE_DIR": own},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert seen.stdout.split() == [own, os.environ["LEAKGUARD_CALLS"]]
