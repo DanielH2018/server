@@ -179,7 +179,12 @@ def test_a_worktree_whose_submodule_gitdir_dangles_is_kept_and_names_the_git_err
     state, why = clean_one(str(repo), tree, ask=lambda *a, **k: True, remover=remove)
 
     assert state == "kept"
-    assert "git status failed" in why and "not a git repository" in why
+    # git 2.56 reworded the dangling-gitfile fatal; accept either version's text.
+    assert "git status failed" in why
+    assert (
+        "not a git repository" in why
+        or "gitfile does not point to a valid repository" in why
+    ), why
     # Unreadable is not clean: the tree and its branch both survive.
     assert wt.exists()
     assert "broken-sub" in _branches(repo)
