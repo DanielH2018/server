@@ -172,3 +172,62 @@ def test_the_committed_runner_table_names_the_known_pole():
     need not touch the table (#5989 is the same trap on the weight table)."""
     table = shard_weight_gate.load_runner_weights()
     assert table.get("scripts/deploy_tools/tests/test_chained_timeout.py", 0.0) > 30.0
+
+
+def _runs(*results):
+    """A `measure` whose successive calls return `results` in order, the last one repeating.
+
+    Each result maps a path to its seconds; a path a result omits measured nothing, which the
+    refresh reads as 0.0. `calls` keeps the files each call was asked for.
+    """
+    calls = []
+
+    def measure(files):
+        calls.append(list(files))
+        result = results[min(len(calls), len(results)) - 1]
+        return {f: result[f] for f in files if f in result}
+
+    return measure, calls
+
+
+@pytest.mark.parametrize(
+    ("recorded", "noisy", "settled"),
+    [
+        # docs-refresh/2026-10-19-0624: one run measured 0.0s, CI measured 15.8s.
+        pytest.param(16.0, None, 15.8, id="one-run-measured-nothing"),
+        # docs-refresh/2026-10-23-0624: one run measured 62.36s, CI measured 1.03s.
+        pytest.param(0.57, 62.36, 1.03, id="one-run-measured-60x"),
+    ],
+)
+def test_a_refresh_keeps_a_row_one_outlying_measurement_would_rewrite(
+    tmp_path, recorded, noisy, settled
+):
+    """#6286: a re-measurement that disagrees with the drifted one leaves the row alone."""
+    module = FILES[0]
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({module: recorded}))
+    first = {} if noisy is None else {module: noisy}
+    measure, _ = _runs(first, {module: settled})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    assert moved == []
+    assert json.loads(table.read_text()) == {module: recorded}
+
+
+def test_a_refresh_re_measures_only_the_files_that_drifted(tmp_path):
+    """#6286: the confirming run costs only the drifted files, not the slice again."""
+    noisy, *steady = FILES
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({f: 2.0 for f in FILES}))
+    measure, calls = _runs({f: 2.0 for f in steady} | {noisy: 9.0})
+
+    pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=FILES, measure=measure, pins={}
+    )
+
+    assert sorted(calls[0]) == sorted(FILES)
+    re_measured = [f for call in calls[1:] for f in call]
+    assert set(re_measured) == {noisy}
