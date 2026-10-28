@@ -250,8 +250,8 @@ def run_applied(ns, read=read_host, setup: Path = SETUP, render_ctx=None) -> int
         return PROBE_FAILED
     if "UNCHECKED" in statuses:
         print(
-            f"applied: coverage partial: an UNCHECKED task file or credential file of "
-            f"{ns.role} was not read",
+            f"applied: coverage partial: an UNCHECKED task file, credential file or "
+            f"file whose content reads a run-time name of {ns.role} was not read",
             file=_sys.stderr,
         )
         return PROBE_UNREADABLE
