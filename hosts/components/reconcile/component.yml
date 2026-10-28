@@ -1,7 +1,8 @@
 # Reconcile, which every host package ships (H3, *The reconcile unit*). The script lives in
 # hosts/lib/ beside the updater that starts it, with the reconcile_lib package it imports (H7.2a
 # to H7.2d: the activation step, the four arms and the metrics). The package installs beside the
-# script, because python3 puts the script's directory first on sys.path. The unit is here.
+# script, because python3 puts the script's directory first on sys.path. The units are here:
+# reconcile's own, and the boot oneshot that rewrites its metrics file (#6188).
 files:
   - {lib: homelab-reconcile, dst: /usr/lib/homelab/homelab-reconcile, mode: "0755"}
   - {lib: reconcile_lib/__init__.py, dst: /usr/lib/homelab/reconcile_lib/__init__.py}
@@ -14,3 +15,7 @@ files:
   - {lib: reconcile_lib/ufw.py, dst: /usr/lib/homelab/reconcile_lib/ufw.py}
   - {lib: reconcile_lib/users.py, dst: /usr/lib/homelab/reconcile_lib/users.py}
   - {src: units/homelab-reconcile.service, dst: /usr/lib/systemd/system/homelab-reconcile.service}
+  - {src: units/homelab-reconcile-metrics.service, dst: /usr/lib/systemd/system/homelab-reconcile-metrics.service}
+# The boot path needs this link: the metrics unit rewrites reconcile's textfile once per boot.
+enable:
+  homelab-reconcile-metrics.service: multi-user.target

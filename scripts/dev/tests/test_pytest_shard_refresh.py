@@ -44,7 +44,7 @@ def test_a_refresh_rewrites_only_the_drifted_entries_of_its_own_slice(tmp_path):
     asked = []
 
     def measure(files):
-        asked.extend(files)
+        asked.append(list(files))
         return {f: measured[f] for f in files}
 
     moved = pytest_shard.refresh_drifted_weights(
@@ -52,7 +52,7 @@ def test_a_refresh_rewrites_only_the_drifted_entries_of_its_own_slice(tmp_path):
     )
 
     written = json.loads(table.read_text())
-    assert sorted(asked) == sorted(ours)
+    assert sorted(asked[0]) == sorted(ours)
     assert moved == sorted(ours[1:])
     assert {f: written[f] for f in ours} == {ours[0]: 2.0} | {f: 6.0 for f in ours[1:]}
     assert all(written[f] == 2.0 for f in theirs)
@@ -266,3 +266,77 @@ def test_the_runner_fetch_refuses_fewer_runs_than_asked():
     )
     with pytest.raises(RuntimeError, match="logs in 1 of the newest 2 green master"):
         pytest_shard.fetch_runner_logs(2, gh)
+
+
+def _runs(*results):
+    """A `measure` whose successive calls return `results` in order, the last one repeating.
+
+    Each result maps a path to its seconds; a path a result omits measured nothing, which the
+    refresh reads as 0.0. `calls` keeps the files each call was asked for.
+    """
+    calls = []
+
+    def measure(files):
+        calls.append(list(files))
+        result = results[min(len(calls), len(results)) - 1]
+        return {f: result[f] for f in files if f in result}
+
+    return measure, calls
+
+
+@pytest.mark.parametrize(
+    ("recorded", "noisy", "settled"),
+    [
+        # docs-refresh/2026-10-19-0624: one run measured 0.0s, CI measured 15.8s.
+        pytest.param(16.0, None, 15.8, id="one-run-measured-nothing"),
+        # docs-refresh/2026-10-23-0624: one run measured 62.36s, CI measured 1.03s.
+        pytest.param(0.57, 62.36, 1.03, id="one-run-measured-60x"),
+    ],
+)
+def test_a_refresh_keeps_a_row_one_outlying_measurement_would_rewrite(
+    tmp_path, recorded, noisy, settled
+):
+    """#6286: a re-measurement that disagrees with the drifted one leaves the row alone."""
+    module = FILES[0]
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({module: recorded}))
+    first = {} if noisy is None else {module: noisy}
+    measure, _ = _runs(first, {module: settled})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    assert moved == []
+    assert json.loads(table.read_text()) == {module: recorded}
+
+
+def test_a_refresh_re_measures_only_the_files_that_drifted(tmp_path):
+    """#6286: the confirming run costs only the drifted files, not the slice again."""
+    noisy, *steady = FILES
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({f: 2.0 for f in FILES}))
+    measure, calls = _runs({f: 2.0 for f in steady} | {noisy: 9.0})
+
+    pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=FILES, measure=measure, pins={}
+    )
+
+    assert sorted(calls[0]) == sorted(FILES)
+    re_measured = [f for call in calls[1:] for f in call]
+    assert set(re_measured) == {noisy}
+
+
+def test_a_refresh_keeps_a_row_whose_two_runs_drift_but_disagree(tmp_path):
+    """#6286: both runs leaving the band is not enough; they must agree with each other."""
+    module = FILES[0]
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({module: 16.0}))
+    measure, _ = _runs({module: 0.0}, {module: 40.0})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    assert moved == []
+    assert json.loads(table.read_text()) == {module: 16.0}

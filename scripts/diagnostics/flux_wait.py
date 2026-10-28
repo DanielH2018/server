@@ -21,7 +21,10 @@ later promotion that lands before Flux applies the commit still carries it. With
 the served commit counts: after a reset to an older commit, the stale applied commit still
 descends from the served one.
 `failed` (exit 1): Ready=False for a reason other than a pending dependency, after an attempt
-at the artifact the source serves, and the source serves that commit. `suspended` (exit 3):
+at the artifact the source serves, and the source serves that commit. A DependencyNotReady
+row is `failed` too when a dependency it waits on, directly or through another held one, failed
+after an attempt at the artifact its source serves: Flux holds the row there until someone
+fixes that dependency (#6354). `suspended` (exit 3):
 `spec.suspend` is set, so nothing will apply. Every other reading keeps the wait open:
 `absent` (no such Kustomization yet), `waiting` (the source serves no commit) and
 `progressing`. A `--revision` that no applied commit descends from waits until the budget

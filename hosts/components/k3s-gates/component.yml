@@ -1,0 +1,23 @@
+# The apply-time gates of H6 (docs/target-architecture/host/h6-k3s-suc.md, *Gates at apply
+# time*). `/usr/lib/homelab/k3s_gates.py` is one stdlib-only script with three callers: the
+# k3s-server Plan's `prepare` on daniel-box, the k3s-agent Plan's `prepare` on daniel-server, and
+# `homelab-k3s-restart` in `host` mode. Each Plan's `prepare` runs the script from the host's root,
+# mounted at /host, so every node a Plan selects must have this component installed, or `prepare`
+# fails with `can't open file` (#6413). The k3s-restart component shipped the file until #6413.
+#
+# A host can list this component without `k3s-restart`, as daniel-server does. `agent` mode reads
+# the API with the Plan pod's own ServiceAccount token, so the script needs no host credential.
+# Only `host` mode needs `k3s_readonly_token`, and only `homelab-k3s-restart` runs `host` mode.
+#
+# Without the restart unit, systemd never creates /run/homelab-k3s-restart/ on the host. The agent
+# gate's check that the directory is absent (`k3s_gates.py:check_restart_marker`) therefore
+# passes by construction. That is correct: the directory marks a running `homelab-k3s-restart`,
+# and a host without the unit has no restarter that competes with SUC for the k3s unit.
+#
+# A package that lists `k3s-restart` also lists this component, because `homelab-k3s-restart`
+# imports the script from its own directory. The renderer refuses a package in which two
+# components install the same path, so no other component ships it.
+#
+# ENFORCED: hosts/lib/tests/test_k3s_gates_component.py.
+files:
+  - {lib: k3s_gates.py, dst: /usr/lib/homelab/k3s_gates.py, mode: "0755"}

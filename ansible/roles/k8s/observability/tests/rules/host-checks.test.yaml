@@ -1578,31 +1578,75 @@ tests:
         alertname: ComposeUpStale
         exp_alerts: []
 
+  # Reconcile restarted homelab-compose.service at 1000, after a digest bump, and compose-run
+  # wrote nothing: the result still ends at 500 (#6342). The rule is quiet at 4m inside its
+  # 5m `for` and fires at 10m. Another unit's start time is ignored.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_unit_started_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi", unit="homelab-compose.service"}'
+        values: '1000x15'
+      - series: 'homelab_host_unit_started_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi", unit="homelab-secrets.service"}'
+        values: '2000x15'
+      - series: 'homelab_compose_up_timestamp_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '500x15'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ComposeRestartUnreported
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ComposeRestartUnreported
+        exp_alerts:
+          - exp_labels:
+              host: daniel-pi
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              unit: homelab-compose.service
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: The Pi's Compose project wrote no result for reconcile's last start of it.
+              description: >-
+                homelab-reconcile started homelab-compose.service on daniel-pi, and
+                homelab_compose_up_timestamp_seconds still predates that call, so compose-run
+                wrote no result for it. systemd killed the run at its TimeoutStartSec, or the
+                write to /var/lib/node-exporter-textfile/homelab_compose.prom failed. Read
+                `journalctl -u homelab-compose -u homelab-reconcile` on daniel-pi.
+
+  # The same restart, and compose-run wrote its result at 1040, after the call. Quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_unit_started_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi", unit="homelab-compose.service"}'
+        values: '1000x15'
+      - series: 'homelab_compose_up_timestamp_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1040x15'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ComposeRestartUnreported
+        exp_alerts: []
+
   # daniel-box first owed a reboot 690000s before time 0, and a later package change rewrites
-  # its reconcile file every minute without moving that time. It is quiet at 10m (690600s, under
-  # the 691200s bound) and fires at 30m. daniel-server's 1 dates from before its last boot, so
-  # that boot already cleared it, and its rule stays quiet.
+  # its reconcile file every minute without moving that time. It crosses the 691200s bound at
+  # 20m, is quiet at 30m inside the 15m `for`, and fires at 40m. daniel-server has owed its
+  # reboot for longer than 8 days, then reboots at 5m, and homelab-reconcile-metrics.service
+  # rewrites its 1 to 0 at 10m (#6188). Its rule stays quiet, because the 1 never lasts 15m.
   - interval: 1m
     input_series:
       - series: 'homelab_host_reboot_pending{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '1x35'
+        values: '1x45'
       - series: 'homelab_host_reboot_pending_since_seconds{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '-690000x35'
+        values: '-690000x45'
       - series: 'node_textfile_mtime_seconds{file="/textfile/homelab_host_reconcile.prom", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '0+60x35'
-      - series: 'node_boot_time_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '-1000000x35'
+        values: '0+60x45'
       - series: 'homelab_host_reboot_pending{host="daniel-server", instance="daniel-server", job="node", origin="daniel-server"}'
-        values: '1x35'
+        values: '1x9 0x35'
       - series: 'homelab_host_reboot_pending_since_seconds{host="daniel-server", instance="daniel-server", job="node", origin="daniel-server"}'
-        values: '-690000x35'
-      - series: 'node_boot_time_seconds{instance="daniel-server", job="node", origin="daniel-server"}'
-        values: '-600000x35'
+        values: '-700000x9 _x35'
     alert_rule_test:
-      - eval_time: 10m
+      - eval_time: 30m
         alertname: HostRebootOverdue
         exp_alerts: []
-      - eval_time: 30m
+      - eval_time: 40m
         alertname: HostRebootOverdue
         exp_alerts:
           - exp_labels:
@@ -1814,3 +1858,358 @@ tests:
                 Discord. Read `systemctl status claude-fanout-server-lander.timer` and `journalctl -u
                 claude-fanout-server-lander` on daniel-box. If
                 `claude_code_fanout_server_lander_enabled` was set false on purpose, delete this rule.
+
+  # The weekly host-maintenance crons (#6179). Every check file holds a green verdict taken
+  # 611000s before time 0, so each NotReporting rule's first arm stays quiet at 10m (611600s old)
+  # and fires at 20m, past the 612000s deadline, once per host that runs the cron. The
+  # verdicts are green, so the Failed rules stay quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x25'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x25'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x25'
+      - series: 'homelab_check_success{check="apt-autoremove", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x25'
+      - series: 'homelab_check_success{check="apt-autoremove", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x25'
+      - series: 'homelab_check_success{check="apt-autoremove", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x25'
+      - series: 'homelab_check_success{check="dpkg-purge", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x25'
+      - series: 'homelab_check_success{check="dpkg-purge", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x25'
+      - series: 'homelab_check_success{check="dpkg-purge", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x25'
+      - series: 'homelab_check_success{check="firmware-update", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '-611000x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-611000x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '-611000x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dpkg-purge", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '-611000x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dpkg-purge", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '-611000x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dpkg-purge", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '-611000x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="firmware-update", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '-611000x25'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AptAutoremoveNotReporting
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: AptAutoremoveFailed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: DpkgPurgeNotReporting
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: DpkgPurgeFailed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: FirmwareUpdateNotReporting
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: FirmwareUpdateFailed
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: AptAutoremoveNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: apt-autoremove
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly apt autoremove has stopped reporting.
+              description: >-
+                No apt-autoremove verdict newer than 612000s reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the weekly apt
+                autoremove still runs. Read the `Weekly apt autoremove` cron in
+                root's crontab and `journalctl -t apt-autoremove`, then
+                /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+          - exp_labels:
+              check: apt-autoremove
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's weekly apt autoremove has stopped reporting.
+              description: >-
+                No apt-autoremove verdict newer than 612000s reached Prometheus from
+                daniel-server's textfile collector, so nothing confirms the weekly
+                apt autoremove still runs. Read the `Weekly apt autoremove` cron in
+                root's crontab and `journalctl -t apt-autoremove`, then
+                /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+          - exp_labels:
+              check: apt-autoremove
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi's weekly apt autoremove has stopped reporting.
+              description: >-
+                No apt-autoremove verdict newer than 612000s reached Prometheus from
+                daniel-pi's textfile collector, so nothing confirms the weekly apt
+                autoremove still runs. Read the `Weekly apt autoremove` cron in
+                root's crontab and `journalctl -t apt-autoremove`, then
+                /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      - eval_time: 20m
+        alertname: DpkgPurgeNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: dpkg-purge
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
+              description: >-
+                No dpkg-purge verdict newer than 612000s reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the weekly dpkg
+                purge of orphaned configs still runs. Read the `Weekly dpkg purge
+                orphaned configs` cron in root's crontab and `journalctl -t
+                dpkg-purge`, then /var/lib/node-exporter-textfile/dpkg-purge.prom on
+                the host.
+          - exp_labels:
+              check: dpkg-purge
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's weekly dpkg purge of orphaned configs has stopped reporting.
+              description: >-
+                No dpkg-purge verdict newer than 612000s reached Prometheus from
+                daniel-server's textfile collector, so nothing confirms the weekly
+                dpkg purge of orphaned configs still runs. Read the `Weekly dpkg
+                purge orphaned configs` cron in root's crontab and `journalctl -t
+                dpkg-purge`, then /var/lib/node-exporter-textfile/dpkg-purge.prom on
+                the host.
+          - exp_labels:
+              check: dpkg-purge
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi's weekly dpkg purge of orphaned configs has stopped reporting.
+              description: >-
+                No dpkg-purge verdict newer than 612000s reached Prometheus from
+                daniel-pi's textfile collector, so nothing confirms the weekly dpkg
+                purge of orphaned configs still runs. Read the `Weekly dpkg purge
+                orphaned configs` cron in root's crontab and `journalctl -t
+                dpkg-purge`, then /var/lib/node-exporter-textfile/dpkg-purge.prom on
+                the host.
+      - eval_time: 20m
+        alertname: FirmwareUpdateNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: firmware-update
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly firmware update has stopped reporting.
+              description: >-
+                No firmware-update verdict newer than 612000s reached Prometheus
+                from daniel-box's textfile collector, so nothing confirms the weekly
+                firmware update still runs. Read the `Weekly firmware update` cron
+                in root's crontab and `journalctl -t fwupd-auto`, then
+                /var/lib/node-exporter-textfile/firmware-update.prom on the host.
+
+  # Every host-maintenance job writes a fresh red verdict, and each Failed rule fires once per
+  # host that runs the cron.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="apt-autoremove", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+      - series: 'homelab_check_success{check="apt-autoremove", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x10'
+      - series: 'homelab_check_success{check="apt-autoremove", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x10'
+      - series: 'homelab_check_success{check="dpkg-purge", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+      - series: 'homelab_check_success{check="dpkg-purge", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x10'
+      - series: 'homelab_check_success{check="dpkg-purge", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x10'
+      - series: 'homelab_check_success{check="firmware-update", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dpkg-purge", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dpkg-purge", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dpkg-purge", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="firmware-update", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AptAutoremoveFailed
+        exp_alerts:
+          - exp_labels:
+              check: apt-autoremove
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly apt autoremove failed.
+              description: >-
+                host-maintenance.sh apt-autoremove on daniel-box wrote success 0:
+                apt-get autoremove exited non-zero. Read `journalctl -t
+                apt-autoremove` on daniel-box for the command's output.
+          - exp_labels:
+              check: apt-autoremove
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's weekly apt autoremove failed.
+              description: >-
+                host-maintenance.sh apt-autoremove on daniel-server wrote success 0:
+                apt-get autoremove exited non-zero. Read `journalctl -t
+                apt-autoremove` on daniel-server for the command's output.
+          - exp_labels:
+              check: apt-autoremove
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi's weekly apt autoremove failed.
+              description: >-
+                host-maintenance.sh apt-autoremove on daniel-pi wrote success 0:
+                apt-get autoremove exited non-zero. Read `journalctl -t
+                apt-autoremove` on daniel-pi for the command's output.
+      - eval_time: 5m
+        alertname: DpkgPurgeFailed
+        exp_alerts:
+          - exp_labels:
+              check: dpkg-purge
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly dpkg purge of orphaned configs failed.
+              description: >-
+                host-maintenance.sh dpkg-purge on daniel-box wrote success 0: the
+                dpkg purge of removed packages' configs exited non-zero. Read
+                `journalctl -t dpkg-purge` on daniel-box for the command's output.
+          - exp_labels:
+              check: dpkg-purge
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's weekly dpkg purge of orphaned configs failed.
+              description: >-
+                host-maintenance.sh dpkg-purge on daniel-server wrote success 0: the
+                dpkg purge of removed packages' configs exited non-zero. Read
+                `journalctl -t dpkg-purge` on daniel-server for the command's
+                output.
+          - exp_labels:
+              check: dpkg-purge
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi's weekly dpkg purge of orphaned configs failed.
+              description: >-
+                host-maintenance.sh dpkg-purge on daniel-pi wrote success 0: the
+                dpkg purge of removed packages' configs exited non-zero. Read
+                `journalctl -t dpkg-purge` on daniel-pi for the command's output.
+      - eval_time: 5m
+        alertname: FirmwareUpdateFailed
+        exp_alerts:
+          - exp_labels:
+              check: firmware-update
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly firmware update failed.
+              description: >-
+                host-maintenance.sh firmware-update on daniel-box wrote success 0:
+                fwupdmgr update exited with an error rather than 0 or 2 (nothing to
+                update). Read `journalctl -t fwupd-auto` on daniel-box for the
+                command's output.
+
+  # The absent arm of the host-maintenance NotReporting rules fires only for a series that
+  # existed in the last 28 days. daniel-box wrote its apt-autoremove file for the first two
+  # hours and then lost it: the arm stays quiet at 170h (the last sample is under 612000s old)
+  # and fires at 175h. No other check or host ever wrote a file, so none of their rules fire,
+  # which is the state from the Flux apply until each cron's first run.
+  - interval: 1h
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x180'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x180'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x180'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x2'
+    alert_rule_test:
+      - eval_time: 170h
+        alertname: AptAutoremoveNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: DpkgPurgeNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: FirmwareUpdateNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: AptAutoremoveNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: apt-autoremove
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly apt autoremove has stopped reporting.
+              description: >-
+                No apt-autoremove verdict newer than 612000s reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the weekly apt autoremove
+                still runs. Read the `Weekly apt autoremove` cron in root's crontab and
+                `journalctl -t apt-autoremove`, then
+                /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
