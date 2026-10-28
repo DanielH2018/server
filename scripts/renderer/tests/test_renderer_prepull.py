@@ -210,7 +210,8 @@ def test_a_prepull_shell_script_other_than_the_renderers_is_flagged():
 
 
 def test_a_verify_job_running_the_shell_no_op_is_flagged():
-    assert _census_rows(kind="verify") == {"delivery"}
+    # The backoff row fires too: a verify Job takes 0 and a pre-pull 3 (#5552).
+    assert _census_rows(kind="verify") == {"backoff", "delivery"}
 
 
 def _job_name(image: str) -> str:
