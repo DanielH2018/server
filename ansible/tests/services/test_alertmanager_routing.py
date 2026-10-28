@@ -369,12 +369,12 @@ def test_every_deploy_pipeline_rule_has_an_expected_outcome():
 
 def test_host_sets_names_every_host_check_rule():
     """Non-vacuity for `host_sets`: every shadow rule of the group, per host for the rules each
-    host carries (#6166, #6168, #6179), and the paging host-plane rules, M3's two disk-health rules
+    host carries (#6166, #6168), and the paging host-plane rules, M3's two disk-health rules
     among them since its PR 5."""
     hosts = ("daniel-box", "daniel-server", "daniel-pi")
     every_host = (
         "TextfileCollectorError AideCheckFailed AideCheckNotReporting RkhunterScanFailed "
-        "RkhunterScanNotReporting AptAutoremoveNotReporting DpkgPurgeNotReporting"
+        "RkhunterScanNotReporting"
     ).split()
     box_only = (
         "FanoutSlotsIdleWithFreeWork ArtifactsSyncFailed ArtifactsSyncNotReporting "
@@ -382,8 +382,7 @@ def test_host_sets_names_every_host_check_rule():
         "LonghornBackupHealthNotReporting EtcdSnapshotOffboxFailed "
         "EtcdSnapshotOffboxNotReporting ManifestPruneCheckFailed "
         "ManifestPruneCheckNotReporting ReleaseStalenessCheckFailed "
-        "ReleaseStalenessCheckNotReporting LiveDriftCheckFailed LiveDriftCheckNotReporting "
-        "FirmwareUpdateNotReporting"
+        "ReleaseStalenessCheckNotReporting LiveDriftCheckFailed LiveDriftCheckNotReporting"
     ).split()
     assert set(host_sets(shadow=True)) == (
         {f"{alert}/{host}" for alert in every_host for host in hosts}

@@ -22,7 +22,7 @@ import os
 import re
 
 import pytest
-from _helpers import K8S_ROLES, ROLES, load_tasks, walk_tasks
+from _helpers import K8S_ROLES, ROLES, load_defaults, load_tasks, walk_tasks
 from _role_census import role_task_files
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, run, write_exec
@@ -34,6 +34,8 @@ CHECK_LIB = ROLE / "files" / "homelab-check-lib.sh"
 REAL_CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
+# The guard on the absent arm: the series existed in this window, so a never-written file is quiet.
+HISTORY = re.compile(r"present_over_time\([^)]*\[(\d+)s\]\)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 
 EVERY_HOST = {"daniel-box", "daniel-server", "daniel-pi"}
@@ -127,7 +129,11 @@ def not_reporting(text: str) -> dict[tuple[str, str], str]:
 
 
 def literal_problems(rules: dict[tuple[str, str], str], deadline_s: int) -> list[str]:
-    """Why the rule set or a rule's deadline literals differ from the script, or nothing."""
+    """Why the rule set or a rule's deadline literals differ from the script, or nothing.
+
+    The absent arm's history guard must outlast the deadline, or the arm can never fire, and
+    must fit inside Prometheus's retention, or the history it reads is already gone.
+    """
     expected = {(check, host) for check, spec in JOBS.items() for host in spec[2]}
     problems = [
         f"no NotReporting rule for {key}" for key in sorted(expected - set(rules))
@@ -147,7 +153,23 @@ def literal_problems(rules: dict[tuple[str, str], str], deadline_s: int) -> list
                 problems.append(
                     f"{check} on {origin}: {name} reads {found}, DEADLINE_S is {deadline_s}"
                 )
+        history = [int(s) for s in HISTORY.findall(expr)]
+        if len(history) != 1 or not deadline_s < history[0] <= retention_s():
+            problems.append(
+                f"{check} on {origin}: the history guard reads {history}, not one window "
+                f"between DEADLINE_S {deadline_s} and the {retention_s()}s retention"
+            )
     return problems
+
+
+def retention_s() -> int:
+    """Prometheus's time retention, `observability_prometheus_retention`, in seconds."""
+    defaults = load_defaults(K8S_ROLES / "observability")
+    days = re.fullmatch(r"(\d+)d", defaults["observability_prometheus_retention"])
+    assert days, (
+        "observability_prometheus_retention is no longer a whole number of days"
+    )
+    return int(days[1]) * 86400
 
 
 def test_literal_problems_is_clean_on_the_shipped_rules():
@@ -163,6 +185,17 @@ def test_literal_problems_is_flagged_on_a_window_that_drifted():
     )
     assert literal_problems(not_reporting(text), deadline()) == [
         "dpkg-purge on daniel-pi: window reads ['604800'], DEADLINE_S is 612000"
+    ]
+
+
+def test_literal_problems_is_flagged_on_a_history_guard_shorter_than_the_deadline():
+    text = RULES.read_text().replace(
+        'check="firmware-update",origin="daniel-box"}[2419200s]',
+        'check="firmware-update",origin="daniel-box"}[600000s]',
+    )
+    assert literal_problems(not_reporting(text), deadline()) == [
+        "firmware-update on daniel-box: the history guard reads [600000], not one window "
+        "between DEADLINE_S 612000 and the 2592000s retention"
     ]
 
 

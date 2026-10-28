@@ -510,10 +510,16 @@ groups:
       # host, the firmware update on daniel-box, the one host with fwupd. Each runs through
       # initial_setup's files/host-maintenance.sh, which writes the check's textfile with
       # success 0 when the job's command failed. No Kuma tile or Healthchecks.io check watches
-      # these crons, so the Failed rules page. The NotReporting rules are shadow until each
-      # cron's first Sunday run has written its file (#6405): the absent_over_time arm fires for
-      # a series that never existed, so they would page from the Flux apply until that run. Both
-      # literals of each NotReporting rule
+      # these crons, so every rule here pages, and none is shadow: a shadow NotReporting source
+      # would still inhibit HostCheckOverdue and leave a stopped cron paging nobody.
+      #
+      # The absent arm differs from DiskHealthNotReporting's. A bare absent_over_time fires for a
+      # series that never existed, and no file exists until each cron's first Sunday run, so it
+      # would page from the Flux apply for up to a week with nothing wrong. The arm therefore
+      # also requires the series within the last 2419200s (28 days, inside Prometheus's 30-day
+      # retention). A file that vanishes after a run pages from its deadline until 28 days after
+      # its last sample; a cron that stops but leaves its file pages through the stale arm for as
+      # long as it stays stopped. Both literals of each NotReporting rule
       # equal the script's DEADLINE_S, and ansible/tests/setup/test_host_maintenance.py pins
       # them to it and the rule set to the hosts that run each cron.
       - alert: AptAutoremoveFailed
@@ -531,13 +537,16 @@ groups:
           (
               time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"} > 612000
             or
-              absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"}[612000s])
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"}[2419200s])
+              )
           )
           unless on (origin) (up{job="node"} == 0)
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly apt autoremove has stopped reporting.
           description: >-
@@ -560,13 +569,16 @@ groups:
           (
               time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"} > 612000
             or
-              absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"}[612000s])
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"}[2419200s])
+              )
           )
           unless on (origin) (up{job="node"} == 0)
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's weekly apt autoremove has stopped reporting.
           description: >-
@@ -589,13 +601,16 @@ groups:
           (
               time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"} > 612000
             or
-              absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"}[612000s])
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"}[2419200s])
+              )
           )
           unless on (origin) (up{job="node-pi"} == 0)
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's weekly apt autoremove has stopped reporting.
           description: >-
@@ -618,13 +633,16 @@ groups:
           (
               time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"} > 612000
             or
-              absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"}[612000s])
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"}[2419200s])
+              )
           )
           unless on (origin) (up{job="node"} == 0)
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
           description: >-
@@ -647,13 +665,16 @@ groups:
           (
               time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"} > 612000
             or
-              absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"}[612000s])
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"}[2419200s])
+              )
           )
           unless on (origin) (up{job="node"} == 0)
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's weekly dpkg purge of orphaned configs has stopped reporting.
           description: >-
@@ -676,13 +697,16 @@ groups:
           (
               time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"} > 612000
             or
-              absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"}[612000s])
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"}[2419200s])
+              )
           )
           unless on (origin) (up{job="node-pi"} == 0)
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's weekly dpkg purge of orphaned configs has stopped reporting.
           description: >-
@@ -705,13 +729,16 @@ groups:
           (
               time() - homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"} > 612000
             or
-              absent_over_time(homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"}[612000s])
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"}[2419200s])
+              )
           )
           unless on (origin) (up{job="node"} == 0)
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly firmware update has stopped reporting.
           description: >-

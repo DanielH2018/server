@@ -1884,7 +1884,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's weekly apt autoremove has stopped reporting.
               description: >-
@@ -1900,7 +1899,6 @@ tests:
               origin: daniel-server
               severity: warning
               service: daniel-server
-              shadow: "true"
             exp_annotations:
               summary: daniel-server's weekly apt autoremove has stopped reporting.
               description: >-
@@ -1916,7 +1914,6 @@ tests:
               origin: daniel-pi
               severity: warning
               service: daniel-pi
-              shadow: "true"
             exp_annotations:
               summary: daniel-pi's weekly apt autoremove has stopped reporting.
               description: >-
@@ -1935,7 +1932,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
               description: >-
@@ -1952,7 +1948,6 @@ tests:
               origin: daniel-server
               severity: warning
               service: daniel-server
-              shadow: "true"
             exp_annotations:
               summary: daniel-server's weekly dpkg purge of orphaned configs has stopped reporting.
               description: >-
@@ -1969,7 +1964,6 @@ tests:
               origin: daniel-pi
               severity: warning
               service: daniel-pi
-              shadow: "true"
             exp_annotations:
               summary: daniel-pi's weekly dpkg purge of orphaned configs has stopped reporting.
               description: >-
@@ -1989,7 +1983,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's weekly firmware update has stopped reporting.
               description: >-
@@ -2134,3 +2127,45 @@ tests:
                 fwupdmgr update exited with an error rather than 0 or 2 (nothing to
                 update). Read `journalctl -t fwupd-auto` on daniel-box for the
                 command's output.
+
+  # The absent arm of the host-maintenance NotReporting rules fires only for a series that
+  # existed in the last 28 days. daniel-box wrote its apt-autoremove file for the first two
+  # hours and then lost it: the arm stays quiet at 170h (the last sample is under 612000s old)
+  # and fires at 175h. No other check or host ever wrote a file, so none of their rules fire,
+  # which is the state from the Flux apply until each cron's first run.
+  - interval: 1h
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x180'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x180'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x180'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x2'
+    alert_rule_test:
+      - eval_time: 170h
+        alertname: AptAutoremoveNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: DpkgPurgeNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: FirmwareUpdateNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: AptAutoremoveNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: apt-autoremove
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly apt autoremove has stopped reporting.
+              description: >-
+                No apt-autoremove verdict newer than 612000s reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the weekly apt autoremove
+                still runs. Read the `Weekly apt autoremove` cron in root's crontab and
+                `journalctl -t apt-autoremove`, then
+                /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.

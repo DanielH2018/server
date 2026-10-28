@@ -236,6 +236,34 @@
   become: true
   tags: [crons, ansible-log]
 
+- name: Find the ansible.log files the removed log_path left in each checkout
+  tags: [crons, ansible-log]
+  # ansible.cfg set `log_path = ./ansible.log` until #6217, so the primary checkout and every
+  # `.claude/worktrees/<name>` checkout grew their own copy, and a `--diff` run wrote rendered
+  # bodies into it. Nothing writes the file any more; this and the task below delete the copies
+  # left behind, and find nothing once they are gone. Depth 2 reaches `worktrees/<name>/`.
+  ansible.builtin.find:
+    paths:
+      - "/home/{{ sys_user }}/server"
+      - "/home/{{ sys_user }}/server/.claude/worktrees"
+    patterns: ansible.log
+    file_type: file
+    recurse: true
+    depth: 2
+  register: initial_setup_stale_ansible_logs
+  check_mode: false # read-only query; must run under --check or the loop below breaks
+  become: true
+
+- name: Delete the ansible.log files the removed log_path left behind
+  tags: [crons, ansible-log]
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ initial_setup_stale_ansible_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+
 - name: Create the directory the worktree holder scan installs into
   tags: [crons, worktree-sweep]
   # Ubuntu does not ship /usr/local/libexec, and `copy` does not create a missing parent. The
