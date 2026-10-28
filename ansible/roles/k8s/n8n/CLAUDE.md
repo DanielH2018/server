@@ -32,7 +32,8 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   its GHCR one with `imagePullPolicy: IfNotPresent`
   (`scripts/renderer/renderer_lib/images.py:ghcr_refs`).
 - **The new images are pulled before the old pod stops.** `n8n` is `Recreate`, and a base
-  bump re-pulls about 465 MB from GHCR at 0.15-0.36 MB/s, so the role sets
+  bump re-pulls about 465 MB from GHCR. GHCR served it at 0.15-0.36 MB/s on 2026-10-17 and at
+  44-98 MB/s on 2026-10-24 (#5654). The budget is sized for the slow rate, so the role sets
   `flux_prepull_timeout: 3600s`. The render adds the `n8n-prepull` Kustomization, and `n8n`
   depends on it. Its one Job runs all three images the two Deployments pull: n8n, n8n-runners
   and the runners' `alpine` init container. The Job copies the pods' placement, a
