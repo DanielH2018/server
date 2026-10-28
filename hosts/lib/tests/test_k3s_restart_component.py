@@ -1,7 +1,8 @@
 """The `k3s-restart` component as daniel-box's package renders it.
 
 H6.3b: the unit, the timer, the credential, the lock's `tmpfiles.d` entry and the two files the
-unit runs. The package needs `k3s_readonly_token` in `secrets.yml` and a daniel-box SOPS file to
+unit runs. `k3s_gates.py` arrives through the `k3s-gates` component, which the package lists
+beside this one (#6413). The package needs `k3s_readonly_token` in `secrets.yml` and a daniel-box SOPS file to
 render, so the fixtures below stand in for both; the operator adds the real ones.
 """
 
