@@ -15,8 +15,10 @@ Run: uv run pytest ansible/tests/setup/test_agent_dotfiles.py
 import subprocess
 from pathlib import Path
 
+import jinja2
 import pytest
 from _helpers import ANSIBLE, HOST_VARS, load_yaml
+from lib.ansible_jinja_env import make_ansible_env
 from _setup_render import render_setup_text
 from lib import yaml_fast
 from lib.git_testing import commit, git, init_repo, scrubbed_env
@@ -237,6 +239,33 @@ def test_the_seed_answers_agent_true() -> None:
     seed = render_setup_text("claude_code", "agent-chezmoi-seed.toml.j2", {})
     assert "    agent = true\n" in seed
     assert '    profile = "server"\n' in seed
+
+
+@pytest.mark.parametrize(
+    ("operator_read", "modes"), [(True, ("0710", "0640")), (False, ("0700", "0600"))]
+)
+def test_the_operator_reads_the_seed_only_under_operator_read(
+    operator_read: bool, modes: tuple[str, str]
+) -> None:
+    """`probe.py applied` reads seed.toml as the operator, since rootq refuses any path under
+    the agent-owned home (#6408). chezmoi.toml keeps 0600 either way."""
+    dotfiles = tasks("agent_dotfiles.yml")
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    ctx = {"claude_code_agent_operator_read": operator_read}
+    rendered = tuple(
+        env.from_string(
+            named(dotfiles, name)["ansible.builtin." + module]["mode"]
+        ).render(ctx)
+        for name, module in (
+            ("Create the agent user's chezmoi config directory", "file"),
+            ("Seed the agent user's chezmoi answers", "template"),
+        )
+    )
+    assert rendered == modes
+    first_init = named(
+        dotfiles, "Seed the agent user's chezmoi config for its first init"
+    )
+    assert first_init["ansible.builtin.copy"]["mode"] == "0600"
 
 
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
