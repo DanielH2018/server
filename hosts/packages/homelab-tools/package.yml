@@ -29,14 +29,14 @@ tools:
   chezmoi:
     amd64:
       # renovate: datasource=github-release-attachments depName=twpayne/chezmoi
-      version: v2.73.2
-      sha256: 4d7bd8072f15373d5f5c801209bac218527452c8e54f9ae46ba6c5bd4a6eca41
+      version: v2.73.3
+      sha256: 6e5827598cbfc02d132b04f95b5ea10efb5b79230e2a4a0e52df4af144a8ee9f
       url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_amd64.tar.gz
       member: chezmoi
     arm64:
       # renovate: datasource=github-release-attachments depName=twpayne/chezmoi
-      version: v2.73.2
-      sha256: db92b343a32cade0b1d4ff5e30da54c5156f7a580349281e583a5402c57c7bcf
+      version: v2.73.3
+      sha256: c9e6a6e71eb5291018e161a8426d7c313cd2e8553c2ca4029511fec2a33bc28c
       url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_arm64.tar.gz
       member: chezmoi
   # H7.25: the Pi's node exporter, the version the cluster DaemonSet's image pins
