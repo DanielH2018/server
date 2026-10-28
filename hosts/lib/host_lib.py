@@ -188,7 +188,9 @@ def install_excepthook() -> None:
     sys.excepthook = hook
 
 
-def write_textfile(path: str, text: str | bytes, mode: int = 0o644) -> None:
+def write_textfile(
+    path: str | os.PathLike[str], text: str | bytes, mode: int = 0o644
+) -> None:
     """Replace `path` with `text` atomically, at `mode`, for a reader polling the directory.
 
     The temp file is `mkstemp`'s, in the same directory, named `.<basename>.<random>`, so it

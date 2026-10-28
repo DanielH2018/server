@@ -15,6 +15,7 @@ import host_lib
 
 
 def test_host_lib_and_kuma_push_parse_with_the_3_12_grammar():
+    # fact: hosts/components/builder/CLAUDE.md#The signer and the publish (H3.5b)
     # The repository signer imports host_lib under daniel-box's /usr/bin/python3, which is 3.12
     # on Ubuntu 24.04 (#6202). A 3.14-only construct, such as an unparenthesised `except A, B:`,
     # would fail every signer run there and none here. pyproject.toml formats both for py312.

@@ -179,8 +179,9 @@ _SYSTEM_INTERPRETER_EXEMPT = {
     "homelab-repo-sign.service.j2": (
         "the signer cannot read the builder's pinned interpreter under its 0700 state "
         "directory, and a second uv install would be one more task that can fail the attended "
-        "apply. The script is stdlib-only, pyproject.toml formats it for py312, and "
-        "homelab_builder/tests/test_repo_signer.py parses it with the 3.12 grammar, as "
+        "apply. The script is stdlib-only, pyproject.toml formats it and the host_lib.py it "
+        "imports for py312, and homelab_builder/tests/test_repo_signer.py and "
+        "hosts/lib/tests/test_host_lib.py parse them with the 3.12 grammar, as "
         "homelab-reconcile is held"
     ),
 }
