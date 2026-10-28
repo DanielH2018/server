@@ -1,8 +1,9 @@
 """The `<tag>-prepull` directory: Jobs that pull a role's images onto its node before `<tag>` applies.
 
 A `Recreate` Deployment stops its old pod before the new pod's image pull starts, so a role
-whose image is large and whose registry is slow is down for the whole pull. code-server pulls
-851 MB from GHCR at about 0.28 MB/s, about 50 minutes (#5525). A role that sets
+whose image is large and whose registry is slow is down for the whole pull. During a slow-GHCR
+episode, code-server pulled 851 MB at about 0.28 MB/s, about 50 minutes (#5525); GHCR's normal
+rate is 44-98 MB/s (#5654). A role that sets
 `flux_prepull_timeout` in its `defaults/main.yml` gets `DIR/cluster/<tag>-prepull/`, which
 holds:
 
