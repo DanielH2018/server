@@ -238,6 +238,7 @@
 
 - name: Find the ansible.log files the removed log_path left in each checkout
   tags: [crons, ansible-log]
+  when: has_repo_checkout
   # ansible.cfg set `log_path = ./ansible.log` until #6217, so the primary checkout and every
   # `.claude/worktrees/<name>` checkout grew their own copy, and a `--diff` run wrote rendered
   # bodies into it. Nothing writes the file any more; this and the task below delete the copies
@@ -256,6 +257,7 @@
 
 - name: Delete the ansible.log files the removed log_path left behind
   tags: [crons, ansible-log]
+  when: has_repo_checkout
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
