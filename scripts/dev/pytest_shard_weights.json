@@ -37,7 +37,7 @@
  ".claude/hooks/tests/test_session_health_manual_plane.py": 0.0,
  ".claude/hooks/tests/test_session_health_master_moved.py": 0.0,
  ".claude/hooks/tests/test_session_health_module_scope_import.py": 0.07,
- ".claude/hooks/tests/test_session_health_no_wall_clock_bound.py": 0.06,
+ ".claude/hooks/tests/test_session_health_no_wall_clock_bound.py": 0.19,
  ".claude/hooks/tests/test_session_health_other_sessions.py": 0.0,
  ".claude/hooks/tests/test_session_health_parked_deployer.py": 0.0,
  ".claude/hooks/tests/test_setup_wiring.py": 0.01,
