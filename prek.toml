@@ -623,10 +623,27 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 [[repos.hooks]]
 id = "static-ratchet-tests"
 name = "Static ratchet tests (module length, facts.lock, shard partition, doc fragments, role CLAUDE.md, census rows)"
-entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_facts_lock_matches_tree.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py ansible/tests/repo/test_role_claude_md.py ansible/tests/repo/test_census_rows_python.py scripts/tests/test_census_rows_test_modules.py scripts/tests/test_census_rows_test_renders.py ansible/tests/repo/test_census_rows_suite.py ansible/tests/repo/test_census_rows_roles.py ansible/tests/repo/test_census_rows_text.py ansible/tests/repo/test_census_rows_layout.py"
+entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_facts_lock_matches_tree.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py ansible/tests/repo/test_role_claude_md.py ansible/tests/repo/test_census_rows_python.py ansible/tests/repo/test_census_rows_suite.py ansible/tests/repo/test_census_rows_roles.py ansible/tests/repo/test_census_rows_text.py ansible/tests/repo/test_census_rows_layout.py"
 language = "system"
 pass_filenames = false
 files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$|^ansible/roles/[^/]+/[^/]+/(templates|defaults|files)/|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/)"
+
+# The two census modules over the pytest-only modules, `_test_module_rules.pytest_only_modules`:
+# the git and subprocess rows and the render-and-path rows. They were the slowest two in the
+# hook above, about 3.8s and 6.5s alone with `-n0` on daniel-box, and under `--dist loadscope`
+# the slowest module bounds a hook (#5599). Their census reads only the tracked modules
+# `is_pytest_only` accepts under a test root, so the gate is those paths (a `test_*.py`, a
+# `conftest.py`, anything under a `tests/` directory), the import closure the two modules
+# reach through scripts/lib and ansible/tests, and pyproject.toml and uv.lock. A commit that
+# touches only non-test `.py` outside scripts/lib/ skips both. `-n 2` puts one module on each
+# worker; `-n auto` would bring up workers that sit idle.
+[[repos.hooks]]
+id = "static-ratchet-tests-test-modules"
+name = "Census rows over the pytest-only modules (git, subprocess, render and path helpers)"
+entry = "uv run --frozen pytest -q -n 2 -p no:cacheprovider scripts/tests/test_census_rows_test_modules.py scripts/tests/test_census_rows_test_renders.py"
+language = "system"
+pass_filenames = false
+files = "^((scripts|ansible/tests|ansible/roles|\\.claude/hooks|\\.claude/tests|evals)/(.*/)?((test_[^/]*|conftest)\\.py|tests/.*\\.py)|ansible/tests/[^/]+\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Eleven more cheap ratchet and census modules, which failed 15 PR runs across 13 PRs between
 # 2026-10-15 and 2026-10-17 (#5481). They sit in sibling hooks rather than in the entry above,
