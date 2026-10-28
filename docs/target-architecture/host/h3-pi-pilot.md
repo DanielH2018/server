@@ -96,8 +96,9 @@ printed nothing, and `/usr/lib/homelab/bin/` holds `chezmoi` and `sops`.
 PR H3.12, staged rollout: the PR that carries this line. It adds the gate, the `canary` reason and
 the root-owned `release` override to the builder, and `PROMETHEUS_URLS` to its settings file. It
 changes nothing while the Pi is the only host with a package.
-PR H3.13, the daily fallback: owed only if the Pi moves to the daily schedule (step H3.13). The
-Pi's drop-in fires every 15 minutes, so no PR has taken it.
+PR H3.13, the daily fallback: undecided. It is owed only if the Pi's memory peaks cross the
+*Risks* threshold, and [#5206](https://github.com/DanielH2018/server/issues/5206) still owes those
+peaks (step H3.13).
 
 Depends on: R1
 Unblocks: H4, H5
@@ -986,8 +987,9 @@ publishes a second host package.
   questions* 10).
 - **The Pi leads the order only while it fires more than once a day.** Under the daily
   fallback schedule (*Risks*, apt memory), a Pi canary would hold every other host for up
-  to a day and trip the lag arm. The fallback is not taken, so `CANARY_ORDER` puts the Pi
-  first. Step H3.13 owns moving daniel-server ahead of it if the fallback is ever taken.
+  to a day and trip the lag arm. The Pi runs the 15-minute schedule, so `CANARY_ORDER`
+  puts the Pi first. Step H3.13 owns moving daniel-server ahead of it if the fallback is
+  taken.
 
 ### CI (builds, never signs)
 
@@ -1807,14 +1809,16 @@ says otherwise.
       adds whatever row the defaults-read census in
       `ansible/tests/setup/test_setup_cross_role_files.py` requires for that read.
     - Add the root-owned `release` override and its runbook step.
-15. **H3.13 The daily fallback, only if the Pi's memory peaks call for it.** No PR owes
-    this step while the Pi's drop-in,
-    `hosts/daniel-pi/units/homelab-updater.timer.conf`, fires every 15 minutes. H3.9b
-    armed that schedule, so the fallback was not taken. The trigger is the threshold in
-    *Risks*, apt memory, applied to the four peaks that
-    [#5206](https://github.com/DanielH2018/server/issues/5206) records. The one PR that
-    moves the Pi to the daily schedule makes every change below, because each half alone
-    leaves the rollout or the paging wrong:
+15. **H3.13 The daily fallback, only if the Pi's memory peaks call for it.** The trigger
+    is the threshold in *Risks*, apt memory. Nobody has evaluated it yet, because the
+    four peaks are unmeasured: H3.6 did not record them, and
+    [#5206](https://github.com/DanielH2018/server/issues/5206) owes them. Until then the
+    Pi runs the 15-minute drop-in that H3.9b armed,
+    `hosts/daniel-pi/units/homelab-updater.timer.conf`. The PR that records the peaks
+    decides this step. It applies the threshold and records the verdict in this step. If a
+    peak crosses the threshold, it opens the follow-up that takes the fallback. That
+    follow-up makes every change below in one PR, because each half alone leaves the
+    rollout or the paging wrong:
     - Move the Pi's drop-in to once a day at 00:30.
     - Raise daniel-pi's `limit_seconds` in `observability_expected_hosts` past a day, with
       the matching `HostUpdateStale` rule in `host-checks.yaml`.
