@@ -3,7 +3,7 @@
 The chain has four links in three languages, and every break in it is SILENT — Grafana renders
 an annotation query that matches nothing exactly as it renders one with no deploys to show:
 
-    deploy.sh / gitops_deploy.py  --logger-->  syslog
+    deploy.sh                     --logger-->  syslog
     promote.py land-wait          --logger-->  syslog  (promote_lib/wait.py, flux_host.py)
     the soak Job (flux_soak.py)   --stdout-->  its pod log, the cluster's annotation (D5.3b3)
     alloy                         --ships-->   loki-homelab
@@ -32,14 +32,12 @@ _DASHBOARDS = "grafana-dashboards.yaml.j2"
 _DEPLOY_UNDER_LOCKS = _REPO / "scripts/deploy_tools/deploy_lib/under_locks.py"
 _DEPLOY_PLAYBOOK = _REPO / "scripts/deploy_tools/deploy_lib/playbook.py"
 _DEPLOY_DETACH = _REPO / "scripts/deploy_tools/deploy_lib/detach_run.py"
-# emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
-_GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py"
 # A Flux promotion that land.sh waited on: `land-wait` builds the line, and `FluxHost.log`
 # runs `logger`, because promote_lib/wait.py starts no subprocess itself.
 _PROMOTE = _REPO / "scripts/deploy_tools/promote_lib/wait.py"
 _FLUX_HOST = _REPO / "scripts/deploy_tools/flux_host.py"
-_EMITTERS = (_DEPLOY_PLAYBOOK, _GITOPS, _PROMOTE)
-# The three host emitters build the line with `host_lib.deploy_event` (#6164), so the literal the
+_EMITTERS = (_DEPLOY_PLAYBOOK, _PROMOTE)
+# The two host emitters build the line with `host_lib.deploy_event` (#6164), so the literal the
 # query filters on is that function's, and each emitter must call it.
 # The soak Job prints the cluster's line, which a second query reads from its pod log.
 _SOAK = _REPO / "ansible/roles/k8s/manifests/files/flux_soak.py"
@@ -48,7 +46,7 @@ _SOAK = _REPO / "ansible/roles/k8s/manifests/files/flux_soak.py"
 def test_the_query_matches_what_the_deployers_actually_log():
     """The join that nothing else can check.
 
-    Both emitters and the annotation query are edited independently, in different languages. If
+    The emitters and the annotation query are edited independently, in different languages. If
     the line filter in the expr stops matching the text `logger` writes, every board keeps
     rendering and silently shows no deploys.
     """
@@ -126,12 +124,12 @@ def test_the_datasource_uid_matches_the_provisioned_one():
 
 def test_both_deploy_paths_annotate():
     """One emitter alone means the dashboards show part of the deploys, which is worse than
-    none — an operator would read the gaps as "nothing was deployed then". A Flux promotion is
-    the third path: `land-wait` annotates it with `source=promote` once it settles. The name
-    predates it and stays, because docs/target-architecture/deploy/d6-delete-old-path.md
-    cites it."""
+    none — an operator would read the gaps as "nothing was deployed then". `deploy.sh`
+    annotates a hand deploy, and `land-wait` annotates a Flux promotion with
+    `source=promote` once it settles. The GitOps deployer's emitter went with its k8s arms in
+    D6.12; the name predates that and stays, because
+    docs/target-architecture/deploy/d6-delete-old-path.md cites it."""
     assert "def annotate(" in _DEPLOY_PLAYBOOK.read_text()
-    assert "emit_deploy_annotation" in _GITOPS.read_text()
     promote = _PROMOTE.read_text()
     assert "def annotate_promotion(" in promote and 'source="promote"' in promote
     assert '"deploy-annotation"' in promote
@@ -182,12 +180,6 @@ def test_annotating_can_never_fail_a_good_deploy():
     annotate = python.split("def annotate(", 1)[1].split("\ndef ", 1)[0]
     assert "contextlib.suppress(OSError)" in annotate, (
         "the wrapper's emitter must swallow a missing or failing logger"
-    )
-
-    gitops = _GITOPS.read_text()
-    impl = gitops.split("def emit_deploy_annotation(", 1)[1].split("\ndef ", 1)[0]
-    assert "except Exception" in impl, (
-        "the gitops emitter must swallow its own failures"
     )
 
     flux_host = _FLUX_HOST.read_text()

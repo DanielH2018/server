@@ -1,5 +1,5 @@
 {
-  "checksum": "44302be106280c67132726d536a6a30badc502f9218d7cc22ec2f588ae6bb8f5",
+  "checksum": "e8647309869014e7c8b14d5b88fe7fd74231762db393e4db1d6b4effc7adb8e7",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#Review & Memory Hygiene (making judgment cumulative)",
   "row": {
@@ -9,6 +9,6 @@
       "docs/claude-agent-user.md": "2406c931c957af4700b44d61857808bff08d543a53baa319af3b24878d32f070"
     },
     "python": "3.14",
-    "verified_sha": "c071becad"
+    "verified_sha": "a7dccd77d"
   }
 }

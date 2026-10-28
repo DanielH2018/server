@@ -15,7 +15,6 @@ see `deploy_io.py`'s docstring for why.
 """
 
 from deployer_lib.deploy_failtext import TimedOutWithOutput, failing_task, head, tail
-from deployer_lib.deploy_remediation import k8s_remediation
 from gitops_markers import HOLD_CLEAR_CMD, PLAYBOOK_CMD
 
 # Per-alert budget for an embedded error string. host_lib.discord_post cuts a post at
@@ -97,16 +96,13 @@ def broad_failure_alert(
     tags: list[str],
     origin: str,
     exc: BaseException,
-    bumps: set[str],
 ) -> str:
     """The post for a failed broad apply.
 
     A function rather than an inline f-string so the 1900-char budget it is sized against is
-    testable — see tests/test_gitops_deploy_failure_output.py. `bumps`: no later range has them.
+    testable — see tests/test_gitops_deploy_failure_output.py.
     """
     tag_note = f" --tags `{','.join(tags)}`" if tags else ""
-    bump_cmd = f'`./scripts/deploy.sh --tags "{",".join(sorted(bumps))}"`'
-    bump_note = f"**Image bumps not deployed**; after the plane, run {bump_cmd}.\n"
     return (
         f"🚨 gitops-deploy: **broad apply failed** on {hostname}.\n"
         f"`{playbook}`{tag_note} errored on `{origin[:8]}`:\n"
@@ -114,7 +110,6 @@ def broad_failure_alert(
         f"The tree is fast-forwarded and the plane is **unapplied**. This arm is "
         f"forward-only — **nothing was rolled back**, so live state is whatever the "
         f"failed run left.\n"
-        f"{bump_note if bumps else ''}"
         f"**Action:** fix forward and re-run that playbook by hand. A later tick clears each "
         f"held plane by applying it or deploying the services it tags. "
         f"{hold_clear_note(origin)}"
@@ -185,21 +180,6 @@ def tasks_deferred_alert(origin: str, services: set[str]) -> str:
     )
 
 
-def k8s_deferred_alert(
-    origin: str, k8s: set[str], declared_k8s: set[str], consumers: set[str] | None
-) -> str:
-    """The post for a k8s role change this tick did not deploy.
-
-    The remediation half is `deploy_remediation.k8s_remediation`, which decides whether the
-    change can be named as a `--tags` redeploy at all.
-    """
-    return (
-        f"⚠️ gitops-deploy: k8s role(s) `{', '.join(sorted(k8s))}` changed in "
-        f"`{origin[:8]}` — fast-forwarded but **not applied** (a k8s change is defer-and-"
-        f"alert unless this tick deployed it as a `k8s_autodeploy` image bump). "
-    ) + k8s_remediation(k8s, declared_k8s, consumers)
-
-
 def dirty_tree_alert(hostname: str) -> str:
     """The twice-daily reminder that an operator's edit is parking this host."""
     return (
@@ -214,65 +194,4 @@ def ci_failed_alert(hostname: str, local: str, origin: str) -> str:
         f"⛔ gitops-deploy: CI is RED on `{origin[:8]}` — NOT deploying on {hostname}. "
         f"The host stays on `{local[:8]}` until master is green; fix forward or revert. "
         "(GitOps Status pages separately once the host has been behind for 6h.)"
-    )
-
-
-def stale_denylist_alert(origin: str, detail: str, fix: str) -> str:
-    """The post for a config.env denylist that disagrees with the declarations at origin."""
-    return (
-        f"⚠️ gitops-deploy: `/etc/gitops-deploy/config.env` denylist is stale against "
-        f"`{origin[:8]}` — {detail}. k8s auto-deploy is DISARMED until this is fixed: "
-        f"{fix}."
-    )
-
-
-def k8s_failure_alert(
-    hostname: str,
-    local: str,
-    origin: str,
-    services: set[str],
-    exc: BaseException,
-    revert_note: str,
-) -> str:
-    """The post for a k8s deploy that failed its rollout gate and was rolled back."""
-    return (
-        f"🚨 gitops-deploy: **k8s deploy failed** on {hostname}.\n"
-        f"`{', '.join(sorted(services))}` from `{origin[:8]}` failed its rollout "
-        f"gate:\n```\n{alert_excerpt(exc)}\n```\n"
-        f"Rolled back locally to `{local[:8]}`.\n"
-        f"{revert_note}"
-        f"**The bad pin is still live on master.** The hold only skips THIS commit — "
-        f"`skip_hold` matches while `origin_head == hold_sha`, so the next push past it "
-        f"redeploys the same pin.\n"
-        f"**Action:** revert the offending commit on the remote, or pin the bad version "
-        f"out via Renovate `allowedVersions`."
-    )
-
-
-def broad_k8s_failure_alert(
-    hostname: str,
-    origin: str,
-    services: set[str],
-    exc: BaseException,
-    hold_file: str,
-) -> str:
-    """The post for a promoted image bump that failed inside a BROAD tick.
-
-    Distinct from `k8s_failure_alert` because nothing was rolled back and nothing will be:
-    the reset `_rollback_k8s` performs would leave the tree claiming the old commit over an
-    applied setup plane, and a maintenance-mode hint would chase a revert that never ran.
-    """
-    return (
-        f"🚨 gitops-deploy: **k8s deploy failed on a broad tick** on {hostname}.\n"
-        f"The image bumps from `{origin[:8]}` failed:\n"
-        f"```\n{alert_excerpt(exc)}\n```\n"
-        f"**Nothing was rolled back.** The broad plane applied first on this tick, so the "
-        f"reset a k8s rollback performs would strand that apply against a tree claiming the "
-        f"old commit. The tree stays fast-forwarded and `{hold_file}` holds the SHA.\n"
-        f"The pre-apply Longhorn snapshot WAS taken for any service declaring "
-        f"`k8s_autodeploy_snapshot_pvcs` — `k8s/manifests` takes it on every apply — so a "
-        f"revert is available by hand.\n"
-        f"**Action:** fix forward on master, or redeploy by hand with "
-        f'`./scripts/deploy.sh --tags "{",".join(sorted(services))}"`. A later tick that '
-        f"deploys these services clears their held plane. {hold_clear_note(origin)}"
     )

@@ -80,7 +80,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # The comment-only read of a k8s role's defaults is the deployer's own, so a path the tick
 # drops as no change cannot read stale here (#4460).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from deployer_lib.deploy_k8s import comment_only_k8s_defaults
+from deployer_lib.deploy_changes import comment_only_k8s_defaults
 
 # A changed line, stripped of its diff marker and indentation, that a real run cannot see on
 # its own. The `when:` forms are NOT here: they are conditions, and the comparison below is

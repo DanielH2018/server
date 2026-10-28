@@ -22,7 +22,6 @@ import pytest
 from deployer_lib import deploy_alerts
 from deployer_lib import deploy_state
 from deployer_lib.deploy_changes import ChangeSet
-from deployer_lib.deploy_remediation import k8s_remediation
 from deployer_lib.deploy_toolbox import DeployTools
 from gitops_markers import parse_alerted
 
@@ -134,7 +133,7 @@ def test_no_secrets_change_pages_nothing(gitops_deploy, state_dir, settings, sta
     assert _alerted(state_dir, "secrets") is None
 
 
-# ── alert_deferred(): tasks and k8s channels ──────────────────────────────────────────────────
+# ── alert_deferred(): the tasks channel ──────────────────────────────────────────────────
 def test_an_empty_changeset_pages_nothing(gitops_deploy, state_dir, settings, state):
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, set(), ChangeSet())
@@ -168,51 +167,13 @@ def test_a_structural_change_that_rode_its_own_redeploy_is_not_flagged(
     assert seen == []
 
 
-def test_a_k8s_change_pages_with_the_remediation_for_this_host(
-    gitops_deploy, state_dir, settings, state
-):
-    tools, seen = _posts(state_dir)
-    cs = ChangeSet(k8s={"sonarr"})
-    deploy_alerts.alert_deferred(
-        tools, state, settings, ORIGIN, set(), cs, declared_k8s={"sonarr"}
-    )
-    ((key, content),) = seen
-    assert key == f"k8s:{ORIGIN}"
-    assert "`sonarr`" in content and ORIGIN[:8] in content
-    assert content.endswith(k8s_remediation({"sonarr"}, {"sonarr"}, set()))
-    assert _alerted(state_dir, "k8s") == ORIGIN
-
-
-def test_a_k8s_change_is_flagged_even_when_something_else_deployed(
-    gitops_deploy, state_dir, settings, state
-):
-    # Unlike tasks/meta there is no `- deployed` subtraction: this deployer never applies a k8s
-    # role through deploy(cs.services), so nothing a k8s change could have ridden.
-    tools, seen = _posts(state_dir)
-    deploy_alerts.alert_deferred(
-        tools,
-        state,
-        settings,
-        ORIGIN,
-        {"sonarr"},
-        ChangeSet(services={"sonarr"}, k8s={"sonarr"}),
-        {"sonarr"},
-    )
-    assert [key for key, _ in seen] == [f"k8s:{ORIGIN}"]
-
-
-def test_an_unread_inventory_prescribes_the_full_deploy(
-    gitops_deploy, state_dir, settings, state
-):
-    # declared_k8s=None is the caller that has not read host_vars. Treated as the empty set,
-    # every changed role reads as untaggable and the remediation is the full deploy: slower,
-    # but a `--tags` line for a role with no entry exits 0 having applied nothing.
+def test_a_k8s_change_pages_nothing(gitops_deploy, state_dir, settings, state):
+    """No tick applies a k8s role since D6.12, so a k8s change has no channel to page on."""
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_deferred(
         tools, state, settings, ORIGIN, set(), ChangeSet(k8s={"sonarr"})
     )
-    ((_key, content),) = seen
-    assert content.endswith(k8s_remediation({"sonarr"}, set(), set()))
+    assert seen == []
 
 
 # ── DeployerState.record_behind(): the behind-origin marker ───────────────────────────────────

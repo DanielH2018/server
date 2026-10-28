@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from validate import cross_plane_order as gate
+from validate import render_diff_gates as gate
 
 
 def test_the_snapshot_sets_the_revision_by_env_and_passes_no_flag(monkeypatch):

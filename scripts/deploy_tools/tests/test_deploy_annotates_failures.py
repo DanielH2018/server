@@ -46,7 +46,6 @@ def test_a_detached_deploy_annotates_its_result(tmp_path, status, marks):
         run_playbook=lambda _run: status,
         annotate=lambda _run: seen.append("ok"),
         annotate_failure=lambda _run, _duration: seen.append("fail"),
-        discharge=lambda _root: None,
         notify=lambda *_a: status,
     )
     run = deploy_under_locks.Run(

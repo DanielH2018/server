@@ -33,8 +33,8 @@ FILES = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"
 # The `deploy_*` modules live in this namespace package beside the entry point (#4355). ALLOWED
 # keys every module by its stem, wherever it sits.
 PACKAGE = "deployer_lib"
-# The three modules every caller reaches QUALIFIED — `deploy_io.deploy_k8s(...)` after
-# `from deployer_lib import deploy_io`, never `from deployer_lib.deploy_io import deploy_k8s`. The role's CLAUDE.md states the rule; this is its guard.
+# The three modules every caller reaches QUALIFIED — `deploy_io.deploy_broad(...)` after
+# `from deployer_lib import deploy_io`, never `from deployer_lib.deploy_io import deploy_broad`. The role's CLAUDE.md states the rule; this is its guard.
 QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 
 
@@ -165,7 +165,7 @@ def test_no_leaf_imports_the_entry_module():
 
 
 def test_deploy_io_and_deploy_alerts_are_reached_qualified():
-    """`deploy_io.deploy_k8s(...)`, never `from deploy_io import deploy_k8s`.
+    """`deploy_io.deploy_broad(...)`, never `from deploy_io import deploy_broad`.
 
     Those two modules are the deployer's I/O surface, and the suite reads the argv their
     functions build. A from-import binds a second name for one of them, which a reader

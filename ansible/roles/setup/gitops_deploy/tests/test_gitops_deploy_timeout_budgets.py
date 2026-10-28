@@ -1,15 +1,14 @@
 """The cross-file timeout sums nothing else pins.
 
-"The rollback survives max flock contention" is split across defaults/main.yml (the k8s deploy,
-rollback budgets) and gitops-deploy.service.j2 (the flock wait and
-TimeoutStartSec). Four other jobs wait on the same
-lock, so every one of their waits must clear the deployer's worst hold. That
-K8S_ROLLBACK_TIMEOUT_S covers one full revert cycle is test_gitops_deploy_k8s_rollback_budget.py's. Every
-value is read from its source rather than pinned, so a bump to any one of them fails here
-instead of silently reopening the gap.
+"The deployer's apply survives max flock contention" is split across defaults/main.yml (the
+broad apply budget) and gitops-deploy.service.j2 (the flock wait and TimeoutStartSec). Four
+other jobs wait on the same lock, so every one of their waits must clear the deployer's worst
+hold. Every value is read from its source rather than pinned, so a bump to any one of them
+fails here instead of silently reopening the gap.
 
-The forward cap is derived the same way as the rollback budget: from the worst promoted role's
-own waits, plus a lock-wait allowance and playbook overhead.
+Since D6.12 deleted the k8s path, the broad apply is the one phase a tick runs under the lock:
+the forward k8s deploy and its rollback, the two terms these sums were first built for, are
+gone with their budgets.
 
 The lock waiters are checked as a CENSUS (`_LOCK_WAITERS`) rather than one test each. A
 per-consumer test only ever covers the consumers somebody remembered to write one for.
@@ -22,23 +21,17 @@ import re
 
 import pytest
 import yaml
-from deployer_lib.deploy_changes import ChangeSet
-from deployer_lib.deploy_inventory import route_not_ansible_owned, service_owners
 
-from lib.repo_paths import ALL_VARS, HOST_VARS
 from lib.repo_paths import REPO as _REPO
 
-
-from _helpers import manifests_rollout_timeout_s
 from _shell_render import rendered_shell_text
-from _role_tasks import in_role_wait_s
 
-# Each phase budget is measured from the moment its phase starts, which is AFTER flock acquires,
-# while TimeoutStartSec counts from unit activation and so INCLUDES the flock wait. The worst case
-# is therefore flock_wait + the summed phase budgets, and it must fit inside TimeoutStartSec, else
-# systemd SIGTERMs the deployer mid-rollback and the bad commit is stranded live. Nothing else pins the cross-file sum, so a later bump to
-# any one value would silently reopen it while every other test stays green — the same class the
-# write_hold / divergence-marker guards pin.
+# The phase budget is measured from the moment its phase starts, which is AFTER flock acquires,
+# while TimeoutStartSec counts from unit activation and so INCLUDES the flock wait. The worst
+# case is therefore flock_wait + the phase budget, and it must fit inside TimeoutStartSec, else
+# systemd SIGTERMs the deployer mid-apply with no hold written. Nothing else pins the cross-file
+# sum, so a later bump to any one value would silently reopen it while every other test stays
+# green.
 
 _TEMPLATES = pathlib.Path(__file__).parents[1] / "templates"
 
@@ -56,48 +49,32 @@ def _systemd_seconds(span: str) -> int:
     return int(m.group(1)) * (60 if m.group(2) in ("min", "m") else 1)
 
 
-# On the k8s path a failed forward deploy and its rollback redeploy run SEQUENTIALLY inside one
-# systemd unit activation, each bounded by its own K8S_DEPLOY_TIMEOUT_S / K8S_ROLLBACK_TIMEOUT_S.
-# Both values are Jinja references in config.env.j2, not literals, so this reads their source —
+# The value is a Jinja reference in config.env.j2, not a literal, so this reads its source —
 # defaults/main.yml — instead of the rendered template.
-
 _DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
 
 
 def _worst_lock_hold(defaults: dict) -> int:
-    """The two k8s-path terms of the git-tree lock hold, EXCLUDING this unit's own flock wait
-    (which is spent before the lock is held).
+    """The git-tree lock hold of one activation, EXCLUDING this unit's own flock wait.
 
-    Both terms are on the SAME path and are additive, not alternative: a failed forward deploy
-    is followed by its rollback redeploy inside one activation, so an activation that stalls
-    both playbook budgets spends both in sequence. The BROAD arm returns before that block and
-    so cannot stack with either.
+    The broad arm is the one phase left: `BROAD_DEPLOY_TIMEOUT_S` bounds its whole apply loop
+    (`deploy_handlers.handle_broad`), and the arm is forward-only, so no rollback budget
+    stacks on top.
 
-    Each term bounds its phase WHOLE: since ADR-0017 a k8s phase also waits for one service lock
-    per tag, and it waits while this unit holds the git-tree lock. `deploy_locks.locked_budget`
-    is what keeps the term true — it shares one deadline between that wait and the playbook, so
-    a phase queued behind an operator's deploy still cannot hold the lock for longer than its
-    own timeout. Give the wait a budget of its own and every k8s term here doubles while this
-    file keeps reading green;
+    The term bounds its phase WHOLE: since ADR-0017 an apply also waits for its service locks,
+    and it waits while this unit holds the git-tree lock. `deploy_locks.locked_budget` is what
+    keeps the term true — it shares one deadline between that wait and the playbook.
     `ansible/tests/deploy/test_deploy_runs_from_a_snapshot_under_service_locks.py::test_a_budgeted_deploy_shares_one_deadline_between_its_wait_and_its_run`
-    is the guard that fails instead.
-
-    EVERY phase budget on this path is counted, whether or not the feature that spends it is
-    on today. A budget that only holds while a feature is off is not a budget — that reading is
-    exactly how the 2026-08-29 review's H-1 got in: the staging gate's 1200 + 180 sat unsummed
-    inside a 2700s ceiling and every check read green. The staging terms themselves are gone
-    with the gate (#2859).
+    is the guard that fails if the wait gets a budget of its own.
     """
-    return int(defaults["gitops_deploy_k8s_timeout_s"]) + int(
-        defaults["gitops_deploy_k8s_rollback_timeout_s"]
-    )
+    return int(defaults["gitops_deploy_broad_timeout_s"])
 
 
 def _budget_fits(defaults: dict, flock_wait: int, timeout_start: int) -> bool:
     return flock_wait + _worst_lock_hold(defaults) <= timeout_start
 
 
-def test_k8s_deploy_timeout_budget_survives_max_flock_contention():
+def test_the_deployers_hold_survives_max_flock_contention():
     unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()
     defaults = yaml.safe_load(_DEFAULTS.read_text())
     flock_wait = int(_search1(r"^ExecStart=.*?flock\s+-w\s+(\d+)", unit))
@@ -105,32 +82,22 @@ def test_k8s_deploy_timeout_budget_survives_max_flock_contention():
     hold = _worst_lock_hold(defaults)
     assert _budget_fits(defaults, flock_wait, timeout_start), (
         f"flock -w {flock_wait} + the worst-case lock hold {hold}s "
-        f"(K8S_DEPLOY_TIMEOUT_S + K8S_ROLLBACK_TIMEOUT_S) = "
-        f"{flock_wait + hold}s must fit inside TimeoutStartSec {timeout_start}s, or a stalled "
-        f"forward deploy followed by a stalled rollback gets SIGTERMed mid-rollback, stranding "
-        f"the bad commit live with the volume revert possibly half-done (task 6b)."
+        f"(BROAD_DEPLOY_TIMEOUT_S) = {flock_wait + hold}s must fit inside TimeoutStartSec "
+        f"{timeout_start}s, or a stalled broad apply gets SIGTERMed with no hold written."
     )
 
 
 def test_a_budget_that_outgrows_the_ceiling_is_caught():
-    # Red proof for the three budget tests that share _worst_lock_hold. They can only ever be
-    # observed passing, so this drives the same verdict function with a shape that must fail:
-    # two phase budgets inside a 2700s ceiling that nothing sums them into.
-    sized = {
-        "gitops_deploy_k8s_timeout_s": 900,
-        "gitops_deploy_k8s_rollback_timeout_s": 1320,
-    }
-    assert _worst_lock_hold(sized) == 2220
-    assert _budget_fits(sized, 180, 3600)
+    # Red proof for the budget tests that share _worst_lock_hold. They can only ever be
+    # observed passing, so this drives the same verdict function with a shape that must fail.
+    sized = {"gitops_deploy_broad_timeout_s": 1800}
+    assert _worst_lock_hold(sized) == 1800
+    assert _budget_fits(sized, 180, 2700)
 
-    over = {
-        "gitops_deploy_k8s_timeout_s": 1800,
-        "gitops_deploy_k8s_rollback_timeout_s": 1800,
-    }
-    assert _worst_lock_hold(over) == 3600
+    over = {"gitops_deploy_broad_timeout_s": 3600}
     assert not _budget_fits(over, 180, 2700), (
-        "the budget check must REJECT a shape that overruns (180 + 1800 + 1800 = 3780s "
-        "against TimeoutStartSec 2700s); a check that passes it is measuring nothing."
+        "the budget check must REJECT a shape that overruns (180 + 3600 = 3780s against "
+        "TimeoutStartSec 2700s); a check that passes it is measuring nothing."
     )
 
 
@@ -192,14 +159,12 @@ def _waiter_text(path: pathlib.Path) -> str:
 @pytest.mark.parametrize("name", sorted(_LOCK_WAITERS))
 def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     # gitops-deploy.service wraps its whole ExecStart in the git-tree lock, and one
-    # activation runs the forward deploy budget and then, in the failure path, the rollback
-    # budget — sequentially, inside that one hold. A
-    # waiter that gives up early does not fail safe: it fires its unit's OnFailure= alert for
+    # activation runs the broad apply budget inside that one hold. A waiter that gives up early does not fail safe: it fires its unit's OnFailure= alert for
     # ordinary contention AND skips that run. For the weekly secret-rotate that means the next
     # attempt is +7 days, and ROTATE_LEAD_DAYS=8 against a 7-day cadence means a token usually
     # gets exactly one eligible run, so a skipped week can put a token overdue.
     #
-    # Derived from the same defaults the deployer reads, so bumping either budget fails this
+    # Derived from the same defaults the deployer reads, so bumping the budget fails this
     # instead of silently shortening every waiter at once.
     path, pattern = _LOCK_WAITERS[name]
     defaults = yaml.safe_load(_DEFAULTS.read_text())
@@ -208,224 +173,17 @@ def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     wait = int(_search1(pattern, _waiter_text(path)))
     assert wait >= worst_hold, (
         f"{name}'s git-tree lock wait of {wait}s must clear gitops-deploy's worst-case lock "
-        f"hold ({worst_hold}s: K8S_DEPLOY_TIMEOUT_S then K8S_ROLLBACK_TIMEOUT_S), or a "
-        f"legitimate long rollback makes this job skip a run "
+        f"hold ({worst_hold}s: BROAD_DEPLOY_TIMEOUT_S), or a "
+        f"legitimate long apply makes this job skip a run "
         f"and page for ordinary contention."
     )
 
 
 def test_a_short_lock_waiter_is_flagged():
     # Red proof for the parametrized test above, which can only ever be observed passing. This
-    # is a waiter at 2700 against the 2940s hold.
+    # is a waiter at 1200 against the 1800s hold.
     defaults = yaml.safe_load(_DEFAULTS.read_text())
-    assert 2700 < _worst_lock_hold(defaults), (
-        "the worst-case hold must exceed 2700 for this red proof to mean anything; if the "
-        "budgets shrank below it, re-derive this number rather than deleting the test."
-    )
-
-
-_K8S_ROLES_DIR = pathlib.Path(__file__).parents[3] / "k8s"
-
-
-def _rollout_timeout_s(role: str) -> int:
-    # Shared with ansible/tests/longhorn/test_rollback_timeout_budget.py and the inline-gate
-    # census. A literal read returns the shared default for a role that names its budget in a
-    # variable (sonarr), sizing a 660s service as a 300s one.
-    return manifests_rollout_timeout_s(_K8S_ROLES_DIR / role)
-
-
-# The in-role waits this derivation must find were netpol-baseline's probe Job, prowlarr's 300s
-# flaresolverr probe (#5594) and registry's 540s of self-test and netpol probe waits. Each
-# flip deleted its waits, and no Ansible-owned role waits in-role now.
-
-
-# The FORWARD deploy's own ceiling, derived the same way as the rollback's (in
-# test_gitops_deploy_k8s_rollback_budget.py) and from the
-# same role sources — minus the revert terms, which only the rollback run pays. One tick runs
-# `ansible-playbook --tags <promoted services>` under `locked_budget(services,
-# K8S_DEPLOY_TIMEOUT_S)`, and inside that one budget a promoted role pays, in sequence: the
-# pre-apply snapshot wait per declared claim, its OWN in-role waits, the drain's rollout wait,
-# and the stabilisation soak. The service-lock wait comes out of the same budget
-# (`deploy_locks.locked_budget`), so it is overhead on top of all four.
-#
-# Every second the cap grows is also a second of `_worst_lock_hold` above, so the census of
-# tree-lock waiters is what keeps a raise here from being done alone.
-#
-# Only an Ansible-owned role counts, as in the rollback derivation, and through the deployer's own
-# filter: `route_not_ansible_owned` moves each tag `service_owners` names to `cs.flux`, which the
-# tick never applies. Every promoted role is flux-owned since the D5 flips, so the live set is
-# empty and the cap is sized for a role handed back to Ansible. `_FORWARD_MUST_FIND` and the
-# fixture pair below are what show the derivation still reads the tree and the filter still bites.
-#
-# Within that set, EVERY promoted role is counted, not just the claim-declaring ones the rollback
-# derivation narrows to: a claim-free role still pays the other three terms. That widening costs this
-# derivation a guarantee the narrow one got for free — a claim-declaring role has a workload by
-# construction, and a claim-free one may have none. `roles/k8s/manifests` queues the drain only
-# when `manifests_rollout | default(manifests_service) | length > 0`, so a role passing
-# `manifests_rollout: ""` waits for no rollout however long its own
-# `manifests_rollout_timeout` reads. Counting the term anyway made netpol-baseline look like the
-# worst role in the repo at 970s when it pays 370s, and `manifests_rollout_timeout_s` cannot
-# see the difference: it reads the budget, not whether anything spends it.
-#
-# The forward sum also carries two terms no role declares. Both are allowances rather than
-# bounds, sized from a sonarr tick (27.8s in total, snapshot 4.74s, probe 0.27s):
-#
-#   - the service-lock wait, which `locked_budget` spends out of this same deadline. That tick
-#     showed a 70s gap consistent with one. A wait longer than the allowance does not strand
-#     anything: the run starts with less than it needs and, at worst, times out into
-#     `_rollback_k8s`, the same route a rollout timeout takes.
-#   - playbook overhead: start-up, fact gathering and renders, about 30s measured.
-#
-# The cap has to clear the worst role's ceiling plus both, or a slow prowlarr deploy is killed
-# by the cap mid-drain before its own 780s rollout timeout can fire.
-_FORWARD_LOCK_ALLOWANCE_S = 90
-_FORWARD_OVERHEAD_S = 60
-
-# The role the derivation must find, at the ceiling it must read, once its owner is dropped. Both
-# terms are found by pattern — the in-role waits by walking `tasks/`, the rollout term by looking
-# for an empty `manifests_rollout` — so a rename or a moved task would leave the sum quietly
-# smaller with every assertion below still green. prowlarr is the worst promoted role, and the one
-# the cap was sized against while its 300s isolation probe still ran (#5594 deleted it, leaving
-# 960s). It is flux-owned, so the live derivation skips it.
-_FORWARD_MUST_FIND = ("prowlarr", 960)
-
-
-def _ansible_owned(roles: set[str], owners: dict[str, str]) -> set[str]:
-    """The roles the deployer keeps in `cs.k8s` once it routes every owned tag to `cs.flux`."""
-    cs = ChangeSet(k8s=set(roles))
-    route_not_ansible_owned(cs, owners)
-    return cs.k8s
-
-
-def _live_owners() -> dict[str, str]:
-    return service_owners((HOST_VARS / "daniel-box.yml").read_text())
-
-
-def _waits_for_a_rollout(role: str) -> bool:
-    """Whether `roles/k8s/manifests` queues the drain for this role at all.
-
-    False for a role that passes `manifests_rollout: ""` — NetworkPolicies, a PVC, a ConfigMap
-    consumed by somebody else. Read off the role's own tasks rather than from the rendered
-    manifests, because the empty override is what the queueing task's `when` reads.
-    """
-    tasks = _K8S_ROLES_DIR / role / "tasks" / "main.yml"
-    text = tasks.read_text() if tasks.is_file() else ""
-    return 'manifests_rollout: ""' not in text
-
-
-def _forward_ceiling(
-    role: str, role_defaults: dict, snapshot_timeout: int, stabilise: int
-) -> int:
-    """One promoted role's worst case inside K8S_DEPLOY_TIMEOUT_S, excluding the lock wait."""
-    claims = role_defaults.get("k8s_autodeploy_snapshot_pvcs") or []
-    rollout = _rollout_timeout_s(role) if _waits_for_a_rollout(role) else 0
-    return len(claims) * snapshot_timeout + in_role_wait_s(role) + rollout + stabilise
-
-
-def _worst_forward_case(roles_dir, owners, ceiling_of) -> tuple[str, int]:
-    """The promoted, Ansible-owned role in `roles_dir` with the longest forward ceiling, and it.
-
-    A role whose tag `owners` names is skipped, as the deployer skips it. `ceiling_of(role,
-    role_defaults)` prices one role. Returns `("", 0)` when no role qualifies.
-    """
-    paths = {p.parent.parent.name: p for p in roles_dir.glob("*/defaults/main.yml")}
-    worst_role, worst = "", 0
-    for role in sorted(_ansible_owned(set(paths), owners)):
-        role_defaults = yaml.safe_load(paths[role].read_text()) or {}
-        if not role_defaults.get("k8s_autodeploy"):
-            continue
-        ceiling = ceiling_of(role, role_defaults)
-        if ceiling > worst:
-            worst_role, worst = role, ceiling
-    return worst_role, worst
-
-
-def _live_ceiling_of(snapshot_timeout: int, stabilise: int):
-    return lambda role, role_defaults: _forward_ceiling(
-        role, role_defaults, snapshot_timeout, stabilise
-    )
-
-
-def _forward_terms() -> tuple[int, int, int]:
-    """(snapshot timeout, stabilise soak, forward cap), each read from its own source."""
-    snapshot_defaults = yaml.safe_load(
-        (_K8S_ROLES_DIR / "volume-snapshot" / "defaults" / "main.yml").read_text()
-    )
-    all_vars = yaml.safe_load(ALL_VARS.read_text())
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
-    return (
-        int(snapshot_defaults["volume_snapshot_timeout"]),
-        int(all_vars["k8s_rollout_stabilise_seconds"]),
-        int(defaults["gitops_deploy_k8s_timeout_s"]),
-    )
-
-
-def _forward_fits(worst: int, cap: int) -> bool:
-    """Whether the worst role's forward ceiling, plus the lock allowance and overhead, fits the cap."""
-    return _FORWARD_LOCK_ALLOWANCE_S + worst + _FORWARD_OVERHEAD_S <= cap
-
-
-def test_the_forward_derivation_reads_the_must_find_role_once_its_owner_is_dropped():
-    snapshot_timeout, stabilise, _ = _forward_terms()
-    role, ceiling = _FORWARD_MUST_FIND
-    assert _live_owners().get(role) == "flux"
-    found = _worst_forward_case(
-        _K8S_ROLES_DIR, {}, _live_ceiling_of(snapshot_timeout, stabilise)
-    )
-    assert found == _FORWARD_MUST_FIND, (
-        f"with no owner filter the derivation reads {found}, not {role} at {ceiling}s "
-        f"({in_role_wait_s(role)}s of in-role waits, rollout "
-        f"{'counted' if _waits_for_a_rollout(role) else 'NOT counted'} at "
-        f"{_rollout_timeout_s(role)}s). A moved wait or a changed `manifests_rollout` reads as "
-        "a smaller sum here and leaves the fit check below green against a cap it outgrew."
-    )
-
-
-def _fixture_forward_case(roles_dir: pathlib.Path, owners: dict[str, str]):
-    # prowlarr's shape, priced flat at its 960s ceiling.
-    defaults = roles_dir / "widget" / "defaults" / "main.yml"
-    defaults.parent.mkdir(parents=True, exist_ok=True)
-    defaults.write_text("k8s_autodeploy: true\n")
-    return _worst_forward_case(roles_dir, owners, lambda _role, _defaults: 960)
-
-
-def test_an_ansible_owned_role_is_counted_in_the_forward_cap(tmp_path):
-    assert _fixture_forward_case(tmp_path, owners={}) == ("widget", 960)
-
-
-def test_a_flux_owned_role_is_left_out_of_the_forward_cap(tmp_path):
-    assert _fixture_forward_case(tmp_path, owners={"widget": "flux"}) == ("", 0)
-    assert _fixture_forward_case(tmp_path, owners={"widget": "released"}) == ("", 0)
-
-
-def test_the_forward_cap_covers_the_worst_promoted_role():
-    # The live set is empty since the D5 flips, so this holds at 0 until a role is handed back;
-    # the must-find test above is what keeps that from being a reader that found nothing.
-    snapshot_timeout, stabilise, cap = _forward_terms()
-    worst_role, worst = _worst_forward_case(
-        _K8S_ROLES_DIR, _live_owners(), _live_ceiling_of(snapshot_timeout, stabilise)
-    )
-    need = _FORWARD_LOCK_ALLOWANCE_S + worst + _FORWARD_OVERHEAD_S
-    assert _forward_fits(worst, cap), (
-        f"{worst_role} needs {need}s inside gitops_deploy_k8s_timeout_s ({cap}s): "
-        f"{_FORWARD_LOCK_ALLOWANCE_S}s lock allowance + {in_role_wait_s(worst_role)}s of "
-        f"in-role waits + {_rollout_timeout_s(worst_role)}s rollout + {stabilise}s soak + one "
-        f"{snapshot_timeout}s snapshot per declared claim + {_FORWARD_OVERHEAD_S}s overhead. "
-        f"A cap kill is a killpg MID-DRAIN that routes to _rollback_k8s (#2397). Raise the cap "
-        f"WITH all four tree-lock waiters and the unit's TimeoutStartSec, or shrink the role's "
-        f"waits; do not shrink the allowances to make the run green."
-    )
-
-
-def test_a_forward_ceiling_past_the_cap_is_caught():
-    # Red proof for the fit check above, which can only ever be observed passing. Driven on the
-    # verdict function the way `test_a_budget_that_outgrows_the_ceiling_is_caught` drives
-    # `_budget_fits`. The shape is prowlarr's 1260s against a 900s cap.
-    assert _forward_fits(1260, 1440)
-    assert not _forward_fits(1260, 900), (
-        "the fit check must REJECT prowlarr's 1260s against the pre-#2397 900s cap; a check "
-        "that passes it is measuring nothing"
-    )
-    assert not _forward_fits(1291, 1440), (
-        "the fit check must count the lock allowance and the overhead, not the role terms alone"
+    assert 1200 < _worst_lock_hold(defaults), (
+        "the worst-case hold must exceed 1200 for this red proof to mean anything; if the "
+        "budget shrank below it, re-derive this number rather than deleting the test."
     )

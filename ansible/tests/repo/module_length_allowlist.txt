@@ -35,8 +35,6 @@ ansible/tests/repo/test_census_rows_roles.py 414
 evals/ablate.py 456
 hosts/lib/k3s_gates.py 477  # conjoined: the host-side checks, the cluster checks and the modes share ReadError, Getter and the API path constants, and the script ships as the single stdlib file /usr/lib/homelab/k3s_gates.py, so a second module would be a second file every Plan's prepare and the restart unit must find
 scripts/backup/tests/test_longhorn_reap_logic.py 441
-scripts/deploy_tools/narrow_lib/order_only_runner.py 508
-scripts/deploy_tools/tests/test_digest_covers.py 435
 scripts/diagnostics/probe_lib/cli_parser.py 479
 scripts/lib/exit_codes.py 641  # conjoined: each family's constants and its CONTRACTS row are held to each other by test_exit_codes.py, so a family split out would import _c and Code from here and CONTRACTS would import it back; the readers of CONTRACTS live in exit_messages.py
 scripts/validate/host_package_cases.py 453

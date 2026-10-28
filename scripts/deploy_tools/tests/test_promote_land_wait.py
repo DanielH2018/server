@@ -249,50 +249,6 @@ def test_a_merge_not_yet_published_waits_on_every_name_until_it_is():
     assert sim.sleeps == 2
 
 
-# -- names forced past the digests (D3.4) ----------------------------------------------------
-
-
-def _cluster_vars_sim() -> Sim:
-    """A `cluster-vars.source`-only change: no digest moves between P and M.
-
-    `cluster-vars` reaches M on the second poll and its dependent `peanut` on the third.
-    `sonarr` depends on nothing and stays at P throughout.
-    """
-
-    def poll(cluster_vars: str, peanut: str) -> list[dict]:
-        return [
-            kustomization("homelab", f"master@sha1:{M}"),
-            kustomization("cluster-vars", f"master@sha1:{cluster_vars}"),
-            kustomization(
-                "peanut", f"master@sha1:{peanut}", depends_on=("cluster-vars",)
-            ),
-            kustomization("sonarr", f"master@sha1:{P}"),
-        ]
-
-    same = digests(cluster_vars="c", peanut="p", sonarr="s")
-    return Sim(polls=[poll(P, P), poll(M, P), poll(M, M)], published={M: same, P: same})
-
-
-def test_a_forced_name_waits_on_it_and_on_its_dependent():
-    sim = _cluster_vars_sim()
-    result = promote_wait.land_wait(
-        sim.reads(), M, [], also=frozenset({"cluster-vars"})
-    )
-    assert (result.verdict, result.revision) == ("settled", M)
-    assert sim.sleeps == 2
-
-
-def test_no_forced_name_waits_on_the_digests_alone():
-    """The control for the test above, not a test of `also`.
-
-    The same simulation settles at the first poll without `also`, so the two sleeps above
-    come from `also` and not from the digests or from `sonarr`.
-    """
-    sim = _cluster_vars_sim()
-    result = promote_wait.land_wait(sim.reads(), M, [])
-    assert result.verdict == "settled" and sim.sleeps == 0
-
-
 # -- the revision read -----------------------------------------------------------------------
 
 

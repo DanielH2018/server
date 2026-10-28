@@ -24,7 +24,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_shared_mapper_agree
 from deploy_tools.land_lib import land_shared
 from deploy_tools.land_lib import land_tags
 import reach
-from deployer_lib.deploy_k8s import k8s_roles_listed
 from deployer_lib.deploy_logic import services_from_changed_paths
 
 # One real path per shape the two mappers have to agree about. Real, because a made-up path
@@ -63,12 +62,11 @@ CORPUS = (
 def _shared_roles(path: str) -> set[str]:
     """The role(s) the deployer's shared mapper attributes one path to.
 
-    The three service-bearing fields are unioned because they are one question split by
-    platform and by auto-deploy eligibility: `services` is the Docker plane, `k8s` the
-    cluster plane, `k8s_deploy` the image-pin subset split out of `k8s`.
+    The two service-bearing fields are unioned because they are one question split by
+    platform: `services` is the Docker plane, `k8s` the cluster plane.
     """
     cs = services_from_changed_paths([path])
-    return set(cs.services) | set(cs.k8s) | set(cs.k8s_deploy)
+    return set(cs.services) | set(cs.k8s)
 
 
 def test_the_two_mappers_name_the_same_role_for_every_corpus_path():
@@ -121,13 +119,12 @@ def test_tag_for_is_narrower_than_role_for_and_that_is_the_reason_derive_keeps_i
     assert _shared_roles(shared) == {"manifests"}
 
 
-def test_both_sides_drop_a_k8s_role_whose_directory_is_gone(tmp_path):
-    """A deleted shared role owes nothing on either side (#3568).
+def test_the_landing_drops_a_k8s_role_whose_directory_is_gone(tmp_path):
+    """A deleted shared role owes nothing (#3568).
 
-    The mappers above are path-only and still name the role; each side then filters on the
-    tree. `land_shared.shared_roles` reads the role directory on disk, and the deployer's
-    `plan_tick` reads a `git ls-tree` at origin through `k8s_roles_listed`. Both are given the
-    same tree here: `manifests` present, `volume-claim` gone.
+    The mappers above are path-only and still name the role; `land_shared.shared_roles` then
+    filters on the role directory on disk. The deployer's own filter went with its k8s ledger
+    writer in D6.12. The tree here holds `manifests` and not `volume-claim`.
     """
     present, deleted = "manifests", "volume-claim"
     (tmp_path / "k8s" / present).mkdir(parents=True)
@@ -136,7 +133,5 @@ def test_both_sides_drop_a_k8s_role_whose_directory_is_gone(tmp_path):
         f"ansible/roles/k8s/{deleted}/tasks/main.yml",
     ]
     assert _shared_roles(paths[1]) == {deleted}, "the path-only mapper still names it"
-    listed = k8s_roles_listed(f"ansible/roles/k8s/{present}\n")
-    deployer = services_from_changed_paths(paths).k8s & listed
     landing = set(land_shared.shared_roles(paths, declared=set(), roles_root=tmp_path))
-    assert landing == deployer == {present}
+    assert landing == {present}

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from lib.git_testing import commit, init_repo
-from validate import cross_plane_order as gate
+from validate import render_diff_gates as gate
 
 TREES = ("ansible", "scripts", "hosts")
 

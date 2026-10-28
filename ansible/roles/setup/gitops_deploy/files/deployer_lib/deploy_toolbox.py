@@ -37,7 +37,6 @@ from functools import partial
 
 from deployer_lib import deploy_io
 from deployer_lib import deploy_narrow
-from deployer_lib import deploy_release
 from deployer_lib import deploy_setup_roles
 from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_git import ci_verdict, read_check_pages
@@ -154,8 +153,8 @@ class DeployTools:
     """Every boundary one tick crosses, so a test replaces a field and not a module.
 
     The defaults are production. `run` is the one that also reaches subprocess indirectly:
-    `deploy_io.deploy_k8s` and `deploy_broad` build their own argv and take `run=tools.run`,
-    so they are not fields here — the argv they build is what the suite asserts on, and a
+    `deploy_io.deploy_broad` builds its own argv and takes `run=tools.run`, so it is not a
+    field here — the argv they build is what the suite asserts on, and a
     field would replace the builder rather than the process.
     """
 
@@ -163,42 +162,14 @@ class DeployTools:
     git_fetch: Callable[[str, str], subprocess.CompletedProcess] = deploy_io.git_fetch
     git_status: Callable[[str], subprocess.CompletedProcess] = deploy_io.git_status
     is_ancestor: Callable[[str, str, str], bool] = deploy_io.is_ancestor
-    # The applied commit from a service's k8s release record, for the `k8s_unapplied`
-    # discharge. A field because the record is written by a DIFFERENT process — an operator's
-    # `deploy.sh` — so the suite has to script it rather than stage a file.
-    release_commit: Callable[[str], str | None] = deploy_release.release_commit
-    # The commit a matching render proves a service's applied bytes for (#3057), read from the
-    # render record an hourly producer writes. A field for the reason `release_commit` is one.
-    render_proof: Callable[[str], str | None] = deploy_release.render_proof
-    # The commit of that render record whether or not it matches, so a kept line can say
-    # whether the producer has reached the change (#5118).
-    render_commit: Callable[[str], str | None] = deploy_release.render_commit
-    # The render-digest verdicts at one commit, for the deploy-plane shadow log (#3045).
-    digest_diff: Callable[[str], dict[str, list[str]]] = deploy_release.digest_diff
-    # The tags whose deploy runs a shared role (#2643), which has no record of its own.
-    # A subprocess that parses YAML, so a field for the reason `narrow_setup_role` is one.
-    shared_role_callers: Callable[..., deploy_narrow.SharedCallers] = (
-        deploy_narrow.shared_role_callers
-    )
-    # The roles whose own render digest may discharge their line (#3110). A YAML-parsing
-    # subprocess too, and a field for the same reason.
-    digest_provable: Callable[..., set[str]] = deploy_narrow.digest_provable
-    # Which `ROLE:BASE:HEAD` ranges a matching render covers for a role that is not provable
-    # (#4781). A YAML-parsing subprocess too, and a field for the same reason.
-    digest_covers: Callable[..., set[str]] = deploy_narrow.digest_covers
     fetch_ci_verdict: Callable[[str], str] = _ci_unconfigured
     # Production default, unlike `fetch_ci_verdict` above: this one needs no `Config`.
     github_authenticated: Callable[[], bool] = github_authenticated
     discord_post: Callable[[str, str], bool] = post
     flush_discord_spool: Callable[[str, str], bool] = flush_spool
-    # The deploy-plane narrowing, which is a subprocess because the derivation parses YAML
-    # and this unit runs under `uv run --no-project`. A field rather than a qualified call,
-    # so the broad arm's tests script an exit code instead of a process.
-    narrow_deploy_plane: Callable[..., tuple[int, str]] = (
-        deploy_narrow.narrow_deploy_plane
-    )
-    # The setup-role narrowing, a subprocess for the same reason and a field for the same
-    # reason: `deploy_defer.record`'s tests script an exit code rather than a process.
+    # The setup-role narrowing, which is a subprocess because the derivation parses YAML and
+    # this unit runs under `uv run --no-project`. A field rather than a qualified call, so
+    # `deploy_defer.record`'s tests script an exit code rather than a process.
     narrow_setup_role: Callable[..., tuple[int, str]] = deploy_narrow.narrow_setup_role
     # Which playbook and tag apply each setup role (#3734): a subprocess that parses the
     # playbooks, and a field so a tick test scripts the routing rather than a process.
@@ -210,12 +181,6 @@ class DeployTools:
     secret_setup_readers: Callable[..., tuple[list[str], dict[str, list[str]]]] = (
         deploy_setup_roles.secret_setup_readers
     )
-    # Its deploy-plane half, the k8s tags reading a moved key (#5577), for the same reasons.
-    secret_k8s_readers: Callable[[str, str, str], tuple[int, str]] = (
-        deploy_setup_roles.secret_k8s_readers
-    )
-    # `(services, sha, result="ok", duration_s=None)`; see `deploy_io.emit_deploy_annotation`.
-    emit_deploy_annotation: Callable[..., None] = deploy_io.emit_deploy_annotation
     # `datetime.now`, NOT a zero-argument clock: `deploy_handlers.handle_dirty` calls it with
     # `CHICAGO`, so a `lambda: datetime.now()` adapter would change what that call receives.
     now: Callable[..., datetime] = datetime.now

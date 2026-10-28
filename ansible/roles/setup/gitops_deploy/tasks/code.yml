@@ -42,7 +42,6 @@
   loop:
     - deployer_lib/deploy_alert_text.py
     - deployer_lib/deploy_alerts.py
-    - deployer_lib/deploy_broad_k8s.py
     - deployer_lib/deploy_changes.py
     - deployer_lib/deploy_config.py
     - deployer_lib/deploy_cross_role.py
@@ -53,14 +52,10 @@
     - deployer_lib/deploy_health.py
     - deployer_lib/deploy_inventory.py
     - deployer_lib/deploy_io.py
-    - deployer_lib/deploy_k8s.py
-    - deployer_lib/deploy_k8s_owed.py
     - deployer_lib/deploy_locks.py
     - deployer_lib/deploy_logic.py
     - deployer_lib/deploy_narrow.py
     - deployer_lib/deploy_phases.py
-    - deployer_lib/deploy_release.py
-    - deployer_lib/deploy_render_bases.py
     - deployer_lib/deploy_remediation.py
     - deployer_lib/deploy_setup_roles.py
     - deployer_lib/deploy_state.py
@@ -85,7 +80,6 @@
   loop:
     - deploy_alert_text.py
     - deploy_alerts.py
-    - deploy_broad_k8s.py
     - deploy_changes.py
     - deploy_config.py
     - deploy_cross_role.py
@@ -96,14 +90,10 @@
     - deploy_health.py
     - deploy_inventory.py
     - deploy_io.py
-    - deploy_k8s.py
-    - deploy_k8s_owed.py
     - deploy_locks.py
     - deploy_logic.py
     - deploy_narrow.py
     - deploy_phases.py
-    - deploy_release.py
-    - deploy_render_bases.py
     - deploy_remediation.py
     - deploy_setup_roles.py
     - deploy_state.py
@@ -112,7 +102,9 @@
   become: true
 
 # A copy loop removes nothing it stops naming. These three mixins folded back into
-# deploy_state.py (#3661); nothing imports them, so the copies left behind are dead files.
+# deploy_state.py (#3661), and D6.12 deleted the tick's k8s modules, each named twice: as the
+# live copy under deployer_lib/ and as the flat copy from before #4355. Nothing imports any
+# of them, so the copies left behind are dead files.
 - name: Remove deployer modules folded into another
   tags: [gitops-deploy-code]
   ansible.builtin.file:
@@ -122,6 +114,16 @@
     - deploy_state_k8s.py
     - deploy_state_hold.py
     - deploy_state_alerts.py
+    - deployer_lib/deploy_broad_k8s.py
+    - deploy_broad_k8s.py
+    - deployer_lib/deploy_k8s.py
+    - deploy_k8s.py
+    - deployer_lib/deploy_k8s_owed.py
+    - deploy_k8s_owed.py
+    - deployer_lib/deploy_release.py
+    - deploy_release.py
+    - deployer_lib/deploy_render_bases.py
+    - deploy_render_bases.py
   become: true
 
 - name: Install the shared host_lib helper beside the deployer
@@ -174,8 +176,6 @@
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_health.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_inventory.py
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_inventory.py
-      - live: /opt/gitops-deploy/deployer_lib/deploy_k8s.py
-        src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_k8s.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_locks.py
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_toolbox.py
@@ -188,14 +188,6 @@
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_defer.py
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_defer.py
-      - live: /opt/gitops-deploy/deployer_lib/deploy_k8s_owed.py
-        src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_k8s_owed.py
-      - live: /opt/gitops-deploy/deployer_lib/deploy_release.py
-        src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_release.py
-      - live: /opt/gitops-deploy/deployer_lib/deploy_render_bases.py
-        src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_render_bases.py
-      - live: /opt/gitops-deploy/deployer_lib/deploy_broad_k8s.py
-        src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_broad_k8s.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_narrow.py
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py
       - live: /opt/gitops-deploy/deployer_lib/deploy_cross_role.py

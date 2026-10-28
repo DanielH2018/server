@@ -10,43 +10,23 @@ Type=oneshot
 # the 30-min timer (OnUnitActiveSec) — without this a hang stalls the whole pipeline until manual
 # intervention.
 #
-# Two independent worst cases must fit inside this ceiling — the k8s path and the broad path.
-# The k8s one is why it is 45min rather than the 25min a Docker tick needed before #2805 removed
-# that arm; #2397's forward cap took it to 70min. #2859 removed the staging gate's two budgets
-# from both sums, which leaves headroom rather than a reason to shrink the ceiling — the terms
-# below are the whole of what the unit can spend.
-#   - k8s path: a failed forward deploy can spend its whole K8S_DEPLOY_TIMEOUT_S (1440s, derived
-#     from the worst promoted role — see defaults/main.yml) before gitops_deploy.py catches the
-#     timeout, THEN the rollback redeploy can spend its whole K8S_ROLLBACK_TIMEOUT_S (1620s,
-#     re-sized against the real per-service ceiling) — the two run SEQUENTIALLY in one unit
-#     activation, not concurrently. That pair
-#     alone is 180 (max flock wait) + 1440 + 1620 = 3240s, which needs more than the 25min this
-#     ceiling used to be — see
-#     ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two revert-role
-#     timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
-#     The BROAD arm returns before the k8s block, so the true ceiling is max(broad, k8s), not
-#     a sum of the two.
-#   - broad path, since #2348: that arm also deploys the promoted image bumps riding on its
-#     range, so its own worst case is 180 (max flock wait) + BROAD_DEPLOY_TIMEOUT_S (1800) =
-#     1980s, still under the k8s path's 3240s. Two things keep it there. The bumps share the
-#     plans' BROAD_DEPLOY_TIMEOUT_S rather than taking a K8S_DEPLOY_TIMEOUT_S of their own, so
-#     the whole apply phase is still one term. And the arm is FORWARD-ONLY — for a correctness
-#     reason rather than this one (a reset would undo the ff-merge under a setup plane it
-#     already applied), but K8S_ROLLBACK_TIMEOUT_S on top would reach 3600s.
+# One worst case must fit inside this ceiling since D6.12 deleted the k8s path: the broad arm,
+# 180 (max flock wait) + BROAD_DEPLOY_TIMEOUT_S (1800) = 1980s. The arm is FORWARD-ONLY, so no
+# rollback budget stacks on top.
 #
-# This deliberately GIVES UP the old invariant ("stay under the 30-min interval so the next tick
-# always fires on schedule") in exchange for the k8s rollback getting a budget that can actually
-# finish. That is a considered trade, not a bug to tighten back: a normal run finishes in well
-# under a minute, so the 30-min tick is only at risk in the pathological case both k8s timeouts
-# get spent in full — and per docs/gitops-pipeline.md's *The rollback timeout, derived*
-# section (verified live against this unit on daniel-box, not inferred from the man page alone),
-# an overrun never produces a second or concurrent run: systemd finds the unit already
+# 70min was sized for the k8s path, a forward deploy and its rollback in sequence
+# (180 + 1440 + 1620 = 3240s). It stays at 70min rather than shrinking with that path: four
+# tree-lock waiters, the lander deadlines and `deploy.sh`'s LOCK_WAIT were derived from the
+# same budgets, so a smaller ceiling is a change of its own. A ceiling above the worst case
+# costs nothing on a healthy run, which finishes in well under a minute.
+#
+# An overrun never produces a second or concurrent run: systemd finds the unit already
 # `activating` and coalesces the timer's start request into the run already in flight, rather
-# than spawning another one. The practical effect is a delayed/absorbed tick, not a stacked
-# deploy — see that CLAUDE.md section for what is and is not verified about the cadence.
+# than spawning another one (docs/gitops-pipeline.md, verified live against this unit on
+# daniel-box). The practical effect is a delayed or absorbed tick, not a stacked deploy.
 #
-# The lock this unit's ExecStart holds (`{{ server_git_tree_lock }}`, below) is now held for
-# up to this same pathological duration, which EXCEEDS the 30-min timer interval — a concurrent
+# The lock this unit's ExecStart holds (`{{ server_git_tree_lock }}`, below) is held for up to
+# the broad arm's worst case, which EXCEEDS the 30-min timer interval — a concurrent
 # `./scripts/deploy.sh` waits its own `deploy_lib/under_locks.py:LOCK_WAIT` (not this `-w 180`, which
 # governs only this unit), then returns exit 75 (nothing deployed) if the lock stays busy past
 # it — so it normally OUTLASTS this hold and deploys. The weekly secret-rotate cron waits on the same lock, with the
@@ -76,12 +56,11 @@ Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 SyslogLevel=notice
 # flock serializes against the weekly secret-rotate cron (secret-rotate.sh) — both mutate
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
-# could silently discard a half-rotated secret. Every phase budget — K8S_DEPLOY_TIMEOUT_S,
-# K8S_ROLLBACK_TIMEOUT_S, BROAD_DEPLOY_TIMEOUT_S — starts when its phase
-# starts, AFTER flock acquires, so time spent waiting here is pure overhead against this unit's
-# TimeoutStartSec and is counted by none of them. -w 180 outlasts any normal deploy-step
+# could silently discard a half-rotated secret. The phase budget, BROAD_DEPLOY_TIMEOUT_S, starts
+# when its phase starts, AFTER flock acquires, so time spent waiting here is pure overhead against this unit's
+# TimeoutStartSec and is not counted by it. -w 180 outlasts any normal deploy-step
 # contention (secret-rotate is short — 0-2
-# tokens) but fails fast enough to leave the forward/rollback budgets intact; /run/lock is
+# tokens) but fails fast enough to leave the apply budget intact; /run/lock is
 # world-writable+sticky, so the unprivileged {{ sys_user }} can create the lockfile.
 #
 # DECIDED: contention exits 75 and the unit SUCCEEDS — do not "fix" this back to a failure, and
@@ -89,10 +68,11 @@ SyslogLevel=notice
 # `./scripts/deploy.sh` (~20min, holding this same lock for its whole run back then; it now
 # holds it only for a snapshot of HEAD) paged via OnFailure: seven such silent
 # exit-1 ticks in the seven days to 2026-08-23, each logging nothing at all because flock died
-# before the deployer started. Raising -w cannot fix it — this unit's own worst case is
-# K8S_DEPLOY_TIMEOUT_S + K8S_ROLLBACK_TIMEOUT_S = 3060s against TimeoutStartSec 4200s, so the
-# largest legal -w is 1140s, still short of a routine 20-minute deploy; test_gitops_discord_contract.py::test_k8s_deploy_
-# timeout_budget_survives_max_flock_contention asserts that bound and goes red if you try. So
+# before the deployer started. Raising -w could not fix it: when this was decided the unit's own
+# worst case was the k8s path's 3060s against TimeoutStartSec 4200s, so the largest legal -w was
+# 1140s, still short of a routine 20-minute deploy. Since D6.12 the worst case is the broad
+# arm's BROAD_DEPLOY_TIMEOUT_S, and test_gitops_deploy_timeout_budgets.py::
+# test_the_deployers_hold_survives_max_flock_contention asserts the bound. So
 # -E 75 + SuccessExitStatus=75
 # instead, the same "lock busy, nothing deployed" contract as deploy.sh's DEPLOY_LOCK_BUSY.
 # Contention is not silent starvation: the flock path never writes last_run, so contention

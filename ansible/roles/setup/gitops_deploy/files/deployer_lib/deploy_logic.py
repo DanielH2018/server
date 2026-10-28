@@ -12,7 +12,6 @@ This module is the index: every decision the deployer makes is defined in one of
 | `deploy_git` | what a tick does given the two HEADs, the hold and the CI verdict |
 | `deploy_health` | the Discord delivery queue's pure half |
 | `deploy_inventory` | what this host declares, parsed from host_vars text |
-| `deploy_k8s` | k8s auto-deploy eligibility, the denylist, the rollback's revert note |
 
 Nothing defines a name here, and that is load-bearing for the tests: a `monkeypatch` on
 `deploy_logic.<name>` rebinds a re-export that no function reads, so the test passes against
@@ -47,6 +46,7 @@ from deployer_lib.deploy_changes import (  # noqa: F401
     _is_test_only_path,
     setup_roles_for,
     comment_only_broad_changes,
+    comment_only_k8s_defaults,
     is_doc,
     is_routed,
     role_of,
@@ -81,23 +81,7 @@ from deployer_lib.deploy_health import (  # noqa: F401
 from deployer_lib.deploy_inventory import (  # noqa: F401
     _DECLARED_ENTRY,
     _ENTRY_PLATFORM,
-    declared_k8s_services,
     declares_no_gitops,
-)
-from deployer_lib.deploy_k8s import (  # noqa: F401
-    _DECLARATION_RE,
-    _DIFF_HEADER,
-    _DIFF_IMAGE_LINE,
-    _K8S_DEFAULTS_PATH,
-    _SNAPSHOT_CLAIM_RE,
-    _TRUE_VALUES,
-    SHARED_K8S_ROLES,
-    declared_denylist,
-    declares_snapshot_claims,
-    is_image_only_diff,
-    k8s_role_paths,
-    rollback_volume_revert_note,
-    split_k8s_auto_deploy,
 )
 from deployer_lib.deploy_remediation import (  # noqa: F401
     BRANCH_DEFAULT,

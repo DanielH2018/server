@@ -1,5 +1,5 @@
 {
-  "checksum": "5e780c19e1b2ff9c6e8f5e1e345761199059860172d7613f12a789e0b650b89b",
+  "checksum": "a2b79997981290dce47096e7b3b29a4807bc0c254261695dbd6eee3cbea0f7b2",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/gitops_deploy/CLAUDE.md#Safety",
   "row": {
@@ -13,6 +13,6 @@
       "scripts/deploy_tools/setup_routing.py": "f625a92f6fb5f312f62635c7fd66580dd12257a811e81ddaf56672e1248617df"
     },
     "python": "3.14",
-    "verified_sha": "65b1917f5"
+    "verified_sha": "a7dccd77d"
   }
 }

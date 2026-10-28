@@ -38,69 +38,33 @@ from deploy_tools.land_lib.outcome import (
 )
 
 
-def _narrowed(ln: Landing):
-    """The deployer's own narrowing of the range, or None when it refuses too.
-
-    `deploy_tags.py changed` refuses a range wholesale as soon as ONE path is broad, so a
-    >100-file PR that touches `group_vars` alongside a service role derives no tags at all,
-    and the service half goes undeployed behind whatever verdict the broad half reached.
-
-    `narrow` is the mapper the deployer already trusts for this question, and it answers MORE
-    than the service half: it maps each broad path to the services whose render it reaches, so
-    a list it returns accounts for the whole deploy plane of the range rather than leaving a
-    residue. Where it cannot — a path no rule reads, or a list covering most of the fleet — it
-    refuses, and the landing falls back to grading from the deployer's markers. The setup
-    plane is untouched either way: `narrow` never answers for it, and
-    `plane_note` and `self_applied` still own it.
-
-    The range is WIDER than this PR, as `--since` always is here, so this can deploy a service
-    another session's merge inside the range reached. That is the safe direction: wider than
-    the truth is recoverable, narrower is not.
-    """
-    r = ln.tools.deploy_tags(ln.opts.primary, ["narrow", ln.opts.since, "HEAD"])
-    if r.returncode != DEPLOY_OK:
-        return None
-    say("`changed` refused the range as broad; the deployer's own narrowing scopes it")
-    return r
-
-
 def derive_from_diff(ln: Landing) -> None:
     """Resolve the fallback to a tag list HERE rather than handing deploy.sh --changed.
 
     deploy.sh resolves --changed internally, so the verdict call would receive an empty
     --tags and report settled having checked nothing -- on the large-PR path, where
     verification matters most.
+
+    A range `changed` refuses as broad derives no tag here. Its k8s half is the promotion's,
+    and land-wait's changed set names the tags this landing gates (D6.12). The deployer's
+    `narrow` scoped such a range to k8s tags until then; Flux applies every one of them.
     """
     say(f"deriving tags from the diff since {ln.opts.since}")
     r = ln.tools.deploy_tags(ln.opts.primary, ["changed", ln.opts.since])
-    narrowed = False
     if r.returncode == DEPLOY_BROAD:
-        alt = _narrowed(ln)
-        narrowed = alt is not None
-        r = alt or r
-    if r.returncode == DEPLOY_BROAD:
-        # The tick is the apply, so `no_tag_outcome` reads the deployer's markers. Gated on
-        # `self_applied or plane`: `--since` bounds a range WIDER than this PR, and another
-        # session's broad merge can refuse a PR that touched nothing broad (`nothing-to-deploy`).
-        if ln.classification.self_applied or ln.plane:
-            say(
-                "no tag list scopes this diff; grading the landing from the deployer's own "
-                "markers instead of asking for a hand"
-            )
-            no_tag_outcome(ln, scope="no tag list scoping its diff")
-        ln.die(
-            "the change is broad and maps to no service list — deploy it by hand",
-            1,
-            Verdict.NEEDS_MANUAL_APPLY,
+        say(
+            "`changed` refused the range as broad; the promotion's changed set names its k8s "
+            "tags, and a Pi Compose role it reaches is a `deploy.sh -e target=daniel-pi` by hand"
         )
+        ln.resolved_tags = []
+        return
     if r.returncode != DEPLOY_OK:
         ln.die(f"deploy_tags.py changed failed (exit {r.returncode})", 1)
     # An empty element (a doubled or trailing comma) is dropped here rather than handed to
     # deploy.sh, which would refuse the whole list as a tag miss. Deliberate: the empty
     # element carries no service, so refusing on it is a false failure.
     ln.resolved_tags = [t for t in r.stdout.strip().split(",") if t]
-    if not narrowed:
-        record_k8s_only(ln)
+    record_k8s_only(ln)
 
 
 def record_k8s_only(ln: Landing) -> None:
@@ -120,10 +84,6 @@ def record_k8s_only(ln: Landing) -> None:
       `--k8s-only=` argv for a service this landing never deploys.
     Every failure leaves `k8s_only` empty and routes to every declaring host, which is the
     direction a wrong answer here must fall.
-
-    The `_narrowed` sub-branch does not come here at all. Its tags map broad paths to the
-    services whose render they reach, which no path names, so the derivation would return
-    nothing for them.
     """
     rng = land_platform.diff_range(ln.opts.since)
     r = ln.git("diff", "--name-only", rng)
@@ -441,12 +401,11 @@ def deploy_phase(ln: Landing) -> None:
     """Step 5, end to end: derive, split, deploy, wait on promotion, stamp the ledger.
 
     The split comes before any deploy.sh (`promotion.split_owned`): a tag Flux applies leaves
-    `resolved_tags`, and deploy.sh runs only when an Ansible-owned tag remains. A PR holding
-    such a tag then waits on promotion, after deploy.sh for a PR that holds both kinds. A
-    deploy-plane path derives no tag, so such a tag is also read from the deployer's narrowing
-    of the PR's range (`promotion.owned_by_narrowing`), and an inventory-only flip to
-    `owner: flux` waits on promotion rather than settling on the tick alone. A PR changing a
-    cluster file derives no tag and waits on promotion too (`promotion.waits_on_cluster_vars`).
+    `resolved_tags`, and deploy.sh runs only when an Ansible-owned tag remains, which is a Pi
+    Compose tag. A path-derived tag Flux applies is then dropped (`promotion.drop_path_derived`),
+    because every landing whose PR may move the bundle waits on the promotion, and land-wait's
+    changed set names the tags the gate reads (D6.12). A PR that moves no bundle file, or
+    whose changed set names no tag, ends in `no_tag_outcome` when deploy.sh had nothing either.
     A plane it also carries, such as the rotation note for `secrets.yml`, is reported by the
     health step after the wait.
     """
@@ -454,15 +413,17 @@ def deploy_phase(ln: Landing) -> None:
     if ln.needs_diff:
         derive_from_diff(ln)
     promotion.split_owned(ln)
-    promotion.owned_by_narrowing(ln)
-    cluster_vars = promotion.waits_on_cluster_vars(ln)
-    if not ln.resolved_tags and not ln.owned_tags and not cluster_vars:
+    promotion.drop_path_derived(ln)
+    waits = (
+        bool(ln.owned_tags)
+        or ln.needs_diff
+        or promotion.moves_the_bundle(ln.classification.pr_paths)
+    )
+    if not ln.resolved_tags and not waits:
         if ln.host_targets and not ln.plane:
             return  # nothing for deploy.sh: the tick took the empty change set, then the host wait
         no_tag_outcome(ln)
-    ln.ledger.tags_label = ",".join(
-        ln.resolved_tags + list(ln.owned_tags) + promotion.forced_names(ln)
-    )
+    ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
     if ln.resolved_tags:
         _deploy_resolved(ln)
     elif not ln.tick_is_the_apply:
@@ -474,10 +435,15 @@ def deploy_phase(ln: Landing) -> None:
     # that started after deploy.sh returned, and the wait can last 67 minutes, or longer while
     # an earlier commit's verification is in flight (`wait.py:IN_FLIGHT_WAIT_S`).
     ln.deploy_ended_at = t.wall_clock()
-    if ln.owned_tags or cluster_vars:
+    if waits:
         promotion.wait_on_promotion(ln)
+        ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
     # Step 5's own time on the board, the promotion wait included.
     ln.ledger.t_deploy = t.clock()
+    if not ln.resolved_tags and not ln.owned_tags:
+        if ln.host_targets and not ln.plane:
+            return
+        no_tag_outcome(ln)
 
 
 def _deploy_resolved(ln: Landing) -> None:

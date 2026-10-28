@@ -59,15 +59,6 @@ def test_a_reserialised_map_lands_no_caller(tree: Tree):
     assert _rows(tree, GUARD_MAP) == frozenset()
 
 
-def test_the_landing_and_the_deployer_name_the_same_map():
-    """The deployer's `k8s_unapplied` discharge waits on the rows this narrowing deploys
-    (#5106), so the two must read one file. `land_shared` keeps its own literal because
-    importing the deployer's would pull `host_lib` into `land.py`."""
-    from deployer_lib.deploy_k8s_owed import STANDALONE_GUARD_MAP
-
-    assert GUARD_MAP == STANDALONE_GUARD_MAP
-
-
 def test_the_landing_and_the_ticks_narrow_name_the_same_map():
     """`deploy_tags.py narrow` applies the same row rule for the tick (#5571), and a copy
     naming another path would leave the tick fanning the real map out to every caller."""

@@ -29,10 +29,8 @@ NEWER_GREEN = "3" * 40
 OLDER_GREEN = "4" * 40
 
 
-def _plan(gitops_deploy, cs: ChangeSet, paths=None, k8s_services=None):
-    return deploy_tick_types.TickPlan(
-        cs=cs, paths=list(paths or []), k8s_services=set(k8s_services or ())
-    )
+def _plan(gitops_deploy, cs: ChangeSet, paths=None):
+    return deploy_tick_types.TickPlan(cs=cs, paths=list(paths or []))
 
 
 def _target(gitops_deploy, **overrides):
@@ -235,20 +233,6 @@ def test_plan_tick_drops_a_comment_only_change_to_a_bring_up_playbook(
     assert "not parking" in capsys.readouterr().out
 
 
-def test_plan_tick_attributes_each_k8s_role_to_the_newest_commit_touching_it(
-    gitops_deploy, tick, settings, state
-):
-    """A role change below a tests-only tip. The
-    tip reaches no role, so sonarr's line must name the commit its own landing deployed."""
-    role_change, tests_only = "1" * 40, "2" * 40
-    template = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
-    tick.paths = [template, "ansible/tests/k8s/test_sonarr.py"]
-    tick.commits = [(tests_only, [tick.paths[1]]), (role_change, [template])]
-    plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
-    assert plan.cs.k8s == {"sonarr"}
-    assert plan.cs.k8s_origins == {"sonarr": role_change}
-
-
 @pytest.fixture
 def installed_tables():
     """The cross-role tables a tick starts from, put back after the test swaps them."""
@@ -437,38 +421,6 @@ def test_a_failed_broad_apply_holds_the_plane_and_does_not_reset(
     assert state.hold_plane
     assert not [argv for argv in tick.git if argv[1] == "reset"]
     assert "broad apply failed" in tick.posts[-1]
-
-
-# ── handle_k8s() ──────────────────────────────────────────────────────────────────────────
-def test_handle_k8s_merges_then_deploys(gitops_deploy, tick, settings, state):
-    plan = _plan(gitops_deploy, ChangeSet(k8s_deploy={"sonarr"}))
-    assert (
-        deploy_handlers.handle_k8s(
-            tick.tools, state, settings, _target(gitops_deploy), plan
-        )
-        == 0
-    )
-    assert tick.merges == [ORIGIN]
-    assert tick.playbooks[0][-2:] == ["--tags", "sonarr"]
-    assert ("annotation", {"sonarr"}) in tick.log
-
-
-def test_handle_k8s_rolls_back_to_the_failed_shas_snapshot(
-    gitops_deploy, tick, settings, state
-):
-    """`origin[:8]`, never `local`: the snapshot worth reverting to is the one taken before the
-    deploy that failed."""
-    tick.playbook_outcomes = [
-        RuntimeError("uv run ansible-playbook -> 2\nrollout failed")
-    ]
-    plan = _plan(gitops_deploy, ChangeSet(k8s_deploy={"sonarr"}))
-    deploy_handlers.handle_k8s(
-        tick.tools, state, settings, _target(gitops_deploy), plan
-    )
-    assert state.hold_sha == ORIGIN
-    rollback = tick.playbooks[-1]
-    assert f"k8s_restore_snapshot_sha={ORIGIN[:8]}" in rollback
-    assert ("annotation", {"sonarr"}) not in tick.log
 
 
 # ── handle_no_services() ──────────────────────────────────────────────────────────────────

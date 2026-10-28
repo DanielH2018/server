@@ -3,7 +3,7 @@
 
 `deploy_logic.py` and the `deploy_*` modules behind it hold the decisions, which are pure.
 This module holds their I/O counterparts, which until now sat in `gitops_deploy.py` beside
-`main()` — `deploy_k8s()` next to `deploy_k8s.py`. Splitting them out is what lets
+`main()`. Splitting them out is what lets
 `gitops_deploy.main()` be a sequence of named phases a test can drive one at a time.
 
 Three boundaries are leaves of their own: `deploy_config` (the config file, `Config`, `log`),
@@ -18,8 +18,8 @@ Two rules hold this module's shape:
   it needs — `repo`, `hostname`, a timeout — as an argument, so a test can call it directly and
   so `gitops_deploy` stays the one place the deployer's configuration is bound.
 - **Most of these reach a caller as a `DeployTools` field (`deploy_toolbox.py`), so a test
-  replaces the field, not this module. `k8s_declarations_at`, `k8s_image_diff`, `deploy_k8s`
-  and `deploy_broad` are not fields, because the argv they build is what the suite asserts on.
+  replaces the field, not this module. `k8s_declarations_at` and `deploy_broad` are not
+  fields, because the argv they build is what the suite asserts on.
   Each takes a required `run` instead, which a caller passes as `tools.run`.**
 
 Stdlib only: the unit runs under `uv run --no-project`, never from a venv. The `# DECIDED:`
@@ -27,12 +27,10 @@ marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
 """
 
 import os
-import pathlib
 import signal
 import subprocess
 from collections.abc import Callable
 
-from host_lib import deploy_event
 from deployer_lib.deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
     WARNING,
     Config,
@@ -56,10 +54,8 @@ from deployer_lib.deploy_failtext import (  # noqa: F401 — re-exported for `de
     timeout_detail,
 )
 from deployer_lib.deploy_inventory import service_owners
-from deployer_lib.deploy_k8s import k8s_role_paths
 from deployer_lib.deploy_locks import locked_budget
 from deployer_lib.deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
-from gitops_markers import DEPLOY_PLAYBOOK
 
 
 # ── subprocess ────────────────────────────────────────────────────────────────────────────────
@@ -265,17 +261,46 @@ def host_vars_owners(
 # ── reading k8s roles out of git ──────────────────────────────────────────────────────────────
 
 
+def k8s_role_paths(listing: str) -> dict[str, str | None]:
+    """Map each k8s role to its defaults/main.yml path in a `git ls-tree -r --name-only` listing.
+
+    A role with no defaults/main.yml at that ref maps to None, which
+    `deploy_phases.declared_denylist` reads as denied. Paths look like
+    `ansible/roles/k8s/<role>/<rest...>`, so the role name is the FOURTH segment — this
+    indexing shipped an off-by-one once already.
+
+    Pure string parsing, callable on its own so it's unit-testable without git; the I/O caller
+    is `k8s_declarations_at`.
+    """
+    roles: dict[str, str | None] = {}
+    for path in listing.splitlines():
+        # "ansible/roles/k8s/<role>/<rest...>" — a real role always has a file at least one
+        # directory deep, so anything shallower (a stray file directly under roles/k8s/) is
+        # not a role and must not be recorded as one.
+        parts = path.split("/")
+        if len(parts) < 5:
+            continue
+        role = parts[3]
+        if parts[4] == "defaults" and path.endswith("defaults/main.yml"):
+            roles[role] = path
+        else:
+            # Still record the role so one with no defaults/ at all is visible as None. A
+            # setdefault here never clobbers an already-found defaults/main.yml path, and
+            # doesn't need to run before it either — the listing's order doesn't matter.
+            roles.setdefault(role, None)
+    return roles
+
+
 def k8s_declarations_at(
     repo: str, ref: str, *, run: Callable[..., str]
 ) -> dict[str, str | None]:
     """Every k8s role's defaults/main.yml as it exists at `ref`.
 
-    Reads the ref directly rather than the working tree: the promotion decision runs BEFORE the
-    ff-merge, so the working tree still holds the pre-merge declarations — exactly as stale as
-    the config we are checking it against.
+    Reads the ref directly rather than the working tree. `deploy_phases.reconcile_denylist`
+    compares it with the denylist the deployer's config was rendered from.
 
     A role directory present at the ref with no defaults/main.yml maps to None, which
-    declared_denylist() reads as denied. The path parsing itself is k8s_role_paths(), a pure
+    `deploy_phases.declared_denylist` reads as denied. The path parsing itself is k8s_role_paths(), a pure
     function unit-tested without git; this function does only the git I/O around it.
     """
     listing = run(
@@ -290,90 +315,12 @@ def k8s_declarations_at(
     }
 
 
-def k8s_image_diff(
-    repo: str, local: str, origin: str, svc: str, *, run: Callable[..., str]
-) -> str:
-    """Unified diff of one k8s role's defaults/main.yml across the incoming range.
-
-    -U0 drops context lines, so is_image_only_diff classifies changed lines only — an
-    unrelated neighbouring var sitting next to the pin cannot make a clean bump look dirty.
-    """
-    return run(
-        [
-            "git",
-            "diff",
-            "-U0",
-            f"{local}..{origin}",
-            "--",
-            f"ansible/roles/k8s/{svc}/defaults/main.yml",
-        ],
-        cwd=repo,
-    )
-
-
-def read_local_k8s_default(repo: str, role: str) -> str | None:
-    """Read a k8s role's defaults/main.yml from the CURRENT working tree, not via `git show`.
-
-    Only called from the rollback path, after `git reset --hard local` — so a plain read
-    matches exactly what roles/k8s/manifests itself reads for the claim list (see the comment
-    above the revert task in that role's tasks/main.yml).
-    """
-    path = (
-        pathlib.Path(repo)
-        / "ansible"
-        / "roles"
-        / "k8s"
-        / role
-        / "defaults"
-        / "main.yml"
-    )
-    try:
-        return path.read_text()
-    except FileNotFoundError:
-        return None
-
-
 # ── deploying ─────────────────────────────────────────────────────────────────────────────────
 
 # The argv prefix every deploy shares. `uv run` gives the deploy the repo's pinned env
 # (ansible-core plus the community.docker deps requests/docker) — the same toolchain the
 # operator uses; `--frozen` installs from the committed uv.lock rather than mutating it here.
 PLAYBOOK_ARGV = ("uv", "run", "--frozen", "ansible-playbook")
-
-
-def deploy_k8s(
-    repo: str,
-    services: set[str],
-    timeout: float,
-    restore_sha: str | None = None,
-    *,
-    run: Callable[..., str],
-) -> None:
-    """Deploy k8s services by tag. The rollout gate lives INSIDE the role.
-
-    No health-poll phase here on purpose: the play already runs apply (roles/k8s/manifests)
-    -> `rollout status --timeout` (roles/k8s/manifests/tasks/drain.yml) -> a post-Available soak
-    (post_tasks/k8s_stabilise_gate.yml) that hard-fails on a restart-count delta or a
-    readiness shortfall. Polling again would duplicate it.
-
-    The wait and the soak moved out of roles/k8s/manifests in 5eea64e6, when rollouts were
-    batched and the stabilisation window deferred to end-of-play; the sequence above is
-    unchanged. assert_stable.yml is gone entirely as of 2026-08-22: observability was its last
-    caller, and it now hands its six telemetry workloads to the same end-of-play gate as
-    everything else rather than running a second 60s window of its own.
-
-    restore_sha, when given, is passed to the play as the `k8s_restore_snapshot_sha` extra-var,
-    which roles/k8s/manifests reads to revert each service's claimed volumes to the snapshot
-    named for that SHA before re-applying. Omitted (the ordinary deploy) or blank, the extra-var
-    is never added — the call is byte-identical to before this argument existed.
-    """
-    tags = ",".join(sorted(services))
-    log(f"k8s-deploy: deploying {tags} (timeout {timeout:.0f}s)")
-    argv = [*PLAYBOOK_ARGV, DEPLOY_PLAYBOOK, "--tags", tags]
-    if restore_sha is not None and restore_sha.strip():
-        argv += ["-e", f"k8s_restore_snapshot_sha={restore_sha}"]
-    with locked_budget(services, timeout) as budget:
-        run(argv, cwd=repo, timeout=budget)
 
 
 def deploy_broad(
@@ -386,14 +333,12 @@ def deploy_broad(
 ) -> None:
     """Run a broad-plane playbook, bounded. Raises on failure or timeout.
 
-    `uv run --frozen` for the same reason deploy() uses it: the repo's pinned env, and never
-    mutating uv.lock on the host.
+    `uv run --frozen` gives the run the repo's pinned env, and never mutates uv.lock on the
+    host.
 
-    No tags would mean the whole playbook, and the tick never asks for it. A refused
-    deploy-plane narrowing defers the plane instead (#4333), because the whole
-    `ansible/deploy.yml` does not fit the budget this call is given. The setup plane never
-    lands here unscoped either: setup_tags_for returning an empty set routes to the
-    defer-and-alert arm, because an unscoped initial_setup.yml is a whole-host reprovision.
+    No tags would mean the whole playbook, and the tick never asks for it: setup_tags_for
+    returning an empty set routes to the defer-and-alert arm, because an unscoped
+    initial_setup.yml is a whole-host reprovision.
     """
     cmd = [*PLAYBOOK_ARGV, playbook]
     if tags:
@@ -401,52 +346,3 @@ def deploy_broad(
     # `all` EXCLUSIVE whatever the tags: this reconfigures the host, not one service.
     with locked_budget(tags, timeout, exclusive_all=True) as budget:
         run(cmd, cwd=repo, timeout=budget)
-
-
-def emit_deploy_annotation(
-    services: set[str],
-    sha: str,
-    result: str = "ok",
-    duration_s: float | None = None,
-) -> None:
-    """Record an auto-deploy where Grafana can draw it as a dashboard annotation.
-
-    `result` is `ok` for a deploy that passed its gate, `rollback` for one that failed and was
-    rolled back, and `fail` for one that failed with nothing rolled back. A failure carries
-    the deploy's `duration_s`; the line is `host_lib.deploy_event`'s (#6164).
-
-    A LOG LINE, not a POST to Grafana's /api/annotations, and the peer of `annotate` in
-    scripts/deploy_tools/deploy_lib/playbook.py (bash's for `--detach`) — the deploy paths must
-    annotate the same way or the dashboards show only half the deploys. Grafana has no hostPort
-    and no pinned ClusterIP, and this runs on the HOST, so calling in would mean pinning a fourth
-    address or routing through Traefik with a standing write credential. Neither is needed: the
-    Alloy shipper tails /var/log/syslog into loki-homelab, and Grafana reads that Loki by DNS.
-
-    Only the k8s auto-deploy path, its rollback and the broad arm call this.
-
-    Fire-and-forget: any failure is logged and swallowed. An annotation is a convenience, and a
-    deploy that succeeded must not be reported as failed because recording it did not.
-    """
-    try:
-        subprocess.run(
-            [
-                "logger",
-                "-t",
-                "deploy-annotation",
-                deploy_event(
-                    ",".join(sorted(services)),
-                    sha[:8],
-                    result,
-                    duration_s=duration_s,
-                    source="gitops",
-                ),
-            ],
-            check=True,
-            capture_output=True,
-            timeout=10,
-        )
-    except Exception as exc:
-        log(
-            f"k8s-deploy: annotation failed (the deploy's own result stands): {exc}",
-            level=WARNING,
-        )

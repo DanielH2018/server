@@ -99,48 +99,15 @@ _ROTATION_NOTE = (
     "a setup role that reads a changed key and that its own host runs (#5436)."
 )
 
-# Which k8s consumers the tick applies itself, appended to `_ROTATION_NOTE`. The tick routes a
-# secrets-only range to the k8s roles reading a moved key (#5577), and skips that route when the
-# range also changes a k8s role (`deploy_broad_k8s.route_secret_k8s_readers`). A range with a
-# deploy-plane path skips it too, because the deploy plane's narrowing already maps each moved
-# key to its readers (#5409), and this landing waits on that apply's receipt. The lander sees
-# only this PR's paths, not the tick's range, so the first note names the case where the tick
-# routes nothing after all, and where to read what it applied. A secrets-only landing does not
-# wait on the tick (`self_applied` is False), so that note says to read the line only once the
-# tick has run.
-_TICK_K8S_READERS_NOTE = (
-    "It also applies each k8s role that reads a changed key (#5577). It applies none when its "
-    "range also carries another session's k8s role change, and it records a reader the lookup "
-    "refuses in `k8s_unapplied`. A Flux-owned reader is Flux's to apply: `deploy.sh` refuses "
-    "its tag with exit 5. This landing does not wait for the tick, so wait until the tick "
-    "crossing this merge has run (the `gitops-tick` skill runs one now). Its `secret-readers:` "
-    "line in `journalctl -u gitops-deploy` then names what it applied, and only the consumers "
-    "that line leaves out need a hand redeploy."
+# Where a k8s consumer of a changed key gets the new value, appended to `_ROTATION_NOTE`. The
+# tick applied the k8s readers itself until D6.12 deleted its k8s arms (#5577, #5409). A
+# flux-owned role reads the value through `homelab-cluster-vars`, which only
+# `cluster_vars.py write` regenerates, and `promote` then applies it.
+_K8S_READERS_NOTE = (
+    "The GitOps tick applies no k8s role. A k8s consumer reads a changed key through "
+    "`homelab-cluster-vars`: regenerate it with `cluster_vars.py write` (operator-only), and "
+    "`promote` applies it with the next bundle."
 )
-_DEPLOY_PLANE_K8S_READERS_NOTE = (
-    "This PR also changes the deploy plane, so the tick's `deploy.yml` run covers each k8s role "
-    "that reads a changed key (#5409), and this landing waits on that apply."
-)
-_NO_TICK_K8S_READERS_NOTE = (
-    "This PR also changes a k8s role, so the tick applies no k8s role that reads a changed "
-    "key (#5577): redeploy each k8s consumer by hand."
-)
-
-# The two files whose change moves the Secret `homelab-cluster-vars`, which every
-# substituting Kustomization reads through `dependsOn: cluster-vars` (D3.4, d3-secrets.md,
-# *Rotating a value read by both planes*). A PR changing one touches no role, so no tag
-# derives from it, and `promotion.wait_on_promotion` waits on `cluster-vars` instead. The
-# rule names no changed key, which keeps it within the `DECIDED: fire on ANY change to
-# secrets.yml` marker below. It is interim: it retires in the PR where `land.sh` reads its
-# changed set from `digests.json` (D6).
-CLUSTER_VARS_PATHS = frozenset(
-    {"ansible/vars/cluster-vars.sops.env", "ansible/vars/cluster-vars.source"}
-)
-
-
-def changes_cluster_vars(paths) -> bool:
-    """Whether the PR changes a cluster file, so its landing waits on `cluster-vars`."""
-    return any(p in CLUSTER_VARS_PATHS for p in paths)
 
 
 def landing_hosts_at(
@@ -333,19 +300,10 @@ def plane_note(
         # `ansible/vars/secrets-staging.yml` belongs to daniel-stage, which land.sh never
         # deploys. Both are correctly outside it.
         #
-        # The k8s half mirrors the tick's own routing, from this PR's paths alone. A deploy-plane
-        # path sends the readers through that plane's narrowing, and a k8s role change routes no
-        # reader, so the operator still owes every k8s consumer. A
-        # Flux-owned role over-asks here, because the tick moves it to `cs.flux` before that
-        # skip and so does route the readers. Asking for a redeploy the tick also ran costs a
-        # duplicate apply; claiming one it skipped leaves a credential stale.
+        # The k8s half: the tick applies no k8s role since D6.12, whatever else the range
+        # carries, so one note names the cluster's path for every k8s consumer.
         notes.append(_ROTATION_NOTE)
-        if cs.broad_deploy:
-            notes.append(_DEPLOY_PLANE_K8S_READERS_NOTE)
-        elif cs.k8s or cs.k8s_deploy or cs.k8s_consumers:
-            notes.append(_NO_TICK_K8S_READERS_NOTE)
-        else:
-            notes.append(_TICK_K8S_READERS_NOTE)
+        notes.append(_K8S_READERS_NOTE)
     return " ".join(notes)
 
 
@@ -354,12 +312,12 @@ def self_applied_playbooks(files, quiet=()) -> frozenset[str]:
 
     `self_applied` is whether this is non-empty. `Landing.tick_applied` asks the tick's
     receipt for each of them, because a receipt naming only the setup plane says nothing
-    about a deploy plane the tick deferred (#4333).
+    about a deploy plane the tick deferred (#4333). The tick runs no `ansible/deploy.yml`
+    since D6.12, so a deploy-plane path adds nothing here: `promote` applies it, and the
+    landing waits on land-wait for it.
     """
     cs = reach.reach(files, quiet).changes
     out = {setup_role_playbook(r) for r in cs.setup_roles if tick_applies_setup_role(r)}
-    if cs.broad_deploy:
-        out.add("ansible/deploy.yml")
     return frozenset(p for p in out if p)
 
 
@@ -367,8 +325,8 @@ def self_applied(files, quiet=()) -> bool:
     """Whether the PR carries a broad change that the TICK applies, not deploy.sh.
 
     When true, the landing is not done until the deployer's own state says it converged.
-    True for a deploy-plane change (a full deploy.yml) and for a setup role
-    initial_setup.yml includes (`--tags <role>`). False for docs, for an ordinary service
+    True for a setup role initial_setup.yml includes (`--tags <role>`). False for a
+    deploy-plane change, which `promote` applies since D6.12, for docs, for an ordinary service
     (deploy.sh's job), and for what `plane_note` already hands to a human. land.sh uses it
     to decide whether `behind_since` after the tick means "this PR is not applied yet" or
     is merely somebody else's pending merge.

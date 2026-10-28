@@ -78,12 +78,11 @@ MARKERS: dict[str, str] = {
     # The per-SHA alert dedupe slots, ONE file holding every channel as `"<slot> <origin_sha>"`
     # lines (`ALERT_SLOTS`, `parse_alerted`). The operator is paged ONCE per origin SHA about
     # a deferred broad change, a secrets-only push (a rotated value with no service template
-    # change), a tasks-only push (a role tasks/ change, not auto-deployed), a k8s-role push (no
-    # mechanism here ever applies one, so there is no "rode a redeploy" case to dedupe against
-    # `deployed`), a stale denylist (the DISARM itself is stateless and recomputed every tick —
-    # only the page is throttled), a master tip that FAILED CI (until the operator fixes or
-    # reverts; there is no marker for `ci_pending`, which resolves itself within a tick or two
-    # and stays silent) — rather than every tick for as long as the state persists.
+    # change), a tasks-only push (a role tasks/ change, not auto-deployed), a master tip that
+    # FAILED CI (until the operator fixes or reverts; there is no marker for `ci_pending`,
+    # which resolves itself within a tick or two and stays silent) — rather than every tick
+    # for as long as the state persists. A `k8s` or `stale_denylist` line an older tick wrote
+    # is kept by every rewrite and read by nothing, since D6.12 deleted both channels.
     #
     # ONE KEYED FILE RATHER THAN SEVEN `<channel>_alerted_sha` FILES (#3047), and nothing
     # outside the deployer reads it. `dirty_alerted` below is keyed by DATE rather than SHA,
@@ -128,12 +127,10 @@ MARKERS: dict[str, str] = {
 # A NAMED SET, so a typo raises rather than opening a seventh slot — the check
 # `DeployerState.path` gave each slot while it was its own `MARKERS` entry.
 # `tests/test_alert_once_markers.py` checks every call site's literal against it.
-ALERT_SLOTS: frozenset[str] = frozenset(
-    {"broad", "secrets", "tasks", "k8s", "stale_denylist", "ci"}
-)
+ALERT_SLOTS: frozenset[str] = frozenset({"broad", "secrets", "tasks", "ci"})
 
-# The deploy-plane playbook. A k8s deploy runs it with `--tags <services>`, and a failed one
-# writes it into the hold's `hold_plane` entry. `gitops_hold.Hold.cover_services` clears an entry
+# The deploy-plane playbook. An older tick's failed k8s deploy wrote it into the hold's
+# `hold_plane` entry; no tick runs it since D6.12. `gitops_hold.Hold.cover_services` clears an entry
 # only when it names this same string, so the writer and the clear take it from here: two
 # spellings that drifted apart would leave a hold no deploy clears (#4428).
 DEPLOY_PLAYBOOK = "ansible/deploy.yml"
@@ -221,9 +218,9 @@ SHARED_K8S_ROLES = frozenset(
     }
 )
 
-# The shared roles whose `k8s_unapplied` line discharges on a caller's render digest with no
-# deploy at all. `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` is this set; its `DECIDED:` holds the
-# reasoning and the gap it accepts.
+# The shared roles whose `k8s_unapplied` line discharged on a caller's render digest with no
+# deploy at all. The discharge went with `deploy_k8s_owed.py` in D6.12, and the line is
+# cleared by hand now, but the printers keep this remedy text until D6.6 deletes the class.
 RENDER_PROOF_SHARED_ROLES = frozenset({"manifests"})
 
 

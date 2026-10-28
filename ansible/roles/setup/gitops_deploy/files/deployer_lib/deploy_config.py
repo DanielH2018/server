@@ -78,10 +78,6 @@ class Config:
     k8s_autodeploy_enabled_in_file: bool = False
     k8s_autodeploy_pilot: frozenset[str] = frozenset()
     k8s_autodeploy_denylist: frozenset[str] = frozenset()
-    k8s_autodeploy_max_per_tick: int = 3
-    k8s_autodeploy_max_claim_services_per_tick: int = 1
-    k8s_deploy_timeout_s: int = 1440
-    k8s_rollback_timeout_s: int = 1320
     broad_deploy_timeout_s: int = 1800
     errors: tuple[str, ...] = field(default=())
 
@@ -165,12 +161,6 @@ def load_config(env: Mapping[str, str]) -> Config:
         k8s_autodeploy_enabled_in_file=_bool("K8S_AUTODEPLOY_ENABLED"),
         k8s_autodeploy_pilot=csv_set(env.get("K8S_AUTODEPLOY_PILOT", "")),
         k8s_autodeploy_denylist=csv_set(env.get("K8S_AUTODEPLOY_DENYLIST", "")),
-        k8s_autodeploy_max_per_tick=_int("K8S_AUTODEPLOY_MAX_PER_TICK", 3),
-        k8s_autodeploy_max_claim_services_per_tick=_int(
-            "K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK", 1
-        ),
-        k8s_deploy_timeout_s=_int("K8S_DEPLOY_TIMEOUT_S", 1440),
-        k8s_rollback_timeout_s=_int("K8S_ROLLBACK_TIMEOUT_S", 1320),
         broad_deploy_timeout_s=_int("BROAD_DEPLOY_TIMEOUT_S", 1800),
         errors=tuple(errors),
     )

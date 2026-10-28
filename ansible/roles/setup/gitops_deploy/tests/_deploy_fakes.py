@@ -5,10 +5,9 @@ and Discord answer, and what the tick did to them. Set the
 attributes before the call, then read `log` (every call, oldest first) afterwards. `build_tools`
 turns one into the `DeployTools` `main(tools, config, state)` takes.
 
-WHAT IS DELIBERATELY NOT A FIELD. `deploy_io.deploy_k8s` and `deploy_broad` build the
-`ansible-playbook` argv the suite asserts on, so replacing them here would retire the assertion
-rather than fake the process. They take `run=tools.run` instead, which is `ScriptedTick.run`
-here.
+WHAT IS DELIBERATELY NOT A FIELD. `deploy_io.deploy_broad` builds the `ansible-playbook`
+argv the suite asserts on, so replacing it here would retire the assertion rather than fake the
+process. It takes `run=tools.run` instead, which is `ScriptedTick.run` here.
 """
 
 import functools
@@ -55,17 +54,13 @@ class ScriptedTick:
             reads as one commit at `origin` carrying `paths`, the range as one change.
         files: `"<ref>:<path>"` to the content `git show` returns for it.
         tree_listing: what `git ls-tree` at origin lists, under roles/k8s/ or roles/setup/.
-        diffs: k8s service to the `-U0` diff of its defaults file across the range. Every
-            service the image-diff read reaches for must have an entry, `""` included.
         playbook_outcomes: an exception to raise from each playbook run in turn; None runs
             clean, and the list running out means every later run is clean.
         run_error: raised by every `run()` call instead of answering, for the paths that must
             survive a git failure.
         discord_ok: whether Discord accepts each post.
-        releases: k8s service to the commit its release record names; a service absent
-            from it has no record.
-        log: every call, oldest first, as ("git", argv), ("playbook", argv, kwargs),
-            ("annotation", services) or ("post", content).
+        log: every call, oldest first, as ("git", argv), ("playbook", argv, kwargs) or
+            ("post", content).
         repo: the fake checkout REPO points at; `declare()` and `render()` populate it.
     """
 
@@ -91,15 +86,8 @@ class ScriptedTick:
         self.commits: list[tuple[str, list[str]]] | None = None
         self.files: dict[str, str] = {}
         self.tree_listing = ""
-        self.diffs: dict[str, str] = {}
         self.playbook_outcomes: list[Exception | None] = []
         self.run_error: Exception | None = None
-        # What `deploy_tags.py narrow` answers: (exit code, stdout). The production
-        # default is a refusal, so a test that does not script it gets today's full
-        # `deploy.yml` — the behaviour every pre-narrowing test was written against.
-        self.narrow: tuple[int, str] = (3, "")
-        # Raised INSTEAD of answering, for the fallback's own red-proof half.
-        self.narrow_error: Exception | None = None
         # What `narrow_setup.py` answers for a pending setup role, by role tag. A role absent
         # from this map refuses, which is production's own fallback and the behaviour every
         # test written before the narrowing expects.
@@ -113,11 +101,7 @@ class ScriptedTick:
         self.secret_unread: dict[str, list[str]] = {}
         # Raised instead of answering, for `route_secret_readers`'s fallback.
         self.secret_readers_error: Exception | None = None
-        # What `--deploy-tags` answers (#5577): (exit code, stdout). No k8s reader by default.
-        self.secret_k8s: tuple[int, str] = (0, "")
-        self.secret_k8s_error: Exception | None = None
         self.discord_ok = True
-        self.releases: dict[str, str] = {}
         self.log: list[tuple] = []
         self.repo = repo
         # The DeployTools built from this object; the `tick` fixture fills it in, and every
@@ -160,18 +144,6 @@ class ScriptedTick:
             if commits is None:
                 commits = [(self.origin, self.paths)]
             return "\n".join(f"@@{sha}\n" + "\n".join(ps) for sha, ps in commits)
-        if sub == "diff" and argv[2] == "-U0":
-            service = argv[-1].split("/")[3]
-            # No `.get(..., "")` default. An empty diff is a REAL production answer (the
-            # range touched no line of that defaults file), so a silent default would let a
-            # test that forgot to script one read as "nothing changed" and pass. Every other
-            # `run()` path raises on an unscripted call; this is the one that did not.
-            assert service in self.diffs, (
-                f"the image-diff read asked for {service!r}, which no test scripted "
-                f"(scripted: {sorted(self.diffs)}). Script an empty diff as "
-                f"diffs[{service!r}] = '' when that is what the test means."
-            )
-            return self.diffs[service]
         if sub == "show":
             if argv[2] not in self.files:
                 raise RuntimeError(
@@ -218,9 +190,6 @@ class ScriptedTick:
             return False
         raise AssertionError(f"unscripted ancestry query: {ancestor} {descendant}")
 
-    def release_commit(self, service: str) -> str | None:
-        return self.releases.get(service)
-
     def fetch_ci_verdict(self, sha: str) -> str:
         """The scripted verdict for the tip, or for one scripted ancestor of it.
 
@@ -238,23 +207,6 @@ class ScriptedTick:
         )
         return self.ancestor_ci[sha]
 
-    def narrow_deploy_plane(
-        self, _repo: str, old: str, new: str, _timeout: float
-    ) -> tuple[int, str]:
-        """The scripted narrowing, asserted to be asked about THIS tick's own range.
-
-        A fake that ignored its refs would answer the same for a derivation run after
-        the merge, which is the one thing the call site's ordering is about.
-        """
-        assert (old, new) == (self.local, self.origin), (
-            f"the narrowing asked about {old[:8]}..{new[:8]}, not this tick's "
-            f"{self.local[:8]}..{self.origin[:8]}"
-        )
-        self.log.append(("narrow", [old, new]))
-        if self.narrow_error is not None:
-            raise self.narrow_error
-        return self.narrow
-
     def narrow_setup_role(
         self,
         _repo: str,
@@ -267,9 +219,9 @@ class ScriptedTick:
     ) -> tuple[int, str]:
         """The scripted setup-role narrowing, asserted against THIS tick's own range.
 
-        Same assertion as `narrow_deploy_plane` and for the same reason: the derivation reads
-        the range through `git show`, so a fake that ignored its refs would answer identically
-        for a range it was never asked about.
+        The derivation reads the range through `git show`, so a fake that ignored its refs
+        would answer identically for a range it was never asked about, including one run
+        after the merge.
         """
         assert (old, new) == (self.local, self.origin), (
             f"the setup narrowing asked about {old[:8]}..{new[:8]}, not this tick's "
@@ -292,29 +244,6 @@ class ScriptedTick:
         if self.secret_readers_error is not None:
             raise self.secret_readers_error
         return list(self.secret_readers), dict(self.secret_unread)
-
-    def secret_k8s_readers(self, _repo: str, old: str, new: str) -> tuple[int, str]:
-        """The scripted deploy tags reading a moved key, asserted against THIS tick's range."""
-        assert (old, new) == (self.local, self.origin), (
-            f"the secret k8s readers were asked about {old[:8]}..{new[:8]}"
-        )
-        self.log.append(("secret_k8s", [old, new]))
-        if self.secret_k8s_error is not None:
-            raise self.secret_k8s_error
-        return self.secret_k8s
-
-    def emit_deploy_annotation(
-        self,
-        services: set[str],
-        _sha: str,
-        result: str = "ok",
-        _duration_s: float | None = None,
-    ) -> None:
-        # A success keeps the two-tuple every older assertion reads; a failure names its result.
-        if result == "ok":
-            self.log.append(("annotation", set(services)))
-        else:
-            self.log.append(("annotation", set(services), result))
 
     def now(self, tz=None) -> datetime:
         return CLOCK if tz is None else CLOCK.astimezone(tz)
@@ -390,21 +319,9 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         github_authenticated=lambda: scripted.authenticated,
         discord_post=scripted.discord_post,
         flush_discord_spool=scripted.flush_discord_spool,
-        narrow_deploy_plane=scripted.narrow_deploy_plane,
         narrow_setup_role=scripted.narrow_setup_role,
         setup_routing=lambda _repo, _ref, _host: checkout_routing(),
         secret_setup_readers=scripted.secret_setup_readers,
-        secret_k8s_readers=scripted.secret_k8s_readers,
-        # The host's render records, read for a log line alone, so no tick test reads them.
-        digest_diff=lambda _ref: {},
-        # The host's release records, which a tick that records `k8s_unapplied` reads to drop
-        # a line already deployed (#4087). A tick test that wants one scripts it here.
-        release_commit=scripted.release_commit,
-        # A subprocess over the real tree; no tick test discharges by an own-role digest.
-        digest_provable=lambda _repo, _roles: set(),
-        # The same, for the per-range answer a role that is not provable takes (#4781).
-        digest_covers=lambda _repo, _items: set(),
-        emit_deploy_annotation=scripted.emit_deploy_annotation,
         now=scripted.now,
     )
 

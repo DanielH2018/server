@@ -10,13 +10,14 @@ docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*.
 given and deploy.sh refuses such a tag with exit 5. A PR whose only tags are such tags runs no
 deploy.sh at all.
 
-`owned_by_narrowing` finds such a tag where the PR's derivation cannot. A deploy-plane edit,
-such as the `host_vars` line that flips an entry to `owner: flux`, classifies as broad: the
-tick applies it and derives no tag for it. The deployer's own narrowing still names the tag,
-and the tick drops it because Flux applies it, so the landing reads the same narrowing and
-waits on promotion for it (#5146).
+The landing derives no k8s tag from paths since D6.12 (docs/target-architecture/deploy/
+d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*). `drop_path_derived` empties
+`owned_tags` unless `--tags` named them, and every landing whose PR `moves_the_bundle` waits
+on the promotion. land-wait's changed set, read from the two `digests.json` files, then names
+the tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that
+moves no bundle file waits on `homelab` alone and gates no tag.
 
-`wait_on_promotion` then runs `promote.py land-wait` on the merge commit. Its four outcomes
+`wait_on_promotion` runs `promote.py land-wait` on the merge commit. Its four outcomes
 map to a landing's words:
 
 | land-wait | Verdict | Cause | Exit |
@@ -36,27 +37,41 @@ tags too, when only some were. Either way the gate leaves the suspended tags out
 """
 
 import subprocess
-from typing import NoReturn
 
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib.land_tags import changes_cluster_vars
-from deploy_tools.land_lib.landing import Landing, TickState
+from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import (
     PROMOTE_TIMEOUT_NOTE,
     Cause,
     Verdict,
-    remaining_hosts_note,
     say,
 )
-from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.repo_paths import GITOPS_DEPLOY_FILES
-from renderer.renderer_lib.bundle import CLUSTER_VARS
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from deployer_lib.deploy_changes import _BROAD_DEPLOY_PREFIXES
+from deployer_lib.deploy_changes import _is_test_only_path, is_doc
+
+
+def _reaches_no_render(path: str) -> bool:
+    """A document or a test, which no render reads; a `.md` a role ships under `files/` may."""
+    if _is_test_only_path(path):
+        return True
+    return is_doc(path) and not (
+        path.startswith("ansible/roles/") and "/files/" in path
+    )
+
+
+def moves_the_bundle(paths) -> bool:
+    """Whether a changed path may move the bundle `promote` publishes (D6.12).
+
+    Every path but a document or a test may: the landing waits on land-wait, whose changed
+    set says what moved, and a PR that moved nothing waits on `homelab` alone. A prefix list
+    of render inputs would end a PR it missed at `nothing-to-deploy` unwaited.
+    """
+    return not all(_reaches_no_render(p) for p in paths)
 
 
 def published(ln: Landing) -> list[str]:
@@ -107,117 +122,39 @@ def split_owned(ln: Landing) -> None:
         say(f"{tag}: owner: {owner}, so it lands through promote, not deploy.sh")
 
 
-def owned_by_narrowing(ln: Landing) -> None:
-    """Add to `owned_tags` each tag the deployer's narrowing of a deploy-plane PR names.
+def _flux_owned(ln: Landing, tags) -> list[str]:
+    """The `owner: flux` tags at the merge commit among `tags`, which the gate may ask about.
 
-    The deployer narrows a deploy-plane range to the tags its render reaches, then drops each
-    tag that is not Ansible-owned (`deploy_narrow._deploy_plane`). The PR's own derivation
-    never names those tags, because the edit is broad, so without this a landing graded the
-    tick alone and printed `settled` while the promotion was still running.
-
-    `deploy_tags.py narrow` runs over the PR's own range, the commits the PR added, rather
-    than `--since`, which also holds other sessions' merges. A tag it names that is still
-    Ansible-owned stays with the tick, which applied it; only the rest enter `owned_tags`.
-    A refusal (exit 3) still prints the tags it reached, and those are read too: a bulk flip
-    covering most of the fleet is refused, and its tags need the wait as much as one tag
-    does. No PR range, no deploy-plane path, or any other failure adds nothing, which is the
-    landing as it was before #5146.
-
-    An unreadable ownership map ends the landing in `_owners_unread`, not through
-    `owners_at_merge`'s refusal. When the tick is the apply, step 4 has already applied this
-    deploy-plane change, so "nothing was deployed" would be false. What is unknown is only
-    whether a promotion owes any of the narrowed tags, and the verdict line says so, beside
-    the tick's own state.
+    A widened changed set names every Kustomization the cluster lists, so this keeps a name
+    that is no deploy tag away from `probe.py health`. An unreadable ownership map keeps
+    every name and says so: a gate asked too much fails loudly, one asked too little passes.
     """
-    cl = ln.classification
-    if not any(p.startswith(_BROAD_DEPLOY_PREFIXES) for p in cl.pr_paths):
-        return
-    if not cl.pr_range:
-        say("no PR range to narrow, so no tag Flux applies is looked for")
-        return
-    base, head = cl.pr_range.split("..", 1)
-    r = ln.tools.deploy_tags(ln.opts.primary, ["narrow", base, head])
-    if r.returncode not in (DEPLOY_OK, DEPLOY_BROAD):
-        say(
-            f"the deployer's narrowing failed on this PR's range (exit {r.returncode}), so "
-            "no tag Flux applies is looked for"
-        )
-        return
-    narrowed = [t for t in r.stdout.strip().split(",") if t]
-    if not narrowed:
-        return
+    if not tags:
+        return []
     try:
         owners = ln.tools.flux.owners_at(ln.opts.primary, ln.merge_sha)
     except OWNER_READ_ERRORS as exc:
-        _owners_unread(ln, narrowed, exc)
-    found = {
-        tag: owners[tag]
-        for tag in narrowed
-        if tag in owners and tag not in ln.owned_tags
-    }
-    ln.owned_tags |= found
-    for tag, owner in found.items():
         say(
-            f"{tag}: this PR's deploy-plane change reaches it, and owner: {owner}, so it "
-            "lands through promote"
+            f"could not read which tags Flux applies at {ln.merge_sha[:12]} ({exc}); gating every changed name"
         )
+        return list(tags)
+    return [tag for tag in tags if owners.get(tag) == "flux"]
 
 
-def _owners_unread(ln: Landing, narrowed: list[str], exc: Exception) -> NoReturn:
-    """End a deploy-plane landing whose ownership map cannot be read at the merge commit.
+def drop_path_derived(ln: Landing) -> None:
+    """Empty `owned_tags` unless `--tags` named them: the changed set names a PR's tags.
 
-    This arm ends the landing inside step 5, before `deploy.no_tag_outcome` and step 7 read
-    the deployer's state, so it reports that state itself (#5160). A plane only a hand can
-    apply keeps `needs-manual-apply`, with the tick's half printed beside it, as in
-    `no_tag_outcome`. Without one, a held tick means this PR's own apply failed, which is
-    `deploy-failed` with cause `tick-held` whatever a promotion owes. Every other tick state
-    is printed beside `needs-manual-apply`.
+    A path-derived tag is a guess at what the render moves. A `tasks/`-only change moves no
+    bundle file, and a shared template moves tags no path names, so the landing waits on
+    land-wait's changed set instead and gates what it read (D6.12).
     """
-    pr, sha, tags = ln.opts.pr, ln.merge_sha, ",".join(narrowed)
-    print(f"  could not read which tags Flux applies at {sha[:12]}: {exc}")
-    print(
-        "  once it reads, wait on the promotion by hand: uv run python "
-        f"scripts/deploy_tools/promote.py land-wait {sha}"
+    if ln.opts.tags or not ln.owned_tags:
+        return
+    say(
+        f"{','.join(ln.owned_tags)}: named by this PR's paths; the promotion's changed set "
+        "names the tags this landing gates"
     )
-    if ln.plane:
-        print(f"  it needs applying by hand: {ln.plane}")
-    if ln.classification.remaining_setup:
-        print(remaining_hosts_note(ln.classification.remaining_setup))
-    for line in ln.tick_half_open_lines():
-        print(line)
-    if (
-        not ln.plane
-        and ln.classification.self_applied
-        and ln.tick_state() == TickState.HELD
-    ):
-        ln.ledger.cause = Cause.TICK_HELD
-        ln.finish(
-            Verdict.DEPLOY_FAILED,
-            1,
-            f"PR #{pr}, {sha} — the tick's own apply failed and is held; whether a "
-            f"promotion also owes {tags} is unknown",
-        )
-    ln.finish(
-        Verdict.NEEDS_MANUAL_APPLY,
-        1,
-        f"PR #{pr}, {sha} — the tick may already have applied this change; whether a "
-        f"promotion owes {tags} is unknown",
-    )
-
-
-def waits_on_cluster_vars(ln: Landing) -> bool:
-    """Whether the PR changes a cluster file (`land_tags.CLUSTER_VARS_PATHS`)."""
-    return changes_cluster_vars(ln.classification.pr_paths)
-
-
-def forced_names(ln: Landing) -> list[str]:
-    """The names land-wait waits on whatever the digests say: `cluster-vars`, or none.
-
-    The ledger's `tags=` names them beside the deploy tags, so a landing that changed only a
-    cluster file still shows what it waited on (#5175). No reader of that field treats a
-    value as a deploy tag: the Landings board only prints it.
-    """
-    return [CLUSTER_VARS] if waits_on_cluster_vars(ln) else []
+    ln.owned_tags = {}
 
 
 # What a landing keeps back from `LAND_DEADLINE` after the promotion wait: the health gate and
@@ -236,18 +173,20 @@ def wait_cap(ln: Landing) -> float | None:
 def wait_on_promotion(ln: Landing) -> None:
     """Wait until a promotion covers the merge commit; return on `settled`, else end the landing.
 
-    A PR that changes a cluster file also waits on `cluster-vars` and every Kustomization
-    that depends on it, which land-wait reads from the live graph. `cluster-vars` is not a
-    deploy tag, so it stays out of `owned_tags` and the health gate never asks for it.
+    The changed set's tags join `owned_tags` as `owner: flux`, so the health gate and the
+    ledger read what the promotion applied rather than what the PR's paths named.
     """
     pr, sha = ln.opts.pr, ln.merge_sha
-    forced = forced_names(ln)
-    also = frozenset(forced)
-    tags = ",".join([*ln.owned_tags, *forced])
-    say(f"waiting until a promotion covers {sha[:12]} ({tags})")
+    named = f" ({','.join(ln.owned_tags)})" if ln.owned_tags else ""
+    say(f"waiting until a promotion covers {sha[:12]}{named}")
     result = ln.tools.flux.land_wait(
-        sha, published(ln), ln.opts.primary, also, wait_cap(ln), ln.opts.window_grace
+        sha, published(ln), ln.opts.primary, wait_cap(ln), ln.opts.window_grace
     )
+    for tag in _flux_owned(ln, result.tags):
+        ln.owned_tags.setdefault(tag, "flux")
+    tags = ",".join(ln.owned_tags) or "homelab"
+    if result.tags:
+        say(f"the changed set names {','.join(result.tags)}")
     if result.widened:
         say(f"land-wait waited on every Kustomization: {result.widened}")
     if result.suspended:

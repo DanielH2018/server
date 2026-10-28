@@ -87,7 +87,7 @@ ALLOWED = {
     # Its boundaries. It imports `promote.py`'s `last-good` reader, outside land_lib.
     "pin_reads": set(),
     "policy": {"landing", "outcome", "pr_json", "gh_read"},
-    "classify": {"landing", "outcome", "land_tags"},
+    "classify": {"landing", "outcome", "land_tags", "promotion"},
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},
     "deploy": {
@@ -101,9 +101,8 @@ ALLOWED = {
     },
     # Step 5's answer to a stale `--at` run: the deploy callable is handed in, not imported.
     "stale_retarget": {"landing", "outcome"},
-    # The split before deploy.sh and the wait on promotion, a half of step 5 (D2.3). It reads
-    # `land_tags.changes_cluster_vars`, the path rule for the cluster-vars wait (D3.4).
-    "promotion": {"landing", "outcome", "land_tags"},
+    # The split before deploy.sh and the wait on promotion, a half of step 5 (D2.3).
+    "promotion": {"landing", "outcome"},
     # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
     # a run in flight. The kick's states live in tick.py, in one place.
     "health_verdict": {"landing", "outcome", "tick", "promotion"},

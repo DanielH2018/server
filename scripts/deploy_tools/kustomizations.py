@@ -64,21 +64,3 @@ def kustomization_graph(items: list[dict]) -> tuple[dict[str, list[str]], set[st
         if spec.get("suspend") is True:
             suspended.add(name)
     return depends_on, suspended
-
-
-def with_dependents(
-    names: frozenset[str], depends_on: dict[str, list[str]], suspended: set[str]
-) -> frozenset[str]:
-    """`names`, plus every Kustomization that depends on one of them, directly or not.
-
-    A suspended dependent is left out, because Flux applies nothing for it.
-    """
-    found = set(names)
-    grew = True
-    while grew:
-        grew = False
-        for name, deps in depends_on.items():
-            if name not in found and name not in suspended and found.intersection(deps):
-                found.add(name)
-                grew = True
-    return frozenset(found)

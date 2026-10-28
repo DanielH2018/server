@@ -406,8 +406,10 @@ def comment_only_paths(
     so a ref fetched in the primary is readable from a worktree that never fetched it.
     """
     from deploy_tools.narrow_lib.templates import comment_only_shared_templates
-    from deployer_lib.deploy_k8s import comment_only_k8s_defaults
-    from deployer_lib.deploy_logic import comment_only_broad_changes
+    from deployer_lib.deploy_logic import (
+        comment_only_broad_changes,
+        comment_only_k8s_defaults,
+    )
 
     show = show or _git_show
     return (

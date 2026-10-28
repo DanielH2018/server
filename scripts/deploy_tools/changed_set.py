@@ -91,7 +91,7 @@ def suspended_changed(older: object, newer: object) -> list[str]:
     """The tags suspended in both parsed `digests.json` files whose `own` digest differs (D5.1d).
 
     A suspended tag applies nothing until its resume, so a change to its render that lands
-    while it stays suspended is lost. `cross_plane_order.py` refuses such a PR, comparing its
+    while it stays suspended is lost. `render_diff_gates.py` refuses such a PR, comparing its
     base with its head, and `promote.py decide` holds such a revision, comparing `last-good`
     with it. A tag the newer file no longer suspends is the resume and passes.
     """

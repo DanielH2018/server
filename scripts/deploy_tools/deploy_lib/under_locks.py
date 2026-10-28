@@ -50,7 +50,6 @@ from deploy_tools.deploy_lib.messages import say, say_error
 from deploy_tools.deploy_lib.playbook import (
     annotate,
     annotate_failure,
-    discharge_owed_k8s,
     run_playbook,
 )
 from lib.git import git, git_stdout
@@ -522,7 +521,6 @@ def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
     # saying it happened.
     if status == 0:
         annotate(state)
-        discharge_owed_k8s(repo_root)
         return 0
     if status == DEPLOY_NO_HOSTS:
         say_error(

@@ -264,6 +264,32 @@ def comment_only_broad_changes(paths, old_ref: str, new_ref: str, show) -> set[s
     return _content_unchanged(candidates, old_ref, new_ref, show)
 
 
+# A k8s role's `defaults/` file. Ansible reads it only through its values, so an edit that
+# moves no content line renders the same manifests. `manifests` is left out: it is the renderer
+# every service includes, and `probe_lib/releases_diff.py` skips it for the same reason.
+_K8S_DEFAULTS_FILE = re.compile(
+    r"^ansible/roles/k8s/(?!manifests/)[^/]+/defaults/[^/]+\.ya?ml$"
+)
+
+
+def comment_only_k8s_defaults(paths, old_ref: str, new_ref: str, show) -> set[str]:
+    """The k8s role `defaults/` files whose change between two refs is comments only (#4460).
+
+    A caller drops the paths returned here before classifying, as it drops
+    `comment_only_broad_changes`'s. It moved here from `deploy_k8s.py` when D6.12 deleted that
+    module, because three kept readers ask it: `deploy_phases.plan_tick`,
+    `deploy_lib/tags.py:comment_only` and the release-staleness census
+    (`probe_lib/releases_diff.py:drop_comment_only_defaults`).
+
+    Kept apart from `comment_only_broad_changes` rather than widening
+    `_COMMENT_ONLY_PREFIXES`: land.sh's plane note and the `blockers` verdict read that one,
+    and neither asks about a service role. `templates/` and `tasks/` stay out too -- a `#`
+    line in a `.j2` is usually rendered content.
+    """
+    candidates = [p for p in paths if _K8S_DEFAULTS_FILE.match(p)]
+    return _content_unchanged(candidates, old_ref, new_ref, show)
+
+
 def _content_unchanged(paths, old_ref: str, new_ref: str, show) -> set[str]:
     """The YAML `paths` whose `_content_lines` are equal at both refs.
 
@@ -340,20 +366,9 @@ class ChangeSet:
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
     # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …), named for history.
     tasks: set[str] = field(default_factory=set)
-    # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...) and are not promoted to
-    # `k8s_deploy` below. Each defer-and-alerts; nothing this tick applies can cover one.
+    # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...). The tick applies none
+    # since D6.12; `reach.py` and `land_lib` read it until D6.3 and D6.4.
     k8s: set[str] = field(default_factory=set)
-    # k8s service(s) whose change is an image-pin bump ELIGIBLE for auto-deploy, split out of
-    # `k8s` by split_k8s_auto_deploy; `k8s` keeps its "defer-and-alert, never applied" meaning.
-    k8s_deploy: set[str] = field(default_factory=set)
-    # The newest commit in the range whose own diff reaches each `k8s` service, which
-    # `k8s_unapplied` records instead of the tip (#3111). `deploy_phases.plan_tick` fills it.
-    k8s_origins: dict[str, str] = field(default_factory=dict)
-    # k8s roles that import a changed `files/*.py` owned by another role — see
-    # shared_module_consumers. Kept separate from `k8s` so it stays inert for every consumer
-    # that reads `k8s` directly; only k8s_remediation folds it in, and only after
-    # intersecting with what this host declares.
-    k8s_consumers: set[str] = field(default_factory=set)
     # k8s tags not Ansible-owned at origin, which `deploy_inventory.route_not_ansible_owned`
     # moves out of `k8s`: merged and logged, never applied, deferred, alerted on or owed (D2.2).
     flux: set[str] = field(default_factory=set)
@@ -535,9 +550,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if at is None:
             continue
         if at.plane == "k8s":
-            # A k8s role change the deployer applies only as a promoted image-pin bump
-            # (`split_k8s_auto_deploy`, `cs.k8s_deploy`); every other one defer-and-alerts.
-            # The whole role dir, because the alert only needs to name the role.
+            # A k8s role change, which `promote` applies and the tick does not (D6.12).
+            # The whole role dir, because a reader only needs to name the role.
             cs.k8s.add(at.role)
         elif at.plane != "containers":
             # A setup-plane path, which `_BROAD_SETUP_PREFIXES` consumes before this loop

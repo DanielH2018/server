@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""A busy service lock defers the tick; every other failure still holds and rolls back.
+"""A busy service lock defers the tick; every other failure still holds the plane.
 
 ADR-0017 gave this deployer one lock per service, and an operator `./scripts/deploy.sh` can be
 holding one when a tick wants it. That is contention, not a failed deploy: nothing ran, so
-holding the SHA would park every later tick behind a lock that has since been released, and
-rolling back would redeploy a version that is already live.
+holding the SHA would park every later tick behind a lock that has since been released.
 
 Each handler is driven directly, the way `test_gitops_deploy_phases.py` drives them, because
 what is under test is one `except` arm rather than a whole tick. The FLAGGED half of each pair
-— the ordinary failure that must still hold and roll back — lives in
+— the ordinary failure that must still hold — lives in
 `test_gitops_deploy_main_branches.py`, which runs those same handlers through `main()`.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_lock_contention.py
@@ -29,9 +28,7 @@ BUSY = "service lock sonarr busy for 900s"
 
 
 def _plan(cs: ChangeSet, paths=None) -> deploy_tick_types.TickPlan:
-    return deploy_tick_types.TickPlan(
-        cs=cs, paths=list(paths or []), k8s_services=set()
-    )
+    return deploy_tick_types.TickPlan(cs=cs, paths=list(paths or []))
 
 
 def _target(**overrides) -> deploy_tick_types.TickTarget:
@@ -73,20 +70,12 @@ def _deferred(tick, state_dir, posts: int = 0) -> None:
     )
 
 
-def test_a_busy_service_lock_defers_a_k8s_deploy(
-    gitops_deploy, tick, settings, state_dir, state
-):
-    """CLEAN half for handle_k8s: one rollout is running, so this tick does nothing at all.
-
-    The rollback the FLAGGED half takes would revert volumes to a snapshot and redeploy the
-    prior pin over a cluster this tick never touched — strictly more dangerous than waiting.
-    """
-    _busy(tick)
-    plan = _plan(ChangeSet(k8s_deploy={"sonarr"}))
-    code = deploy_handlers.handle_k8s(tick.tools, state, settings, _target(), plan)
-    assert code == 0
-    assert len(tick.playbooks) == 1, "a rollback ran for a deploy that never started"
-    _deferred(tick, state_dir)
+def _setup() -> deploy_tick_types.TickPlan:
+    """A range whose one plan applies `gitops_deploy`, a role this deployer applies itself."""
+    return _plan(
+        ChangeSet(broad=True, broad_setup=True, setup_roles={"gitops_deploy"}),
+        paths=["ansible/roles/setup/gitops_deploy/templates/config.env.j2"],
+    )
 
 
 def test_a_busy_service_lock_defers_a_broad_apply(
@@ -99,11 +88,9 @@ def test_a_busy_service_lock_defers_a_broad_apply(
     both markers.
     """
     _busy(tick)
-    plan = _plan(
-        ChangeSet(broad=True, broad_setup=True, setup_roles={"gitops_deploy"}),
-        paths=["ansible/roles/setup/gitops_deploy/templates/config.env.j2"],
+    code = deploy_handlers.handle_broad(
+        tick.tools, state, settings, _target(), _setup()
     )
-    code = deploy_handlers.handle_broad(tick.tools, state, settings, _target(), plan)
     assert code == 0
     _deferred(tick, state_dir)
     assert not (state_dir / "receipts.jsonl").exists(), (
@@ -116,8 +103,7 @@ def test_a_busy_service_lock_names_the_lock_in_the_marker(
     gitops_deploy, tick, settings, state_dir, state
 ):
     tick.playbook_outcomes = [deploy_locks.ServiceLockBusy(BUSY, lock="sonarr")]
-    plan = _plan(ChangeSet(k8s_deploy={"sonarr"}))
-    deploy_handlers.handle_k8s(tick.tools, state, settings, _target(), plan)
+    deploy_handlers.handle_broad(tick.tools, state, settings, _target(), _setup())
     assert (state_dir / "contention_since").read_text().split()[1] == "sonarr"
 
 
@@ -130,9 +116,8 @@ def test_consecutive_contention_defers_extend_one_streak(
         deploy_locks.ServiceLockBusy(BUSY),
         deploy_locks.ServiceLockBusy(BUSY),
     ]
-    plan = _plan(ChangeSet(k8s_deploy={"sonarr"}))
     for _ in range(2):
-        deploy_handlers.handle_k8s(tick.tools, state, settings, _target(), plan)
+        deploy_handlers.handle_broad(tick.tools, state, settings, _target(), _setup())
     entry = state.contention_pending()
     assert entry.count == 2
     assert entry.first_seen <= entry.last_seen
@@ -184,49 +169,6 @@ def test_a_contended_mixed_range_records_no_pending_role(
     _deferred(tick, state_dir, posts=1)
 
 
-# A range carrying BOTH broad planes, so `deploy_narrow.plan` gives the loop two plans: the
-# setup plane's `initial_setup.yml`, then the deploy plane's `deploy.yml`. Plan 1 applies and
-# records it in the receipt; plan 2 is where the busy lock lands.
-_TWO_PLANES = ChangeSet(
-    broad=True,
-    broad_setup=True,
-    broad_deploy=True,
-    setup_roles={"gitops_deploy"},
-)
-_TWO_PLANE_PATHS = [
-    "ansible/roles/setup/gitops_deploy/templates/config.env.j2",
-    "ansible/inventory/group_vars/all.yml",
-]
-
-
-def test_a_contended_second_plan_takes_back_the_first_plans_receipt(
-    gitops_deploy, tick, settings, state_dir, state
-):
-    """CLEAN half: the reset undoes the merge, so no marker may claim that SHA.
-
-    Nothing here is pending — `gitops_deploy` is a role this deployer applies — which is why
-    the reverse cannot hang off the `Recorded` of a tick with no pending role. `land.sh` reads
-    the receipt to tell a plane the tick APPLIED from one it merely fast-forwarded past, and
-    after the reset this tree carries neither.
-    """
-    tick.narrow = (0, "sonarr")
-    tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
-    code = deploy_handlers.handle_broad(
-        tick.tools,
-        state,
-        settings,
-        _target(),
-        _plan(_TWO_PLANES, _TWO_PLANE_PATHS),
-    )
-    assert code == 0
-    assert len(tick.playbooks) == 2, "both plans must have been attempted"
-    assert not (state_dir / "receipts.jsonl").exists(), (
-        "the first plan's apply is still recorded against a SHA the reset took away; the "
-        "next tick re-crosses the range to write it"
-    )
-    _deferred(tick, state_dir)
-
-
 def test_a_contended_tick_leaves_an_earlier_ticks_receipt_alone(
     gitops_deploy, tick, settings, state_dir, state
 ):
@@ -245,15 +187,8 @@ def test_a_contended_tick_leaves_an_earlier_ticks_receipt_alone(
         sort_keys=True,
     )
     (state_dir / "receipts.jsonl").write_text(earlier)
-    tick.narrow = (0, "sonarr")
-    tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
-    deploy_handlers.handle_broad(
-        tick.tools,
-        state,
-        settings,
-        _target(),
-        _plan(_TWO_PLANES, _TWO_PLANE_PATHS),
-    )
+    _busy(tick)
+    deploy_handlers.handle_broad(tick.tools, state, settings, _target(), _setup())
     assert (state_dir / "receipts.jsonl").read_text() == earlier
 
 

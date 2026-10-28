@@ -1,7 +1,7 @@
 # ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_inventory.py
 """What this host declares, read from host_vars text.
 
-`declared_k8s_services` and `service_owners` parse `containers_list` without yaml (the unit
+`service_owners` parses `containers_list` without yaml (the unit
 runs under `uv run --no-project`), and `declares_no_gitops` reads whether this host is the
 deployer at all.
 """
@@ -32,29 +32,13 @@ _LIST_END = re.compile(r"^[^\s#]", re.MULTILINE)
 def _listing(hostvars_text: str) -> str:
     """The text of the `containers_list:` block alone, or "" when the file has no such key.
 
-    Both readers run `_DECLARED_ENTRY` over this rather than the whole file, so a top-level
+    `service_owners` runs `_DECLARED_ENTRY` over this rather than the whole file, so a top-level
     list before or after `containers_list` never reads as entries (#4964).
     """
     start = _LIST_START.search(hostvars_text)
     if start is None:
         return ""
     return _LIST_END.split(hostvars_text[start.end() :], maxsplit=1)[0]
-
-
-def declared_k8s_services(hostvars_text: str) -> set[str]:
-    """The `platform: k8s` service names declared in a host's containers_list block.
-
-    `deploy_k8s_owed.alert_and_record_deferred` reads it to name the k8s roles a tick merged
-    and will not apply. An entry with no `platform:` key is Docker, and is not returned.
-    """
-    out: set[str] = set()
-    for m in _DECLARED_ENTRY.finditer(_listing(hostvars_text)):
-        name, block = m.group(1), m.group(2)
-        pm = _ENTRY_PLATFORM.search(block)
-        platform = pm.group(1) if pm else "docker"
-        if platform == "k8s":
-            out.add(name)
-    return out
 
 
 # The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag. `released`:
@@ -138,18 +122,12 @@ def service_owners(hostvars_text: str) -> dict[str, str]:
 def route_not_ansible_owned(cs: ChangeSet, owners: Mapping[str, str]) -> None:
     """Move the k8s roles whose tag is in `owners` from `cs.k8s` into `cs.flux`.
 
-    `owners` is `service_owners` at the commit being applied. A tag that reaches the range only
-    as a consumer of another role's changed file leaves `cs.k8s_consumers` and is not moved,
-    because the range did not change it. `deploy_k8s_owed.skip_not_ansible_owned` logs what
-    moved; this module stays import-pure, because `deploy_logic` re-exports it.
-
-    `deploy_phases.plan_tick` runs this before `split_k8s_auto_deploy`, which promotes out of
-    `cs.k8s` alone, so an image bump to such a role is never promoted. A k8s role's directory
-    name is its tag, as everything that names a `cs.k8s` member as a `--tags` value assumes.
+    `owners` is `service_owners` at the commit being applied. This module stays import-pure,
+    because `deploy_logic` re-exports it. A k8s role's directory name is its tag, as
+    everything that names a `cs.k8s` member as a `--tags` value assumes.
     """
     moved = cs.k8s & owners.keys()
     cs.k8s -= moved
-    cs.k8s_consumers -= owners.keys()
     cs.flux |= moved
 
 

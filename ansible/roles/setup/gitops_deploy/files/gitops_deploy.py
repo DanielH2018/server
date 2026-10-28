@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """GitOps deployer — runs once per systemd-timer tick, on every host with has_gitops set.
 
-Flow: fetch origin/master; if it advanced, require the tip's CI to be green; map changed
-templates to services; ff-merge; deploy each via the existing ansible-playbook path;
-health-gate each container. On failure: reset to the previous HEAD, redeploy the prior version,
-record the bad SHA as a hold marker, and alert the dedicated Discord webhook.
+Flow: fetch origin/master; if it advanced, require the tip's CI to be green; map the changed
+paths to planes; ff-merge; apply the setup roles this host runs with `initial_setup.yml`. On a
+failed apply: record the bad SHA as a hold marker, mark the plane, and alert the dedicated
+Discord webhook. A k8s role reaches the cluster through `promote`, never through this tick
+(D6.12).
 
 `main()` sequences named phases and decides nothing itself: `deploy_phases.assess()` reads git
 and returns a `TickTarget`, `deploy_phases.plan_tick()` turns the incoming range into a
@@ -55,10 +56,8 @@ if __name__ == "__main__":
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deployer_lib import deploy_alert_text
 from deployer_lib import deploy_alerts
-from deployer_lib import deploy_broad_k8s
 from deployer_lib import deploy_defer
 from deployer_lib import deploy_handlers
-from deployer_lib import deploy_k8s_owed
 from deployer_lib import deploy_phases
 from deployer_lib import deploy_state
 from deployer_lib import deploy_tick_types
@@ -102,37 +101,20 @@ REPO = CONFIG.repo
 BRANCH = CONFIG.branch
 HOSTNAME = CONFIG.hostname
 
-# ── k8s auto-deploy ───────────────────────────────────────────────────────────────────────────
-# OFF unless the host explicitly enables it, so a host that has not re-templated config.env
-# behaves exactly as it does today.
+# ── the k8s auto-deploy denylist ──────────────────────────────────────────────────────────────
+# The tick deploys no k8s role since D6.12. These three stay until D6.2a, because
+# `deploy_phases.reconcile_denylist` still re-renders the denylist line that
+# `land_renovate_pr.py:denied_roles` reads.
 K8S_AUTODEPLOY_ENABLED = CONFIG.k8s_autodeploy_enabled
 # The same key, kept as the file asked for it — the fail-closed disarm below mutates only
 # K8S_AUTODEPLOY_ENABLED. `deploy_phases.reconcile_denylist` gates on this one so that the
 # damaged state the disarm produces stays healable; the DECIDED marker at that gate is the long
 # form. No new config.env key: both read K8S_AUTODEPLOY_ENABLED.
 K8S_AUTODEPLOY_ENABLED_IN_FILE = CONFIG.k8s_autodeploy_enabled_in_file
-K8S_AUTODEPLOY_PILOT = CONFIG.k8s_autodeploy_pilot
-# 0 disables the cap. See split_k8s_auto_deploy: the whole promoted set shares one
-# ansible-playbook run and one K8S_DEPLOY_TIMEOUT_S, and a timeout rolls the batch back
-# together.
-# DECIDED: falls back to the role default 3, NOT to 0 — same argument as the claim cap below,
-# which this line did not carry until 2026-08-24. 0 means UNCAPPED, so a config.env that lost
-# this key would restore the unbounded batch on exactly the host whose config is damaged. The
-# live case is truncation, not age: in templates/config.env.j2 the denylist is line 23 and this
-# key is line 27, so a half-written file keeps a matching denylist plus ENABLED=true and drops
-# only the cap — passing the fail-closed denylist guard below while uncapped.
-K8S_AUTODEPLOY_MAX_PER_TICK = CONFIG.k8s_autodeploy_max_per_tick
-# Defaults to 1, not 0: an older config.env rendered before this key existed must get the SAFE
-# cap, not an absent one. 0 here would silently restore the unbounded-batch behaviour this
-# closes, on exactly the hosts whose config is stale (2026-08-22 review H2).
-K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK = (
-    CONFIG.k8s_autodeploy_max_claim_services_per_tick
-)
 K8S_AUTODEPLOY_DENYLIST = CONFIG.k8s_autodeploy_denylist
 if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
     # Fail closed. An absent or empty denylist means "nothing is eligible", never "everything
-    # is" — a truncated or half-rendered config.env must not silently widen what auto-deploys
-    # to the whole cluster, platform roles included.
+    # is" — a truncated or half-rendered config.env must not silently widen the list.
     # K8S_AUTODEPLOY_ENABLED_IN_FILE above is deliberately NOT flipped: it is what makes this
     # state distinguishable from a host that legitimately has the feature off, and therefore
     # what lets `deploy_phases.reconcile_denylist` re-render the file whose damage caused it.
@@ -141,24 +123,13 @@ if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
         level=WARNING,
     )
     K8S_AUTODEPLOY_ENABLED = False
-# Bounds ONE ansible-playbook invocation on the k8s path. Without it the only bound is systemd's
-# TimeoutStartSec SIGTERM, which can land mid-rollback.
-K8S_DEPLOY_TIMEOUT_S = CONFIG.k8s_deploy_timeout_s
-# Bounds the ROLLBACK redeploy specifically — the run that also reverts each claimed volume to
-# its pre-deploy snapshot (k8s/volume-revert), which is strictly more work than a forward deploy.
-# Sizing, the batch-summation gap this does NOT cover, and the lock-hold consequence all live in
-# defaults/main.yml's gitops_deploy_k8s_rollback_timeout_s comment — this fallback is only what a
-# host runs on before its config.env is re-templated with the new value.
-K8S_ROLLBACK_TIMEOUT_S = CONFIG.k8s_rollback_timeout_s
 # Bounds ONE broad-plane apply (initial_setup.yml --tags <role>, or a narrowed deploy.yml; a
 # refused narrowing defers rather than starting the whole play inside it, #4333).
 # Bounded because that arm is forward-only: without a timeout a wedged run spends the unit's
 # whole TimeoutStartSec and is SIGTERMed with no hold written and no alert sent, leaving the
 # tree fast-forwarded onto a commit nothing recorded as bad. 1800s covers the 1212s measured
 # full deploy (2026-08-22) with headroom, inside TimeoutStartSec alongside the 180s max flock
-# wait. This arm does not stack with the k8s one — it returns before that block — so it is
-# never the term that sizes the ceiling. See deploy_logic.broad_budget_ok for why no rollback
-# is funded on top.
+# wait. See deploy_logic.broad_budget_ok for why no rollback is funded on top.
 BROAD_DEPLOY_TIMEOUT_S = CONFIG.broad_deploy_timeout_s
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
@@ -183,7 +154,7 @@ def tick_config() -> Config:
 
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
-    TWO of the twelve kwargs below are load-bearing, and ten are not. The two:
+    TWO of the seven kwargs below are load-bearing, and five are not. The two:
 
       - `k8s_autodeploy_enabled` is the value AFTER the empty-denylist fail-closed disarm above,
         which is a decision this module makes and `load_config` cannot.
@@ -191,7 +162,7 @@ def tick_config() -> Config:
         that has the feature off from one whose denylist line was lost, which is the difference
         `deploy_phases.reconcile_denylist` gates on.
 
-    The other ten, `repo` among them, equal CONFIG's fields and are passed anyway, so that
+    The other five, `repo` among them, equal CONFIG's fields and are passed anyway, so that
     this snapshot, not CONFIG, stays the one object a phase reads. A test does not patch these
     constants: it builds its config with `dataclasses.replace(tick_config(), ...)`.
 
@@ -204,12 +175,7 @@ def tick_config() -> Config:
         hostname=HOSTNAME,
         k8s_autodeploy_enabled=K8S_AUTODEPLOY_ENABLED,
         k8s_autodeploy_enabled_in_file=K8S_AUTODEPLOY_ENABLED_IN_FILE,
-        k8s_autodeploy_pilot=K8S_AUTODEPLOY_PILOT,
         k8s_autodeploy_denylist=K8S_AUTODEPLOY_DENYLIST,
-        k8s_autodeploy_max_per_tick=K8S_AUTODEPLOY_MAX_PER_TICK,
-        k8s_autodeploy_max_claim_services_per_tick=K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK,
-        k8s_deploy_timeout_s=K8S_DEPLOY_TIMEOUT_S,
-        k8s_rollback_timeout_s=K8S_ROLLBACK_TIMEOUT_S,
         broad_deploy_timeout_s=BROAD_DEPLOY_TIMEOUT_S,
     )
 
@@ -218,9 +184,7 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     """Run one gitops-deploy tick end to end, as a sequence of named phases.
 
     `assess()` reads git and classifies the tick; `plan_tick()` turns the incoming range into a
-    ChangeSet; one `handle_*` phase owns each terminal branch and returns the exit code. The
-    branch order is load-bearing — broad before k8s — because a broad change and a
-    promoted image bump can arrive in the same range and the broad plane has to win.
+    ChangeSet; one `handle_*` phase owns each terminal branch and returns the exit code.
 
     Almost always returns 0 — a failed tick pages via Discord and the hold marker rather than a
     non-zero exit. The exceptions are the few `0 if posted else 1` branches, reached only when
@@ -263,9 +227,6 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     deploy_phases.adopt_setup_routing(tools, config, "HEAD")
     deploy_defer.drop_deleted_manual_plane(tools, state, config)
     deploy_defer.log_pending(state)
-    # Same shape, one plane over: the k8s changes a tick merged and did not apply (#2449,
-    # #2570). `reconcile` discharges what a deploy has since covered, then names the rest.
-    deploy_k8s_owed.reconcile(tools, state, config)
 
     target = deploy_phases.assess(tools, state, config)
     if target.action == "dirty":
@@ -277,12 +238,10 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     # the denylist from the working tree, so rendering from a tree an operator is mid-edit in
     # would bake a list nobody pushed.
     if deploy_phases.reconcile_denylist(tools, state, config, target.local):
-        # A render ENDS the tick, for two reasons. The in-memory config still holds the list the
-        # render just proved wrong, so anything below would decide against it. And every arm of
-        # this unit is non-stacking by construction — the unit template sizes TimeoutStartSec as
-        # max(broad, k8s + rollback), not a sum — so a render that ran on to a k8s
-        # deploy would be the first arm to add its budget to another's and could be SIGTERMed
-        # mid-rollback. The next tick is ten minutes away and reads the fresh config.
+        # A render ENDS the tick. Every arm of this unit is non-stacking by construction — the
+        # unit template sizes TimeoutStartSec for one broad apply, not a sum — so a render that
+        # ran on to a broad apply would add its budget to another's and could be SIGTERMed
+        # mid-apply. The next tick is ten minutes away and reads the fresh config.
         tools.note_outcome("nothing")
         return 0
     if target.action == "noop":
@@ -312,19 +271,10 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
         deploy_handlers.alert_red_tip(tools, state, config, target)
 
     plan = deploy_phases.plan_tick(tools, state, config, target)
-    plan = deploy_broad_k8s.route_secret_k8s_readers(tools, config, target, plan)
-    # DECIDED: the ledger drop runs here, before the ff-merge, although every other k8s ledger
-    # write runs on an exit that leaves the range merged. A range a busy lock resets or a
-    # manual plane parks is re-crossed by a later tick, and `deploy.sh` refuses a tree behind
-    # origin meanwhile, so no Ansible deploy can need the dropped line; once the range merges,
-    # Flux applies the service. Running it here covers every handler with one call (D2.2).
-    deploy_k8s_owed.skip_not_ansible_owned(state, plan, target.origin)
     # Every handler below merges the range, except a broad park, which relabels the tick.
     tools.note_outcome("merged")
     if plan.cs.broad:
         return deploy_handlers.handle_broad(tools, state, config, target, plan)
-    if plan.cs.k8s_deploy:
-        return deploy_handlers.handle_k8s(tools, state, config, target, plan)
     return deploy_handlers.handle_no_services(tools, state, config, target, plan)
 
 

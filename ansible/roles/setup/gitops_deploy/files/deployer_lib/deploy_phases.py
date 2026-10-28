@@ -16,31 +16,23 @@ Each takes the tick's `tools`, `state` and `config` — the `deploy_config.Confi
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
 
-from deployer_lib import deploy_alert_text
-from deployer_lib import deploy_alerts
+import re
+from collections.abc import Mapping
+
 from deployer_lib import deploy_inventory
 from deployer_lib import deploy_io
 from deployer_lib import deploy_cross_role
 from deployer_lib import deploy_defer
 from deployer_lib import deploy_setup_roles
 from deployer_lib.deploy_changes import (
-    ChangeSet,
     comment_only_broad_changes,
+    comment_only_k8s_defaults,
     services_from_changed_paths,
-    shared_module_consumers,
 )
 from deployer_lib.deploy_config import ERR, WARNING, Config, log
 from deployer_lib.deploy_git import ci_walk_candidates, is_diverged, next_action
-from deployer_lib.deploy_inventory import declared_k8s_services, declares_no_gitops
-from deployer_lib.deploy_k8s import (
-    comment_only_k8s_defaults,
-    declared_denylist,
-    declares_snapshot_claims,
-    is_image_only_diff,
-    split_k8s_auto_deploy,
-)
+from deployer_lib.deploy_inventory import declares_no_gitops
 from deployer_lib.deploy_state import DeployerState
-from deployer_lib.deploy_k8s_owed import k8s_roles_deleted_at
 from deployer_lib.deploy_tick_types import (
     NotTheDeployerHost,
     RetryableFetchError,
@@ -221,7 +213,7 @@ def plan_tick(
     """Classify the incoming range into the ChangeSet this tick will act on.
 
     Runs BEFORE the ff-merge, so every read here is at the pinned `origin` rather than the
-    working tree — see `deploy_io.k8s_declarations_at`.
+    working tree.
     """
     paths = tools.run(
         ["git", "diff", "--name-only", f"{target.local}..{target.origin}"],
@@ -240,8 +232,8 @@ def plan_tick(
             f"classify: comment-only change in {', '.join(sorted(quiet))} — "
             "not parking; the tick treats it as no change"
         )
-    # The same read for a k8s role's defaults, which would otherwise defer, page and owe a
-    # no-op deploy (#4460).
+    # The same read for a k8s role's defaults (#4460). The tick applies no k8s role since
+    # D6.12, so this only keeps the journal from naming an edit that moved nothing.
     quiet_k8s = comment_only_k8s_defaults(paths, target.local, target.origin, show)
     if quiet_k8s:
         log(
@@ -258,23 +250,15 @@ def plan_tick(
         tools, config, target.origin, services_from_changed_paths(paths), paths
     )
     deploy_defer.route_secret_readers(tools, config, target, cs)
-    # Read at origin: this runs before the ff-merge, so the deleted directory is still on disk.
-    deleted = k8s_roles_deleted_at(tools, config, target.origin, cs.k8s)
-    if deleted:
-        log(
-            f"k8s_unapplied: {', '.join(sorted(deleted))}: role directory deleted at {target.origin[:8]} — "
-            "nothing left to apply, so no k8s_unapplied line"
-        )
-    cs.k8s -= deleted
-    # Roles holding a copy of a changed file another role owns, by import or by lookup().
-    readers = deploy_cross_role.k8s_lookup_readers(paths, config.repo)
-    cs.k8s_consumers = shared_module_consumers(paths, config.repo) | readers
-    hostvars, owners = deploy_io.host_vars_owners(config, target.origin, run=tools.run)
+    _, owners = deploy_io.host_vars_owners(config, target.origin, run=tools.run)
     deploy_inventory.route_not_ansible_owned(cs, owners)
-    k8s_services = declared_k8s_services(hostvars) - owners.keys()
-    cs = _promote_k8s_auto_deploys(tools, state, config, cs, paths, target)
-    cs.k8s_origins = k8s_change_commits(tools, config, target, set(quiet))
-    return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services, owners=owners)
+    for tag in sorted(cs.flux):
+        reached = [p for p in paths if p.startswith(f"ansible/roles/k8s/{tag}/")]
+        log(
+            f"flux: {tag}: owned by {owners[tag]} at {target.origin[:8]} — fast-forwarding "
+            f"{', '.join(sorted(reached))}; promote applies it, so this tick does not (D2.2)"
+        )
+    return TickPlan(cs=cs, paths=paths, owners=owners)
 
 
 def _adopt_incoming_cross_role_tables(
@@ -325,57 +309,58 @@ def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None
         )
 
 
-# The line `git log` prints ahead of each commit's paths. No tracked path starts with it.
-_COMMIT_LINE = "@@"
+# Roles under roles/k8s/ that deploy no service of their own — they are included by other roles
+# and carry no defaults/main.yml, so they declare nothing. Mirrors SHARED_ROLES in
+# ansible/filter_plugins/k8s_autodeploy.py; ansible/tests/deploy/test_denylist_parsers_agree.py asserts
+# the two stay in step. It moved here from `deploy_k8s.py` with `declared_denylist` (D6.12).
+SHARED_K8S_ROLES = frozenset({"manifests"})
+
+# A top-level `k8s_autodeploy:` assignment, with an optional trailing comment. Anchored at column
+# zero deliberately: an indented key of the same name belongs to some other mapping and does not
+# declare the role's stance. `[ \t]+` (not `*`) requires a space after the colon, so
+# `k8s_autodeploy:true` — which is not a dict key YAML would resolve this way either — doesn't
+# match and falls through to "no declaration found", i.e. denied.
+_DECLARATION_RE = re.compile(
+    r"^k8s_autodeploy:[ \t]+(?P<value>\S+)[ \t]*(?:#.*)?$", re.MULTILINE
+)
+# The spellings PyYAML resolves to boolean true. Everything else — including an unparseable or
+# absent value — counts as denied, so this parser can never widen the denylist's complement.
+_TRUE_VALUES = frozenset(
+    {"true", "True", "TRUE", "yes", "Yes", "YES", "on", "On", "ON"}
+)
 
 
-def k8s_change_commits(
-    tools: DeployTools, config: Config, target: TickTarget, dropped: set[str]
-) -> dict[str, str]:
-    """The newest commit in `local..origin` whose own diff reaches each k8s service (#3111).
+def declared_denylist(sources: Mapping[str, str | None]) -> frozenset[str]:
+    """Roles denied auto-deploy, read from each role's own `k8s_autodeploy` declaration.
 
-    `deploy_k8s_owed.alert_and_record_deferred` writes a service's `k8s_unapplied` line at this
-    commit rather than at the tick's tip. A landing deploys its PR's merge commit, so the
-    release record names THAT commit; a line written at a later, unrelated tip in the same range
-    is a commit the record can never descend from, and the line never discharged (2026-10-01:
-    #3080's eight media roles recorded at #3081's tests-only tip, cleared by hand).
+    `sources` maps a role name to the text of its defaults/main.yml, or None when the role has
+    no such file. Shared roles are skipped; every other role is denied unless EVERY line that
+    looks like a top-level `k8s_autodeploy:` assignment reads as true, and at least one such
+    line was found.
 
-    `--first-parent -m` lists a merge commit's diff against master's side, so a service is
-    attributed to the commit that sits on master and that a landing deploys. `dropped` is the
-    comment-only set `plan_tick` already filtered, applied per commit for the same reason.
+    That's unanimity, not "last match wins" — a role is permitted only if every candidate
+    assignment agrees. YAML itself is last-key-wins for a genuine duplicate key, so unanimity is
+    not what a real YAML parser would do; it's deliberately more conservative. This is a regex,
+    not a YAML parser: on adversarial or malformed input (a decoy `true` before the real
+    `false`, a duplicate key) unanimity can only ever add denials, never turn a role the
+    last-wins reading would deny into one this reader calls permitted.
 
-    Returns an empty map when the log cannot be read, and the caller then records at the tip,
-    which is the behaviour before #3111.
+    Its one caller is `reconcile_denylist`, which detects that the deployer's rendered config
+    has gone stale against the checkout. The authoritative derivation is the Ansible filter,
+    which parses real YAML; ansible/tests/deploy/test_denylist_parsers_agree.py pins the two
+    together. D6.2a deletes both readers.
     """
-    try:
-        out = tools.run(
-            [
-                "git",
-                "log",
-                "--first-parent",
-                "-m",
-                "--name-only",
-                f"--format={_COMMIT_LINE}%H",
-                f"{target.local}..{target.origin}",
-            ],
-            cwd=config.repo,
-        )
-    except Exception as exc:
-        log(
-            f"k8s_unapplied: could not read per-commit paths ({exc}) — recording at tip"
-        )
-        return {}
-    commits: list[tuple[str, list[str]]] = []
-    for line in out.splitlines():
-        if line.startswith(_COMMIT_LINE):
-            commits.append((line[len(_COMMIT_LINE) :], []))
-        elif line.strip() and commits and line not in dropped:
-            commits[-1][1].append(line)
-    newest: dict[str, str] = {}
-    for commit, paths in commits:  # git log is newest first, so the first hit wins
-        for service in services_from_changed_paths(paths).k8s:
-            newest.setdefault(service, commit)
-    return newest
+    denied = set()
+    for role, text in sources.items():
+        if role in SHARED_K8S_ROLES:
+            continue
+        if not text:
+            denied.add(role)
+            continue
+        values = [m.group("value") for m in _DECLARATION_RE.finditer(text)]
+        if not values or any(v not in _TRUE_VALUES for v in values):
+            denied.add(role)
+    return frozenset(denied)
 
 
 # The one command that re-derives K8S_AUTODEPLOY_DENYLIST — the filter plugin reads every role
@@ -411,16 +396,13 @@ def reconcile_denylist(
     `K8S_AUTODEPLOY_DENYLIST` is derived from every role under roles/k8s/ at RENDER time, and
     the only thing that re-renders it is `initial_setup.yml --tags gitops_deploy`. A change
     under roles/k8s/ matches no prefix that runs that playbook, so adding a role declaring
-    `k8s_autodeploy: false` left the baked list stale and `_promote_k8s_auto_deploys` disarmed
-    auto-deploy FLEET-WIDE until an operator re-rendered by hand — measured on game-stats-lib,
-    2026-09-05, disarmed 12:30 to 18:29 UTC (issues #1265, #1294).
+    `k8s_autodeploy: false` left the baked list stale (issues #1265, #1294).
 
-    This is the local half of that invariant: config.env must match the declarations at the
-    checkout's own HEAD. Stating it against HEAD rather than origin is what makes it fixable —
-    the render reads the working tree, so re-rendering can only ever produce HEAD's list. The
-    origin-side comparison in `_promote_k8s_auto_deploys` stays exactly as it was and remains
-    the fail-safe for the window where origin is ahead: this heals on disk, and the tick that
-    follows the ff-merge is the one that reads the fresh config.
+    This keeps config.env matching the declarations at the checkout's own HEAD. Stating it
+    against HEAD rather than origin is what makes it fixable — the render reads the working
+    tree, so re-rendering can only ever produce HEAD's list. The tick deploys no k8s role since
+    D6.12, so nothing in it reads the list any more; `land_renovate_pr.py:denied_roles` still
+    reads the rendered line until D6.2a repoints it, and D6.2a deletes this function.
 
     Returns:
         True when a re-render ran (whether or not it succeeded), False when nothing was needed.
@@ -495,107 +477,9 @@ def reconcile_denylist(
         # apply. The two failures contain differently. A half-applied broad plane leaves live
         # state nothing recorded, so parking is the containment. This render only rewrites the
         # deployer's own config.env; a failure leaves the OLD file, which is the state the tick
-        # already tolerates — auto-deploy stays disarmed by the origin comparison, which is the
-        # fail-safe direction. Parking every unrelated service deploy behind a config render
-        # would be a strictly larger outage than the one this heals.
+        # already tolerates. Parking every unrelated apply behind a config render would be a
+        # strictly larger outage than the one this heals.
         log(f"denylist: re-render failed: {type(exc).__name__}: {exc}", level=ERR)
         return True
     log("denylist: config.env re-rendered — the next tick reads the fresh denylist")
     return True
-
-
-def _promote_k8s_auto_deploys(
-    tools: DeployTools,
-    state: DeployerState,
-    config: Config,
-    cs: ChangeSet,
-    paths: list[str],
-    target: TickTarget,
-) -> ChangeSet:
-    """Move image-bump-only k8s changes from defer-and-alert into the auto-deploy channel.
-
-    Disarms itself first when this host's baked denylist disagrees with the declarations at
-    origin: that config is rendered only by `initial_setup.yml --tags gitops_deploy`, while a
-    declaration flip lands under roles/k8s/ and alerts naming `deploy.yml` — a playbook that
-    never re-renders it. Without the check the host would keep acting on the old list, leaving a
-    role that was just denied still auto-deployable. Disarm loudly rather than acting on a stale
-    boundary.
-    """
-    autodeploy_enabled = config.k8s_autodeploy_enabled
-    k8s_defaults_at_origin: dict[str, str | None] = {}
-    if autodeploy_enabled:
-        try:
-            # `target.origin` (the SHA pinned in assess(), not f"origin/{config.branch}") — the diff and
-            # the alert already evaluate against that exact commit; re-resolving the ref here
-            # would open a TOCTOU where a concurrent fetch lands between the two reads.
-            k8s_defaults_at_origin = deploy_io.k8s_declarations_at(
-                config.repo, target.origin, run=tools.run
-            )
-            declared = declared_denylist(k8s_defaults_at_origin)
-            read_error = None
-        except Exception as exc:
-            k8s_defaults_at_origin = {}
-            declared = None
-            read_error = f"{type(exc).__name__}: {exc}"
-            log(f"denylist: could not read k8s declarations at origin: {read_error}")
-        if declared is None or declared != config.k8s_autodeploy_denylist:
-            autodeploy_enabled = False
-            if declared is not None:
-                added = sorted(declared - config.k8s_autodeploy_denylist)
-                removed = sorted(config.k8s_autodeploy_denylist - declared)
-                detail = (
-                    f"denied at origin but not in config: {added or 'none'}; "
-                    f"in config but not at origin: {removed or 'none'}"
-                )
-                # Both directions are usually "config is behind origin" and want the same fix:
-                # a re-render. `added` means a role was newly denied at origin; `removed` means a
-                # role was PROMOTED there — the denylist shrank — which this host has not picked
-                # up yet. `removed` has one other cause, an operator who rendered locally before
-                # pushing, so it names that as a secondary check. Naming `git push` FIRST on
-                # `removed` was wrong: it is the less common cause and the fix does nothing for
-                # the other one, which is what a promotion looks like.
-                fix = (
-                    "run `uv run ansible-playbook ansible/initial_setup.yml --tags "
-                    "gitops_deploy` on the host (`deploy.yml` does not re-render config.env)"
-                )
-                if removed and not added:
-                    fix += (
-                        ". If that changes nothing, the config was rendered from an unpushed "
-                        "tree instead — `git push` it and re-render"
-                    )
-            else:
-                detail = f"the declarations at origin could not be read ({read_error})"
-                fix = "check the ref/path on the host — this clears on its own once it reads again"
-            log(f"denylist: k8s auto-deploy disarmed — stale ({detail})", level=WARNING)
-            deploy_alerts.alert_once(
-                tools,
-                state,
-                config,
-                "stale_denylist",
-                target.origin,
-                deploy_alert_text.stale_denylist_alert(target.origin, detail, fix),
-            )
-    # Everything not promoted stays in cs.k8s and defer-and-alerts exactly as before, so this is
-    # inert until a service passes BOTH the diff-shape test and the denylist.
-    return split_k8s_auto_deploy(
-        cs,
-        paths,
-        denylist=config.k8s_autodeploy_denylist,
-        pilot=config.k8s_autodeploy_pilot,
-        enabled=autodeploy_enabled,
-        image_only=lambda svc: is_image_only_diff(
-            deploy_io.k8s_image_diff(
-                config.repo, target.local, target.origin, svc, run=tools.run
-            )
-        ),
-        max_per_tick=config.k8s_autodeploy_max_per_tick,
-        # Read at the PINNED origin, like the denylist above and for the same reason — the
-        # promotion decision runs before the ff-merge, so the working tree still holds the
-        # pre-merge declarations. `.get(svc)` (not `[svc]`): a role absent from the listing is
-        # already denied by the stale-denylist comparison, and an absent entry must not raise
-        # here.
-        declares_claims=lambda svc: declares_snapshot_claims(
-            k8s_defaults_at_origin.get(svc)
-        ),
-        max_claim_services_per_tick=config.k8s_autodeploy_max_claim_services_per_tick,
-    )

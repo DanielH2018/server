@@ -152,41 +152,25 @@ def test_the_command_is_empty_for_a_pr_the_tick_never_applies(files):
     assert land_tags.self_applied(files) is False
 
 
-def test_a_secrets_only_rotation_leaves_the_k8s_readers_to_the_tick():
-    """A secrets-only range routes its k8s readers through the tick (#5577).
-
-    The note asked for a hand redeploy of every consumer, so the operator repeated the tick's
-    `deploy.yml --tags <readers>` apply, or ran it beside the tick.
-    """
-    note = land_tags.plane_note(["ansible/vars/secrets.yml"])
-    assert "#5577" in note and "secret-readers:" in note, (
-        "the note must say the tick applies the k8s readers, and where to read which"
-    )
-    assert "redeploy each k8s consumer by hand" not in note
-
-
-def test_a_secrets_rotation_beside_a_k8s_role_keeps_the_k8s_readers_owed():
-    """The tick routes no k8s reader for a range that also changes a k8s role.
-
-    `deploy_broad_k8s.route_secret_k8s_readers` skips that range, so the note must not claim
-    the tick applied the readers.
-    """
-    note = land_tags.plane_note(
+@pytest.mark.parametrize(
+    "files",
+    [
+        ["ansible/vars/secrets.yml"],
         [
             "ansible/vars/secrets.yml",
             "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
-        ]
-    )
-    assert "redeploy each k8s consumer by hand" in note
-    assert "secret-readers:" not in note
+        ],
+        ["ansible/vars/secrets.yml", "ansible/deploy.yml"],
+    ],
+    ids=["secrets-only", "beside-a-k8s-role", "beside-the-deploy-plane"],
+)
+def test_a_secrets_rotation_sends_every_k8s_reader_through_cluster_vars(files):
+    """The tick applies no k8s reader since D6.12, whatever else the range carries.
 
-
-def test_a_secrets_rotation_beside_the_deploy_plane_leaves_the_readers_to_its_apply():
-    """A deploy-plane path routes the readers through `narrow`, not `secret-readers:`.
-
-    `route_secret_k8s_readers` returns early on `cs.broad_deploy`, so it logs no such line,
-    and the landing already waits on the `deploy.yml` receipt.
+    The note named a `secret-readers:` journal line or a `deploy.yml` receipt before, and
+    the tick writes neither now.
     """
-    note = land_tags.plane_note(["ansible/vars/secrets.yml", "ansible/deploy.yml"])
-    assert "#5409" in note and "this landing waits on that apply" in note
+    note = land_tags.plane_note(files)
+    assert "cluster_vars.py write" in note
     assert "secret-readers:" not in note
+    assert "this landing waits on that apply" not in note

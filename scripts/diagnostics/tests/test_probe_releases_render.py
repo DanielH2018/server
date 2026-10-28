@@ -470,9 +470,10 @@ def test_a_render_commit_that_is_not_a_full_lowercase_sha_proves_nothing_is_flag
 
 
 def test_digest_provable_roles_match_the_deployers():
-    from deployer_lib import deploy_k8s_owed
+    """The deployer's copy is `gitops_markers.RENDER_PROOF_SHARED_ROLES` since D6.12."""
+    from gitops_markers import RENDER_PROOF_SHARED_ROLES
 
-    assert rr.DIGEST_PROVABLE_ROLES == deploy_k8s_owed.DIGEST_PROVABLE_ROLES
+    assert rr.DIGEST_PROVABLE_ROLES == RENDER_PROOF_SHARED_ROLES
 
 
 @pytest.mark.parametrize(

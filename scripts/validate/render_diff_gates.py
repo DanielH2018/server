@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
-"""Refuse a PR whose change spans both deploy planes along a dependency edge (D4.4).
+"""Refuse a PR whose render diff Flux would apply unsafely (D4.4, D5.1d, D5.1f, D6.12).
 
-Until D5 ends, an edge between a flux-owned role and an Ansible-owned role has no ordering
-mechanism. `land.sh` applies the Ansible half after the merge, while `promote` applies the Flux
-half after CI, so a PR that changes both halves lands them in whichever order the two pipelines
-happen to finish. This gate renders the cluster at the PR's base and head with `homelab-render
-cluster` and refuses two shapes:
+This gate renders the cluster at the PR's base and head with `homelab-render cluster` and
+refuses four shapes. It was `cross_plane_order.py` until D6.12, when every k8s role was
+flux-owned and its arm 1, the order between a flux-owned and an Ansible-owned tag along one
+dependency edge, lost its subject. The numbers of the arms that stay are kept, because docs,
+commit messages and `ansible/deploy.yml` cite them. A tag counts for arm 2 whenever its
+`cluster/<tag>/` or `cluster/<tag>-deferred/` output moves; the image-pin exception went with
+arm 1 (docs/target-architecture/deploy/d6-delete-old-path.md, *The render-diff gates
+after D6*).
 
-- **Arm 1, plane order.** Two counted tags sit on different planes, and one is in the other's
-  transitive `build_k8s_dep_map` set, `K8S_APPLIES_LAST` included. A tag counts when its
-  `cluster/<tag>/` or `cluster/<tag>-deferred/` output moved, unless its role's own diff is
-  only an image pin (`deploy_k8s.py:is_image_only_diff`). A tag whose role's `tasks/` changed
-  counts as well when it is Ansible-owned at the head, because a task change moves no render.
-  A PR none of whose paths reaches an Ansible apply (`reaches_ansible`) counts its flux-owned
-  tags alone: a renderer change moves `homelab-render` output, which Ansible never applies
-  (#5213).
-  A flux-owned role's tasks run nowhere, since every Ansible path skips the tag, so only the
-  render they feed reaches a plane (D4 Open question 9). An inventory field another role reads
-  counts only through the render it moves: an `auth_tier` edit on bento-pdf moves authelia's
-  access rules alone, so no pair forms.
 - **Arm 2, edge first.** A tag that is flux-owned at both ends gains a `dependsOn` edge, and
   its own render moves in the same PR. A tag that becomes flux-owned in the PR is not judged:
   its Kustomization is born with its edges, and D3's `checksum/restart` stamp moves its render
@@ -34,7 +25,6 @@ cluster` and refuses two shapes:
   entry carries `owner: flux` on the base. The play's teardown deletes the last render
   Ansible staged, and Flux at the old `prod` re-creates it. Such a service retires by two
   PRs instead (docs/flux-deploy-plane.md, *Retiring a flux-owned service*).
-
 - **Arm 5, a suspended tag's render (D5.1d).** A tag that `digests.json` marks `suspended` at
   both ends has a different `own` digest, its `cluster/<tag>/` output alone. A suspended tag
   applies nothing until its resume, so the change would sit merged and unapplied. The same
@@ -43,28 +33,21 @@ cluster` and refuses two shapes:
   the key from another variable is covered too (d5-bulk-move.md, *A suspended role takes no
   change*). A shared-template change whose render reaches the tag waits for the resume.
 
-Arms 3, 4 and 5 run from `gate()` alone, through `removal_problems()` and
-`suspended_problems()`, so the replay of master's squash commits judges arms 1 and 2 only. Arm 3 reads the trailers from the PR's own commits,
-and the CI step runs on pull requests only, where `HEAD^1..HEAD` is those commits and the merge.
+Arm 3 reads the trailers from the PR's own commits, and the CI step runs on pull requests
+only, where `HEAD^1..HEAD` is those commits and the merge.
 
-There is no bypass for arms 1 and 2. Two PRs that merge back to back each pass alone, and an image bump that does
-need ordering passes too; `docs/landing.md` states the `settled` rule that covers both, and how
-to split a refused PR. The plan is docs/target-architecture/deploy/d4-ordering.md, *The
-cross-plane gate*.
-
-`scripts/dev/cross_plane_replay.py` replays this gate's decision over past master commits
-(Open question 9).
+There is no bypass for arm 2. Two PRs that merge back to back each pass alone; `docs/landing.md`
+states how to split a refused PR. The plan is docs/target-architecture/deploy/d4-ordering.md,
+*The cross-plane gate*.
 
 Exit codes: 0 clean; 1 refused; 2 a render failed, so the gate could not judge.
 
-Run: uv run python scripts/validate/cross_plane_order.py --base origin/master
-     uv run pytest scripts/validate/tests/test_validate_cross_plane_order.py
+Run: uv run python scripts/validate/render_diff_gates.py --base origin/master
+     uv run pytest scripts/validate/tests/test_validate_render_diff_gates.py
 """
 
-import functools
 import hashlib
 import json
-import re
 import subprocess
 import sys
 import tarfile
@@ -101,26 +84,12 @@ if str(FILTER_PLUGINS) not in _sys.path:
 if str(GITOPS_DEPLOY_FILES) not in _sys.path:
     _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deployer_lib.deploy_changes import _is_test_only_path, is_doc
-from deployer_lib.deploy_k8s import is_image_only_diff
 from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 HOST_VARS = Path("ansible/inventory/host_vars/daniel-box.yml")
 GROUP_VARS = Path("ansible/inventory/group_vars/all.yml")
-ANSIBLE_TREE = "ansible/"
-# The filter plugins load modules from here by path (`standalone_guard.py:_RESOLVER`).
-SCRIPTS_LIB = "scripts/lib/"
-# Root files that configure every Ansible apply: `ansible.cfg`, and the interpreter and pinned
-# packages, ansible-core and Jinja2 among them, that `uv run ansible-playbook` syncs. A bump
-# can move an Ansible-owned render as surely as a template edit.
-ROOT_ANSIBLE_INPUTS = frozenset(
-    {"ansible.cfg", "pyproject.toml", "uv.lock", "uv.toml", ".python-version"}
-)
-# A task or template that reads a file under `scripts/` names it through `playbook_dir`.
-_SCRIPT_REF = re.compile(r"playbook_dir\s*\}\}/\.\./(scripts/[\w./-]*\w)")
 K8S_ROLES = "ansible/roles/k8s/"
-SHARED_TEMPLATES = "ansible/templates/"
 ANSIBLE_PLANE = "ansible"
 FLUX_PLANE = "flux"
 
@@ -181,116 +150,23 @@ class Snapshot:
         )
 
 
-def closure(deps: Mapping[str, Iterable[str]], tag: str) -> set[str]:
-    """Every name `tag` depends on, directly or through another name."""
-    seen: set[str] = set()
-    stack = list(deps.get(tag, ()))
-    while stack:
-        name = stack.pop()
-        if name not in seen:
-            seen.add(name)
-            stack.extend(deps.get(name, ()))
-    return seen - {tag}
-
-
-@functools.cache
-def ansible_scripts(tree: Path = REPO) -> frozenset[str]:
-    """Every path under `scripts/` that a task or template in `tree` names, file or directory."""
-    found: set[str] = set()
-    for path in (tree / "ansible").rglob("*"):
-        if path.suffix in (".yml", ".yaml", ".j2") and path.is_file():
-            found.update(_SCRIPT_REF.findall(path.read_text(errors="ignore")))
-    return frozenset(found)
-
-
-def reaches_ansible(path: str, scripts: Iterable[str]) -> bool:
-    """Whether a changed path can change what an Ansible apply sends to the cluster.
-
-    A doc or a test reaches no apply. Anything else under `ansible/` does, and so do
-    `scripts/lib/`, the root files in `ROOT_ANSIBLE_INPUTS` and every `scripts/` path in
-    `scripts`, the ones Ansible reads.
-    """
-    if is_doc(path) or _is_test_only_path(path):
-        return False
-    if path in ROOT_ANSIBLE_INPUTS or path.startswith((ANSIBLE_TREE, SCRIPTS_LIB)):
-        return True
-    return any(path == s or path.startswith(s.rstrip("/") + "/") for s in scripts)
-
-
-def counted(
-    base: Snapshot,
-    head: Snapshot,
-    changed_paths: Iterable[str],
-    role_diffs: Mapping[str, str],
-    scripts: Iterable[str] | None = None,
-) -> set[str]:
-    """The tags the PR changes, by render, by an Ansible-owned `tasks/`, never by a pin alone.
-
-    A PR none of whose paths reaches an Ansible apply counts no Ansible-owned tag.
-
-    Args:
-        changed_paths: The paths the PR changes.
-        role_diffs: Each tag mapped to the unified diff of its role directory.
-        scripts: The `scripts/` paths Ansible reads; `ansible_scripts()` when None.
-    """
-    moved = {
+def counted(base: Snapshot, head: Snapshot) -> set[str]:
+    """The tags whose render moves between the two sides, a tag added or dropped included."""
+    return {
         tag
         for tag in base.renders.keys() | head.renders.keys()
         if base.renders.get(tag) != head.renders.get(tag)
     }
-    changed_paths = list(changed_paths)
-    # A role's image-pin diff exempts it only when nothing outside the roles moved too: a
-    # shared template or an inventory edit beside the bump also moves the role's render.
-    if all(p.startswith(K8S_ROLES) for p in changed_paths):
-        moved -= {tag for tag in moved if is_image_only_diff(role_diffs.get(tag, ""))}
-    # DECIDED: an Ansible-owned tag's render move counts only when a changed path reaches an
-    # Ansible apply. Ansible applies its own templates, never `homelab-render` output, so a
-    # renderer change moves nothing Ansible applies, and the docs, tests and shard weights that
-    # ride along with one reach no apply either. Only the flux-owned half reaches a cluster,
-    # through `promote` (#5213). An empty path list is left alone, as no real PR has one.
-    if scripts is None:
-        scripts = ansible_scripts()
-    if changed_paths and not any(reaches_ansible(p, scripts) for p in changed_paths):
-        moved = {tag for tag in moved if head.plane(tag) != ANSIBLE_PLANE}
-    tasks = {
-        p[len(K8S_ROLES) :].split("/", 1)[0]
-        for p in changed_paths
-        if p.startswith(K8S_ROLES) and "/tasks/" in p
-    }
-    # DECIDED: a `tasks/` change counts only for a tag Ansible owns at the head. The tasks of a
-    # flux-owned role run nowhere, and the render they feed is already in `moved`. Counting them
-    # refused three mechanical edits in the 30-day replay that no plane could misorder. The
-    # operator ruled on 2026-10-16 (D4 Open question 9).
-    tasks &= base.owners.keys() | head.owners.keys()
-    return moved | {tag for tag in tasks if head.plane(tag) == ANSIBLE_PLANE}
 
 
-def problems(
-    base: Snapshot,
-    head: Snapshot,
-    changed_paths: Iterable[str],
-    role_diffs: Mapping[str, str],
-) -> list[str]:
-    """Every reason the PR must be split, one line each; empty when it may land as one."""
-    changed_paths = list(changed_paths)
-    tags = sorted(counted(base, head, changed_paths, role_diffs))
+def problems(base: Snapshot, head: Snapshot) -> list[str]:
+    """Arm 2's reasons the PR must be split, one line each; empty when it may land as one."""
     found = []
-    for dependent in tags:
-        needs = closure(head.deps, dependent)
-        for dependency in tags:
-            if dependency in needs and head.plane(dependency) != head.plane(dependent):
-                found.append(
-                    f"arm 1: {dependent} ({head.plane(dependent)}) depends on {dependency} "
-                    f"({head.plane(dependency)}), and this PR changes both. Land "
-                    f"{dependency}'s half first, and merge {dependent}'s only after that "
-                    f"PR's land.sh verdict reads `settled`. A shared-template change splits "
-                    f"by copy and migrate (docs/landing.md)."
-                )
-    for tag in tags:
+    for tag in sorted(counted(base, head)):
         if tag not in base.flux_owned() or tag not in head.flux_owned():
             continue
         gained = head.depends_on(tag) - base.depends_on(tag)
-        if gained and base.renders.get(tag) != head.renders.get(tag):
+        if gained:
             found.append(
                 f"arm 2: {tag} gains dependsOn {sorted(gained)} and its own render moves "
                 f"in the same PR. Land the edge alone first, then the change."
@@ -502,25 +378,6 @@ def extract(sha: str, dest: Path, paths: Iterable[str] = (), repo: Path = REPO) 
             tar.extractall(dest, filter="data")
 
 
-def changes(
-    base: str, head: str, repo: Path = REPO
-) -> tuple[list[str], dict[str, str]]:
-    """The paths `base..head` changes, and each k8s role's unified diff."""
-    paths = git_stdout(
-        "diff", "--no-renames", "--name-only", base, head, cwd=repo
-    ).split()
-    roles = {
-        p[len(K8S_ROLES) :].split("/", 1)[0] for p in paths if p.startswith(K8S_ROLES)
-    }
-    diffs = {
-        role: git(
-            "diff", "--no-renames", base, head, "--", K8S_ROLES + role, cwd=repo
-        ).stdout
-        for role in roles
-    }
-    return paths, diffs
-
-
 def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:
     """`sha`'s tree unpacked under `dest` and rendered with its own renderer."""
     extract(sha, dest, ("ansible", "scripts", "hosts"), repo=repo)
@@ -543,28 +400,27 @@ def gate(
         git_stdout("rev-parse", "--verify", f"{r}^{{commit}}", cwd=repo)
         for r in (base, head)
     )
-    paths, diffs = changes(base, head, repo)
-    with tempfile.TemporaryDirectory(prefix="cross-plane-trees-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="render-diff-trees-") as tmp:
         snaps = []
         for name, sha in (("base", base), ("head", head)):
             try:
                 snaps.append(render(sha, Path(tmp) / name, repo))
             except RenderFailed as exc:
                 print(
-                    f"cross-plane-order: cannot judge, the {name} render failed. {exc}",
+                    f"render-diff-gates: cannot judge, the {name} render failed. {exc}",
                     file=sys.stderr,
                 )
                 return UNJUDGED
     messages = git_stdout("log", "--format=%B", f"{base}..{head}", cwd=repo)
-    found = problems(snaps[0], snaps[1], paths, diffs)
+    found = problems(snaps[0], snaps[1])
     found += removal_problems(snaps[0], snaps[1], removes_object.declared(messages))
     found += suspended_problems(snaps[0], snaps[1])
     for line in found:
         print(f"[FAIL] {line}", file=sys.stderr)
     if not found:
         print(
-            f"cross-plane-order: {base[:9]}..{head[:9]} changes no pair across the planes "
-            f"and removes nothing Flux owns undeclared"
+            f"render-diff-gates: {base[:9]}..{head[:9]} adds no edge beside a change, "
+            f"removes nothing Flux owns undeclared and changes no suspended tag"
         )
     return REFUSED if found else CLEAN
 

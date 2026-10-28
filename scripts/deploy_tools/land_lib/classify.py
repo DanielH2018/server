@@ -12,11 +12,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Classification, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_lib.land_tags import (
-    DeriveSource,
-    changes_cluster_vars,
-    guard_map_rows,
-)
+from deploy_tools.land_lib.land_tags import DeriveSource
+from deploy_tools.land_lib.promotion import moves_the_bundle
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 from renderer.renderer_lib.host_inputs import HOST_INPUTS
@@ -252,59 +249,9 @@ def classify(ln: Landing) -> None:
         ln.k8s_only = _classified(
             ln, "k8s-only tag classification", c.k8s_only_tags, paths, declared
         )
-        # A shared role deploys through every role that runs it, so `plane_note` does not
-        # name one. Read over `plane_paths`, the list that note read, so a change
-        # `shared_role_reach` found deploy-time only fans out to nothing.
-        reached = _classified(
-            ln,
-            "shared-role caller expansion",
-            c.shared_caller_tags,
-            plane_paths,
-            declared,
-        )
-        # A change confined to the standalone-guard map reaches only the callers whose row
-        # moved (#4932); None keeps every caller.
-        rows = _classified(
-            ln,
-            "guard-map row narrowing",
-            guard_map_rows,
-            plane_paths,
-            recorded,
-            ln.git,
-        )
-        if rows is not None and "manifests" in reached:
-            reached["manifests"] &= rows
-            say(
-                "`manifests` changed only its standalone-guard map; deploying the "
-                f"{len(reached['manifests'])} caller(s) whose row moved"
-            )
-        smoke = _classified(
-            ln,
-            "shared-role smoke narrowing",
-            c.smoke_narrowed_roles,
-            plane_paths,
-            declared,
-        )
-        for role, role_tags in sorted(reached.items()):
-            if role in smoke:
-                # The operator line must not claim the fleet: this change moves no rendered
-                # byte, so one caller proves the task logic runs and the rest pick it up on
-                # their own next deploy (#3124).
-                say(
-                    f"`{role}` renders no different bytes for this change; deploying "
-                    f"{', '.join(sorted(role_tags))} as a smoke test, and its other callers "
-                    "take the new task logic on their own next deploy"
-                )
-            elif role_tags and not (role == "manifests" and rows is not None):
-                say(
-                    f"`{role}` has no deploy tag of its own; deploying the "
-                    f"{len(role_tags)} service(s) that run it"
-                )
-        extra = set().union(*reached.values()) - set(tags)
-        if extra:
-            # The caller graph is the provenance, so these ARE proven k3s.
-            ln.k8s_only = sorted(set(ln.k8s_only) | extra)
-            ln.resolved_tags = sorted(set(tags) | extra)
+        # DECIDED: no shared-role caller joins the list (D6.12). Every caller of a shared k8s
+        # role is flux-owned, so the promotion applies it, and land-wait's changed set names
+        # each caller whose render moved. `land_shared.shared_caller_tags` goes in D6.3.
     if source == DeriveSource.FALLBACK:
         if not ln.opts.since:
             ln.die(
@@ -390,8 +337,8 @@ def reaches_host_inputs(ln: Landing) -> bool:
 def shortcut_if_nothing(ln: Landing) -> None:
     """A PR reaching no tag, no plane, no host candidate and nothing self-applied has nothing to wait for.
 
-    A PR changing a cluster file reaches none of them and still waits on a promotion
-    (`land_tags.changes_cluster_vars`).
+    A PR whose paths may move the bundle reaches none of them and still waits on a promotion
+    (`promotion.moves_the_bundle`), whose changed set names its tags (D6.12).
     """
     cl = ln.classification
     if not (
@@ -400,7 +347,7 @@ def shortcut_if_nothing(ln: Landing) -> None:
         or cl.self_applied
         or ln.needs_diff
         or ln.host_candidate
-        or changes_cluster_vars(cl.pr_paths)
+        or moves_the_bundle(cl.pr_paths)
     ):
         ln.finish(
             Verdict.NOTHING_TO_DEPLOY,

@@ -39,12 +39,12 @@ _DEPLOY_LOCKS = (
 
 # The deployer's playbook call sites. Named rather than discovered so that a third one added
 # without a lock fails this file instead of joining a vacuously-true census.
-_LOCKED_DEPLOY_FUNCTIONS = frozenset({"deploy_k8s", "deploy_broad"})
+_LOCKED_DEPLOY_FUNCTIONS = frozenset({"deploy_broad"})
 # The helper that shares one deadline between the lock wait and the run, and the call sites
 # that carry a phase budget to share.
 _BUDGET_HELPER = "locked_budget"
 _LOCK_HELPERS = frozenset({"service_locks", _BUDGET_HELPER})
-_BUDGETED_DEPLOY_FUNCTIONS = frozenset({"deploy_k8s", "deploy_broad"})
+_BUDGETED_DEPLOY_FUNCTIONS = frozenset({"deploy_broad"})
 
 
 def _unlocked_playbook_calls(source: str) -> list[str]:
@@ -338,12 +338,12 @@ def test_a_separately_budgeted_wait_is_flagged():
     This is the shape to reject: the same `timeout` handed to the lock helper and to `run`.
     """
     before = _one_function(
-        "def deploy_k8s(repo, services, timeout):\n"
+        "def deploy_broad(repo, services, timeout):\n"
         "    with service_locks(services, timeout):\n"
         "        run(argv, cwd=repo, timeout=timeout)\n"
     )
     after = _one_function(
-        "def deploy_k8s(repo, services, timeout):\n"
+        "def deploy_broad(repo, services, timeout):\n"
         "    with locked_budget(services, timeout) as budget:\n"
         "        run(argv, cwd=repo, timeout=budget)\n"
     )

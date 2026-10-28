@@ -104,13 +104,12 @@ run less than it looks are in the **`deploy` skill**.
 ## After a PR Merges — Pull, Deploy, Verify
 
 **The default is that a merge is followed through to a verified deploy, in the same session,
-without asking.** Merging is not shipping here. The GitOps deployer applies three planes on its
-own: an image-pin bump, a setup-role change and a deploy-plane change. The *Safety* section of
-`ansible/roles/setup/gitops_deploy/CLAUDE.md` owns which paths fall in each plane and how the
-deployer applies it. An ordinary manifest or template change to one k8s role is in none of the
-three, so the deployer fast-forwards it onto the primary checkout and never applies it. Left there it sits
-undeployed behind a green master until someone notices, and the next session to deploy that
-service ships it as a side effect of unrelated work.
+without asking.** Merging is not shipping here. The GitOps deployer applies one plane on its
+own, a setup-role change; the *Safety* section of `ansible/roles/setup/gitops_deploy/CLAUDE.md`
+owns which paths fall in it. `promote` and Flux apply every k8s change, a template or
+inventory change included, after master CI. Nothing reports whether that promotion settled
+and the changed workloads came up healthy except `land.sh`, which waits on the promotion and
+gates the tags its changed set names.
 
 Do not ask permission between the steps. The user asking for the change *is* the ask to deploy
 it; stop only for one of the reasons in *When to wait* below, or for a command the harness
@@ -160,13 +159,13 @@ ones that mean another session got there first.
 Say which of these applies, then stop:
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
-- The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
-  broad apply failed. `hold_plane` names each failed playbook when it was the latter.
+- The host holds a non-empty `hold_sha`: a setup-plane apply failed. `hold_plane` names each
+  failed playbook.
 - A change in one of the bring-up playbooks — `bootstrap.yml`, `k3s-bringup.yml`,
   `initial_setup.yml`, the list
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
   sits in the `local..origin` range, and it is another session's. The deployer applies every
-  other broad change itself, but not the bring-up playbooks: those run by hand by
+  other setup-plane change itself, but not the bring-up playbooks: those run by hand by
   construction. Clearing it means applying their change; name it and stop.
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer
   cannot apply, and another session's PR created it. That line is theirs to clear. When your
@@ -222,10 +221,10 @@ The rules for promoting a review learning into memory live in the `memory-consol
   memory file or a commit message is a decision every future reviewer re-derives; one written as a
   comment where the code makes the trade-off is one they trip over before they spend an hour on it.
   Write the marker, then the reasoning, and point at the long form rather than at a line number
-  that drifts. Cite a marker by its text, not its line: `grep -rn 'DECIDED: `origin\[:8\]`'
+  that drifts. Cite a marker by its text, not its line: `grep -rn 'DECIDED: the lock order'
   ansible/roles/setup/gitops_deploy/files/` finds the live example wherever it lands, and it
-  reads `a fixed slice while volume-snapshot names with --short=8, a MINIMUM width … Full
-  analysis in this role's CLAUDE.md.` Reviewer briefs grep for it
+  reads `the lock order is server-deploy-all.lock first … then each service's own lock in
+  sorted order.` Reviewer briefs grep for it
   (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
   the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
   evidence at a cited `file:line` and name the marker you are contradicting.

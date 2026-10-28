@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """One function per terminal branch of a tick, each returning the process exit code.
 
-`gitops_deploy.main()` picks exactly one of these after `deploy_phases.plan_tick`, in a
-load-bearing order — broad before k8s, because a broad change and a promoted
-image bump can arrive in the same range and the broad plane has to win. Everything a handler
-needs is a parameter: the tick's `tools`, `state` and `config`, plus the `TickTarget` and
+`gitops_deploy.main()` picks exactly one of these after `deploy_phases.plan_tick`. Everything a
+handler needs is a parameter: the tick's `tools`, `state` and `config`, plus the `TickTarget` and
 `TickPlan` the phases produced.
 
 Almost every path returns 0. A failed deploy pages through Discord and the hold marker rather
@@ -19,10 +17,8 @@ import time
 
 from deployer_lib import deploy_alert_text
 from deployer_lib import deploy_alerts
-from deployer_lib import deploy_broad_k8s
 from deployer_lib import deploy_defer
 from deployer_lib import deploy_io
-from deployer_lib import deploy_k8s_owed
 from deployer_lib import deploy_locks
 from deployer_lib import deploy_narrow
 from deployer_lib.deploy_changes import setup_tags_for, setup_role_tag
@@ -31,10 +27,6 @@ from deployer_lib.deploy_git import (
     dirty_alert_slot,
     dirty_summary,
     should_alert_dirty,
-)
-from deployer_lib.deploy_k8s import (
-    declares_snapshot_claims,
-    rollback_volume_revert_note,
 )
 from deployer_lib.deploy_state import DeployerState
 from deployer_lib.deploy_tick_types import TickPlan, TickTarget
@@ -122,8 +114,8 @@ def log_pi_changes(cs) -> None:
 
     Two shapes, one line each: a `roles/containers/<svc>/` change (`cs.services`) and a
     `roles/containers/common/` change (`cs.pi_shared`). Before #2836 only the
-    `handle_no_services` path said either, so a Pi change sharing a tick with a promoted image
-    bump or a broad plane was merged in silence.
+    `handle_no_services` path said either, so a Pi change sharing a tick with a broad plane
+    was merged in silence.
 
     A contention arm below the call site resets the tree seconds later, which makes the line
     retroactively wrong on that path. Accepted rather than moved: `for_contention` logs its own
@@ -163,19 +155,17 @@ def handle_broad(
         tools.note_outcome("parked")
         return 0
 
-    # Everything else fast-forwards and applies what `deploy_narrow.plan` names. The
-    # narrowing runs BEFORE the merge, so it reads the two refs this tick pinned.
+    # Everything else fast-forwards and applies what `deploy_narrow.plan` names: the setup
+    # roles this host runs, narrowed to their own block tags. The narrowing runs BEFORE the
+    # merge, so it reads the two refs this tick pinned. A deploy-plane path adds no plan, so
+    # the tick fast-forwards past it as it passes a docs-only one (D6.12): the renderer reads
+    # it, and `promote` carries its cluster half.
     #
     # The ff-merge happens FIRST, before the apply, so an unrelated commit sharing this tick lands
     # even if the apply below fails. Stranding a docs-only commit behind somebody else's setup
     # change — a tick that exits 0, logs nothing, and writes behind_since — was the original
     # complaint this arm exists to fix.
     #
-    # `applies` gates the narrowing: with no setup tag and no deploy-plane path there is
-    # nothing for `deploy_narrow.plan` to plan, and asking it anyway would route a
-    # `roles/setup/k3s/` range into `_deploy_plane` — whose refusal branch runs a full
-    # `ansible/deploy.yml` for a change that reaches no container at all.
-    applies = bool(setup_tags) or cs.broad_deploy
     # Role tag -> role directory, for the setup roles this tick applies ITSELF — the
     # complement of `pending`, which goes to `manual_plane` for a human.
     # `narrowed_setup_tags` keys on the tag because `setup_tags_for` has already mapped each
@@ -185,24 +175,9 @@ def handle_broad(
     appliable = {
         setup_role_tag(role): role for role in cs.setup_roles if role not in pending
     }
-    plans = (
-        deploy_narrow.plan(
-            tools.narrow_deploy_plane,
-            config,
-            target,
-            setup_tags,
-            cs.broad_deploy,
-            tools.narrow_setup_role,
-            appliable,
-            tools.digest_diff,
-            owners=plan.owners,
-        )
-        if applies
-        else []
+    plans = deploy_narrow.plan(
+        config, target, setup_tags, tools.narrow_setup_role, appliable
     )
-    # The k8s readers of a moved secret on a range `narrow` never saw (#5577). After the
-    # setup plan, so the deploy plane still applies second.
-    plans += plan.secret_plans
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     log_pi_changes(cs)
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —
@@ -228,22 +203,11 @@ def handle_broad(
     # where every check would read green against a tree that lies. hold_sha is what stops the
     # retry loop, and it does that whether or not the tree moved.
     #
-    # One plan per plane, setup first, SHARING one `broad_deploy_timeout_s`: the unit's
-    # TimeoutStartSec treats the broad arm as a single apply plus the flock wait, and a budget
-    # per plan would put a mixed range past that ceiling. A failure holds the plane that
-    # failed and leaves the earlier plane's marker standing — that apply happened. A busy
-    # lock on the second plane resets the ff-merge like one on the first: the setup plane
-    # is idempotent, and the next tick re-crosses the whole range.
+    # The setup plan runs inside one `broad_deploy_timeout_s`: the unit's TimeoutStartSec
+    # treats the broad arm as a single apply plus the flock wait.
     deadline = time.monotonic() + config.broad_deploy_timeout_s
     for broad in plans:
         playbook, tags = broad.playbook, broad.tags
-        if broad.deferred:
-            # Nothing ran, so no `applied` entry, no hold cleared and no line cleared: an
-            # empty tag list there reads as "the whole play ran" to land.sh (#4333).
-            # `apply_broad_k8s` records what it owes in the ledger, and only then the
-            # receipt's `deferred` entry (`record_deferred_receipt` says why the order).
-            continue
-        started = time.monotonic()
         try:
             if broad.apply:
                 deploy_io.deploy_broad(
@@ -256,8 +220,8 @@ def handle_broad(
         except deploy_locks.ServiceLockBusy as exc:
             # Before the generic arm: nothing was applied, so this plane must not be held —
             # and the reset undoes the ff-merge, so the manual_plane lines this tick just
-            # wrote describe a range that is no longer merged. Take them back with their page,
-            # and with the receipt an EARLIER plan in this loop wrote (#2382).
+            # wrote describe a range that is no longer merged. Take them back with their page
+            # and their receipt (#2382).
             deploy_defer.unrecord(state, origin, recorded)
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
@@ -266,18 +230,11 @@ def handle_broad(
             # role it narrowed from, so that role's whole-role apply clears the hold. The
             # property carries the derivation.
             state.hold_failed_apply(origin, playbook, broad.held)
-            # A deploy-plane apply annotates its services on success (`apply_broad_k8s`), so
-            # its failure annotates them too (#6164). Nothing rolls a broad apply back.
-            if playbook == deploy_broad_k8s.DEPLOY_PLAYBOOK and broad.apply:
-                tools.emit_deploy_annotation(
-                    set(tags) or {"full"}, origin, "fail", time.monotonic() - started
-                )
             # The range is merged and this arm never resets, so nothing re-derives what it
-            # carried: the deferred pages go out now, and the failure post below names the
-            # promoted bumps, which no later tick's range will contain.
+            # carried: the deferred pages go out now.
             #
             # DECIDED: the secrets page rides the NON-CONTENTION exits — this arm, and the
-            # two in `apply_broad_k8s` — rather than firing once before the loop (#2459).
+            # tail of this function — rather than firing once before the loop (#2459).
             # #2383 put it before the loop so no failure arm could drop it, and that also
             # sent it on the contention arm, which resets the tree seconds later. Its text
             # says the range was fast-forwarded and names `ansible-playbook` as the remedy,
@@ -286,18 +243,7 @@ def handle_broad(
             # dedupe marker then suppressed the page the re-merging tick owes. Sending it
             # from each exit that leaves the range merged keeps #2383's property — every one
             # of them is reached with `local == origin`, where no later tick re-evaluates.
-            deploy_k8s_owed.alert_and_record_deferred(
-                tools,
-                state,
-                config,
-                origin,
-                set(),
-                deploy_broad_k8s.fold_deferred(cs, plans, plan.k8s_services),
-                plan.k8s_services,
-            )
-            deploy_broad_k8s.record_deferred_receipt(
-                state, target, plans, plan.k8s_services
-            )
+            deploy_alerts.alert_deferred(tools, state, config, origin, set(), cs)
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
             posted = deploy_alerts.discord(
                 tools,
@@ -308,7 +254,6 @@ def handle_broad(
                     tags,
                     origin,
                     exc,
-                    cs.k8s_deploy,
                 ),
             )
             # Exit 0 on a delivered detailed post so systemd's OnFailure generic curl doesn't
@@ -324,136 +269,12 @@ def handle_broad(
         state.record_receipt(origin, target.local, applied={playbook: tags})
         state.clear_broad_hold(playbook, tags)
         deploy_defer.clear_applied(state, playbook, tags)
-    # After the loop, so a broad apply that failed or hit a busy lock has already returned:
-    # the k8s half rides on the plane below it, and applying a workload onto a host whose
-    # setup plane did not apply is the ordering `main()`'s broad-before-k8s branch exists to
-    # prevent. It shares the same `deadline`, for the reason the plans share it, and it sends
-    # the deferred-change pages on every path but contention.
-    return deploy_broad_k8s.apply_broad_k8s(
-        tools, state, config, target, plan, cs, plans, recorded, deadline
-    )
-
-
-def handle_k8s(
-    tools: DeployTools,
-    state: DeployerState,
-    config: Config,
-    target: TickTarget,
-    plan: TickPlan,
-) -> int:
-    """The promoted k8s image bumps: ff-merge, deploy, roll back on failure."""
-    cs, origin = plan.cs, target.origin
-    tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
-    log_pi_changes(cs)
-    started = time.monotonic()
-    try:
-        deploy_io.deploy_k8s(
-            config.repo, cs.k8s_deploy, config.k8s_deploy_timeout_s, run=tools.run
-        )
-    except deploy_locks.ServiceLockBusy as exc:
-        # Before the rollback arm: a rollback would revert volumes and redeploy the prior pin
-        # over a cluster this tick never touched.
-        return deploy_defer.for_contention(tools, state, config, target, exc)
-    except Exception as exc:
-        return _rollback_k8s(tools, state, config, target, plan, exc, started)
-    # One of the two places a service hold clears (the broad arm's bump path is the other).
-    # Without it the first rollback would leave GitOps Deploy — Status red until a manual rm.
-    state.clear_service_hold(cs.k8s_deploy)
-    # A bump an earlier broad tick deferred for budget is applied by its own later deploy,
-    # which is the ordinary way out of the marker (#2449).
-    deploy_k8s_owed.clear_applied_k8s_deferred(state, cs.k8s_deploy)
-    # Only after the gate inside deploy_k8s has passed and the hold is cleared — annotating
-    # from inside the try would mark a deploy that the rollout gate went on to reject.
-    tools.emit_deploy_annotation(cs.k8s_deploy, origin)
-    # A promoted k8s service is image-bump-only, so it is never the consumer of a secret that
-    # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
+    # The tick's last exit, reached only with `local == origin`, as the failure arm is. A
+    # range with nothing deferred reaches only this exit, so the two pages are here as well
+    # as on the failure arm (#2459). Nothing was redeployed, so `deployed` is empty.
+    deploy_alerts.alert_deferred(tools, state, config, origin, set(), cs)
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
-    deploy_k8s_owed.alert_and_record_deferred(
-        tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
-    )
     return 0
-
-
-def _rollback_k8s(
-    tools: DeployTools,
-    state: DeployerState,
-    config: Config,
-    target: TickTarget,
-    plan: TickPlan,
-    exc: Exception,
-    started: float,
-) -> int:
-    """Undo a failed k8s deploy: hold, reset, redeploy the prior pin, revert claimed volumes.
-
-    `started` is the `time.monotonic()` the failed deploy began at, for the annotation's
-    `duration_s`, which covers the deploy and its rollback.
-    """
-    cs, local, origin = plan.cs, target.local, target.origin
-    # Hold BEFORE the reset: a hung rollback redeploy would otherwise
-    # be SIGTERMed before the marker is written, stranding the bad commit into a per-tick
-    # redeploy loop.
-    log(
-        f"k8s-deploy: failed for {sorted(cs.k8s_deploy)}: {exc}; rolling back",
-        level=ERR,
-    )
-    state.write_hold(origin)
-    tools.run(["git", "reset", "--hard", local], cwd=config.repo)
-    rollback_failed: Exception | None = None
-    try:
-        # `origin`, not `local`: the tree is already reset to the last-good commit, so the
-        # snapshot worth reverting to is the one taken before the FAILED deploy — named for
-        # `origin`, the commit being rolled back FROM. Passing `local` looks right and is wrong
-        # twice over: on a first rollback it finds no snapshot and fails the deploy, and on a
-        # second rollback of the same service it finds a STALE snapshot and reverts to the wrong
-        # point.
-        # DECIDED: `origin[:8]` is a fixed slice while volume-snapshot names with `--short=8`, a
-        # MINIMUM width. They diverge only when 8 chars collide, and then the prefix misses by
-        # one character and volume-revert's no-snapshot assert fires before the scale-down — the
-        # safe failure. Measured zero ambiguous 8-char prefixes across ~39k objects. Full
-        # analysis in this role's CLAUDE.md; two reviewers re-derived it on 2026-08-22, hence the
-        # marker.
-        deploy_io.deploy_k8s(
-            config.repo,
-            cs.k8s_deploy,
-            config.k8s_rollback_timeout_s,
-            restore_sha=origin[:8],
-            run=tools.run,
-        )
-    except Exception as exc2:
-        rollback_failed = exc2
-        log(
-            f"k8s-deploy: rollback redeploy of the prior version also failed: {exc2}",
-            level=ERR,
-        )
-    # The failure goes on the dashboards as well as Discord (#6164): `rollback` when the prior
-    # pin went back out, `fail` when that redeploy failed too and nothing is known to be live.
-    tools.emit_deploy_annotation(
-        cs.k8s_deploy,
-        origin,
-        "fail" if rollback_failed else "rollback",
-        time.monotonic() - started,
-    )
-    # Read from the tree AFTER the reset above, matching what roles/k8s/manifests itself reads
-    # for the claim list — the failed commit may have added or renamed a claim, and that version
-    # is exactly what must NOT decide this note.
-    reverting = frozenset(
-        svc
-        for svc in cs.k8s_deploy
-        if declares_snapshot_claims(deploy_io.read_local_k8s_default(config.repo, svc))
-    )
-    revert_note = rollback_volume_revert_note(
-        cs.k8s_deploy,
-        reverting,
-        str(rollback_failed) if rollback_failed else None,
-    )
-    posted = deploy_alerts.discord(
-        tools,
-        config,
-        deploy_alert_text.k8s_failure_alert(
-            config.hostname, local, origin, cs.k8s_deploy, exc, revert_note
-        ),
-    )
-    return 0 if posted else 1
 
 
 def handle_no_services(
@@ -477,9 +298,6 @@ def handle_no_services(
     # consumer(s); without this the rotated secret sits stale.
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     # tasks/ changes aren't auto-deployed but DO change what a deploy does, so they must not
-    # sit silently ff-merged. Nothing was deployed this tick (deployed=set()), so
-    # the full sets are flagged. Same helper runs on the deploy path for a combined push.
-    deploy_k8s_owed.alert_and_record_deferred(
-        tools, state, config, origin, set(), cs, plan.k8s_services
-    )
+    # sit silently ff-merged. Nothing was deployed this tick, so `deployed` is empty.
+    deploy_alerts.alert_deferred(tools, state, config, origin, set(), cs)
     return 0

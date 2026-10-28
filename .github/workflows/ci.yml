@@ -179,7 +179,8 @@ jobs:
   # The `mkdocs-strict` hook in the full sweep is this job's only docs build (#6150).
   #
   # By PR run 40125170130 (2026-10-24) the picture had moved: `hooks` took 4m58s and set the
-  # wall, ahead of pytest's slowest shard at 4m29s. 77s of that was the cross-plane order gate,
+  # wall, ahead of pytest's slowest shard at 4m29s. 77s of that was the cross-plane order gate
+  # (the render-diff gates since D6.12),
   # which now runs in the `pr_gates` job beside this one (#6149).
   #
   # Two things that make the split behave, both learned the hard way and both enforced below:
@@ -411,7 +412,7 @@ jobs:
         # `real_tree`), so the hook here was a second render of every k8s role (#6150).
         run: prek run --all-files --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-host-files --skip static-ratchet-tests-landing --skip static-ratchet-tests-deployer --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --color always
 
-  # The two PR-only refusals, the cross-plane order gate and the cluster pin checks, in a job of
+  # The two PR-only refusals, the render-diff gates and the cluster pin checks, in a job of
   # their own (#6149). They ran serially inside `hooks`, ahead of its sweep, and on PR run
   # 40125170130 the cross-plane gate's 77s made `hooks` the slowest job at 4m58s. Here they run
   # beside the sweep, and the run wall is the slower of the two jobs instead of their sum.
@@ -441,20 +442,18 @@ jobs:
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
         if: github.event_name == 'pull_request'
 
-      # The cross-plane gate (D4.4). It refuses a PR that changes a flux-owned role and an
-      # Ansible-owned role on one dependency path, because `promote` and `land.sh` would apply
-      # the two halves in whichever order they finish. It also refuses an edge added beside a
-      # change to its dependent. docs/landing.md says how to split a refused PR, and there is
-      # no bypass. Its removal arms (D5.1f) refuse an object a flux-owned tag drops without a
+      # The render-diff gates (D4.4, renamed from the cross-plane gate in D6.12, which deleted
+      # its plane-order arm). It refuses an edge added beside a change to its dependent.
+      # docs/landing.md says how to split a refused PR, and there is no bypass. Its removal arms (D5.1f) refuse an object a flux-owned tag drops without a
       # `Removes-Object:` line in the PR's commits, and a flux-owned name added to
       # k8s_retired_services (docs/flux-deploy-plane.md). It runs on a pull request only,
       # because a push or a dispatch has no diff to judge and no PR commits to read. The
       # checkout is the merge commit, so its first parent is the base it merges onto, and each
       # side renders with its own tree's renderer, about 15s each.
-      - name: Cross-plane order gate
+      - name: Render-diff gates
         if: github.event_name == 'pull_request'
         timeout-minutes: 8
-        run: uv run python scripts/validate/cross_plane_order.py --base HEAD^1
+        run: uv run python scripts/validate/render_diff_gates.py --base HEAD^1
 
       # The cluster pin checks (H1.1f). Merging a Longhorn or MetalLB pin is the upgrade, so it
       # refuses a pin that decreases, a Longhorn bump that skips a minor release, and a bump

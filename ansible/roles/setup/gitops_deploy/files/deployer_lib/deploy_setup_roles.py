@@ -196,38 +196,6 @@ def secret_setup_readers(
     return paths, unread
 
 
-def secret_k8s_readers(repo: str, old: str, new: str) -> tuple[int, str]:
-    """Run `secret_setup_readers.py --deploy-tags` over `old..new` in `repo` (#5577).
-
-    Returns:
-        (exit code, stdout): the deploy tags reading a `secrets.yml` key the range moved,
-        comma-joined. Exit 0 answers, with an empty stdout when no k8s role reads one; exit
-        `SECRET_READERS_REFUSED_EXIT` refuses, naming the tags only when it knows them.
-
-    Raises:
-        subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
-        OSError: the child could not be started.
-    """
-    r = subprocess.run(
-        [
-            "uv",
-            "run",
-            "--frozen",
-            "python",
-            SECRET_READERS_SCRIPT,
-            "--deploy-tags",
-            old,
-            new,
-        ],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        timeout=ROUTING_TIMEOUT_S,
-        check=False,
-    )
-    return r.returncode, r.stdout.strip()
-
-
 def current_routing() -> dict[str, SetupRoute] | None:
     """What `use_routing` last installed, None if nothing; a test restores it with this."""
     return _ROUTES

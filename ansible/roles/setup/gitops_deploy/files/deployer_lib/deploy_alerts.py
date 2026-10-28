@@ -2,8 +2,8 @@
 """The deployer's notify subsystem: when to send, the queue's file, and the send itself.
 
 **When to say it** is this module: `alert_once` owns the per-SHA dedupe marker, `deliver` owns
-the retry queue, `drain_pending` empties it, and `alert_deferred` fires the tasks/meta/k8s
-channels. **What to say** is `deploy_alert_text.py`, one pure function per alert — the seam
+the retry queue, `drain_pending` empties it, and `alert_deferred` fires the tasks
+channel. **What to say** is `deploy_alert_text.py`, one pure function per alert — the seam
 this module's docstring named before #2600 split it. This module decides delivery and never
 composes a message, so each half reads without the other.
 
@@ -189,15 +189,10 @@ def alert_secrets_deferred(
 ) -> None:
     """Alert (once per SHA) that `secrets.yml` was ff-merged, for the consumers no apply reached.
 
-    Split out of the no-services branch on 2026-08-24 so the k8s auto-deploy path can fire it too.
-    That path ff-merges, deploys the promoted service and returns without ever reading cs.secrets,
-    so a rotation push and a Renovate image bump landing in the same 30-minute window arrive as ONE
-    ChangeSet and the rotated secret goes silently stale — and because the merge already happened,
-    no later tick re-evaluates it.
-
-    Why it is safe to fire on the k8s path: a k8s service is promoted to auto-deploy only when
-    its sole changed path is defaults/main.yml — image-bump-only by construction (see
-    split_k8s_auto_deploy) — so a promoted service can never itself be the secret's consumer.
+    Split out of the no-services branch on 2026-08-24 so every exit that leaves a range
+    merged can fire it: `handle_no_services`, and both the failure arm and the tail of
+    `handle_broad`. Once the merge has happened no later tick re-evaluates the range, so an exit
+    that skipped it would leave the rotated secret silently stale.
     """
     if not cs.secrets:
         return
@@ -218,25 +213,16 @@ def alert_deferred(
     origin: str,
     deployed: set[str],
     cs: ChangeSet,
-    declared_k8s: set[str] | None = None,
 ) -> None:
-    """Fire the tasks/ and k8s-role defer-and-alert for changes not redeployed.
+    """Fire the tasks/ defer-and-alert for a container role's change no apply reached.
 
-    Runs on BOTH the no-services branch (deployed=set()) and after a SUCCESSFUL deploy
-    (deployed=cs.services): a combined push (svcA template + svcB tasks/) deploys svcA but
-    leaves svcB's structural change ff-merged and unapplied. The pending remainder is the pure
-    `deferred_service_alerts`; this is its I/O shell (per-SHA dedupe marker + deliver). Each channel
-    alerts at most once per origin SHA; its marker advances on DETECTION (deliver() and the pending
-    queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped.
-
-    `declared_k8s` is this host's `platform: k8s` containers_list entries, used to decide whether
-    the k8s alert can name a `--tags` redeploy at all (see k8s_remediation). It defaults to None
-    for the caller that has not read the inventory; None is treated as the EMPTY set, which makes
-    every changed role read as untaggable and prescribes a full deploy. That is the fail-safe
-    direction: a full deploy is slower than necessary but always applies the change, whereas a
-    `--tags` line for a role with no entry exits 0 having applied nothing.
+    `deploy_handlers` calls it with `deployed=set()` from `handle_no_services`, from
+    `handle_broad`'s failure arm and from `handle_broad`'s tail, each an exit that leaves the
+    range merged. The pending remainder is the pure `deferred_service_alerts`; this is its I/O
+    shell (per-SHA dedupe marker + deliver). The channel alerts at most once per origin SHA; its
+    marker advances on DETECTION (deliver() and the pending queue own delivery + retry), so a
+    transient webhook blip is redelivered, not silently dropped.
     """
-    declared_k8s = declared_k8s or set()
     pending_tasks = deferred_service_alerts(cs, deployed)
     if pending_tasks:
         alert_once(
@@ -246,26 +232,4 @@ def alert_deferred(
             "tasks",
             origin,
             deploy_alert_text.tasks_deferred_alert(origin, pending_tasks),
-        )
-    if cs.k8s:
-        # No `- deployed` subtraction (unlike tasks): a bump this tick deployed sits in
-        # `cs.k8s_deploy`. The one exception is a broad tick's narrowed deploy plane, and
-        # `deploy_broad_k8s` subtracts what that applied from `cs` before calling this (#2453).
-        #
-        # DECIDED: this alert is a one-shot detection, not the durable signal. It fires once per
-        # origin SHA (alert_once) and the ff-merge below clears `behind_since`, so every other
-        # monitored marker reads clean while the cluster keeps running the old manifests (#947).
-        # TWO durable signals carry it: the `k8s_unapplied` marker, which the caller one frame up
-        # (`deploy_defer.alert_and_record_deferred`) writes for the hand-edited and denylisted
-        # classes (#2570), and the daniel-box cron reading `probe.py releases --stale-only`
-        # against the records `roles/k8s/manifests/tasks/release_stamp.yml` writes on a real apply.
-        alert_once(
-            tools,
-            state,
-            config,
-            "k8s",
-            origin,
-            deploy_alert_text.k8s_deferred_alert(
-                origin, cs.k8s, declared_k8s, cs.k8s_consumers
-            ),
         )

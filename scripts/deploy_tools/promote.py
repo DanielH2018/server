@@ -448,8 +448,7 @@ def main(
     if args.command == "land-wait":
         services = [tag for tag in args.services.split(",") if tag]
         reads = wait_reads.live_wait_reads(f, args.repo)
-        also = frozenset(name for name in args.also.split(",") if name)
-        result = wait.land_wait(reads, args.merge, services, args.timeout, also=also)
+        result = wait.land_wait(reads, args.merge, services, args.timeout)
         return wait.report_wait(args.merge, result)
     if args.command == "prune":
         return prune(

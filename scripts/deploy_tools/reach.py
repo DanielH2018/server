@@ -198,7 +198,6 @@ class Reach(NamedTuple):
         return (
             cs.services
             | cs.k8s
-            | cs.k8s_deploy
             | cs.tasks
             | shared_module_consumers(self.loud, repo)
             | deploy_cross_role.k8s_lookup_readers(self.loud, repo)

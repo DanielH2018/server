@@ -809,7 +809,7 @@ role and, while Ansible owns it, the deployer auto-deploying its image bumps. Th
 to a suspended role applies nothing until the resume, so the suspend is a temporary stop, and
 three checks hold it there (D5.1d):
 
-- **The gate.** `scripts/validate/cross_plane_order.py`'s arm 5 refuses a PR that changes the
+- **The gate.** `scripts/validate/render_diff_gates.py`'s arm 5 refuses a PR that changes the
   `own` digest of a tag `digests.json` marks `suspended` at both its base and its head. The
   same change passes in the PR that removes `flux_suspend`. The arm reads the `suspended`
   field, never the key, so a role that derives the key from another variable is covered too.
@@ -1885,7 +1885,7 @@ Removes-Object: <kind>/<namespace>/<name>
 - A rename is not a removal. An object whose name, with the trailing `-<digest8>`
   removed, still renders in the candidate passes, as the soak Job and its ConfigMap do on
   every revision. `scripts/deploy_tools/object_loss.py` strips the suffix as
-  `cross_plane_order.py` does at PR time.
+  `render_diff_gates.py` does at PR time.
 
 `decide` skips an ineligible candidate with one stderr line per candidate, naming each
 undeclared object, and weighs older ones. When every candidate loses an object, it prints
@@ -1902,7 +1902,7 @@ with `git log` back to `prod`'s commit.
 
 ### The same check on the pull request
 
-CI's cross-plane order gate, `scripts/validate/cross_plane_order.py`, refuses the PR before it
+CI's render-diff gates, `scripts/validate/render_diff_gates.py`, refuse the PR before it
 merges, so a removal never reaches `decide` undeclared. Its arm 3 renders the cluster at the
 PR's base and head. It fails when a tag that is `owner: flux` at both ends loses an object of
 any kind, and no commit of the PR carries the `Removes-Object:` line for it. The failure line
@@ -1927,7 +1927,7 @@ checks share one implementation of them, `stem` and `prune_disabled` in
 `ansible/tasks/k8s_retire.yml` deletes the last render Ansible staged for a service. For a
 flux-owned service that render predates the flip, and Flux at the old `prod` keeps applying
 the tag until promotion, so it re-creates what the teardown deleted. Arm 4 of the
-cross-plane order gate therefore refuses a PR that adds a name to `k8s_retired_services`
+render-diff gates therefore refuses a PR that adds a name to `k8s_retired_services`
 whose entry reads `owner: flux` on the PR's base. A flux-owned service retires in this order
 instead:
 
@@ -1947,8 +1947,8 @@ instead:
    `manifests_extra_rollouts` or `manifests_self_rollouts` entry goes too, and so do the
    role's `k8s_claims`. The exclude list drops the Service and IngressRoute that the shared
    defaults render from the entry's `port` and `hostname`. Editing the entry instead would
-   move the render of every Ansible-owned role that reads `containers_list`, such as
-   authelia, and arm 1 would flag the PR. The tag's `cluster/<tag>/` directory then holds
+   move the render of every role that reads `containers_list`, such as authelia, in the
+   PR that empties this one. The tag's `cluster/<tag>/` directory then holds
    only a `kustomization.yaml` with `resources: []`.
    `scripts/validate/tests/test_validate_cross_plane_retirement.py::test_step_1_of_a_flux_owned_retirement_renders_no_object`
    renders this step on bento-pdf.
