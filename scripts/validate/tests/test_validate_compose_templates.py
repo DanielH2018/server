@@ -150,12 +150,12 @@ def test_verbose_lists_each_clean_template(capsys):
 
 
 # The Pi package's services (H5.2b): the same checks run over hosts/components/pi-compose/services.
-# `pi-canary` is the named member, so a scan that stopped reading the component fails here.
+# `autoheal` is the named member, so a scan that stopped reading the component fails here.
 
 
-def test_verbose_lists_the_packaged_canary(capsys):
+def test_verbose_lists_a_packaged_service(capsys):
     assert vct.main(["-v"]) == 0
-    assert "  [ok]   pi-canary\n" in capsys.readouterr().out
+    assert "  [ok]   autoheal\n" in capsys.readouterr().out
 
 
 def _service(tmp_path, image):
