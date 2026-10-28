@@ -157,13 +157,11 @@
   # firmware on the next boot, so applying it without a reboot in the same window leaves it
   # pending indefinitely. The write itself takes seconds; the 30 min is slack, not need.
   #
-  # `refresh --force` because a plain refresh exits non-zero once the metadata is younger than
-  # its refresh interval, which is the normal weekly case, not an error. Output goes to syslog
-  # rather than /dev/null so a real failure is recoverable from Loki (`{job="syslog"}`) — and
-  # piping into logger makes the job's exit status logger's, which keeps cron from mailing
-  # root every week for the `update` exit code that means "nothing to do".
-  #
-  # `--no-reboot-check` because the reboot is the next cron's job, not this one's.
+  # files/host-maintenance.sh runs the refresh and the update, reads fwupdmgr's exit code
+  # (2 means nothing to do) and writes the `firmware-update` textfile that
+  # FirmwareUpdateNotReporting reads (#6179). Its output goes to syslog rather than /dev/null
+  # so a real failure is recoverable from Loki (`{job="syslog"}`), and piping into logger
+  # keeps cron from mailing root every week.
   #
   # Note on value: Secure Boot is DISABLED on daniel-box, so the db/dbx signature databases
   # these updates carry are not consulted by anything. The cron is here for real firmware
@@ -173,7 +171,7 @@
     minute: "0"
     hour: "7"
     weekday: "0"
-    job: "/usr/bin/fwupdmgr refresh --force >/dev/null 2>&1 ; /usr/bin/fwupdmgr update -y --no-reboot-check 2>&1 | /usr/bin/logger -t fwupd-auto"
+    job: "/usr/local/bin/host-maintenance.sh firmware-update 2>&1 | /usr/bin/logger -t fwupd-auto"
     user: root
   become: true
   when: initial_setup_fwupdmgr.stat.exists
@@ -237,6 +235,36 @@
     state: absent
   become: true
   tags: [crons, ansible-log]
+
+- name: Find the ansible.log files the removed log_path left in each checkout
+  tags: [crons, ansible-log]
+  when: has_repo_checkout
+  # ansible.cfg set `log_path = ./ansible.log` until #6217, so the primary checkout and every
+  # `.claude/worktrees/<name>` checkout grew their own copy, and a `--diff` run wrote rendered
+  # bodies into it. Nothing writes the file any more; this and the task below delete the copies
+  # left behind, and find nothing once they are gone. Depth 2 reaches `worktrees/<name>/`.
+  ansible.builtin.find:
+    paths:
+      - "/home/{{ sys_user }}/server"
+      - "/home/{{ sys_user }}/server/.claude/worktrees"
+    patterns: ansible.log
+    file_type: file
+    recurse: true
+    depth: 2
+  register: initial_setup_stale_ansible_logs
+  check_mode: false # read-only query; must run under --check or the loop below breaks
+  become: true
+
+- name: Delete the ansible.log files the removed log_path left behind
+  tags: [crons, ansible-log]
+  when: has_repo_checkout
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ initial_setup_stale_ansible_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
 
 - name: Create the directory the worktree holder scan installs into
   tags: [crons, worktree-sweep]
