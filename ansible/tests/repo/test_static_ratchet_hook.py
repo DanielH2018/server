@@ -408,20 +408,17 @@ def test_the_test_module_censuses_run_in_their_own_sibling():
 @pytest.mark.parametrize(
     "path",
     [
-        "scripts/dev/tests/test_findings.py",
-        "ansible/roles/k8s/monitor-bridge/tests/test_check_ha.py",
-        "ansible/roles/conftest.py",
-        "ansible/tests/_row_table.py",
-        "ansible/tests/k8s/_manifest_guards.py",
-        ".claude/hooks/tests/test_hook_scripts_executable.py",
-        "evals/tests/test_eval_cases.py",
-        "scripts/tests/_render_helper_rules.py",
         "scripts/lib/repo_paths.py",
+        "scripts/lib/proc_testing.py",
         "prek.toml",
         "pyproject.toml",
     ],
 )
-def test_the_census_sibling_gate_matches_a_pytest_only_module_or_its_closure(path):
+def test_the_census_sibling_gate_matches_the_import_closure_and_its_config(path):
+    """The gate covers the inputs the census does not return.
+
+    test_census_rows_test_modules.py checks the census's own members against the gate.
+    """
     assert re.search(_sibling(CENSUS_SIBLING)["files"], path)
 
 
