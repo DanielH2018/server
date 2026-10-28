@@ -104,6 +104,32 @@ def test_a_later_reboot_class_change_keeps_the_time_the_reboot_was_first_owed(no
     )
 
 
+def test_the_boot_metrics_run_reads_zero_once_the_boot_cleared_the_flag_and_acts_on_nothing(
+    node,
+):
+    """`homelab-reconcile-metrics.service` runs `--metrics` at boot, so the 1 does not outlive
+    the reboot that applied it (#6188)."""
+    ship(node, "/etc/modprobe.d/50-homelab.conf", "options x y=1\n", "reboot")
+    live_unit(node, "docker.service")
+    ship(node, "/etc/docker/daemon.json", "{}\n", "manual:docker.service")
+    settled(node)
+    record = node.applied_path.read_text()
+    (node.root / "run/homelab/reboot-pending").unlink()  # /run is a tmpfs
+    node.state["units"]["docker.service"]["invocation"] = (
+        "inv1"  # the boot started it anew
+    )
+
+    result = node.run("--metrics")
+
+    assert result.returncode == 0, result.stderr
+    assert metrics(node) == (
+        'homelab_host_reboot_pending{host="daniel-pi"} 0\n'
+        'homelab_host_reconcile_drift{host="daniel-pi",arm="legacy"} 0\n'
+    )
+    assert node.applied_path.read_text() == record
+    assert verbs(node) == []
+
+
 def test_a_host_with_nothing_pending_reads_reboot_pending_zero_not_absent(node):
     settled(node)
 

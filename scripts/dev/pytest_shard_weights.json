@@ -538,6 +538,7 @@
  "ansible/tests/repo/test_fix_skeptic_pass_documented.py": 0.0,
  "ansible/tests/repo/test_flux_bootstrap_section.py": 0.0,
  "ansible/tests/repo/test_flux_recovery_runbook.py": 0.0,
+ "ansible/tests/repo/test_gitguardian_ignores_only_the_facts_lock.py": 0.0,
  "ansible/tests/repo/test_gitleaks_allowlist_paths_are_anchored.py": 0.0,
  "ansible/tests/repo/test_gitleaks_manifest_digest_allowlist.py": 0.0,
  "ansible/tests/repo/test_gitleaks_secret_key_name_allowlist.py": 0.0,
