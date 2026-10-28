@@ -493,15 +493,22 @@ def test_an_open_event_with_a_writing_mode_string_keeps_the_line(tree, tmp_path)
         ("import logging", "logging._lock.acquire()"),
         ("import decimal", "decimal.getcontext().prec = 5"),
         ("import threading", "threading._counter()"),
+        ("import _socket", "_socket.setdefaulttimeout(5)"),
     ],
-    ids=["c-object-rlock-held", "c-object-thread-decimal-context", "c-object-count"],
+    ids=[
+        "c-object-rlock-held",
+        "c-object-thread-decimal-context",
+        "c-object-count",
+        "c-modules-socket-timeout",
+    ],
 )
 def test_state_inside_a_c_object_the_runner_loads_keeps_the_line(tree, imports, call):  # noqa: F811
-    """A change inside a C object of a module loaded before the hook keeps the line (#5209).
+    """A change inside a C object of a module loaded before the hook or in `c_modules` (#5209).
 
     An `RLock`, the thread's `decimal` context and an `itertools.count` are static C types
-    the walk does not copy and no `readers` entry reads. A held logging lock deadlocks every
-    other thread of the controller, and a narrowed context changes every later `Decimal`.
+    the walk does not copy and no `readers` entry reads, and `_socket` keeps its default
+    timeout in C. A held logging lock deadlocks every other thread of the controller, and a
+    narrowed context changes every later `Decimal`.
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
@@ -510,7 +517,7 @@ def test_state_inside_a_c_object_the_runner_loads_keeps_the_line(tree, imports, 
 @pytest.mark.parametrize(
     "imports, call",
     [
-        ("import os", "os.set_inheritable(2, True)"),
+        ("import os", "os.set_inheritable(0, False)"),
         ("import gc", "gc.set_debug(gc.DEBUG_SAVEALL)"),
         ("import sys", "sys.set_coroutine_origin_tracking_depth(5)"),
     ],
@@ -519,7 +526,7 @@ def test_state_inside_a_c_object_the_runner_loads_keeps_the_line(tree, imports, 
 def test_an_unaudited_call_or_unread_process_state_keeps_the_line(tree, imports, call):  # noqa: F811
     """A call with no audit event to process state the runner neither reads nor counts (#5209).
 
-    An inheritable stderr leaks into every child the controller spawns, and `DEBUG_SAVEALL`
+    A non-inheritable stdin reaches no child the controller spawns, and `DEBUG_SAVEALL`
     keeps every collected object alive for the rest of the deploy.
     """
     reason = _reason_for_head_call(tree, imports, call)
