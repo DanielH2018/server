@@ -10,6 +10,7 @@ Run: uv run pytest hosts/lib/tests/test_reconcile_component.py
 import ast
 
 import pytest
+import yaml
 from _reconcile_component import render_reconcile
 
 from lib.repo_paths import REPO
@@ -105,3 +106,44 @@ def test_the_metrics_unit_rewrites_the_textfile_once_per_boot(package):
             "../homelab-reconcile-metrics.service"
         )
     }
+
+
+def test_a_leveled_reconcile_line_carries_its_priority_only_on_the_journal(
+    tmp_path, monkeypatch, capsys
+):
+    # The distro tier's copy of host_lib's prefix rule (#6202): `journalctl -p err` finds a
+    # reconcile failure, and a terminal never sees `<3>`.
+    from reconcile_lib import common
+
+    journal = tmp_path / "journal"
+    journal.touch()
+    st = journal.stat()
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+    with open(journal, "w") as out:
+        common.log(
+            "stop x failed:\nboom", common.ERR, tag="homelab-reconcile", stream=out
+        )
+        common.log("stopped x", tag="homelab-reconcile", stream=out)
+    assert journal.read_text() == (
+        "<3>homelab-reconcile: stop x failed:\n<3>boom\nhomelab-reconcile: stopped x\n"
+    )
+    common.say("stop x failed", common.ERR)
+    assert capsys.readouterr().err == "homelab-reconcile: stop x failed\n"
+
+
+def test_every_host_package_with_the_secrets_unit_ships_reconcile():
+    """homelab-secrets imports reconcile_lib's `log`, which only the reconcile component ships."""
+    packages = {
+        path.parent.name: yaml.safe_load(path.read_text()) or {}
+        for path in (REPO / "hosts").glob("*/package.yml")
+    }
+    with_secrets = {
+        host: package["components"]
+        for host, package in packages.items()
+        if "secrets-unit" in package.get("components", [])
+    }
+    assert {"daniel-box", "daniel-pi", "daniel-server"} <= set(with_secrets)
+    missing = sorted(
+        host for host, parts in with_secrets.items() if "reconcile" not in parts
+    )
+    assert not missing, f"{missing} ship homelab-secrets without reconcile_lib"
