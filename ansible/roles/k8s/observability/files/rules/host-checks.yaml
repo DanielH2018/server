@@ -506,6 +506,209 @@ groups:
             textfile collector, so nothing confirms the malware scan still runs. Read the
             `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`, then
             /var/lib/node-exporter-textfile/rkhunter-check.prom on the host.
+      # The weekly host-maintenance crons (#6179): apt autoremove and the dpkg purge on every
+      # host, the firmware update on daniel-box, the one host with fwupd. Each runs through
+      # initial_setup's files/host-maintenance.sh, which writes the check's textfile with
+      # success 0 when the job's command failed. Not shadow, because no Kuma tile or
+      # Healthchecks.io check watches these crons. Both literals of each NotReporting rule
+      # equal the script's DEADLINE_S, and ansible/tests/setup/test_host_maintenance.py pins
+      # them to it and the rule set to the hosts that run each cron.
+      - alert: AptAutoremoveFailed
+        expr: homelab_check_success{check="apt-autoremove",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly apt autoremove failed.
+          description: >-
+            host-maintenance.sh apt-autoremove on daniel-box wrote success 0: apt-get autoremove exited non-zero. Read
+            `journalctl -t apt-autoremove` on daniel-box for the command's output.
+      - alert: AptAutoremoveNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"}[612000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly apt autoremove has stopped reporting.
+          description: >-
+            No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-box's textfile
+            collector, so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron in
+            root's crontab and `journalctl -t apt-autoremove`, then
+            /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      - alert: AptAutoremoveFailed
+        expr: homelab_check_success{check="apt-autoremove",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's weekly apt autoremove failed.
+          description: >-
+            host-maintenance.sh apt-autoremove on daniel-server wrote success 0: apt-get autoremove exited non-zero. Read
+            `journalctl -t apt-autoremove` on daniel-server for the command's output.
+      - alert: AptAutoremoveNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"}[612000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's weekly apt autoremove has stopped reporting.
+          description: >-
+            No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-server's textfile
+            collector, so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron in
+            root's crontab and `journalctl -t apt-autoremove`, then
+            /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      - alert: AptAutoremoveFailed
+        expr: homelab_check_success{check="apt-autoremove",origin="daniel-pi"} == 0
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's weekly apt autoremove failed.
+          description: >-
+            host-maintenance.sh apt-autoremove on daniel-pi wrote success 0: apt-get autoremove exited non-zero. Read
+            `journalctl -t apt-autoremove` on daniel-pi for the command's output.
+      - alert: AptAutoremoveNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"}[612000s])
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's weekly apt autoremove has stopped reporting.
+          description: >-
+            No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-pi's textfile
+            collector, so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron in
+            root's crontab and `journalctl -t apt-autoremove`, then
+            /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      - alert: DpkgPurgeFailed
+        expr: homelab_check_success{check="dpkg-purge",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly dpkg purge of orphaned configs failed.
+          description: >-
+            host-maintenance.sh dpkg-purge on daniel-box wrote success 0: the dpkg purge of removed packages' configs exited non-zero. Read
+            `journalctl -t dpkg-purge` on daniel-box for the command's output.
+      - alert: DpkgPurgeNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"}[612000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
+          description: >-
+            No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-box's textfile
+            collector, so nothing confirms the weekly dpkg purge of orphaned configs still runs. Read the `Weekly dpkg purge orphaned configs` cron in
+            root's crontab and `journalctl -t dpkg-purge`, then
+            /var/lib/node-exporter-textfile/dpkg-purge.prom on the host.
+      - alert: DpkgPurgeFailed
+        expr: homelab_check_success{check="dpkg-purge",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's weekly dpkg purge of orphaned configs failed.
+          description: >-
+            host-maintenance.sh dpkg-purge on daniel-server wrote success 0: the dpkg purge of removed packages' configs exited non-zero. Read
+            `journalctl -t dpkg-purge` on daniel-server for the command's output.
+      - alert: DpkgPurgeNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"}[612000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's weekly dpkg purge of orphaned configs has stopped reporting.
+          description: >-
+            No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-server's textfile
+            collector, so nothing confirms the weekly dpkg purge of orphaned configs still runs. Read the `Weekly dpkg purge orphaned configs` cron in
+            root's crontab and `journalctl -t dpkg-purge`, then
+            /var/lib/node-exporter-textfile/dpkg-purge.prom on the host.
+      - alert: DpkgPurgeFailed
+        expr: homelab_check_success{check="dpkg-purge",origin="daniel-pi"} == 0
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's weekly dpkg purge of orphaned configs failed.
+          description: >-
+            host-maintenance.sh dpkg-purge on daniel-pi wrote success 0: the dpkg purge of removed packages' configs exited non-zero. Read
+            `journalctl -t dpkg-purge` on daniel-pi for the command's output.
+      - alert: DpkgPurgeNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"}[612000s])
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's weekly dpkg purge of orphaned configs has stopped reporting.
+          description: >-
+            No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-pi's textfile
+            collector, so nothing confirms the weekly dpkg purge of orphaned configs still runs. Read the `Weekly dpkg purge orphaned configs` cron in
+            root's crontab and `journalctl -t dpkg-purge`, then
+            /var/lib/node-exporter-textfile/dpkg-purge.prom on the host.
+      - alert: FirmwareUpdateFailed
+        expr: homelab_check_success{check="firmware-update",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly firmware update failed.
+          description: >-
+            host-maintenance.sh firmware-update on daniel-box wrote success 0: fwupdmgr update exited with an error rather than 0 or 2 (nothing to update). Read
+            `journalctl -t fwupd-auto` on daniel-box for the command's output.
+      - alert: FirmwareUpdateNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"}[612000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly firmware update has stopped reporting.
+          description: >-
+            No firmware-update verdict newer than 612000s reached Prometheus from daniel-box's textfile
+            collector, so nothing confirms the weekly firmware update still runs. Read the `Weekly firmware update` cron in
+            root's crontab and `journalctl -t fwupd-auto`, then
+            /var/lib/node-exporter-textfile/firmware-update.prom on the host.
       # The catch-all deadman (#6166), one rule per host so `service` stays a literal. It reads
       # each check's own homelab_check_deadline_seconds, so a producer that writes the textfile
       # is covered the day it ships, before anyone writes its NotReporting pair. It is the

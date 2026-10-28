@@ -157,13 +157,11 @@
   # firmware on the next boot, so applying it without a reboot in the same window leaves it
   # pending indefinitely. The write itself takes seconds; the 30 min is slack, not need.
   #
-  # `refresh --force` because a plain refresh exits non-zero once the metadata is younger than
-  # its refresh interval, which is the normal weekly case, not an error. Output goes to syslog
-  # rather than /dev/null so a real failure is recoverable from Loki (`{job="syslog"}`) — and
-  # piping into logger makes the job's exit status logger's, which keeps cron from mailing
-  # root every week for the `update` exit code that means "nothing to do".
-  #
-  # `--no-reboot-check` because the reboot is the next cron's job, not this one's.
+  # files/host-maintenance.sh runs the refresh and the update, reads fwupdmgr's exit code
+  # (2 means nothing to do) and writes the `firmware-update` textfile that
+  # FirmwareUpdateNotReporting reads (#6179). Its output goes to syslog rather than /dev/null
+  # so a real failure is recoverable from Loki (`{job="syslog"}`), and piping into logger
+  # keeps cron from mailing root every week.
   #
   # Note on value: Secure Boot is DISABLED on daniel-box, so the db/dbx signature databases
   # these updates carry are not consulted by anything. The cron is here for real firmware
@@ -173,7 +171,7 @@
     minute: "0"
     hour: "7"
     weekday: "0"
-    job: "/usr/bin/fwupdmgr refresh --force >/dev/null 2>&1 ; /usr/bin/fwupdmgr update -y --no-reboot-check 2>&1 | /usr/bin/logger -t fwupd-auto"
+    job: "/usr/local/bin/host-maintenance.sh firmware-update 2>&1 | /usr/bin/logger -t fwupd-auto"
     user: root
   become: true
   when: initial_setup_fwupdmgr.stat.exists
