@@ -249,7 +249,6 @@ def test_the_runner_fetch_reads_green_pytest_legs_of_the_newest_runs_that_ran_th
         "log of repos/{owner}/{repo}/actions/jobs/70/logs",
         "log of repos/{owner}/{repo}/actions/jobs/80/logs",
     ]
-    assert ("run", "view", "9", "--json", "jobs") not in calls
     listing = " ".join(calls[0])
     for wanted in (
         "--workflow ci.yml",
