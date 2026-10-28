@@ -388,11 +388,15 @@ def test_the_cost_comment_quotes_a_daniel_server_run_under_budget_near_load_3():
     )
 
 
-CENSUS_SIBLING = f"{HOOK_ID}-test-modules"
-CENSUS_MODULES = {
-    "scripts/tests/test_census_rows_test_modules.py",
-    "scripts/tests/test_census_rows_test_renders.py",
-}
+CENSUS_SIBLING = "static-ratchet-tests-test-modules"
+
+
+def _census_modules() -> set[str]:
+    """The two census files over the pytest-only modules, which #5599 moved to the sibling."""
+    return {
+        "scripts/tests/test_census_rows_test_modules.py",
+        "scripts/tests/test_census_rows_test_renders.py",
+    }
 
 
 def _sibling(hook_id: str) -> dict:
@@ -401,8 +405,28 @@ def _sibling(hook_id: str) -> dict:
 
 def test_the_test_module_censuses_run_in_their_own_sibling():
     """They bounded the main hook under `--dist loadscope`, so they run apart from it (#5599)."""
-    assert _modules(_sibling(CENSUS_SIBLING)) == CENSUS_MODULES
-    assert not _modules(_hook()) & CENSUS_MODULES
+    assert _modules(_sibling(CENSUS_SIBLING)) == _census_modules()
+    assert not _modules(_hook()) & _census_modules()
+
+
+def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
+    """By recorded seconds, the main hook's slowest module is faster than the one that moved.
+
+    `--dist loadscope` keeps each module on one worker, so the slowest module bounds the hook.
+    The oracle is CI's recorded weights, not the cost comment. If a module left in the hook
+    grows past the moved census, the split no longer buys what the comment says it does.
+    """
+    weights = xdist_width.load_weights(REPO)
+    assert weights, "scripts/dev/pytest_shard_weights.json did not load"
+    main = sorted(_modules(_hook()))
+    seconds = xdist_width.module_seconds([REPO / m for m in main], REPO, weights)
+    moved = xdist_width.module_seconds(
+        [REPO / m for m in sorted(_census_modules())], REPO, weights
+    )
+    slowest = max(zip(seconds, main, strict=True))
+    assert slowest[0] < max(moved), (
+        f"{slowest[1]} records {slowest[0]}s, at least the moved census's {max(moved)}s"
+    )
 
 
 @pytest.mark.parametrize(
