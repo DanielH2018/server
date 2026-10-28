@@ -147,7 +147,7 @@ provision() {
 }
 
 # Renovate's cloudflare/pint manager rewrites this line; keep it a literal.
-pint_version="0.89.2"
+pint_version="0.89.3"
 prometheus_version="$(image_version "$defaults" observability_k8s_prometheus_image)"
 alertmanager_version="$(image_version "$defaults" observability_k8s_alertmanager_image)"
 loki_version="$(image_version "$loki_defaults" loki_homelab_k8s_image)"
