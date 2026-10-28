@@ -18,21 +18,36 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   to master — YAML lint, ansible-lint, gitleaks, pytest, the compose-template validator, ruff. uv
   must be on PATH. The test set is `pyproject.toml` `[tool.pytest.ini_options].testpaths` (single
   source; excludes vendored `ansible/collections/**`).
-- **GitOps:** `ansible/roles/setup/gitops_deploy/` installs a 30-min systemd timer that fetches
-  origin/master, maps changed `roles/containers/<svc>/…` → service tags, ff-merges, deploys each,
-  then health-gates and rolls back on failure (writes a hold-marker SHA). Pure decision logic is in
-  `files/deployer_lib/deploy_logic.py` (unit-tested in `tests/test_deploy_*.py`); broad changes (shared
-  templates / inventory / common / deploy.yml) defer to a manual full deploy.
-  **Important post-migration nuance:** this pipeline **never auto-applies a k8s role change**. A
-  change under `ansible/roles/k8s/<role>/` maps to a k8s role and always *defers and alerts*
-  — deliberate, not a gap. Since the host carrying `has_gitops` (daniel-box) runs essentially all
-  services as `platform: k8s`, the auto-deploy path in practice now covers very little. Judge the
-  pipeline on whether the defer-and-alert signal is reliable, not on auto-deploy coverage.
+- **GitOps:** `ansible/roles/setup/gitops_deploy/` installs a 10-min systemd timer that fetches
+  origin/master, waits for a green CI verdict on the tip, maps each changed path to a service or a
+  plane, ff-merges, and applies what it may. Pure decision logic is in
+  `files/deployer_lib/deploy_logic.py` (unit-tested in `tests/test_deploy_*.py`). A setup-plane
+  change applies as `initial_setup.yml` and a deploy-plane change (shared templates / inventory /
+  common / deploy.yml) as `deploy.yml`; only the bring-up playbooks park for a manual run.
+  **A k8s role auto-deploys only for an image-pin bump** to a service its own `k8s_autodeploy`
+  declaration leaves eligible; every other k8s role change defers and alerts, which is
+  deliberate. A failed k8s deploy fails the play's rollout gate, and the deployer then writes
+  `hold_sha` and redeploys the prior pin. So an automerged Renovate image PR is deployed by the
+  next tick, health-gated and rolled back on failure; it does not sit undeployed on master.
 - **Updates:** Renovate (`renovate.json`) manages version-pinned images + custom regex managers
-  (compose tags, prek.toml, galaxy collections, the CI prek pin). **Watchtower is retired** — image
-  updates are Renovate-PR-driven only, so a `:latest` tag no longer auto-updates and the residual
-  `watchtower.enable=false` labels are dead metadata. A compose CI guard
-  (`scripts/validate/compose_templates.py`) enforces cap_drop + watchtower update-policy on services.
+  (compose tags, prek.toml, galaxy collections, the CI prek pin, and the k8s-defaults manager for
+  every `*_image:` var in `ansible/roles/k8s/*/defaults/main.yml`). **Watchtower is retired** —
+  image updates are Renovate-PR-driven only, and the residual `watchtower.enable=false` labels are
+  dead metadata. A compose CI guard (`scripts/validate/compose_templates.py`) enforces cap_drop +
+  watchtower update-policy on services.
+- **Image pins:** `repo:<tag>@sha256:<digest>` is the pin form on the k8s plane. The digest is
+  what runs, so the pin is immutable whatever the tag says. That holds for a channel tag such as
+  `:latest@sha256:` too. The tag stays only so Renovate can look the image up. The k8s-defaults
+  manager's regex captures `depName`, `currentValue` and an optional `currentDigest`, so a
+  digest-pinned channel tag is tracked and gets digest-bump PRs. The "Digest bumps on the k8s
+  plane" packageRule automerges `digest`/`pinDigest` updates with a 3-day `minimumReleaseAge` and
+  `minimumReleaseAgeBehaviour: timestamp-optional`. A digest with no release timestamp (GHCR, any
+  channel tag) therefore raises at once instead of stalling. The services whose regression is
+  expensive are kept off auto-deploy, which keeps their digest PRs manual
+  (`ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py` holds that fence
+  and its `DECIDED:` marker). A `:latest@sha256:` pin is therefore not unpinned, floating or
+  untracked. Re-pinning it to a version tag is not a required fix; many channel tags have no
+  version to pin. A bare floating tag with no digest is a real finding.
 - **Secret rotation:** `scripts/secrets_mgmt/secret_rotation.py` (sync/audit/rotate) + `ansible/secret_rotation.yml`
   (plaintext registry: names/tiers/dates, no values) + a daily Kuma push.
 
@@ -50,6 +65,9 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
    robustness + failure handling (rollback, dirty-tree, broad-change defer), secret-registry
    completeness vs the live secret names, Ansible idempotency/lint, notification reliability.
 3. Report each with the source `file:line` + a concrete fix.
+4. Rank a finding you could not verify as Low at most, phrased as a check to run, never as a
+   Medium or High gap. A pin or setting that carries a comment explaining its trade-off is a
+   documented decision. Flag it only when the code contradicts the comment.
 
 ## Output format
 Findings grouped **High / Medium / Low**. Each: 1-line title, `file:line`, the problem, a concrete

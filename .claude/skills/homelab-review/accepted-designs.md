@@ -28,6 +28,10 @@ that makes the trade-off. When an entry moves there, delete it here.
   direct-urllib POST.
 - The Renovate LSIO regex rejects dev and legacy tags on purpose; silence is not up-to-date.
 - The critical tier is PINNED, not auto-updated.
+- A k8s `repo:latest@sha256:` pin is digest-pinned and Renovate-tracked, not drift. The
+  k8s-defaults manager captures the digest, and the "Digest bumps on the k8s plane" rule
+  automerges each bump. `ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py`
+  keeps the expensive services off auto-deploy.
 - meili stays pinned until karakeep bumps its own pin.
 - pytest must NOT live under `ansible/filter_plugins/`; the plugin loader imports every `.py`
   there.
