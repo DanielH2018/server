@@ -386,3 +386,54 @@ def test_the_cost_comment_quotes_a_daniel_server_run_under_budget_near_load_3():
         f"no daniel-server run at load <= {NEAR_LOAD_3} under {SERVER_BUDGET_SECONDS}s "
         f"in the {HOOK_ID} cost comment; quoted (load, seconds): {figures}"
     )
+
+
+CENSUS_SIBLING = f"{HOOK_ID}-test-modules"
+CENSUS_MODULES = {
+    "scripts/tests/test_census_rows_test_modules.py",
+    "scripts/tests/test_census_rows_test_renders.py",
+}
+
+
+def _sibling(hook_id: str) -> dict:
+    return next(h for h in _ratchet_hooks() if h["id"] == hook_id)
+
+
+def test_the_test_module_censuses_run_in_their_own_sibling():
+    """They bounded the main hook under `--dist loadscope`, so they run apart from it (#5599)."""
+    assert _modules(_sibling(CENSUS_SIBLING)) == CENSUS_MODULES
+    assert not _modules(_hook()) & CENSUS_MODULES
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/dev/tests/test_findings.py",
+        "ansible/roles/k8s/monitor-bridge/tests/test_check_ha.py",
+        "ansible/roles/conftest.py",
+        "ansible/tests/_row_table.py",
+        "ansible/tests/k8s/_manifest_guards.py",
+        ".claude/hooks/tests/test_hook_scripts_executable.py",
+        "evals/tests/test_eval_cases.py",
+        "scripts/tests/_render_helper_rules.py",
+        "scripts/lib/repo_paths.py",
+        "pyproject.toml",
+    ],
+)
+def test_the_census_sibling_gate_matches_a_pytest_only_module_or_its_closure(path):
+    assert re.search(_sibling(CENSUS_SIBLING)["files"], path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/dev/findings.py",
+        "scripts/deploy_tools/land_lib/ledger.py",
+        "ansible/roles/k8s/monitor-bridge/files/registry.py",
+        "ansible/filter_plugins/toposort.py",
+        "ansible/roles/k8s/traefik/defaults/main.yml",
+    ],
+)
+def test_the_census_sibling_gate_skips_a_non_test_module(path):
+    """The census reads only modules `is_pytest_only` accepts, so other `.py` pays nothing."""
+    assert not re.search(_sibling(CENSUS_SIBLING)["files"], path)

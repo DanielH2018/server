@@ -643,7 +643,7 @@ name = "Census rows over the pytest-only modules (git, subprocess, render and pa
 entry = "uv run --frozen pytest -q -n 2 -p no:cacheprovider scripts/tests/test_census_rows_test_modules.py scripts/tests/test_census_rows_test_renders.py"
 language = "system"
 pass_filenames = false
-files = "^((scripts|ansible/tests|ansible/roles|\\.claude/hooks|\\.claude/tests|evals)/(.*/)?((test_[^/]*|conftest)\\.py|tests/.*\\.py)|ansible/tests/[^/]+\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^((scripts|ansible/roles|\\.claude/hooks|evals)/(.*/)?((test_[^/]*|conftest)\\.py|tests/.*\\.py)|(ansible|\\.claude)/tests/.*\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Eleven more cheap ratchet and census modules, which failed 15 PR runs across 13 PRs between
 # 2026-10-15 and 2026-10-17 (#5481). They sit in sibling hooks rather than in the entry above,
