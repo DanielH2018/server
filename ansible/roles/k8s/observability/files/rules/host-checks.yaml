@@ -997,8 +997,9 @@ groups:
       # result ended after that time, so a result older than it means the run wrote nothing:
       # systemd killed it at TimeoutStartSec, or the write failed after `up` succeeded. The
       # second exits 0, so HostReconcileFailed stays quiet for it (#6342). ComposeUpStale covers
-      # the boot run, which reconcile does not start, and a file that is gone. The 5m `for`
-      # rides out a scrape that reads one file before the other is rewritten.
+      # the boot run, which reconcile does not start, and a file that is gone. Reconcile writes
+      # its file after compose-run's, so no scrape between the two writes can fire this; the 5m
+      # `for` is defensive.
       - alert: ComposeRestartUnreported
         expr: |
           homelab_host_unit_started_seconds{origin="daniel-pi",unit="homelab-compose.service"}
