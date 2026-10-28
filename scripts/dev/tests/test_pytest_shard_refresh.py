@@ -231,3 +231,18 @@ def test_a_refresh_re_measures_only_the_files_that_drifted(tmp_path):
     assert sorted(calls[0]) == sorted(FILES)
     re_measured = [f for call in calls[1:] for f in call]
     assert set(re_measured) == {noisy}
+
+
+def test_a_refresh_keeps_a_row_whose_two_runs_drift_but_disagree(tmp_path):
+    """#6286: both runs leaving the band is not enough; they must agree with each other."""
+    module = FILES[0]
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({module: 16.0}))
+    measure, _ = _runs({module: 0.0}, {module: 40.0})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    assert moved == []
+    assert json.loads(table.read_text()) == {module: 16.0}
