@@ -85,7 +85,8 @@ check.
 - **Abort valves:** a failed prune leaves its Healthchecks.io ping unsent, and the reboot
   chain reboots even when its ping fails, by design.
 - **Required evidence:** a `weekly-restart`, `fwupd-auto` or `docker-prune` line in the journal,
-  and the Healthchecks.io check for the reboot and the prune.
+  the Healthchecks.io check for the reboot and the prune, and the `apt-autoremove`,
+  `dpkg-purge` and `firmware-update` textfiles for the three maintenance jobs.
 - **Next-run review:** before adding a state-changing cron here, check whether a component
   under `hosts/components/` should own it instead.
 
@@ -102,5 +103,9 @@ with a `DEADLINE_S` that equals its Kuma tile's interval, and the rules in
 ENFORCED: `ansible/tests/services/test_initial_setup_check_rule_literals.py` pins each rule's
 deadline literals to the rendered `DEADLINE_S`. The weekly AIDE and rkhunter scans write a
 textfile the same way on every host (#6168), and the `host-checks` rule group reads it.
-ENFORCED: `ansible/tests/setup/test_integrity_scan_rule_literals.py`. The witness gets its
+ENFORCED: `ansible/tests/setup/test_integrity_scan_rule_literals.py`. The apt autoremove,
+dpkg purge and firmware update crons run through `files/host-maintenance.sh`, which writes
+each job's exit code as a textfile verdict, and the `host-checks` group reads it with a
+`Failed` and a `NotReporting` rule per host that runs the job (#6179). ENFORCED:
+`ansible/tests/setup/test_host_maintenance.py`. The witness gets its
 textfile directory from a task tagged `loki_route_witness`, which gives the deploy user write access on daniel-server.

@@ -789,6 +789,7 @@
  "ansible/tests/setup/test_homelab_check_lib.py": 0.05,
  "ansible/tests/setup/test_host_coredns_install_is_checksummed.py": 0.0,
  "ansible/tests/setup/test_host_lib_sibling_copies.py": 0.29,
+ "ansible/tests/setup/test_host_maintenance.py": 0.08,
  "ansible/tests/setup/test_host_package_line_two_writers.py": 2.36,
  "ansible/tests/setup/test_host_package_two_writers.py": 2.38,
  "ansible/tests/setup/test_host_package_ufw_two_writers.py": 1.06,
