@@ -66,7 +66,11 @@ system_upgrade_gate_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d3
 # one node at a time (H6.3c: daniel-box, H6.3d: daniel-server), and setting it back to empty is
 # the durable pause. The immediate pause is an operator write: label a node
 # `homelab/k3s-upgrade-paused` and SUC skips it at once.
-system_upgrade_nodes: [daniel-box, daniel-server]
+# daniel-server left the list again on 2026-10-28: the agent Plan's `prepare` runs
+# /host/usr/lib/homelab/k3s_gates.py, and only the `k3s-restart` package component ships it,
+# which daniel-server's package does not list yet (H6.3b's 2026-10-24 amendment). H6.3d's first
+# merge (#6403) failed `prepare` there and set DEPLOY_HOLD.
+system_upgrade_nodes: [daniel-box]
 
 # Each Plan's Job deadline. SUC starts both Jobs when the Plans resolve, so the agent's deadline
 # covers the server's 60 minutes plus 30 for Longhorn's recovery and the agent's own upgrade.

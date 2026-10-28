@@ -80,8 +80,9 @@ def test_an_empty_node_list_selects_no_node_and_a_named_node_selects_it(template
     assert _clause(_plan(template, ["daniel-box"]), "kubernetes.io/hostname")[
         "values"
     ] == ["daniel-box"]
-    # H6.3c widened the list to the server node, and H6.3d to daniel-server.
-    assert DEFAULTS["system_upgrade_nodes"] == ["daniel-box", "daniel-server"]
+    # H6.3c widened the list to the server node. H6.3d's daniel-server entry is paused until
+    # daniel-server's package ships k3s_gates.py, which the agent Plan's prepare runs.
+    assert DEFAULTS["system_upgrade_nodes"] == ["daniel-box"]
 
 
 @pytest.mark.parametrize("template", PLANS)
