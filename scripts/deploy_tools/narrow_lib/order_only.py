@@ -62,11 +62,14 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # includes every `__slots__` value (#5107). So it sees `logging.disable` writing `logging.root.manager`,
 # `logging.root.addFilter` adding to `logging.root.filters`, a named logger's `disabled` flag
 # under `logging.Logger.manager.loggerDict` (#5085), and that logger's `filters` a level below.
-# The runner's `readers` table reads two C objects' state through their own C getters: a
-# random generator's and a decimal context's (#5107). It also covers
+# The runner's `readers` table reads C objects' state through their own C getters: a random
+# generator's and a decimal context's (#5107), and an `RLock`'s holder and an `itertools.count`'s
+# next value, which the walk reaches through a bound slot's `__self__` (#5209). It also covers
 # process state no module attribute holds, such as the umask, a signal handler or mask, a
 # pending timer, an atexit callback, the recursion limit, the dlopen flags, gc's freeze count
-# (#5060) or the thread stack size (#5107). No function reads back the codec registries, the
+# (#5060), the thread stack size (#5107), gc's debug flags, the coroutine origin tracking depth,
+# the inheritable flag of fds 0-2, `_socket`'s default timeout or the thread's decimal context
+# (#5209). No function reads back the codec registries, the
 # at-fork handlers, faulthandler's handlers and watchdog or a signal's `siginterrupt` flag, so
 # the runner wraps the calls that change them and compares how many returned. An `open` whose
 # mode string writes ends the run as its flags do, because a C-level
@@ -74,13 +77,14 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # A second walk, once the plugin's module code has run, copies the objects that code created,
 # such as a logger the base end makes and the head end's filter call disables (#5085). Neither
 # walk sees what the module code wrote to such an object before it, so the report also compares
-# each one's own `bool`, `int`, `str` and container-length attributes between the ends (#5107).
-# A logger first created while the chain runs sits in neither walk, so the report compares those
-# same attributes of each such logger (#5085).
-# The gaps taken: a branch HEAD's data does not exercise; a write the plugin's module code
-# makes to an object that code created which none of those attributes shows, such as one
-# replacing an object reference; a change to the handler or filter objects of a logger first
-# created while the chain runs, as opposed to how many it holds; state inside a C object outside
+# each one's `signature` between the ends (#5107): its `bool`, `int`, `str` and container-length
+# attributes, a reference to a walked object as that object's walk path, and the same of every
+# object below it that no walk copied (#5209). A logger first created while the chain runs sits
+# in neither walk, so the report compares the `signature` of each such logger (#5085), which
+# reaches its handlers and filters (#5209).
+# The gaps taken: a branch HEAD's data does not exercise; a reference `signature` records to an
+# object whose walk path passes through a set item, which reads the same whatever it names;
+# state inside a C object outside
 # the `readers` table, or in a static C type's members, when its module is one the runner loads
 # before its hook or lists in `c_modules`; process state the runner neither reads nor counts; a
 # counted call through a reference taken before the runner wrapped it; an unaudited call it does
