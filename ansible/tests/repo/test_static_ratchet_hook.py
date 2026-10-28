@@ -417,6 +417,7 @@ def test_the_test_module_censuses_run_in_their_own_sibling():
         "evals/tests/test_eval_cases.py",
         "scripts/tests/_render_helper_rules.py",
         "scripts/lib/repo_paths.py",
+        "prek.toml",
         "pyproject.toml",
     ],
 )
