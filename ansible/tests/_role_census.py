@@ -4,8 +4,8 @@
 guard that asks either question sees the same set as every other guard asking it (#3717,
 #3726).
 
-Covers all three trees: `roles/k8s/`, `roles/setup/` and the Pi's `roles/containers/`. A
-retired role ghosts the same way in each, so they read through one predicate.
+Covers both trees, `roles/k8s/` and `roles/setup/`. A retired role ghosts the same way in
+each, so they read through one predicate.
 
 Lives in its own module rather than in `_helpers.py`, which was at its line cap.
 The `role-tree-walks-use-role-dirs` and `role-task-walks-use-task-files` rows of
@@ -49,7 +49,7 @@ def role_dirs(roles_dir: Path = K8S_ROLES, *, skip_dotted: bool = False) -> list
 
 
 def every_plane_role_dirs(roles_root: Path = ROLES) -> list[Path]:
-    """Every role in every plane under `roles_root` (`containers/`, `k8s/`, `setup/`), sorted.
+    """Every role in every plane under `roles_root` (`k8s/`, `setup/`), sorted.
 
     `roles_root` is a parameter so a guard's red proof can build a synthetic plane tree in
     `tmp_path`.

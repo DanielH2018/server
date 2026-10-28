@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy a service using Ansible — k3s workloads (the default) or the Pi's Docker services. Use when the user wants to deploy or redeploy a specific service, or to check a k8s manifest change without deploying it (`prek` vs `--check` vs `--dry-run`).
+description: Deploy a k3s workload using Ansible. The Pi's Docker services ship in its host package instead. Use when the user wants to deploy or redeploy a specific service, or to check a k8s manifest change without deploying it (`prek` vs `--check` vs `--dry-run`).
 allowed-tools: Bash, Glob
 ---
 
@@ -18,8 +18,11 @@ on the cluster nodes:
 
 - Role under `ansible/roles/k8s/<service>/`, entry has `platform: k8s` in
   `host_vars/daniel-box.yml` → **k3s workload** (this is nearly everything).
-- Role under `ansible/roles/containers/<service>/`, entry in `host_vars/daniel-pi.yml` →
-  **Docker on the Pi** (docker-proxy, wg-easy, alloy, autoheal).
+- Entry in `compose_services` in `host_vars/daniel-pi.yml` → **Docker on the Pi**
+  (docker-proxy, wg-easy, alloy, autoheal). `deploy.sh` does not deploy these: the
+  `homelab-daniel-pi` package renders them from `hosts/components/pi-compose/services/<name>/`,
+  and the Pi's updater installs a merged change (`docs/host-packages.md`). Since H5.12 there is
+  no Ansible Compose path, so `deploy.sh --tags <svc> -e target=daniel-pi` deploys nothing.
 
 `daniel-server` and `daniel-box` have had **no Docker since 2026-08-14** — never verify a
 deploy there with a `docker` command; it doesn't exist on those hosts.
@@ -57,7 +60,6 @@ Steps:
    and is the right choice only when the doubt is about task wiring.
 3. If dry run: `./scripts/deploy.sh --tags "<service>" --dry-run` (or `--check`, per step 2)
 4. If dry run passes or they skip it: `./scripts/deploy.sh --tags "<service>"`
-   (add `-e target=daniel-pi` for a Pi service)
 
    Deploy through `scripts/deploy.sh`, not `ansible-playbook` directly — it takes
    the git-tree lock (its holders are listed in
@@ -65,7 +67,7 @@ Steps:
    copy `HEAD` into a snapshot worktree, then runs
    the playbook from that snapshot under `/var/lock/server-deploy-<tag>.lock`, one per
    service. So deploys of the same service serialize and deploys of different services do
-   not. A Pi deploy takes both too, even though the writes land on the Pi. `--check` runs
+   not. `--check` runs
    unlocked, from the working tree. **The snapshot is of `HEAD`: an uncommitted edit is not
    deployed.** On a non-zero exit, read the run's last two lines
    ([below](#when-a-run-fails-read-its-last-two-lines)).
@@ -93,9 +95,10 @@ Steps:
        Deployment carries a `checksum/config` pod annotation; without it the pod isn't
        rolled. Also note `kubectl apply` leaves **stale Secret keys** behind — a key removed
        from the manifest persists live until patched out.
-   - **Docker (Pi only):** `uv run python scripts/diagnostics/probe.py health <service> --docker` —
-     exit 0 = running + healthy; allow-listed. Run it from daniel-box as written: `--docker`
-     reaches the Pi's Docker daemon over ssh itself.
+   - **Docker (Pi only), after the package installs:** `uv run python
+     scripts/diagnostics/probe.py health <service> --docker` — exit 0 = running + healthy;
+     allow-listed. Run it from daniel-box as written: `--docker` reaches the Pi's Docker daemon
+     over ssh itself.
    - For a config-only run (`--skip-tags deploy`), the workload isn't recreated, so this is
      just a liveness check, not a deploy verification.
 6. Report the result, including the verification line. If the gate fails, surface the failing
@@ -105,9 +108,9 @@ Steps:
 
 Run all commands from the root of the checkout you mean to deploy: `deploy.sh` deploys the
 checkout containing your working directory. A playbook run outside `deploy.sh` goes through
-`uv run` — bare `ansible-playbook` (the uv-tool shim) lacks the module deps and fails. For a service on the
-Pi, add `-e target=daniel-pi` (deploy.yml defaults `hosts:` to the local hostname — `--limit`
-alone matches nothing).
+`uv run` — bare `ansible-playbook` (the uv-tool shim) lacks the module deps and fails. A setup
+play aimed at the Pi takes `-e target=daniel-pi` (the playbooks default `hosts:` to the local
+hostname — `--limit` alone matches nothing).
 
 ## The command reference
 
@@ -124,12 +127,6 @@ snapshot, the tag check or the staleness check.
 # It has no containers_list entry, so deploy.sh replaces the name with every service
 # that includes it and prints the list. manifests and volume-snapshot reach ~58 services.
 ./scripts/deploy.sh --tags "<shared-role>"
-
-# Target the Pi. NB `-e target=`, NOT `--limit` — the play's hosts: defaults to the local
-# hostname, so --limit daniel-pi matches zero hosts. The Pi is ansible_connection=ssh, so
-# this reaches it from either node. `-e target=` a LOCAL-connection host (either cluster
-# node) and the tasks run on the machine you typed it on — see ansible/inventory/hosts.ini.
-./scripts/deploy.sh --tags "<service-name>" -e target=daniel-pi
 
 # Deploy a commit that is not this checkout's HEAD: the snapshot is cut from <sha>, and the
 # staleness gate and the tag check are asked about <sha> too. This is how land.sh deploys a
@@ -173,7 +170,7 @@ takes — guards the local git tree every deploy renders from,
 which gitops-deploy rewrites with a `git pull` mid-run; `deploy.sh` holds it only to copy
 `HEAD` into a detached worktree under `/tmp/homelab-deploy-snapshots/`. It then releases that
 and holds one `/var/lock/server-deploy-<tag>.lock` per service across the playbook, which is
-what stops two deploys of the same service racing. A `-e target=daniel-pi` deploy takes both.
+what stops two deploys of the same service racing.
 
 Because the snapshot is of `HEAD`, **an uncommitted edit is not deployed** — commit first.
 

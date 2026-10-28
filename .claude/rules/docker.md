@@ -1,20 +1,22 @@
 ---
 paths:
-  - "ansible/roles/containers/**"
+  - "hosts/components/pi-compose/**"
 ---
 
 # Docker Compose Rules
 
-These roles deploy to `daniel-pi` only; neither cluster node has Docker. The `/new-container`
-skill carries the compose skeleton and the shared macros in `ansible/templates/`.
+These services deploy to `daniel-pi` only; neither cluster node has Docker. The `homelab-daniel-pi`
+package runs them as one Compose project, `homelab`. The `/new-container` skill carries the
+service skeleton.
 
-## `containers/` is rendered, not tracked
+## The rendered project is not tracked
 
-`containers/` is not a directory in this repo — it is untracked and rendered by Ansible onto
-the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration
-it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are
-overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/`
-instead.
+The package installs the rendered project at `/usr/lib/homelab/compose/` on the Pi. It is
+read-only: the next package version overwrites an edit, so always modify
+`hosts/components/pi-compose/services/<svc>/` instead. The directories under
+`/home/<user>/server/containers/<svc>/` that some services bind-mount are created by the
+component's `tmpfiles.d/homelab-compose.conf`. H5.12 deleted the Ansible Compose path that
+used to render them (`ansible/roles/containers/`).
 
 ## Conventions
 

@@ -19,7 +19,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   must be on PATH. The test set is `pyproject.toml` `[tool.pytest.ini_options].testpaths` (single
   source; excludes vendored `ansible/collections/**`).
 - **GitOps:** `ansible/roles/setup/gitops_deploy/` installs a 30-min systemd timer that fetches
-  origin/master, maps changed `roles/containers/<svc>/…` → service tags, ff-merges, deploys each,
+  origin/master, maps changed `roles/k8s/<svc>/…` → service tags, ff-merges, deploys each,
   then health-gates and rolls back on failure (writes a hold-marker SHA). Pure decision logic is in
   `files/deployer_lib/deploy_logic.py` (unit-tested in `tests/test_deploy_*.py`); broad changes (shared
   templates / inventory / common / deploy.yml) defer to a manual full deploy.

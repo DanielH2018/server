@@ -1,0 +1,12 @@
+{
+  "checksum": "36467753cf03bae4993753d513a52b53043849af02e5194f2838fa3a682966d0",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/wg-easy/CLAUDE.md#wg-easy (k3s) — the homelab's remote-access entry point",
+  "row": {
+    "atoms": {
+      "hosts/components/pi-compose/services/wg-easy/compose.yaml.j2": "53d43b5db14d48fc46b7df7c91652301dca541cd0779b01306bc7c70a11f5a16"
+    },
+    "python": "3.14",
+    "verified_sha": "908a1b626"
+  }
+}

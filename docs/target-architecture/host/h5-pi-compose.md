@@ -1,7 +1,7 @@
 # H5 — Pi Compose
 
-Status: IN PROGRESS. H5.1 to H5.10 and H5.14 landed; H5.10 removed `pi-canary`. H5.11 to H5.13 are
-left.
+Status: IN PROGRESS. H5.1 to H5.10, H5.12 and H5.14 landed; H5.10 removed `pi-canary`, and H5.12
+deleted `ansible/roles/containers/` and amended ADR-0013. H5.11 and H5.13 are left.
 Depends on: H3, H4
 Unblocks: H7
 

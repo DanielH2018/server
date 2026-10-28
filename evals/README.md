@@ -222,9 +222,9 @@ and re-running it, not by reasoning:
    plus the shared `common`) and scored 1/3 twice; repointed at the real `roles/containers/wg-easy`
    it scores **3/3**. Cases citing retired roles (`k8s/kopia`) or roles that never existed
    (`k8s/longhorn` — the real files are under `roles/setup/k3s/templates/`) were corrected for the
-   same reason. `test_no_case_cites_a_retired_container_role` holds every cited
-   `roles/containers/<x>` to daniel-pi's `containers_list`. A fixture for a service that does not
-   exist yet goes under `roles/k8s/`, marked "(a new role, not yet merged)".
+   same reason. H5.12 deleted `roles/containers/`, so a cited `roles/containers/<x>` path is now
+   always missing. A fixture for a service that does not exist yet goes under `roles/k8s/`,
+   marked "(a new role, not yet merged)".
    `test_no_case_cites_a_missing_role_path` holds every other cited `ansible/roles/...` path to
    the tree. A path that does not exist passes only when one citation under its role carries that
    marker and the role directory is absent; a marker on a role that exists exempts nothing.

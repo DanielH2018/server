@@ -77,8 +77,10 @@ which only the operator can write. Step 6 tells you which case you are in.
    diffing. The first deploy that reads the value proves it decrypts.
 
 5. **Reference it in the template** (if a service uses it): edit the role's
-   `ansible/roles/k8s/<svc>/templates/*.j2` (or `ansible/roles/containers/<svc>/` for one of
-   the Pi's Docker services) to use `{{ name }}`. Add `no_log: true` to
+   `ansible/roles/k8s/<svc>/templates/*.j2` to use `{{ name }}`. A Pi Docker service reads a
+   secret through its package instead: add the key to `keys:` on the `compose.env` output in
+   `hosts/components/pi-compose/component.yml`, and the operator runs
+   `host_secrets.py sync daniel-pi` (**operator-only**). Add `no_log: true` to
    any task that handles it. (Per `.claude/rules/secrets.md`.)
 
 6. **Check whether the cluster reads it.** Run
