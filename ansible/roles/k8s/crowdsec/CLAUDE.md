@@ -216,7 +216,10 @@ sources (`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`) lose 
 
 **Re-check #2124 on the next `crowdsec_k8s_image` bump**
 (set in `ansible/inventory/group_vars/all.yml`): a release carrying
-crowdsecurity/crowdsec#4678 closes it. Verify with
+crowdsecurity/crowdsec#4678 closes it, and v1.8.2 is the first such release. Upstream had not
+published its image on 2026-10-28, and `docs/crowdsec-waf-record.md` has the dates. The pin
+sits in the `k8s_autodeploy: false` Renovate group, so the bump arrives as a `manual —` PR.
+Verify with
 `probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h` returning
 nothing.
 
