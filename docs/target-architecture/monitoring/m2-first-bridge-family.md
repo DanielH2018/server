@@ -1045,7 +1045,8 @@ branch that adds the file back.
    the roles that arm `manifests_prune`. R4, which follows D6, deletes that role. Resolution: C1
    requires the renderer to keep stamping `homelab/role`, or C7 adopts the Flux label. Either
    way, both stay in the allowlist until D6. Gate: before D6 merges. Requested as a row of
-   contracts.md *Requested amendments not yet applied*.
+   contracts.md *Requested amendments not yet applied*. **Ruled 2026-10-28:** the renderer
+   keeps stamping `homelab/role`, and C1 *The deploy-tag label* records it.
 2. **The four unlabelled homelab workloads.** The override table stands in for labels that
    `authelia`, `nut` and pihole's deferred render never stamp. Resolution: once D5 moves those
    roles to Flux, their objects carry the Flux label. Step 2 strips `-deferred`, so `pihole-2`'s
