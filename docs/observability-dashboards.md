@@ -125,6 +125,31 @@ including hidden versions until lifecycle clears them after 7 days. `check_b2_st
 "billable" would under-report the thing the 10 GB cap is measured against — a false-GREEN worse
 than the missing board.
 
+## The host jobs board reads the textfile series the host rules read
+
+`Infrastructure/host-jobs.json` (titled *Host jobs*, #6203) shows the series that host jobs write
+into node_exporter's textfile directory. The alert rules in `files/rules/host-checks.yaml` read
+the same series. The board has three parts:
+
+- **Textfile checks.** One row per `homelab_check_*` check, with its last verdict, the age of its
+  timestamp, the `homelab_check_deadline_seconds` it declares, and the age as a share of that
+  deadline. The deadline share is the comparison `HostCheckOverdue` makes.
+- **Host updater.** One row per host, with `homelab_host_reconcile_ok`, the age of the last
+  successful update, the `dpkg --verify` mismatch count, the reconcile drift and the units
+  still owed a restart.
+- **Builder against hosts.** The versions `homelab_repo_published_info` says the builder serves,
+  beside the version `homelab_host_applied_info` says each host last applied.
+
+Every query keys on the scrape's `origin` label rather than the producer's `host` label,
+because the rules key on `origin`. Each table query aggregates to its row key before the
+`merge` transform joins the columns. A bare selector keeps `job` and `instance`, and the merge
+then splits one check across rows. The board uses a merge rather than a PromQL join because
+`homelab_host_applied_info` and the update-success timestamp are absent until a host's first
+success. A join drops that host's row; the merge keeps it with blank cells.
+
+A check whose `.prom` file is gone has no row. Only the check's own `*NotReporting` rule can
+see that, because only its name says the series should exist.
+
 ## Granting the `groups` scope does not deliver the `groups` claim
 
 Measured on 2026-09-06, both times through a real login. With the scope alone, a user in `admins`

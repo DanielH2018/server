@@ -226,6 +226,7 @@ observability_dashboard_folders:
     - alert-history.json
     - docker-and-system-monitoring.json
     - hardware-thermal.json
+    - host-jobs.json
     - landings.json
     - longhorn-storage.json
     - node-exporter-full.json
