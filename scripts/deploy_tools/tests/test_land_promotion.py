@@ -180,6 +180,17 @@ def test_a_settled_wait_that_names_a_suspended_tag_gates_the_rest(land_run):
     assert [c[1] for c in calls if c[0] == "gate"] == [(["texbrain"],)]
 
 
+def test_an_unreadable_ownership_map_after_the_wait_gates_every_changed_name(land_run):
+    """Asked too much, a gate fails loudly; asked too little, it passes over a broken tag."""
+    fakes = _fakes(
+        derived=([], "pr"),
+        owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")},
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "gating every changed name" in out
+    assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
+
+
 def test_an_unreadable_ownership_map_deploys_nothing(land_run):
     fakes = _fakes(owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")})
     rc, out, _, calls, _ = land_run([], fakes)

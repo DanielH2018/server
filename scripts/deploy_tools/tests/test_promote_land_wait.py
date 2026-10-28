@@ -84,6 +84,22 @@ def test_a_change_that_raced_the_gate_onto_a_suspended_tag_waits_for_the_hold():
     assert sim.sleeps == 1
 
 
+def test_a_widened_set_attributes_a_hold_by_the_prs_services_alone():
+    """#6199 on a widened set: every listed name joins the tags, so it is no evidence."""
+    sim = Sim(
+        polls=[at(P, "bento-pdf", "texbrain")],
+        holds=[f"{P} failed=texbrain"],
+        published={
+            M: promote_wait.WaitReadError("sha-M holds no digests.json"),
+            P: digests(bento_pdf="a", texbrain="t"),
+        },
+    )
+    result = sim.wait(services=("bento-pdf",))
+    assert result.cause == "promote-held" and result.widened
+    assert "texbrain" in result.tags
+    assert "None is this PR's (bento-pdf)" in result.detail
+
+
 def test_a_hold_beside_a_suspended_tag_ends_the_wait_deploy_failed():
     entry = {"own": "own-b", "footprint": "b", "suspended": True}
     sim = Sim(
