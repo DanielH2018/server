@@ -587,11 +587,15 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # against 31.5-45.5s; at 7.5-12.8, under other sessions' test runs, 21.4-34.7s against
 # 40.5-65.9s. #5501 had measured 27.6s at load 3.3 and 49.0s at load 7.0 there. The census
 # detectors over the test modules held most of the cost, re-walking modules that could not
-# match; each now skips a module that cannot spell a hit. The slowest module, the
-# render-and-path census, takes about 6.5s alone with `-n0` on daniel-box. `--dist loadscope`
-# keeps it on one worker, so it bounds the hook. `--dist load` measured no faster on
-# daniel-box. Moving the two test-module census files to a sibling hook is the next lever
-# (#5599).
+# match; each now skips a module that cannot spell a hit. `--dist loadscope` keeps each module
+# on one worker, so the slowest module bounds the hook, and `--dist load` measured no faster on
+# daniel-box. The slowest was the render-and-path census, about 6.5s alone with `-n0` on
+# daniel-box, so it and the git-and-subprocess census moved to the
+# `static-ratchet-tests-test-modules` sibling below (#5599). Measured again on 2026-10-28,
+# three rounds interleaved with the parent commit, each run started at a load average of 3.5
+# or less. On daniel-server at load average 2.9-3.4, it took 12.1-12.6s against 20.6-21.6s.
+# The module length ratchet and the Python census rows now bound it, each about 7.5s alone with
+# `-n0` on daniel-box at load average 9.7.
 #
 # It sits after `tighten-ratchet-allowlists` and `facts-reverify-changed` because the ratchet
 # and facts tests read the files those two rewrite. `files` is wider than `.py`: a `moved`
@@ -612,7 +616,7 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # file that names a deleted macro goes red in CI instead. Gating all Markdown would charge every docs-only commit the cost above, and
 # the edit that usually breaks the row deletes a macro template, which `.j2` already gates.
 #
-# CI skips it on both `prek run` steps, because its `pytest` job runs the same twelve files.
+# CI skips it on both `prek run` steps, because its `pytest` job runs the same ten files.
 # The `static-ratchet-tests-*` siblings below carry the eleven more #5481 added and six more
 # from the 2026-10-25 survey of a week's PR reds.
 # That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
@@ -635,8 +639,14 @@ files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard
 # `is_pytest_only` accepts under a test root, so the gate is those paths (a `test_*.py`, a
 # `conftest.py`, anything under a `tests/` directory), the import closure the two modules
 # reach through scripts/lib and ansible/tests, and pyproject.toml and uv.lock. A commit that
-# touches only non-test `.py` outside scripts/lib/ skips both. `-n 2` puts one module on each
-# worker; `-n auto` would bring up workers that sit idle.
+# touches only non-test `.py` outside scripts/lib/ skips both. prek.toml is in the gate
+# because test_census_rows_test_modules.py reads this hook's own `files`.
+#
+# A commit that matches both gates pays both, because prek runs hooks one after another. On
+# daniel-server on 2026-10-28 at load average 2.9-3.5, this hook took 11.8-13.7s with `-n 2`
+# against 17.0-20.4s with `-n0`, and the two hooks together took 26.0-27.4s, against 20.6-21.6s
+# for the single hook before the split. Only a commit that skips this gate gains; parsing each
+# test module once across the census rows is the lever left for the rest (#6437).
 [[repos.hooks]]
 id = "static-ratchet-tests-test-modules"
 name = "Census rows over the pytest-only modules (git, subprocess, render and path helpers)"
