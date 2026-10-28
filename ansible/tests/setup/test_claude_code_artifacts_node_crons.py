@@ -21,6 +21,7 @@ from lib.render_context import render_context
 
 from _helpers import ROLES, load_tasks, walk_tasks
 from _role_census import task_files
+from _shell_render import rendered_shell_text
 
 CLAUDE_CODE = ROLES / "setup" / "claude_code"
 NODE_CRONS = CLAUDE_CODE / "tasks" / "node_crons.yml"
@@ -174,8 +175,8 @@ def node_cron_paths() -> set[str]:
     for task in _node_cron_tasks():
         if isinstance(tpl := task.get("ansible.builtin.template"), dict):
             paths.add(tpl["dest"])
-            source = (CLAUDE_CODE / "templates" / tpl["src"]).read_text()
-            for check in TEXTFILE.findall(source):
+            script = rendered_shell_text("setup", "claude_code", tpl["src"])
+            for check in TEXTFILE.findall(script):
                 paths.add(f"/var/lib/node-exporter-textfile/{check}.prom")
         if isinstance(cron := task.get("ansible.builtin.cron"), dict):
             paths.add(f"/etc/cron.d/{cron['cron_file']}")
