@@ -1,12 +1,13 @@
 {
-  "checksum": "a1f9a8b76bf77d914dec0eb7db520e9a1bd473af9368ffb01cc34c104ac4a79b",
+  "checksum": "587bb78c311b04479f6d0ad9abdceb8ec564ee810c6902e6918518ad8f9d4e7b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The `crowdsec-verify` Job proves the edge enforces a ban",
   "row": {
     "atoms": {
+      "docs/crowdsec-waf-record.md": "0fed3631bfac065efe701fd07f11045f36675afdf7959517fcaa567e5f5cb4cb",
       "hosts/components/crowdsec-probe/": "2922c6c83b4b37d7f48683f222dc5897af5d49dc27959fa678d8745764b421c8"
     },
     "python": "3.14",
-    "verified_sha": "37f64931b"
+    "verified_sha": "bd00bfb95"
   }
 }
