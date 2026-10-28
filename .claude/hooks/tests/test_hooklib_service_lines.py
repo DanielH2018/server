@@ -241,8 +241,17 @@ def test_stale_release_problems_is_silent_on_an_up_verdict(tmp_path):
 
 
 def test_stale_release_problems_is_silent_when_the_cron_never_ran_here(tmp_path):
-    assert service_lines.stale_release_problems(tmp_path / "absent") == []
+    # No state directory: a host the k3s role never set up, such as an agent node.
+    assert service_lines.stale_release_problems(tmp_path / "absent" / "verdict") == []
     assert _stale_problems(tmp_path, "") == []
+
+
+def test_stale_release_problems_names_the_apply_when_the_cron_predates_the_file(
+    tmp_path,
+):
+    # The role created the directory but its cron writes no verdict: the apply is owed.
+    (line,) = service_lines.stale_release_problems(tmp_path / "verdict")
+    assert "--tags release-staleness" in line
 
 
 def test_stale_release_problems_is_silent_on_a_dead_crons_last_verdict(tmp_path):

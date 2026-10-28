@@ -113,6 +113,14 @@ STALE_VERDICT_FILE = "/var/lib/homelab/release-staleness/verdict"
 # Past this age a verdict is a dead cron's, not the fleet's: four of its 30-minute periods.
 STALE_VERDICT_MAX_AGE_S = 2 * 60 * 60
 
+# Shown when the state directory exists but the cron has written no verdict into it. A run
+# writes one every 30 minutes, so the line outlives one run only on a host still owing the apply.
+_NO_VERDICT_LINE = (
+    "  ⚠ release staleness: the cron has written no verdict file yet; if this persists past "
+    "one 30-minute run, apply `uv run ansible-playbook ansible/k3s-bringup.yml "
+    "--tags release-staleness`"
+)
+
 # Services in a stale-release verdict named on the banner line after "e.g.".
 _STALE_NAMED = 3
 
@@ -203,6 +211,13 @@ def stale_release_problems(path=STALE_VERDICT_FILE, now=None):
         age = (time.time() if now is None else now) - os.stat(path).st_mtime
         with open(path, encoding="utf-8", errors="replace") as f:
             first = f.readline().rstrip("\n")
+    except FileNotFoundError:
+        # The k3s role creates the state directory, so a directory with no verdict in it is a
+        # host whose cron predates the verdict file: the role was not re-applied after #6183.
+        # Said aloud, because a silent banner there reads as a fleet with nothing stale.
+        if os.path.isdir(os.path.dirname(path)):
+            return [_NO_VERDICT_LINE]
+        return []
     except OSError:
         return []
     if age > STALE_VERDICT_MAX_AGE_S or not first.startswith("status=down "):
