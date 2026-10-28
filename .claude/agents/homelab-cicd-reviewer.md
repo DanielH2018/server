@@ -70,8 +70,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
 3. Report each with the source `file:line` + a concrete fix.
 4. A finding that rests on config you could not read (a regex, a packageRule, a file outside
    what you were shown) is Low at most, phrased as a check to run. A defect visible in what you
-   were shown keeps its real severity. A pin that carries a comment explaining its trade-off is
-   a documented decision, so flag it only when the code you were shown contradicts the comment.
+   were shown keeps its real severity.
 
 ## Output format
 Findings grouped **High / Medium / Low**. Each: 1-line title, `file:line`, the problem, a concrete
