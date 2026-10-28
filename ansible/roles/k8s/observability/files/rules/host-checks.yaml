@@ -509,8 +509,11 @@ groups:
       # The weekly host-maintenance crons (#6179): apt autoremove and the dpkg purge on every
       # host, the firmware update on daniel-box, the one host with fwupd. Each runs through
       # initial_setup's files/host-maintenance.sh, which writes the check's textfile with
-      # success 0 when the job's command failed. Not shadow, because no Kuma tile or
-      # Healthchecks.io check watches these crons. Both literals of each NotReporting rule
+      # success 0 when the job's command failed. No Kuma tile or Healthchecks.io check watches
+      # these crons, so the Failed rules page. The NotReporting rules are shadow until each
+      # cron's first Sunday run has written its file (#6405): the absent_over_time arm fires for
+      # a series that never existed, so they would page from the Flux apply until that run. Both
+      # literals of each NotReporting rule
       # equal the script's DEADLINE_S, and ansible/tests/setup/test_host_maintenance.py pins
       # them to it and the rule set to the hosts that run each cron.
       - alert: AptAutoremoveFailed
@@ -534,6 +537,7 @@ groups:
         labels:
           severity: warning
           service: daniel-box
+          shadow: "true"
         annotations:
           summary: daniel-box's weekly apt autoremove has stopped reporting.
           description: >-
@@ -562,6 +566,7 @@ groups:
         labels:
           severity: warning
           service: daniel-server
+          shadow: "true"
         annotations:
           summary: daniel-server's weekly apt autoremove has stopped reporting.
           description: >-
@@ -590,6 +595,7 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
+          shadow: "true"
         annotations:
           summary: daniel-pi's weekly apt autoremove has stopped reporting.
           description: >-
@@ -618,6 +624,7 @@ groups:
         labels:
           severity: warning
           service: daniel-box
+          shadow: "true"
         annotations:
           summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
           description: >-
@@ -646,6 +653,7 @@ groups:
         labels:
           severity: warning
           service: daniel-server
+          shadow: "true"
         annotations:
           summary: daniel-server's weekly dpkg purge of orphaned configs has stopped reporting.
           description: >-
@@ -674,6 +682,7 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
+          shadow: "true"
         annotations:
           summary: daniel-pi's weekly dpkg purge of orphaned configs has stopped reporting.
           description: >-
@@ -702,6 +711,7 @@ groups:
         labels:
           severity: warning
           service: daniel-box
+          shadow: "true"
         annotations:
           summary: daniel-box's weekly firmware update has stopped reporting.
           description: >-

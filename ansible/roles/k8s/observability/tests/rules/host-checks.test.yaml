@@ -1884,6 +1884,7 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
+              shadow: "true"
             exp_annotations:
               summary: daniel-box's weekly apt autoremove has stopped reporting.
               description: >-
@@ -1899,6 +1900,7 @@ tests:
               origin: daniel-server
               severity: warning
               service: daniel-server
+              shadow: "true"
             exp_annotations:
               summary: daniel-server's weekly apt autoremove has stopped reporting.
               description: >-
@@ -1914,6 +1916,7 @@ tests:
               origin: daniel-pi
               severity: warning
               service: daniel-pi
+              shadow: "true"
             exp_annotations:
               summary: daniel-pi's weekly apt autoremove has stopped reporting.
               description: >-
@@ -1932,6 +1935,7 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
+              shadow: "true"
             exp_annotations:
               summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
               description: >-
@@ -1948,6 +1952,7 @@ tests:
               origin: daniel-server
               severity: warning
               service: daniel-server
+              shadow: "true"
             exp_annotations:
               summary: daniel-server's weekly dpkg purge of orphaned configs has stopped reporting.
               description: >-
@@ -1964,6 +1969,7 @@ tests:
               origin: daniel-pi
               severity: warning
               service: daniel-pi
+              shadow: "true"
             exp_annotations:
               summary: daniel-pi's weekly dpkg purge of orphaned configs has stopped reporting.
               description: >-
@@ -1983,6 +1989,7 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
+              shadow: "true"
             exp_annotations:
               summary: daniel-box's weekly firmware update has stopped reporting.
               description: >-
