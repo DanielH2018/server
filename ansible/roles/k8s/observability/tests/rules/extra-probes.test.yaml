@@ -105,9 +105,8 @@ tests:
               description: >-
                 blackbox_exporter's http_body_OK probe of
                 https://edge-selfcheck.local.example.com/.well-known/traefik-edge-selfcheck has
-                failed for 2 minutes. This is the replacement for a Kuma tile tagged critical.
-                Read probe_http_status_code or probe_dns_lookup_time_seconds for this instance,
-                then the workload's own log.
+                failed for 2 minutes. Read probe_http_status_code or probe_dns_lookup_time_seconds
+                for this instance, then the workload's own log.
       - eval_time: 6m
         alertname: ExtraProbeFailed
         exp_alerts: []
@@ -172,6 +171,5 @@ tests:
               summary: Prometheus cannot scrape daniel-pi's node_exporter at 10.0.0.139:9100.
               description: >-
                 The node-pi scrape has failed for 2 minutes, so the Pi is off the network or its
-                node_exporter unit is down. Kuma's Daniel Pi Host ping tile read the first of
-                those. Ping the host, then read the unit with `ssh daniel-pi systemctl status
-                node_exporter`.
+                node_exporter unit is down. Ping the host, then read the unit with `ssh daniel-pi
+                systemctl status node_exporter`.

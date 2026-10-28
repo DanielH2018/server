@@ -143,6 +143,7 @@ groups:
             unavailable backup target, a stale or errored backup, a failed job, or a restore drill
             that is overdue. `journalctl -t longhorn-backup-health` names the check. Read
             docs/longhorn-disaster-recovery.md after it.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - alert: LonghornBackupHealthNotReporting
         expr: |
           (
@@ -174,6 +175,7 @@ groups:
             etcd-snapshot-offbox.sh on daniel-box could not take or upload the etcd snapshot, or the
             cluster token changed since the off-box copy was stamped. `journalctl -t
             etcd-snapshot-offbox` names which. Read docs/k3s-etcd-restore.md after it.
+          runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/
       - alert: EtcdSnapshotOffboxNotReporting
         expr: |
           (
@@ -891,6 +893,7 @@ groups:
             its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes the pod
             every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A stale iSCSI
             session blocks an attach".
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - alert: IscsiSessionStale
         expr: homelab_iscsi_session_info{state!="LOGGED_IN",origin="daniel-server"} == 1
         for: 15m
@@ -905,6 +908,7 @@ groups:
             its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes the pod
             every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A stale iSCSI
             session blocks an attach".
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - alert: IscsiSessionsNotReporting
         expr: |
           (
@@ -1145,6 +1149,7 @@ groups:
             reruns reconcile and clears the hold if it passes, and `sudo
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       - alert: HostReconcileFailed
         expr: homelab_host_reconcile_ok{origin="daniel-pi"} == 0
         for: 15m
@@ -1161,6 +1166,7 @@ groups:
             reconcile and clears the hold if it passes, and `sudo
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       - alert: HostReconcileFailed
         expr: homelab_host_reconcile_ok{origin="daniel-box"} == 0
         for: 15m
@@ -1177,6 +1183,7 @@ groups:
             reconcile and clears the hold if it passes, and `sudo
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       # The Pi's Compose project (H5). compose-run writes homelab_compose_up_result each time
       # homelab-reconcile starts homelab-compose.service, and a failed `up --wait` writes 0. The
       # Pi's recovery heartbeat pages the same 0 through its Kuma tile, so this rule is SHADOW
@@ -1259,6 +1266,7 @@ groups:
             ago, and the host has not booted since, so the weekly reboot did not run or was
             refused. Read `journalctl -t weekly-restart` on daniel-box and docs/host-packages.md,
             "Reboot-pending and activation-pending", then reboot the host.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       - alert: HostRebootOverdue
         expr: |
           (
@@ -1279,6 +1287,7 @@ groups:
             ago, and the host has not booted since, so the weekly reboot did not run or was
             refused. Read `journalctl -t weekly-restart` on daniel-server and docs/host-packages.md,
             "Reboot-pending and activation-pending", then reboot the host.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       - alert: HostRebootOverdue
         expr: |
           (
@@ -1299,6 +1308,7 @@ groups:
             ago, and the host has not booted since, so the weekly reboot did not run or was
             refused. Read `journalctl -t weekly-restart` on daniel-pi and docs/host-packages.md,
             "Reboot-pending and activation-pending", then reboot the host.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       # SHADOW UNTIL #5658's ruling on unattended launches decides whether idle slots page
       # anyone (#5672). No batch ran for 16.4h on the night of 2026-10-13 while 9 filed issues
       # waited, and nothing said so. The server lander writes findings_issues from issue labels
@@ -1348,3 +1358,4 @@ groups:
             a firewall rule, a keyring mismatch and a stopped timer each leave it stale. Read
             `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
             daniel-pi, and docs/host-packages.md, "Host-plane pages".
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
