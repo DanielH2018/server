@@ -1,6 +1,7 @@
 # H5 — Pi Compose
 
-Status: PLANNED
+Status: IN PROGRESS. H5.1 to H5.10 and H5.14 landed; H5.10 removed `pi-canary`. H5.11 to H5.13 are
+left.
 Depends on: H3, H4
 Unblocks: H7
 
@@ -300,8 +301,8 @@ reading `containers_list` alone. At `70591c307` the answer is:
 **Census.** A test in `ansible/tests/setup/` fails on three conditions:
 
 - a name appears in both keys;
-- a `compose_services` entry other than `pi-canary` has no legacy entry for its Ansible-era
-  compose file in the `pi-compose` component;
+- a `compose_services` entry has no legacy entry for its Ansible-era compose file in the
+  `pi-compose` component. H5.2b's canary was the one exemption until H5.10 removed it;
 - one of the three cluster readers, or the recovery script, renders differently after any one
   entry moves from `containers_list` to `compose_services`. The cluster readers render
   twice. One render goes through `ansible/tests/_k8s_render.py`, which builds its `hostvars`
