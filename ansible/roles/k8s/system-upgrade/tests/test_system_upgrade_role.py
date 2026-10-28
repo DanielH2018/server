@@ -80,8 +80,8 @@ def test_an_empty_node_list_selects_no_node_and_a_named_node_selects_it(template
     assert _clause(_plan(template, ["daniel-box"]), "kubernetes.io/hostname")[
         "values"
     ] == ["daniel-box"]
-    # H6.3c widened the list to the server node; H6.3d adds daniel-server.
-    assert DEFAULTS["system_upgrade_nodes"] == ["daniel-box"]
+    # H6.3c widened the list to the server node, and H6.3d to daniel-server.
+    assert DEFAULTS["system_upgrade_nodes"] == ["daniel-box", "daniel-server"]
 
 
 @pytest.mark.parametrize("template", PLANS)
