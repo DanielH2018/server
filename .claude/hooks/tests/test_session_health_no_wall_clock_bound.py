@@ -136,7 +136,9 @@ def test_the_fence_asserts_the_prune_call_reached_the_stand_in():
     )
 
 
-_FENCE_HEAD = f"def {_FENCE_TEST}({_FENCE_FIXTURE}):\n    assert 'broken' not in out\n"
+def _fence_head() -> str:
+    """A fence test's opening lines, which the parametrized bodies below complete."""
+    return f"def {_FENCE_TEST}({_FENCE_FIXTURE}):\n    assert 'broken' not in out\n"
 
 
 @pytest.mark.parametrize(
@@ -153,4 +155,4 @@ _FENCE_HEAD = f"def {_FENCE_TEST}({_FENCE_FIXTURE}):\n    assert 'broken' not in
     ids=["names-and-asserts", "prune-dropped-from-tuple", "loop-deleted"],
 )
 def test_the_prune_predicate_rejects_a_fence_without_the_prune_assert(body, expected):
-    assert _asserts_prune_call_recorded(_fence_def(_FENCE_HEAD + body)) is expected
+    assert _asserts_prune_call_recorded(_fence_def(_fence_head() + body)) is expected
