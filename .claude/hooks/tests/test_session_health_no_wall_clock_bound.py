@@ -11,6 +11,8 @@ import ast
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from lib.repo_paths import REPO as _REPO
 
 _TESTS_DIR = ".claude/hooks/tests"
@@ -86,3 +88,69 @@ def test_no_hooks_test_times_test_session_health_and_the_fence_remains():
     assert any(isinstance(n, ast.Assert) for n in ast.walk(fence)), (
         f"{_FENCE_TEST} no longer asserts on the fenced calls"
     )
+
+
+_PRUNE_CALL = "prune_worktrees.py"
+
+
+def _asserts_prune_call_recorded(fence: ast.FunctionDef) -> bool:
+    """Return whether the fence loops over a tuple naming the prune call and asserts `in`.
+
+    Any `assert` in the body is not enough: the subprocess test also asserts on the hook's
+    stdout, which says nothing about whether the worktree survey reached the stand-in.
+    """
+    for loop in ast.walk(fence):
+        if not isinstance(loop, ast.For) or not isinstance(loop.iter, ast.Tuple):
+            continue
+        named = any(
+            isinstance(e, ast.Constant)
+            and isinstance(e.value, str)
+            and _PRUNE_CALL in e.value
+            for e in loop.iter.elts
+        )
+        checks_in = any(
+            isinstance(n, ast.Assert)
+            and isinstance(n.test, ast.Compare)
+            and any(isinstance(op, ast.In) for op in n.test.ops)
+            for n in ast.walk(loop)
+        )
+        if named and checks_in:
+            return True
+    return False
+
+
+def _fence_def(source: str) -> ast.FunctionDef:
+    return next(
+        n
+        for n in ast.parse(source).body
+        if isinstance(n, ast.FunctionDef) and n.name == _FENCE_TEST
+    )
+
+
+def test_the_fence_asserts_the_prune_call_reached_the_stand_in():
+    """The fence test asserts `prune_worktrees.py` is among the calls the stand-in recorded."""
+    fence = _fence_def((_REPO / _TESTS_DIR / _TARGET).read_text(encoding="utf-8"))
+    assert _asserts_prune_call_recorded(fence), (
+        f"{_FENCE_TEST} no longer asserts that the {_PRUNE_CALL} call reached the "
+        f"{_FENCE_FIXTURE} stand-in, so nothing guards the survey's host independence"
+    )
+
+
+_FENCE_HEAD = f"def {_FENCE_TEST}({_FENCE_FIXTURE}):\n    assert 'broken' not in out\n"
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (
+            "    for b in ('curl', 'uv run x/prune_worktrees.py'):\n"
+            "        assert b in rec\n",
+            True,
+        ),
+        ("    for b in ('curl', 'journalctl'):\n        assert b in rec\n", False),
+        ("", False),
+    ],
+    ids=["names-and-asserts", "prune-dropped-from-tuple", "loop-deleted"],
+)
+def test_the_prune_predicate_rejects_a_fence_without_the_prune_assert(body, expected):
+    assert _asserts_prune_call_recorded(_fence_def(_FENCE_HEAD + body)) is expected
