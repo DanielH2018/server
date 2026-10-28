@@ -62,6 +62,9 @@ correctly recorded entries 1.1x to 13x their weight. A serial run on the recordi
 the cron runs `--refresh-drifted`: each run re-measures one hash slice of the table and rewrites
 only the entries `DRIFT_RATIO` or more away from what they measured. Measurement noise inside
 that band leaves the table alone, which is what keeps a twice-daily run from churning it.
+Noise outside the band is caught by a second run of only the drifted files: an entry is
+rewritten only when both runs drift and agree with each other within the band. One outlying
+run wrote 0.0s for a 16s module and 62s for a 1s one, and CI failed the bot's branch (#6286).
 
 THE GATE FAILS ONLY WHERE SOMEONE CAN APPLY THE REPAIR. On a pull request the author re-records
 and pushes. On a push to master nobody can, and a red master run still reaches the deployer's
@@ -382,7 +385,8 @@ def refresh_drifted_weights(
 
     The unattended repair for a weight that has drifted but not far enough for the gate's
     ratio arms. Only an entry `drifted` judges out of band is rewritten, so re-measuring a
-    slice usually leaves the table byte-identical. A recorded path no longer in the census is
+    slice usually leaves the table byte-identical. A drifted entry is measured a second time,
+    and it is rewritten with that measurement only when the two runs agree. A recorded path no longer in the census is
     dropped, as `record_missing_weights` drops it.
 
     Args:
@@ -401,8 +405,19 @@ def refresh_drifted_weights(
     kept = {f: known[f] for f in files if f in known}
     chosen = [f for f in kept if refresh_slice(f, slices) == index and f not in pins]
     measured = measure(chosen) if chosen else {}
-    moved = sorted(f for f in chosen if drifted(kept[f], measured.get(f, 0.0)))
-    kept |= {f: measured.get(f, 0.0) for f in moved}
+    candidates = [f for f in chosen if drifted(kept[f], measured.get(f, 0.0))]
+    # One serial run is not enough to rewrite a row: a single outlier measured 0.0s for a 16s
+    # module and 62s for a 1s one, and CI then failed the bot's own branch on it (#6286). The
+    # drifted files run once more, and a row moves only when the second run drifts too and
+    # agrees with the first within DRIFT_RATIO.
+    confirmed = measure(candidates) if candidates else {}
+    moved = sorted(
+        f
+        for f in candidates
+        if drifted(kept[f], confirmed.get(f, 0.0))
+        and not drifted(measured.get(f, 0.0), confirmed.get(f, 0.0))
+    )
+    kept |= {f: confirmed.get(f, 0.0) for f in moved}
     _write_weights(kept, path, pins)
     return moved
 

@@ -42,7 +42,7 @@ def test_a_refresh_rewrites_only_the_drifted_entries_of_its_own_slice(tmp_path):
     asked = []
 
     def measure(files):
-        asked.extend(files)
+        asked.append(list(files))
         return {f: measured[f] for f in files}
 
     moved = pytest_shard.refresh_drifted_weights(
@@ -50,7 +50,7 @@ def test_a_refresh_rewrites_only_the_drifted_entries_of_its_own_slice(tmp_path):
     )
 
     written = json.loads(table.read_text())
-    assert sorted(asked) == sorted(ours)
+    assert sorted(asked[0]) == sorted(ours)
     assert moved == sorted(ours[1:])
     assert {f: written[f] for f in ours} == {ours[0]: 2.0} | {f: 6.0 for f in ours[1:]}
     assert all(written[f] == 2.0 for f in theirs)
