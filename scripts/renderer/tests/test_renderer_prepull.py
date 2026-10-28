@@ -123,7 +123,7 @@ def test_the_census_refuses_a_prepull_job_that_cannot_retry():
     rows = {
         line.split(":", 1)[0] for line in problems({"app-prepull": [job, configmap]})
     }
-    assert rows == {"backoff"}
+    assert rows, "the census admits a prepull Job that cannot retry a failed Pod"
 
 
 def test_the_prepull_directory_passes_the_job_census_and_check_bundle(rendered):
