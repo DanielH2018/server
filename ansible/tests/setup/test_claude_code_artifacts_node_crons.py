@@ -13,6 +13,7 @@ never re-applies `claude_code`. So each value is a key pair, and this module hol
 equal, resolved the way a deploy resolves it.
 """
 
+import re
 from pathlib import Path
 
 from lib import yaml_fast
@@ -160,3 +161,54 @@ def test_both_crons_are_gated_on_the_artifacts_node():
     ]
     assert len(imports) == 1, imports
     assert imports[0]["when"] == "inventory_hostname == claude_code_artifacts_node"
+
+
+TEXTFILE = re.compile(r"write_check_textfile (\S+) ")
+
+
+def node_cron_paths() -> set[str]:
+    """Every path node_crons.yml leaves on the artifacts node: scripts, cron files, check
+    files and the render stamp.
+    """
+    paths = set()
+    for task in _node_cron_tasks():
+        if isinstance(tpl := task.get("ansible.builtin.template"), dict):
+            paths.add(tpl["dest"])
+            source = (CLAUDE_CODE / "templates" / tpl["src"]).read_text()
+            for check in TEXTFILE.findall(source):
+                paths.add(f"/var/lib/node-exporter-textfile/{check}.prom")
+        if isinstance(cron := task.get("ansible.builtin.cron"), dict):
+            paths.add(f"/etc/cron.d/{cron['cron_file']}")
+        if name := (task.get("vars") or {}).get("stamp_render_name"):
+            paths.add(f"/var/lib/homelab/setup-render-manifest.d/{name}")
+    return paths
+
+
+def _absent_arm() -> dict:
+    arms = [
+        task
+        for task in load_tasks(CLAUDE_CODE / "tasks" / "main.yml")
+        if task.get("when") == "inventory_hostname != claude_code_artifacts_node"
+    ]
+    assert len(arms) == 1, arms
+    return arms[0]
+
+
+def test_every_node_cron_path_has_an_absent_arm_off_the_node_is_clean():
+    """A host the artifacts node leaves keeps nothing that pages as stale (#6355)."""
+    arm = _absent_arm()
+    assert arm["ansible.builtin.file"] == {"path": "{{ item }}", "state": "absent"}
+    paths = node_cron_paths()
+    # Non-vacuity: the check file the stale-page incident named, and the cron behind it.
+    assert {"/var/lib/node-exporter-textfile/sync-artifacts.prom", "/etc/cron.d/sync-artifacts"} <= paths  # fmt: skip
+    assert len(paths) == 7
+    assert paths - set(arm["loop"]) == set()
+
+
+def test_a_node_cron_path_the_absent_arm_misses_is_flagged():
+    loop = [
+        p for p in _absent_arm()["loop"] if not p.endswith("claude-otel-health.prom")
+    ]
+    assert node_cron_paths() - set(loop) == {
+        "/var/lib/node-exporter-textfile/claude-otel-health.prom"
+    }
