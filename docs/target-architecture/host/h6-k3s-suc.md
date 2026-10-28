@@ -1,8 +1,12 @@
 # H6 — system-upgrade-controller for k3s
 
-Status: IN PROGRESS. Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)) and H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)).
-In flight: H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)) is open and held until Monday 2026-10-26.
-In flight: H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)) is open.
+Status: IN PROGRESS. Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)), H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)) and H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)).
+Also merged: H6.3e and H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)).
+Paused: H6.3d ([#6403](https://github.com/DanielH2018/server/pull/6403)) merged on 2026-10-28
+and was paused the same day. The agent Plan's `prepare` failed on daniel-server because that
+host's package does not ship `k3s_gates.py`, and the failure set `DEPLOY_HOLD`.
+`system_upgrade_nodes` is back to `[daniel-box]`. The `agent.yml` guard and the runbook
+changes stay. See the H6.3d step's amendment.
 Depends on: D2, H1.1a to H1.8, H4, M1 (the contracts.md row; *Open questions* 2 says why
 each edge exists).
 Unblocks: H7
@@ -1223,6 +1227,15 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - Set `system_upgrade_nodes: [daniel-box, daniel-server]`.
     - Make the same guard change in `agent.yml`, and rewrite the agent half of the runbook.
     - Two-writer check: the agent's version has one writer, SUC.
+    - **Amended 2026-10-28:** H6.3d also needs daniel-server's package to ship
+      `/usr/lib/homelab/k3s_gates.py`, because the agent Plan's `prepare` runs it from
+      `/host`. Only the `k3s-restart` component ships it, and H6.3b's 2026-10-24 amendment
+      left that component off daniel-server's package. The first merge (#6403) failed
+      `prepare` with `can't open file '/host/usr/lib/homelab/k3s_gates.py'` and set
+      `DEPLOY_HOLD`. Nothing was upgraded or restarted. Re-select daniel-server only after
+      the follow-up that adds `k3s-restart`, the credential and its sync to daniel-server's
+      package (*Open questions* 7) has installed. Check for the file with `ls
+      /usr/lib/homelab/k3s_gates.py` in the pre-merge read, beside the binary sum.
 10. **H6.3e The binary-sum check (about 150 lines).**
     - Add `k3s_binary_sha256_amd64` to the role's defaults, the co-change check in
       `scripts/validate/`, and the `binary` mode of `k3s_gates.py` with its tests

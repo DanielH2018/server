@@ -2,9 +2,10 @@
 
 `ansible.builtin.template` puts the rendered body in its result only under diff mode, and
 `scripts/deploy.sh` forwards the operator's flags to ansible-playbook unchanged, so a
-`--check --diff` rehearsal prints every changed script's before/after to stdout and to
-`ansible.log` (`log_path = ./ansible.log`, ansible.cfg). A script that interpolates a Kuma push
-token is therefore a credential in the log the moment someone types `--diff`. `no_log: true` is
+`--check --diff` rehearsal prints every changed script's before/after to stdout, and to any
+log file the run's ANSIBLE_LOG_PATH names (ansible.cfg sets none since #6217). A script that
+interpolates a Kuma push token is therefore a credential in the log the moment someone types
+`--diff`. `no_log: true` is
 the one setting that keeps the body out of the callback whatever the flags say, and
 `.claude/rules/ansible.md` requires it on any task that handles a secret.
 
@@ -172,7 +173,7 @@ def test_every_secret_rendering_shell_template_task_has_no_log():
         if not task_keeps_the_body_out_of_the_log(task)
     ]
     assert not offenders, (
-        "Under `--diff` the template module prints the rendered body to stdout and ansible.log. "
+        "Under `--diff` the template module prints the rendered body to stdout and to any log file. "
         "Add `no_log: true  # renders the Kuma push token` to:\n  "
         + "\n  ".join(offenders)
     )
