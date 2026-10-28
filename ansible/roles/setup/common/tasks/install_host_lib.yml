@@ -5,15 +5,14 @@
 #
 # WHY A SIBLING COPY AND NOT A SHARED PATH. Every consumer is a directly-invoked script, so it
 # gets its own directory on `sys.path` and nothing else (the repo-root CLAUDE.md states the
-# rule). Nine callers across eight roles therefore need a copy of the SAME file in their own
+# rule). Eight callers across seven roles therefore need a copy of the SAME file in their own
 # /opt directory. This file holds the source path, the `host_lib.py` basename and the 0755 mode
 # in one place, so a change to any of them has one place to make.
 #
-# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. Seven of the nine
-# sites record `/opt/<x>/host_lib.py` and `/opt/<x>/kuma_push.py` in their role's
-# `stamp_deployed_pairs` (gitops_deploy, renovate_notify, renovate_agent, fake_remux,
-# homelab_builder, and k3s twice); the other two (configarr, janitorr) declare no `stamp_deployed` group at all, so there
-# is nothing for a pair to join.
+# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. All eight sites
+# record `/opt/<x>/host_lib.py` and `/opt/<x>/kuma_push.py` in their role's
+# `stamp_deployed_pairs` (claude_code, deploy_ui, fake_remux, gitops_deploy, renovate_agent,
+# renovate_notify, and k3s twice).
 # Emitting a fragment here would change host state at those. Worse, a fragment is named per
 # GROUP and holds the whole group's pairs, so a second fragment written from here under the
 # caller's own name would overwrite the pairs the caller declared. The

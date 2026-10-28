@@ -693,3 +693,7 @@
         src: ansible/roles/setup/claude_code/files/claude_triage_run.py
       - live: /opt/claude-triage/claude_triage_poll.py
         src: ansible/roles/setup/claude_code/files/claude_triage_poll.py
+      - live: /opt/claude-triage/host_lib.py
+        src: hosts/lib/host_lib.py
+      - live: /opt/claude-triage/kuma_push.py
+        src: hosts/lib/kuma_push.py

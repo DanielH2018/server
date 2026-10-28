@@ -2,8 +2,9 @@
 """Shared I/O-shell helpers for the host-run scripts.
 
 Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
-longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py, render_records.py, live_drift_check.py
-and secret rotation's rotation_tools.py. Each runs via
+longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py, render_records.py, live_drift_check.py,
+the triage poller and runner, deploy_ui.py, the fake-remux scripts and secret rotation's
+rotation_tools.py. Each runs via
 ``uv run --no-project --python <pin>`` (host_python_version in
 ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed into its own
 ``/opt`` dir, where it does a ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...``
@@ -12,6 +13,10 @@ scripts: the Cloudflare-1010 User-Agent on the Discord POST and its length cap, 
 torn-write-safe atomic state write, the config.env parser, the kubectl runner, the RFC3339
 parser, the Uptime Kuma push, the GitHub token lookup and REST read, the journal-aware ``log``
 with its ``logfmt`` fields and crash hook, and the node-exporter textfile write. Stdlib only.
+
+The repository signer (homelab_repo_sign.py) imports it under the host's /usr/bin/python3,
+Ubuntu 24.04's 3.12, so this file and kuma_push.py keep to the 3.12 grammar (#6202):
+pyproject.toml formats both for py312, and tests/test_host_lib.py parses them with it.
 """
 
 from __future__ import annotations

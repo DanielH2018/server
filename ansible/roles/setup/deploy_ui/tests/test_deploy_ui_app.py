@@ -473,6 +473,13 @@ def test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged():
     assert deploy_ui.request_line("POST", "/api/land", 409, "").endswith("user=-")
 
 
+def test_request_line_quotes_a_path_logfmt_would_split_is_flagged():
+    """The line is host_lib's logfmt (#6202): a path with a space stays one `path` value."""
+    assert deploy_ui.request_line("GET", "/a b", 404, "u") == (
+        'request method=GET path="/a b" status=404 user=u'
+    )
+
+
 def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
     """The daemon runs outside the venv and cannot import the lock names, so this is
     the literal-agreement guard: the service-lock shape the page watches is the one

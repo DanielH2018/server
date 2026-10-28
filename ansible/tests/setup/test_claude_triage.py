@@ -158,6 +158,12 @@ def test_switching_either_flag_off_removes_everything_the_install_writes() -> No
     for task in installs:
         if "ansible.builtin.import_tasks" in task:
             v = task["vars"]
+            if "host_lib_dir" in v:
+                # install_host_lib.yml copies these two beside the scripts.
+                dests |= {
+                    f"{v['host_lib_dir']}/{n}" for n in ("host_lib.py", "kuma_push.py")
+                }
+                continue
             at = "@" if v.get("alert_unit_instanced") else ""
             dests.add(f"/etc/systemd/system/{v['alert_unit_name']}-alert{at}.service")
             continue
@@ -179,6 +185,7 @@ def test_switching_either_flag_off_removes_everything_the_install_writes() -> No
     assert "/etc/systemd/system/claude-triage-report-alert@.service" in dests
     assert "/etc/systemd/system/claude-triage-poll.timer" in dests
     assert "/opt/claude-triage/claude_triage_poll.py" in dests
+    assert "/opt/claude-triage/host_lib.py" in dests
     (removal,) = [
         t
         for t in tasks
