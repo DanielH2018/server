@@ -1,0 +1,18 @@
+# Shipped by every host package. At boot it rewrites homelab_host_reconcile.prom from reconcile's
+# record, so homelab_host_reboot_pending reads 0 once the boot has cleared
+# /run/homelab/reboot-pending (#6188). The updater runs reconcile only when a package changes, so
+# without this unit the file kept the 1 until the next package. It starts and restarts nothing.
+[Unit]
+Description=Rewrite reconcile's textfile metrics for this boot
+
+[Service]
+Type=oneshot
+# Reconcile's step 2 starts every enabled unit that is not active. RemainAfterExit keeps this one
+# active after it exits, so a reconcile run does not start it again.
+RemainAfterExit=yes
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+ExecStart=/usr/lib/homelab/homelab-reconcile --metrics
+
+[Install]
+WantedBy=multi-user.target

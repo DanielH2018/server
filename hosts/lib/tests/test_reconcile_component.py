@@ -32,6 +32,8 @@ LIBRARY_MEMBERS = frozenset(
     }
 )
 SERVICE = "/usr/lib/systemd/system/homelab-reconcile.service"
+METRICS_SERVICE = "/usr/lib/systemd/system/homelab-reconcile-metrics.service"
+MANIFEST = "/usr/lib/homelab/manifest.json"
 
 
 @pytest.fixture(scope="module")
@@ -49,11 +51,16 @@ def test_the_library_glob_finds_its_members():
 
 def test_the_component_renders_the_script_its_library_and_its_unit(package):
     modules = [f"{MODULES}/{path.name}" for path in library_files()]
-    assert sorted(package.files) == sorted([SCRIPT, *modules, SERVICE])
+    assert sorted(package.files) == sorted(
+        [SCRIPT, *modules, SERVICE, METRICS_SERVICE, MANIFEST]
+    )
     assert package.files[SCRIPT] == (RECONCILE.read_bytes(), 0o755)
     for path in library_files():
         assert package.files[f"{MODULES}/{path.name}"] == (path.read_bytes(), 0o644)
-    assert package.units() == ["homelab-reconcile.service"]
+    assert package.units() == [
+        "homelab-reconcile-metrics.service",
+        "homelab-reconcile.service",
+    ]
     unit = package.files[SERVICE][0].decode()
     assert "Type=oneshot\n" in unit
     assert f"ExecStart={SCRIPT}\n" in unit
@@ -84,3 +91,17 @@ def test_reconcile_and_its_library_parse_with_the_3_12_grammar():
 )
 def test_syntax_newer_than_3_12_is_flagged(newer):
     assert not parses_under_3_12(RECONCILE.read_text() + newer)
+
+
+def test_the_metrics_unit_rewrites_the_textfile_once_per_boot(package):
+    """The boot path runs it through its enable link, and RemainAfterExit keeps reconcile's
+    step 2 from starting it again on every run (#6188)."""
+    unit = package.files[METRICS_SERVICE][0].decode()
+    assert f"ExecStart={SCRIPT} --metrics\n" in unit
+    assert "Type=oneshot\n" in unit
+    assert "RemainAfterExit=yes\n" in unit
+    assert package.links == {
+        "/usr/lib/systemd/system/multi-user.target.wants/homelab-reconcile-metrics.service": (
+            "../homelab-reconcile-metrics.service"
+        )
+    }

@@ -140,8 +140,8 @@ class Node:
         self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
         self.manifest_path.write_text(json.dumps(self.manifest))
 
-    def run(self) -> subprocess.CompletedProcess:
-        result = run([sys.executable, str(self.script)], env=self._prepare())
+    def run(self, *args: str) -> subprocess.CompletedProcess:
+        result = run([sys.executable, str(self.script), *args], env=self._prepare())
         self.state = json.loads((self.stub / "state.json").read_text())
         return result
 

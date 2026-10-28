@@ -990,25 +990,47 @@ groups:
             TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
             failed. Read `systemctl status homelab-compose` and `journalctl -b -u
             homelab-compose` on daniel-pi.
+      # Reconcile also starts or restarts homelab-compose.service: when its file changes, when
+      # pending.json lists it after an env-file rotation, and in step 2 when it is not active.
+      # Reconcile records the time it made the call, blocks until compose-run returns, and then
+      # writes that time as homelab_host_unit_started_seconds. A compose-run that wrote its
+      # result ended after that time, so a result older than it means the run wrote nothing:
+      # systemd killed it at TimeoutStartSec, or the write failed after `up` succeeded. The
+      # second exits 0, so HostReconcileFailed stays quiet for it (#6342). ComposeUpStale covers
+      # the boot run, which reconcile does not start, and a file that is gone. The 5m `for`
+      # rides out a scrape that reads one file before the other is rewritten.
+      - alert: ComposeRestartUnreported
+        expr: |
+          homelab_host_unit_started_seconds{origin="daniel-pi",unit="homelab-compose.service"}
+            > on (origin) group_left homelab_compose_up_timestamp_seconds{origin="daniel-pi"}
+        for: 5m
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: The Pi's Compose project wrote no result for reconcile's last start of it.
+          description: >-
+            homelab-reconcile started homelab-compose.service on daniel-pi, and
+            homelab_compose_up_timestamp_seconds still predates that call, so compose-run wrote
+            no result for it. systemd killed the run at its TimeoutStartSec, or the write to
+            /var/lib/node-exporter-textfile/homelab_compose.prom failed. Read `journalctl -u
+            homelab-compose -u homelab-reconcile` on daniel-pi.
       # One rule per inventory host, so `service` stays a literal (#6166). Reconcile writes
       # homelab_host_reboot_pending 1 when a package change needs a reboot, and the weekly
       # reboot is what applies it. homelab_host_reboot_pending_since_seconds is when the host
       # first owed that reboot, the flag's mtime, which a later change never moves. The age is
       # read from it rather than from the file's mtime, because every later package change
-      # rewrites the file. The `> node_boot_time_seconds` arm drops a 1 left in the file from
-      # before the last boot: the updater runs reconcile only when a package changes, so the
-      # file can outlive the boot that cleared the flag. 691200s is 8 days, a weekly reboot
-      # slot plus a day.
+      # rewrites the file. homelab-reconcile-metrics.service rewrites the file at boot, so a 1
+      # does not outlive the reboot that cleared the flag (#6188). The 15m `for` covers the
+      # scrapes between boot and that unit. 691200s is 8 days, a weekly reboot slot plus a day.
       - alert: HostRebootOverdue
         expr: |
           (
               homelab_host_reboot_pending{origin="daniel-box"} == 1
             and on (origin)
-              homelab_host_reboot_pending_since_seconds{origin="daniel-box"}
-              > on (origin) node_boot_time_seconds{origin="daniel-box"}
-            and on (origin)
               time() - homelab_host_reboot_pending_since_seconds{origin="daniel-box"} > 691200
           )
+        for: 15m
         labels:
           severity: warning
           service: daniel-box
@@ -1024,11 +1046,9 @@ groups:
           (
               homelab_host_reboot_pending{origin="daniel-server"} == 1
             and on (origin)
-              homelab_host_reboot_pending_since_seconds{origin="daniel-server"}
-              > on (origin) node_boot_time_seconds{origin="daniel-server"}
-            and on (origin)
               time() - homelab_host_reboot_pending_since_seconds{origin="daniel-server"} > 691200
           )
+        for: 15m
         labels:
           severity: warning
           service: daniel-server
@@ -1044,11 +1064,9 @@ groups:
           (
               homelab_host_reboot_pending{origin="daniel-pi"} == 1
             and on (origin)
-              homelab_host_reboot_pending_since_seconds{origin="daniel-pi"}
-              > on (origin) node_boot_time_seconds{origin="daniel-pi"}
-            and on (origin)
               time() - homelab_host_reboot_pending_since_seconds{origin="daniel-pi"} > 691200
           )
+        for: 15m
         labels:
           severity: warning
           service: daniel-pi

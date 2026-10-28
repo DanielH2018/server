@@ -1578,31 +1578,75 @@ tests:
         alertname: ComposeUpStale
         exp_alerts: []
 
+  # Reconcile restarted homelab-compose.service at 1000, after a digest bump, and compose-run
+  # wrote nothing: the result still ends at 500 (#6342). The rule is quiet at 4m inside its
+  # 5m `for` and fires at 10m. Another unit's start time is ignored.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_unit_started_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi", unit="homelab-compose.service"}'
+        values: '1000x15'
+      - series: 'homelab_host_unit_started_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi", unit="homelab-secrets.service"}'
+        values: '2000x15'
+      - series: 'homelab_compose_up_timestamp_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '500x15'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ComposeRestartUnreported
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ComposeRestartUnreported
+        exp_alerts:
+          - exp_labels:
+              host: daniel-pi
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              unit: homelab-compose.service
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: The Pi's Compose project wrote no result for reconcile's last start of it.
+              description: >-
+                homelab-reconcile started homelab-compose.service on daniel-pi, and
+                homelab_compose_up_timestamp_seconds still predates that call, so compose-run
+                wrote no result for it. systemd killed the run at its TimeoutStartSec, or the
+                write to /var/lib/node-exporter-textfile/homelab_compose.prom failed. Read
+                `journalctl -u homelab-compose -u homelab-reconcile` on daniel-pi.
+
+  # The same restart, and compose-run wrote its result at 1040, after the call. Quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_host_unit_started_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi", unit="homelab-compose.service"}'
+        values: '1000x15'
+      - series: 'homelab_compose_up_timestamp_seconds{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1040x15'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ComposeRestartUnreported
+        exp_alerts: []
+
   # daniel-box first owed a reboot 690000s before time 0, and a later package change rewrites
-  # its reconcile file every minute without moving that time. It is quiet at 10m (690600s, under
-  # the 691200s bound) and fires at 30m. daniel-server's 1 dates from before its last boot, so
-  # that boot already cleared it, and its rule stays quiet.
+  # its reconcile file every minute without moving that time. It crosses the 691200s bound at
+  # 20m, is quiet at 30m inside the 15m `for`, and fires at 40m. daniel-server has owed its
+  # reboot for longer than 8 days, then reboots at 5m, and homelab-reconcile-metrics.service
+  # rewrites its 1 to 0 at 10m (#6188). Its rule stays quiet, because the 1 never lasts 15m.
   - interval: 1m
     input_series:
       - series: 'homelab_host_reboot_pending{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '1x35'
+        values: '1x45'
       - series: 'homelab_host_reboot_pending_since_seconds{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '-690000x35'
+        values: '-690000x45'
       - series: 'node_textfile_mtime_seconds{file="/textfile/homelab_host_reconcile.prom", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '0+60x35'
-      - series: 'node_boot_time_seconds{instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '-1000000x35'
+        values: '0+60x45'
       - series: 'homelab_host_reboot_pending{host="daniel-server", instance="daniel-server", job="node", origin="daniel-server"}'
-        values: '1x35'
+        values: '1x9 0x35'
       - series: 'homelab_host_reboot_pending_since_seconds{host="daniel-server", instance="daniel-server", job="node", origin="daniel-server"}'
-        values: '-690000x35'
-      - series: 'node_boot_time_seconds{instance="daniel-server", job="node", origin="daniel-server"}'
-        values: '-600000x35'
+        values: '-700000x9 _x35'
     alert_rule_test:
-      - eval_time: 10m
+      - eval_time: 30m
         alertname: HostRebootOverdue
         exp_alerts: []
-      - eval_time: 30m
+      - eval_time: 40m
         alertname: HostRebootOverdue
         exp_alerts:
           - exp_labels:
