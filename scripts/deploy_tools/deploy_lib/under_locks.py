@@ -59,9 +59,9 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_locks
 
-# Covers gitops-deploy's worst-case hold of 3780s (STAGING_GATE_TIMEOUT_S 600 +
-# STAGING_EXPECT_TIMEOUT_S 120 + K8S_DEPLOY_TIMEOUT_S 1440 + K8S_ROLLBACK_TIMEOUT_S 1620), not its
-# TimeoutStartSec. It tracks the unit's timeout: a budget below the worst-case hold makes a deploy
+# Covers gitops-deploy's worst-case hold, not its TimeoutStartSec. That hold was 3780s while
+# the tick deployed and rolled back k8s roles; since D6.12 it is one broad apply,
+# BROAD_DEPLOY_TIMEOUT_S 1800, and the wait stays until a later PR shrinks the unit's budget. It tracks the unit's timeout: a budget below the worst-case hold makes a deploy
 # queued behind a pathological gitops run give up having deployed nothing while that run is still
 # legitimately working. Pinned to the same role defaults the deployer reads by
 # test_deploy_lock_wait_budget.py. It is also the budget each per-service lock waits.

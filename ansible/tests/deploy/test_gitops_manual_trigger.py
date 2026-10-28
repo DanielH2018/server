@@ -197,9 +197,9 @@ def test_unit_pages_on_failure():
 
 
 def test_unit_timeout_covers_the_measured_k8s_worst_case():
-    # 180s max flock wait + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120) +
-    # K8S_DEPLOY_TIMEOUT_S (1440) + K8S_ROLLBACK_TIMEOUT_S (1620) = 3960s, which is why the unit's
-    # own arithmetic comment sizes TimeoutStartSec to 70min. The docstring at the top of this file defers to this pin for the value.
+    # The unit's own arithmetic comment sizes TimeoutStartSec to 70min. Its k8s worst case,
+    # 3960s, went with the k8s arms in D6.12; the broad apply needs 1980s, and the 70min stays
+    # because the lander deadlines and LOCK_WAIT derive from it. The docstring at the top of this file defers to this pin for the value.
     unit = rendered_setup_text("gitops_deploy", _UNIT_TEMPLATE)
     assert re.search(r"^TimeoutStartSec=70min$", unit, re.MULTILINE), (
         f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 70min. If this is a deliberate "
