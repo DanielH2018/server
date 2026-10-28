@@ -1727,9 +1727,9 @@ under *Rules for every Job Flux applies (D5.1a3)*.
 ### The pre-pull Job
 
 A `Recreate` Deployment stops its old pod before the new pod's pull starts, so a large image
-from a slow registry is an outage as long as the pull. GHCR serves both nodes at 0.21-0.51
-MB/s (measured 2026-10-17), so code-server's 851 MB re-pull after a base bump is about 50
-minutes down (#5525).
+from a slow registry is an outage as long as the pull. GHCR served both nodes at 0.21-0.51
+MB/s on 2026-10-17 and at 44-98 MB/s on 2026-10-24 (#5654). At the slow rate, code-server's
+851 MB re-pull after a base bump is about 50 minutes down (#5525).
 
 A role that sets `flux_prepull_timeout` in its `defaults/main.yml` gets
 `cluster/<tag>-prepull/` and the Kustomization `<tag>-prepull`

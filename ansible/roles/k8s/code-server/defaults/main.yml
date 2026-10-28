@@ -170,7 +170,8 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # its node before the code-server Kustomization applies (scripts/renderer/renderer_lib/prepull.py).
 # The Deployment is `Recreate`, so without it the old pod stops before the new pod's pull
 # starts, and the editor is down for the whole pull. With it, the old pod keeps serving while
-# the image arrives. MEASURED 2026-10-17 (#5525): GHCR serves daniel-box at 0.21-0.33 MB/s; a
+# the image arrives. MEASURED 2026-10-17 (#5525), during a slow-GHCR episode: GHCR served
+# daniel-box at 0.21-0.33 MB/s, against 44-95 MB/s on 2026-10-24 (#5654). At the slow rate a
 # claude-code CLI bump re-pulls about 377 MB (about 22 minutes) and a base bump about 851 MB
 # (about 50 minutes). 4500s covers the full re-pull down to 0.19 MB/s, below the measured low:
 # at 0.21 MB/s it takes about 4050s. The Job has no deadline, so a pull slower still costs
