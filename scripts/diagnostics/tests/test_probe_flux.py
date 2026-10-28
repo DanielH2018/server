@@ -278,6 +278,16 @@ def test_wait_fails_on_a_dependency_held_by_a_failed_one():
     assert flux.wait_state(items, "configarr", None)["state"] == "failed"
 
 
+def test_wait_does_not_fail_on_a_dependency_failure_at_an_older_artifact():
+    """sonarr's failure is about the artifact before the one its source serves now."""
+    items = [
+        _source(),
+        _ks("sonarr", "False", "HealthCheckFailed", attempted="prod@sha256:b"),
+        _ks("configarr", "False", "DependencyNotReady", depends_on=["sonarr"]),
+    ]
+    assert flux.wait_state(items, "configarr", None)["state"] == "progressing"
+
+
 def test_wait_is_ready_at_a_later_commit_that_holds_the_expected_one():
     """Another session's promotion landed before Flux applied OLD, and NEW carries it."""
     items = [_source(), _ks("sonarr")]
