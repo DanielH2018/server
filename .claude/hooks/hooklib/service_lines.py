@@ -14,6 +14,7 @@ import json
 import os
 import re
 import subprocess
+import time
 
 
 def k8s_namespace(repo):
@@ -105,6 +106,13 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
     return bad
 
 
+# Where `release-staleness-check.sh` writes its run's verdict, in the state directory the k3s
+# role creates 0755 for the cron's user.
+STALE_VERDICT_FILE = "/var/lib/homelab/release-staleness/verdict"
+
+# Past this age a verdict is a dead cron's, not the fleet's: four of its 30-minute periods.
+STALE_VERDICT_MAX_AGE_S = 2 * 60 * 60
+
 # Services in a stale-release verdict named on the banner line after "e.g.".
 _STALE_NAMED = 3
 
@@ -140,7 +148,7 @@ def stale_verdict_names(verdict):
     the count from there and treats these as examples.
 
     Args:
-        verdict: the journal line with `status=down ` already stripped.
+        verdict: the verdict line with `status=down ` already stripped.
 
     Returns:
         The names that parse as deploy tags, de-duplicated, first occurrence first.
@@ -164,16 +172,19 @@ def stale_verdict_names(verdict):
     return names
 
 
-def stale_release_problems(run):
+def stale_release_problems(path=STALE_VERDICT_FILE, now=None):
     """One line naming the services `Release Staleness Drift` last found stale, or nothing.
 
-    `release-staleness-check.sh` (roles/setup/k3s) logs `status=<up|down> <verdict>` under
-    its own journal tag every `k3s_release_staleness_cron_minute`, then pushes the same text
-    to Kuma. That journal entry is the one place the verdict exists on the host: reading the
-    release records here instead would re-run the git derivation the cron just paid for, and
-    the banner must not. `--since -2h` keeps a dead cron's last verdict off the
-    banner — the Kuma tile pages for the dead cron itself. A host that never runs the cron
-    (an agent node, a laptop) has no such entry and stays silent.
+    `release-staleness-check.sh` (roles/setup/k3s) writes its run's verdict, `status=<up|down>
+    <verdict>`, to `path` every `k3s_release_staleness_cron_minute`, then pushes the same text
+    to Kuma. Reading the release records here instead would re-run the git derivation the cron
+    just paid for, and the banner must not. A file older than `STALE_VERDICT_MAX_AGE_S` keeps a
+    dead cron's last verdict off the banner — the Kuma tile pages for the dead cron itself. A
+    host that never runs the cron (an agent node, a laptop) has no such file and stays silent.
+
+    The file, not the journal (#6183): it is a stat and a read with no subprocess, and it holds
+    the probe's output alone. The journal line after a re-alert opens `Stale set changed:`,
+    which the headline below cannot match.
 
     The verdict is `probe.py releases --stale-only --kuma`'s output, one line in one of
     `bridge.msgfmt`'s three DOWN shapes. Three branches read it: the headline makes it a
@@ -181,22 +192,22 @@ def stale_release_problems(run):
     a verdict neither this parser nor the producer agrees on — also shown as broken. That
     last branch cannot be dropped. The cron maps a probe exit of 1 to `status=down` with
     the output unmodified, and an uncaught Python exception exits 1 too, so a traceback and
-    a real stale list reach the journal under the same status with no `exited N:` prefix
+    a real stale list reach the file under the same status with no `exited N:` prefix
     between them; the text shape is the only thing that tells them apart.
 
     Args:
-        run: `session-health.py`'s `_run` — takes (argv, timeout), raises on timeout or a
-            missing binary.
+        path: the cron's verdict file (a test passes one under `tmp_path`).
+        now: the current epoch seconds (a test passes a fixed value).
     """
-    argv = ["journalctl", "-t", "release-staleness-check", "-n", "1", "-o", "cat"]
     try:
-        res = run(argv + ["--since", "-2h", "--no-pager"], 5)
-    except subprocess.TimeoutExpired, OSError:
+        age = (time.time() if now is None else now) - os.stat(path).st_mtime
+        with open(path, encoding="utf-8", errors="replace") as f:
+            first = f.readline().rstrip("\n")
+    except OSError:
         return []
-    lines = res.stdout.strip().splitlines() if res.returncode == 0 else []
-    if not lines or not lines[0].startswith("status=down "):
+    if age > STALE_VERDICT_MAX_AGE_S or not first.startswith("status=down "):
         return []
-    verdict = lines[0][len("status=down ") :]
+    verdict = first[len("status=down ") :]
     if verdict.startswith(_PROBE_FAILED_PREFIX):
         return [f"  ⚠ release staleness check is broken: {verdict[:110]}"]
     head = _STALE_HEADLINE.match(verdict)
