@@ -101,6 +101,31 @@ def test_the_job_sets_no_deadline_so_a_slow_pull_never_fails_it(rendered):
     assert "activeDeadlineSeconds" not in yaml_fast.safe_load(text)["spec"]
 
 
+def _retries(job: dict) -> bool:
+    spec = job["spec"]
+    return spec.get("backoffLimit", 0) > 0 or bool(spec.get("podFailurePolicy"))
+
+
+def test_the_job_retries_a_failed_pod_and_the_census_admits_it(rendered):
+    """An evicted or interrupted Pod must not leave a Failed Job that wedges `<tag>` (#5552)."""
+    text = (rendered / "cluster" / f"{TAG}-prepull" / "job.yaml").read_text()
+    assert _retries(yaml_fast.safe_load(text))
+    assert problems(load(rendered)) == []
+
+
+def test_the_census_refuses_a_prepull_job_that_cannot_retry():
+    files = prepull_files("app", [({"nodeSelector": {"h": "a"}}, ["app:1"])])
+    configmap = yaml_fast.safe_load(files["configmap.yaml"])
+    job = yaml_fast.safe_load(files["job.yaml"])
+    job["spec"]["backoffLimit"] = 0
+    job["spec"].pop("podFailurePolicy", None)
+    job["metadata"]["name"] = f"prepull-app-{job_spec_digest8(job)}"
+    rows = {
+        line.split(":", 1)[0] for line in problems({"app-prepull": [job, configmap]})
+    }
+    assert rows == {"backoff"}
+
+
 def test_the_prepull_directory_passes_the_job_census_and_check_bundle(rendered):
     assert problems(load(rendered)) == []
     assert report(rendered, [TAG]) == OK
