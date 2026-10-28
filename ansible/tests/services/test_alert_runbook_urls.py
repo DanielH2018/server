@@ -81,7 +81,7 @@ def runbook_problems(alerts: list[tuple[str, dict]], base: str) -> list[str]:
     return problems
 
 
-def test_every_alert_links_the_runbook_its_description_cites():
+def test_every_alert_links_the_runbook_its_description_cites_is_clean():
     assert runbook_problems(_alerts(), _base_url()) == []
 
 
@@ -112,7 +112,7 @@ def test_a_cited_page_with_no_runbook_url_is_flagged():
     ]
 
 
-def test_a_design_doc_citation_needs_no_runbook_url():
+def test_a_design_doc_citation_with_no_runbook_url_is_clean():
     cited = "See docs/target-architecture/monitoring/m1-alertmanager.md."
     assert runbook_problems(_rule(cited), BASE) == []
 
