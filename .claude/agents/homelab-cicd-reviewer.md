@@ -27,8 +27,11 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   **A k8s role auto-deploys only for an image-pin bump** to a service its own `k8s_autodeploy`
   declaration leaves eligible; every other k8s role change defers and alerts, which is
   deliberate. A failed k8s deploy fails the play's rollout gate, and the deployer then writes
-  `hold_sha` and redeploys the prior pin. So an automerged Renovate image PR is deployed by the
-  next tick, health-gated and rolled back on failure; it does not sit undeployed on master.
+  `hold_sha` and redeploys the prior pin. So an automerged image PR for an eligible
+  Ansible-owned role is deployed by a later tick, within `gitops_deploy_k8s_autodeploy_max_per_tick`,
+  and health-gated; it does not sit undeployed on master. A flux-owned role (`owner` set on its
+  `containers_list` entry) is applied by Flux instead, and a denylisted role's PR opens as
+  `manual —` rather than automerging.
 - **Updates:** Renovate (`renovate.json`) manages version-pinned images + custom regex managers
   (compose tags, prek.toml, galaxy collections, the CI prek pin, and the k8s-defaults manager for
   every `*_image:` var in `ansible/roles/k8s/*/defaults/main.yml`). **Watchtower is retired** —
@@ -65,9 +68,10 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
    robustness + failure handling (rollback, dirty-tree, broad-change defer), secret-registry
    completeness vs the live secret names, Ansible idempotency/lint, notification reliability.
 3. Report each with the source `file:line` + a concrete fix.
-4. Rank a finding you could not verify as Low at most, phrased as a check to run, never as a
-   Medium or High gap. A pin or setting that carries a comment explaining its trade-off is a
-   documented decision. Flag it only when the code contradicts the comment.
+4. A finding that rests on config you could not read (a regex, a packageRule, a file outside
+   what you were shown) is Low at most, phrased as a check to run. A defect visible in what you
+   were shown keeps its real severity. A pin that carries a comment explaining its trade-off is
+   a documented decision, so flag it only when the code you were shown contradicts the comment.
 
 ## Output format
 Findings grouped **High / Medium / Low**. Each: 1-line title, `file:line`, the problem, a concrete
