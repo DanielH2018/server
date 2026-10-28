@@ -464,7 +464,8 @@ for the PRs that carry k3s bumps (Baseline), and it would gate the merge, not th
 gates therefore run inside each Plan's `prepare` container, whatever path merged the PR.
 
 - **One script.** `hosts/lib/k3s_gates.py` is stdlib Python 3.12. Both host packages ship it
-  as `/usr/lib/homelab/k3s_gates.py` in the `k3s-restart` component.
+  as `/usr/lib/homelab/k3s_gates.py` in the `k3s-gates` component, which every package that
+  lists `k3s-restart` also lists (#6413).
 - **In the Plan.** `prepare` uses a digest-pinned `python` image,
   `system_upgrade_gate_image`, and runs as root, the image's user. It declares no
   `volumes` entry. SUC already mounts the host's root at `/host` (Baseline), so it runs
@@ -906,7 +907,8 @@ PR H6.1a records the operator's approval.
   ansible/roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2  (+ a kube-system Role: get one Lease; H1.2 moved the file)
   ansible/roles/k8s/cluster-base/defaults/main.yml       (+ upgrade.cattle.io in k3s_readonly_crd_api_groups)
 + hosts/lib/k3s_gates.py
-+ hosts/components/k3s-restart/                          (unit, timer, k3s_gates.py)
++ hosts/components/k3s-gates/component.yml              (k3s_gates.py, #6413)
++ hosts/components/k3s-restart/                          (unit, timer)
 + hosts/components/k3s-server/component.yml              (k3s_server_config and the file variables)
 + hosts/components/k3s-server/templates/                 (config drop-in, unit drop-in, audit policy, auth config, registries)
 + hosts/components/k3s-agent/component.yml
