@@ -68,7 +68,7 @@ def _install(
     created = []
     state = {}
     calls = {}
-    skip, deque, getset, member, class_dict, type_flags, wrapper, wrapper_self = kinds
+    skip, deque, getset, member, class_dict, type_flags, wrapper, wrapper_self, named = kinds
     scalars = (bool, int, float, str, bytes, type(None))
     unset = object()
     builtin_names, builtin_importer, extension_loader, module_type, imp = loaders
@@ -187,8 +187,9 @@ def _install(
     def signature(root):
         # What differs between two ends' copies of an object, as one string. A breadth-first
         # walk from `root` records, under each path relative to it, an exact `bool`, `int`,
-        # `str` or `None` by value and a container by its length, and descends into every
-        # object no walk copied, such as the handlers of a logger the chain created (#5209).
+        # `str` or `None` by value, a container by its length, a function by its qualified
+        # name, and descends into every object no walk copied, such as a tuple or the handlers
+        # of a logger the chain created (#5209).
         # A reference to an object a walk copied reads as that object's walk path, so a
         # re-pointed `parent` shows (#5209), except under a set item, whose path follows hash
         # order. `_cache` follows which levels were asked about, not what the logger is set
@@ -200,10 +201,18 @@ def _install(
         while level:
             following = []
             for path, value in level:
-                try:
-                    copied = shallow(value)
-                except Exception:
-                    copied = None
+                kind = type(value)
+                if path and issubclass(kind, frozenset):
+                    # Hash order again, so only the length (#5209).
+                    parts.append(path + "#" + str(frozenset.__len__(value)))
+                    continue
+                if path and issubclass(kind, tuple):
+                    copied = [tuple.__getitem__(value, i) for i in range(tuple.__len__(value))]
+                else:
+                    try:
+                        copied = shallow(value)
+                    except Exception:
+                        copied = None
                 if copied is None:
                     if not path:
                         return "?"
@@ -223,6 +232,10 @@ def _install(
                     elif id(item) in where:
                         target = where[id(item)]
                         parts.append(name + "=@" + ("~" if "/~" in target else target))
+                    elif kind in named:
+                        # No walk copies a callable, so name it: a filter or handler method
+                        # replaced by another function shows as a different name (#5209).
+                        parts.append(name + "=&" + named[kind](item))
                     elif id(item) not in seen:
                         seen.add(id(item))
                         following.append((name, item))
@@ -436,6 +449,7 @@ _install(
         type.__dict__["__flags__"],
         types.MethodWrapperType,
         types.MethodWrapperType.__dict__["__self__"],
+        callable_names,
     ),
     c_modules,
     (
@@ -447,7 +461,7 @@ _install(
     ),
 )
 del _install, _process_state, unaudited, counted, readers, decimal_context, c_modules, name
-del partial
+del partial, callable_names
 
 
 def _chain(plugins, roles, preload):

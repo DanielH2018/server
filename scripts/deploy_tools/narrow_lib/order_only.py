@@ -78,12 +78,14 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # such as a logger the base end makes and the head end's filter call disables (#5085). Neither
 # walk sees what the module code wrote to such an object before it, so the report also compares
 # each one's `signature` between the ends (#5107): its `bool`, `int`, `str` and container-length
-# attributes, a reference to a walked object as that object's walk path, and the same of every
-# object below it that no walk copied (#5209). A logger first created while the chain runs sits
+# attributes, a tuple's items, a reference to a walked object as that object's walk path, a
+# function or method by its qualified name, and the same of every object below it that no walk
+# copied (#5209). A logger first created while the chain runs sits
 # in neither walk, so the report compares the `signature` of each such logger (#5085), which
 # reaches its handlers and filters (#5209).
 # The gaps taken: a branch HEAD's data does not exercise; a reference `signature` records to an
-# object whose walk path passes through a set item, which reads the same whatever it names;
+# object whose walk path passes through a set item, which reads the same whatever it names; a
+# function replaced by another of the same qualified name, such as one lambda for another;
 # state inside a C object outside
 # the `readers` table, or in a static C type's members, when its module is one the runner loads
 # before its hook or lists in `c_modules`; process state the runner neither reads nor counts; a

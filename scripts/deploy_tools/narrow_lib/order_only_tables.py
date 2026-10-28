@@ -108,6 +108,42 @@ except ImportError:
     pass
 
 
+
+def _callable_names(function, module, qualname, builtin, builtin_qualname, method, func):
+    # How `signature` names a callable no walk copies, read through C descriptors only, so a
+    # filter replaced by another function shows (#5209). A non-`str` name, which the plugin
+    # can set on a function, reads as `?` rather than running its `__str__` in the hook.
+    def text(name):
+        return name if type(name) is str else "?"
+
+    def name_function(value):
+        return text(module.__get__(value)) + "." + text(qualname.__get__(value))
+
+    def name_method(value):
+        target = func.__get__(value)
+        name = names.get(type(target))
+        return "method " + (name(target) if name is not None and name is not name_method else "?")
+
+    names = {
+        function: name_function,
+        builtin: lambda value: text(builtin_qualname.__get__(value)),
+        method: name_method,
+    }
+    return names
+
+
+callable_names = _callable_names(
+    types.FunctionType,
+    types.FunctionType.__dict__["__module__"],
+    types.FunctionType.__dict__["__qualname__"],
+    types.BuiltinFunctionType,
+    types.BuiltinFunctionType.__dict__["__qualname__"],
+    types.MethodType,
+    types.MethodType.__dict__["__func__"],
+)
+del _callable_names
+
+
 def _process_state(umask, getsignal, signals, getrecursionlimit, getpriority, prio,
                    getsid, getpgrp, ids, get_threshold, isenabled, getswitchinterval,
                    getitimer, timers, sigmask, ncallbacks, affinity, int_digits,
