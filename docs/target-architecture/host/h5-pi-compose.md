@@ -1,6 +1,6 @@
 # H5 — Pi Compose
 
-Status: IN PROGRESS. H5.1 to H5.12 and H5.14 landed (H5.11 as #PRNUM, H5.12 as #6441); H5.10
+Status: IN PROGRESS. H5.1 to H5.12 and H5.14 landed (H5.11 as #6501, H5.12 as #6441); H5.10
 removed `pi-canary`, H5.11 put the Pi's images under Renovate, and H5.12 deleted
 `ansible/roles/containers/` and amended ADR-0013. H5.13 is left.
 Depends on: H3, H4
