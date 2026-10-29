@@ -311,7 +311,7 @@ def test_exit_four_names_the_parked_deployer_when_one_is_parked(
     err = capsys.readouterr().err
     assert rc == DEPLOY_STALE
     assert "primary checkout" in err
-    assert "journalctl -t gitops-deploy" in err
+    assert "journalctl -u gitops-deploy.service" in err
 
 
 def test_exit_four_says_nothing_extra_when_the_deployer_is_converged(
