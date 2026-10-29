@@ -200,24 +200,31 @@ def test_a_hold_written_during_the_wait_ends_it_as_held(world):
 
 
 _502 = "failed to get variable DEPLOY_HOLD: HTTP 502: Server Error"
+_401 = "HTTP 401: Bad credentials"
 
 
-@pytest.mark.parametrize(
-    ("errors", "verdict", "reason"),
-    [
-        ([_502] * 2, "promote", ""),
-        ([_502] * 3, "error", "HTTP 502"),
-        (["HTTP 401: Bad credentials"], "error", "HTTP 401"),
-    ],
-    ids=["5xx-recovers", "5xx-every-attempt", "4xx-not-retried"],
-)
-def test_a_5xx_reading_the_hold_mid_wait_is_retried_and_nothing_else_is(
-    world, errors, verdict, reason
-):
+def _in_flight(world) -> tuple[str, str]:
+    """`prod` on c1 while `last-good` is still c0, so `decide` waits; returns (c1, tip)."""
     c0, c1, _, tip = world.commits
     world.set_prod(c1)
     world.set_last_good(c0)
     world.publish(tip)
+    return c1, tip
+
+
+@pytest.mark.parametrize(
+    ("errors", "verdict", "reason", "unread"),
+    [
+        ([_502] * 2, "promote", "", 0),
+        ([_502] * 4, "error", "HTTP 502", 1),
+        ([_401] * 3, "error", "HTTP 401", 2),
+    ],
+    ids=["5xx-recovers", "5xx-gives-up-after-three-reads", "4xx-read-once"],
+)
+def test_a_5xx_reading_the_hold_mid_wait_is_retried_and_nothing_else_is(
+    world, errors, verdict, reason, unread
+):
+    c1, _ = _in_flight(world)
 
     def settle(now: float) -> None:
         if now == vp.IN_FLIGHT_POLL_S:  # one poll in, GitHub errors on the next reads
@@ -228,6 +235,23 @@ def test_a_5xx_reading_the_hold_mid_wait_is_retried_and_nothing_else_is(
     decision = promote.decide(_reads(world, Clock(settle)), supersede_on=False)
     assert decision.verdict == verdict, decision.reason
     assert reason in decision.reason
+    # `unread` pins how many reads ran: three for a 5xx, one for anything else.
+    assert len(world.run.hold_errors) == unread
+
+
+def test_a_5xx_reading_a_digest_mid_wait_is_retried(world):
+    c1, tip = _in_flight(world)
+
+    def settle(now: float) -> None:
+        if now == vp.IN_FLIGHT_POLL_S:  # the next read of `prod` answers 502 once
+            world.transport.forced["prod"] = 502
+        else:
+            world.transport.forced.pop("prod", None)
+        if now >= 90:
+            world.set_last_good(c1)
+
+    decision = promote.decide(_reads(world, Clock(settle)), supersede_on=False)
+    assert (decision.verdict, decision.target) == ("promote", tip), decision.reason
 
 
 # -- the revert rule -------------------------------------------------------------------------

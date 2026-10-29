@@ -140,12 +140,13 @@ POLL_S = 30
 IN_FLIGHT_WAIT_S = 350 * 60
 IN_FLIGHT_POLL_S = 30
 
-# A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times, so one GitHub
-# 5xx among them ended a wait that would have succeeded (run 40197827680, #6269). A read that
-# fails with a 5xx is tried again, HOLD_RETRY_S apart, up to HOLD_READ_ATTEMPTS reads in all.
-# Any other failure, and a missing or empty variable, still ends the run at once.
-HOLD_READ_ATTEMPTS = 3
-HOLD_RETRY_S = 10
+# A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times and the
+# registry's tags two or three times as often, so one 5xx among them ended a wait that would
+# have succeeded (run 40197827680, #6269). A read in the wait that fails with a 5xx is tried
+# again, READ_RETRY_S apart, up to READ_ATTEMPTS reads in all. Any other failure, and a
+# missing or empty variable, still ends the run at once.
+READ_ATTEMPTS = 3
+READ_RETRY_S = 10
 _SERVER_ERROR = re.compile(r"\bHTTP 5\d\d\b")
 
 # `<T> failed=<names>`, the one hold form the revert rule may pass. `settle` writes it.
@@ -549,28 +550,30 @@ class Settled:
     in_flight: bool = False
 
 
-def _read_hold(
-    hold: Callable[[], str | None], sleep: Callable[[float], None]
-) -> str | None:
-    """DEPLOY_HOLD's value, read again after a GitHub 5xx up to HOLD_READ_ATTEMPTS reads.
+def _read[T](read: Callable[[], T], what: str, sleep: Callable[[float], None]) -> T:
+    """What `read` returns, read again after a 5xx up to READ_ATTEMPTS reads.
+
+    Args:
+        read: one read of DEPLOY_HOLD or of a tag's digest.
+        what: the name the retry message gives the read.
+        sleep: waits READ_RETRY_S between reads.
 
     Raises:
         forge.ForgeError: the read failed with anything but a 5xx, or with a 5xx on every
             attempt.
     """
-    for _ in range(HOLD_READ_ATTEMPTS - 1):
+    for _ in range(READ_ATTEMPTS - 1):
         try:
-            return hold()
+            return read()
         except forge.ForgeError as err:
             if not _SERVER_ERROR.search(str(err)):
                 raise
             print(
-                f"promote.py: reading {forge.HOLD_VARIABLE} failed ({err}); "
-                f"retrying in {HOLD_RETRY_S}s",
+                f"promote.py: reading {what} failed ({err}); retrying in {READ_RETRY_S}s",
                 file=sys.stderr,
             )
-            sleep(HOLD_RETRY_S)
-    return hold()
+            sleep(READ_RETRY_S)
+    return read()
 
 
 # DECIDED: a hold without a reset (H1.1b) leaves `prod` on the failed T while `last-good` stays
@@ -591,7 +594,8 @@ def wait_settled(
 
     Each poll re-reads the hold, so a `failed=` hold that a `settle` writes ends the wait. A
     `prod` that names the `held` tag's digest ends it too: a hold without a reset settled it.
-    A read that fails with a GitHub 5xx is retried (`_read_hold`) before it ends the run.
+    A read of the hold or a digest that fails with a 5xx is retried (`_read`) before it ends
+    the run.
 
     Args:
         hold: DEPLOY_HOLD's value, or None when the variable is missing.
@@ -603,12 +607,12 @@ def wait_settled(
             it answers True under a `none` hold, the wait ends at once with `in_flight`.
 
     Raises:
-        Whatever `digest` raises, and whatever `hold` raises other than a 5xx it recovers
-        from within HOLD_READ_ATTEMPTS reads.
+        Whatever `hold` and `digest` raise, other than a 5xx they recover from within
+        READ_ATTEMPTS reads.
     """
     started = clock()
     while True:
-        value = _read_hold(hold, sleep)
+        value = _read(hold, forge.HOLD_VARIABLE, sleep)
         if value is None:
             return Settled(("error", f"{forge.HOLD_VARIABLE} does not exist"))
         value = value.strip()
@@ -617,10 +621,11 @@ def wait_settled(
         held = None if value == "none" else revertible(value, revert_rule)
         if value != "none" and held is None:
             return Settled(("held", f"{forge.HOLD_VARIABLE}={value}"))
-        prod, last_good = digest(PROD_TAG), digest(LAST_GOOD_TAG)
+        prod = _read(lambda: digest(PROD_TAG), PROD_TAG, sleep)
+        last_good = _read(lambda: digest(LAST_GOOD_TAG), LAST_GOOD_TAG, sleep)
         if last_good is None or prod is None or prod == last_good:
             return Settled(None, held, prod, last_good, value)
-        if digest(HELD_TAG) == prod:
+        if _read(lambda: digest(HELD_TAG), HELD_TAG, sleep) == prod:
             return Settled(None, held, prod, last_good, value)
         if supersedable is not None and value == "none" and supersedable(prod):
             return Settled(None, held, prod, last_good, value, in_flight=True)
