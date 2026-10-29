@@ -11,7 +11,7 @@ Run: uv run pytest hosts/lib/tests/test_homelab_reconcile_restart.py
 import json
 
 import pytest
-from _reconcile_arms import live_unit
+from _reconcile_arms import PROM, TEXTFILE, live_unit
 from _reconcile_host import SECRETS_UNIT, Node
 
 from renderer.renderer_lib import host as host_mode
@@ -195,6 +195,31 @@ def test_a_restart_that_fails_queues_the_unit_and_the_next_run_restarts_it_once(
     assert retried.returncode == 0, retried.stderr
     assert names(node, NUT) == [["reset-failed", NUT], ["restart", NUT]]
     assert node.pending() == []
+
+
+def test_each_restart_is_timed_in_the_metrics_file_even_when_it_fails(node):
+    """A rule compares this time with the unit's own result, so a restart that wrote no result
+    is visible whether or not systemctl reported a failure (#6342)."""
+    (node.root / TEXTFILE).mkdir(parents=True)
+    series = (
+        'homelab_host_unit_started_seconds{host="daniel-pi",unit="nut-monitor.service"}'
+    )
+    settled(node)
+    record = node.applied()
+    assert record["started"][NUT] > 1
+    record["started"][NUT] = 1  # long before this run
+    node.applied_path.write_text(json.dumps(record))
+    node.write_dropin(NUT, "[Service]\nEnvironment=CHANGED=1\n")
+    node.state["fail"] = [f"restart {NUT}"]
+
+    assert node.run().returncode == 1
+
+    line = next(
+        line
+        for line in (node.root / PROM).read_text().splitlines()
+        if line.startswith(series)
+    )
+    assert int(line.rsplit(" ", 1)[1]) > 1, "the failed restart moved the time on"
 
 
 # The windowed exemption.
