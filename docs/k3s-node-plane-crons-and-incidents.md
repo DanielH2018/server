@@ -149,6 +149,11 @@ unit file wholesale. Raising the unit's `SyslogLevel` to notice was the alternat
 rejected: notice passes the rsyslog info filter, so every k3s line would land in `/var/log/syslog`
 and ship to Loki. `ansible/tests/setup/test_k3s_unit_logging.py` holds both node types to it.
 
+The file's warn, error and fatal lines still reach Loki, filtered, as `loki-homelab`'s
+`{job="k3s"}` stream (#6177), so a crash loop's reason outlives the file's four rotations.
+Alloy tails the file and drops every info line before it ships. The filter and its measured
+volume are in `ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2`.
+
 ## The apiserver's OIDC authenticator can wedge for the life of the boot
 
 Nothing pages when it does (#2749). `k3s_oidc_issuer_urls` in
