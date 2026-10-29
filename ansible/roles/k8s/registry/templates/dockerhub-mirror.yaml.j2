@@ -73,8 +73,7 @@ spec:
             # (registry-gc.sh, ghcr-mirror-prune.sh, its keep set and warm pass), and that
             # machinery reads ghcr.io refs only. The TTL counts from the fetch, so an image
             # fetched more than one TTL ago and not pulled since is a gap again; the default 168h
-            # would make that gap a week. Moving to a zero TTL with a GC is filed for later in
-            # the PR that added this mirror.
+            # would make that gap a week. A zero TTL with a GC for this store is #6536.
             - name: REGISTRY_PROXY_TTL
               value: "{{ registry_k8s_dockerhub_mirror_ttl }}"
           volumeMounts:
