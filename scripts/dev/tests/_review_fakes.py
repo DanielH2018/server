@@ -39,6 +39,8 @@ def _finding(title, severity="high", confidence=0.9, category="correctness"):
         "confidence": confidence,
         "category": category,
         "detail": "fails on an empty list",
+        # The line the delta review quotes; `FakeRunner.tree` holds it at the fix head.
+        "evidence": "boom = 1",
     }
 
 
@@ -64,6 +66,9 @@ class FakeRunner:
         self.claude = []  # (argv, stdin, phase file at call time)
         self.comments = []
         self.git = []
+        # What `git show <rev>:<path>` answers: the file at the fix head, by path. A path
+        # absent from it has no such file there.
+        self.tree = {"scripts/x.py": "a\nb\nboom = 1\nd\n"}
         # The landing the pipeline runs: each `bash -l` command, the VERDICT line land.sh's
         # log ends on ("" for none), land.sh's exit code, and cc-wait's exit codes in order.
         self.lands = []
@@ -97,6 +102,13 @@ class FakeRunner:
         argv = unprefixed(argv)
         if argv[0] == "git":
             self.git.append(argv[3:])
+            if argv[3] == "show":
+                path = argv[4].partition(":")[2]
+                if path not in self.tree:
+                    return subprocess.CompletedProcess(
+                        argv, 128, "", "fatal: no such path"
+                    )
+                return subprocess.CompletedProcess(argv, 0, self.tree[path], "")
             if "merge-base" in argv:
                 out = "base0"
             elif "symbolic-ref" in argv:
