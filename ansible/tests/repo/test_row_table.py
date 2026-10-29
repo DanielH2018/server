@@ -6,14 +6,16 @@ table; these prove it through `Census`, whose subjects come from the tracked tre
 Run: uv run pytest ansible/tests/repo/test_row_table.py
 """
 
+import ast
 from dataclasses import replace
 
+import pytest
 from _row_table import (
+    REPO,
     Census,
     Subject,
     check,
-    drop_parsed,
-    parse,
+    Sharing,
     proof_problems,
     tracked,
 )
@@ -86,10 +88,64 @@ def test_tracked_reads_this_checkout():
     assert "ansible/tests/_row_table.py" in tracked("ansible/tests/*.py")
 
 
-def test_parse_shares_one_tree_until_drop_parsed_releases_it():
-    source = "x = 'test_row_table drop_parsed sample'\n"
-    first = parse(source)
-    assert parse(source) is first
-    drop_parsed()
-    assert parse.cache_info().currsize == 0
-    assert parse(source) is not first
+@pytest.fixture
+def parses(monkeypatch):
+    """Each `ast.parse` source, counted at the standard library's own entry point."""
+    seen = []
+    real = ast.parse
+
+    def counting(source, *args, **kwargs):
+        seen.append(source)
+        return real(source, *args, **kwargs)
+
+    monkeypatch.setattr(ast, "parse", counting)
+    return seen
+
+
+def _names_row(sharing: Sharing, name: str, census=()) -> Census:
+    """A shared-row candidate whose offence reads the subject's tree."""
+    return _toy(
+        name=name,
+        files=lambda: list(census),
+        offence=lambda s: [
+            f"{name} {n.id}"
+            for n in ast.walk(sharing.parse(s.text))
+            if isinstance(n, ast.Name)
+        ],
+    )
+
+
+def test_shared_rows_find_their_hits_from_one_parse_and_keep_no_tree(parses):
+    sharing = Sharing()
+    first, second = sharing.share(
+        (_names_row(sharing, "one"), _names_row(sharing, "two"))
+    )
+    subject = Subject("m.py", "x = y\n")
+    assert first.offence(subject) == ["one x", "one y"]
+    assert second.offence(subject) == ["two x", "two y"]
+    assert parses == ["x = y\n"]
+    assert sharing.held == {}
+
+
+def test_a_shared_row_that_raises_fails_only_its_own_row(parses):
+    sharing = Sharing()
+    textual, parsing = sharing.share(
+        (
+            _toy(name="textual", offence=lambda s: ["hit"] if "for" in s.text else []),
+            _names_row(sharing, "parsing"),
+        )
+    )
+    subject = Subject("m.py", "for x in y:\n")
+    assert textual.offence(subject) == ["hit"]
+    with pytest.raises(SyntaxError):
+        parsing.offence(subject)
+
+
+def test_a_census_module_read_ahead_is_parsed_once(parses):
+    sharing = Sharing()
+    (row,) = sharing.share((_names_row(sharing, "one", census=["m.py"]),))
+    sharing.parse_ahead(REPO / "m.py", "x = 1\n")
+    sharing.parse_ahead(REPO / "elsewhere.py", "z = 1\n")
+    assert row.offence(Subject("m.py", "x = 1\n")) == ["one x"]
+    assert parses == ["x = 1\n", "z = 1\n"]
+    assert sharing.held == {}, "a module outside the census was held after its parse"

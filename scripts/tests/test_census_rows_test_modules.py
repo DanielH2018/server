@@ -21,9 +21,9 @@ from _row_table import (
     Census,
     Subject,
     check,
-    drop_parsed,
     lines_matching,
     proof_problems,
+    share,
 )
 from _test_module_rules import (
     GIT_SCRUB,
@@ -243,12 +243,9 @@ ROWS = (
     ),
 )
 
-
-# The shared trees are about 540 MiB, and the worker that ran this file goes on to run others.
-@pytest.fixture(autouse=True, scope="module")
-def _release_parsed_trees():
-    yield
-    drop_parsed()
+# Every row here and in its sibling file reads the same census, so they judge each module in
+# one pass over one tree (#6437, #6465).
+ROWS = share(ROWS)
 
 
 _IDS = [row.name for row in ROWS]

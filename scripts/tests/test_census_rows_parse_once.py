@@ -3,7 +3,8 @@
 Every detector row in `test_census_rows_test_modules.py` and `test_census_rows_test_renders.py`
 reads the same census, `pytest_only_modules()`. Parsing dominates the rows' cost: `ast.parse`
 was 5.15s of the 9.23s one row took over 1620 modules (#6437). A row that reparses what another
-row already parsed pays that again, so the tree is shared across the rows of both files.
+row already parsed pays that again, so `share` in `ansible/tests/_row_table.py` has the rows of
+both files find their hits in one pass over one tree per module.
 
 The rows run in a fresh interpreter. In this one, an earlier test on the same xdist worker may
 already have parsed the sample, and a count of zero would then hide whether the instrument saw
@@ -23,6 +24,21 @@ from lib.repo_paths import REPO
 
 # Enough modules that every row's selector keeps some, few enough to stay a unit test.
 SAMPLE = 60
+
+# A census module another census module imports is read twice: once for the importer's names,
+# once on its own turn. Each pair is (importer, imported), and the sample keeps both. In the
+# first pair the importer sorts first, so the imported module is read ahead of its turn. In
+# the second the imported module's turn comes first, and the importer reads its names later.
+IMPORT_PAIRS = (
+    (
+        ".claude/hooks/tests/test_hook_shim_fail_open.py",
+        ".claude/hooks/tests/test_run_hook.py",
+    ),
+    (
+        "ansible/roles/k8s/registry/tests/test_registry_verify.py",
+        "ansible/roles/k8s/registry/tests/_registry_fakes.py",
+    ),
+)
 
 # Runs every row of both census files over the sample, each row through its own selector, and
 # prints how many times each sampled module's text was compiled to an AST.
@@ -58,7 +74,10 @@ print(json.dumps(parses))
 
 
 def test_every_census_row_of_both_files_shares_one_parse_per_module():
-    sample = pytest_only_modules()[:SAMPLE]
+    census = pytest_only_modules()
+    pairs = [rel for pair in IMPORT_PAIRS for rel in pair]
+    assert set(pairs) <= set(census), f"an import pair left the census: {pairs}"
+    sample = sorted({*census[:SAMPLE], *pairs})
     tests_dir = REPO / "scripts" / "tests"
     result = run(
         [sys.executable, "-c", _COUNT_PARSES, json.dumps(sample)],
