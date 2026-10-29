@@ -1,0 +1,87 @@
+---
+# The daily snapshot of the per-PR pipeline timeline (issue #5661). Two of its inputs are in
+# daniel-box's journal, which rotates after about ten days, so a day nobody runs the joiner is
+# lost. The rule is scripts/dev/pipeline_timeline.py and this role's CLAUDE.md contract.
+# Imported from main.yml. Armed only in daniel-box's host_vars; the alert unit reads the
+# webhook file claude-rc writes.
+
+- name: Install the pipeline timeline units
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - claude-pipeline-timeline.service
+    - claude-pipeline-timeline.timer
+  become: true
+  when: claude_code_pipeline_timeline_enabled
+  notify: Reload systemd for claude_code
+
+- name: Install the pipeline timeline failure alert
+  tags: [claude_code]
+  when: claude_code_pipeline_timeline_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: claude-pipeline-timeline
+    alert_unit_description: Alert when the pipeline timeline snapshot fails
+    alert_unit_message: "claude-pipeline-timeline failed on {{ inventory_hostname }}: GitHub or the journal could not be read, so a day of the journal inputs to the PR timeline may rotate away unsaved. Check `journalctl -u claude-pipeline-timeline`."
+    alert_unit_env_dir: /etc/claude-rc
+
+- name: Enable and start the pipeline timeline timer
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-pipeline-timeline.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: claude_code_pipeline_timeline_enabled
+
+# The way out: false stops the timer and removes all three units. The snapshots already
+# written stay in ~/.local/state/pipeline-timeline/, because they are the record.
+- name: Check whether a pipeline timeline timer is installed
+  tags: [claude_code]
+  ansible.builtin.stat:
+    path: /etc/systemd/system/claude-pipeline-timeline.timer
+  register: claude_code_pipeline_timeline_timer_file
+  become: true
+  when: not claude_code_pipeline_timeline_enabled
+
+# Guarded on the file: systemd refuses to stop a unit it has never heard of, which is every
+# host that was never armed.
+- name: Stop and disable the pipeline timeline timer when disarmed
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-pipeline-timeline.timer
+    enabled: false
+    state: stopped
+  become: true
+  when:
+    - not claude_code_pipeline_timeline_enabled
+    - claude_code_pipeline_timeline_timer_file.stat.exists
+
+- name: Remove the pipeline timeline units when disarmed
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop:
+    - claude-pipeline-timeline.service
+    - claude-pipeline-timeline.timer
+    - claude-pipeline-timeline-alert.service
+  become: true
+  when: not claude_code_pipeline_timeline_enabled
+  notify: Reload systemd for claude_code
+
+# The run's textfile must not outlive the timer: a disarmed host's rule is deleted with the
+# flag, and a stale file would otherwise read as a current verdict.
+- name: Remove the pipeline timeline's heartbeat textfile when disarmed
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: /var/lib/node-exporter-textfile/claude-pipeline-timeline.prom
+    state: absent
+  become: true
+  when: not claude_code_pipeline_timeline_enabled

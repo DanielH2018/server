@@ -222,6 +222,13 @@ checks and the merge live in `land.sh`, and the lander does not re-implement the
   (`scripts/dev/fanout_lib/notify.py`) starts the alert instead, and the polkit rule
   `50-claude-fanout-alert.rules` lets `ubuntu` and each agent user start it for the paging
   states only. `claude_code_fanout_alert_enabled: false` removes the unit and the rule.
+- **A session that ends on an API error pages Discord with its own message**, as
+  `claude-stop-alert@<cause>.service` (#6021). The StopFailure hook runs as a user and cannot
+  read the webhook, so it starts the alert, and the polkit rule `50-claude-stop-alert.rules`
+  lets `ubuntu` and each agent user start an instance named `[a-z0-9_]+` and nothing else.
+  The message speaks about a session. Before this unit the hook borrowed `fanout-alert@`,
+  whose body pointed at `fanout.py place status`. `claude_code_stop_alert_enabled: false`
+  removes the unit and the rule.
 
 ### The approval floor
 

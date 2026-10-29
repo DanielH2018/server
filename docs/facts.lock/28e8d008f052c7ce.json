@@ -1,15 +1,16 @@
 {
-  "checksum": "8d67f2bd4df8397374519fa46282835f66cdaf8abde3c79b386efe23aa30f2c7",
+  "checksum": "292c77be00dd86d51d5fc69a31c5fae264c3113866de7718a7496fa2897562c3",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/claude_code/CLAUDE.md#What monitoring does and does not cover",
   "row": {
     "atoms": {
       "ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py": "48f17c21ab36c22b699469adf3a718df65c81364c96a95e923bd220384ae9fd9",
+      "ansible/tests/setup/test_claude_stop_alert.py": "d15b43d78bdf4351f7102861f6361f96b8e116866373fcef13a5dfdd5287300d",
       "ansible/tests/setup/test_claude_timer_rule_literals.py": "8b0494b0df8515af99099cbc5d91577d88611eb7052105ab2f9f130bdb905a4a",
       "ansible/tests/setup/test_setup_crons_write_a_textfile.py": "8adfbceb93a698d31d320ec6bdff2e3bf0bd9c898e6dc7584fe8a7c74ace3691",
       "docs/claude-code-rc-caps.md": "2d515326fa8d32d682265f2a3e8361c3bd241b199b3810fcec388c2b120e8245"
     },
     "python": "3.14",
-    "verified_sha": "7d8f436d4"
+    "verified_sha": "ea8d28624"
   }
 }

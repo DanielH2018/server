@@ -1,0 +1,23 @@
+// Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+//
+// Lets the accounts that run Claude Code sessions START the page a session sends when it ends
+// on an API error, and nothing else. The session's StopFailure hook runs as a user, which
+// cannot read the root-only webhook, so it asks for the page by starting
+// claude-stop-alert@<cause>.service, which holds the webhook (#6021). The instance is the
+// error cause the hook writes, lowercase letters, digits and underscores, so the most a
+// session can post is a page opening with that word.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return undefined;
+    }
+    if ({{ ([sys_user] + claude_code_agents_present) | unique | list | to_json }}.indexOf(subject.user) < 0) {
+        return undefined;
+    }
+    if (!/^claude-stop-alert@[a-z0-9_]+\.service$/.test(action.lookup("unit"))) {
+        return undefined;
+    }
+    if (action.lookup("verb") !== "start") {
+        return undefined;
+    }
+    return polkit.Result.YES;
+});

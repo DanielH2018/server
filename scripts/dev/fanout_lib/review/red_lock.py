@@ -76,6 +76,15 @@ in an imported helper module. An older function a red node calls stays locked, s
 positive, a weakened pre-existing test the red node calls, is still refused. Only literal data
 counts, because any other module-level statement runs code at import around every red test.
 
+DECIDED: a table the fix appends may hold lambdas when no red test reads its name (#5520).
+There the fix appended `_OTHER_READS = {...: ([...], lambda ln: ...)}`, read only by the test
+appended after it, and the lock refused it as not a constant. `_table` admits a value that
+runs none of the fix's code at import: literals, containers, plain names and lambdas, whose
+default values must be inert too, since defining a lambda runs nothing else. Its names get
+`_constant_problem`'s rebinding rule. Admitting a call or an operator was rejected, because
+each can run the fix's code at import, which `_literal` already rules out for a constant.
+Only an addition qualifies: a table in the red version stays locked, as `_locked` leaves it.
+
 A CONFTEST.PY (#4542). `forbidden_conftest_change` lets a fix only delete from a `conftest.py`:
 a fixture that is not autouse, that no red file names or requests through the conftests, and
 that is in no red node's fixture closure, a helper or constant nothing kept names, and an
@@ -182,11 +191,12 @@ def forbidden_change(
     hoisted = _hoistable(kept)
     reads = _reads_problems(_body(head))
     for stmt in added:
-        problem = (
-            _constant_problem(stmt, used, lock) or reads.get(id(stmt), "")
-            if _constant(stmt)
-            else _addition_problem(stmt, used, hoisted)
-        )
+        if _constant(stmt):
+            problem = _constant_problem(stmt, used, lock) or reads.get(id(stmt), "")
+        elif _table(stmt):
+            problem = _constant_problem(stmt, used, lock, _targets(stmt))
+        else:
+            problem = _addition_problem(stmt, used, hoisted)
         if problem:
             return f"adds `{_label(stmt)}`, which {problem}"
     return ""
@@ -268,12 +278,53 @@ def _literal(node: ast.expr) -> bool:
     return isinstance(node, kinds) and all(_literal(c) for c in children)
 
 
-def _constant_problem(stmt: ast.stmt, used: set[str], lock: _Lock) -> str:
-    """Why a constant the red version lacks could change how a red test runs, or ""."""
-    for name in sorted(_binds(stmt)):
+def _constant_problem(
+    stmt: ast.stmt, used: set[str], lock: _Lock, names: set[str] | None = None
+) -> str:
+    """Why an assignment the red version lacks could change how a red test runs, or "".
+
+    `names` is what the assignment binds, which a constant's `_binds` already says.
+    """
+    for name in sorted(_binds(stmt) if names is None else names):
         if name in lock.direct or (name in used and name not in lock.free):
             return f"rebinds `{name}`"
     return ""
+
+
+def _table(stmt: ast.stmt) -> bool:
+    """Whether `stmt` binds plain names to a value whose evaluation runs none of the fix's code.
+
+    That is a constant that may also hold lambdas, since defining a lambda runs nothing but
+    its default values (#5520). A name read, an operator, a call, an attribute and a subscript
+    all stay out: each can run the fix's code at import. A dunder or a name in `PYTEST_NAMES`
+    is never a table's, since pytest reads it.
+    """
+    return (
+        isinstance(stmt, ast.Assign)
+        and all(isinstance(t, ast.Name) for t in stmt.targets)
+        and not any(n.startswith("__") or n in PYTEST_NAMES for n in _targets(stmt))
+        and _inert(stmt.value)
+    )
+
+
+def _inert(node: ast.expr) -> bool:
+    if isinstance(node, ast.Lambda):
+        defaults = [*node.args.defaults, *node.args.kw_defaults]
+        return all(d is None or _inert(d) for d in defaults)
+    if isinstance(node, ast.UnaryOp):
+        return isinstance(node.operand, ast.Constant)
+    if not isinstance(node, (ast.Constant, ast.Name, *_CONTAINERS)):
+        return False
+    # `{**x}` calls `x.keys()`.
+    if isinstance(node, ast.Dict) and None in node.keys:
+        return False
+    return all(_inert(c) for c in ast.iter_child_nodes(node) if isinstance(c, ast.expr))
+
+
+def _targets(stmt: ast.stmt) -> set[str]:
+    """The plain names an assignment binds."""
+    targets = stmt.targets if isinstance(stmt, ast.Assign) else []
+    return {t.id for t in targets if isinstance(t, ast.Name)}
 
 
 def _reads_problems(body: list[ast.stmt]) -> dict[int, str]:

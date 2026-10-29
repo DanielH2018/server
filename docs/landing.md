@@ -131,6 +131,12 @@ cancelled, so `ci.yml`'s concurrency group did not cause it.
   line saying it did, and the toggled run's verdict then arrives inside the existing
   `merge_timeout` budget (#6546). A re-run of the skipped run would replay its draft event and
   skip again, which is why the landing toggles instead.
+- The landing does not toggle while the head has a `ci.yml` run that did not skip: one queued,
+  in progress, or finished with any other conclusion. It prints why and restarts the grace.
+  The ready run's `prek` gate gets its check run only once every job it needs has finished,
+  so for those minutes `await_ci` reads only the draft run's skipped gate. A toggle then
+  cancels the ready run: on PR 6443 it cancelled a run 32 seconds old, and on PR 6531 one 20
+  minutes old (#6566). A failed read of the runs also stops the toggle.
 - A second draft-skip on the same head after the toggle ends at `merge-timeout`, whose message
   says the toggle already ran. A toggle that fails also ends there, and names a PR left as a
   draft, because a draft PR never merges. The remedy is then a push, or the same two commands

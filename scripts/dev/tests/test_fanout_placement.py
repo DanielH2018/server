@@ -123,6 +123,14 @@ def test_refuses_when_neither_has_headroom():
     assert "daniel-box" in str(exc.value) and "daniel-server" in str(exc.value)
 
 
+def test_the_reservation_sits_between_the_measured_peak_and_2_25_gib():
+    """A host with 2.25 GiB free takes a batch; one with 1.75 GiB, under the 1781 MiB anon
+    peak the per-batch series recorded in the week to 2026-10-29 (#5667), does not."""
+    assert place(["a"], [_r("h", 10 * GIB, 7.75 * GIB)]) == [("a", "h")]
+    with pytest.raises(NoHeadroom):
+        place(["a"], [_r("h", 10 * GIB, 8.25 * GIB)])
+
+
 def test_the_reservation_is_subtracted_before_the_next_batch():
     """Six batches do not pile onto one host: each placement costs that host a reservation."""
     readings = [

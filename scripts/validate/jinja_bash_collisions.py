@@ -24,6 +24,7 @@ Run directly or via the ``validate-jinja-bash-collisions`` prek hook. Exits non-
 template carries the collision.
 """
 
+from collections.abc import Sequence
 import re
 import sys
 from pathlib import Path
@@ -98,13 +99,13 @@ def templates(root: Path = ANSIBLE) -> list[Path]:
     return sorted(p for p in root.rglob("*.j2") if not p.is_relative_to(vendored))
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Sequence[str] = ()) -> int:
     """Scan every template and report each `${#` collision.
 
     Returns:
         0 if no template carries the collision, 1 otherwise.
     """
-    answer_help(__doc__, argv)
+    answer_help(__doc__, list(argv))
     found = 0
     scanned = templates()
     for tpl in scanned:
@@ -121,4 +122,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(_sys.argv[1:]))

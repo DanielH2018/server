@@ -60,6 +60,11 @@ PRODUCERS = {
         "claude-fanout-server-lander",
         "claude_code_fanout_server_lander_interval",
     ),
+    "ClaudePipelineTimelineNotReporting": (
+        "claude-pipeline-timeline.service.j2",
+        "claude-pipeline-timeline",
+        "claude_code_pipeline_timeline_interval",
+    ),
 }
 
 
@@ -112,6 +117,7 @@ def test_the_deadlines_are_two_periods_plus_the_run_timeout_plus_300s():
         "ClaudeMemorySyncNotReporting": 2100,
         "ClaudeTriagePollNotReporting": 660,
         "ClaudeFanoutLanderNotReporting": 3300,
+        "ClaudePipelineTimelineNotReporting": 174900,
     }
 
 
@@ -126,6 +132,7 @@ ARMED_BY = {
     "ClaudeMemorySyncNotReporting": ("claude_code_memory_sync_enabled",),
     "ClaudeTriagePollNotReporting": ("claude_code_triage_enabled",),
     "ClaudeFanoutLanderNotReporting": ("claude_code_fanout_server_lander_enabled",),
+    "ClaudePipelineTimelineNotReporting": ("claude_code_pipeline_timeline_enabled",),
 }
 
 

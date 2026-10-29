@@ -257,7 +257,7 @@ The dispatcher scores a host on memory headroom, and an agent is throttled by tw
 rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as
 a transient user service. It reads both and takes the smaller headroom, so the tighter cap
 decides and a host the fleet number alone would allow can still be refused. Each placement
-spends one 2.5 GiB reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`),
+spends one 2 GiB reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`),
 and the host with the most left takes the next batch.
 
 `clean` records each removal in the manifest, because the act destroys its own evidence: the
