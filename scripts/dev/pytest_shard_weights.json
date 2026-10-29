@@ -713,6 +713,7 @@
  "ansible/tests/services/test_registry_gc_dockerhub_mirror.py": 0.17,
  "ansible/tests/services/test_registry_gc_ghcr_mirror.py": 0.03,
  "ansible/tests/services/test_registry_gc_state_file_is_json.py": 0.01,
+ "ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py": 0.4,
  "ansible/tests/services/test_scrape_target_rule_jobs.py": 0.3,
  "ansible/tests/services/test_scrutiny_influxdb_policy.py": 0.0,
  "ansible/tests/services/test_scrutiny_rollouts.py": 0.01,
