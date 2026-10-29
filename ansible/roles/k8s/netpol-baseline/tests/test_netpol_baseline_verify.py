@@ -8,6 +8,7 @@ run the Job census over the result. The plan is docs/target-architecture/deploy/
 Run: uv run pytest ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_verify.py
 """
 
+import contextlib
 import json
 import re
 import socket
@@ -72,16 +73,24 @@ def servers():
         server.server_close()
 
 
-def _closed_port() -> int:
-    """A local port nothing listens on, so a connect to it is refused."""
+@contextlib.contextmanager
+def _closed_port():
+    """Yield a local port nothing listens on, so a connect to it is refused.
+
+    The socket stays bound, without listening, until the block exits. Linux refuses a connect
+    to a bound port that is not listening, and no other socket can bind it meanwhile. A
+    released port can be handed to a stand-in server, in this test or in another xdist worker,
+    and a refused row then reads an answer (#6480).
+    """
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+        yield sock.getsockname()[1]
 
 
 @pytest.fixture
-def closed_url() -> str:
-    return f"http://127.0.0.1:{_closed_port()}/"
+def closed_url():
+    with _closed_port() as port:
+        yield f"http://127.0.0.1:{port}/"
 
 
 @pytest.fixture
@@ -127,9 +136,10 @@ def _env(servers, closed_url, rows=None, **over) -> dict[str, str]:
 
 def _legs(env):
     """The legs with no retries, and the DNS leg dialling a closed port rather than this host's 53."""
-    return verify.legs(
-        env, control_retry_seconds=0, sentinel_retry_seconds=0, dns_port=_closed_port()
-    )
+    with _closed_port() as port:
+        return verify.legs(
+            env, control_retry_seconds=0, sentinel_retry_seconds=0, dns_port=port
+        )
 
 
 def test_a_fenced_cluster_passes(servers, closed_url):

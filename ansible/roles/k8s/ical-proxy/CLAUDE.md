@@ -12,7 +12,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux's render pulls `ghcr.io/danielh2018/ical-proxy:<content tag>`**, with
+- **Flux's render pulls `ghcr.io/danielh2018/<name>:<content tag>` for `ical-proxy`**, with
   `imagePullPolicy: IfNotPresent` (D5.4b), and the *Image* line above names that repository.
   The role's defaults still name the in-cluster registry, for the handback. The image is built
   from `templates/Dockerfile.j2`, with the Flask app in `files/ical_proxy.py`, shipped into the

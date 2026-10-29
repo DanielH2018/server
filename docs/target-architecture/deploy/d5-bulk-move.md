@@ -375,10 +375,12 @@ also depends on H2's family PRs for six roles, as *Host-side rows* lists, and ne
   authelia's, D3's `mqtt_password_hash` colon refusal gates mosquitto's, and the `_push_token`
   format refusal from uptime-kuma's conversion PR (#5712) gates uptime-kuma's (*How each kind
   of task moves*).
-- M2's PR 4b gates dri-device-plugin's flip. dri-device-plugin's verify is M2's
-  `K8sExtendedResourceMissing`, which carries `verify="true"` and `shadow: "true"`. The soak
-  reads neither a shadow rule's `for:` nor its alert, so the verify is inert until PR 4b drops
-  `shadow` from k8s-workloads. M2 does not depend on D5, so the edge adds no loop.
+- M2's PR 4b gated dri-device-plugin's flip, and it landed at `39c163646`. dri-device-plugin's
+  verify is M2's `K8sExtendedResourceMissing`, which carries `verify="true"`. The soak reads
+  neither a shadow rule's `for:` nor its alert, so the verify was inert until PR 4b dropped
+  `shadow` from k8s-workloads (#5530).
+  `scripts/renderer/tests/test_renderer_soak.py::test_the_soak_verifies_dri_device_plugin_through_its_unshadowed_rule`
+  fails if the rule is shadowed again. M2 does not depend on D5, so the edge adds no loop.
 - R2 PR 7b and a green run of D3.3d's `sops-manifest-type-proof` job gate qbittorrent's flip,
   because R2 PR 7b moves `mullvad_account` into a dedicated SOPS Secret whose all-digit value
   only that job measures (*How each kind of task moves*). Neither R2 nor D3 waits on D5, so
@@ -1945,8 +1947,11 @@ promotion, an automerged one included, without having to page.
   only writer of Grafana's `deploy-annotation` line, and from the flux PR on `deploy.sh`
   deploys nothing in the cluster. `promote` cannot take over, because it runs on GitHub's
   runners and cannot write daniel-box's syslog. So the soak Job writes the cluster's
-  annotation. When it posts `success`, and only then, it prints one logfmt line to stdout:
+  annotation. When it posts `success`, it prints one logfmt line to stdout:
   `event=deploy services=flux sha=<R's first eight hex characters> result=ok source=flux`.
+  D5.3b3 printed it on success only. #6164 reversed that: a failed or erroring soak prints
+  the same line with `result=fail` and `duration_s`, so a failed promotion also draws a
+  marker (#5881).
   Alloy ships the line to loki-homelab under `loki_streams.cluster_pods`' job, `k8s`.
     - **A second annotation query.** observability's `observability_deploy_annotation_expr`
       selects `{job="syslog"}`, and a LogQL log query has one stream selector. So D5.3b3 adds
@@ -1955,8 +1960,8 @@ promotion, an automerged one included, without having to page.
       `ansible/filter_plugins/grafana_dashboards.py` injects both. The renderer names the
       soak Job's one container `soak`, so the selector reads a fixed value. The stream selector
       scopes the query, so a dashboard load reads only the soak's lines, never every pod's.
-    - **Tests.** `test_deploy_annotations.py` pins the soak's line shape and its
-      success-only print, with a failing soak fixture that prints nothing.
+    - **Tests.** `test_deploy_annotations.py` pins the soak's line shape, and
+      `test_flux_soak.py` pins the `result=fail` line a failing soak prints.
       `test_loki_stream_labels.py` reads the new expression's `job` against `loki_streams`.
 
 ### Images built by CI (D5.4)
