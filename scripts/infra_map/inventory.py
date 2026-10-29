@@ -66,20 +66,9 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
     batch: set[str] = set()
     manifest_namespaces: dict[str, frozenset[str]] = {}
 
-    docker_roles = repo_root / "ansible" / "roles" / "containers"
-    for role in sorted(p for p in docker_roles.glob("*") if p.is_dir()):
-        compose = role / "templates" / "docker-compose.yml.j2"
-        if not compose.is_file():
-            continue
-        names = _CONTAINER_NAME.findall(compose.read_text())
-        if not names:
-            batch.add(role.name)
-        for name in names:
-            owners[name] = role.name
-
-    # A Pi service in the package (H5, `compose_services`) owns its `container_name`s the same
-    # way, so a moved container such as `docker-proxy-lifecycle` keeps its owner. The service's
-    # directory is its owner, as the role directory is for the trees above.
+    # A Pi service in the package (H5, `compose_services`) owns its `container_name`s, so a
+    # container such as `docker-proxy-lifecycle` maps to its service. The service's directory is
+    # its owner, as the role directory is for the k8s tree below.
     services = repo_root / "hosts" / "components" / "pi-compose" / "services"
     for service in sorted(p for p in services.glob("*") if p.is_dir()):
         compose = service / "compose.yaml.j2"

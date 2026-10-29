@@ -2,8 +2,7 @@
 
 The controller (SUC), its Plan CRD and two Plans, `k3s-server` and `k3s-agent`, in the
 `system-upgrade` namespace. SUC replaces the k3s binary on the nodes the Plans select. Nothing
-else upgrades daniel-box's k3s since H6.3c landed; daniel-server's agent stays a hand upgrade
-until H6.3d's selection returns. The slice plan is
+else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
 `docs/target-architecture/host/h6-k3s-suc.md`, and the decision is
 `docs/adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md`.
 
@@ -21,9 +20,9 @@ until H6.3d's selection returns. The slice plan is
   from its first commit, so `deploy.sh` refuses `--tags=system-upgrade` with exit 5.
   `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path runs it.
 - **The Plans select the nodes in `system_upgrade_nodes`.** The list in `defaults/main.yml` holds
-  `daniel-box` since H6.3c. H6.3d added `daniel-server` (#6403), and the list dropped it again
-  on 2026-10-28: the agent Plan's `prepare` runs `k3s_gates.py`, which daniel-server's package
-  does not ship until it lists the `k3s-restart` component. Both Plans render an empty list as
+  `daniel-box` since H6.3c and `daniel-server` since H6.3d. A node joins the list only after its
+  host package installs the `k3s-gates` component, because each Plan's `prepare` runs
+  `/host/usr/lib/homelab/k3s_gates.py` (#6413). Both Plans render an empty list as
   `no-node-selected`, a hostname no node carries, and setting the list back to empty is the
   durable pause.
   `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py` holds that an empty
@@ -72,9 +71,10 @@ until H6.3d's selection returns. The slice plan is
 - **The namespace denies all ingress** (`templates/networkpolicy.yaml.j2`). The controller
   declares no container port, so no netpol-baseline probe row can prove the policy live, and
   the render test is the whole proof (H6 *Open questions* 13).
-- **`prepare` runs a script no host ships yet.** `/host/usr/lib/homelab/k3s_gates.py` arrives
-  with H6.3a. A Plan that selected a node before then would fail `prepare`, the closed
-  direction.
+- **`prepare` runs a script the host package ships.** `/host/usr/lib/homelab/k3s_gates.py`
+  comes from the `k3s-gates` component (`hosts/components/k3s-gates/component.yml`). A Plan
+  that selects a node without it fails `prepare`, the closed direction, as H6.3d's first merge
+  did on daniel-server (#6403).
 
 ## Autonomous-role contract
 

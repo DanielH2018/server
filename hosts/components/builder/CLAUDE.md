@@ -196,9 +196,12 @@ start waits for a signer still running and never rewrites `staged/` under it.
   unit's `ExecStopPost=-+` line copies it through `publish-textfile`.
 - **The interpreter.** The unit runs the host's `/usr/bin/python3`, because the signer cannot
   read the builder's pinned interpreter under its 0700 state directory. The script is
-  stdlib-only, `pyproject.toml` formats it for 3.12, and
+  stdlib-only, and `pyproject.toml` formats it for 3.12.
   `ansible/roles/setup/homelab_builder/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar`
-  holds it to that grammar.
+  holds it to that grammar. The signer takes its `log` and its atomic write from the `host_lib.py`
+  installed beside it, so that file and the `kuma_push.py` it imports are formatted for 3.12 too,
+  and `hosts/lib/tests/test_host_lib.py::test_host_lib_and_kuma_push_parse_with_the_3_12_grammar`
+  holds them to it (#6202).
 - **The sandbox.** The plan's *Sandboxing* list plus `PrivateNetwork=yes`, writing only
   `/var/lib/homelab-signer` and `staged/`.
 

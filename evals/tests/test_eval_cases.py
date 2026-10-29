@@ -10,17 +10,9 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
-import yaml
-
-from lib.repo_paths import HOST_VARS, REPO
+from lib.repo_paths import REPO
 
 CASES_DIR = Path(__file__).parent.parent / "cases"
-PI_HOST_VARS = HOST_VARS / "daniel-pi.yml"
-# A Compose role path, cited bare or under `ansible/`. The role-name class excludes `*`, so the
-# `roles/containers/**` glob a Renovate ruling quotes is not read as a role.
-_CONTAINER_ROLE_RE = re.compile(
-    r"(?<![\w-])(?:ansible/)?roles/containers/([a-z0-9][a-z0-9_-]*)"
-)
 # Any role path, cited bare, under `ansible/` or under `$HOME/server/`. The path ends on a name
 # character, so a `:14` line suffix, trailing punctuation and a `roles/containers/**` glob stay
 # out of it. Group 1 is the `<tree>/<role>` pair; group 2 is the marker, when it follows the
@@ -94,25 +86,6 @@ def _strings(value: object) -> Iterator[str]:
     elif isinstance(value, list):
         for item in value:
             yield from _strings(item)
-
-
-def cited_container_roles(obj: dict) -> set[str]:
-    return {m for text in _strings(obj) for m in _CONTAINER_ROLE_RE.findall(text)}
-
-
-def live_pi_roles() -> set[str]:
-    """The Compose roles a case may cite: daniel-pi's containers_list, plus the shared `common`."""
-    entries = yaml.safe_load(PI_HOST_VARS.read_text())["containers_list"]
-    return {entry["name"] for entry in entries} | {"common"}
-
-
-def retired_container_roles(obj: dict) -> set[str]:
-    """README rule 1: a cited `roles/containers/<x>` must be a live Pi role.
-
-    A fixture for a service that does not exist yet belongs under `roles/k8s/`, marked
-    `(a new role, not yet merged)`, because no new service lands on Docker.
-    """
-    return cited_container_roles(obj) - live_pi_roles()
 
 
 def cited_role_paths(obj: dict) -> tuple[set[str], set[str]]:
@@ -245,42 +218,14 @@ def test_all_case_files_valid():
 
 
 def test_retired_container_role_is_flagged():
+    """H5.12 deleted `roles/containers/`, so every Compose role path a case cites is missing."""
     case = {
-        "input": "# ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
-        "rubric": "see $HOME/server/ansible/roles/containers/ledger/tasks/main.yml",
-    }
-    assert retired_container_roles(case) == {"dozzle", "ledger"}
-
-
-def test_live_pi_role_and_renovate_glob_are_not_flagged():
-    case = {
-        "input": "ansible/roles/containers/common/tasks/docker_deploy.yml",
+        "input": "# ansible/roles/containers/common/tasks/docker_deploy.yml",
         "rubric": "Renovate must not track `roles/containers/**`.",
     }
-    assert retired_container_roles(case) == set()
-
-
-def test_no_case_cites_a_retired_container_role():
-    cited: dict[Path, set[str]] = {
-        f: cited_container_roles(json.loads(f.read_text())) for f in _all_case_files()
+    assert missing_role_paths(case) == {
+        "ansible/roles/containers/common/tasks/docker_deploy.yml"
     }
-    # A scan that matches nothing would pass vacuously. H5.9 moved wg-easy, the last Pi service,
-    # into the host package, so the shared `common` role is the one live container role to find.
-    reviewer = CASES_DIR / "homelab-cicd-reviewer/001-config-not-registered.json"
-    assert "common" in cited[reviewer], (
-        "the role-path scan no longer finds common in homelab-cicd-reviewer/001"
-    )
-    live = live_pi_roles()
-    stale = {
-        str(f.relative_to(CASES_DIR)): sorted(roles - live)
-        for f, roles in cited.items()
-        if roles - live
-    }
-    assert not stale, (
-        f"cases cite roles/containers/ roles that are not live on daniel-pi ({sorted(live)}): {stale}. "
-        "Rebuild the case from a live file, or move a new-service fixture under roles/k8s/ "
-        "marked '(a new role, not yet merged)' (evals/README.md, rule 1)."
-    )
 
 
 def test_missing_role_path_is_flagged():
@@ -313,12 +258,12 @@ def test_marker_on_a_role_that_exists_exempts_nothing():
 
 def test_no_case_cites_a_missing_role_path():
     cited = {f: json.loads(f.read_text()) for f in _all_case_files()}
-    # A scan that matches nothing would pass vacuously. homelab-cicd-reviewer/001 quotes a live
-    # `common` file, and homelab-container-reviewer/001 marks notesdb as a new role.
+    # A scan that matches nothing would pass vacuously. homelab-cicd-reviewer/002 quotes a live
+    # littlelink file, and homelab-container-reviewer/001 marks notesdb as a new role.
     paths, _ = cited_role_paths(
-        cited[CASES_DIR / "homelab-cicd-reviewer/001-config-not-registered.json"]
+        cited[CASES_DIR / "homelab-cicd-reviewer/002-frozenset-latest-accepted.json"]
     )
-    assert "ansible/roles/containers/common/tasks/docker_deploy.yml" in paths
+    assert "ansible/roles/k8s/littlelink/defaults/main.yml" in paths
     _, marked = cited_role_paths(
         cited[CASES_DIR / "homelab-container-reviewer/001-named-volume-unbacked.json"]
     )

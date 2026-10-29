@@ -41,7 +41,7 @@ operator's time).
 ## Tools (read-only)
 - `Read`/`Grep` `roles/k8s/{monitor-bridge,observability,loki-homelab,uptime-kuma,pi-peer-backup}` +
   their CLAUDE.md, the Longhorn config in `roles/setup/k3s`, and the role crons/CronJobs
-  (`grep -rn cron ansible/roles/k8s/*/tasks ansible/roles/containers/*/tasks`).
+  (`grep -rn cron ansible/roles/k8s/*/tasks ansible/roles/setup/*/tasks`).
 - `uv run python scripts/diagnostics/probe.py targets` / `metric '<promql>'` / `loki-query '<logql>'` /
   `scrutiny` — live scrape-target, metric, and log state. Never run a command that writes state.
 

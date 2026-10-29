@@ -3,7 +3,7 @@
 # configarr-health, that READS the last Job through its own ServiceAccount and pushes Kuma.
 # Until H2.5b (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13) that reader
 # was a daniel-box host cron; setup/k8s_host_files keeps the absent arms that remove it.
-configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.36.0@sha256:0d15c74cf74cd980bb2f9e9dd0cfdde1655a8f928e481c3258d7ccd4cde9dcbc
+configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.38.0@sha256:36d15adcc815557409a9437bc51468edfd1ac05ef6b46336dff650a56d2cc6a3
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
@@ -73,6 +73,11 @@ configarr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b
 # both images, which counts against the deadline too. A deadline that fires before the
 # container starts fails the deploy.
 configarr_k8s_health_deadline_seconds: 420
+# How long a finished configarr-health Job, and so its pod, stays visible. A run the weekly reboot
+# interrupts fails, and without a TTL it reads Failed until two later runs fail (#6367).
+# 30 minutes clears it inside the hour after boot
+# (ansible/tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
+configarr_k8s_health_job_ttl_seconds: 1800
 
 configarr_k8s_health_cpu_limit: "200m"
 configarr_k8s_health_mem_limit: 128Mi

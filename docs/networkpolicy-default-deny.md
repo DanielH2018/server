@@ -280,6 +280,10 @@ definition of this set into one of two shapes it holds.
 that needs nothing bespoke anywhere. It has no IngressRoute, Prometheus is its only caller, and
 it opens no outbound connection at all — it reads DRM sysfs through a read-only `/host/sys`
 mount — so no sibling policy gains a podSelector for it.
+**dri-device-plugin** (2026-10-29) joins for one pod, the `dri-admission-reaper` CronJob it
+runs in `homelab` (#6367). The job takes no connection at all, and its one outbound call goes
+to the API server, which is egress. The role's DaemonSet sits in `kube-system`, which no
+baseline selects, so it carries no label.
 
 **Why observability moved from first to third.** It is small in pod count but dense in
 exactly the paths that are hardest — `loki:3100`, `tempo:3200`, `prometheus:9090` and

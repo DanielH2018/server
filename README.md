@@ -37,8 +37,8 @@ ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
   k3s-bringup.yml     # Cluster foundation (k3s, Longhorn, Traefik CRDs, …)
   initial_setup.yml   # Host hardening / bootstrap
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
-  roles/containers/   # One role per Docker service (+ a shared `common` role)
-    archive/          # Roles retired by the k3s migration, kept for reference
+  roles/setup/        # One role per host-setup concern (k3s, Docker engine, crons, …)
+hosts/            # Host packages; the Pi's Docker services are hosts/components/pi-compose/
   filter_plugins/     # Custom dependency-resolution filters (toposort.py)
   inventory/          # hosts.ini, group_vars/all.yml, host_vars/<host>.yml
   vars/secrets.yml    # SOPS-encrypted secrets
@@ -47,12 +47,11 @@ docs/             # Runbooks, design specs, security notes
   archive/            # Superseded planning docs (incl. the Docker → k3s migration)
 ```
 
-**`containers/` is not in this repo.** It is a *runtime* directory Ansible renders on the
-target host (`/home/<user>/server/containers/<svc>/docker-compose.yml`) and is untracked —
-`git ls-files containers/` returns nothing. Post-migration it exists only on `daniel-pi`;
-neither cluster node has one, since neither runs Docker. Edits there are overwritten on the
-next deploy: always change `ansible/roles/containers/<svc>/templates/` instead. The cluster's
-equivalent is the manifests rendered from `ansible/roles/k8s/`.
+**The Pi's rendered Compose project is not in this repo.** The `homelab-daniel-pi` package
+installs it at `/usr/lib/homelab/compose/` on `daniel-pi`, the only Docker host; neither
+cluster node runs Docker. Edits there are overwritten by the next package version: always
+change `hosts/components/pi-compose/services/<svc>/` instead. The cluster's equivalent is the
+manifests rendered from `ansible/roles/k8s/`.
 
 ## Ingress and segmentation
 
@@ -144,7 +143,7 @@ playbooks). The manual post-deploy setup Ansible can't do is verified by
   `ansible/roles/k8s/observability/`, alongside `roles/k8s/loki-homelab` (Loki + an Alloy
   DaemonSet) for homelab logs. Prometheus scrapes node-exporter / cAdvisor / Traefik /
   CrowdSec. Grafana dashboards stay provisioned as code from
-  [`roles/k8s/observability/files/dashboards/`](ansible/roles/containers/grafana/) — that
+  [`roles/k8s/observability/files/dashboards/`](ansible/roles/k8s/observability/files/dashboards/) — that
   tree is the single source of truth and is mounted into the cluster Grafana, which is why
   the role survives the migration despite not being in any `containers_list`. Uptime Kuma
   takes monitors from AutoKuma labels and a static-monitors Secret; `monitor-bridge` turns

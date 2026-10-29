@@ -41,6 +41,9 @@ import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timezone
 
+# The poller runs from /opt/claude-triage, where tasks/triage.yml installs host_lib.py beside it.
+from host_lib import WARNING, atomic_write, log, parse_env_file
+
 CONFIG = "/etc/claude-triage/config.env"
 KUMA_QUERY = 'monitor_status{job="uptime-kuma"}'
 KUMA_UP_QUERY = 'up{job="uptime-kuma"}'
@@ -54,39 +57,46 @@ PROM_AGE_QUERY = 'time() - process_start_time_seconds{job="prometheus"}'
 ALERTS_SETTLE_S = 1200
 HOLD_ALERT = "DeployHoldActive"
 EPISODE_MAX = 63
+# The prefix on every journal line, as `log` writes it.
+TAG = "claude-triage-poll"
 
 
-def log(msg: str) -> None:
-    print(f"claude-triage-poll: {msg}", flush=True)
+def prom_vector(
+    base_url: str,
+    query: str,
+    timeout: float = 10,
+    urlopen: Callable = urllib.request.urlopen,
+) -> list[dict] | None:
+    """The `result` list of an instant query, or None when the read failed.
 
-
-def parse_env_file(path: str) -> dict[str, str]:
-    """KEY=VALUE lines; blank lines and `#` comments skipped, one layer of quotes stripped."""
-    out: dict[str, str] = {}
-    with open(path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            value = value.strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-                value = value[1:-1]
-            out[key.strip()] = value
-    return out
-
-
-def prom_vector(base_url: str, query: str, timeout: float = 10) -> list[dict] | None:
-    """The `result` list of an instant query, or None when the read failed."""
+    A failure is logged at warning priority with the URL and the cause. `read_all` falls back
+    to the next URL, so without the line a dead loopback Prometheus left no trace while the
+    ClusterIP answered. `urlopen` is the seam a test replaces.
+    """
     url = f"{base_url.rstrip('/')}/api/v1/query?" + urllib.parse.urlencode(
         {"query": query}
     )
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
+        with urlopen(url, timeout=timeout) as resp:
             body = json.load(resp)
-    except OSError, ValueError:
+    except (OSError, ValueError) as exc:
+        log(
+            f"Prometheus read failed: {exc}",
+            WARNING,
+            tag=TAG,
+            url=base_url,
+            query=query,
+        )
         return None
     if body.get("status") != "success":
+        log(
+            "Prometheus answered without success",
+            WARNING,
+            tag=TAG,
+            url=base_url,
+            query=query,
+            status=body.get("status"),
+        )
         return None
     return body.get("data", {}).get("result", [])
 
@@ -282,7 +292,7 @@ def start_run(episode: str) -> None:
         ["systemctl", "start", "--no-block", unit], check=False
     ).returncode
     if rc != 0:
-        log(f"could not start {unit} (exit {rc})")
+        log(f"could not start {unit} (exit {rc})", WARNING, tag=TAG)
 
 
 def drain(state: dict, state_dir: str, start: Callable[[str], None]) -> dict:
@@ -297,7 +307,7 @@ def drain(state: dict, state_dir: str, start: Callable[[str], None]) -> dict:
     started = [e for e in state.get("started", []) if e in waiting]
     pending = [e for e in waiting if e not in started]
     if pending and lock_free(os.path.join(state_dir, "run.lock")):
-        log(f"starting {pending[0]}")
+        log(f"starting {pending[0]}", tag=TAG)
         start(pending[0])
         started.append(pending[0])
     return {**state, "started": started}
@@ -330,7 +340,11 @@ def main(
     urls = cfg.get("PROM_URLS", "http://127.0.0.1:9090").split()
     found = read_all(urls, read)
     if found is None:
-        log(f"no Prometheus answered every query; tried {' '.join(urls)}")
+        log(
+            f"no Prometheus answered every query; tried {' '.join(urls)}",
+            WARNING,
+            tag=TAG,
+        )
         down, hold, unknown, up = None, False, set(), set()
     else:
         down = down_keys(found["kuma"], found["alerts"])
@@ -355,10 +369,11 @@ def main(
             path = os.path.join(state_dir, "inbox", f"{episode['id']}.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(episode, f, indent=2, sort_keys=True)
-            log(f"queued {episode['id']}")
+            log(f"queued {episode['id']}", tag=TAG)
         else:
             log(
-                f"shadow: would queue {episode['id']}: {json.dumps(episode, sort_keys=True)}"
+                f"shadow: would queue {episode['id']}: {json.dumps(episode, sort_keys=True)}",
+                tag=TAG,
             )
             with open(
                 os.path.join(state_dir, "shadow.jsonl"), "a", encoding="utf-8"
@@ -366,10 +381,7 @@ def main(
                 f.write(json.dumps({"at": t, **episode}, sort_keys=True) + "\n")
     if mode == "armed":
         state = drain(state, state_dir, start)
-    tmp = f"{state_path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2, sort_keys=True)
-    os.replace(tmp, state_path)
+    atomic_write(state_path, json.dumps(state, indent=2, sort_keys=True))
     return 0
 
 

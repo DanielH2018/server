@@ -129,8 +129,8 @@ def test_non_watchtower_label_without_equals_is_ignored():
 
 
 # The synthetic tests above only exercise the two detector functions. This is the
-# ONLY pytest coverage of the *real* render path (every service in both hosts'
-# containers_list, through ALL the shared macros: networks/resources/healthcheck/
+# ONLY pytest coverage of the *real* render path (every service in the Pi's
+# compose_services, through ALL the shared macros: networks/resources/healthcheck/
 # traefik/autokuma/expose). It mirrors the sibling validators' live-config guards
 # (validate_ha_config.test_validate_real_config_is_clean, validate_grafana
 # .test_real_role_passes). Without it, a Jinja-indent regression in a macro that
@@ -182,6 +182,12 @@ def test_a_packaged_service_without_a_digest_is_flagged(tmp_path):
 def test_a_packaged_service_with_no_template_is_flagged(tmp_path):
     err = vct.check_component_service("daniel-pi", {"name": "gone"}, tmp_path)
     assert err and "no hosts/components/pi-compose/services/gone/" in err
+
+
+def test_a_docker_containers_list_entry_is_flagged():
+    """H5.12 deleted the Ansible Compose path, so a Docker entry deploys nothing."""
+    entries = [{"name": "stray"}, {"name": "svc", "platform": "k8s"}]
+    assert vct.undeployed_docker_entries(entries) == ["stray"]
 
 
 # Every service should drop ALL capabilities (defense in depth), adding back only what it

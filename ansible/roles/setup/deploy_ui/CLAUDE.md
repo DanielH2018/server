@@ -111,7 +111,10 @@ journalctl -u deploy-ui --since -30d | grep -cE 'request method=GET path=/ |requ
 
 journald on daniel-box is capped at 1G (`SystemMaxUse`), which held entries back to
 2026-07-31 on 2026-09-30, so a 30-day window fits. `request_line` in `files/deploy_ui.py`
-formats the line and is unit-tested.
+formats the line with host_lib's `logfmt`, so a path holding a space or a quote is quoted
+rather than split (#6202). The role installs `host_lib.py` beside the daemon for it. The `user`
+value is narrowed to `[\w.@-]` first, because `logfmt` quotes a newline without escaping it.
+The line is unit-tested.
 
 ## Deploy
 

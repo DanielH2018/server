@@ -38,9 +38,8 @@ from fake_remux_lib.fake_remux_scan import (
     DISCORD_SPOOL_DIR,
     flush_queued_posts,
     load_config,
-    log,
 )
-from host_lib import atomic_write, discord_post
+from host_lib import atomic_write, discord_post, log
 
 USER_AGENT = "autofix-mkv-attachments"
 DISCORD_MARKER = "🔤 mkv-attachments:"
@@ -190,7 +189,7 @@ def main(argv=None) -> int:
         Exception
     ) as e:  # a sweep that cannot run at all is this check's own failure -> page
         ok, msg = False, "mkv attachment repair error: %s" % e
-    log("OK  " if ok else "DOWN", msg)
+    log(f"{'OK  ' if ok else 'DOWN'} {msg}")
     if not args.dry_run:
         write_state(state_file, ok, msg)
         flush_queued_posts(cfg)

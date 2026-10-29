@@ -2,16 +2,16 @@
   "id": "homelab-cicd-reviewer/003-output-format",
   "agent": "homelab-cicd-reviewer",
   "description": "Reviewer output must be grouped High/Medium/Low with file:line and [GAP]/[IMPROVEMENT]/[ADDITION] tags.",
-  "input": "Review this task and report your findings in the required format:\n```yaml\n# ansible/roles/containers/common/tasks/docker_deploy.yml (proposed)\n- name: Deploy Container\n  tags: [deploy]\n  ansible.builtin.include_role:\n    name: common\n    tasks_from: docker_deploy.yml\n```\nContext: The compose template bind-mounts `./config/config.alloy:/etc/alloy/config.alloy:ro`, and Alloy reads its config once, at startup. Deploys are idempotent (`recreate: auto`), so the container is recreated only when the compose file changes or the caller passes `common_config_changed` to `docker_deploy.yml`. No task in the proposed file registers the config template, and the include passes no `common_config_changed`. Report at least this one finding, using your standard output format. Everything you need is above. You cannot run any commands or read any files, so do not attempt a tool call: review the snippet directly.",
+  "input": "Review this service definition and report your findings in the required format:\n```yaml\n# hosts/components/pi-compose/services/alloy/compose.yaml.j2 (proposed)\nservices:\n  alloy:\n    volumes:\n      - type: bind\n        source: /usr/lib/homelab/compose/alloy/config.alloy\n        target: /etc/alloy/config.alloy\n        read_only: true\n    labels:\n      - \"autokuma.alloy.enabled=false\"\n```\nContext: config.alloy is a plain package file installed beside the compose file and bind-mounted read-only, and Alloy reads its config once, at startup. The Pi's package applies the project with `docker compose up -d`, which recreates a container only when its compose definition changes; Compose cannot see the content of a bind-mounted file. The live template carries the label `homelab.config-sha256={{ alloy_config_sha256 }}`, the sha256 of the rendered config.alloy, so a config edit changes the definition and `up -d` recreates the container. The proposed file has no such label. Report at least this one finding, using your standard output format. Everything you need is above. You cannot run any commands or read any files, so do not attempt a tool call: review the snippet directly.",
   "assert": {
     "must_match": [
       "\\[(GAP|IMPROVEMENT|ADDITION)\\]",
       "(High|Medium|Low)",
-      "main\\.yml"
+      "compose\\.yaml\\.j2"
     ],
     "must_not_match": []
   },
-  "rubric": "PASS only if the output groups findings by severity (High/Medium/Low), cites the ansible source file (main.yml, ideally with a line), and tags at least one finding with [GAP], [IMPROVEMENT], or [ADDITION]. The judgement content need not be perfect — this case grades output SHAPE.",
+  "rubric": "PASS only if the output groups findings by severity (High/Medium/Low), cites the source file (compose.yaml.j2, ideally with a line), and tags at least one finding with [GAP], [IMPROVEMENT], or [ADDITION]. The judgement content need not be perfect — this case grades output SHAPE.",
   "k": 5,
   "threshold": "all"
 }

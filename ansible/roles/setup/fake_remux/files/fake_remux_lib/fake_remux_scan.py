@@ -37,7 +37,16 @@ import urllib.request
 # files/ (the install dir on the host): fake_remux_lib's parent, and where host_lib.py sits.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fake_remux_lib import fake_remux_logic as frl
-from host_lib import atomic_write, discord_post, flush_discord_spool, parse_env_file
+
+# host_lib's `log` writes no timestamp: each cron pipes its output to `logger`, and journald
+# stamps every line it receives.
+from host_lib import (
+    atomic_write,
+    discord_post,
+    flush_discord_spool,
+    log,
+    parse_env_file,
+)
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
 USER_AGENT = "autofix-fake-remux"
@@ -70,10 +79,6 @@ def load_config(path: str = CONFIG_PATH) -> dict:
     if os.path.exists(path):
         cfg.update(parse_env_file(path))
     return cfg
-
-
-def log(*args) -> None:
-    print("[%s]" % time.strftime("%Y-%m-%dT%H:%M:%S"), *args, flush=True)
 
 
 def resolve_ip(container: str) -> str:
@@ -362,23 +367,24 @@ def scan(cfg):
     return ok, summary
 
 
-def main() -> int:
+def main(cfg: dict | None = None, run=scan) -> int:
     """Run one scan end to end and write the state file.
 
     A scan that raises is caught and recorded as a failed run via write_state rather than
     propagated, so a bad scan pages through the state file instead of crashing the cron. Always
-    returns 0 — the exit code carries no information, the state file does.
+    returns 0 — the exit code carries no information, the state file does. `cfg` and `run` are
+    the seams a test replaces; the cron passes neither.
     """
-    cfg = load_config()
+    cfg = load_config() if cfg is None else cfg
     state_file = cfg.get("STATE_FILE", "/var/lib/autofix-fake-remux/state.json")
     log("fake-remux scan starting")
     try:
-        ok, msg = scan(cfg)
+        ok, msg = run(cfg)
     except (
         Exception
     ) as e:  # a scan that can't run at all is this check's own failure -> page
         ok, msg = False, "fake-remux scan error: %s" % e
-    log("OK  " if ok else "DOWN", msg)
+    log(f"{'OK  ' if ok else 'DOWN'} {msg}")
     write_state(state_file, ok, msg)
     flush_queued_posts(cfg)
     return 0

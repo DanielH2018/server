@@ -101,6 +101,31 @@ def test_the_job_sets_no_deadline_so_a_slow_pull_never_fails_it(rendered):
     assert "activeDeadlineSeconds" not in yaml_fast.safe_load(text)["spec"]
 
 
+def _retries(job: dict) -> bool:
+    spec = job["spec"]
+    return spec.get("backoffLimit", 0) > 0 or bool(spec.get("podFailurePolicy"))
+
+
+def test_the_job_retries_a_failed_pod_and_the_census_admits_it(rendered):
+    """An evicted or interrupted Pod must not leave a Failed Job that wedges `<tag>` (#5552)."""
+    text = (rendered / "cluster" / f"{TAG}-prepull" / "job.yaml").read_text()
+    assert _retries(yaml_fast.safe_load(text))
+    assert problems(load(rendered)) == []
+
+
+def test_the_census_refuses_a_prepull_job_that_cannot_retry():
+    files = prepull_files("app", [({"nodeSelector": {"h": "a"}}, ["app:1"])])
+    configmap = yaml_fast.safe_load(files["configmap.yaml"])
+    job = yaml_fast.safe_load(files["job.yaml"])
+    job["spec"]["backoffLimit"] = 0
+    job["spec"].pop("podFailurePolicy", None)
+    job["metadata"]["name"] = f"prepull-app-{job_spec_digest8(job)}"
+    rows = {
+        line.split(":", 1)[0] for line in problems({"app-prepull": [job, configmap]})
+    }
+    assert rows, "the census admits a prepull Job that cannot retry a failed Pod"
+
+
 def test_the_prepull_directory_passes_the_job_census_and_check_bundle(rendered):
     assert problems(load(rendered)) == []
     assert report(rendered, [TAG]) == OK
@@ -185,7 +210,8 @@ def test_a_prepull_shell_script_other_than_the_renderers_is_flagged():
 
 
 def test_a_verify_job_running_the_shell_no_op_is_flagged():
-    assert _census_rows(kind="verify") == {"delivery"}
+    # The backoff row fires too: a verify Job takes 0 and a pre-pull 3 (#5552).
+    assert _census_rows(kind="verify") == {"backoff", "delivery"}
 
 
 def _job_name(image: str) -> str:
@@ -279,3 +305,14 @@ def test_a_prepull_scope_that_cannot_apply_is_a_problem(tmp_path, text, problem)
     assert found == {}
     [line] = problems
     assert problem in line
+
+
+def test_only_the_backoff_row_refuses_a_prepull_job_set_to_zero():
+    # The red test above accepts any row; this pins the one that holds the retry (#5552).
+    files = prepull_files("app", [({"nodeSelector": {"h": "a"}}, ["app:1"])])
+    configmap = yaml_fast.safe_load(files["configmap.yaml"])
+    job = yaml_fast.safe_load(files["job.yaml"])
+    job["spec"]["backoffLimit"] = 0
+    job["metadata"]["name"] = f"prepull-app-{job_spec_digest8(job)}"
+    offences = problems({"app-prepull": [job, configmap]})
+    assert {line.split(":", 1)[0] for line in offences} == {"backoff"}

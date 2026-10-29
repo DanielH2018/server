@@ -42,9 +42,9 @@ from lib.render_guard import containers_entries_in, entry_platform
 from validate.shell_templates import discover_templates
 
 # The Pi's Docker roles are gone: H5.9 moved wg-easy, the last one, into the host package, which
-# tests read through `render_host`. The accessor stays until H5.12 deletes `roles/containers`, so
-# these tests run it over a tmp-tree role (`_pi_role_rendering` below) and over the real census,
-# which must now be empty.
+# tests read through `render_host`, and H5.12 deleted `roles/containers`. The accessor outlives
+# the tree because other guards still import it, so these tests run it over a tmp-tree role
+# (`_pi_role_rendering` below) and over the real census, which must stay empty.
 
 
 def _pi_docker_roles() -> set[str]:
