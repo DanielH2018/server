@@ -156,8 +156,9 @@ Prometheus is not asked. Otherwise the builder reads `homelab_host_applied_info`
 `homelab_host_reconcile_ok` for the canary from the addresses in the settings file's
 `PROMETHEUS_URLS`, loopback first and then the pinned ClusterIP. It closes the gate when the
 applied SHA equals or descends from the gate's commit with reconcile at 1. Any other answer, an
-unreadable file or an unreachable Prometheus leaves the gate open. After the gate closes with
-nothing new on master, the next run rebuilds the deferred packages at the last built commit.
+unreadable file or an unreachable Prometheus leaves the gate open. After the gate closes, a run
+that finds no green commit above the last built one rebuilds the deferred packages at the last
+built commit. A pending or red commit on master therefore does not hold them back.
 
 `PROMETHEUS_URLS` renders from `builder_prom_urls` in `component.yml`. The component cannot read
 the observability role's `observability_prometheus_cluster_ip`, so the default repeats the address,
