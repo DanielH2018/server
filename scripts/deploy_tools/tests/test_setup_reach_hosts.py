@@ -28,3 +28,9 @@ def test_a_hypervisor_range_names_daniel_server(capsys):
 def test_an_empty_range_names_no_role(capsys):
     """The rejecting half: a range with no change reaches no host."""
     assert _reach(capsys, _HYPERVISOR, _HYPERVISOR) == {}
+
+
+def test_the_drill_script_commit_names_daniel_server(capsys):
+    """49c90e3be changed the script hypervisor copies, and no file under its role (#6411)."""
+    reach = _reach(capsys, "49c90e3be~1", "49c90e3be")
+    assert "daniel-server" in reach["hypervisor"]
