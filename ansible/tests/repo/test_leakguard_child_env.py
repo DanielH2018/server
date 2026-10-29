@@ -4,7 +4,8 @@
 its child an explicit `env` used to drop it, and a check script the child ran wrote a fake
 verdict into node_exporter's real directory (#6191, #6238). The same wrapper shims a
 hand-built PATH without overriding a test's own stub or un-hiding a binary (#6418), and swaps
-a real binary started by absolute path for its shim (#6463). These run in this process, under
+a real binary started by absolute path for its shim (#6463), a `shell=True` string's
+included (#6485). These run in this process, under
 the plugin `pyproject.toml` loads, because the wrapper is what they check.
 
 Run: uv run pytest ansible/tests/repo/test_leakguard_child_env.py
@@ -13,6 +14,7 @@ Run: uv run pytest ansible/tests/repo/test_leakguard_child_env.py
 import os
 import shutil
 import subprocess
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,8 @@ _REAL_LOGGER = shutil.which("logger", path="/usr/bin:/bin")
 _ABSOLUTE_LAUNCHES = {
     "argv": f"[{_REAL_LOGGER!r}, 'leakguard-6463-argv']",
     "executable": f"['logger', 'leakguard-6463-executable'], executable={_REAL_LOGGER!r}",
+    # A command string the shell runs, which names the program by absolute path (#6485).
+    "shell": f"'{_REAL_LOGGER} leakguard-6463-shell', shell=True",
 }
 
 
@@ -100,7 +104,9 @@ def test_a_child_with_a_hand_built_path_is_failed_for_its_call(tmp_path: Path) -
 def test_a_child_started_by_absolute_path_is_failed_for_its_call(
     tmp_path: Path, form: str
 ) -> None:
-    """Reject case: an absolute `argv[0]` or `executable` no longer reaches the real binary."""
+    """Reject case: an absolute `argv[0]`, `executable` or `shell=True` word no longer reaches
+    the real binary.
+    """
     module = (
         "import subprocess\n\n\ndef test_it_logs_by_absolute_path():\n"
         f"    subprocess.run({_ABSOLUTE_LAUNCHES[form]}, check=False)\n"
@@ -179,4 +185,21 @@ def test_only_a_real_stub_directory_is_dropped_from_the_recorded_path(
     path = os.pathsep.join([str(stub), str(subset), str(checkout_bin), "/usr/bin"])
     assert leakguard.without_stub_dirs(path) == os.pathsep.join(
         [str(checkout_bin), "/usr/bin"]
+    )
+
+
+def test_a_shell_command_swaps_only_a_real_shimmed_word(tmp_path: Path) -> None:
+    """A real binary's path is swapped wherever it starts a word; nothing else changes."""
+    stub = str(tmp_path)
+    swap = partial(
+        leakguard.shim_shell_command,
+        real_binaries={"logger": "/usr/bin/logger"},
+        real_dirs=frozenset({"/usr/bin"}),
+        stub_dir=stub,
+    )
+    assert swap("/usr/bin/logger x") == f"{stub}/logger x"
+    assert swap("echo a; FOO=/usr/bin/logger") == f"echo a; FOO={stub}/logger"
+    assert swap(f"{tmp_path}/own/logger x") == f"{tmp_path}/own/logger x"
+    assert swap("/usr/bin/loggerd x | /opt/bin/logger") == (
+        "/usr/bin/loggerd x | /opt/bin/logger"
     )

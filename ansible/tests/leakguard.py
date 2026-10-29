@@ -78,9 +78,13 @@ the `PATH` hides stays hidden. The `DECIDED:` marker at the wrapper has the reas
 A child started by absolute path, such as `/usr/bin/logger`, never consults `PATH` at all. The
 wrapper swaps such a program for its shim when it names a shimmed binary in one of the
 directories the real `PATH` lists, whether it arrives as `argv[0]` or as `executable` (#6463).
-A program in any other directory, such as a test's own stub, runs as given. Two launches stay
-uncovered: a `shell=True` command string, and an absolute path a script hardcodes and runs
-itself, because the wrapper sees only the direct child.
+A program in any other directory, such as a test's own stub, runs as given. A `shell=True`
+command string gets the same swap for each word naming such a path, such as
+`"/usr/bin/logger x"` (#6485). The wrapper sees only the direct child, so a script that
+hardcodes `/usr/bin/logger` and runs it itself would still reach the real binary. The
+`scripts-run-no-shimmed-binary-by-hardcoded-path` row of
+`ansible/tests/repo/test_census_rows_text.py` refuses that path in every script a test can run,
+unless it is only the default of a variable the test can set.
 
 ## Ansible's local temp directory points at a temp directory
 
@@ -435,12 +439,31 @@ def shim_for_program(program, real_binaries, real_dirs, stub_dir: str) -> str | 
     return os.path.join(stub_dir, name)
 
 
+# An absolute path at the start of a shell word: after whitespace, a quote, `=` or an operator.
+_SHELL_WORD_PATH = re.compile(r"(?<![^\s;&|(`'\"=])/[^\s;&|()`'\"<>]+")
+
+
+def shim_shell_command(command: str, real_binaries, real_dirs, stub_dir: str) -> str:
+    """`command` with each word that `shim_for_program` would swap replaced by its shim.
+
+    The string is not parsed as shell. Every word that names a real shimmed binary by absolute
+    path is swapped, including one that is only an argument, such as `cat /usr/bin/logger`.
+    """
+    return _SHELL_WORD_PATH.sub(
+        lambda m: (
+            shim_for_program(m.group(0), real_binaries, real_dirs, stub_dir)
+            or m.group(0)
+        ),
+        command,
+    )
+
+
 def shim_absolute_program(args: tuple, kwargs: dict) -> tuple[tuple, dict]:
     """`Popen`'s `args` and `kwargs` with an absolute real program swapped for its shim.
 
     With `executable` set, that is the program the kernel runs and `argv[0]` is only the name
-    the child sees, so `executable` alone is swapped. A `shell=True` launch is left alone: its
-    program is the shell, and the command string is not parsed here.
+    the child sees, so `executable` alone is swapped. A `shell=True` launch keeps its shell,
+    and `shim_shell_command` swaps the absolute paths inside its command string.
     """
     real_binaries = _state.get("real_binaries")
     real_dirs = _state.get("real_dirs")
@@ -449,9 +472,10 @@ def shim_absolute_program(args: tuple, kwargs: dict) -> tuple[tuple, dict]:
         not isinstance(real_binaries, dict)
         or not isinstance(real_dirs, frozenset)
         or not isinstance(stub_dir, str)
-        or kwargs.get("shell")
     ):
         return args, kwargs
+    if kwargs.get("shell"):
+        return _shim_shell_launch(args, kwargs, real_binaries, real_dirs, stub_dir)
     if kwargs.get("executable") is not None:
         shim = shim_for_program(
             kwargs["executable"], real_binaries, real_dirs, stub_dir
@@ -475,6 +499,30 @@ def shim_absolute_program(args: tuple, kwargs: dict) -> tuple[tuple, dict]:
     else:
         return args, kwargs
     if shim is None:
+        return args, kwargs
+    if args:
+        return (swapped, *args[1:]), kwargs
+    return args, {**kwargs, "args": swapped}
+
+
+def _shim_shell_launch(args, kwargs, real_binaries, real_dirs, stub_dir):
+    """The `shell=True` half of `shim_absolute_program`: only a `str` command is rewritten.
+
+    A list's first item is the command string and the rest are the shell's `$0` and on, so
+    only that item is rewritten. A `bytes` command is left alone.
+    """
+    if args:
+        command = args[0]
+    elif "args" in kwargs:
+        command = kwargs["args"]
+    else:
+        return args, kwargs
+    if isinstance(command, str):
+        swapped = shim_shell_command(command, real_binaries, real_dirs, stub_dir)
+    elif isinstance(command, (list, tuple)) and command and isinstance(command[0], str):
+        first = shim_shell_command(command[0], real_binaries, real_dirs, stub_dir)
+        swapped = [first, *command[1:]]
+    else:
         return args, kwargs
     if args:
         return (swapped, *args[1:]), kwargs
