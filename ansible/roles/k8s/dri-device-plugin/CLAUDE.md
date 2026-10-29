@@ -8,7 +8,8 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=dri-device-plugin` with exit 5
-- **Image:** `ghcr.io/squat/generic-device-plugin` (`dri_device_plugin_k8s_image`)
+- **Images:** `ghcr.io/squat/generic-device-plugin` (`dri_device_plugin_k8s_image`), `python`
+  (`dri_device_plugin_reaper_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
@@ -38,6 +39,18 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
   physical render node, multiplexed across however many pods request it concurrently.
 - `priorityClassName: system-node-critical` — this must not be the pod evicted to make room
   for jellyfin or tdarr, which is exactly backwards from what losing it does to them.
+- **The `dri-admission-reaper` CronJob deletes the pods a reboot rejects** (#6367). After a
+  reboot the kubelet can re-admit a GPU pod before this plugin re-registers. The pod ends
+  `Failed` with `UnexpectedAdmissionError`, its ReplicaSet replaces it, and nothing else
+  deletes it, because the controller-manager's `terminated-pod-gc-threshold` is 12500 pods.
+  Every 15 minutes the job deletes each `Failed` pod a ReplicaSet owns whose reason is
+  `UnexpectedAdmissionError` or `OutOf<resource>`, and nothing else; the rule is
+  `ansible/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py:is_tombstone`. It runs
+  in `homelab`, not `kube-system`, because a Role grants only in its own namespace. Its Role
+  grants `list` and `delete` on every pod there: RBAC cannot name pods it has not seen.
+  Lowering the GC threshold instead was rejected, because PodGC also deletes the Job pods
+  whose logs the health readers read.
 
 ## Editing
-- Manifest: `templates/daemonset.yaml.j2`.
+- Manifests: `templates/daemonset.yaml.j2`, and the reaper's
+  `templates/admission-reaper-cronjob.yaml.j2` and `templates/admission-reaper-rbac.yaml.j2`.
