@@ -86,11 +86,14 @@ def edit(origin, host: str, text: str) -> str:
     return git(origin.path, "rev-parse", "HEAD")
 
 
-def run(lab, prom: Prom, at: float | None = None, **overrides) -> FixtureBuilder:
-    """One builder run, at `at` when given, with every commit green and `prom` as its Prometheus."""
+def run(
+    lab, prom: Prom, at: float | None = None, pending: str = "", **overrides
+) -> FixtureBuilder:
+    """One builder run, at `at` when given, with every commit but `pending` green and `prom` as its Prometheus."""
     origin, _state, etc, github = lab
     for sha in git(origin.path, "rev-list", "master").split():
-        github.runs[sha] = GREEN
+        if sha != pending:
+            github.runs[sha] = GREEN
     b = make_builder(lab, cls=HostsBuilder, PROMETHEUS_URLS=URLS, **overrides)
     b.release_path = etc / "release"
     b.prom_fetch = prom
@@ -188,6 +191,18 @@ def test_a_canary_at_a_descendant_closes_the_gate(opened):
     # The tip moved, so this run builds the new commit and every package still owed.
     run(lab, prom)
     assert "homelab-daniel-server" in debs(state)
+
+
+def test_a_gate_closing_behind_a_pending_commit_builds_the_deferred_package_at_the_last_build(
+    opened,
+):
+    lab, prom, v, state, _ = opened
+    newer = edit(lab[0], "daniel-box", "box 1")
+    prom.applied["daniel-pi"], prom.reconcile["daniel-pi"] = v[:12], 1
+    run(lab, prom, pending=newer)
+    assert debs(state) == ["homelab-daniel-server"]
+    assert (state / "staged" / "chosen").read_text() == v[:12] + "\n"
+    assert json.loads((state / "state.json").read_text())["deferred"] == []
 
 
 def test_no_answer_on_either_address_keeps_the_gate_open(opened):
