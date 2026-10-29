@@ -354,18 +354,29 @@ def _write_shim(shim: Path) -> None:
 _STUB_PREFIX = "leakguard-"
 
 
+def _is_stub_dir(entry: str) -> bool:
+    """True for a leakguard stub directory, or a `subset/<names>` shim directory inside one.
+
+    The root is recognised by its `mkdtemp` name AND the `calls` file `pytest_configure`
+    writes there. A name match alone would also catch a checkout whose path merely contains a
+    `leakguard-` directory, and drop its `.venv/bin` from the PATH every test runs with.
+    """
+    root = Path(entry)
+    if root.parent.name == "subset":
+        root = root.parent.parent
+    return root.name.startswith(_STUB_PREFIX) and (root / "calls").is_file()
+
+
 def without_stub_dirs(path: str) -> str:
     """`path` without any leakguard stub directory, an outer run's included.
 
     `test_leakguard.py` starts a nested pytest with a hand-built PATH, which the outer run's
     wrapper shims. Kept, those entries would make the nested run's exempt tests reach the outer
-    shims, and its real binaries resolve to them. Matched by a path component rather than by
-    the temp directory, because the nested run need not share the outer run's `TMPDIR`.
+    shims, and its real binaries resolve to them. Matched by `_is_stub_dir` rather than by the
+    temp directory, because the nested run need not share the outer run's `TMPDIR`.
     """
     return os.pathsep.join(
-        entry
-        for entry in path.split(os.pathsep)
-        if not any(part.startswith(_STUB_PREFIX) for part in Path(entry).parts)
+        entry for entry in path.split(os.pathsep) if not _is_stub_dir(entry)
     )
 
 

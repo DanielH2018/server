@@ -116,3 +116,19 @@ def test_a_symlink_to_the_real_binary_in_a_test_dir_is_the_tests_choice(
     assert (
         leakguard.names_reaching_real(f"{tmp_path}:/usr/bin:/bin", real_binaries) == []
     )
+
+
+def test_only_a_real_stub_directory_is_dropped_from_the_recorded_path(
+    tmp_path: Path,
+) -> None:
+    """A checkout under a `leakguard-*` directory keeps its `.venv/bin`; a stub does not."""
+    checkout_bin = tmp_path / "leakguard-shim-fix" / ".venv" / "bin"
+    checkout_bin.mkdir(parents=True)
+    stub = tmp_path / "leakguard-abcd1234"
+    subset = stub / "subset" / "curl+logger"
+    subset.mkdir(parents=True)
+    (stub / "calls").touch()
+    path = os.pathsep.join([str(stub), str(subset), str(checkout_bin), "/usr/bin"])
+    assert leakguard.without_stub_dirs(path) == os.pathsep.join(
+        [str(checkout_bin), "/usr/bin"]
+    )
