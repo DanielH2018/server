@@ -114,7 +114,12 @@ def test_a_child_started_by_absolute_path_is_failed_for_its_call(
 
 
 def test_a_tests_own_stub_started_by_absolute_path_still_runs(tmp_path: Path) -> None:
-    """Accept case: only a program in a real PATH directory is swapped, not a test's stub."""
+    """Accept case: a test's own stub, named by absolute path, runs as given.
+
+    The code before #6463 swapped nothing, so this passes there too. It is the regression guard
+    against a swap that matches by name alone, which would run the shim in place of this stub.
+    The memory-seed test's rsync symlink depends on the same rule.
+    """
     fake_bin(tmp_path, logger="echo own-stub\n")
     seen = subprocess.run(
         [str(tmp_path / "logger"), "x"], capture_output=True, text=True, timeout=60
