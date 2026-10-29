@@ -27,3 +27,16 @@ k8s_autodeploy_reason: "no rollout gate proves the plugin works — the soak rea
 # How many pods may hold the render node at once. It is one physical device; this is a scheduling
 # allowance, not a hardware fact — jellyfin and tdarr both want it, and the GPU multiplexes fine.
 dri_device_plugin_count: 4
+
+# ── the admission reaper (templates/admission-reaper-cronjob.yaml.j2) ──────────────────────
+# After a reboot the kubelet can re-admit a GPU pod before this plugin re-registers, and the
+# rejected pod stays Failed beside its replacement (#6367). The CronJob deletes those pods;
+# files/dri_admission_reaper.py has the rule. Every 15 minutes, so a tombstone from the weekly
+# reboot is gone well inside the hour after boot.
+dri_device_plugin_reaper_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+dri_device_plugin_reaper_schedule: "*/15 * * * *"
+# One list and a delete or two take seconds; `open_url` retries a refused connect for 60s.
+dri_device_plugin_reaper_deadline_seconds: 120
+# The job's own runs age out too, so a run the reboot interrupts does not become the next
+# tombstone. The output is in Loki past this.
+dri_device_plugin_reaper_job_ttl_seconds: 1800
