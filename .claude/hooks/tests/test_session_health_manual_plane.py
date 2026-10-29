@@ -231,8 +231,8 @@ def test_a_role_owed_on_daniel_server_is_applied_there_over_ssh():
     assert "-e target=daniel-server" not in line
 
 
-def test_a_role_owed_on_no_other_host_names_no_ssh_hop():
-    """The rejecting half: the same line with no `hosts` key prints the plain local run."""
-    (line,) = _problems(manual=_owed_elsewhere([]), now=1000 + 3600)
-    assert "--tags hypervisor" in line
+def test_a_role_owed_on_an_ssh_host_keeps_its_target_and_no_ssh_hop():
+    """The rejecting half: daniel-pi is driven over ssh by the play itself, from here."""
+    (line,) = _problems(manual=_owed_elsewhere(["daniel-pi"]), now=1000 + 3600)
+    assert "--tags hypervisor -e target=daniel-pi" in line
     assert "ssh " not in line
