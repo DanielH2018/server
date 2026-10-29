@@ -7,6 +7,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_ci.py
 """
 
 import json
+import subprocess
 
 from _review_fakes import PR, _finding, _pipeline, _report
 from fanout_lib.launch import REVIEW_RUNTIME_MAX_S, RUNTIME_MAX_S
@@ -14,6 +15,7 @@ from fanout_lib.review.review_ci import (
     CI_RECHECK_S,
     CI_SLICE_S,
     CI_WAIT_S,
+    MERGEABLE_RECHECK_S,
     READY_POLL_S,
     READY_WAIT_S,
 )
@@ -284,3 +286,49 @@ def test_a_draft_held_for_its_findings_is_still_marked_ready(tmp_path):
     final = pipeline.run_all()
     assert BLOCKER.search(final["result"])
     assert len(run.readied) == 1 and run.ci_calls == []
+
+
+def _mergeable_batch(tmp_path, answers):
+    """A draft whose ready run never starts, with `gh pr view --json mergeable` scripted."""
+    pipeline, run, clock = _server_batch(tmp_path, _clean_review())
+    run.draft = True
+    inner, reads = pipeline.run, []
+
+    def run_with_mergeable(argv, stdin):
+        if argv[:3] == ["gh", "pr", "view"] and argv[-1] == "mergeable":
+            reads.append(argv)
+            state = answers.pop(0) if len(answers) > 1 else answers[0]
+            body = json.dumps({"mergeable": state})
+            return subprocess.CompletedProcess(argv, 0, body, "")
+        return inner(argv, stdin)
+
+    pipeline.run = run_with_mergeable
+    return pipeline, run, clock, reads
+
+
+def test_a_conflicting_pr_that_starts_no_ci_is_blamed_on_the_conflict_not_actions(
+    tmp_path,
+):
+    """GitHub runs no `pull_request` workflow on a CONFLICTING PR (#5629)."""
+    pipeline, run, _, _ = _mergeable_batch(tmp_path, ["CONFLICTING"])
+    final = pipeline.run_all()["result"]
+    assert final.startswith("needs input: PR #4000 conflicts with master")
+    assert "Merge or rebase master into the branch and push" in final
+    assert "gh pr ready" not in final and "Actions" not in final
+    # The PR stays ready: it cannot merge while it conflicts, and the push starts CI.
+    assert ("undo",) not in run.log and run.ci_calls == []
+
+
+def test_a_mergeable_pr_that_starts_no_ci_keeps_the_actions_message(tmp_path):
+    pipeline, run, _, _ = _mergeable_batch(tmp_path, ["MERGEABLE"])
+    final = pipeline.run_all()["result"]
+    assert "Run `gh pr ready 4000` once Actions is up" in final
+    assert "conflicts" not in final and run.log[-1] == ("undo",)
+
+
+def test_an_unknown_mergeable_state_is_read_again_before_the_message_is_chosen(
+    tmp_path,
+):
+    pipeline, _, clock, reads = _mergeable_batch(tmp_path, ["UNKNOWN", "CONFLICTING"])
+    assert "conflicts with master" in pipeline.run_all()["result"]
+    assert len(reads) == 2 and clock.sleeps[-1] == MERGEABLE_RECHECK_S
