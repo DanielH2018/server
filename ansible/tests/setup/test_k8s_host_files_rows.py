@@ -89,6 +89,7 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "registry.yml: Create the registry job manifest directory",
         "registry.yml: Deploy the registry garbage-collection script",
         "registry.yml: Remove the retired push store's garbage-collection job manifest",
+        "registry.yml: Render the dockerhub-mirror garbage-collection job",
         "registry.yml: Render the ghcr-mirror garbage-collection job",
         "registry.yml: Schedule the registry garbage collection",
         "traefik.yml: Remove the Cloudflare IP drift cron",

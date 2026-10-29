@@ -15,13 +15,17 @@ WAN outage. These properties keep it from being decorative or from breaking the 
   * its store is its own claim. Every ghcr.io image in the cluster pulls through it and none
     expires, so on the push store's claim it would fill the volume and fail every build;
   * its weekly prune keeps untagged revisions. The push store's `--delete-untagged` would
-    delete every digest-pinned image the mirror caches (#5541).
+    delete every digest-pinned image the mirror caches (#5541);
+  * the docker.io mirror has the same zero TTL, unrendered replica count and weekly prune
+    (#6536). A TTL counts from the fetch, so it dropped an image a pod still ran.
 
 The `registries.yaml` half is `ansible/tests/setup/test_k3s_registries_mirror_ghcr.py`, and the
 NetworkPolicy half is in `ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py`.
 """
 
 import re
+
+import pytest
 
 from lib import yaml_fast
 from _manifest_guards import K8S, _render, _role_context
@@ -37,7 +41,7 @@ HOST_FILES = K8S.parent / "setup" / "k8s_host_files"
 def _docs(template: str) -> list[dict]:
     # The GC Job renders from the setup role since the conversion, with registry's context:
     # test_k8s_host_files_pairs.py holds its copies of the registry keys equal to the originals.
-    base = HOST_FILES if template == "ghcr-mirror-gc-job.yaml.j2" else K8S / ROLE
+    base = HOST_FILES if template.endswith("gc-job.yaml.j2") else K8S / ROLE
     rendered = _render(base / "templates" / template, **CTX)
     return [d for d in yaml_fast.safe_load_all(rendered) if d]
 
@@ -174,17 +178,16 @@ def test_the_mirror_stores_on_its_own_claim():
     assert CTX["registry_k8s_claim"] not in mirror, mirror
 
 
-def test_the_dockerhub_mirror_proxies_docker_hub_with_a_bounded_ttl():
-    """No GC collects the docker.io mirror, so its TTL is what bounds the store (#6257).
+def test_the_dockerhub_mirror_proxies_docker_hub_with_no_expiry_or_replica_count():
+    """A TTL counts from the fetch, so any TTL drops an image a pod still runs (#6536).
 
-    A zero TTL there would grow the claim until it fills; the 168h default would drop an image
-    a week after its fetch.
+    The weekly GC bounds the store instead, and it scales the Deployment to zero, so a rendered
+    `replicas` would let Flux restore the pod mid-GC.
     """
     env = _env(_mirror("dockerhub-mirror"))
     assert env["REGISTRY_PROXY_REMOTEURL"] == "https://registry-1.docker.io", env
-    ttl = env.get("REGISTRY_PROXY_TTL", "")
-    assert re.fullmatch(r"[1-9][0-9]*h", ttl), ttl
-    assert int(ttl[:-1]) > 168, ttl
+    assert env.get("REGISTRY_PROXY_TTL") in {"0", "0s"}, env
+    assert "replicas" not in _deployments()["dockerhub-mirror"]["spec"]
 
 
 def test_the_dockerhub_mirror_has_its_own_ports_address_and_claim():
@@ -220,15 +223,32 @@ def test_the_dockerhub_mirror_has_its_own_ports_address_and_claim():
     assert CTX["registry_k8s_dockerhub_mirror_claim"] in declared, declared
 
 
+# Each mirror store's GC: (its Job template, the deployment it collects, its claim's key, its
+# keep-revisions key).
+_STORES = {
+    "ghcr-mirror": (
+        "ghcr-mirror-gc-job.yaml.j2",
+        "registry_k8s_ghcr_mirror_claim",
+        "registry_k8s_ghcr_mirror_keep_revisions",
+    ),
+    "dockerhub-mirror": (
+        "dockerhub-mirror-gc-job.yaml.j2",
+        "registry_k8s_dockerhub_mirror_claim",
+        "registry_k8s_dockerhub_mirror_keep_revisions",
+    ),
+}
+
+
 def _gc_jobs() -> dict[str, dict]:
     return {
         d["metadata"]["name"]: d
-        for d in _docs("ghcr-mirror-gc-job.yaml.j2")
+        for template, _, _ in _STORES.values()
+        for d in _docs(template)
         if d["kind"] == "Job"
     }
 
 
-def test_only_the_mirror_store_has_a_gc_job():
+def test_only_the_mirror_stores_have_a_gc_job():
     """The push store's GC is retired (D5, Wave D's registry bullet): under Flux its scale-down
     of deploy/registry would be a second writer on a field Flux renders."""
     templates = sorted(
@@ -236,8 +256,14 @@ def test_only_the_mirror_store_has_a_gc_job():
         for base in (K8S / ROLE, HOST_FILES)
         for p in (base / "templates").glob("*gc-job.yaml.j2")
     )
-    assert templates == ["ghcr-mirror-gc-job.yaml.j2"]
-    assert set(_gc_jobs()) == {"registry-gc-ghcr-mirror"}
+    assert templates == [
+        "dockerhub-mirror-gc-job.yaml.j2",
+        "ghcr-mirror-gc-job.yaml.j2",
+    ]
+    assert set(_gc_jobs()) == {
+        "registry-gc-ghcr-mirror",
+        "registry-gc-dockerhub-mirror",
+    }
 
 
 def _job_claims(job: dict) -> set[str]:
@@ -248,36 +274,38 @@ def _job_claims(job: dict) -> set[str]:
     }
 
 
-def test_the_mirror_gc_job_collects_the_mirror_store_without_delete_untagged():
+@pytest.mark.parametrize("store", sorted(_STORES))
+def test_the_mirror_gc_job_collects_the_mirror_store_without_delete_untagged(store):
     """A digest-pinned pull is cached as a revision with no tag, so --delete-untagged on the
     mirror's store would delete nearly every cached image (#5541)."""
-    job = _gc_jobs()["registry-gc-ghcr-mirror"]
-    assert _job_claims(job) == {CTX["registry_k8s_ghcr_mirror_claim"]}, job
+    _, claim, keep = _STORES[store]
+    job = _gc_jobs()[f"registry-gc-{store}"]
+    assert _job_claims(job) == {CTX[claim]}, job
     (gc,) = job["spec"]["template"]["spec"]["containers"]
     assert gc["args"][0] == "garbage-collect", gc["args"]
     assert "--delete-untagged" not in gc["args"], gc["args"]
     (prune,) = job["spec"]["template"]["spec"]["initContainers"]
     assert prune["command"] == ["sh", "/prune/ghcr-mirror-prune.sh"], prune
-    assert _env(prune)["KEEP_NEWEST"] == str(
-        CTX["registry_k8s_ghcr_mirror_keep_revisions"]
-    )
+    assert _env(prune)["KEEP_NEWEST"] == str(CTX[keep])
 
 
-def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim():
+@pytest.mark.parametrize("store", sorted(_STORES))
+def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim(store):
     """registry-gc.sh deletes the keep set before each run, so a missing one must start the prune
     with no file (which prunes nothing) rather than block the pod or reuse an old set."""
-    job = _gc_jobs()["registry-gc-ghcr-mirror"]
+    template, _, _ = _STORES[store]
+    job = _gc_jobs()[f"registry-gc-{store}"]
     volumes = {v["name"]: v for v in job["spec"]["template"]["spec"]["volumes"]}
-    assert volumes["ghcr-mirror-keep"]["configMap"] == {
-        "name": "registry-gc-ghcr-mirror-keep",
+    assert volumes[f"{store}-keep"]["configMap"] == {
+        "name": f"registry-gc-{store}-keep",
         "optional": True,
-    }, volumes["ghcr-mirror-keep"]
+    }, volumes[f"{store}-keep"]
     (script,) = [
         d
-        for d in _docs("ghcr-mirror-gc-job.yaml.j2")
+        for d in _docs(template)
         if d["kind"] == "ConfigMap"
         and d["metadata"]["name"]
-        == volumes["ghcr-mirror-prune-script"]["configMap"]["name"]
+        == volumes[f"{store}-prune-script"]["configMap"]["name"]
     ]
     source = (HOST_FILES / "files" / "ghcr-mirror-prune.sh").read_text()
     assert script["data"]["ghcr-mirror-prune.sh"] == source
@@ -319,14 +347,16 @@ def test_the_service_routes_each_port_to_one_deployment_by_name():
     }, routed
 
 
-def test_registry_gc_applies_the_mirror_manifest_the_deploy_stages():
-    """The mirror's Job is its own file, which the cron reads at GC time (#1669)."""
-    (read,) = re.findall(
-        r"^MIRROR_JOB_MANIFEST=(\S+)$",
+def test_registry_gc_applies_the_mirror_manifests_the_deploy_stages():
+    """Each mirror's Job is its own file, which the cron reads at GC time (#1669)."""
+    reads = re.findall(
+        r"^(?:MIRROR|DOCKERHUB)_JOB_MANIFEST=(\S+)$",
         rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2"),
         re.MULTILINE,
     )
+    assert len(reads) == 2, reads
     tasks = (HOST_FILES / "tasks" / "registry.yml").read_text()
-    assert f"dest: {read}\n" in tasks, (
-        f"no task stages {read}, the file the cron applies"
-    )
+    for read in reads:
+        assert f"dest: {read}\n" in tasks, (
+            f"no task stages {read}, the file the cron applies"
+        )

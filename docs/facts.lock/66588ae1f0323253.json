@@ -1,18 +1,19 @@
 {
-  "checksum": "8b1330ae1e32f8b7cbc6e915b342035d5025781ef760e706de5b713d4e98e8b1",
+  "checksum": "69de7287ff40aa5740a7e313bbd1680d171a9f7cb63be39d658c20fd57b16903",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/registry/CLAUDE.md#Notable",
   "row": {
     "atoms": {
       "ansible/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh": "d506158cad5e1cba31a028d2535846b344ec5af44ac4114c1444b1d84b8cff8e",
       "ansible/roles/k8s/nut/templates/ghcr-mirror-probe-configmap.yaml.j2": "68411c59219585e037344a788436000a502e56ea7aa3e1bf79490b37f3a95b0a",
-      "ansible/roles/k8s/registry/templates/dockerhub-mirror.yaml.j2:DECIDED: a long TTL": "3147a8016a4046c8f27e10c0cefa803624bab57592f2415a01cedc409babaa0a",
+      "ansible/roles/k8s/registry/templates/dockerhub-mirror.yaml.j2:DECIDED: a zero TTL and the weekly GC": "50cbb43236a018dcd48f71f26a037f64fd64a3aeaf1c63233f2c4a8713f7ade3",
       "ansible/roles/k8s/registry/templates/ghcr-mirror.yaml.j2:DECIDED: its own Deployment": "6e33927e149323bf80fe83b6fef8fff9ed2af5b888eff954b667d474e4a6622d",
       "ansible/roles/k8s/registry/templates/service.yaml.j2:DECIDED: one Service fronting two": "010c158f27f061f1d315ed70cfaa63ce233194a6bc32a611103a504eb9042efe",
       "ansible/roles/k8s/registry/tests/test_ghcr_resume_proxy.py": "837508e494651fa7f2ea1b47a51cb6adeeee0a13ce6b0c98c8e74cc338f2a82a",
       "ansible/roles/setup/k3s/templates/registries.yaml.j2": "84acc4687f537d52798e72653d71265ac192c40d3cddc15967d19a26887f355f",
       "ansible/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh": "b4ab60ad821c5dfcca3005fde38fe2a9a82c369602d01ddc1bb9bfed2671cd5d",
       "ansible/roles/setup/k8s_host_files/tasks/registry.yml": "9072729272d46e1723d45ad5d4e2494f06f08f152d925765912d6613bc945a0e",
+      "ansible/roles/setup/k8s_host_files/templates/dockerhub-mirror-gc-job.yaml.j2": "50aae9abccca429a05f9a12a8bb2e8fa4167f56cda3abd43b23b330c5987f36e",
       "ansible/roles/setup/k8s_host_files/templates/ghcr-mirror-gc-job.yaml.j2": "50e1ce77c544a5a383ec5ecd80f5ea56097cd2c0126428d38ec1b468027790c9",
       "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2:DECIDED: a blob that fails to warm": "954d375e47b45650c92e0b42b056da4472e5abe88353ec26b0cf9938c6ed4e0e",
       "ansible/tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page": "b8da3ca9190d84525868807c3082996ba4cce8b51b06a35d9fe6fed6688b9408",
@@ -22,6 +23,6 @@
       "scripts/renderer/renderer_lib/images.py:ghcr_text": "2d355f1d1aa99f59d01f5bf5c6ab179e1efa8f7d41400ae0b043aeb259ff760d"
     },
     "python": "3.14",
-    "verified_sha": "8de0fd887"
+    "verified_sha": "86b0a6e04"
   }
 }
