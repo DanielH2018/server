@@ -10,11 +10,15 @@ Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_host_package_b
 
 import json
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 import builder_rollout_gate as gate
+from deploy_tools.land_lib.host_schedule import calendar_after
+from lib.repo_paths import REPO
+from lib.systemd_timer import timer_settings
 from test_host_package_builder import (
     FPR,
     GREEN,
@@ -28,6 +32,9 @@ from test_host_package_builder import (
 )
 
 URLS = "http://127.0.0.1:9090 http://10.43.0.9:9090"
+# A run inside the Pi's firing hours, and one inside its 23:00 to 00:59 gap: #6524's publish.
+DAYTIME = datetime(2026, 10, 28, 14, 1, tzinfo=UTC).timestamp()
+QUIET = datetime(2026, 10, 28, 23, 8, 33, tzinfo=UTC).timestamp()
 
 
 class HostsBuilder(FixtureBuilder):
@@ -83,14 +90,15 @@ def edit(origin, host: str, text: str) -> str:
     return git(origin.path, "rev-parse", "HEAD")
 
 
-def run(lab, prom: Prom, **overrides) -> FixtureBuilder:
-    """One builder run with every commit green and `prom` as its Prometheus."""
+def run(lab, prom: Prom, at: float = DAYTIME, **overrides) -> FixtureBuilder:
+    """One builder run at `at`, with every commit green and `prom` as its Prometheus."""
     origin, _state, etc, github = lab
     for sha in git(origin.path, "rev-list", "master").split():
         github.runs[sha] = GREEN
     b = make_builder(lab, cls=HostsBuilder, PROMETHEUS_URLS=URLS, **overrides)
     b.release_path = etc / "release"
     b.prom_fetch = prom
+    b.now = lambda: at
     assert b.main() == 0
     return b
 
@@ -276,5 +284,67 @@ def test_without_the_pi_s_package_daniel_server_is_the_canary(lab):
     ],
 )
 def test_the_canary_order_and_the_shared_packages(changed, staged_now, deferred):
-    got = gate.admit(changed, None, "a" * 40)
+    got = gate.admit(changed, None, "a" * 40, DAYTIME)
     assert (got[0], got[1]) == (staged_now, deferred)
+
+
+def test_a_pi_package_published_in_its_quiet_hours_makes_daniel_server_the_canary(lab):
+    """#6524: a canary that next fires at 01:05 held daniel-server's package for 2h04m."""
+    origin, state, _, _ = lab
+    edit(origin, "daniel-pi", "pi 1")
+    edit(origin, "daniel-server", "server 1")
+    run(lab, Prom(), at=QUIET)
+    assert debs(state) == ["homelab-daniel-server", "homelab-updater"]
+    saved = json.loads((state / "state.json").read_text())
+    assert saved["gate"]["host"] == "daniel-server"
+    assert saved["deferred"] == ["hosts/daniel-pi"]
+
+
+def test_a_newer_pi_version_in_its_quiet_hours_re_picks_the_open_gate(opened):
+    lab, prom, _v, state, _ = opened
+    newer = edit(lab[0], "daniel-pi", "pi 2")
+    run(lab, prom, at=QUIET)
+    assert debs(state) == ["homelab-daniel-server"]
+    saved = json.loads((state / "state.json").read_text())
+    assert saved["gate"] == {"host": "daniel-server", "sha": newer}
+    assert saved["deferred"] == ["hosts/daniel-pi"]
+
+
+def test_the_fire_table_is_every_host_drop_in_s_schedule():
+    """CALENDAR_FIRES restates each drop-in, which the builder cannot read, fire for fire."""
+    dropins = sorted(REPO.glob("hosts/*/units/homelab-updater.timer.conf"))
+    shared = (
+        REPO / "hosts/packages/homelab-updater/units/homelab-updater.timer"
+    ).read_text()
+    assert {p.parts[-3] for p in dropins} == set(gate.CALENDAR_FIRES)
+    for dropin in dropins:
+        triggers, _ = timer_settings(shared, [dropin.read_text()])
+        assert set(triggers) == {"OnCalendar"}, dropin
+        day = calendar_after(triggers["OnCalendar"], DAYTIME - DAYTIME % 86400, 200)
+        day = [t for t in day if t < DAYTIME - DAYTIME % 86400 + 86400]
+        host = dropin.parts[-3]
+        walk, t = [], day[0] - 1
+        while (t := gate.next_fire(host, t)) < day[-1] + 1:
+            walk.append(t)
+        assert walk == day, host
+
+
+def test_the_bound_covers_the_pi_s_spacing_and_stays_under_the_lag_arm():
+    """The Pi stays the canary all through its firing hours, and a gate on any canary closes
+    before monitor-bridge's lag arm pages: the wait, then the updater's longest run."""
+    minutes = gate.CALENDAR_FIRES["daniel-pi"][1]
+    spacing = max(
+        b - a for a, b in zip(minutes, (*minutes[1:], minutes[0] + 60), strict=True)
+    )
+    assert spacing * 60 <= gate.CANARY_MAX_WAIT_S
+    unit = (
+        REPO / "hosts/packages/homelab-updater/units/homelab-updater.service"
+    ).read_text()
+    timeout = re.search(r"^TimeoutStartSec=(\d+)min$", unit, re.M)
+    assert timeout
+    timeout_min = int(timeout[1])
+    defaults = (REPO / "ansible/roles/k8s/monitor-bridge/defaults/main.yml").read_text()
+    found = re.search(r"^monitor_bridge_builder_max_lag_s: (\d+)$", defaults, re.M)
+    assert found
+    lag = int(found[1])
+    assert gate.CANARY_MAX_WAIT_S + timeout_min * 60 < lag

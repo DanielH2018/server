@@ -6,8 +6,10 @@ more than one host package stages the canary's alone and opens a gate at that co
 gate is open the builder builds no other host package. The gate closes when the operator's
 root-owned `release` file names the gate's commit or a descendant, or when Prometheus reports
 the canary at that commit or a descendant with `homelab_host_reconcile_ok` at 1. Prometheus
-unreachable or silent leaves the gate open, which fails closed. Stdlib only, plus the
-`host_lib` the builder already ships beside it.
+unreachable or silent leaves the gate open, which fails closed. A host whose updater next fires
+more than `CANARY_MAX_WAIT_S` away is never the canary, so the Pi's two 2h15m gaps in its
+schedule hold no other host (#6524). Stdlib only, plus the `host_lib` the builder already ships
+beside it.
 """
 
 from __future__ import annotations
@@ -24,6 +26,23 @@ from host_lib import log as host_log
 RELEASE = "/etc/homelab-builder/release"
 # The canary order (*Staged rollout*): daniel-box runs the builder, so it always comes last.
 CANARY_ORDER = ("daniel-pi", "daniel-server", "daniel-box")
+# DECIDED: a host whose updater next fires more than CANARY_MAX_WAIT_S away is passed over as
+# the canary, and a run that builds a new commit re-picks an open gate on it. A run with nothing
+# new on master leaves an open gate alone, so a gate opened before the Pi's last fire ahead
+# of a gap waits on that fire. daniel-pi's drop-in skips 23:00 to 00:59
+# and 04:00 to 05:59, so a Pi package published at 23:08 held every other host until the Pi's
+# 01:05 fire (#6524). The next host in the order is a canary the gate already uses whenever the
+# Pi's package is unchanged. The bound covers the Pi's 15-minute spacing, and with the
+# updater's 50-minute TimeoutStartSec it stays under the monitor-bridge lag arm's 2 hours;
+# test_host_package_builder_rollout.py holds both.
+CANARY_MAX_WAIT_S = 30 * 60
+# The hosts whose updater fires on a calendar instead of the shared 5-minute timer: the UTC
+# hours it fires in, and the minutes past each of those hours. Each is the host's drop-in
+# hosts/<host>/units/homelab-updater.timer.conf, which the builder cannot read, so a test
+# derives this table from the drop-ins and holds the two equal.
+CALENDAR_FIRES = {
+    "daniel-pi": (frozenset({1, 2, 3, *range(6, 23)}), (5, 20, 35, 50)),
+}
 APPLIED = "homelab_host_applied_info"
 RECONCILE_OK = "homelab_host_reconcile_ok"
 QUERY_TIMEOUT_S = 10
@@ -45,8 +64,28 @@ def host_of(package: str) -> str | None:
     return host if head == "hosts" and host else None
 
 
+def next_fire(host: str, now: float) -> float:
+    """When `host`'s updater next fires after `now`; `now` itself on the shared timer."""
+    if host not in CALENDAR_FIRES:
+        return now
+    hours, minutes = CALENDAR_FIRES[host]
+    hour = now - now % 3600
+    for _ in range(25):
+        if int(hour // 3600) % 24 in hours:
+            for minute in minutes:
+                if hour + minute * 60 > now:
+                    return hour + minute * 60
+        hour += 3600
+    return float("inf")
+
+
+def too_far(host: str, now: float) -> bool:
+    """Whether `host` waits longer than `CANARY_MAX_WAIT_S` for its next updater fire."""
+    return next_fire(host, now) - now > CANARY_MAX_WAIT_S
+
+
 def admit(
-    changed: list[str], gate: dict | None, chosen: str
+    changed: list[str], gate: dict | None, chosen: str, now: float
 ) -> tuple[list[str], list[str], dict | None]:
     """Split `changed` into the packages to stage now and those the gate defers.
 
@@ -54,16 +93,25 @@ def admit(
         changed: the package directories whose render differs from the published one.
         gate: the open gate, `{"host": ..., "sha": ...}`, or None.
         chosen: the full SHA of the commit this run builds.
+        now: the run's Unix time, which `too_far` reads the canary's schedule at.
 
     Returns:
         (staged, deferred, the gate after this run). The gate moves to `chosen` whenever the
         canary's package is staged.
     """
     hosts = [p for p in changed if host_of(p)]
+    if gate is not None and too_far(gate["host"], now):
+        log(
+            f"rollout gate at {gate['sha'][:12]} re-picks its canary: {gate['host']}'s "
+            f"updater does not fire within {CANARY_MAX_WAIT_S}s"
+        )
+        gate = None
     if gate is None:
         if len(hosts) < 2:
             return changed, [], None
         order = [h for h in CANARY_ORDER if f"hosts/{h}" in hosts]
+        # A canary that would not fire for hours holds every other host that long.
+        order = [h for h in order if not too_far(h, now)] or order
         # A host outside the order is last, and a name sort keeps the choice stable.
         canary = order[0] if order else host_of(sorted(hosts)[0])
         gate = {"host": canary, "sha": chosen}
