@@ -105,6 +105,11 @@ sonarr_k8s_air_date_guard_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc6
 # removed before the warning it causes pages.
 sonarr_k8s_air_date_guard_schedule: "*/5 * * * *"
 sonarr_k8s_air_date_guard_deadline_seconds: 240
+# How long a finished sonarr-air-date-guard Job, and so its pod, stays visible. A run the weekly reboot
+# interrupts fails, and without a TTL it reads Failed until three later runs fail (#6367).
+# 30 minutes clears it inside the hour after boot
+# (ansible/tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
+sonarr_k8s_air_date_guard_job_ttl_seconds: 1800
 # v5's grace period of -1 day. Backtested on 2026-10-25 over this library's history from
 # 2023-04: for standard series it would have removed 13 of the 16 grabs marked failed by hand,
 # and 1 of the releases Sonarr imported (a Rick and Morty episode published 4 days before

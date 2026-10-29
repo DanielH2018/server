@@ -21,10 +21,9 @@ groups:
         annotations:
           summary: The ingress probe of {{ $labels.service }} is failing.
           description: >-
-            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
-            for 2 minutes. {{ $labels.service }} is home-critical. A probe behind SSO expects
-            Authelia's 302, which proves the edge and the middleware answer, not that the
-            backend is up, so a pass there does not clear the backend. Read
+            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed for
+            2 minutes. {{ $labels.service }} is home-critical. A probe behind SSO expects Authelia's
+            302 and never reaches the backend, so a failure there is in Traefik or Authelia. Read
             probe_http_status_code for this instance, then the Traefik and Authelia logs.
       # The same, for every service outside home-critical.
       - alert: IngressProbeFailed
@@ -35,11 +34,10 @@ groups:
         annotations:
           summary: The ingress probe of {{ $labels.service }} is failing.
           description: >-
-            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
-            for 2 minutes. A probe behind SSO expects Authelia's 302, which proves the edge and
-            the middleware answer, not that the backend is up, so a pass there does not clear
-            the backend. Read probe_http_status_code for this instance, then the Traefik and
-            Authelia logs.
+            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed for
+            2 minutes. A probe behind SSO expects Authelia's 302 and never reaches the backend, so a
+            failure there is in Traefik or Authelia. Read probe_http_status_code for this instance,
+            then the Traefik and Authelia logs.
       # This family's zero-series alert. A job dropped from prometheus.yml leaves both rules
       # above evaluating to nothing. Kuma's Cluster Scrape Targets tile fails on a member at 0,
       # and a removed job leaves no member, so no Kuma check watches this and it pages without

@@ -35,3 +35,4 @@ groups:
             a firewall rule, a keyring mismatch and a stopped timer each leave it stale. Read
             `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
             fixture-host, and docs/host-packages.md, "Host-plane pages".
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/

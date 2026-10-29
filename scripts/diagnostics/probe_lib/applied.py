@@ -13,7 +13,9 @@ playbook entry admits in one `host_reader` call per host, and prints one row per
 - `DRIFT`: missing, present where an absent arm removes it, or a declared field or the
   content differs;
 - `UNCHECKED`: a credential file rootq refused even to stat, so nothing about it was
-  verified (#6372);
+  verified (#6372), or a file whose content reads a name only the run sets, such as a
+  `register`, so the render cannot predict it (#6378). Mode and owner are still compared, and
+  a difference there is DRIFT;
 - `unread`: the path could not be stat'ed as this user, and rootq did not answer for it,
   because the path is not on rootq's allowlist or the host has no rootq.
 
@@ -170,6 +172,8 @@ def compare(want: Want, live: dict, user: str) -> tuple[str, str]:
             return "ok", f"{meta}, content matches"
     if diffs:
         return "DRIFT", "; ".join(diffs)
+    if want.unchecked:
+        return "UNCHECKED", f"{meta}, content not compared: {want.why_no_content}"
     why = want.why_no_content or f"content unreadable as {user}"
     if want.sha256 is not None:
         why = live.get("refused") or f"content unreadable as {user}"
@@ -246,8 +250,8 @@ def run_applied(ns, read=read_host, setup: Path = SETUP, render_ctx=None) -> int
         return PROBE_FAILED
     if "UNCHECKED" in statuses:
         print(
-            f"applied: coverage partial: an UNCHECKED task file or credential file of "
-            f"{ns.role} was not read",
+            f"applied: coverage partial: an UNCHECKED task file, credential file or "
+            f"file whose content reads a run-time name of {ns.role} was not read",
             file=_sys.stderr,
         )
         return PROBE_UNREADABLE

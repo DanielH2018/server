@@ -62,9 +62,10 @@ groups:
         annotations:
           summary: R2 usage is past 80% of the free tier on at least one arm.
           description: >-
-            Month-to-date R2 storage, Class A operations, Class B operations or incomplete
-            multipart uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so this
-            is the only boundary. The runbook is longhorn-backup-tiering.
+            Month-to-date R2 storage, Class A operations, Class B operations or incomplete multipart
+            uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so this is the only
+            boundary.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       - alert: CloudflareIPRangesDrifted
         expr: homelab_check_success{job="monitor-bridge", check="cloudflare_ips_drift"} == 0
         labels:
@@ -91,6 +92,7 @@ groups:
             The monitor-bridge log names each slug and field that differs, or a check missing from
             the console. Fix the console, or change docs/healthchecks-io-deadman.md and
             monitor_bridge_healthchecks_expected together and redeploy monitor-bridge.
+          runbook_url: https://docs.local.daniel-hunter.com/healthchecks-io-deadman/
       # SHADOW UNTIL A6-7b. Kuma's Cluster Scrape Targets tile pages a failed scrape of this job
       # today, because the job carries no `origin` label (M1 convention 5 allows one pager). The
       # absent() arm is what that tile cannot see: a scrape job removed from prometheus.yml.
@@ -154,9 +156,9 @@ groups:
         annotations:
           summary: Backblaze B2 refuses monitor-bridge's key, or the transaction cap is exceeded.
           description: >-
-            monitor-bridge authenticates against B2 at most every 30 minutes. A cap denial looks
-            the same as data loss, so read the monitor-bridge log message before assuming either.
-            The runbook is longhorn-backup-tiering.
+            monitor-bridge authenticates against B2 at most every 30 minutes. A cap denial looks the
+            same as data loss, so read the monitor-bridge log message before assuming either.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       - alert: B2FreeTierHeadroomLow
         expr: homelab_check_success{job="monitor-bridge", check="b2_storage"} == 0
         labels:
@@ -169,6 +171,7 @@ groups:
           description: >-
             A drain is nearly free, but a prune pays per deleted backup, so read
             longhorn-backup-tiering before deleting anything.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       # THE UNGATED FAMILY (A6-6): the five rows with no `gate` column value. None reads
       # Prometheus, Loki or the WAN, and none is a `startup_grace` row, so no rule here carries
       # a `requires` label or a `for:`. `arr_queue` and `ha_heartbeat` streak one arm inside the
@@ -199,9 +202,9 @@ groups:
         annotations:
           summary: The pull-based deployer on daniel-box has stopped ticking.
           description: >-
-            The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or
-            unparseable. Run systemctl status gitops-deploy.timer on daniel-box and read the
-            SessionStart banner's parked state.
+            The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or unparseable.
+            Run `systemctl status gitops-deploy.timer` on daniel-box and read the SessionStart
+            banner's parked state.
       - alert: GitOpsDeployerParked
         expr: homelab_check_success{job="monitor-bridge", check="gitops_status"} == 0
         labels:
@@ -225,9 +228,9 @@ groups:
           summary: The weekly etcd restore drill has not passed within 8 days.
           description: >-
             No list-only drill has ever passed, the last-success-list-only stamp on daniel-box is
-            older than 8 days, or the pod cannot read the stamp. Run journalctl for
-            etcd-restore-drill on daniel-box and check the stamp's mode. The runbook is
-            k3s-etcd-restore.
+            older than 8 days, or the pod cannot read the stamp. Run `journalctl -t
+            etcd-restore-drill` on daniel-box and check the stamp's mode.
+          runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/
       - alert: HomeAssistantAutomationsStalled
         expr: homelab_check_success{job="monitor-bridge", check="ha_heartbeat"} == 0
         labels:

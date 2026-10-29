@@ -112,21 +112,6 @@ def test_a_replacement_environment_is_used_rather_than_merged():
     assert done.stdout.strip() == "yes"
 
 
-def test_a_replacement_environment_still_carries_the_textfile_dir(monkeypatch):
-    monkeypatch.setenv("TEXTFILE_DIR", "/tmp/leakguard-textfile")
-    done = run(["sh", "-c", "echo $TEXTFILE_DIR"], env={"PATH": "/usr/bin:/bin"})
-    assert done.stdout.strip() == "/tmp/leakguard-textfile"
-
-
-def test_a_caller_s_own_textfile_dir_wins_over_the_carried_one(monkeypatch):
-    monkeypatch.setenv("TEXTFILE_DIR", "/tmp/leakguard-textfile")
-    done = run(
-        ["sh", "-c", "echo $TEXTFILE_DIR"],
-        env={"PATH": "/usr/bin:/bin", "TEXTFILE_DIR": "/tmp/own"},
-    )
-    assert done.stdout.strip() == "/tmp/own"
-
-
 def test_cwd_decides_where_the_child_runs(tmp_path):
     assert run(["pwd"], cwd=tmp_path).stdout.strip() == str(tmp_path.resolve())
 

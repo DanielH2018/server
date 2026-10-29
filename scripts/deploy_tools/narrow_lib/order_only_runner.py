@@ -1,7 +1,8 @@
 """The script `order_only` runs in a subprocess at each end of a `toposort.py` change.
 
 Kept apart from `order_only.py` so each module reads alone: this one is the program the
-subprocess runs, as a string, and that one prepares its inputs and compares its reports.
+subprocess runs, as a string, and that one prepares its inputs and compares its reports. The
+program opens with `order_only_tables.py`'s tables and process-state reader.
 """
 
 # Runs in `python -I -B`, so neither PYTHONPATH nor the caller's cwd reaches the import, and
@@ -24,7 +25,7 @@ subprocess runs, as a string, and that one prepares its inputs and compares its 
 # `import` event it copies the attributes of every module loaded so far. It also takes, by
 # `walk`, a breadth-first shallow copy of each object below a module attribute that is a
 # container, carries a `__dict__` or `__slots__`, or has a `readers` entry, at any depth
-# (#5107), the process state `_process_state` reads (#5060), and the counts of the `counted`
+# (#5107), through a bound slot to its `__self__` (#5209), the process state `_process_state` reads (#5060), and the counts of the `counted`
 # calls (#5081). At the `order-only.imported` event `_chain` raises once the import returns,
 # it walks again and copies the objects the plugin's module code created (#5085). At the
 # `order-only.report` event the runner raises after the chain, it writes into the report each
@@ -46,89 +47,15 @@ subprocess runs, as a string, and that one prepares its inputs and compares its 
 # exits with `os._exit` rather than raising, because a raise lands in the plugin's frame, where
 # an `except` can swallow it. `_run` reads the nonzero exit as doubt. The chain runs inside
 # `_chain`, so the runner binds no name in `__main__` while the module state is compared.
-RUNNER = """
-import _codecs, _collections, _locale, _signal, _thread, atexit, codecs, copy, faulthandler
-import gc, json, os, posix, signal, sys, types
-from _functools import partial
 
-# Imported before the hook so their file-creating calls can be replaced below (#5063).
-unaudited = {
-    "_dbm": ("open",),
-    "_gdbm": ("open",),
-    "_posixshmem": ("shm_open", "shm_unlink"),
-    "_multiprocessing": ("SemLock", "sem_unlink"),
-    # A Tcl interpreter's `open` and `file` commands create files with no event (#5107).
-    "_tkinter": ("create",),
-}
-for name in list(unaudited):
-    try:
-        __import__(name)
-    except ImportError:
-        del unaudited[name]
+import sys as _sys
+from pathlib import Path as _Path
 
-# Calls that change interpreter state no function reads back: the codec search path and error
-# handlers, the at-fork handlers, and faulthandler's C signal handlers and watchdog thread. The
-# runner wraps each to count the calls that return, and compares the counts (#5081).
-counted = {
-    "codecs": ("register", "unregister", "register_error"),
-    "_codecs": ("register", "unregister", "register_error"),
-    "os": ("register_at_fork",),
-    "posix": ("register_at_fork",),
-    "faulthandler": (
-        "register", "unregister", "dump_traceback_later", "cancel_dump_traceback_later",
-    ),
-    # A signal's `SA_RESTART` flag, which no function reads back (#5107).
-    "signal": ("siginterrupt",),
-    "_signal": ("siginterrupt",),
-}
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
-# Every C module the real chain imports once the hook is installed, and `_string`, which
-# `logging` imports and which holds no state. A C module holds state and calls that no walk,
-# reader or audit event reaches, so the hook ends the run on the import of any other, whether
-# built in or a shared object (#5201). A module loaded before the hook, as the runner's own
-# imports and the `unaudited` table's are, is outside the check. An interpreter or Ansible
-# upgrade that adds a C module to the chain reads as doubt and turns
-# `test_4836s_real_toposort_change_is_order_only` red; extend the list then.
-c_modules = frozenset({
-    "_ast", "_bisect", "_bz2", "_contextvars", "_datetime", "_heapq", "_lzma", "_opcode",
-    "_socket", "_string", "_tokenize", "_typing", "_zstd", "fcntl", "grp", "math", "pwd",
-    "unicodedata", "zlib",
-})
+from deploy_tools.narrow_lib.order_only_tables import TABLES
 
-# C objects whose state no descriptor the walk reads exposes, each with a C-level reader. The
-# walk stores what the reader returns, as its `repr`, under the key `()` (#5107).
-readers = []
-try:
-    import _random
-
-    readers.append((_random.Random, _random.Random.getstate))
-except ImportError:
-    pass
-try:
-    import _decimal
-
-    def _context(fields, getattribute):
-        def read(context):
-            return (
-                tuple(field.__get__(context) for field in fields),
-                getattribute(context, "traps"),
-                getattribute(context, "flags"),
-            )
-
-        return read
-
-    readers.append((_decimal.Context, _context(
-        tuple(
-            _decimal.Context.__dict__[name]
-            for name in ("prec", "Emax", "Emin", "rounding", "capitals", "clamp")
-        ),
-        _decimal.Context.__getattribute__,
-    )))
-    del _context
-except ImportError:
-    pass
-
-
+_HOOK_AND_CHAIN = """
 def _install(
     exit_, write_flags, allowed, exempt, modules, unaudited, counted, readers, process, kinds,
     c_modules, loaders,
@@ -136,11 +63,12 @@ def _install(
     before = {}
     contents = {}
     claimed = set()
+    where = {}
     walked_after_import = []
     created = []
     state = {}
     calls = {}
-    skip, deque, getset, member, class_dict, type_flags = kinds
+    skip, deque, getset, member, class_dict, type_flags, wrapper, wrapper_self, named = kinds
     scalars = (bool, int, float, str, bytes, type(None))
     unset = object()
     builtin_names, builtin_importer, extension_loader, module_type, imp = loaders
@@ -162,6 +90,10 @@ def _install(
             return tuple(value)
         if issubclass(kind, type):
             return class_dict.__get__(value).copy()
+        if kind is wrapper:
+            # A bound slot such as `threading._counter`, an `itertools.count`'s `__next__`,
+            # holds its object only as `__self__` (#5209).
+            return {"__self__": wrapper_self.__get__(value)}
         # An instance's `__dict__`, then the members of each heap type in its MRO, read
         # through their `member_descriptor`s, then any C reader's result. A heap type is a
         # Python-defined class, whose `__slots__` are its members, or a C type an extension
@@ -239,38 +171,75 @@ def _install(
                 seen.add(id(value))
                 if id(value) not in claimed and path not in contents:
                     claimed.add(id(value))
+                    where[id(value)] = path
                     contents[path] = (value, copied)
                     if new is not None:
                         new.append(path)
                 items = copied.items() if type(copied) is dict else enumerate(copied)
+                # A set's items follow hash order, which differs between processes, so `~`
+                # marks their names as ones `signature` must not compare across the ends.
+                mark = "/~" if issubclass(type(value), set) else "/#"
                 for index, (key, child) in enumerate(items):
-                    name = key if type(key) is str else "#" + str(index)
-                    following.append((path + "/" + name, child))
+                    name = "/" + key if type(key) is str else mark + str(index)
+                    following.append((path + name, child))
             level = following
 
-    def signature(value):
-        # What differs between two ends' copies of an object, as one string: an exact `bool`,
-        # `int`, `str` or `None` by value, a container by its length and anything else by
-        # nothing. `_cache` follows which levels were asked about, not what the logger is set to.
-        # A reader's `()` result is left out, because a random generator's state differs
+    def signature(root):
+        # What differs between two ends' copies of an object, as one string. A breadth-first
+        # walk from `root` records, under each path relative to it, an exact `bool`, `int`,
+        # `str` or `None` by value, a container by its length, a function by its qualified
+        # name, and descends into every object no walk copied, such as a tuple or the handlers
+        # of a logger the chain created (#5209).
+        # A reference to an object a walk copied reads as that object's walk path, so a
+        # re-pointed `parent` shows (#5209), except under a set item, whose path follows hash
+        # order. `_cache` follows which levels were asked about, not what the logger is set
+        # to. A reader's `()` result is left out, because a random generator's state differs
         # between two processes that never touch it.
-        try:
-            copied = shallow(value)
-        except Exception:
-            return "?"
-        if copied is None:
-            return "?"
-        if type(copied) is not dict:
-            return "#" + str(len(copied))
         parts = []
-        for key, item in copied.items():
-            if type(key) is not str or key in ("_cache", "()"):
-                continue
-            kind = type(item)
-            if kind in (bool, int, str, type(None)):
-                parts.append(key + "=" + repr(item))
-            elif kind in (list, dict, tuple, set, frozenset, deque):
-                parts.append(key + "=#" + str(len(item)))
+        seen = {id(root)}
+        level = [("", root)]
+        while level:
+            following = []
+            for path, value in level:
+                kind = type(value)
+                if path and issubclass(kind, frozenset):
+                    # Hash order again, so only the length (#5209).
+                    parts.append(path + "#" + str(frozenset.__len__(value)))
+                    continue
+                if path and issubclass(kind, tuple):
+                    copied = [tuple.__getitem__(value, i) for i in range(tuple.__len__(value))]
+                else:
+                    try:
+                        copied = shallow(value)
+                    except Exception:
+                        copied = None
+                if copied is None:
+                    if not path:
+                        return "?"
+                    continue
+                if type(copied) is not dict or issubclass(type(value), dict):
+                    parts.append(path + "#" + str(len(copied)))
+                if issubclass(type(value), set):
+                    continue
+                items = copied.items() if type(copied) is dict else enumerate(copied)
+                for key, item in items:
+                    if type(copied) is dict and (type(key) is not str or key in ("_cache", "()")):
+                        continue
+                    name = path + "/" + str(key)
+                    kind = type(item)
+                    if kind in (bool, int, str, type(None)):
+                        parts.append(name + "=" + repr(item))
+                    elif id(item) in where:
+                        target = where[id(item)]
+                        parts.append(name + "=@" + ("~" if "/~" in target else target))
+                    elif kind in named:
+                        # No walk copies a callable, so name it: a filter or handler method
+                        # replaced by another function shows as a different name (#5209).
+                        parts.append(name + "=&" + named[kind](item))
+                    elif id(item) not in seen:
+                        seen.add(id(item))
+                        following.append((name, item))
+            level = following
         parts.sort()
         return ",".join(parts)
 
@@ -431,47 +400,6 @@ def _install(
             setattr(module, attr, counter(name + "." + attr, getattr(module, attr)))
 
 
-def _process_state(umask, getsignal, signals, getrecursionlimit, getpriority, prio,
-                   getsid, getpgrp, ids, get_threshold, isenabled, getswitchinterval,
-                   getitimer, timers, sigmask, ncallbacks, affinity, int_digits,
-                   faulthandler_enabled, getlocale, getdlopenflags, freeze_count, stack_size):
-    def read():
-        # Set and restore: neither the umask nor the thread stack size has a reader that leaves
-        # it alone, since `stack_size()` with no argument sets the size to 0 (#5107).
-        mask = umask(0)
-        umask(mask)
-        size = stack_size(0)
-        stack_size(size)
-        state = {
-            "umask": mask,
-            "recursionlimit": getrecursionlimit(),
-            "priority": getpriority(prio, 0),
-            "sid": getsid(0),
-            "pgrp": getpgrp(),
-            "ids": tuple(f() for f in ids),
-            "gc": (isenabled(), get_threshold()),
-            "switchinterval": getswitchinterval(),
-            "sigmask": sorted(sigmask()),
-            "atexit": ncallbacks(),
-            "affinity": sorted(affinity()),
-            "intmaxstrdigits": int_digits(),
-            "faulthandler": faulthandler_enabled(),
-            "locale": getlocale(),
-            "dlopenflags": getdlopenflags(),
-            "gcfreeze": freeze_count(),
-            "stacksize": size,
-        }
-        for timer in timers:
-            # A running timer's remaining time falls between reads, so compare whether it runs.
-            value, interval = getitimer(timer)
-            state["itimer." + str(timer)] = (value > 0, interval)
-        for signum in signals:
-            state["signal." + str(signum)] = getsignal(signum)
-        return state
-
-    return read
-
-
 _install(
     os._exit,
     os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC,
@@ -504,7 +432,9 @@ _install(
         partial(_signal.pthread_sigmask, _signal.SIG_BLOCK, ()), atexit._ncallbacks,
         partial(os.sched_getaffinity, 0), sys.get_int_max_str_digits, faulthandler.is_enabled,
         partial(_locale.setlocale, _locale.LC_ALL, None), sys.getdlopenflags,
-        gc.get_freeze_count, _thread.stack_size,
+        gc.get_freeze_count, _thread.stack_size, gc.get_debug,
+        sys.get_coroutine_origin_tracking_depth, os.get_inheritable, _socket.getdefaulttimeout,
+        decimal_context,
     ),
     (
         frozenset({
@@ -517,6 +447,9 @@ _install(
         types.MemberDescriptorType,
         type.__dict__["__dict__"],
         type.__dict__["__flags__"],
+        types.MethodWrapperType,
+        types.MethodWrapperType.__dict__["__self__"],
+        callable_names,
     ),
     c_modules,
     (
@@ -527,7 +460,8 @@ _install(
         sys.modules["_imp"],
     ),
 )
-del _install, _process_state, unaudited, counted, readers, c_modules, name, partial
+del _install, _process_state, unaudited, counted, readers, decimal_context, c_modules, name
+del partial, callable_names
 
 
 def _chain(plugins, roles, preload):
@@ -554,3 +488,5 @@ def _chain(plugins, roles, preload):
 
 _chain(sys.argv[1], sys.argv[2], json.loads(sys.argv[3]))
 """
+
+RUNNER = TABLES + _HOOK_AND_CHAIN

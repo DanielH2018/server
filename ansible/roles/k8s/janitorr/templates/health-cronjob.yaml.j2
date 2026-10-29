@@ -41,6 +41,7 @@ spec:
         app: janitorr-health
     spec:
       activeDeadlineSeconds: {{ janitorr_k8s_health_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ janitorr_k8s_health_job_ttl_seconds }}
       # No retry: the next run is ten minutes away and re-reads the same state.
       backoffLimit: 0
       template:

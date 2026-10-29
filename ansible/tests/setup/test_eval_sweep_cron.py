@@ -87,9 +87,9 @@ def _run_script(tmp_path, key_text: str | None):
     The caller's environment carries another key, so the credential file is the ONLY place a key
     can come from. A script that kept an inherited key gets past the gate with no credential.
 
-    `TEXTFILE_DIR` points the exit hook's textfile at `tmp_path`. The child's environment is
-    built here rather than inherited, so leakguard's default does not reach it, and without
-    this the write lands in the host's real node_exporter directory (#6191).
+    `TEXTFILE_DIR` points the exit hook's textfile at `tmp_path`, so the assertion reads this
+    test's own file. leakguard would otherwise carry its temp directory into the hand-built
+    environment (#6238); before it did, the write landed in node_exporter's real one (#6191).
     """
     creds = tmp_path / "creds"
     creds.mkdir()
