@@ -84,8 +84,9 @@ def verdict(
 # One tree per source text for the whole process. Every row of a census reads the same modules,
 # and parsing was 5.15s of the 9.23s one row took over 1620 of them (#6437), so the rows of
 # `scripts/tests/test_census_rows_test_*.py` share the parse rather than each paying it again.
-# Every tree of that census held is about 420 MiB per process (measured 2026-10-29, 1624
-# modules); under `--dist loadscope` each worker that runs a census file holds its own share.
+# Holding every tree costs memory: the two census files' maxrss went from 102 MiB to 643 MiB
+# (measured 2026-10-29, 1624 modules). Every row sweeps the whole census, so under
+# `--dist loadscope` each worker that runs either file holds a full copy, not a share.
 # Unbounded on purpose: every row sweeps the census in the same order, so an LRU smaller than
 # the census never hits. A caller only reads the tree; one that edited it would edit every row's.
 #
