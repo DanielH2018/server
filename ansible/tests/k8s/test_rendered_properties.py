@@ -25,6 +25,7 @@ from _edge_property_rows import EDGE_PROPERTIES
 from _helpers import REPO, manifests_rollout_timeout_s
 from _image_property_rows import IMAGE_PROPERTIES
 from _k8s_render import pod_spec
+from _port_property_rows import PORT_PROPERTIES
 from _property_table import Property, check
 from _scrape_property_rows import SCRAPE_PROPERTIES
 from _workload_property_rows import OBSERVABILITY, POD_KINDS, WORKLOAD_PROPERTIES
@@ -319,6 +320,7 @@ PROPERTIES = (
     + IMAGE_PROPERTIES
     + SCRAPE_PROPERTIES
     + EDGE_PROPERTIES
+    + PORT_PROPERTIES
 )
 
 _IDS = [p.name for p in PROPERTIES]
