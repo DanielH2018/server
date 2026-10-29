@@ -75,6 +75,6 @@ def test_a_pending_retirement_is_still_in_the_store_and_not_yet_retired(current)
     Named members, so an emptied set cannot pass. A name in both tables would say a key is
     pending and gone at once.
     """
-    assert "monitor_bridge_loki_push_token" in PENDING_RETIREMENT
+    assert "daniel_box_disk_push_token" in PENDING_RETIREMENT
     assert PENDING_RETIREMENT <= current, sorted(PENDING_RETIREMENT - current)
     assert not PENDING_RETIREMENT & RETIRED
