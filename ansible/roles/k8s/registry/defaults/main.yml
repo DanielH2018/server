@@ -44,6 +44,20 @@ registry_k8s_ghcr_mirror_debug_port: 5003
 registry_k8s_ghcr_resume_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 registry_k8s_ghcr_resume_port: 5004
 
+# The docker.io pull-through mirror (the `dockerhub-mirror` Deployment in
+# dockerhub-mirror.yaml.j2, #6257). Its own claim for the ghcr-mirror's reason: about 47 live
+# docker.io images pull through it. No GC collects it; the proxy TTL below bounds it instead, so
+# the store holds roughly what the nodes pulled in one TTL. Losing it costs re-pulls, hence
+# longhorn-nobackup.
+registry_k8s_dockerhub_mirror_claim: registry-dockerhub-mirror
+registry_k8s_dockerhub_mirror_size: 40Gi
+# How long the proxy keeps a blob or manifest after it fetched it from Docker Hub. distribution
+# counts from the fetch, and a pull served from the store never moves it, so a cached image is
+# deleted this long after its first fetch however often nodes pulled it since. The next pull that
+# misses the store refetches it. dockerhub-mirror.yaml.j2's DECIDED: marker has why it is not zero.
+registry_k8s_dockerhub_mirror_ttl: 2160h
+registry_k8s_dockerhub_mirror_debug_port: 5006
+
 # The claim the renderer emits for this role, which the registry Kustomization applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ registry_k8s_claim }}"
@@ -52,6 +66,9 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ registry_k8s_ghcr_mirror_claim }}"
     storage_class: "{{ registry_k8s_storage_class }}"
     size: "{{ registry_k8s_ghcr_mirror_size }}"
+  - name: "{{ registry_k8s_dockerhub_mirror_claim }}"
+    storage_class: "{{ registry_k8s_storage_class }}"
+    size: "{{ registry_k8s_dockerhub_mirror_size }}"
 
 # ── garbage collection (registry-gc.sh, ghcr-mirror-gc-job.yaml) ───────────────────────────
 # Only the ghcr-mirror store is collected. The push store's GC was retired once no image-builder

@@ -137,7 +137,11 @@ def _policies() -> dict[str, dict]:
     ctx = _role_context(ROLE, domain="example.com")
     return {
         d["metadata"]["name"]: d
-        for template in ("networkpolicy.yaml.j2", "ghcr-mirror.yaml.j2")
+        for template in (
+            "networkpolicy.yaml.j2",
+            "ghcr-mirror.yaml.j2",
+            "dockerhub-mirror.yaml.j2",
+        )
         for d in yaml_fast.safe_load_all(
             _render(K8S / ROLE / "templates" / template, **ctx)
         )
@@ -215,3 +219,30 @@ def test_source_controller_reaches_the_push_port_and_nothing_else_does():
     )
     assert selector.items() <= pod_labels.items(), (selector, pod_labels)
     assert [p["port"] for p in rule["ports"]] == [DEFAULTS["k8s_registry_port"]], rule
+
+
+def test_the_dockerhub_mirror_port_is_admitted_only_from_the_node_grants():
+    """The docker.io mirror's own policy admits containerd's two host sources and nothing else.
+
+    The same failure shapes as the ghcr.io mirror's: a missing grant drops every pull to
+    Docker Hub without a word, and a pod-network rule lets any pod fill its claim (#6257).
+    """
+    mirror = DEFAULTS["k8s_registry_dockerhub_mirror_port"]
+    admitting = [
+        (name, rule)
+        for name, policy in _policies().items()
+        for rule in policy["spec"]["ingress"]
+        if mirror in {p["port"] for p in rule.get("ports", [])}
+    ]
+    assert [name for name, _ in admitting] == ["dockerhub-mirror"], (
+        f"port {mirror} is admitted by {admitting}"
+    )
+    assert _policies()["dockerhub-mirror"]["spec"]["podSelector"] == {
+        "matchLabels": {"app": "dockerhub-mirror"}
+    }
+    peers = admitting[0][1]["from"]
+    assert all("ipBlock" in peer for peer in peers), peers
+    assert {peer["ipBlock"]["cidr"] for peer in peers} == {
+        DEFAULTS["registry_k8s_netpol_cni_gateway"],
+        DEFAULTS["registry_k8s_netpol_agent_flannel"],
+    }, peers

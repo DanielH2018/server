@@ -45,7 +45,11 @@ def _docs(template: str) -> list[dict]:
 def _deployments() -> dict[str, dict]:
     return {
         d["metadata"]["name"]: d
-        for template in ("deployment.yaml.j2", "ghcr-mirror.yaml.j2")
+        for template in (
+            "deployment.yaml.j2",
+            "ghcr-mirror.yaml.j2",
+            "dockerhub-mirror.yaml.j2",
+        )
         for d in _docs(template)
         if d["kind"] == "Deployment"
     }
@@ -59,15 +63,14 @@ def _env(container: dict) -> dict[str, str]:
     return {e["name"]: str(e["value"]) for e in container.get("env", [])}
 
 
-def _mirror() -> dict:
+def _mirror(name: str = "ghcr-mirror") -> dict:
     mirrors = [
         c
-        for d in _deployments().values()
-        for c in _pod(d)["containers"]
+        for c in _pod(_deployments()[name])["containers"]
         if "REGISTRY_PROXY_REMOTEURL" in _env(c)
     ]
     assert len(mirrors) == 1, (
-        f"expected exactly one container proxying ghcr.io, found {[c['name'] for c in mirrors]}"
+        f"expected exactly one container proxying in {name}, found {[c['name'] for c in mirrors]}"
     )
     return mirrors[0]
 
@@ -171,6 +174,52 @@ def test_the_mirror_stores_on_its_own_claim():
     assert CTX["registry_k8s_claim"] not in mirror, mirror
 
 
+def test_the_dockerhub_mirror_proxies_docker_hub_with_a_bounded_ttl():
+    """No GC collects the docker.io mirror, so its TTL is what bounds the store (#6257).
+
+    A zero TTL there would grow the claim until it fills; the 168h default would drop an image
+    a week after its fetch.
+    """
+    env = _env(_mirror("dockerhub-mirror"))
+    assert env["REGISTRY_PROXY_REMOTEURL"] == "https://registry-1.docker.io", env
+    ttl = env.get("REGISTRY_PROXY_TTL", "")
+    assert re.fullmatch(r"[1-9][0-9]*h", ttl), ttl
+    assert int(ttl[:-1]) > 168, ttl
+
+
+def test_the_dockerhub_mirror_has_its_own_ports_address_and_claim():
+    """It answers where registries.yaml names it and shares no port or claim with the others."""
+    pod = _pod(_deployments()["dockerhub-mirror"])
+    assert pod["nodeSelector"] == {"kubernetes.io/hostname": CTX["k8s_registry_node"]}
+    mirror = _mirror("dockerhub-mirror")
+    port = CTX["k8s_registry_dockerhub_mirror_port"]
+    (bound,) = mirror["ports"]
+    assert bound["hostPort"] == bound["containerPort"] == port, bound
+    assert bound["hostIP"] == CTX["k8s_registry_host_ip"], bound
+    env = _env(mirror)
+    assert env["REGISTRY_HTTP_ADDR"] == f":{port}", env
+    debug = env["REGISTRY_HTTP_DEBUG_ADDR"]
+    assert debug.startswith("127.0.0.1:"), debug
+    taken = {
+        str(CTX[k])
+        for k in (
+            "k8s_registry_port",
+            "k8s_registry_ghcr_mirror_port",
+            "registry_k8s_ghcr_mirror_debug_port",
+            "registry_k8s_ghcr_resume_port",
+        )
+    } | {"5001"}
+    assert taken.isdisjoint({str(port), debug.rsplit(":", 1)[1]}), (port, debug)
+    claims = {
+        v["persistentVolumeClaim"]["claimName"]
+        for v in pod["volumes"]
+        if "persistentVolumeClaim" in v
+    }
+    assert claims == {CTX["registry_k8s_dockerhub_mirror_claim"]}, claims
+    declared = {c["name"] for c in CTX["k8s_claims"]}
+    assert CTX["registry_k8s_dockerhub_mirror_claim"] in declared, declared
+
+
 def _gc_jobs() -> dict[str, dict]:
     return {
         d["metadata"]["name"]: d
@@ -266,6 +315,7 @@ def test_the_service_routes_each_port_to_one_deployment_by_name():
     assert routed == {
         CTX["k8s_registry_port"]: "registry",
         CTX["k8s_registry_ghcr_mirror_port"]: "ghcr-mirror",
+        CTX["k8s_registry_dockerhub_mirror_port"]: "dockerhub-mirror",
     }, routed
 
 

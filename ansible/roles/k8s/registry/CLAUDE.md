@@ -16,6 +16,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   (`registry_k8s_netpol_probe_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** `registry-data` (no backup (StorageClass longhorn-nobackup)),
+  `registry-dockerhub-mirror` (no backup (StorageClass longhorn-nobackup)),
   `registry-ghcr-mirror` (no backup (StorageClass longhorn-nobackup))
 <!-- /generated_from -->
 
@@ -43,7 +44,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     the trade-off.
   - It keeps the address every consumer names: `k8s_registry_ghcr_mirror_port` (5002) on the
     loopback hostPort of the registry node, and on the pinned ClusterIP. One Service fronts
-    both Deployments and routes each port by a named targetPort that only one pod declares.
+    every Deployment and routes each port by a named targetPort that only one pod declares.
     `ansible/roles/k8s/registry/templates/service.yaml.j2:DECIDED: one Service fronting two`
     has why.
   - Its own NetworkPolicy, beside its Deployment, admits that port only from the two node
@@ -115,6 +116,29 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     `/var/lib/registry-gc/ghcr-mirror-down` exists from before the scale-down until the mirror
     serves again, and a run that finds it restores the mirror first. Observability's
     `GhcrMirrorScaledToZero` (`files/rules/registry.yaml` there) pages one left at zero for 2h.
+- **lscr.io pulls go through the ghcr-mirror too** (#6257). lscr.io serves ghcr.io's
+  `linuxserver/*` repositories with ghcr.io's token realm and the same digests, so every node's
+  `registries.yaml` names the ghcr-mirror's endpoint for `lscr.io` as well. The proxy caches
+  them under their ghcr.io path, so `registry-gc.sh` strips both prefixes when it builds the
+  keep set and the warm list. Without that, the prune would delete a digest-pinned lscr.io
+  image once its repository held more than the kept revisions.
+- **A third registry, `dockerhub-mirror`, is the pull-through mirror of `docker.io`** (#6257).
+  It is `templates/dockerhub-mirror.yaml.j2`: its own Deployment, NetworkPolicy and claim
+  (`registry_k8s_dockerhub_mirror_claim`, 40Gi, `longhorn-nobackup`), on
+  `k8s_registry_dockerhub_mirror_port` (5005) behind the same Service. `registries.yaml` names
+  it as the `docker.io` mirror. It also takes repeat pulls off Docker Hub's anonymous rate
+  limit.
+  - It has no resume sidecar. The cut transfer that sidecar repairs is ghcr.io's signed blob
+    URL expiring.
+  - Its TTL is `registry_k8s_dockerhub_mirror_ttl` (2160h), not zero, so no GC collects it and
+    it renders `replicas: 1`. distribution schedules the expiry only on a fetch from Docker
+    Hub, and a pull served from the store never moves it. Every cached image is therefore
+    deleted one TTL after its first fetch, however often nodes pulled it since, so a digest pin
+    unchanged for longer than the TTL needs the WAN again.
+    `ansible/roles/k8s/registry/templates/dockerhub-mirror.yaml.j2:DECIDED: a long TTL` has
+    the trade-off.
+  - Nothing proves it serves pulls the way node-exporter's `ghcr-mirror-pull` sidecar proves
+    the ghcr-mirror does, and `registry-gc.sh` does not warm it.
 - **The push store is not collected** (D5, Wave D's registry bullet). Its GC scaled
   `deploy/registry`, whose `replicas: 1` Flux renders after the flip, so Flux would restore
   the pod mid-GC, the corruption the stop-the-world rule exists to prevent. Every
@@ -172,4 +196,4 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     `k8s_registry_pull_host`, so the pod starting is the proof (ruling on #5680). On a first
     run they wait in ImagePullBackOff until the push has seeded it. The `DECIDED:` comment
     in `templates/verify/job.yaml.j2` has the deadline arithmetic.
-  - `isolation` proves both ports refuse `app: registry-verify`.
+  - `isolation` proves all three ports refuse `app: registry-verify`.

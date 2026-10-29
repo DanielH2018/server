@@ -101,6 +101,7 @@ _RECREATE = {
     ("qbittorrent", "qbittorrent"): "VPN killswitch iptables live in the pod netns",
     ("registry", "registry"): "hostPort is node-exclusive",
     ("registry", "ghcr-mirror"): "hostPort is node-exclusive",
+    ("registry", "dockerhub-mirror"): "hostPort is node-exclusive",
     # ── in-process state ──
     (
         "monitor-bridge",

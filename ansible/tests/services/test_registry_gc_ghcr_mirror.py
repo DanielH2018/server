@@ -14,6 +14,8 @@ function that logs each call and answers from canned output.
     again, and a run that finds it restores the mirror first.
   * the run holds the lock from before its scale-down until after its restore (#5736). The
     deploy-time restore that took the same lock was deleted with registry's Ansible tasks.
+  * lscr.io refs join the keep set and the warm list under their ghcr.io repository path,
+    because registries.yaml points lscr.io at the same mirror (#6257).
   * `warm_mirror()` GETs each distinct amd64 blob of every ghcr.io ref through the mirror,
     only after the restore succeeded, and a blob that fails to warm leaves the run up (#5654).
 """
@@ -76,6 +78,34 @@ def test_tag_only_ghcr_refs_are_written_beside_the_digests(tmp_path):
     assert note == ""
     written = "\n".join(calls)
     assert f"--from-literal=digests={LIVE}\ndanielh2018/nut:abc123" in written, calls
+
+
+def test_lscr_refs_are_kept_and_warmed_under_their_ghcr_path(tmp_path):
+    """registries.yaml sends lscr.io pulls to the ghcr-mirror, which caches them as ghcr.io paths.
+
+    A keep set without them would let the prune delete a digest-pinned lscr.io image (#6257).
+    """
+    script = f"""
+KUBECTL="k3s kubectl -n homelab"
+MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
+MIRROR_NOTE=""
+WARM_REFS=""
+k3s() {{ printf '%s\\n' "$*" >> {shlex.quote(str(tmp_path / "calls"))}
+  [[ "$*" == *" get "* ]] && printf '%s' "$GET_BODY"; return 0; }}
+{KEEP_SET}
+write_mirror_keep_set
+printf '%s' "$WARM_REFS"
+"""
+    body = (
+        f'{{"items": [{{"image": "lscr.io/linuxserver/sonarr:4.0@{PINNED}"}},'
+        f' {{"image": "lscr.io/linuxserver/radarr:5.1"}}]}}'
+    )
+    env = {**os.environ, "GET_BODY": body}
+    refs = run(["bash", "-c", script], env=env, check=True).stdout.splitlines()
+
+    assert refs == ["linuxserver/radarr:5.1", f"linuxserver/sonarr@{PINNED}"], refs
+    kept = (tmp_path / "calls").read_text().splitlines()
+    assert {"linuxserver/radarr:5.1", "linuxserver/sonarr:4.0"} <= set(kept), kept
 
 
 def test_warm_refs_keep_the_digest_and_drop_a_bare_repository(tmp_path):

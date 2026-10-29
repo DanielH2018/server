@@ -50,8 +50,8 @@
       Their image pull is containerd's, which arrives SNAT'd to a node grant the fence already
       holds, so they need no peer either;
     - `registry-verify-isolation-<digest>` carries `app: registry-verify` and dials
-      registry:{{ k8s_registry_port }} and registry:{{ k8s_registry_ghcr_mirror_port }}, both
-      of which must REFUSE it. No peer is added: admitting `registry-verify` would open the
+      registry:{{ k8s_registry_port }}, registry:{{ k8s_registry_ghcr_mirror_port }} and
+      registry:{{ k8s_registry_dockerhub_mirror_port }}, all of which must REFUSE it. No peer is added: admitting `registry-verify` would open the
       hole the Job proves closed. tests/test_registry_verify.py fails if the fence admits it.
 #}
 {% set script_name = 'registry_verify.py' %}
@@ -95,7 +95,7 @@
     'deadline': 120,
     'env': {
       'CHECK': 'isolation',
-      'ISOLATED_URLS': 'http://' + registry_service + ':' + (k8s_registry_port | string) + '/v2/ http://' + registry_service + ':' + (k8s_registry_ghcr_mirror_port | string) + '/v2/',
+      'ISOLATED_URLS': 'http://' + registry_service + ':' + (k8s_registry_port | string) + '/v2/ http://' + registry_service + ':' + (k8s_registry_ghcr_mirror_port | string) + '/v2/ http://' + registry_service + ':' + (k8s_registry_dockerhub_mirror_port | string) + '/v2/',
     },
   },
 ] %}

@@ -9,14 +9,15 @@ spec:
   # containerd is a host process that resolves no cluster DNS, and an auto-assigned
   # ClusterIP would silently change on Service recreate, stranding every agent-side pull.
   clusterIP: {{ k8s_registry_cluster_ip }}
-  # DECIDED: one Service fronting two Deployments, so the ghcr.io mirror keeps the pinned
+  # DECIDED: one Service fronting two mirrors and the push store, so each mirror keeps the pinned
   # ClusterIP agents' registries.yaml names. A Service of its own would need a second pinned
   # address, and moving the endpoint is a setup-plane change on both nodes. The selector is a
-  # label both pods carry, and each targetPort is a port NAME that only one of them declares.
-  # The EndpointSlice controller leaves a pod out of a port whose named targetPort it does
-  # not declare, so :5000 reaches only the push store and :5002 only the mirror, and either
-  # pod being unready leaves the other port's endpoint in place. A numeric targetPort would
-  # send part of the push traffic to the mirror pod, which listens on nothing there.
+  # label all three pods carry, and each targetPort is a port NAME that only one of them
+  # declares. The EndpointSlice controller leaves a pod out of a port whose named targetPort it
+  # does not declare, so :5000 reaches only the push store, :5002 only the ghcr.io mirror and
+  # :5005 only the docker.io mirror, and one pod being unready leaves the other ports' endpoints
+  # in place. A numeric targetPort would send part of the push traffic to a mirror pod, which
+  # listens on nothing there.
   selector:
     registry-service: "true"
   ports:
@@ -26,3 +27,6 @@ spec:
     - name: ghcr-mirror
       port: {{ k8s_registry_ghcr_mirror_port }}
       targetPort: ghcr-mirror
+    - name: dockerhub-mirror
+      port: {{ k8s_registry_dockerhub_mirror_port }}
+      targetPort: dockerhub-mirror

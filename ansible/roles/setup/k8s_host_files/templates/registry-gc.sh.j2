@@ -220,6 +220,11 @@ journal_mirror_prune() {
 # A CronJob's pod is not running at 04:20 on a Sunday, so its pinned digest comes from its spec.
 # Every sha256 digest in the JSON is kept, which can only keep more than strictly needed.
 #
+# LSCR.IO REFS COUNT AS GHCR.IO REFS. registries.yaml points lscr.io at this same mirror
+# (#6257), and lscr.io serves ghcr.io's repositories under the same paths, so
+# `lscr.io/linuxserver/x` is cached as `linuxserver/x` beside the ghcr.io refs. Both prefixes
+# strip to that one repo path.
+#
 # TAG REFS TOO. A flux-owned built image runs as `ghcr.io/danielh2018/<name>:<tag>` with no
 # digest, so a workload of one scaled to zero leaves no digest anywhere. Its spec still names
 # the tag, and the prune keeps whatever revision that tag points at in the store. Each ref goes
@@ -242,15 +247,16 @@ write_mirror_keep_set() {
     return 0
   fi
   # A ref that carries a digest is warmed by it, its tag dropped. A bare repository is no ref.
-  WARM_REFS=$(grep -oE 'ghcr\.io/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?' \
-                <<<"$json" | sed -E 's|^ghcr\.io/||; s|^([^:@]+):[^@]+@|\1@|' \
+  WARM_REFS=$(grep -oE '(ghcr|lscr)\.io/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?' \
+                <<<"$json" | sed -E 's#^(ghcr|lscr)\.io/##; s|^([^:@]+):[^@]+@|\1@|' \
                 | grep -E '[:@]' | sort -u)
   keep=$(grep -o 'sha256:[0-9a-f]\{64\}' <<<"$json" | sort -u)
   if [[ -z "$keep" ]]; then
     MIRROR_NOTE="ghcr-mirror prune skipped, no digest found in any workload"
     return 0
   fi
-  tags=$(grep -oE 'ghcr\.io/[a-z0-9._/-]+:[A-Za-z0-9._-]+' <<<"$json" | sed 's|^ghcr\.io/||' \
+  tags=$(grep -oE '(ghcr|lscr)\.io/[a-z0-9._/-]+:[A-Za-z0-9._-]+' <<<"$json" \
+           | sed -E 's#^(ghcr|lscr)\.io/##' \
            | sort -u)
   [[ -n "$tags" ]] && keep="${keep}"$'\n'"${tags}"
   if ! $KUBECTL create configmap "$MIRROR_KEEP_CM" --from-literal=digests="$keep" \

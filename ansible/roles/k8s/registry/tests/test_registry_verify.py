@@ -287,25 +287,28 @@ def test_the_fence_admits_the_push_job_on_the_push_port(flipped, policy):
 
 
 @pytest.fixture(scope="module")
-def mirror_policy(flipped_tag) -> dict:
-    (policy,) = [
+def mirror_policies(flipped_tag) -> list[dict]:
+    policies = [
         doc
         for doc in _docs(flipped_tag.files)
-        if doc["kind"] == "NetworkPolicy" and doc["metadata"]["name"] == "ghcr-mirror"
+        if doc["kind"] == "NetworkPolicy"
+        and doc["metadata"]["name"] in {"ghcr-mirror", "dockerhub-mirror"}
     ]
-    return policy
+    assert len(policies) == 2, [p["metadata"]["name"] for p in policies]
+    return policies
 
 
 def test_the_isolation_job_dials_every_port_the_fence_covers(
-    flipped, policy, mirror_policy
+    flipped, policy, mirror_policies
 ):
     """A port the Job skipped would be a fence hole nothing checks.
 
-    The Service fronts both pods, so the fence is the push store's policy and the mirror's.
+    The Service fronts all three pods, so the fence is the push store's policy and each
+    mirror's.
     """
     fenced = {
         int(port["port"])
-        for fence in (policy, mirror_policy)
+        for fence in (policy, *mirror_policies)
         for rule in fence["spec"]["ingress"]
         for port in rule["ports"]
     }
@@ -314,15 +317,16 @@ def test_the_isolation_job_dials_every_port_the_fence_covers(
         for u in _env_of(_job(flipped, "isolation"))["ISOLATED_URLS"].split()
     ]
     assert {u.hostname for u in urls} == {"registry.homelab.svc.cluster.local"}
-    assert {u.port for u in urls} == fenced == {5000, 5002}
+    assert {u.port for u in urls} == fenced == {5000, 5002, 5005}
 
 
-def test_the_fence_does_not_admit_the_isolation_job(flipped, policy, mirror_policy):
+def test_the_fence_does_not_admit_the_isolation_job(flipped, policy, mirror_policies):
     """Admitting `registry-verify` would open the hole the Job proves closed."""
     label = _label(_job(flipped, "isolation"))
     assert label == "registry-verify"
     assert _may_admit_on(policy, label) == []
-    assert _may_admit_on(mirror_policy, label) == []
+    for mirror_policy in mirror_policies:
+        assert _may_admit_on(mirror_policy, label) == []
 
 
 @pytest.mark.parametrize(
