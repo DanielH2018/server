@@ -359,3 +359,19 @@ def test_a_failed_reach_derivation_records_nothing_and_still_applies(
     assert gitops_deploy.main(tick.tools, config, state) == 0
     assert APPLY_GITOPS_DEPLOY in tick.playbooks
     assert state.manual_plane_pending() == []
+
+
+def test_a_repo_file_hypervisor_copies_is_applied_and_asks_the_reach_about_hypervisor(
+    gitops_deploy, tick, settings, state
+):
+    """The drill script sits under no role, and daniel-server kept the old copy (#6411, #6527).
+
+    `deploy_cross_role` routes it to hypervisor, so the tick applies hypervisor on its own host
+    and offers it to `record_reach`. The hosts come from the stub; the real derivation over the
+    same path is `test_setup_reach_hosts.py::test_the_drill_script_commit_names_daniel_server`.
+    """
+    tick.paths = ["scripts/backup/etcd_restore_drill.sh"]
+    tick.reach = {"hypervisor": ("daniel-server",)}
+    assert gitops_deploy.main(tick.tools, settings, state) == 0
+    assert [*APPLY_GITOPS_DEPLOY[:-1], "hypervisor"] in tick.playbooks
+    assert [e.role for e in state.manual_plane_pending()] == ["hypervisor"]
