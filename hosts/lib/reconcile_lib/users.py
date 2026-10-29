@@ -21,7 +21,7 @@ declares no users leaves them alone. Each name the floor kept is drift.
 import re
 from pathlib import Path
 
-from reconcile_lib.common import ERR, run, say, under_root
+from reconcile_lib.common import ERR, run, log, under_root
 
 SYSUSERS = Path("/usr/lib/sysusers.d/homelab.conf")
 NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
@@ -61,10 +61,10 @@ def check(user: dict) -> str:
         return "absent"
     fields = found.stdout.split(":")
     if found.returncode != 0 or len(fields) < 3 or not fields[2].isdigit():
-        say(f"getent passwd {user['name']} failed: {found.stderr.strip()}", ERR)
+        log(f"getent passwd {user['name']} failed: {found.stderr.strip()}", ERR)
         return "fault"
     if int(fields[2]) != user["uid"]:
-        say(
+        log(
             f"{user['name']} has uid {fields[2]}; the package declares {user['uid']}",
             ERR,
         )
@@ -76,7 +76,7 @@ def expire(name: str) -> bool:
     gone = run("getent", "passwd", name).returncode == 2
     if gone or run("usermod", "--expiredate", "1", name).returncode == 0:
         return True
-    say(f"cannot expire {name}", ERR)
+    log(f"cannot expire {name}", ERR)
     return False
 
 
@@ -92,7 +92,7 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
         created = run("systemd-sysusers", str(under_root(SYSUSERS))).returncode == 0
         ok = created and all(check(u) == "live" for u in missing)
         if not ok:
-            say("systemd-sysusers did not leave every declared user in place", ERR)
+            log("systemd-sysusers did not leave every declared user in place", ERR)
     names = {user["name"] for user in users}
     stale = sorted(set((prev or {}).get("names") or []) - names)
     drift = 0

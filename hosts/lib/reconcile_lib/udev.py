@@ -16,7 +16,7 @@ run retries it.
 import hashlib
 from pathlib import Path
 
-from reconcile_lib.common import ERR, run, say, under_root
+from reconcile_lib.common import ERR, run, log, under_root
 
 RULES = Path("/usr/lib/udev/rules.d")
 GLOB = "[0-9][0-9]-homelab-*.rules"
@@ -36,14 +36,14 @@ def reconcile(prev: object) -> tuple[bool, dict[str, str]]:
             if rule.is_file()
         }
     except OSError as exc:
-        say(f"cannot read the udev rules: {exc}", ERR)
+        log(f"cannot read the udev rules: {exc}", ERR)
         return False, {k: v for k, v in known.items() if isinstance(v, str)}
     if all(known.get(path) == digest for path, digest in shipped.items()):
         return True, shipped
     for argv in CALLS:
         result = run(*argv)
         if result.returncode != 0:
-            say(f"{' '.join(argv)} failed: {result.stderr.strip()}", ERR)
+            log(f"{' '.join(argv)} failed: {result.stderr.strip()}", ERR)
             return False, {path: known[path] for path in shipped if path in known}
-    say(f"reloaded udev for {len(shipped)} shipped rule(s)")
+    log(f"reloaded udev for {len(shipped)} shipped rule(s)")
     return True, shipped

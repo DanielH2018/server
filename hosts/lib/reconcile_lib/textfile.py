@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 
 from reconcile_lib.activate import REBOOT_PENDING
-from reconcile_lib.common import ERR, ROOT, say
+from reconcile_lib.common import ERR, ROOT, log
 
 TEXTFILE_DIR = ROOT / "var/lib/node-exporter-textfile"
 PROM = "homelab_host_reconcile.prom"
@@ -61,7 +61,7 @@ def render(host: str, state: dict) -> str:
 def write(host: str, state: dict) -> None:
     """Write the metrics file; say why and write nothing when the directory is missing."""
     if not TEXTFILE_DIR.is_dir():
-        say(f"{TEXTFILE_DIR} is missing; writing no metrics")
+        log(f"{TEXTFILE_DIR} is missing; writing no metrics")
         return
     try:
         fd, tmp = tempfile.mkstemp(dir=TEXTFILE_DIR, prefix=f".{PROM}.")
@@ -70,4 +70,4 @@ def write(host: str, state: dict) -> None:
         Path(tmp).chmod(0o644)
         os.replace(tmp, TEXTFILE_DIR / PROM)
     except OSError as exc:
-        say(f"cannot write {PROM}: {exc}", ERR)
+        log(f"cannot write {PROM}: {exc}", ERR)

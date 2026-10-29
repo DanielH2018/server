@@ -25,7 +25,13 @@ def _is_journal(stream) -> bool:
         return False
 
 
-def log(message: str, level: int | None = None, *, tag: str, stream=None) -> None:
+def log(
+    message: str,
+    level: int | None = None,
+    *,
+    tag: str = "homelab-reconcile",
+    stream=None,
+) -> None:
     """Print `<tag>: <message>` to stderr, each line prefixed `<level>` on the journal.
 
     The distro-python tier's copy of host_lib's `log`: reconcile and homelab-secrets run
@@ -38,10 +44,6 @@ def log(message: str, level: int | None = None, *, tag: str, stream=None) -> Non
     if level is not None and _is_journal(out):
         text = "\n".join(f"<{level}>{line}" for line in text.split("\n"))
     print(text, file=out, flush=True)
-
-
-def say(message: str, level: int | None = None) -> None:
-    log(message, level, tag="homelab-reconcile")
 
 
 def under_root(path: Path) -> Path:

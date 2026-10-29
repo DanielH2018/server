@@ -127,7 +127,7 @@ def test_a_leveled_reconcile_line_carries_its_priority_only_on_the_journal(
     assert journal.read_text() == (
         "<3>homelab-reconcile: stop x failed:\n<3>boom\nhomelab-reconcile: stopped x\n"
     )
-    common.say("stop x failed", common.ERR)
+    common.log("stop x failed", common.ERR)
     assert capsys.readouterr().err == "homelab-reconcile: stop x failed\n"
 
 
