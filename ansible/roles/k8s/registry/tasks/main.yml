@@ -25,3 +25,6 @@
     manifests_extra_rollouts:
       - name: ghcr-mirror
         restart_on: []
+      # The docker.io mirror (templates/dockerhub-mirror.yaml.j2), for the same reason.
+      - name: dockerhub-mirror
+        restart_on: []

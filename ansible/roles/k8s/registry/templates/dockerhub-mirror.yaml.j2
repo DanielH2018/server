@@ -1,0 +1,126 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+---
+# The pull-through mirror of docker.io (#6257). k3s's registries.yaml names it as the `docker.io`
+# mirror, so containerd pulls a Docker Hub image through it and the LAN keeps a copy. A pod whose
+# image is not on its node can then still start during a WAN outage: a first schedule onto the
+# other node, a node drain, or kubelet's image GC. It also takes repeat pulls off Docker Hub's
+# anonymous rate limit. lscr.io needs no mirror of its own: it serves ghcr.io's linuxserver
+# repositories with ghcr.io's token realm and digests, so registries.yaml points it at the
+# ghcr-mirror.
+#
+# Its own Deployment for the ghcr-mirror's reasons (that template's `DECIDED: its own
+# Deployment`): a proxy refuses pushes, so it cannot be the push store, and one registry serves
+# one upstream. It needs no resume sidecar: the cut transfer that sidecar repairs is ghcr.io's
+# signed blob URL expiring (#5654), and Docker Hub's blob redirect is not cut that way.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dockerhub-mirror
+  namespace: {{ k8s_namespace }}
+spec:
+  # Recreate: the claim is ReadWriteOnce and the hostPort is node-exclusive.
+{{ spec_shell('Recreate') }}
+  # Rendered, unlike the ghcr-mirror's: no GC scales this one, so the apply is its only writer.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dockerhub-mirror
+  template:
+    metadata:
+      labels:
+        app: dockerhub-mirror
+        registry-service: "true"
+        # Opted out of the namespace baseline: the policy below is tighter, and the baseline is
+        # additive.
+        netpol-baseline-exempt: "true"
+    spec:
+      # On the registry node, because daniel-box's registries.yaml reaches this mirror on its
+      # own loopback hostPort.
+      nodeSelector:
+        kubernetes.io/hostname: {{ k8s_registry_node }}
+{{ pod_shell(containers_list | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
+      containers:
+        - name: dockerhub-mirror
+          image: {{ registry_k8s_image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            # Named for the Service's targetPort.
+            - name: dockerhub-mirror
+              containerPort: {{ k8s_registry_dockerhub_mirror_port }}
+              # Loopback only. Without hostIP this binds 0.0.0.0 and an unauthenticated
+              # pull-through cache of every public Docker Hub image becomes open to the LAN.
+              hostIP: {{ k8s_registry_host_ip }}
+              hostPort: {{ k8s_registry_dockerhub_mirror_port }}
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: REGISTRY_LOG_LEVEL
+              value: info
+            - name: REGISTRY_HTTP_ADDR
+              value: ":{{ k8s_registry_dockerhub_mirror_port }}"
+            # Loopback only, off the baked :5001.
+            - name: REGISTRY_HTTP_DEBUG_ADDR
+              value: "127.0.0.1:{{ registry_k8s_dockerhub_mirror_debug_port }}"
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+            # Docker Hub's registry API host. containerd sends a docker.io pull to a mirror with
+            # the repository path normalised (`library/alpine`), which this host serves as is.
+            - name: REGISTRY_PROXY_REMOTEURL
+              value: https://registry-1.docker.io
+            # DECIDED: a long TTL, not the ghcr-mirror's zero. A zero TTL never expires anything,
+            # so the store then needs the weekly offline prune the ghcr-mirror has
+            # (registry-gc.sh, ghcr-mirror-prune.sh, its keep set and warm pass), and that
+            # machinery reads ghcr.io refs only. The TTL counts from the fetch, so an image
+            # fetched more than one TTL ago and not pulled since is a gap again; the default 168h
+            # would make that gap a week. Moving to a zero TTL with a GC is filed for later in
+            # the PR that added this mirror.
+            - name: REGISTRY_PROXY_TTL
+              value: "{{ registry_k8s_dockerhub_mirror_ttl }}"
+          volumeMounts:
+            - name: dockerhub-mirror-data
+              mountPath: /var/lib/registry
+          # `/v2/` answers from the local handler, so neither probe depends on Docker Hub being
+          # reachable, which would mark the mirror unready in the WAN outage it exists for.
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: {{ k8s_registry_dockerhub_mirror_port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: {{ k8s_registry_dockerhub_mirror_port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+{{ container_resources(cpu_limit='500m', mem_limit='256Mi', cpu_request='20m', mem_request='32Mi') }}
+      volumes:
+        - name: dockerhub-mirror-data
+          persistentVolumeClaim:
+            claimName: {{ registry_k8s_dockerhub_mirror_claim }}
+---
+# A pull path only, admitted from the two host sources the ghcr-mirror's policy admits:
+# daniel-box's containerd through the loopback hostPort, and daniel-server's across the overlay
+# to the pinned ClusterIP. networkpolicy.yaml.j2 has the SNAT evidence for both. No pod-network
+# rule: a pod that could reach it could fill the claim with arbitrary public images.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dockerhub-mirror
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: dockerhub-mirror
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: {{ registry_k8s_netpol_cni_gateway }}
+        - ipBlock:
+            cidr: {{ registry_k8s_netpol_agent_flannel }}
+      ports:
+        - protocol: TCP
+          port: {{ k8s_registry_dockerhub_mirror_port }}
