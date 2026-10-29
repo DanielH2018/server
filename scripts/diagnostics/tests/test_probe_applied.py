@@ -418,3 +418,53 @@ def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_pat
     assert {w.path for w in wants} == {"/etc/a", "/etc/b"}
     _, skips = applied_tasks.expected(role, "daniel-box", {})
     assert [(s.reason, s.unchecked) for s in skips] == [("it loops over a list that is not literal", True)]  # fmt: skip
+
+
+def test_a_loop_item_holding_jinja_is_rendered_before_the_task_reads_it(tmp_path):
+    """Ansible templates the loop before it binds `item`, so a dict item's Jinja values and
+    a `dirname` item both reach a literal path (#6409)."""
+    tasks = (
+        "- name: Make the dict items' directories\n"
+        "  ansible.builtin.file: {path: '{{ item.path }}', state: directory, mode: '{{ item.mode }}'}\n"
+        "  loop:\n"
+        "    - {path: '{{ home }}/.ssh', mode: '0750'}\n"
+        "    - {path: /opt/x, mode: \"{{ '0710' if opened else '0700' }}\"}\n"
+        "    - {path: '{{ nowhere }}/y', mode: '0700'}\n"
+        "- name: Make the string items' directories\n"
+        "  ansible.builtin.file: {path: '{{ item }}', state: directory}\n"
+        "  loop: ['{{ creds | dirname }}']\n"
+    )
+    ctx = {
+        "home": "/var/lib/a",
+        "opened": True,
+        "creds": "/var/lib/a/.config/ui/c.json",
+    }
+    wants, skips = applied_tasks.expected(_role(tmp_path, tasks), "daniel-box", ctx)
+    assert {(w.path, w.mode) for w in wants} == {
+        ("/var/lib/a/.ssh", "0750"),
+        ("/opt/x", "0710"),
+        ("/var/lib/a/.config/ui", None),
+    }
+    # An item naming a variable the context lacks stays as written, and its task is skipped.
+    assert [(s.task, s.reason) for s in skips] == [
+        ("Make the dict items' directories", "its path does not render to a literal")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "kept"),
+    [("/etc/x/user-1000.slice.d", False), ("/etc/x/user-1001.slice.d", True)],
+)
+def test_a_gate_through_basename_or_dirname_is_evaluated(tmp_path, path, kept):
+    """ansible-core's path filters are registered, so such a gate is read, not refused (#6407)."""
+    tasks = (
+        "- name: Remove the uncapped drop-in\n"
+        "  ansible.builtin.file: {path: /etc/x/drop-in, state: absent}\n"
+        "  when:\n"
+        "    - (p | basename | replace('user-', '') | replace('.slice.d', '') | int) not in uids\n"
+        "    - p | dirname == '/etc/x'\n"
+    )
+    ctx = {"p": path, "uids": [1000]}
+    wants, skips = applied_tasks.expected(_role(tmp_path, tasks), "daniel-box", ctx)
+    assert skips == []
+    assert [w.path for w in wants] == (["/etc/x/drop-in"] if kept else [])
