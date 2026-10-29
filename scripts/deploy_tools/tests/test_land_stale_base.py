@@ -1,7 +1,8 @@
 """--await-merge on a PR whose base master has moved past since its CI ran (issue #4013).
 
-A green head whose merge base is behind master is not merged: the branch is updated once and
-the merge waits for the updated head to go green. Each behaviour is tested against its
+A green head whose base is behind master on a path the PR changes is not merged: the branch is
+updated once and the merge waits for the updated head to go green. A head whose files master
+did not touch merges as it stands (#6565). Each behaviour is tested against its
 counterpart: a stale base against an up-to-date one, an update GitHub accepts against one it
 refuses, and a head GitHub has already moved against one it has not.
 
@@ -28,6 +29,10 @@ INCIDENT_2922 = [
     "ansible/roles/k8s/claude-otel/CLAUDE.md",
     "ansible/tests/_ratchet.py",
 ]
+# The PR's own file listing, sharing the role CLAUDE.md with INCIDENT_2922.
+OVERLAPPING = [
+    {"status": "modified", "filename": "ansible/roles/k8s/claude-otel/CLAUDE.md"}
+]
 
 
 def _polls(*heads: str) -> list[dict]:
@@ -41,13 +46,16 @@ def _polls(*heads: str) -> list[dict]:
     ]
 
 
-def _landing(landing, polls, compare, gh_rc=(0,), tested_base=None, **opts):
+def _landing(
+    landing, polls, compare, gh_rc=(0,), tested_base=None, pr_files=None, **opts
+):
     ln, calls = landing(
         Fakes(
             gh_views={"state,mergeable,headRefOid": polls},
             tested_base=tested_base or {},
             compare=compare,
             gh_merge_rc=list(gh_rc),
+            pr_files=OVERLAPPING if pr_files is None else pr_files,
         ),
         **opts,
     )
@@ -70,6 +78,54 @@ def test_a_stale_base_updates_the_branch_and_merges_the_updated_head(landing):
     merge.await_merge(ln)
     assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
     assert len([c for c in calls if c[0] == "gh:compare"]) == 1
+
+
+def test_master_changing_no_path_the_pr_changes_merges_without_an_update(landing):
+    """#2922's shape: the accepted risk of the 2026-10-29 ruling, traded for a CI run."""
+    docs_only = [{"status": "modified", "filename": "docs/landing.md"}]
+    ln, calls = _landing(landing, _polls(OLD), [INCIDENT_2922], pr_files=docs_only)
+    merge.await_merge(ln)
+    assert _gh_writes(calls) == ["merge aaaa"]
+    assert len([c for c in calls if c[0] == "gh:files"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("mergeable", "compare", "pr_files"),
+    [
+        pytest.param(
+            "CONFLICTING",
+            INCIDENT_2922,
+            [{"status": "added", "filename": "x.md"}],
+            id="conflicting",
+        ),
+        pytest.param(
+            "MERGEABLE",
+            [f"docs/{i}.md" for i in range(merge.COMPARE_CAP)],
+            [{"status": "added", "filename": "x.md"}],
+            id="capped-compare",
+        ),
+        pytest.param(
+            "MERGEABLE",
+            INCIDENT_2922,
+            [
+                {
+                    "status": "renamed",
+                    "filename": "docs/claude-otel.md",
+                    "previous_filename": "ansible/roles/k8s/claude-otel/CLAUDE.md",
+                }
+            ],
+            id="pr-renamed-a-moved-path",
+        ),
+    ],
+)
+def test_an_overlap_that_cannot_be_ruled_out_updates_the_branch(
+    landing, mergeable, compare, pr_files
+):
+    polls = _polls(OLD, NEW)
+    polls[0]["mergeable"] = mergeable
+    ln, calls = _landing(landing, polls, [compare], pr_files=pr_files)
+    merge.await_merge(ln)
+    assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
 
 
 def test_an_up_to_date_base_merges_without_an_update(landing):
@@ -208,6 +264,7 @@ def test_the_policy_checks_and_pins_the_head_its_own_update_made(landing):
                 "headRefOid": {"headRefOid": NEW},
             },
             compare=[INCIDENT_2922],
+            pr_files=OVERLAPPING,
         ),
         require_branch_prefix=PREFIX,
     )
@@ -269,7 +326,8 @@ def _approved_landing(landing, tmp_path, compare):
 
 def test_a_stale_approved_head_is_refused_without_an_update(landing, tmp_path):
     """The update would make a head the approval does not name; merging it is untested."""
-    ln, calls = _approved_landing(landing, tmp_path, [INCIDENT_2922])
+    moved = [*INCIDENT_2922, "scripts/deploy_tools/land_lib/merge.py"]
+    ln, calls = _approved_landing(landing, tmp_path, [moved])
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
     assert exc.value.rc == 1
@@ -279,5 +337,11 @@ def test_a_stale_approved_head_is_refused_without_an_update(landing, tmp_path):
 
 def test_an_up_to_date_approved_head_merges(landing, tmp_path):
     ln, calls = _approved_landing(landing, tmp_path, [[]])
+    merge.await_merge(ln)
+    assert _gh_writes(calls) == ["merge aaaa"]
+
+
+def test_an_approved_head_whose_files_master_did_not_touch_merges(landing, tmp_path):
+    ln, calls = _approved_landing(landing, tmp_path, [INCIDENT_2922])
     merge.await_merge(ln)
     assert _gh_writes(calls) == ["merge aaaa"]
