@@ -1,0 +1,23 @@
+# Managed by Ansible (roles/setup/claude_code, tasks/rootq.yml) — edits here are overwritten.
+#
+# The read-only root inspector's socket (#6350). A user in the group below, such as the agent
+# user, connects here to run one `rootq` verb as root. `sudo` cannot give the agent that:
+# claude-rc.service runs with NoNewPrivileges=yes, and a socket needs no setuid. The group
+# decides who may connect. The helper then runs the same script as the operator's sudo path.
+[Unit]
+Description=Read-only root inspector socket
+
+[Socket]
+ListenStream={{ claude_code_rootq_socket_path }}
+# One homelab-rootq@.service instance per connection, with the connection on its stdin.
+Accept=yes
+SocketUser=root
+SocketGroup={{ claude_code_rootq_socket_group }}
+SocketMode=0660
+# Without this, a stopped socket leaves its file behind, and a connect to it is refused
+# instead of finding no file.
+RemoveOnStop=yes
+MaxConnections=8
+
+[Install]
+WantedBy=sockets.target

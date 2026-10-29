@@ -678,3 +678,17 @@ claude_code_rootq_users:
   - "{{ sys_user }}"
 claude_code_rootq_script: /usr/local/sbin/homelab-rootq
 claude_code_rootq_shim: /usr/local/bin/rootq
+
+# The same inspector for the agent user through a socket (issue #6350). `sudo` is no route for
+# the agent: claude-rc.service runs with NoNewPrivileges=yes. homelab-rootq.socket (0660, the
+# group below) starts a root helper per connection, and the helper runs the script above, so
+# the allowlist and the redaction are the same. True in daniel-box.yml and daniel-server.yml.
+# False removes the socket, its units, the helper, the client and the group, and agent_access.yml
+# takes the agent out of the group. It does nothing while claude_code_rootq_enabled is false,
+# because a socket must not outlive the script it runs. CLAUDE.md, "The root inspector".
+claude_code_rootq_socket_enabled: false
+claude_code_rootq_socket_armed: "{{ claude_code_rootq_enabled and claude_code_rootq_socket_enabled }}"
+claude_code_rootq_socket_group: homelab-rootq
+claude_code_rootq_socket_path: /run/homelab-rootq.sock
+claude_code_rootq_socket_helper: /usr/local/libexec/homelab-rootq-socket
+claude_code_rootq_socket_client: /usr/local/bin/rootq-socket

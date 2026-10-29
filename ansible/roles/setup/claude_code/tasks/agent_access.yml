@@ -21,14 +21,28 @@
   register: claude_code_worktree_holders_group_made
   become: true
 
-# Skipped by a --check run that has not created the group, because usermod refuses a group it
+# The root inspector's socket group lets the agent run `rootq-socket` (tasks/rootq.yml, #6350).
+# Created here too, for the reason above: this file runs before rootq.yml. Absent when the
+# socket is switched off, which drops the agent from the group and lets rootq.yml remove it.
+- name: Create the root inspector's socket group for the agent user to join
+  when: claude_code_rootq_socket_armed
+  ansible.builtin.group:
+    name: "{{ claude_code_rootq_socket_group }}"
+    system: true
+  register: claude_code_rootq_socket_group_made
+  become: true
+
+# Skipped by a --check run that has not created a group, because usermod refuses a group it
 # cannot find even when it only reports.
-- name: Set the agent user's journal access, its ssh login group and its worktree scan group
-  when: not (ansible_check_mode and claude_code_worktree_holders_group_made is changed)
+- name: Set the agent user's journal access, its ssh login group and its socket groups
+  when: >-
+    not (ansible_check_mode and (claude_code_worktree_holders_group_made is changed
+    or claude_code_rootq_socket_group_made is changed))
   ansible.builtin.user:
     name: "{{ claude_code_agent_user }}"
     groups: >-
       {{ [initial_setup_worktree_holders_group]
+      + ([claude_code_rootq_socket_group] if claude_code_rootq_socket_armed else [])
       + (['systemd-journal'] if claude_code_agent_journal_access else [])
       + (['ssh-users'] if claude_agent_ssh_login_enabled and claude_code_agent_is_primary
       and inventory_hostname != claude_agent_ssh_key_host else []) }}

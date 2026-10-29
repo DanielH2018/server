@@ -235,6 +235,11 @@ FLOOR = [
     "ansible/roles/setup/claude_code/files/rootq.sh",
     "ansible/roles/setup/claude_code/tasks/rootq.yml",
     "ansible/roles/setup/claude_code/templates/claude-rootq.sudoers.j2",
+    # The agent's socket to the same inspector joined it on 2026-10-29 (#6350).
+    "ansible/roles/setup/claude_code/files/homelab_rootq_socket.py",
+    "ansible/roles/setup/claude_code/files/rootq_socket.py",
+    "ansible/roles/setup/claude_code/templates/homelab-rootq.socket.j2",
+    "ansible/roles/setup/claude_code/templates/homelab-rootq@.service.j2",
     "scripts/deploy_tools/land",
     "pyproject.toml",
     "uv.lock",
