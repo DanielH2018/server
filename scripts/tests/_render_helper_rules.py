@@ -14,6 +14,8 @@ import ast
 from pathlib import Path
 from typing import NamedTuple
 
+from _row_table import parse
+
 from lib.repo_paths import REPO
 
 _ENV_CLASSES = frozenset({"Environment", "NativeEnvironment"})
@@ -29,7 +31,7 @@ def bare_jinja_envs(source: str) -> list[str]:
     # An import is an identifier, so a module that never spells `jinja2` imports neither (#5501).
     if "jinja2" not in source:
         return []
-    tree = ast.parse(source)
+    tree = parse(source)
     bound: set[str] = set()
     modules: set[str] = set()
     for node in ast.walk(tree):
@@ -103,7 +105,7 @@ def local_repo_roots(source: str, module: Path, repo: Path = REPO) -> list[str]:
     if "__file__" not in source:
         return []
     found = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(parse(source)):
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
@@ -439,7 +441,7 @@ def shell_template_source_reads(source: str) -> list[str]:
     A template written to `tmp_path` is the module's own fixture rather than a deployed script,
     so a receiver naming it is not a hit: the validator's tests build synthetic trees.
     """
-    tree = ast.parse(source)
+    tree = parse(source)
     if not _mentions_a_shell_template(tree):
         return []
     bound = {**_shell_template_paths(tree), **_resolver_fed_names(tree)}
