@@ -12,6 +12,13 @@ as unverified: the PR comment and the local record name it, and it does not hold
 
 from collections.abc import Callable
 
+# Reach the sibling package: a directly-invoked script gets only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 # The red/green gate's finding names no source file, so there is no line to quote at the head.
 # `green_contest` judges it from the red tests themselves.
 from fanout_lib.review.red_gate import GREEN_FILE
