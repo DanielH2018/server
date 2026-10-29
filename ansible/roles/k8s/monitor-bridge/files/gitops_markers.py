@@ -163,15 +163,26 @@ def by_hand(playbook: str) -> str | None:
     return None
 
 
-def target_arg(host: str | None) -> str:
-    """` -e target=<host>` for a role gated off the tick's host, else "".
+# The hosts `inventory/hosts.ini` pins `ansible_connection=local`. `-e target=` from another
+# machine selects such a host's vars and runs the play where it was typed, so its apply runs on
+# the host itself, from its own checkout. ENFORCED: `test_local_connection_hosts_match_the_inventory`.
+LOCAL_CONNECTION_HOSTS = frozenset({"daniel-box", "daniel-server"})
 
-    `host` is the `manual_plane` line's own `host` key, which the deployer derives from the
-    playbook's gate when it records the role (#3734). Appended to every printed
-    `ansible-playbook ... --tags <role>`: without it the command runs on the operator's host,
-    skips the role and exits 0 (#3933).
+
+def on_host(cmd: str, host: str | None) -> str:
+    """`cmd`, an `ansible-playbook` line, as run against `host`, or as is when `host` is None.
+
+    `host` is the `manual_plane` line's own `host` key: the host the routing gates an off-host
+    role onto (#3734), or a host the tick's own run did not reach (#6510). Without it the
+    command runs on the operator's host, skips the role and exits 0 (#3933). A
+    `LOCAL_CONNECTION_HOSTS` member is reached over ssh, and pulls first: nothing else keeps
+    that host's checkout current, and a stale one applies the pre-merge tree with a green recap.
     """
-    return f" -e target={host}" if host else ""
+    if host is None:
+        return cmd
+    if host in LOCAL_CONNECTION_HOSTS:
+        return f'ssh {host} "cd /home/ubuntu/server && git pull --ff-only && {cmd}"'
+    return f"{cmd} -e target={host}"
 
 
 # The prefix of every playbook command a surface prints for an operator to paste. A bare
@@ -384,7 +395,7 @@ def agent_join_cmds(role: str, playbook: str, tags, agent_hosts) -> list[str]:
 
     The whole-role tag gets them, and so does a row holding `AGENT_JOIN_TAGS[role]`, for the
     reason the `DECIDED:` marker above gives. A role with no known agent host, such as one an older deployer recorded, gets a visible
-    placeholder rather than a guessed host. No `target_arg`: `-e target=` selects a host's
+    placeholder rather than a guessed host. No `on_host`: `-e target=` selects a host's
     vars and still runs on the operator's machine, while the join play opens its own SSH
     connection to the host `join_agent` names.
     """
@@ -466,7 +477,7 @@ class ManualPlaneEntry(NamedTuple):
             gives is what monitor-bridge pages on, so it is NEVER refreshed for a role
             already listed.
         host: the one host the playbook gates the role onto, for a role the tick's host
-            does not run, else None. Every printed apply command appends `target_arg(host)`.
+            does not run, else None. Every printed apply command goes through `on_host`.
         agent_hosts: the hosts the playbook's join plays apply the role's agent half to, from
             the routing when the deployer recorded the line (#5627). Empty for every role
             `AGENT_JOIN_TAGS` does not name. Every printer passes it to `agent_join_cmds`.

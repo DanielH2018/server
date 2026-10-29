@@ -43,6 +43,8 @@ ROUTING_TIMEOUT_S = 30.0
 # A grep per changed key: 0.4s measured over PR #5405's commit, and 0.25s for the `--deploy-tags`
 # half over the last three commits to the file, so the routing bound serves both.
 SECRET_READERS_SCRIPT = "scripts/deploy_tools/secret_setup_readers.py"
+# 0.84s measured over ee529af466, a six-file hypervisor commit, so the routing bound serves it.
+SETUP_REACH_SCRIPT = "scripts/deploy_tools/setup_reach_hosts.py"
 # The script's deliberate refusal, distinct from 1, which a traceback exits with. This unit
 # cannot import `lib.exit_codes`, so `test_narrow_secret_keys.py` pins it to `DEPLOY_BROAD`.
 SECRET_READERS_REFUSED_EXIT = 3
@@ -226,6 +228,53 @@ def secret_k8s_readers(repo: str, old: str, new: str) -> tuple[int, str]:
         check=False,
     )
     return r.returncode, r.stdout.strip()
+
+
+def setup_reach_hosts(
+    repo: str, old: str, new: str, host: str
+) -> dict[str, tuple[str, ...]]:
+    """Run `setup_reach_hosts.py` over `old..new` in `repo`, for the tick host `host` (#6510).
+
+    Returns:
+        Each setup role the tick applies on `host`, mapped to the other hosts the range's
+        change to it reaches. Empty when the change reaches no other host.
+
+    Raises:
+        subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
+        RuntimeError: the child exited non-zero; the message is its stderr.
+        ValueError: its stdout is not a JSON object of host lists.
+        OSError: the child could not be started.
+    """
+    r = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "python",
+            SETUP_REACH_SCRIPT,
+            old,
+            new,
+            "--host",
+            host,
+        ],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=ROUTING_TIMEOUT_S,
+        check=False,
+    )
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip() or f"exited {r.returncode}")
+    data = json.loads(r.stdout)
+    if not (
+        isinstance(data, dict)
+        and all(
+            isinstance(v, list) and all(isinstance(h, str) for h in v)
+            for v in data.values()
+        )
+    ):
+        raise ValueError(f"not the setup-reach JSON: {r.stdout.strip()[:200]!r}")
+    return {role: tuple(hosts) for role, hosts in data.items() if hosts}
 
 
 def current_routing() -> dict[str, SetupRoute] | None:

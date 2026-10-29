@@ -428,12 +428,27 @@ inventory_hostname == optimize_pi_host`, so the tick's `--tags optimize_pi` run 
 matched no task, exited 0 and recorded an apply the Pi never received.
 `scripts/deploy_tools/setup_routing.py` reads the role's `when:` against each host's vars and
 finds the one host it admits. The deployer writes that host into the role's `manual_plane` line
-as its `host` key, and every surface that prints the remediation appends `-e target=<host>`
-from it: `uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e
-target=daniel-pi`. Each prints `gitops_markers.PLAYBOOK_CMD` as the prefix, because a bare `ansible-playbook`
+as its `host` key, and every surface that prints the remediation runs the command against
+it through `gitops_markers.on_hosts`: `uv run ansible-playbook ansible/initial_setup.yml --tags
+optimize_pi -e target=daniel-pi`. A host `hosts.ini` pins `ansible_connection=local` gets
+`ssh <host> "cd /home/ubuntu/server && git pull --ff-only && <command>"` instead, because
+`-e target=` from another machine selects its vars and runs the play where it was typed. Each prints `gitops_markers.PLAYBOOK_CMD` as the prefix, because a bare `ansible-playbook`
 is the uv-tool shim without the collection deps (#4413).
 A second role gated off the tick's host is derived the same way, with no table to update
 (#3734).
+
+A role the tick DOES apply can still owe another host (#6510). `hypervisor` routes onto
+daniel-box, where only its teardown half runs, so its install half on daniel-server went
+unapplied with nothing durable naming it (#6411). After the ff-merge the tick runs
+`scripts/deploy_tools/setup_reach_hosts.py` over the range. That script reads the same
+derivation as `land.sh`'s "also reaches" note (`land_reach.remaining_setup_hosts`). The tick
+then writes a `manual_plane` line for each role it names, with the other hosts in the line's
+`hosts` key. `clear_manual_plane_applied` never clears a line that carries `hosts`, so the
+tick's own apply of the role leaves it standing. Apply the role on each host as printed, then
+`clear-owed manual_plane <role>`. A later range reaching another host widens the line's `hosts`
+and keeps its stamp. A failed derivation records nothing and logs `setup-reach:`. The script
+covers role-directory edits only: a changed repo file a role ships, such as
+`scripts/backup/etcd_restore_drill.sh`, takes no broad arm, so the tick never asks.
 
 #### The tag the remediation prints is derived, not the role tag
 
