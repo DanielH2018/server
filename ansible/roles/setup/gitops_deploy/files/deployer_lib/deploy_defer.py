@@ -497,6 +497,60 @@ def record(
     return Recorded(recorded, tags_before)
 
 
+def record_reach(
+    tools: DeployTools,
+    state: DeployerState,
+    config: Config,
+    target: TickTarget,
+    roles: list[str],
+) -> list[str]:
+    """Record each of `roles` whose change reaches a host beyond this one, and return those added.
+
+    `roles` are the setup roles this tick applies itself. The tick's run reaches only its own
+    host, so a change `hypervisor`'s install half carries to daniel-server was owed there with
+    nothing durable saying so (#6510, #6411). Each line names the hosts in its `hosts` key,
+    which keeps the tick's own apply from clearing it. `gitops_state.py clear-owed` clears it
+    once a hand has applied the role on each of those hosts.
+
+    Any failure of the derivation records nothing and logs why: the tick has already
+    fast-forwarded, and `land.sh` still prints the same hosts from the same derivation.
+    """
+    if not roles:
+        return []
+    try:
+        reach = tools.setup_reach_hosts(
+            config.repo, target.local, target.origin, config.hostname
+        )
+    except Exception as exc:
+        log(
+            f"setup-reach: no other host recorded ({type(exc).__name__}: {exc})",
+            level=WARNING,
+        )
+        return []
+    now = time.time()
+    added = []
+    for role in sorted(set(roles) & set(reach)):
+        if state.record_manual_plane(
+            target.origin,
+            _ledger_playbook(role),
+            setup_role_tag(role),
+            now,
+            hosts=reach[role],
+        ):
+            added.append(role)
+    owed = {r: reach[r] for r in roles if r in reach}
+    if owed:
+        others = sorted({h for hosts in owed.values() for h in hosts})
+        log(
+            f"manual_plane: {', '.join(sorted(owed))} applied here, still owed on "
+            f"{', '.join(others)}; "
+            + manual_plane_remediation(
+                set(owed), hosts={setup_role_tag(r): h for r, h in owed.items()}
+            )
+        )
+    return added
+
+
 def _ledger_playbook(role: str) -> str:
     """The `playbook` a role's `manual_plane` line records: a path, `NO_PLAYBOOK` or unrouted.
 
@@ -589,10 +643,14 @@ def log_pending(state: DeployerState) -> None:
     The writing tick says its own piece through `record`, which names what it ADDED: this
     call runs ahead of it, against a marker that does not hold the new role yet.
     """
-    roles = sorted({e.role for e in state.manual_plane_pending()})
+    pending = state.manual_plane_pending()
+    roles = sorted({e.role for e in pending})
     if not roles:
         return
+    hosts = {e.role: e.hosts for e in pending if e.hosts}
     log(
         f"manual_plane: pending {', '.join(roles)} — apply by hand: "
-        + manual_plane_remediation(set(roles), state.manual_plane_tags_pending())
+        + manual_plane_remediation(
+            set(roles), state.manual_plane_tags_pending(), hosts=hosts
+        )
     )

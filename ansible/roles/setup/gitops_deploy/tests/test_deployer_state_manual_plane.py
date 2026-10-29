@@ -212,6 +212,31 @@ def test_an_apply_of_a_different_playbook_leaves_the_line(state):
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
 
 
+def test_a_line_owed_on_other_hosts_survives_the_tick_hosts_apply(state):
+    """The tick's own run of the role reached none of the line's `hosts` (#6510)."""
+    playbook = "ansible/initial_setup.yml"
+    state.record_manual_plane(
+        SHA, playbook, "hypervisor", 1000.0, hosts=("daniel-server",)
+    )
+    assert state.clear_manual_plane_applied(playbook, ["hypervisor"]) == []
+    (entry,) = state.manual_plane_pending()
+    assert entry.hosts == ("daniel-server",)
+
+
+def test_a_later_range_widens_the_hosts_and_keeps_the_stamp(state):
+    """Both ranges are merged and unapplied there, so both hosts are owed."""
+    playbook = "ansible/initial_setup.yml"
+    state.record_manual_plane(
+        SHA, playbook, "hypervisor", 1000.0, hosts=("daniel-server",)
+    )
+    widened = state.record_manual_plane(
+        "beef" * 10, playbook, "hypervisor", 2000.0, hosts=("daniel-pi",)
+    )
+    assert widened is False
+    (entry,) = state.manual_plane_pending()
+    assert (entry.at, entry.hosts) == (1000.0, ("daniel-pi", "daniel-server"))
+
+
 def test_a_garbled_line_is_neither_pending_nor_lost(state):
     """Fails open like `behind_since`: garbage must not page, and must not be silently dropped."""
     torn = json.dumps({"class": "manual_plane", "subject": "k3s", "at": "not-a-number"})

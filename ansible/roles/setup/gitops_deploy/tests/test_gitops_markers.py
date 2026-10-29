@@ -8,10 +8,14 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_markers.p
 
 import pytest
 
+from lib.ansible_inventory import inventory_hosts
+from lib.repo_paths import HOSTS_INI
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
+    LOCAL_CONNECTION_HOSTS,
     SHARED_K8S_ROLES,
     ContentionEntry,
+    on_hosts,
     owed_clear_cmd,
     parse_behind,
     parse_contention,
@@ -76,3 +80,29 @@ def test_the_shared_k8s_roles_are_the_roles_with_no_containers_list_entry():
     derived = {p.name for p in role_dirs()} - set(k8s_entries())
     assert "manifests" in derived
     assert SHARED_K8S_ROLES == derived
+
+
+_APPLY = "uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor"
+
+
+def test_a_local_connection_host_is_applied_over_ssh_from_its_own_pulled_checkout():
+    """`-e target=daniel-server` from daniel-box runs the play on daniel-box (#6510)."""
+    assert on_hosts(_APPLY, ("daniel-server",)) == (
+        f'ssh daniel-server "cd /home/ubuntu/server && git pull --ff-only && {_APPLY}"'
+    )
+
+
+def test_an_ssh_host_is_targeted_from_the_operators_checkout():
+    """The rejecting half: daniel-pi is driven over ssh by the play, so it keeps `-e target`."""
+    assert on_hosts(_APPLY, ("daniel-pi",)) == f"{_APPLY} -e target=daniel-pi"
+
+
+def test_no_host_leaves_the_command_as_it_is():
+    assert on_hosts(_APPLY, ()) == _APPLY
+
+
+def test_local_connection_hosts_match_the_inventory():
+    """The set is a literal, because monitor-bridge's copy of this module reads no inventory."""
+    local = {h.name for h in inventory_hosts(HOSTS_INI) if h.connection == "local"}
+    assert local == LOCAL_CONNECTION_HOSTS
+    assert "daniel-server" in local
