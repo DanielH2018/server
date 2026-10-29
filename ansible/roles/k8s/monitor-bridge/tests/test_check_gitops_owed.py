@@ -204,6 +204,24 @@ def test_the_manual_plane_apply_names_the_pinned_playbook_command(cfg):
     )
 
 
+def test_a_role_owed_on_daniel_server_pages_the_apply_over_ssh(cfg):
+    """A `hosts` line the tick wrote after applying the role on daniel-box (#6510)."""
+    owed = _owed(
+        subject="hypervisor",
+        at=1000,
+        playbook="ansible/initial_setup.yml",
+        tags=[],
+        hosts=["daniel-server"],
+    )
+    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
+    assert not ok
+    assert (
+        'apply `ssh daniel-server "cd /home/ubuntu/server && git pull --ff-only && '
+        'uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor"` by hand'
+        in msg
+    )
+
+
 def test_a_whole_role_k3s_page_names_the_agent_join_before_the_clear(cfg):
     """#5627: `--tags k3s` on daniel-box never reaches an agent node (#5606).
 

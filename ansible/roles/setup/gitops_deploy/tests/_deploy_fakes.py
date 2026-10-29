@@ -116,6 +116,10 @@ class ScriptedTick:
         # What `--deploy-tags` answers (#5577): (exit code, stdout). No k8s reader by default.
         self.secret_k8s: tuple[int, str] = (0, "")
         self.secret_k8s_error: Exception | None = None
+        # What `setup_reach_hosts.py` answers (#6510): role -> the other hosts its change
+        # reaches. Empty by default, a range reaching no host beyond the tick's own.
+        self.reach: dict[str, tuple[str, ...]] = {}
+        self.reach_error: Exception | None = None
         self.discord_ok = True
         self.releases: dict[str, str] = {}
         self.log: list[tuple] = []
@@ -293,6 +297,17 @@ class ScriptedTick:
             raise self.secret_readers_error
         return list(self.secret_readers), dict(self.secret_unread)
 
+    def setup_reach_hosts(
+        self, _repo: str, old: str, new: str, _host: str
+    ) -> dict[str, tuple[str, ...]]:
+        """The scripted reach, asserted against THIS tick's own range."""
+        assert (old, new) == (self.local, self.origin), (
+            f"the setup reach was asked about {old[:8]}..{new[:8]}"
+        )
+        if self.reach_error is not None:
+            raise self.reach_error
+        return dict(self.reach)
+
     def secret_k8s_readers(self, _repo: str, old: str, new: str) -> tuple[int, str]:
         """The scripted deploy tags reading a moved key, asserted against THIS tick's range."""
         assert (old, new) == (self.local, self.origin), (
@@ -395,6 +410,7 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         setup_routing=lambda _repo, _ref, _host: checkout_routing(),
         secret_setup_readers=scripted.secret_setup_readers,
         secret_k8s_readers=scripted.secret_k8s_readers,
+        setup_reach_hosts=scripted.setup_reach_hosts,
         # The host's render records, read for a log line alone, so no tick test reads them.
         digest_diff=lambda _ref: {},
         # The host's release records, which a tick that records `k8s_unapplied` reads to drop
