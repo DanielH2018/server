@@ -337,3 +337,21 @@ def test_the_operator_traverses_the_triage_state_dir_only_under_operator_read(
     env = make_ansible_env()
     assert env.from_string(item["group"]).render(**ctx).strip() == group
     assert env.from_string(item["mode"]).render(**ctx) == mode
+
+
+@pytest.mark.parametrize("template", [UNIT, "claude-triage-poll.service.j2"])
+def test_what_the_triage_units_write_is_kept_from_the_operators_group(template) -> None:
+    """The operator traverses the state dir, so a file there is reachable by its fixed name."""
+    text = render_setup_text("claude_code", template)
+    assert directive(text, "UMask") == ["0027"]
+
+
+def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
+    """`runs/` and `done/` made under the old 0022 umask were 0755; the role resets them."""
+    (task,) = [
+        t
+        for t in triage_block()["block"]
+        if t.get("name") == "Create triage's code, config and state directories"
+    ]
+    modes = {i["path"].rsplit("/", 1)[-1]: i["mode"] for i in task["loop"]}
+    assert modes["runs"] == modes["done"] == "0750"

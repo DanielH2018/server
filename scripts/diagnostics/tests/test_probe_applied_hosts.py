@@ -47,12 +47,35 @@ def test_an_assert_the_probe_cannot_read_admits_every_host(tmp_path):
     assert files["daniel-server"] == ["main", "half"]
 
 
+@pytest.mark.parametrize(
+    "hosts, admitted",
+    [
+        (
+            "\"{{ go | default([]) is truthy | ternary('daniel-box', []) }}\"",
+            ["daniel-box"],
+        ),
+        ("daniel-box,daniel-server", ["daniel-server", "daniel-box"]),
+        ('"{{ go | default([]) }}"', ["daniel-server", "daniel-pi", "daniel-box"]),
+    ],
+)
+def test_a_play_hosts_bounds_the_role_only_when_it_names_a_host(
+    tmp_path, hosts, admitted
+):
+    (tmp_path / "initial_setup.yml").write_text(
+        f"- hosts: {hosts}\n  tasks:\n"
+        "    - ansible.builtin.include_role: {name: x, tasks_from: verify}\n"
+    )
+    assert (
+        list(applied_hosts.task_files("x", tmp_path / "x", ansible=tmp_path))
+        == admitted
+    )
+
+
 def test_the_k3s_server_half_walks_on_daniel_box_and_the_agent_half_on_daniel_server():
     files = applied_hosts.task_files("k3s", K3S)
-    assert "main" in files["daniel-box"]
-    assert "main" not in files["daniel-server"]
-    assert {"agent", "static-address"} <= set(files["daniel-server"])
-    assert "main" not in files.get("daniel-pi", [])
+    assert files["daniel-box"] == ["main", "agent_verify"]
+    assert files["daniel-server"] == ["static-address", "agent"]
+    assert "daniel-pi" not in files
 
 
 def test_the_k3s_agent_walk_holds_none_of_the_server_crons():
@@ -84,7 +107,8 @@ def test_a_secret_read_through_default_is_not_compared_by_content(path):
     assert "STUB" in want.why_no_content
 
 
-def test_a_host_whose_files_write_nothing_does_not_make_the_run_partial(tmp_path):
+def test_a_host_whose_files_write_nothing_is_not_read_and_not_a_gap(tmp_path):
+    """The Pi is down or rate-limited often; a host with no path must not turn that into 75."""
     role = tmp_path / "x" / "tasks"
     role.mkdir(parents=True)
     (role / "main.yml").write_text(
@@ -94,6 +118,8 @@ def test_a_host_whose_files_write_nothing_does_not_make_the_run_partial(tmp_path
     row = {"status": "ok", "mode": "0644", "owner": "root", "group": "root"}
 
     def read(plan, host):
+        if host == "daniel-pi":
+            raise applied.core.Unreadable("ssh: connect to host daniel-pi: refused")
         return {"user": "ubuntu", "stat": {p: row for p in plan["stat"]}}
 
     ns = SimpleNamespace(role="x", host=None, dry_run=False)

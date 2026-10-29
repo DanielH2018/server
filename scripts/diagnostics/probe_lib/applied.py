@@ -213,16 +213,20 @@ def run_applied(
         if ns.dry_run:
             print(dry_run_text(request, host))
             continue
-        try:
-            doc = read(request, host)
-        except core.Unreadable as exc:
-            # One host down must not hide the others' rows; its own section says so.
-            print(f"{host}:\n  unread   every path: {exc.message}")
-            statuses.add("unread")
-            continue
+        # A host with no path to compare is not read, so an unreachable one costs nothing.
+        if not wants:
+            doc = {"user": "no one", "stat": {}}
+        else:
+            try:
+                doc = read(request, host)
+            except core.Unreadable as exc:
+                # One host down must not hide the others' rows; its own section says so.
+                print(f"{host}:\n  unread   every path: {exc.message}")
+                statuses.add("unread")
+                continue
         lines, seen = report_host(host, wants, skips, doc)
-        # A host whose files write nothing, such as the k3s verify play's, is not a gap. A
-        # run where no host had a path is: it verified nothing.
+        # A host whose files write nothing is not a gap. A run where no host had a path is:
+        # it verified nothing.
         compared |= bool(wants)
         statuses |= seen
         print("\n".join(lines))

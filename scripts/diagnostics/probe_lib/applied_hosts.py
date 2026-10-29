@@ -9,7 +9,9 @@ applies the role counts. A play reaches the role in one of two ways:
   on each host its `when:` admits.
 
 A play's `assert` pre_tasks also bound its hosts, because a host that fails one stops the play
-before the role runs. `k3s-bringup.yml`'s server play asserts `inventory_hostname in
+before the role runs. So does its `hosts:` when that names inventory hosts literally: the k3s
+verify play's `{{ join_agent | default([]) is truthy | ternary('daniel-box', []) }}` can only
+ever be daniel-box. `k3s-bringup.yml`'s server play asserts `inventory_hostname in
 k3s_server_hosts`, and its join play asserts `inventory_hostname == 'daniel-server'`, so the
 server's crons are walked on daniel-box only and the agent's `tasks/agent.yml` on
 daniel-server only (#6475).
@@ -23,6 +25,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,11 +57,35 @@ class Entry:
         tasks_from: the task file it runs, `main` for a `roles:` entry.
         when: the entry's own `when:`, or None.
         asserts: the `that:` conditions of the play's `assert` pre_tasks.
+        hosts: the inventory hosts the play's `hosts:` names, or None when it names none.
     """
 
     tasks_from: str
     when: object
     asserts: tuple
+    hosts: frozenset[str] | None = None
+
+
+_QUOTED = re.compile(r"""['"]([\w.-]+)['"]""")
+
+
+def _named_hosts(play: dict) -> frozenset[str] | None:
+    """The inventory hosts `hosts:` names, as a literal or a quoted string in its Jinja.
+
+    None when it names no inventory host: `all`, a group, or Jinja that reads only extra vars,
+    as the opt-in join play's `{{ join_agent | default([]) }}` does. Those bound nothing here.
+    """
+    value = play.get("hosts")
+    if isinstance(value, list):
+        names = {str(v) for v in value}
+    elif isinstance(value, str) and "{{" in value:
+        names = set(_QUOTED.findall(value))
+    elif isinstance(value, str):
+        names = {n.strip() for n in re.split(r"[,:]", value)}
+    else:
+        return None
+    named = frozenset(names & set(HOSTS))
+    return named or None
 
 
 def _asserts(play: dict) -> tuple:
@@ -85,12 +112,12 @@ def entries(role: str, ansible: Path = ANSIBLE) -> list[Entry]:
             yaml_fast.safe_load(path.read_text()) if path.is_file() else []
         ) or []:
             play = play or {}
-            asserts = _asserts(play)
+            asserts, named = _asserts(play), _named_hosts(play)
             for entry in play.get("roles") or []:
                 if entry == role:
-                    found.append(Entry("main", None, asserts))
+                    found.append(Entry("main", None, asserts, named))
                 elif isinstance(entry, dict) and entry.get("role") == role:
-                    found.append(Entry("main", entry.get("when"), asserts))
+                    found.append(Entry("main", entry.get("when"), asserts, named))
             for task in play.get("tasks") or []:
                 args = next(
                     (
@@ -102,7 +129,7 @@ def entries(role: str, ansible: Path = ANSIBLE) -> list[Entry]:
                 )
                 if isinstance(args, dict) and args.get("name") == role:
                     tasks_from = str(args.get("tasks_from") or "main")
-                    found.append(Entry(tasks_from, task.get("when"), asserts))
+                    found.append(Entry(tasks_from, task.get("when"), asserts, named))
         if found:
             return found
     raise core.UsageError(
@@ -116,6 +143,8 @@ def _admits(entry: Entry, host: str, forced: bool) -> bool:
     Raises:
         core.UsageError: the entry's `when:` cannot be read for `host` and `forced` is False.
     """
+    if entry.hosts is not None and host not in entry.hosts:
+        return False
     # DECIDED: an assert the probe cannot read admits the host, the wide reading
     # `role_end_hosts` gives an unreadable guard: dropping a host on a guess hides its files.
     for that in entry.asserts:
