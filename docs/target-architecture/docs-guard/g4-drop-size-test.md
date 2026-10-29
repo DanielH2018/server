@@ -190,17 +190,24 @@ worked case in *Verification*.
   hook section says "The payload is 7,500 chars" and "the 7,272 the preamble leaves".
   `ansible/tests/repo/test_docs_quote_current_values.py:ROWS` has one row for that page,
   for `RECENT_RESTART_SECONDS`.
-- **The hook is 7 lines under its module cap.**
-    - `wc -l .claude/hooks/inject-nested-docs.py` prints 593.
-      `ansible/tests/_ratchet.py:NON_TEST_CAP` is 600, and
-      `ansible/tests/repo/module_length_allowlist.txt` has no entry for the hook.
+- **The hook was 7 lines under its module cap.**
+    - `wc -l .claude/hooks/inject-nested-docs.py` printed 593.
+      `ansible/tests/_ratchet.py:NON_TEST_CAP` was 600 raw lines at this baseline, and
+      `ansible/tests/repo/module_length_allowlist.txt` had no entry for the hook.
     - `tracked_python_files` in `ansible/tests/_ratchet_census.py` counts every tracked
       `.py`, hook files included.
     - The `DECIDED` header of `module_length_allowlist.txt` (#3661) says to split a module
       over the cap when each piece reads alone, and to use a `conjoined:` reason only when
       every split leaves a piece conjoined with its parent.
-    - `.claude/hooks/tests/test_inject_nested_docs.py` is 456 lines against
-      `_ratchet.py:TEST_CAP`, which is 500.
+    - `.claude/hooks/tests/test_inject_nested_docs.py` was 456 lines against
+      `_ratchet.py:TEST_CAP`, which was 500 raw lines.
+
+  **HISTORY —** #6173 changed the ratchet to count code lines: `_ratchet.py:code_lines`
+  skips blank lines, comments and docstrings. `NON_TEST_CAP` is 450 code lines and
+  `TEST_CAP` is 400. On 2026-10-29, after PRs 1a, 1b and 2 landed, the hook was 597 raw
+  lines and 329 code lines, 121 under its cap. `test_inject_nested_docs.py` was 464 raw
+  lines and 307 code lines, 93 under its cap. The 7-line headroom no longer constrains
+  any PR in this plan.
 - **The hook already imports library siblings by bare name.** It imports `_facts_line` and
   `_hook_common`. Each opens with a `# gen-hooks: library` block and a `reason:` line, and
   `scripts/dev/gen_hook_settings.py` rejects a hook file that declares no block. `rule_globs`
@@ -496,8 +503,10 @@ PRs 1a and 1b land before PR 2. That way the size stays visible on the day its g
 The PR numbers 2 and 3 are the ones G2's plan cites.
 
 Every PR that touches the hook runs `test_module_length_ratchet.py`. If a PR would take the
-hook past 600 lines, it also moves `_outline` and `_head_lines` into the library. Both are
-pure functions of their arguments. The PR does not add an allowlist line.
+hook past `_ratchet.py:NON_TEST_CAP` code lines, it also moves `_outline` and `_head_lines`
+into the library. Both are pure functions of their arguments. The PR does not add an
+allowlist line. PR 3 adds about 50 lines outside its tests, not all of them in the hook,
+against 121 code lines of headroom, so the move is not expected.
 
 ## Verification
 
@@ -640,10 +649,10 @@ Each risk is checked against `docs/failure-classes.md`.
   gate stood, and the `homelab-review` grep finds it. `.claude/rules/python-layout.md` is
   not amended. It is a head at 10,448 characters, its retirement section is past the cut,
   and a one-off ruling belongs at its code site.
-- **The hook grows back toward its module cap.** It ends near 560 lines after PR 1a, 570
-  after PR 1b and PR 2, and 580 after PR 3. A PR that would pass 600 moves `_outline` and
-  `_head_lines` into the library. G2's PR 4 deletes the facts-line code from the hook,
-  which lowers the count.
+- **The hook grows back toward its module cap.** After PR 2 it is 329 code lines against
+  a cap of 450, as `_ratchet.py:code_lines` counts them. A PR that would pass the cap moves
+  `_outline` and `_head_lines` into the library. G2's PR 4 deletes the facts-line code from
+  the hook, which lowers the count.
 - **The floor and a member meet other areas' deletions.** The floor of 80 `CLAUDE.md` rows
   and the `ansible/roles/k8s/traefik/CLAUDE.md` member depend on role docs that R4, D6 and
   H7 delete. The slice that deletes them lowers the floor and swaps the member in the same
@@ -697,7 +706,8 @@ Each risk is checked against `docs/failure-classes.md`.
     - about 110 lines of tests, including the pin, the exit-status pair and the notice pair;
     - one `# DECIDED` block;
     - optionally, a log field and a ranking of about 100 lines.
-- **Not added:** a module-length allowlist line. The hook stays under 600 lines.
+- **Not added:** a module-length allowlist line. The hook stays under its 450-code-line
+  cap.
 
 ## Open questions
 
@@ -743,10 +753,12 @@ refuted. Each was checked against the tree at `70591c307` before the fix.
   **operator-only** ruling before PR 2. PR 2's body says the retirement meets neither
   python-layout condition. *Design* states that no surface reaches an author mid-edit after
   G4.
-- **G4-R1-03 (medium): PR 1 pushes the hook past the 600-line cap.** Fixed. The hook is 593
+- **G4-R1-03 (medium): PR 1 pushes the hook past the 600-line cap.** Fixed. The hook was 593
   lines, and an allowlist entry must match its file exactly. PR 1 adds a `# conjoined:`
   line, and PRs 2 and 3 restate the max when the hook grows. The report tests go in a new
-  module, because `test_inject_nested_docs.py` is 456 lines against a cap of 500.
+  module, because `test_inject_nested_docs.py` was 456 lines against a cap of 500.
+  **HISTORY —** those were raw-line caps; #6173 replaced them with 450 and 400 code lines,
+  and *Baseline* has the re-measured counts.
 - **G4-R1-04 (medium): two false sizing claims.** Fixed. The header for `deploy_ui` measured
   106 characters with the doc's path as trigger and 96 with its directory. A `CLAUDE.md`
   row now uses the directory, which is the shortest trigger. A rule row uses the shortest
