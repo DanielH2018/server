@@ -12,6 +12,9 @@ import pytest
 
 import checks.gitops
 from _fake_sources import FakeSources
+from lib.repo_paths import REPO
+from lib.systemd_timer import longest_gap_s, timeout_start_s
+from updater_lag_grace import SLACK_S
 
 NOW = 1_780_000_000.0
 SHA = "0123456789ab"
@@ -28,9 +31,27 @@ def _run(cfg, fetch_age_s, unbuilt):
     return checks.gitops.check_host_packages(cfg, src, now=NOW)
 
 
+UNITS = REPO / "hosts/packages/homelab-updater/units"
+PI_DROPIN = (REPO / "hosts/daniel-pi/units/homelab-updater.timer.conf").read_text()
+# The longest the Pi's updater can leave a published canary package unapplied: its longest gap
+# between fires (22:50 to 01:05, 8100 s), the timer's randomized delay (60 s) and a run that
+# takes all of TimeoutStartSec (3000 s).
+PI_WAIT_S = longest_gap_s(
+    (UNITS / "homelab-updater.timer").read_text(), [PI_DROPIN]
+) + timeout_start_s((UNITS / "homelab-updater.service").read_text())
+
+
 def test_the_bounds_are_the_plans_defaults(cfg):
     assert cfg.BUILDER_MAX_FETCH_AGE_S == 1800
-    assert cfg.BUILDER_MAX_LAG_S == 7200
+    # The 7200 s default is the floor; the canary's schedule raises it (#6530).
+    assert cfg.BUILDER_MAX_LAG_S == PI_WAIT_S + SLACK_S
+
+
+def test_a_wait_through_the_pi_s_longest_gap_is_clean(cfg):
+    # 8100 s of gap alone outlasts the 7200 s floor, and the Pi canary holds the gate that long.
+    assert PI_WAIT_S > 7200
+    ok, msg = _run(cfg, 60, [_unbuilt(NOW - PI_WAIT_S, reason="canary")])
+    assert ok, msg
 
 
 @pytest.mark.parametrize(

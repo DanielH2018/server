@@ -12,8 +12,12 @@ monitor_bridge_deploy_pipeline_port: 9180
 # The host-package builder's two page bounds (h3-pi-pilot.md, *Builder arms*), rendered into
 # config/env.yaml.j2 as BUILDER_MAX_LAG_S and BUILDER_MAX_FETCH_AGE_S for the `host_packages` row.
 # Lag: how long master may sit unbuilt (a trust, keyring or tools refusal, a rewritten master,
-# a hold, an open rollout gate, a master that stays red) before the tile pages: 2 hours, against
-# a ~103 s master CI run. Fetch age: how old the builder's last successful `git fetch` may be,
+# a hold, an open rollout gate, a master that stays red) before the tile pages. The value here is
+# the FLOOR, 2 hours against a ~103 s master CI run. config/env.yaml.j2 renders the larger of
+# this and the rollout canary's schedule need: daniel-pi's longest gap between updater fires
+# (2h15m), its randomized delay, the updater's run timeout and a slack, through
+# `filter_plugins/updater_lag_grace.py` (#6530). Raising this floor never lowers the derived
+# value, and a denser Pi schedule falls back to it. Fetch age: how old the builder's last successful `git fetch` may be,
 # 30 minutes, which is 15 of its 2-minute runs and covers a dead timer or a missing token.
 monitor_bridge_builder_max_lag_s: 7200
 monitor_bridge_builder_max_fetch_age_s: 1800

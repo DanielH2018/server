@@ -259,7 +259,8 @@ def service_config(
         # The host-package builder's two page bounds, in seconds, rendered from the role defaults
         # `monitor_bridge_builder_max_lag_s` and `monitor_bridge_builder_max_fetch_age_s`. The
         # lag bound is how long master may sit unbuilt: it exceeds the ~103 s master CI run many
-        # times over, so a normal landing never trips it. The fetch bound is 15 builder runs
+        # times over, so a normal landing never trips it. The template raises the default to
+        # the rollout canary's longest gap between updater fires (`updater_lag_grace_s`, #6530). The fetch bound is 15 builder runs
         # (the timer fires every 2 minutes), so one slow `git fetch` never trips it either.
         BUILDER_MAX_LAG_S=_num("BUILDER_MAX_LAG_S"),
         BUILDER_MAX_FETCH_AGE_S=_num("BUILDER_MAX_FETCH_AGE_S"),

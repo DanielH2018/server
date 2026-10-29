@@ -167,6 +167,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     which raises on a Deployment volume it has no rename for. observability's dashboard
     ConfigMaps inject the deploy-annotation queries into each board through
     ``grafana_deploy_annotated``, which raises on a board that is not a JSON object.
+    monitor-bridge's env ConfigMap sizes the builder lag grace through ``updater_lag_grace_s``,
+    which raises on a schedule the reader cannot bound or a floor that is not a number (#6530).
     Registering the real ones makes
     those failures reach the guard.
 
@@ -206,6 +208,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     import role_label
     import scrape_jobs
     import service_tier
+    import updater_lag_grace
     from toposort import filter_by_platform
 
     # The first ansible-core import creates its local temp directory (#5904).
@@ -264,6 +267,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["grafana_deploy_annotated"] = (
         grafana_dashboards.FilterModule().filters()["grafana_deploy_annotated"]
     )
+    env.filters["updater_lag_grace_s"] = updater_lag_grace.FilterModule().filters()[
+        "updater_lag_grace_s"
+    ]
     env.filters["homelab_role_label"] = role_label.FilterModule().filters()[
         "homelab_role_label"
     ]

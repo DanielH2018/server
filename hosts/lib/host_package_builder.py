@@ -464,9 +464,7 @@ class Builder(RolloutGate):
             if str(p) in unconsumed
             or tree_files(out / p) != tree_files(self.published / p)
         ]
-        changed, deferred, gate = admit(
-            changed, self.state.get("gate"), chosen, self.now()
-        )
+        changed, deferred, gate = admit(changed, self.state.get("gate"), chosen)
         if not changed:
             self.note_rollout(deferred, gate)
             log(f"{chosen[:12]} changes no package")
