@@ -231,13 +231,17 @@ stringData:
     {"type": "push", "name": "k3s Longhorn Backup", "description": "A daniel-box cron runs longhorn_backup_health.py every 10 min with the read-only kubeconfig: backup target availability, per-tier freshness, errored backups, failed jobs, the restore drill stamp and restore coverage. DOWN names the failing check. Run journalctl -t longhorn-backup-health, then check the Longhorn UI.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ longhorn_backup_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-disaster-recovery/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {# The weekly registry garbage collection (k8s/registry role, registry-gc.sh). INTERVAL IS DERIVED FROM THE
    CRONTAB: `20 4 * * 0` (registry_k8s_gc_cron_* in the registry defaults), a 604800s period,
-   plus one hour — the same grace the dead-man carries (docs/healthchecks-io-deadman.md) and
-   comfortably over registry_k8s_gc_deadline_s (1200s) plus the scale-up wait. Only the ghcr-mirror
-   store is collected since the push store's GC was retired. Gated on the
+   plus two hours. The run pushes at its end, and its worst case is about 6000s: two mirror
+   phases, each the pod-exit, Job-delete and rollout waits, registry_k8s_gc_deadline_s (1200s)
+   and its warm budget (1800s, then 900s), plus 60s for the lock. A fast week followed by a
+   worst-case one moves the push by that much. The healthchecks.io grace is the same two hours, and
+   ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py derives both from the
+   budgets (#6569). Only the two mirror
+   stores are collected since the push store's GC was retired. Gated on the
    token like the tiles below: an ungated tile sits red from creation until the secret exists. #}
 {% if registry_gc_push_token is defined %}
   registry-gc.json: |
-    {"type": "push", "name": "Registry GC", "description": "A weekly daniel-box cron (Sunday 04:20) scales the ghcr-mirror to zero, runs a prune and garbage-collect Job on its store and scales it back. DOWN means the keep set was skipped, the pod did not stop, the Job timed out, the mirror did not come back, or another run held the lock; the message says which. Check journalctl -t registry-gc, the registry-gc-ghcr-mirror Job logs and the ghcr-mirror Deployment.", "interval": 608400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ registry_gc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Registry GC", "description": "A weekly daniel-box cron (Sunday 04:20) scales the ghcr-mirror, then the dockerhub-mirror, to zero, runs a prune and garbage-collect Job on each store and scales each back. DOWN means a keep set was skipped, a pod did not stop, a Job timed out, a mirror did not come back, or another run held the lock; the message says which. Check journalctl -t registry-gc, the registry-gc-ghcr-mirror and registry-gc-dockerhub-mirror Job logs and the two mirror Deployments.", "interval": 612000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ registry_gc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# The host half of the shutdown chain. Its producer is nut_host's root cron, whose cadence and
    this deadline both derive from nut_host_watchdog_interval_minutes, so a schedule change cannot

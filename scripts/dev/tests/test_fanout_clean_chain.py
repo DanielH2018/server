@@ -85,7 +85,7 @@ def _scratch_with_a_gone_worktree(tmp_path):
     return repo, worktree, tip
 
 
-def _stub_bin(tmp_path, gh_prints=None, unit_active=False):
+def _stub_bin(tmp_path, gh_prints=None, unit_active=False, gh_script=None):
     """A bin directory to prepend to PATH, holding the stubs this chain must not escape.
 
     `systemctl` is always stubbed and records its arguments to `systemctl-calls`; the chain
@@ -108,7 +108,9 @@ def _stub_bin(tmp_path, gh_prints=None, unit_active=False):
             f'case "$2" in is-active) exit {is_active_rc} ;; esac\nexit 0\n'
         ),
         gh=(
-            '#!/bin/sh\necho "gh: command not found" >&2\nexit 127\n'
+            gh_script
+            if gh_script is not None
+            else '#!/bin/sh\necho "gh: command not found" >&2\nexit 127\n'
             if gh_prints is None
             else f"#!/bin/sh\nprintf '%s' {shlex.quote(gh_prints)}\n"
         ),
@@ -130,7 +132,7 @@ def _run_chain(repo, worktree, stub_bin, proc_root=None):
     # `remote_clean_command` takes no proc-root seam, so the scan it calls is wrapped here.
     scan = partial(live_process_scan, proc_root=str(proc_root))
     with mock.patch.object(clean, "live_process_scan", scan):
-        cmd = remote_clean_command(batch, repo=str(repo))
+        cmd = remote_clean_command(batch, repo=str(repo), script_root=str(repo))
     # The guard that makes running this safe: never let it name the shared checkout.
     assert str(repo) in cmd and "/home/ubuntu/server" not in cmd
     return run(["bash", "-c", cmd], env=_scrubbed_env(extra_path=str(stub_bin)))
@@ -160,6 +162,37 @@ def test_a_branch_whose_merged_pr_head_is_another_sha_survives(tmp_path):
     assert BRANCH in _branches(repo)
     # The stale registration goes either way — only the branch was ever in question.
     assert str(worktree) not in _registrations(repo)
+
+
+def _gh_merged_head_and_compare(merged_head, status):
+    """A `gh` whose `pr list` names `merged_head` and whose `api` compare answers `status`."""
+    return (
+        "#!/bin/sh\n"
+        f'case "$1" in api) printf "%s\\n" {shlex.quote(status)} ;; '
+        f'*) printf "%s\\n" {shlex.quote(merged_head)} ;; esac\n'
+    )
+
+
+def test_a_branch_inside_the_merged_pr_head_is_deleted(tmp_path):
+    """#6365: `land.sh` merged master into the branch, so the merged head is the tip plus a merge.
+
+    The SHAs differ, but GitHub's compare calls the tip an ancestor of the merged head, which
+    means no local commit is unlanded.
+    """
+    repo, worktree, _tip = _scratch_with_a_gone_worktree(tmp_path)
+    gh = _gh_merged_head_and_compare("1" * 40, "ahead")
+    proc = _run_chain(repo, worktree, _stub_bin(tmp_path, gh_script=gh))
+    assert proc.stdout.strip() == f"removed: {worktree} (already gone)"
+    assert BRANCH not in _branches(repo)
+
+
+def test_a_branch_with_commits_the_merged_pr_head_lacks_survives(tmp_path):
+    """The reject half of #6365: a diverged tip holds work nothing proves landed."""
+    repo, worktree, _tip = _scratch_with_a_gone_worktree(tmp_path)
+    gh = _gh_merged_head_and_compare("1" * 40, "diverged")
+    proc = _run_chain(repo, worktree, _stub_bin(tmp_path, gh_script=gh))
+    assert "unmerged, tree gone" in proc.stdout
+    assert BRANCH in _branches(repo)
 
 
 def test_a_gh_that_answers_nothing_leaves_the_branch_alone(tmp_path):

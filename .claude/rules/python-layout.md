@@ -85,7 +85,7 @@ cross-document join or a long exemption list keeps its own file. A predicate wit
 ways to fail is still one row: its extra reject and accept cases go in `more_red` and
 `more_green`. The test file runs every row; once it nears the test-module line cap, a row
 goes in `_config_property_rows.py`, `_workload_property_rows.py`, `_image_property_rows.py`,
-`_scrape_property_rows.py` or `_edge_property_rows.py` beside it.
+`_scrape_property_rows.py`, `_edge_property_rows.py` or `_port_property_rows.py` beside it.
 
 A textual census of the tracked tree follows the same rule. It is one `git ls-files` selector
 and one per-file predicate, and it goes in as a `Census` row of

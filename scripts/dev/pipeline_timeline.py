@@ -53,11 +53,19 @@ The summary also prints the share of the window with N fan-out batches live. A l
 an issue waits on.
 
 Each host keeps its own review records, so a daniel-server batch is joined only when its
-records are passed too:
+records are passed too. `--pull-reviews daniel-server` copies them with a read-only rsync
+into `<out>/reviews-daniel-server/` and joins that copy. When the pull fails the run warns and
+joins the copy the last pull left, so a server down for maintenance costs no snapshot.
 
-    scp 'daniel-server:.local/state/fanout-review/*.json' /tmp/server-reviews/
-    uv run python scripts/dev/pipeline_timeline.py \\
-        --review-dir ~/.local/state/fanout-review --review-dir /tmp/server-reviews
+`waited_h` maps each reason a person had to clear (`lander-surface`, `operator-step`,
+`findings-remain`, `needs-input`) to the hours the PR waited on it before it merged. The lander
+stamps each wait's start and end into `~/.local/state/fanout-server-lander/operator-waits.json`
+(`fanout_lib/operator_waits.py`). A wait still open at the merge ends there. A PR the lander
+never saw held has an empty `waited_h`.
+
+`claude-pipeline-timeline.timer` on daniel-box runs this daily with `--days 3 --pull-reviews
+daniel-server`, so the journal halves are copied out before they rotate. A three-day window
+covers a missed day.
 """
 
 import json
@@ -72,11 +80,22 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
+from fanout_lib import operator_waits
 from lib.cli_help import ArgumentParser, answer_help
 from lib.gh import gh_json
 
 REVIEW_DIR = Path.home() / ".local" / "state" / "fanout-review"
 OUT_DIR = Path.home() / ".local" / "state" / "pipeline-timeline"
+WAITS_FILE = (
+    Path.home()
+    / ".local"
+    / "state"
+    / "fanout-server-lander"
+    / operator_waits.STAMPS_FILE
+)
+# Where a host keeps its review records, relative to its home, as rsync names it.
+REMOTE_REVIEWS = ".local/state/fanout-review/"
+PULL_TIMEOUT_S = 120
 LEDGER_TAG = "landing-annotation"
 LANDER_UNIT = "claude-fanout-server-lander.service"
 # How far before --since an issue may have been filed and still be joined to a PR after it.
@@ -269,15 +288,40 @@ def _gap(a: float | None, b: float | None) -> float | None:
     return None if a is None or b is None else round((b - a) / 3600, 2)
 
 
-def join(prs, issues, landings, holds, reviews, ci=None, jobs=None) -> list[dict]:
+def waited_hours(stamps: list[dict], merged: float | None) -> dict[str, float]:
+    """Hours one PR waited on each reason, from its stamps.
+
+    A stamp still open ends at the merge, and a stamp is clipped to it, because the lander
+    can see a merged PR for one more pass. A stamp that never reaches an end counts for nothing.
+    """
+    out: dict[str, float] = {}
+    for s in stamps:
+        end = s.get("until", merged)
+        if end is not None and merged is not None:
+            end = min(end, merged)
+        if end is None or end <= s["since"]:
+            continue
+        out[s["reason"]] = round(
+            out.get(s["reason"], 0.0) + (end - s["since"]) / 3600, 2
+        )
+    return out
+
+
+def join(
+    prs, issues, landings, holds, reviews, ci=None, jobs=None, waits=None
+) -> list[dict]:
     """One row per merged PR, with every stamp found and the gaps between them.
 
     Args:
         ci: `ci_by_branch`'s table; None leaves the CI fields empty.
         jobs: `job_times` per CI run id; None leaves the queue fields empty.
+        waits: the lander's operator-wait stamps; None leaves `waited_h` empty.
     """
     created = {i["number"]: _epoch(i["createdAt"]) for i in issues}
     reverted = reverts(prs)
+    stamped: dict[int, list[dict]] = {}
+    for stamp in waits or []:
+        stamped.setdefault(stamp["pr"], []).append(stamp)
     rows = []
     for pr in prs:
         n = pr["number"]
@@ -285,6 +329,7 @@ def join(prs, issues, landings, holds, reviews, ci=None, jobs=None) -> list[dict
         landing = landings.get(n, {})
         runs = (ci or {}).get(str(pr.get("headRefName")), {})
         times = (jobs or {}).get(runs.get("last_run"), {})
+        merged_at = _epoch(pr["mergedAt"])
         stamps = {
             "issue_created": created.get(review.get("issue")),
             "batch_start": review.get("batch_start"),
@@ -315,6 +360,7 @@ def join(prs, issues, landings, holds, reviews, ci=None, jobs=None) -> list[dict
                 "reverted_by": reverted.get(n),
                 "review_findings": review.get("review_findings"),
                 "fix_rounds": review.get("fix_rounds"),
+                "waited_h": waited_hours(stamped.get(n, []), merged_at),
             }
         )
     return rows
@@ -388,6 +434,18 @@ def summarize(rows: list[dict]) -> str:
             f"{gap:15} {len(values):3} {statistics.median(values):10.2f} {p90:7.2f}"
         )
     lines.extend(rates(rows))
+    waited: dict[str, list[float]] = {}
+    for r in rows:
+        for reason, hours in (r.get("waited_h") or {}).items():
+            waited.setdefault(reason, []).append(hours)
+    if waited:
+        lines.append(
+            "waited on a person: "
+            + ", ".join(
+                f"{reason} {sum(h):.1f}h over {len(h)} PRs"
+                for reason, h in sorted(waited.items())
+            )
+        )
     shares = concurrency(rows)
     lines.append(
         "share of time with N batches live: "
@@ -421,6 +479,29 @@ def _journal_lines(*selector: str, since: str) -> list[str]:
     return done.stdout.splitlines()
 
 
+def pull_reviews(host: str, dest: Path) -> str:
+    """Copy `host`'s review records into `dest` with a read-only rsync; "" or why it failed.
+
+    One ssh connection a run, because `ufw limit ssh` rejects 6 in 30 seconds. rsync only
+    reads the host; `dest` keeps the last good copy when the pull fails.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "rsync", "-a", "--include=*.json", "--exclude=*",
+        "-e", "ssh -o BatchMode=yes -o ConnectTimeout=10",
+        f"{host}:{REMOTE_REVIEWS}", f"{dest}/",
+    ]  # fmt: skip
+    try:
+        done = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=PULL_TIMEOUT_S, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return str(exc)
+    return (
+        "" if done.returncode == 0 else f"exit {done.returncode}: {done.stderr.strip()}"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     answer_help(__doc__, argv)
     parser = ArgumentParser(description="Join merged PRs' stage timestamps")
@@ -428,12 +509,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--since", default=default_since, help="merged on or after (UTC)"
     )
+    parser.add_argument(
+        "--days",
+        type=int,
+        help="merged in the last N days (UTC); instead of --since, for a unit that cannot compute a date",
+    )
     parser.add_argument("--out", type=Path, default=OUT_DIR, help="snapshot directory")
     parser.add_argument(
         "--review-dir",
         type=Path,
         action="append",
         help=f"fan-out review records, once per host's copy (default {REVIEW_DIR})",
+    )
+    parser.add_argument(
+        "--pull-reviews",
+        metavar="HOST",
+        help="rsync HOST's review records into <out>/reviews-<HOST>/ first, and join that copy too",
+    )
+    parser.add_argument(
+        "--waits-file",
+        type=Path,
+        default=WAITS_FILE,
+        help="the lander's operator-wait stamps (default %(default)s)",
     )
     parser.add_argument(
         "--json", action="store_true", help="print the rows, not the summary"
@@ -444,6 +541,8 @@ def main(argv: list[str] | None = None) -> int:
         help="skip the one jobs call per PR that the queue times need",
     )
     args = parser.parse_args(argv)
+    if args.days is not None:
+        args.since = (datetime.now(UTC) - timedelta(days=args.days)).date().isoformat()
 
     since = datetime.fromisoformat(args.since).replace(tzinfo=UTC)
     prs = _objects(gh_json(
@@ -475,10 +574,20 @@ def main(argv: list[str] | None = None) -> int:
     ) or []  # fmt: skip
     landings = parse_landings(_journal_lines("-t", LEDGER_TAG, since=args.since))
     holds = parse_holds(_journal_lines("-u", LANDER_UNIT, since=args.since))
+    directories = list(args.review_dir or [REVIEW_DIR])
+    if args.pull_reviews:
+        copy = args.out / f"reviews-{args.pull_reviews}"
+        if failed := pull_reviews(args.pull_reviews, copy):
+            print(
+                f"warning: {args.pull_reviews} reviews not pulled: {failed}",
+                file=_sys.stderr,
+            )
+        directories.append(copy)
     reviews: dict[int, dict] = {}
-    for directory in args.review_dir or [REVIEW_DIR]:
+    for directory in directories:
         reviews |= load_reviews(directory)
-    rows = join(prs, issues, landings, holds, reviews, ci, jobs)
+    waits = operator_waits.read_stamps(args.waits_file)
+    rows = join(prs, issues, landings, holds, reviews, ci, jobs, waits)
 
     args.out.mkdir(parents=True, exist_ok=True)
     snapshot = args.out / f"{datetime.now(UTC).date().isoformat()}.jsonl"

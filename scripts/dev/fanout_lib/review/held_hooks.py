@@ -97,6 +97,23 @@ def with_batch_env(settings: dict, cores: int | None = None) -> dict:
     return {**settings, "env": env}
 
 
+def labelled(argv: list[str], assignment: str) -> list[str]:
+    """`argv` run under the env `assignment`, which its `--settings` env carries as well (#5684).
+
+    Claude Code applies a settings `env` over the process environment and replaces the whole
+    value, so the agent user's own `OTEL_RESOURCE_ATTRIBUTES` would displace the batch labels
+    that `env` sets. A `--settings` value outranks the user's settings, as `with_batch_env`'s
+    worker cap relies on.
+    """
+    if "--settings" not in argv:
+        return ["env", assignment, *argv]
+    name, _, value = assignment.partition("=")
+    at = argv.index("--settings") + 1
+    settings = json.loads(argv[at])
+    settings["env"] = {**settings.get("env", {}), name: value}
+    return ["env", assignment, *argv[:at], json.dumps(settings), *argv[at + 1 :]]
+
+
 def read_hooks(root: Path) -> dict[str, bytes]:
     """Every file a held hook can run, import or read, by path relative to `root`.
 

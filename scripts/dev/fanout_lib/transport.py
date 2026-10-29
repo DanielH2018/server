@@ -23,6 +23,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib import signing
+from fanout_lib.branch_pr import branch_pr_argv, parse_branch_prs
 from fanout_lib.brief import WORKED_BY, Comment, Issue
 from fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
 from fanout_lib.manifest import Batch
@@ -327,6 +328,20 @@ def merged_pr_url(branch: str, repo: str = SERVER) -> str:
     return str(data[0]["url"]) if data else ""
 
 
+def branch_pr_urls(branch: str, repo: str = SERVER) -> list[str] | None:
+    """Every PR url GitHub holds for `branch` in `repo`, newest first; None when unreadable.
+
+    An empty list means GitHub answered and knows of none. None means it could not be asked
+    (a `gh` that failed, timed out or printed something unparseable), which a caller must not
+    read as "no PR": `branch_pr.own_pr` words the two differently.
+    """
+    try:
+        out = gh(*branch_pr_argv(branch, repo)[1:], check=False, timeout=GH_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return None
+    return parse_branch_prs(out.stdout) if out.returncode == 0 else None
+
+
 def comment_issue(number: int, body: str, repo: str = SERVER) -> bool:
     """Post `body` as a comment on issue `number` in `repo`; False when `gh` failed."""
     try:
@@ -379,6 +394,7 @@ class Tools:
         gh_issue: fetch one issue by number from a repo.
         signing_keys: the signing keys GitHub verifies for the account.
         merged_pr: the URL of a merged PR for a branch in a repo, or "".
+        branch_prs: every PR url for a branch in a repo, newest first, or None when unreadable.
         findings: run `findings.py` with an argv, for the claim `launch` takes itself.
         default_ref: read a checkout's remote default branch, for `target.resolve`.
         head_branch: read the orchestrator's own branch, which holds this repo's claims.
@@ -391,6 +407,7 @@ class Tools:
     gh_issue: Callable[[int, str], Issue] = gh_issue
     signing_keys: Callable[[], frozenset[str]] = signing.registered_signing_keys
     merged_pr: Callable[[str, str], str] = merged_pr_url
+    branch_prs: Callable[[str, str], list[str] | None] = branch_pr_urls
     findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings
     default_ref: Callable[[str], str | None] = default_ref
     head_branch: Callable[[], str] = head_branch

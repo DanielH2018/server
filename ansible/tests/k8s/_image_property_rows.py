@@ -59,7 +59,86 @@ def _karakeep_with_run(volume: dict) -> dict:
     return {"spec": {"template": {"spec": pod}}}
 
 
+def _karakeep_env(doc: dict) -> dict[str, str]:
+    for c in pod_spec(doc).get("containers", []):
+        if c["name"] == "karakeep":
+            return {e["name"]: e.get("value", "") for e in c.get("env", [])}
+    return {}
+
+
+def _trusted_origins_offence(role: str, doc: dict) -> str | None:
+    env = _karakeep_env(doc)
+    raw = env.get("AUTH_TRUSTED_ORIGINS")
+    if raw is None:
+        return "AUTH_TRUSTED_ORIGINS is unset, so the app trusts upstream's default `*`"
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    if not origins or any("*" in o for o in origins):
+        return f"AUTH_TRUSTED_ORIGINS is {raw!r}, which is empty or holds a wildcard"
+    own = env.get("NEXTAUTH_URL", "")
+    domain = own.removeprefix("https://").partition(".")[2]
+    if own not in origins:
+        return f"AUTH_TRUSTED_ORIGINS {raw!r} omits NEXTAUTH_URL {own!r}"
+    stray = [
+        o
+        for o in origins
+        if not (o.startswith("https://") and o.endswith("." + domain))
+    ]
+    if stray:
+        return f"AUTH_TRUSTED_ORIGINS holds {stray!r}, outside https://*.{domain}"
+    return None
+
+
+def _karakeep_with_env(env: dict[str, str]) -> dict:
+    container = {
+        "name": "karakeep",
+        "env": [{"name": k, "value": v} for k, v in env.items()],
+    }
+    return {"spec": {"template": {"spec": {"containers": [container]}}}}
+
+
+_OWN_URL = "https://karakeep.example.test"
+_LOCAL_URL = "https://karakeep.local.example.test"
+
+
 IMAGE_PROPERTIES = (
+    Property(
+        name="karakeep-auth-trusted-origins-are-its-own-names",
+        reason=(
+            "better-auth accepts a sign-in only from NEXTAUTH_URL and AUTH_TRUSTED_ORIGINS, and "
+            "upstream defaults the latter to `*`, which trusts whatever address the request "
+            "arrived on (packages/shared/config.ts). The Deployment lists the public and "
+            "`.local.` names the role routes instead, built from the same variables as "
+            "NEXTAUTH_URL (#5781). Each origin must be https and under NEXTAUTH_URL's domain."
+        ),
+        select=_karakeep_app,
+        offence=_trusted_origins_offence,
+        red=(
+            "karakeep",
+            _karakeep_with_env({"NEXTAUTH_URL": _OWN_URL, "AUTH_TRUSTED_ORIGINS": "*"}),
+        ),
+        more_red=(
+            ("karakeep", _karakeep_with_env({"NEXTAUTH_URL": _OWN_URL})),
+            (
+                "karakeep",
+                _karakeep_with_env(
+                    {
+                        "NEXTAUTH_URL": _OWN_URL,
+                        "AUTH_TRUSTED_ORIGINS": f"{_OWN_URL},https://other.invalid",
+                    }
+                ),
+            ),
+        ),
+        green=(
+            "karakeep",
+            _karakeep_with_env(
+                {
+                    "NEXTAUTH_URL": _OWN_URL,
+                    "AUTH_TRUSTED_ORIGINS": f"{_OWN_URL},{_LOCAL_URL}",
+                }
+            ),
+        ),
+        must_find=frozenset({"karakeep"}),
+    ),
     Property(
         name="karakeep-run-is-an-emptydir",
         reason=(

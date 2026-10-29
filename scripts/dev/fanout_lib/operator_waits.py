@@ -28,6 +28,13 @@ so a daniel-box record counts only as `needs-input` or `findings-remain`.
 DECIDED: `manual` issues are not counted. They are parked for the operator by design, so
 their oldest age would always be the largest and would hide every other reason.
 
+Each pass also stamps every counted PR wait into `operator-waits.json` beside the lander's
+logs (#5682): `{"pr", "reason", "since"}` when a pass first sees the PR held for that reason,
+and `until` when a later pass sees it held for another reason or not at all. The gauge says
+how many waits are open; the stamps say which PR's wait ended when, and
+`scripts/dev/pipeline_timeline.py` joins them into `waited_h`. A `manual-plane` wait names a
+role, not a PR, so it has no stamp. A stamp has the pass's resolution (10 minutes).
+
 A pass that could not read daniel-server or GitHub writes nothing. The file then ages, and
 node-exporter's `node_textfile_mtime_seconds` shows that, where a write of zeros would
 report the server's waits as cleared.
@@ -64,6 +71,9 @@ _PROBLEM_REASONS = (
 )
 _BOX_REASONS = frozenset({"findings-remain", "needs-input"})
 _STAMP = re.compile(r"-(\d{8}T\d{6}Z)\.json$")
+STAMPS_FILE = "operator-waits.json"
+# A closed stamp is kept this long; the timeline reads a window of days, never months.
+STAMP_KEEP_S = 60 * 86400
 
 
 def reason_of(problem: str) -> str:
@@ -72,6 +82,16 @@ def reason_of(problem: str) -> str:
         if pattern.search(problem):
             return reason
     return ""
+
+
+def counted_reason(host: str, problem: str) -> str:
+    """The waiting reason `problem` counts for under `host` ("server" or "box"), else "".
+
+    On daniel-box a batch lands its own PR whatever it touches, so only the reasons in
+    `_BOX_REASONS` hold it.
+    """
+    reason = reason_of(problem)
+    return "" if host == "box" and reason not in _BOX_REASONS else reason
 
 
 def saved_at(rec: Mapping) -> float | None:
@@ -116,14 +136,62 @@ def waits(
     out: dict[str, list[float]] = {r: [] for r in REASONS}
     for host, pairs in (("server", judged), ("box", box)):
         for problem, rec in pairs:
-            reason = reason_of(problem)
-            if not reason or (host == "box" and reason not in _BOX_REASONS):
+            reason = counted_reason(host, problem)
+            if not reason:
                 continue
             start = saved_at(rec)
             if start is not None:
                 out[reason].append(start)
     out["manual-plane"].extend(manual_planes)
     return out
+
+
+def restamp(
+    entries: Iterable[Mapping], held: Mapping[int, str], now: float
+) -> list[dict]:
+    """The stamp list after one pass: close a wait that ended, open one that began.
+
+    Args:
+        entries: the stamps read from the file; one without a number `pr` and `since` is dropped.
+        held: PR number to the reason it is held for in this pass; a PR not in it waits on nobody.
+        now: the pass's epoch second.
+    """
+    out: list[dict] = []
+    open_now: set[tuple[int, str]] = set()
+    for entry in entries:
+        pr, reason, since = entry.get("pr"), entry.get("reason"), entry.get("since")
+        if not isinstance(pr, int) or not isinstance(since, (int, float)):
+            continue
+        until = entry.get("until")
+        if until is None and held.get(pr) == reason:
+            open_now.add((pr, str(reason)))
+        elif until is None:
+            entry = {**entry, "until": round(now)}
+        elif not isinstance(until, (int, float)) or now - until > STAMP_KEEP_S:
+            continue
+        out.append(dict(entry))
+    out.extend(
+        {"pr": pr, "reason": reason, "since": round(now)}
+        for pr, reason in sorted(held.items())
+        if (pr, reason) not in open_now
+    )
+    return out
+
+
+def read_stamps(path: Path) -> list[dict]:
+    """The stamps in `path`, or [] when it is absent, torn or not a list."""
+    try:
+        data = json.loads(path.read_text())
+    except OSError, ValueError:
+        return []
+    return [e for e in data if isinstance(e, dict)] if isinstance(data, list) else []
+
+
+def record_stamps(path: Path, held: Mapping[int, str], now: float) -> None:
+    """Rewrite the stamp file for this pass; raises OSError when it cannot be written."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stamps = restamp(read_stamps(path), held, now)
+    write(path, json.dumps(stamps, sort_keys=True) + "\n")
 
 
 def render(starts: Mapping[str, list[float]], now: float) -> str:

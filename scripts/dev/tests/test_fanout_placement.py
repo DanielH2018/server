@@ -123,6 +123,14 @@ def test_refuses_when_neither_has_headroom():
     assert "daniel-box" in str(exc.value) and "daniel-server" in str(exc.value)
 
 
+def test_the_reservation_sits_between_the_measured_peak_and_2_25_gib():
+    """A host with 2.25 GiB free takes a batch; one with 1.75 GiB, under the 1781 MiB anon
+    peak the per-batch series recorded in the week to 2026-10-29 (#5667), does not."""
+    assert place(["a"], [_r("h", 10 * GIB, 7.75 * GIB)]) == [("a", "h")]
+    with pytest.raises(NoHeadroom):
+        place(["a"], [_r("h", 10 * GIB, 8.25 * GIB)])
+
+
 def test_the_reservation_is_subtracted_before_the_next_batch():
     """Six batches do not pile onto one host: each placement costs that host a reservation."""
     readings = [
@@ -142,6 +150,20 @@ def test_a_pin_wins_while_it_has_headroom_and_refuses_when_it_does_not():
     assert place(["a"], readings, pin="daniel-box") == [("a", "daniel-box")]
     with pytest.raises(NoHeadroom):
         place(["a"], [_r("daniel-box", 12 * GIB, 11 * GIB)], pin="daniel-box")
+
+
+def test_a_host_with_no_batch_slots_left_is_skipped_for_the_next_host():
+    """#6421: the roomiest host is at its live-batch cap, so the batch goes to the other one."""
+    readings = [_r("daniel-box", 12 * GIB, 1), _r("daniel-server", 6 * GIB, 1)]
+    assert place(["1"], readings) == [("1", "daniel-box")]
+    slots = {"daniel-box": 0, "daniel-server": 1}
+    assert place(["1"], readings, slots=slots) == [("1", "daniel-server")]
+
+
+def test_slots_are_spent_one_per_placement():
+    readings = [_r("daniel-box", 12 * GIB, 1), _r("daniel-server", 12 * GIB, 1)]
+    with pytest.raises(NoHeadroom):
+        place(["1", "2"], readings, slots={"daniel-box": 0, "daniel-server": 1})
 
 
 def test_a_full_login_plane_refuses_a_batch_the_fleet_cap_would_allow():

@@ -38,9 +38,13 @@ Run: uv run pytest scripts/lib/tests/test_entry_points_answer_help.py
 
 import ast
 import importlib
+import inspect
+import io
 import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 import pytest
 
@@ -192,7 +196,8 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
 
 # The entry points the test above once waited on: each ignored `--help` and ran its whole check,
 # which still exits 0 with output, so the subprocess test passed while
-# `k8s_manifests.py --help` took 7s to print its summary line (#5564).
+# `k8s_manifests.py --help` took 7s to print its summary line (#5564). The last three took no
+# argv at all, so an explicit `--help` could not reach them (#6561).
 WORK_BEFORE_HELP = (
     "validate.k8s_manifests",
     "validate.setup_templates",
@@ -204,16 +209,96 @@ WORK_BEFORE_HELP = (
     "home_assistant.validate_ha_config",
     "secrets_mgmt.secret_bearing_host_paths",
     "dev.k8s_autodeploy_counts",
+    "grafana.export_grafana_dashboards",
+    "dev.smoke_extract",
+    "validate.refresh_vendored_schemas",
 )
+
+
+def _main_taking_argv(module):
+    """`module.main`, asserted to exist and to take the `argv` an in-process caller passes."""
+    main = getattr(module, "main", None)
+    assert callable(main), (
+        f"{module.__name__} has no main() an in-process caller can reach"
+    )
+    assert "argv" in inspect.signature(main).parameters, (
+        f"{module.__name__}.main() takes no argv, so it can only read the host's sys.argv"
+    )
+    return main
 
 
 @pytest.mark.parametrize("name", WORK_BEFORE_HELP)
 def test_an_entry_point_answers_help_before_its_work(name, capsys):
     module = importlib.import_module(name)
+    main = _main_taking_argv(module)
     with pytest.raises(SystemExit) as exc:
-        module.main(["--help"])
+        main(["--help"])
     assert exc.value.code == 0
     assert capsys.readouterr().out == (module.__doc__ or "").strip() + "\n"
+
+
+# These five defaulted `argv` to None, which `wants_help` reads as the HOST process's
+# `sys.argv[1:]`. An in-process `main()` under a runner started with `--help` then answered
+# help and exited 0 without running its check (#5638).
+HOST_ARGV_DEFAULTERS = (
+    "validate.grafana_dashboard_uids",
+    "validate.jinja_bash_collisions",
+    "home_assistant.validate_ha_config",
+    "secrets_mgmt.secret_bearing_host_paths",
+    "dev.k8s_autodeploy_counts",
+    # These three called `answer_help(__doc__)` with no argv at all (#6561).
+    "grafana.export_grafana_dashboards",
+    "dev.smoke_extract",
+    "validate.refresh_vendored_schemas",
+)
+
+
+def _refuse_every_download(url, timeout=None):
+    raise urllib.error.URLError(f"no network in this test: {url}")
+
+
+def _refuse_every_subprocess(argv, *args, **kwargs):
+    return subprocess.CompletedProcess(
+        argv, 1, stdout="", stderr="no cluster in this test"
+    )
+
+
+# The boundary each job crosses once it is past the help check, refused at the stdlib so the
+# job fails there instead of reaching a cluster or a network.
+REFUSED_BOUNDARY = {
+    "grafana.export_grafana_dashboards": (subprocess, "run", _refuse_every_subprocess),
+    "dev.smoke_extract": (sys, "stdin", io.StringIO("+    image: nginx:1.27\n")),
+    "validate.refresh_vendored_schemas": (
+        urllib.request,
+        "urlopen",
+        _refuse_every_download,
+    ),
+}
+
+
+@pytest.mark.parametrize("name", HOST_ARGV_DEFAULTERS)
+def test_an_in_process_main_ignores_the_host_processes_help_flag(
+    name, monkeypatch, capsys
+):
+    module = importlib.import_module(name)
+    if name in REFUSED_BOUNDARY:
+        monkeypatch.setattr(*REFUSED_BOUNDARY[name])
+    main = getattr(module, "main", None)
+    assert callable(main), f"{name} has no main() an in-process caller can reach"
+    monkeypatch.setattr(sys, "argv", ["runner", "--help"])
+    code = None
+    try:
+        main()
+    except SystemExit as exc:
+        code = exc.code
+    except Exception as exc:  # the job ran and failed at the refused boundary
+        if name not in REFUSED_BOUNDARY:
+            raise
+        code = exc
+    help_answer = (module.__doc__ or "").strip() + "\n"
+    assert (code, capsys.readouterr().out) != (0, help_answer), (
+        f"{name}.main() answered the host process's --help instead of running"
+    )
 
 
 # -- cc-wait's repo probes: the one exit that is not 0 ------------------------------------

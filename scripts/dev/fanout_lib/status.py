@@ -21,6 +21,7 @@ from lib.exit_codes import (
     FANOUT_PLACE_OK,
     FANOUT_PLACE_UNREAD,
 )
+from fanout_lib.branch_pr import PR_URL, own_pr
 from fanout_lib.brief import lands
 from fanout_lib.manifest import Batch, Manifest
 from fanout_lib.transport import Tools
@@ -28,7 +29,6 @@ from fanout_lib.target import SERVER
 from fanout_lib.unit_state import unit_props_command
 
 STATUS_TIMEOUT_S = 30.0
-PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
 # The line a session ends with when it cannot finish: the brief's *Finishing* section names
 # both prefixes. `.claude/hooks/fanout-stop.py` lets a session stop on either this or a PR URL,
 # and copies both patterns because the hooks stay stdlib-only; a test holds the copies equal.
@@ -245,6 +245,31 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
     return out
 
 
+def with_own_pr(
+    s: BatchStatus,
+    branch: str,
+    branch_prs: Callable[[str, str], list[str] | None],
+    repo: str,
+) -> BatchStatus:
+    """`s` with the PR GitHub holds for `branch`, in place of the first URL its text names.
+
+    `parse_status` reads `pr_url` as the first PR URL in the final text, so a body that links
+    another PR before its own reads as that PR (#6551). A `done` or `no-verdict` batch whose
+    text names a PR the branch does not have becomes `needs-input` naming both, never `done`;
+    a `needs-input` or `failed` one loses the foreign url. Only a batch with a url asks the
+    forge, and a `landed` one holds the forge's own merged url already.
+    """
+    if not s.pr_url or s.state == "landed":
+        return s
+    found = own_pr(s.final_text, branch, branch_prs(branch, repo))
+    if found.url:
+        return dataclasses.replace(s, pr_url=found.url)
+    if s.state in ("done", NO_VERDICT):
+        text = f"needs input: {found.problem}. {s.final_text}"
+        return dataclasses.replace(s, state=NEEDS_INPUT, pr_url="", final_text=text)
+    return dataclasses.replace(s, pr_url="")
+
+
 def reconciled(
     s: BatchStatus, branch: str, merged_pr: Callable[[str, str], str], repo: str
 ) -> BatchStatus:
@@ -391,6 +416,7 @@ def collect(
         for st in parse_status(mine, proc.stdout):
             b = by_id[st.batch]
             st = reconciled(st, b.branch, tools.merged_pr, b.repo)
+            st = with_own_pr(st, b.branch, tools.branch_prs, b.repo)
             # Already reconciled, so `status_line` must not ask the forge a second time.
             line, tier = status_line(
                 st, host, b.branch, lambda *_: "", one_line, b.repo

@@ -58,9 +58,10 @@ nothing else re-tests a PR against the master it merges into. 4 of 5 sampled red
 followed a PR whose every job was green, and two of them came from a master commit merged
 after the PR's base. Once the head reads green, `_master_paths_since` asks GitHub which paths
 master changed since the master commit the head's green CI run tested it against (the PR's
-merge base when that cannot be read). When any did, `_update_branch` merges master into the
-PR branch, and the merge waits for CI on the updated head instead. A landing updates the
-branch at most once. It never updates the branch of a head the landing policy admitted on
+merge base when that cannot be read). When one of them is a path the PR changes, or GitHub
+reads the PR as conflicting with master, `_update_branch` merges master into the PR branch,
+and the merge waits for CI on the updated head instead. A PR whose files master did not touch
+merges as it stands (#6565). A landing updates the branch at most once. It never updates the branch of a head the landing policy admitted on
 an approval, which the update would void: a stale approved head is refused with a rebase
 remedy instead.
 """
@@ -73,13 +74,13 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
-from lib.json_types import JsonObject, as_list, as_object
+from lib.json_types import JsonObject, as_list, as_object, as_object_list
 from lib import removes_object
 from deploy_tools import await_ci
 from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
-from deploy_tools.land_lib.pr_json import CommitMessage
+from deploy_tools.land_lib.pr_json import CommitMessage, parse_file
 
 
 # GitHub's closing keywords, all three tenses of all three verbs. A keyword anywhere in the
@@ -96,6 +97,10 @@ _CANONICAL_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#\d+[.,;:)\]]*\s*", re.IGNOR
 # reference at all inside one.
 _DECORATION = re.compile(r"^[\s>*_#`~-]+|[\s>*_#`~-]+$")
 _SENTENCE_END = re.compile(r"[.!?]$")
+# GitHub's compare endpoint lists at most this many files; a list this long may omit a path.
+COMPARE_CAP = 300
+# Each path the compare lists, and a renamed path's old name as well.
+_COMPARE_PATHS = "[.files[]? | .filename, (.previous_filename // empty)]"
 # How long a head whose every CI run skipped as a draft waits for a ready run before the PR is
 # read for its draft state (#6077). GitHub registered PR #6069's ready run 3s after the flip
 # at 02:09:58 on 2026-10-24, and the push-delivery grace await_ci already allows is far wider.
@@ -256,27 +261,22 @@ def _master_paths_since(ln: Landing, head: str) -> list[str]:
     That base is the master commit the head's green `ci.yml` PR run checked out
     (`tools.tested_base`), and the merge base of `head` and master when it cannot be read.
 
-    GitHub's compare endpoint lists at most 300 files. A capped list is still non-empty, so a
-    capped answer still reads as stale.
+    A renamed path counts under its old name as well as its new one. GitHub's compare endpoint
+    lists at most `COMPARE_CAP` files, so `_stale_paths` reads a capped list as stale.
 
     Dies when the read fails: an unknown base is an unknown test result, and the cost is one
     landing to re-run.
     """
-    # DECIDED: every path master moved counts as one the PR's tests read. The `pytest` job runs
-    # unscoped over the whole tree, and both stale-base reds the issue cites came from a path
-    # sharing no directory with the PR: #2922 (cc2a71fd8) added a size test while master grew the
-    # claude-otel role's CLAUDE.md past it, and #2266 (b86d87d60) changed initial_setup
-    # while master changed docs/facts.lock and ansible/roles/setup/k3s/CLAUDE.md. A directory
-    # or overlap filter passes both. Only the base moves: a PR pushed after master moved was
-    # tested against that newer master, so the merge base alone would update a branch CI had
-    # already tested in full (149 of 235 landings in 2026-10-15..17, 642 CI minutes, #5487).
-    # The tested base is the master commit in the checkout log's `Merge <head> into <base>`;
-    # when it cannot be read the merge base stands, which costs one CI run at worst.
+    # Only the base moves: a PR pushed after master moved was tested against that newer master,
+    # so the merge base alone would update a branch CI had already tested in full (149 of 235
+    # landings in 2026-10-15..17, 642 CI minutes, #5487). The tested base is the master commit
+    # in the checkout log's `Merge <head> into <base>`; when it cannot be read the merge base
+    # stands, which costs one CI run at worst.
     base = ln.tools.tested_base(head) or head
     url = f"repos/{{owner}}/{{repo}}/compare/{base}...{BRANCH}"
 
     def call() -> list:
-        got = ln.tools.gh_json("api", url, "--jq", "[.files[]?.filename]")
+        got = ln.tools.gh_json("api", url, "--jq", _COMPARE_PATHS)
         return as_list(got, "gh api compare")
 
     try:
@@ -291,12 +291,52 @@ def _master_paths_since(ln: Landing, head: str) -> list[str]:
     return [p for p in paths if isinstance(p, str)]
 
 
-def _stale_paths(ln: Landing, head: str) -> list[str]:
+def _pr_paths(ln: Landing) -> set[str] | None:
+    """Every path the PR's REST `files` listing names, a rename's old path included.
+
+    None when the listing is at GitHub's cap, where a path may be missing. Dies when the read
+    fails, as `_master_paths_since` does.
+    """
+    url = f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/files"
+
+    def call() -> list:
+        got = ln.tools.gh_json("api", "--paginate", "--slurp", url) or []
+        pages = as_list(got, "gh api pulls/files")
+        return [parse_file(e) for p in pages for e in as_object_list(p, "files page")]
+
+    try:
+        files = gh_read.read(call, ln.tools.sleep, "gh api pulls/files")
+    except (gh_read.GhReadFailed, ValueError) as exc:
+        ln.die(f"could not list PR #{ln.opts.pr}'s files: {exc}", 1)
+    if len(files) >= policy.FILE_CAP:
+        return None
+    names = [(f["filename"], f.get("previous_filename", "")) for f in files]
+    return {p for pair in names for p in pair if p}
+
+
+def _stale_paths(ln: Landing, head: str, conflicting: bool) -> list[str]:
     """The paths that make `head` stale enough to update; [] to merge it as it stands.
 
-    Dies instead when `head` is one the operator approved and master moved past its base.
+    `head` is stale when master changed a path the PR changes since its tested base, or when
+    `conflicting` says GitHub reads the PR as conflicting with master. Dies instead when `head`
+    is one the operator approved and is stale.
     """
     moved = _master_paths_since(ln, head)
+    # DECIDED: only a path both master and the PR changed makes a green head stale (operator
+    # ruling 2026-10-29, #6565). The update never cancelled an in-flight run; its cost was a
+    # second full CI run, about 22% of ci.yml runner-minutes. The accepted risk is the shape of
+    # #2922 and #2266, which went red on master from a path the PR never touched. A conflict,
+    # a capped compare list and a capped file listing still update, since overlap is unknown.
+    if moved and not conflicting and len(moved) < COMPARE_CAP:
+        pr_paths = _pr_paths(ln)
+        if pr_paths is not None:
+            overlap = sorted(set(moved) & pr_paths)
+            if not overlap:
+                say(
+                    f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base, "
+                    "none of them one the PR changes; merging without a branch update"
+                )
+            moved = overlap
     if moved and head == ln.approved_head:
         # DECIDED: a stale approved head is refused, not updated and not merged. The update
         # would make a head the operator's approval does not name, so the policy would refuse
@@ -479,7 +519,12 @@ def arm_merge(ln: Landing) -> None:
     _leave_for_a_direct_merge(ln, subject)
 
 
-def _draft_skipped_dead_end(ln: Landing, head: str) -> str:
+_RETRIGGER_DONE = (
+    "The landing already converted it to draft and back once for this head. "
+)
+
+
+def _draft_skipped_dead_end(ln: Landing, head: str, retriggered: bool = False) -> str:
     """Why a ready PR whose head's CI skipped as a draft cannot merge; "" while it is a draft.
 
     PR #6069 was marked ready one second after its push, and GitHub created only the push's
@@ -492,9 +537,72 @@ def _draft_skipped_dead_end(ln: Landing, head: str) -> str:
     return (
         f"PR #{pr} is ready, but {head[:8]}'s only CI ran while it was a draft and skipped "
         "every job, and GitHub started no run on the ready flip; a re-run replays the draft "
-        f"event and skips again. Convert it to draft and back (`gh pr ready --undo {pr}`, "
-        f"then `gh pr ready {pr}`) or push, then re-run this"
+        f"event and skips again. {_RETRIGGER_DONE if retriggered else ''}Convert it to draft and back "
+        f"(`gh pr ready --undo {pr}`, then `gh pr ready {pr}`) or push, then re-run this"
     )
+
+
+def _ready_run_on(ln: Landing, head: str) -> str:
+    """Why the PR's `ci.yml` runs on `head` forbid the draft toggle; "" when every one skipped.
+
+    A run that is not completed, or that completed with any conclusion but `skipped`, ran
+    while the PR was ready. Its `prek` gate `needs` every other job, so the gate gets no check
+    run until they finish, and for those minutes `await_ci` reads only the draft run's skipped
+    gate. Converting to draft then cancels the ready run (#6566). A failed read also forbids
+    it, because the toggle is the one action here that can cancel a run.
+    """
+    url = f"repos/{{owner}}/{{repo}}/actions/workflows/ci.yml/runs?head_sha={head}&event=pull_request"
+
+    def call() -> list:
+        got = ln.tools.gh_json(
+            "api", url, "--jq", "[.workflow_runs[] | {id, status, conclusion}]"
+        )
+        return as_list(got, "gh api ci.yml runs")
+
+    try:
+        runs = gh_read.read(call, ln.tools.sleep, "gh api ci.yml runs")
+    except (gh_read.GhReadFailed, ValueError) as exc:
+        return f"its CI runs could not be read ({exc})"
+    for run in runs:
+        if not isinstance(run, dict):
+            return f"its CI runs read as {runs!r}"
+        if run.get("status") != "completed" or run.get("conclusion") != "skipped":
+            return (
+                f"run {run.get('id')} is {run.get('conclusion') or run.get('status')}"
+            )
+    return ""
+
+
+def _retrigger_ready_run(ln: Landing, head: str) -> str:
+    """Convert the PR to draft and back so GitHub starts a ready run; "" on success.
+
+    GitHub starts no `ci.yml` run for the ready flip of a PR whose push run skipped as a
+    draft (#6546), and a re-run replays the draft event. The conversion is the only thing
+    that makes one, so the landing does it once per head instead of ending `merge-timeout`
+    for a person to do the same two commands. A failure is returned as the reason, and names
+    the PR's state when the first command had already run, because a draft PR never merges.
+    """
+    pr = str(ln.opts.pr)
+    say(
+        f"PR #{pr} is ready but {head[:8]}'s only CI skipped as a draft; converting it to draft and back"
+    )
+    for step, args in (
+        ("to draft", ("pr", "ready", "--undo", pr)),
+        ("back to ready", ("pr", "ready", pr)),
+    ):
+        try:
+            ln.tools.gh(*args)
+        except subprocess.CalledProcessError as exc:
+            why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
+            left = (
+                ""
+                if step == "to draft"
+                else f"; PR #{pr} is left as a draft, run `gh pr ready {pr}`"
+            )
+            return f"converting it {step} failed: {why}{left}"
+        except subprocess.TimeoutExpired:
+            return f"converting it {step} timed out"
+    return ""
 
 
 def await_merge(ln: Landing) -> None:
@@ -515,8 +623,10 @@ def await_merge(ln: Landing) -> None:
     Without --arm-merge this only polls, for a PR merged some other way.
 
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
-    it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft ends the wait
-    (`_draft_skipped_dead_end`).
+    it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft is converted
+    to draft and back once for that head (`_retrigger_ready_run`) and the grace starts again.
+    If the head is still skipped after it, the wait ends (`_draft_skipped_dead_end`). Neither
+    happens while a ready `ci.yml` run exists on the head (`_ready_run_on`); the grace restarts.
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -539,6 +649,9 @@ def await_merge(ln: Landing) -> None:
     # The head await_ci last read as skipped in a draft, and the `waited` it was first read at.
     draft_head = ""
     draft_since = 0
+    # The head this landing converted to draft and back, once (#6546); a second draft-skip on
+    # it ends the wait, because another conversion would loop.
+    retriggered_head = ""
     while True:
         # This poll's pacing hold; a held poll never ends the wait at merge-timeout.
         hold = ""
@@ -581,8 +694,22 @@ def await_merge(ln: Landing) -> None:
                 draft_head, draft_since = head, waited
                 say(f"{line}; waiting up to {DRAFT_SKIPPED_GRACE_S}s for a ready run")
             elif waited - draft_since >= DRAFT_SKIPPED_GRACE_S:
-                dead_end = _draft_skipped_dead_end(ln, head)
-                if dead_end:
+                dead_end = _draft_skipped_dead_end(ln, head, head == retriggered_head)
+                ready_run = _ready_run_on(ln, head) if dead_end else ""
+                if ready_run:
+                    say(
+                        f"{head[:8]} reads as skipped as a draft, but {ready_run}; "
+                        "not converting it to draft, which would cancel that run"
+                    )
+                    draft_since = waited
+                elif dead_end and head != retriggered_head:
+                    retriggered_head = head
+                    failure = _retrigger_ready_run(ln, head)
+                    if failure:
+                        ln.die(f"{dead_end}; {failure}", 75, Verdict.MERGE_TIMEOUT)
+                    # The new run takes a moment to register, so the grace starts again.
+                    draft_since = waited
+                elif dead_end:
                     ln.die(dead_end, 75, Verdict.MERGE_TIMEOUT)
             if rc == CI_RED:
                 ln.die(
@@ -604,7 +731,8 @@ def await_merge(ln: Landing) -> None:
                 say(hold)
             paced = hold
             if rc == CI_GREEN and ln.direct_merge_subject and not hold:
-                moved = [] if updated_from else _stale_paths(ln, head)
+                conflicts = view.get("mergeable") == "CONFLICTING"
+                moved = [] if updated_from else _stale_paths(ln, head, conflicts)
                 if moved:
                     _update_branch(ln, head, moved)
                     updated_from = head

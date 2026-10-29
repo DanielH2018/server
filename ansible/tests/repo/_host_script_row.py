@@ -246,11 +246,12 @@ HOST_SCRIPT_WRITES = Census(
     must_find=frozenset({_HOST_FILES_ROLE + "templates/registry-gc.sh.j2"}),
     allow={
         _HOST_FILES_ROLE + "templates/registry-gc.sh.j2": (
-            "The script scales only deploy/ghcr-mirror, since D5 retired the push store's GC "
-            "phase. ghcr-mirror.yaml.j2 renders no `replicas:`, so neither the Ansible apply "
-            "nor Flux's server-side apply owns `spec.replicas`, the one field the script "
-            "writes, and Flux reverts nothing it sets. The operator accepted this exception "
-            "to C4 on that field ownership (#5732), so the mirror's GC stays a host script "
+            "The script scales only deploy/ghcr-mirror and deploy/dockerhub-mirror, since D5 "
+            "retired the push store's GC phase. Neither mirror template renders `replicas:`, "
+            "so Flux's server-side apply does not own `spec.replicas`, the one field the "
+            "script writes, and Flux reverts nothing it sets. The operator accepted this "
+            "exception to C4 on that field ownership for the ghcr-mirror (#5732), #6536 "
+            "extends it to the dockerhub-mirror, and the mirrors' GC stays a host script "
             "after the flip"
         ),
     },

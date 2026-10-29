@@ -80,6 +80,7 @@ def fake_tools(
     signing_keys=None,
     signing_error=None,
     merged_prs=None,
+    branch_prs=None,
     findings_exit=0,
     refused_claims=(),
     head="worktree-orch",
@@ -98,6 +99,8 @@ def fake_tools(
         merged_prs: branch -> merged PR url, the forge answer `merged_pr` gives. A branch
             absent from it reads as "no merged PR", which is also what a failed `gh` call
             reads as in the real thing.
+        branch_prs: branch -> the PR urls GitHub holds for it, newest first, as `branch_prs`
+            answers. A branch absent from it has none; an entry of None is a read that failed.
         findings_exit: the exit status every `findings.py` call returns. Each call is recorded
             in the FakeRun's `calls` under the pseudo-host `findings`.
         refused_claims: issue numbers whose `claim` exits 3 instead, refused.
@@ -127,6 +130,11 @@ def fake_tools(
     def merged_pr(branch: str, repo: str = "DanielH2018/server") -> str:
         return prs.get(branch, "")
 
+    held = branch_prs or {}
+
+    def branch_pr_urls(branch: str, repo: str = "DanielH2018/server"):
+        return held.get(branch, [])
+
     def findings(argv: list[str]) -> subprocess.CompletedProcess:
         # Recorded among the host calls, under the pseudo-host `findings`, so a test reads
         # where the claim fell relative to the tree and the agent from one list.
@@ -150,6 +158,7 @@ def fake_tools(
         gh_issue=gh_issue,
         signing_keys=keys,
         merged_pr=merged_pr,
+        branch_prs=branch_pr_urls,
         findings=findings,
         default_ref=default_ref,
         head_branch=head_branch,

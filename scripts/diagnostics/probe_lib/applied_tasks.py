@@ -1,9 +1,11 @@
 """The files one setup role's tasks write on one host, as `probe.py applied` compares them.
 
 `expected(role_dir, host, ctx)` walks the role's `tasks/main.yml` and every task file it
-imports, through `block`, `rescue` and `always`, and turns each file-writing task into a
-`Want`. An import path renders with `role_path` and `playbook_dir`, so the shared
-`{{ role_path }}/../common/tasks/` files are walked too, with the import's `vars:` on top. It reads five modules:
+imports, through `block` and `always`, and turns each file-writing task into a `Want`. A
+`rescue` is not walked: it runs only when its block fails, so it undoes the block rather than
+stating what a clean apply leaves. An import path renders with `role_path` and `playbook_dir`,
+so the shared `{{ role_path }}/../common/tasks/` files are walked too, with the import's
+`vars:` on top. It reads five modules:
 
 - `template`: the render of `templates/<src>`, with `dest`, `mode`, `owner` and `group`;
 - `copy`: the bytes of `files/<src>`, or the render of `content`, with the same fields;
@@ -251,7 +253,7 @@ class _Walk:
         self.learn(task, here)
         self.resolve(task, here)
         if any(k in task for k in ("block", "rescue", "always")):
-            for key in ("block", "rescue", "always"):
+            for key in ("block", "always"):
                 for sub in task.get(key) or []:
                     if isinstance(sub, dict):
                         self.task(sub, here)

@@ -23,11 +23,12 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 - **Crons (2):**
   - `Sync peer Claude artifacts` — `*/5 * * * *`
   - `Claude Code telemetry health` — `*/10 * * * *`
-- **Timers (7):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+- **Timers (8):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
   `claude-clone-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-dotfiles-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-fanout-server-lander.timer` (`OnBootSec=5min`, `OnUnitActiveSec=10min`),
   `claude-memory-sync.timer` (`OnBootSec=5min`, `OnUnitActiveSec=15min`),
+  `claude-pipeline-timeline.timer` (`OnBootSec=15min`, `OnUnitActiveSec=1440min`),
   `claude-rc-restart.timer` (`OnCalendar=weekly`), `claude-triage-poll.timer`
   (`OnBootSec=5min`, `OnUnitActiveSec=2min`)
 <!-- /generated_from -->
@@ -58,6 +59,12 @@ directory.
   opaquely, check `gitops_deploy_discord_webhook` is in scope.
 - **It pages a login dead at start, not one that dies mid-run**, which leaves the host
   `active`. `docs/claude-code-rc-caps.md` has why (#4618).
+- **A session that ends on an API error pages through `claude-stop-alert@<cause>.service`**
+  (#6021), which `tasks/stop_alert.yml` installs and `templates/50-claude-stop-alert.rules.j2`
+  lets the operator and each agent user start. The StopFailure hook in the dotfiles repo runs as
+  a user that cannot read the webhook, so it starts the instance, named by the error cause in
+  `[a-z0-9_]+`. `claude_code_stop_alert_enabled: false` removes the unit, the rule and the
+  webhook file. ENFORCED: `ansible/tests/setup/test_claude_stop_alert.py`.
 - **A timer that stops firing pages through a textfile, because `OnFailure=` sees only a failed
   run** (#6165). The clone, dotfiles and memory syncs, the triage poller and the fan-out server
   lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.
@@ -301,6 +308,43 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
 `KillMode=process` in the unit is load-bearing. The detached landing leaves a user-manager
 service's cgroup only, so a system unit's default kill would end it when the oneshot exits.
 
+Each pass also stamps every PR held for a counted reason into
+`~/.local/state/fanout-server-lander/operator-waits.json`: `{"pr", "reason", "since"}` on the
+first pass that sees the hold, and `until` on the first pass that does not
+(`operator_waits.restamp`, #5682). `pipeline_timeline.py` joins the stamps into `waited_h`. The
+gauge above counts the waits that are open now; the stamps say which PR's wait ended when. A
+stamp has the pass's 10-minute resolution, and a closed one is kept 60 days.
+
+## Autonomous-role contract (`claude-pipeline-timeline`, a daily snapshot of the PR timeline)
+
+Issue #5661. `scripts/dev/pipeline_timeline.py` joins each merged PR's stamps into one row.
+Two inputs are in daniel-box's journal, which keeps about ten days (`SystemMaxUse=1G`), so a day
+nobody ran the joiner was lost. This timer runs it daily as `ubuntu`.
+
+- **Scope:** every 1440 minutes, `pipeline_timeline.py --days 3 --pull-reviews daniel-server`
+  reads GitHub, the landing ledger and the lander's journal, and appends its rows to
+  `~/.local/state/pipeline-timeline/<UTC date>.jsonl`. It first copies daniel-server's review
+  records with a read-only `rsync` into `~/.local/state/pipeline-timeline/reviews-daniel-server/`
+  (one ssh connection, inside the `ufw limit ssh` budget). It writes nothing else, and changes
+  no repository, cluster or GitHub state.
+- **Mode:** `claude_code_pipeline_timeline_enabled`, true only in daniel-box's host_vars. False
+  stops the timer, removes the three units and the heartbeat file, and keeps the snapshots.
+  `--days` is `claude_code_pipeline_timeline_days`; a window of N days survives N-1 missed runs,
+  because a later snapshot's rows supersede an earlier one's for the same PR.
+- **Abort valves:** the unit's `TimeoutStartSec=30min`. A pull that fails warns and joins the
+  copy the last pull left, so a server down for maintenance costs no snapshot. A failed `gh`
+  read fails the unit and pages.
+- **Evidence:** `journalctl -u claude-pipeline-timeline` holds the summary; a failure pages
+  Discord through `claude-pipeline-timeline-alert`, and `claude-pipeline-timeline.prom` pages a
+  timer that stopped (`ClaudePipelineTimelineNotReporting`, a 174900-second deadline).
+- **Next-run review:** after a week, check that the snapshot files hold one run a day, and that
+  rows for daniel-server PRs carry `phases_min`. An empty `phases_min` means the pull failed
+  on the first run and no copy exists yet.
+
+Applying it: `initial_setup.yml --tags claude_code`, on daniel-box. The GitOps deployer applies
+the role's template and defaults changes itself. A change to `tasks/` alone is skipped by it, so
+a PR that edits only `tasks/pipeline_timeline.yml` is applied by hand.
+
 ## The takeover check
 
 `/usr/local/sbin/homelab-takeover-check` runs a D5 flip PR's pre-merge dry runs as root, behind
@@ -336,8 +380,10 @@ line in `/etc/sudoers.d/claude-rootq` (issue #6323). The operator approved the s
 is true: daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
 only, where fan-out batches and the operator's sessions run. The agent user stays without
 sudo: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297), and
-`NoNewPrivileges=yes` in `claude-rc.service` stops sudo there anyway. The four files that
-decide what the grant reaches are on the lander's approval list.
+`NoNewPrivileges=yes` in `claude-rc.service` stops sudo there anyway. The agent reaches the
+same script through a socket instead (*The agent's socket* below). The four files that decide
+what the grant reaches, and the four that decide what the socket reaches, are on the
+lander's approval list.
 
 Everything rootq accepts is an explicit allowlist, and anything not listed is refused. The
 list is deliberately minimal: the files and sources #6323's sessions needed. It grows only when
@@ -388,4 +434,46 @@ a need appears.
   for why the filter redacts its grammar cleanly, with must-pass and must-redact cases in
   `tests/test_rootq_redaction.py`.
 - **To take it back:** set `claude_code_rootq_enabled: false` and apply the role. The role
-  removes the sudoers file, the shim and the script, in that order.
+  removes the socket first, then the sudoers file, the shim and the script, in that order.
+
+### The agent's socket
+
+The operator approved this on 2026-10-29 (#6350). `homelab-rootq.socket`
+(`templates/homelab-rootq.socket.j2`) listens on `/run/homelab-rootq.sock`, mode 0660, group
+`homelab-rootq`, with `Accept=yes`. For each connection systemd runs the root helper
+`ansible/roles/setup/claude_code/files/homelab_rootq_socket.py`, installed as
+`/usr/local/libexec/homelab-rootq-socket`, through `homelab-rootq@.service`. The agent runs
+`rootq-socket` (`files/rootq_socket.py`, the same verbs as `rootq`). `agent_access.yml` puts
+each present agent in the group. The group is the whole grant, because the helper checks no
+uid.
+
+- **The helper adds no allowlist of its own.** It reads one line, `VERB [PATH [HEX]]`, of at
+  most 4200 bytes within 5 seconds, and refuses anything else before rootq runs: a verb outside
+  `ansible/roles/setup/claude_code/files/homelab_rootq_socket.py:ARITY`, a wrong argument
+  count, a non-ASCII byte, a PATH holding an empty, `.` or `..` component, and a `matches` hash
+  that is not 64 lowercase hex. It then runs `/usr/local/sbin/homelab-rootq` by absolute path
+  with an argument list, a fixed environment and stdin closed, never a shell. Whether a PATH is
+  on the allowlist is rootq's decision, so the caller gets rootq's own refusal text. The
+  helper's own refusals use the same `refused: ...` text and exit 2.
+- **The answer is one JSON line** with `exit`, `stdout` and `stderr`, because a socket carries
+  no exit status. `rootq-socket` fails with 70 on an answer that is missing, truncated or not
+  that object, and with 69 when it cannot connect.
+- **`matches` sends a hash, never a file name.** The client hashes REPO_FILE as the caller, with
+  the shim's checks, and sends `matches PATH HEX`.
+- **The service keeps the host's network namespace.** `nft list ruleset` and `ufw status
+  verbose` read it, and a `PrivateNetwork=` would print an empty ruleset instead of refusing.
+- **A session sees the group after `claude-rc.service` restarts.** Group membership reaches a
+  process at its start. The weekly `claude-rc-restart.timer` restarts the service, or the
+  operator restarts it, and an older session gets exit 69 from `rootq-socket` until then.
+- **The approval list covers the socket's four files.** #6350 expected the sudo grant's
+  entries to cover it, and they cover only the script. The helper, the client and the two unit
+  templates are listed in `templates/claude-land-approval-paths.j2` and in `FLOOR` in
+  `ansible/tests/setup/test_claude_lander.py`.
+- **To take it back:** set `claude_code_rootq_socket_enabled: false`, or
+  `claude_code_rootq_enabled: false`, and apply the role. The role stops and disables the
+  socket, removes the units, the helper, the client and the group, and `agent_access.yml`
+  drops the agent from the group. The operator's sudo path is untouched. The setting is
+  `claude_code_rootq_socket_enabled` in the host's `host_vars`.
+- **How to apply it:** `uv run ansible-playbook ansible/initial_setup.yml --tags claude_code`
+  on each of daniel-box and daniel-server. Both nodes are `connection=local`, so the play runs
+  on the host it is started on.

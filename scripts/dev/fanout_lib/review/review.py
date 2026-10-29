@@ -21,7 +21,9 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    batch whose PR fails `red_gate.green_gate` gets that failure as one more finding, and the
    gate runs again after the fix; a batch still failing it is not landed. A batch passing it
    has each fix hunk reverted on its own under the red tests (`hunk_check`), for the record.
-4. delta review — a fresh reviewer reads only the fix's commits.
+4. delta review — a fresh reviewer reads the fix's commits inside the whole change. A finding
+   it reports is left only if it quotes a line the fix head's file has (`delta_confirm`,
+   #6547); the rest are carried unverified and hold nothing.
 4b. ready — `review_ci.ready_gate` marks a draft PR ready and waits for its CI run (#5563).
 5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
    the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
@@ -83,9 +85,11 @@ import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from fanout_lib.branch_pr import OwnPr, needs_input_report, worktree_own_pr
 from fanout_lib.brief import ISSUES_HEADING, lands
 from fanout_lib.review.held_hooks import (
     held_secret_paths,
+    labelled,
     pointed_settings,
     read_hooks,
     with_batch_env,
@@ -112,6 +116,7 @@ from fanout_lib.review.red_gate import (
     red_section,
     labelled_skip_reason,
 )
+from fanout_lib.review.delta_confirm import split_confirmed
 from fanout_lib.review.green_contest import contested, settle
 from fanout_lib.review.hardened_runs import ResetFailed
 from fanout_lib.review.red_tests import issue_subjects
@@ -259,7 +264,7 @@ class Pipeline:
         )
         (fanout / "stop-blocks").write_text("0\n")
         started = self.clock()
-        proc = self.run(["env", otel_attributes(self.batch, name), *argv], stdin)
+        proc = self.run(labelled(argv, otel_attributes(self.batch, name)), stdin)
         try:
             report = json.loads(proc.stdout)
         except json.JSONDecodeError:
@@ -289,6 +294,13 @@ class Pipeline:
             len(denials) if isinstance(denials, list) else 0
         )
         return phase
+
+    def _read_at(self, rev: str, path: str) -> str | None:
+        """`path` as commit `rev` holds it, or None when it has no such file."""
+        shown = self.run(
+            ["git", "-C", str(self.worktree), "show", f"{rev}:{path}"], None
+        )
+        return shown.stdout if shown.returncode == 0 else None
 
     def _git(self, *args: str) -> str:
         return self.run(["git", "-C", str(self.worktree), *args], None).stdout.strip()
@@ -521,14 +533,20 @@ class Pipeline:
         if red is not None:
             brief = brief.replace(ISSUES_HEADING, red_section(*red) + ISSUES_HEADING, 1)
         impl = self._claude("implement", self._first_implementer(), brief)
-        pr = PR_URL.search(impl.text)
-        if impl.failed or not pr:
+        found = OwnPr()
+        if not impl.failed:
+            found = worktree_own_pr(
+                impl.text, self.worktree, self.target.repo, self.run
+            )
+        # A text naming only another PR is the #6551 defect: end here naming both.
+        report = needs_input_report(found.problem) if found.problem else impl.report
+        if impl.failed or not found.url:
             # Saved whether or not the batch is red-green: a batch that never reached a PR is
             # the failure rate the records exist to measure (#3940).
-            self.record.outcome = outcome(impl.report, has_pr=False)
+            self.record.outcome = outcome(report, has_pr=False)
             self._save()
-            return impl.report
-        self.record.pr = pr.group(0)
+            return report
+        self.record.pr = found.url
         self.session = str(impl.report.get("session_id") or "")
         base = self._git("merge-base", "HEAD", self.target.base)
         head = self.record.head = self._git("rev-parse", "HEAD")
@@ -572,11 +590,16 @@ class Pipeline:
                 )
                 left, delta_error = findings_of(delta)
                 # A failed delta review proves nothing was resolved.
-                self.record.remaining = (
-                    actionable(left)
-                    if left is not None
-                    else list(self.record.actionable)
-                )
+                if left is None:
+                    self.record.remaining = list(self.record.actionable)
+                else:
+                    # A reported finding is left only if the fix head's file holds the line
+                    # it quotes (#6547); the rest are carried unverified and hold nothing.
+                    held, unverified = split_confirmed(
+                        actionable(left), lambda path: self._read_at(after, path)
+                    )
+                    self.record.remaining = held
+                    self.record.unverified = unverified
                 if delta_error:
                     self.record.review_error = f"delta review: {delta_error}"
             # The fix may touch the red tests even when the first run passed, so the PR that

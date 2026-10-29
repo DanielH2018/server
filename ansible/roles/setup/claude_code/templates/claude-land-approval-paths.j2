@@ -35,6 +35,13 @@ ansible/roles/setup/claude_code/files/homelab_rootq.py
 ansible/roles/setup/claude_code/files/rootq.sh
 ansible/roles/setup/claude_code/tasks/rootq.yml
 ansible/roles/setup/claude_code/templates/claude-rootq.sudoers.j2
+# The same inspector through the agent's socket (#6350). The issue expected the entries above
+# to cover it, and they cover only the script: the socket helper that gates a request, the
+# client, and the two units that decide who may connect are grant points of their own.
+ansible/roles/setup/claude_code/files/homelab_rootq_socket.py
+ansible/roles/setup/claude_code/files/rootq_socket.py
+ansible/roles/setup/claude_code/templates/homelab-rootq.socket.j2
+ansible/roles/setup/claude_code/templates/homelab-rootq@.service.j2
 # The landing policy and the code that runs it.
 scripts/deploy_tools/land
 # The interpreter and packages `uv run` syncs before land.py starts. A package can run code at

@@ -6,6 +6,14 @@
 # ghcr.io image in the cluster until the 30Gi claim fills (#5541). The registry never collects
 # on its own, so this weekly run prunes the store offline and garbage-collects it.
 #
+# TWO STORES, ONE AT A TIME. The dockerhub-mirror (dockerhub-mirror.yaml.j2) runs with a zero
+# TTL too (#6536): a TTL counts from the fetch, so it deleted an image a pod still ran one TTL
+# after its first pull. Each store gets the same phase in turn: stamp, scale-down, prune Job,
+# restore, warm. The globals below describe the ghcr-mirror, and use_dockerhub_store points them
+# at the dockerhub-mirror between the two phases. A phase starts only once the previous mirror
+# serves again, so this run takes down one mirror at a time, and the EXIT trap restores the one
+# the current phase holds. A mirror a killed run stranded stays down until its own phase.
+#
 # STOP-THE-WORLD, NOT OPTIONAL. Upstream: "You should ensure that the registry is in read-only
 # mode or not running at all. If you were to upload an image while garbage collection is running,
 # there is the risk that the image's layers are mistakenly deleted leading to a corrupted image."
@@ -19,15 +27,16 @@
 # moving it (docs/target-architecture/deploy/d5-bulk-move.md, Wave D's registry bullet). The
 # verify Job's seed still adds about 20 MB per flux_job_image pin, which nothing reclaims (#5752).
 #
-# deploy/ghcr-mirror renders no `replicas:`, so neither the Ansible apply nor Flux's server-side
-# apply owns `spec.replicas`, and this script is that field's only writer. The operator accepted
-# that exception to contract C4 on field ownership (#5732).
+# Neither mirror's Deployment renders `replicas:`, so Flux's server-side apply does not own
+# `spec.replicas`, and this script is that field's only writer. The operator accepted that
+# exception to contract C4 on field ownership for deploy/ghcr-mirror (#5732), and #6536 extends
+# it to deploy/dockerhub-mirror.
 #
 # ROOT KUBECONFIG, unlike every sibling script deployed by this repo. disk-health.sh,
 # longhorn-backup-health.sh and manifest-prune-check.sh all use the read-only ServiceAccount
 # precisely so a bug there cannot mutate the cluster. This one MUST scale a Deployment, so it
-# holds a credential that can. Everything it does is scoped to deploy/ghcr-mirror, its own Job
-# and its keep-set ConfigMap; keep it that way.
+# holds a credential that can. Everything it does is scoped to the two mirror Deployments, their
+# own Jobs and their keep-set ConfigMaps; keep it that way.
 #
 # ONE LOCK FOR THE WHOLE RUN. The script holds an flock on registry_k8s_gc_lock_file from
 # before the scale-down until after the restore, and the registry deploy restores a mirror it
@@ -35,9 +44,9 @@
 # back while this run prunes the store (#5736). The kernel drops the lock when the process
 # dies, however it dies.
 #
-# A STAMP THAT OUTLIVES THE RUN. /var/lib/registry-gc/ghcr-mirror-down exists from just before
-# the scale-down until the mirror is serving again. A run killed in between leaves it behind,
-# and the next run starts by restoring that mirror. After registry's flip no deploy restores it.
+# A STAMP THAT OUTLIVES THE RUN. /var/lib/registry-gc/ghcr-mirror-down, and dockerhub-mirror-down
+# beside it, exists from just before the scale-down until that mirror is serving again. A run killed in between leaves it behind,
+# and the next run's phase for that mirror starts by restoring it. No deploy restores either.
 #
 # A WARM PHASE AFTER THE RESTORE. Once the mirror serves again, the run GETs every linux/amd64
 # blob of every ghcr.io image the cluster names, through the mirror, so the mirror caches what it
@@ -46,13 +55,16 @@
 # already holds, and a cold blob fetched while GHCR is slow takes many minutes even though the
 # mirror's ghcr-resume sidecar now completes it (#5654, #6401). So a weekly warm fetches those
 # blobs ahead of need, at GHCR's normal speed (49 MB/s cold through the mirror, measured
-# 2026-10-24).
+# 2026-10-24). The dockerhub-mirror's warm reads Docker Hub only for a manifest or blob its store
+# lacks, and Docker Hub's anonymous limit counts manifest GETs, so a cold first warm may be
+# refused partway. Each refusal is a named failure that leaves the run up, and the refs warm in
+# a fixed order, so the store fills over the following weeks.
 #
 # Usage: registry-gc.sh (no arguments)
 # Runs from the registry-gc root cron on daniel-box, weekly at the time set by
-# registry_k8s_gc_cron_weekday, _hour and _minute. It scales deploy/ghcr-mirror to 0, runs
-# /etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml, the prune and
-# garbage-collect, scales the mirror back and warms it. It pushes the result to Kuma when
+# registry_k8s_gc_cron_weekday, _hour and _minute. For each mirror in turn it scales the
+# Deployment to 0, runs its Job from /etc/rancher/k3s/manifests/registry-jobs/ (the prune and
+# garbage-collect), scales the mirror back and warms it. It pushes the result to Kuma when
 # registry_gc_push_token is set. It reads /etc/rancher/k3s/k3s.yaml and
 # /usr/local/lib/kuma-push-lib.sh, and keeps its state in /var/lib/registry-gc.
 
@@ -78,15 +90,20 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 NS="{{ k8s_namespace }}"
 KUBECTL="k3s kubectl -n ${NS}"
 MIRROR_DEPLOY=ghcr-mirror
+MIRROR_UPSTREAM=ghcr.io
+MIRROR_REFS=ghcr_refs
 MIRROR_JOB=registry-gc-ghcr-mirror
 MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
 MIRROR_STARTED=0
 MIRROR_DONE=0
 MIRROR_NOTE=""
 MIRROR_JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml
+DOCKERHUB_JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/dockerhub-mirror-gc-job.yaml
 # Set while deploy/ghcr-mirror may be scaled down, so the EXIT trap knows to restore it.
 MIRROR_DOWN=0
 MIRROR_MSG=""
+# The finished phases' messages, joined with the current one into the run's message.
+DONE_MSG=""
 FAILED=0
 COMPLETED=0
 STATE_DIR=/var/lib/registry-gc
@@ -97,11 +114,27 @@ LOCK_FILE={{ registry_k8s_gc_lock_file }}
 # The mirror's loopback hostPort. This cron runs on the registry node, which reaches it there,
 # as that node's registries.yaml entry does.
 MIRROR_URL="http://{{ k8s_registry_host_ip }}:{{ k8s_registry_ghcr_mirror_port }}"
-# Every manifest type a GHCR push can store, as node-exporter's ghcr-mirror-pull check sends.
+# Every manifest type a registry can store, as node-exporter's mirror pull checks send.
 ACCEPT=application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json
 WARM_BUDGET_S={{ k8s_host_files_ghcr_mirror_warm_budget_s }}
-# The ghcr.io refs write_mirror_keep_set read, one `<repo>@<digest>` or `<repo>:<tag>` per line.
+# The upstream's refs write_mirror_keep_set read, one `<repo>@<digest>` or `<repo>:<tag>` per line.
 WARM_REFS=""
+
+# Points every per-mirror global above at the dockerhub-mirror and resets the phase's state.
+# Called only once the ghcr-mirror's phase has restored that mirror.
+use_dockerhub_store() {
+  MIRROR_DEPLOY=dockerhub-mirror
+  MIRROR_UPSTREAM=docker.io
+  MIRROR_REFS=dockerhub_refs
+  MIRROR_JOB=registry-gc-dockerhub-mirror
+  MIRROR_KEEP_CM=registry-gc-dockerhub-mirror-keep
+  MIRROR_JOB_MANIFEST=$DOCKERHUB_JOB_MANIFEST
+  MIRROR_STAMP="${STATE_DIR}/dockerhub-mirror-down"
+  MIRROR_URL="http://{{ k8s_registry_host_ip }}:{{ k8s_registry_dockerhub_mirror_port }}"
+  WARM_BUDGET_S={{ k8s_host_files_dockerhub_mirror_warm_budget_s }}
+  WARM_REFS=""
+  MIRROR_STARTED=0 MIRROR_DONE=0 MIRROR_DOWN=0 MIRROR_NOTE="" MIRROR_MSG=""
+}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
@@ -180,13 +213,13 @@ restore_mirror_store() {
     rm -f "$MIRROR_STAMP"
     return 0
   fi
-  MIRROR_MSG="${MIRROR_MSG:-ghcr-mirror store not collected}; ghcr-mirror did NOT come back — check deploy/${MIRROR_DEPLOY}"
+  MIRROR_MSG="${MIRROR_MSG:-${MIRROR_DEPLOY} store not collected}; ${MIRROR_DEPLOY} did NOT come back — check deploy/${MIRROR_DEPLOY}"
   return 1
 }
 
 # The mirror MUST come back even if GC dies, the deadline trips, or cron kills us. Without this
-# a failed run leaves the cluster unable to pull any ghcr.io image during a WAN outage until a
-# human notices, which is the outage the mirror exists to prevent.
+# a failed run leaves the cluster unable to pull that upstream's images during a WAN outage until
+# a human notices, which is the outage the mirror exists to prevent.
 scale_up_and_report() {
   restore_mirror_store || FAILED=1
   if [[ "$COMPLETED" == 1 && "$FAILED" == 0 ]]; then
@@ -194,7 +227,8 @@ scale_up_and_report() {
   else
     STATUS=down
   fi
-  [[ -n "$MIRROR_MSG" ]] && MSG="$MIRROR_MSG"
+  local msg="${DONE_MSG}${DONE_MSG:+${MIRROR_MSG:+; }}${MIRROR_MSG}"
+  [[ -n "$msg" ]] && MSG="$msg"
   finish
 }
 trap scale_up_and_report EXIT
@@ -210,15 +244,16 @@ journal_mirror_prune() {
   printf '%s\n' "$lines"
 }
 
-# ── ghcr-mirror keep set ─────────────────────────────────────────────────────────────────────
-# The ghcr-mirror container's store is pruned offline by ghcr-mirror-gc-job.yaml's Job
-# (files/ghcr-mirror-prune.sh in the k8s/registry role, #5541), which has no API access. It
-# reads the digests to keep from a ConfigMap this function writes before the scale-down.
+# ── keep set ─────────────────────────────────────────────────────────────────────────────────
+# Each mirror's store is pruned offline by its GC Job (files/ghcr-mirror-prune.sh, #5541), which
+# has no API access. It reads the digests to keep from a ConfigMap this function writes before
+# the scale-down.
 #
 # EVERY NAMESPACE, AND SPECS AS WELL AS STATUSES. A `registries.yaml` mirror covers the whole
 # ghcr.io host, so Flux's controllers in flux-system pull through it as much as anything here.
 # A CronJob's pod is not running at 04:20 on a Sunday, so its pinned digest comes from its spec.
-# Every sha256 digest in the JSON is kept, which can only keep more than strictly needed.
+# Every sha256 digest in the JSON is kept, for either store, which can only keep more than
+# strictly needed.
 #
 # LSCR.IO REFS COUNT AS GHCR.IO REFS. registries.yaml points lscr.io at this same mirror
 # (#6257), and lscr.io serves ghcr.io's repositories under the same paths, so
@@ -228,7 +263,8 @@ journal_mirror_prune() {
 # TAG REFS TOO. A flux-owned built image runs as `ghcr.io/danielh2018/<name>:<tag>` with no
 # digest, so a workload of one scaled to zero leaves no digest anywhere. Its spec still names
 # the tag, and the prune keeps whatever revision that tag points at in the store. Each ref goes
-# in as `<repo>:<tag>`; a digest-pinned ref also yields one, which only keeps more.
+# in as `<repo>:<tag>`; a digest-pinned ref also yields one, which only keeps more. MIRROR_REFS
+# names the function that reads the store's refs out of the JSON.
 #
 # FAIL CLOSED. The previous run's ConfigMap is deleted first, and the Job mounts it as optional,
 # so a run that could not build the set prunes nothing rather than pruning by last week's. A
@@ -236,33 +272,52 @@ journal_mirror_prune() {
 # green tile while the claim fills. A cluster running pods always has an imageID digest, so an
 # empty set is a fault as well.
 write_mirror_keep_set() {
-  local json keep tags
+  local json refs keep tags
   if ! $KUBECTL delete configmap "$MIRROR_KEEP_CM" --ignore-not-found >/dev/null 2>&1; then
-    MIRROR_MSG="could not delete the previous ghcr-mirror keep set (configmap/${MIRROR_KEEP_CM}) — aborted before scaling down"
+    MIRROR_MSG="could not delete the previous ${MIRROR_DEPLOY} keep set (configmap/${MIRROR_KEEP_CM}) — aborted before scaling down"
     return 1
   fi
   if ! json=$($KUBECTL get pods,deployments,statefulsets,daemonsets,cronjobs,jobs -A -o json \
                 2>/dev/null); then
-    MIRROR_NOTE="ghcr-mirror prune skipped, workloads unreadable"
+    MIRROR_NOTE="${MIRROR_DEPLOY} prune skipped, workloads unreadable"
     return 0
   fi
+  refs=$("$MIRROR_REFS" <<<"$json")
   # A ref that carries a digest is warmed by it, its tag dropped. A bare repository is no ref.
-  WARM_REFS=$(grep -oE '(ghcr|lscr)\.io/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?' \
-                <<<"$json" | sed -E 's#^(ghcr|lscr)\.io/##; s|^([^:@]+):[^@]+@|\1@|' \
-                | grep -E '[:@]' | sort -u)
+  WARM_REFS=$(sed -E 's|^([^:@]+):[^@]+@|\1@|' <<<"$refs" | grep -E '[:@]' | sort -u)
   keep=$(grep -o 'sha256:[0-9a-f]\{64\}' <<<"$json" | sort -u)
   if [[ -z "$keep" ]]; then
-    MIRROR_NOTE="ghcr-mirror prune skipped, no digest found in any workload"
+    MIRROR_NOTE="${MIRROR_DEPLOY} prune skipped, no digest found in any workload"
     return 0
   fi
-  tags=$(grep -oE '(ghcr|lscr)\.io/[a-z0-9._/-]+:[A-Za-z0-9._-]+' <<<"$json" \
-           | sed -E 's#^(ghcr|lscr)\.io/##' \
-           | sort -u)
+  tags=$(awk -F@ '$1 ~ /:/ { print $1 }' <<<"$refs" | sort -u)
   [[ -n "$tags" ]] && keep="${keep}"$'\n'"${tags}"
   if ! $KUBECTL create configmap "$MIRROR_KEEP_CM" --from-literal=digests="$keep" \
          >/dev/null 2>&1; then
-    MIRROR_NOTE="ghcr-mirror prune skipped, could not write configmap/${MIRROR_KEEP_CM}"
+    MIRROR_NOTE="${MIRROR_DEPLOY} prune skipped, could not write configmap/${MIRROR_KEEP_CM}"
   fi
+}
+
+# Prints each ghcr.io or lscr.io ref in the JSON on stdin as `<repo>[:<tag>][@<digest>]`, the
+# path the ghcr-mirror caches it under.
+ghcr_refs() {
+  grep -oE '(ghcr|lscr)\.io/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?' \
+    | sed -E 's#^(ghcr|lscr)\.io/##' | sort -u
+}
+
+# Prints each docker.io ref in the JSON on stdin as `<repo>[:<tag>][@<digest>]`, the path the
+# dockerhub-mirror caches it under (#6536). A docker.io ref has no host to grep for, so this reads
+# every `image` and `imageID` value. A first path component holding `.` or `:`, or `localhost`,
+# names another registry. `docker.io/` and `index.docker.io/` are stripped, and a one-component
+# name such as `alpine` is `library/alpine`, as containerd asks the mirror for it.
+dockerhub_refs() {
+  jq -r '.. | objects | (.image?, .imageID?) | strings' 2>/dev/null \
+    | sed -E 's#^(index\.)?docker\.io/##' \
+    | awk -F/ '/^sha256:/ { next }
+               NF > 1 && ($1 ~ /[.:]/ || $1 == "localhost") { next }
+               NF == 1 { $0 = "library/" $0 }
+               { print }' \
+    | grep -E '^[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?$' | sort -u
 }
 
 # Waits for the mirror Job and records its result in MIRROR_MSG. Returns 1 when the Job did not
@@ -271,13 +326,13 @@ report_mirror_job() {
   local pruned blobs
   if ! $KUBECTL wait --for=condition=complete "job/${MIRROR_JOB}" \
          --timeout={{ registry_k8s_gc_deadline_s }}s >/dev/null 2>&1; then
-    MIRROR_MSG="ghcr-mirror job did not complete — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune"
+    MIRROR_MSG="${MIRROR_DEPLOY} job did not complete — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune"
     return 1
   fi
   MIRROR_DONE=1
   pruned=$(journal_mirror_prune | grep -c '^pruned ')
   blobs=$($KUBECTL logs "job/${MIRROR_JOB}" -c gc 2>/dev/null | grep -c 'Deleting blob')
-  MIRROR_MSG="ghcr-mirror: ${pruned} revision(s) pruned, ${blobs} blob(s) deleted"
+  MIRROR_MSG="${MIRROR_DEPLOY}: ${pruned} revision(s) pruned, ${blobs} blob(s) deleted"
   # The store collected, but a skipped prune is a fault write_mirror_keep_set explains.
   if [[ -n "$MIRROR_NOTE" ]]; then
     MIRROR_MSG="${MIRROR_MSG} (${MIRROR_NOTE})"
@@ -285,10 +340,10 @@ report_mirror_job() {
   fi
 }
 
-# ── The ghcr-mirror store's phase ────────────────────────────────────────────────────────────
-# Scales only deploy/ghcr-mirror, never the push store (operator ruling on #5680). containerd
-# falls back to ghcr.io while it is down. The stamp goes down before the scale-down, so a run
-# killed at any point after it is one the next run repairs.
+# ── A mirror store's phase ───────────────────────────────────────────────────────────────────
+# Scales only deploy/${MIRROR_DEPLOY}, never the push store (operator ruling on #5680).
+# containerd falls back to the upstream while it is down. The stamp goes down before the
+# scale-down, so a run killed at any point after it is one the next run repairs.
 collect_mirror_store() {
   write_mirror_keep_set || return 1
   [[ -n "$MIRROR_NOTE" ]] && logger -t registry-gc "$MIRROR_NOTE"
@@ -298,7 +353,7 @@ collect_mirror_store() {
   fi
   MIRROR_DOWN=1
   if ! stop_deploy "$MIRROR_DEPLOY"; then
-    MIRROR_MSG="ghcr-mirror pod did not terminate within 120s — aborted before touching its store"
+    MIRROR_MSG="${MIRROR_DEPLOY} pod did not terminate within 120s — aborted before touching its store"
     return 1
   fi
   $KUBECTL delete job "$MIRROR_JOB" --ignore-not-found >/dev/null 2>&1
@@ -310,10 +365,14 @@ collect_mirror_store() {
   report_mirror_job
 }
 
-# ── Warming the ghcr-mirror ──────────────────────────────────────────────────────────────────
-# Prints manifest $2 (a tag or a digest) of repository $1, read through the mirror.
+# ── Warming a mirror ─────────────────────────────────────────────────────────────────────────
+# Prints manifest $2 (a tag or a digest) of repository $1, read through the mirror. Reads
+# warm_mirror's `start`, so the read ends with the warm budget, and reads nothing once it is spent.
 mirror_manifest() {
-  curl -fs --max-time 60 -H "Accept: ${ACCEPT}" "${MIRROR_URL}/v2/${1}/manifests/${2}"
+  local left=$((WARM_BUDGET_S - (SECONDS - start)))
+  ((left > 0)) || return 1
+  ((left > 60)) && left=60
+  curl -fs --max-time "$left" -H "Accept: ${ACCEPT}" "${MIRROR_URL}/v2/${1}/manifests/${2}"
 }
 
 # Prints the config and layer digests of image $1 at $2, one per line. An index resolves to its
@@ -332,17 +391,17 @@ mirror_blob_digests() {
 
 # GETs each distinct blob of every ref in WARM_REFS through the mirror, and appends the counts to
 # MIRROR_MSG. A cached blob streams from the mirror's own store, so a warm store costs a local
-# read and no WAN. The whole phase stops starting new blobs after WARM_BUDGET_S, and each GET is
-# bounded by the budget left.
+# read and no WAN. The whole phase stops starting new reads after WARM_BUDGET_S, and each manifest
+# read and blob GET is bounded by the budget left, so the phase ends within its budget.
 # DECIDED: a blob that fails to warm is named in the journal and the message but leaves the run
 # up. It costs a cold pull later, never a corrupt store, and the likely cause is a slow GHCR
 # episode that a Kuma page cannot fix. #5654 has the measurements.
 warm_mirror() {
   local ref repo id blobs blob got left
   local -A seen=()
-  local warmed=0 failed=0 skipped=0 bytes=0 start=$SECONDS
+  local warmed=0 failed=0 skipped=0 unread=0 bytes=0 start=$SECONDS
   if [[ -z "$WARM_REFS" ]]; then
-    MIRROR_MSG="${MIRROR_MSG}; mirror not warmed, no ghcr.io ref read"
+    MIRROR_MSG="${MIRROR_MSG}; mirror not warmed, no ${MIRROR_UPSTREAM} ref read"
     return 0
   fi
   while read -r ref; do
@@ -351,9 +410,13 @@ warm_mirror() {
     else
       repo=${ref%:*} id=${ref##*:}
     fi
+    if ((SECONDS - start >= WARM_BUDGET_S)); then
+      unread=$((unread + 1))
+      continue
+    fi
     if ! blobs=$(mirror_blob_digests "$repo" "$id"); then
       failed=$((failed + 1))
-      logger -t registry-gc "could not read the manifest of ${repo} ${id} through ghcr-mirror"
+      logger -t registry-gc "could not read the manifest of ${repo} ${id} through ${MIRROR_DEPLOY}"
       continue
     fi
     for blob in $blobs; do
@@ -370,13 +433,14 @@ warm_mirror() {
         bytes=$((bytes + got))
       else
         failed=$((failed + 1))
-        logger -t registry-gc "could not warm ${repo}@${blob} through ghcr-mirror"
+        logger -t registry-gc "could not warm ${repo}@${blob} through ${MIRROR_DEPLOY}"
       fi
     done
   done <<<"$WARM_REFS"
   MIRROR_MSG="${MIRROR_MSG}; warmed ${warmed} blob(s), $((bytes / 1000000)) MB in $((SECONDS - start))s"
   ((failed)) && MIRROR_MSG="${MIRROR_MSG}, ${failed} failed (journalctl -t registry-gc)"
   ((skipped)) && MIRROR_MSG="${MIRROR_MSG}, ${skipped} skipped past the ${WARM_BUDGET_S}s budget"
+  ((unread)) && MIRROR_MSG="${MIRROR_MSG}, ${unread} ref(s) unread past the ${WARM_BUDGET_S}s budget"
   return 0
 }
 
@@ -390,6 +454,19 @@ restore_stranded_mirror() {
   restore_mirror_store
 }
 
+# One mirror's whole phase. A stranded mirror that does not come back skips the rest of it.
+run_mirror_phase() {
+  restore_stranded_mirror || return 1
+  MIRROR_STARTED=0
+  collect_mirror_store || FAILED=1
+  # Only a mirror known to serve again is warmed. Against one still at zero every GET would fail.
+  if restore_mirror_store; then
+    warm_mirror
+  else
+    return 1
+  fi
+}
+
 # Waits up to a minute: the registry deploy holds the lock only for one `kubectl scale`.
 take_lock() {
   exec 9>"$LOCK_FILE" && flock -w 60 9
@@ -399,13 +476,18 @@ if ! take_lock; then
   MIRROR_MSG="could not take ${LOCK_FILE} — another registry-gc run, or a registry deploy, holds it"
   exit 1
 fi
-restore_stranded_mirror || exit 1
-MIRROR_STARTED=0
-collect_mirror_store || FAILED=1
-# Only a mirror known to serve again is warmed. Against one still at zero every GET would fail.
-if restore_mirror_store; then
-  warm_mirror
-else
-  FAILED=1
+run_mirror_phase || FAILED=1
+# The next phase starts only with this mirror serving, so this run never holds both down. The
+# stamp, not MIRROR_DOWN, says so: a failed restore clears MIRROR_DOWN and leaves the stamp.
+# A dockerhub-mirror a killed run stranded is still restored: that scales nothing down, and
+# skipping it would leave the mirror at zero for another week.
+if [[ -e "$MIRROR_STAMP" ]]; then
+  DONE_MSG="${MIRROR_MSG}; dockerhub-mirror not collected"
+  use_dockerhub_store
+  restore_stranded_mirror || FAILED=1
+  exit 1
 fi
+DONE_MSG=$MIRROR_MSG
+use_dockerhub_store
+run_mirror_phase || FAILED=1
 COMPLETED=1

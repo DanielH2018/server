@@ -7,15 +7,20 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_ci.py
 """
 
 import json
+import subprocess
 
 from _review_fakes import PR, _finding, _pipeline, _report
+from fanout_lib.launch import REVIEW_RUNTIME_MAX_S, RUNTIME_MAX_S
 from fanout_lib.review.review_ci import (
     CI_RECHECK_S,
     CI_SLICE_S,
     CI_WAIT_S,
+    MERGEABLE_RECHECK_S,
     READY_POLL_S,
     READY_WAIT_S,
 )
+from fanout_lib.review.review import LAND_MARGIN_S
+from fanout_lib.review.review_land import WAIT_MARGIN_S
 from fanout_lib.status import BLOCKER, PR_URL
 from fanout_lib.target import Target
 
@@ -152,6 +157,33 @@ def test_a_wait_that_uses_its_slice_is_re_run_without_a_pause(tmp_path):
     assert len(run.ci_calls) == 3 and clock.sleeps == []
 
 
+def test_ci_that_runs_twenty_minutes_on_a_loaded_host_still_ends_done(tmp_path):
+    # Runs took 1089-1404s on 2026-10-29 (#6195). Four 300s slices exceed a 15-minute budget.
+    pipeline, run, clock = _server_batch(tmp_path, _clean_review())
+    timeout = (75, "WAIT: timeout still running after 300s; re-run: cc-wait ...\n")
+    run.ci = [timeout] * 4 + [PASSED]
+    assert pipeline.run_all()["result"] == f"Opened {PR}"
+    assert len(run.ci_calls) == 5 and clock.sleeps == []
+
+
+def test_ci_still_running_at_the_budget_ends_needs_input_naming_the_time_waited(
+    tmp_path,
+):
+    pipeline, run, _ = _server_batch(tmp_path, _clean_review())
+    run.ci = [(75, "WAIT: timeout still running after 300s; re-run: cc-wait ...\n")]
+    final = pipeline.run_all()
+    assert "within its wait of 35 min (WAIT: timeout still running" in final["result"]
+    assert len(run.ci_calls) == CI_WAIT_S // CI_SLICE_S
+    assert "(waited 35 min)" in _record(tmp_path)["ci_gate"]
+
+
+def test_two_full_ci_waits_fit_in_a_review_batchs_run_time_and_still_leave_room_to_land():
+    # The implementer can use RUNTIME_MAX_S; the CI waits and the landing share what is left.
+    slack = REVIEW_RUNTIME_MAX_S - RUNTIME_MAX_S
+    assert 2 * CI_WAIT_S + WAIT_MARGIN_S <= slack
+    assert 2 * CI_WAIT_S + LAND_MARGIN_S <= slack
+
+
 def test_a_daniel_box_batch_with_red_ci_is_resumed_once_then_lands(tmp_path):
     reports = [*_clean_review(), _report(f"Fixed the weight record. {PR}")]
     pipeline, run, _ = _server_batch(tmp_path, reports, host="daniel-box")
@@ -254,3 +286,49 @@ def test_a_draft_held_for_its_findings_is_still_marked_ready(tmp_path):
     final = pipeline.run_all()
     assert BLOCKER.search(final["result"])
     assert len(run.readied) == 1 and run.ci_calls == []
+
+
+def _mergeable_batch(tmp_path, answers):
+    """A draft whose ready run never starts, with `gh pr view --json mergeable` scripted."""
+    pipeline, run, clock = _server_batch(tmp_path, _clean_review())
+    run.draft = True
+    inner, reads = pipeline.run, []
+
+    def run_with_mergeable(argv, stdin):
+        if argv[:3] == ["gh", "pr", "view"] and argv[-1] == "mergeable":
+            reads.append(argv)
+            state = answers.pop(0) if len(answers) > 1 else answers[0]
+            body = json.dumps({"mergeable": state})
+            return subprocess.CompletedProcess(argv, 0, body, "")
+        return inner(argv, stdin)
+
+    pipeline.run = run_with_mergeable
+    return pipeline, run, clock, reads
+
+
+def test_a_conflicting_pr_that_starts_no_ci_is_blamed_on_the_conflict_not_actions(
+    tmp_path,
+):
+    """GitHub runs no `pull_request` workflow on a CONFLICTING PR (#5629)."""
+    pipeline, run, _, _ = _mergeable_batch(tmp_path, ["CONFLICTING"])
+    final = pipeline.run_all()["result"]
+    assert final.startswith("needs input: PR #4000 conflicts with master")
+    assert "Merge or rebase master into the branch and push" in final
+    assert "gh pr ready" not in final and "Actions" not in final
+    # The PR stays ready: it cannot merge while it conflicts, and the push starts CI.
+    assert ("undo",) not in run.log and run.ci_calls == []
+
+
+def test_a_mergeable_pr_that_starts_no_ci_keeps_the_actions_message(tmp_path):
+    pipeline, run, _, _ = _mergeable_batch(tmp_path, ["MERGEABLE"])
+    final = pipeline.run_all()["result"]
+    assert "Run `gh pr ready 4000` once Actions is up" in final
+    assert "conflicts" not in final and run.log[-1] == ("undo",)
+
+
+def test_an_unknown_mergeable_state_is_read_again_before_the_message_is_chosen(
+    tmp_path,
+):
+    pipeline, _, clock, reads = _mergeable_batch(tmp_path, ["UNKNOWN", "CONFLICTING"])
+    assert "conflicts with master" in pipeline.run_all()["result"]
+    assert len(reads) == 2 and clock.sleeps[-1] == MERGEABLE_RECHECK_S

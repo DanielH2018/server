@@ -273,6 +273,8 @@ jobs:
       # version alert_tools.sh pins, for the `validate-alert-rules` hook. The script fetches
       # each release archive, checks it against its release's sums file, and unpacks the
       # binary into alert-tools/ under the git common dir, .git/alert-tools/ in this checkout.
+      # Alloy is not fetched here: its 167 MB release is provisioned on first use, by the
+      # red-proof step below.
       # It is the tool path the hook itself calls, so CI and a worktree provision the same way.
       - name: Provision promtool, amtool, pint and lokitool
         run: scripts/validate/alert_tools.sh

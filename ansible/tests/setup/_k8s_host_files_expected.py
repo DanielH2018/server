@@ -122,7 +122,7 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
     },
     # The absent arm for the push store's GC manifest, which nothing reads since its retirement,
     # and the ghcr-mirror GC's host side: the Job manifest the cron applies, the script, its state
-    # directory and the cron.
+    # directory and the cron, with the dockerhub-mirror GC's Job manifest beside it.
     "registry.yml": {
         "Create the registry job manifest directory": (
             "ansible.builtin.file",
@@ -139,6 +139,16 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
             {
                 "src": "ghcr-mirror-gc-job.yaml.j2",
                 "dest": "/etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml",
+                "mode": "0644",
+                "owner": "root",
+                "group": "root",
+            },
+        ),
+        "Render the dockerhub-mirror garbage-collection job": (
+            "ansible.builtin.template",
+            {
+                "src": "dockerhub-mirror-gc-job.yaml.j2",
+                "dest": "/etc/rancher/k3s/manifests/registry-jobs/dockerhub-mirror-gc-job.yaml",
                 "mode": "0644",
                 "owner": "root",
                 "group": "root",

@@ -61,6 +61,11 @@ Usage::
     land.sh --regate 574                     # re-run a merged pin bump's gates and
                                              # re-post homelab/upgrade-gates; never merges
 
+A READY PR WHOSE HEAD'S ONLY CI SKIPPED AS A DRAFT is converted to draft and back once per head
+(`gh pr ready --undo`, then `gh pr ready`) after a 180s grace, because GitHub starts no run on
+the ready flip. The wait then continues inside the merge budget; a second draft-skip on the
+same head ends `merge-timeout`.
+
 A PR THAT BUMPS A FORWARD-ONLY PIN MERGES ONLY THROUGH THE PIN GATE. When the head moves
 `k3s_longhorn_version` or `k3s_metallb_version`, the direct merge first requires daniel-box,
 DEPLOY_HOLD reading `none`, no bump of that pin in (last-good, master tip], and a green

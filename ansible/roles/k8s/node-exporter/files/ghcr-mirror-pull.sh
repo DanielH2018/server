@@ -17,14 +17,21 @@
 # skipped write. The file follows the check-file half of M3's producer metric contract
 # (docs/target-architecture/monitoring/m3-textfile-timer.md).
 #
+# The `dockerhub-mirror-pull` sidecar runs this same script against the docker.io mirror
+# (#6535). It sets CHECK, and names a fixed REPOSITORY and REFERENCE in place of TARGET_DIR's
+# files: the exporter's own image by digest. A digest GET is served from the mirror's store once
+# cached, so the check spends none of Docker Hub's anonymous pull limit, where a tag GET would.
+#
 # Environment:
 #   NODE_NAME       this node's name (the downward API's spec.nodeName)
 #   REGISTRY_NODE   the node that runs the mirror, which reaches it on the loopback hostPort
 #   LOCAL_ENDPOINT  the mirror endpoint on REGISTRY_NODE
 #   REMOTE_ENDPOINT the mirror endpoint on every other node, the pinned ClusterIP
-# Optional: TARGET_DIR (default /ghcr-mirror-probe), TEXTFILE_DIR (default
-# /ghcr-mirror-textfile), INTERVAL_S (default 600), TIMEOUT_S (default 30) and ONCE (set to 1
-# to write one file and exit, for the test).
+# Optional: CHECK (the check's name and file name, default ghcr-mirror-pull), REPOSITORY and
+# REFERENCE (a tag or digest; when REPOSITORY is set, TARGET_DIR is not read), TARGET_DIR
+# (default /ghcr-mirror-probe), TEXTFILE_DIR (default /ghcr-mirror-textfile), INTERVAL_S
+# (default 600), TIMEOUT_S (default 30) and ONCE (set to 1 to write one file and exit, for the
+# test).
 # POSIX sh, because the image's shell is busybox ash, and its wget is busybox's.
 set -u
 
@@ -39,12 +46,12 @@ TEXTFILE_DIR=${TEXTFILE_DIR:-/ghcr-mirror-textfile}
 INTERVAL_S=${INTERVAL_S:-600}
 TIMEOUT_S=${TIMEOUT_S:-30}
 ONCE=${ONCE:-0}
-CHECK=ghcr-mirror-pull
+CHECK=${CHECK:-ghcr-mirror-pull}
 # The longest legitimate gap between two writes: five intervals. The GhcrMirrorPullNotReporting
-# rules in observability's registry.yaml carry it as a literal, and
-# ansible/roles/k8s/node-exporter/tests/test_ghcr_mirror_pull.py pins the two together.
+# and DockerhubMirrorPullNotReporting rules in observability's registry.yaml carry it as a
+# literal, and this role's test_ghcr_mirror_pull.py and test_dockerhub_mirror_pull.py pin them.
 DEADLINE_S=$((INTERVAL_S * 5))
-# Every manifest type a GHCR push can store, so a served tag never answers 404 for its type.
+# Every manifest type a registry can store, so a served reference never answers 404 for its type.
 ACCEPT=application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json
 
 if [ "${NODE_NAME:-}" = "${REGISTRY_NODE:-}" ]; then
@@ -56,15 +63,20 @@ fi
 # One verdict: 1 when the GET answered 2xx, 0 otherwise. Each down names its reason on stderr,
 # which is the container log the alert's description points at.
 verdict() {
-  repository=$(head -n 1 "$TARGET_DIR/repository" 2>/dev/null) || repository=
-  tag=$(head -n 1 "$TARGET_DIR/tag" 2>/dev/null) || tag=
+  if [ -n "${REPOSITORY:-}" ]; then
+    repository=$REPOSITORY
+    tag=${REFERENCE:-}
+  else
+    repository=$(head -n 1 "$TARGET_DIR/repository" 2>/dev/null) || repository=
+    tag=$(head -n 1 "$TARGET_DIR/tag" 2>/dev/null) || tag=
+  fi
   if [ -z "$ENDPOINT" ]; then
     echo "$CHECK: no mirror endpoint for node ${NODE_NAME:-unset}" >&2
     echo 0
     return
   fi
   if [ -z "$repository" ] || [ -z "$tag" ]; then
-    echo "$CHECK: $TARGET_DIR names no repository and tag, so there is nothing to pull" >&2
+    echo "$CHECK: no repository and reference, from the environment or $TARGET_DIR, so there is nothing to pull" >&2
     echo 0
     return
   fi

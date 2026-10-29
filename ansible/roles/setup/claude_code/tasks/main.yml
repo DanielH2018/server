@@ -556,10 +556,20 @@
   tags: [claude_code]
   ansible.builtin.import_tasks: fanout_alert.yml
 
+# ── The session stop alert ──────────────────────────────────────────────────────────────
+- name: Install the session stop alert, or take it back
+  tags: [claude_code]
+  ansible.builtin.import_tasks: stop_alert.yml
+
 # ── The server-batch lander ─────────────────────────────────────────────────────────────
 - name: Install the server-batch lander timer, or take it back
   tags: [claude_code]
   ansible.builtin.import_tasks: fanout_server_lander.yml
+
+# ── The pipeline timeline snapshot ──────────────────────────────────────────────────────
+- name: Install the pipeline timeline timer, or take it back
+  tags: [claude_code]
+  ansible.builtin.import_tasks: pipeline_timeline.yml
 
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # In its own file, because that file is on the lander's approval list and pins the lander's
@@ -641,6 +651,8 @@
       - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
       - ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.service.j2
       - ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.timer.j2
+      - ansible/roles/setup/claude_code/templates/claude-pipeline-timeline.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-pipeline-timeline.timer.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.service.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.timer.j2
       - ansible/roles/setup/claude_code/templates/claude-clone-sync.service.j2

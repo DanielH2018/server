@@ -196,3 +196,28 @@ def test_the_tables_row_puts_hypervisor_in_the_change_set_and_still_names_daniel
     assert land_tags.self_applied([_SHIPPED])
     note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-box")
     assert "`hypervisor` also reaches daniel-server" in note, note
+
+
+# --- A task NAME that mentions a repo path ships nothing (#6538) -------------
+#
+# `sops_setup`'s seed task is named after `ansible/.sops.yaml` and writes it from inline
+# `content:` on a first host. A match over the whole task read the name as the ship site, so a
+# range changing only the SOPS config put `sops_setup` in the unapplied half on every host.
+
+_SOPS_CONFIG = "ansible/.sops.yaml"
+_SOPS_TASKS = "ansible/roles/setup/sops_setup/tasks/main.yml"
+
+
+def test_the_sops_seed_task_still_names_the_config():
+    """Non-vacuity: the cases below pass trivially once no task name carries the path."""
+    assert f"- name: Seed {_SOPS_CONFIG} " in (REPO_ROOT / _SOPS_TASKS).read_text()
+
+
+def test_a_task_name_mentioning_a_repo_path_does_not_ship_it():
+    assert land_reach.setup_repo_file_hosts("sops_setup", _SOPS_CONFIG) == frozenset()
+
+
+def test_a_sops_config_only_range_leaves_sops_setup_unapplied_nowhere():
+    """The verify-by: `_remaining_hosts`' unapplied half carries no `sops_setup`."""
+    _, unapplied = land_reach._remaining_hosts([_SOPS_CONFIG], "daniel-box")
+    assert "sops_setup" not in unapplied, unapplied

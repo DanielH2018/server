@@ -106,8 +106,9 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   - containerd falls back to `ghcr.io` while the GC scales the mirror to zero. No build writes
     the mirror's store, so the GC does not wait for builds.
   - **Nothing but `registry-gc.sh` writes the mirror's `spec.replicas`**, so the operator
-    accepted it as the one exception to contract C4 on field ownership (#5732). The script
-    stays a host cron after the flip.
+    accepted it as an exception to contract C4 on field ownership (#5732). #6536 extends the
+    exception to the dockerhub-mirror's `spec.replicas`. The script stays a host cron after
+    the flip.
   - **No deploy restores the mirror.** Until the flip, a deploy task restored a mirror a
     stopped GC left at zero, under the script's flock (#5736). Flux owns the role now and
     renders no `replicas:` for the mirror, so nothing but `registry-gc.sh` writes the count
@@ -130,15 +131,35 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   limit.
   - It has no resume sidecar. The cut transfer that sidecar repairs is ghcr.io's signed blob
     URL expiring.
-  - Its TTL is `registry_k8s_dockerhub_mirror_ttl` (2160h), not zero, so no GC collects it and
-    it renders `replicas: 1`. distribution schedules the expiry only on a fetch from Docker
-    Hub, and a pull served from the store never moves it. Every cached image is therefore
-    deleted one TTL after its first fetch, however often nodes pulled it since, so a digest pin
-    unchanged for longer than the TTL needs the WAN again.
-    `ansible/roles/k8s/registry/templates/dockerhub-mirror.yaml.j2:DECIDED: a long TTL` has
-    the trade-off.
-  - Nothing proves it serves pulls the way node-exporter's `ghcr-mirror-pull` sidecar proves
-    the ghcr-mirror does, and `registry-gc.sh` does not warm it.
+  - Its TTL is zero, and the weekly GC collects it as it does the ghcr-mirror (#6536).
+    distribution counts a TTL from the fetch from Docker Hub, and a pull served from the store
+    never moves it, so any TTL deletes a cached image one TTL after its first fetch while a pod
+    still runs it.
+    `ansible/roles/k8s/registry/templates/dockerhub-mirror.yaml.j2:DECIDED: a zero TTL and the weekly GC`
+    has the trade-off.
+  - `registry-gc.sh` collects it in a second phase, after the ghcr-mirror serves again, so
+    a run takes down one mirror at a time. A dockerhub-mirror a killed run left at zero stays
+    down through the next run's ghcr-mirror phase. Its own phase restores it, or the run's exit
+    path does when the ghcr-mirror phase leaves its own stamp. The phase is the ghcr-mirror's with its own names: the
+    `registry-gc-dockerhub-mirror` Job from
+    `ansible/roles/setup/k8s_host_files/templates/dockerhub-mirror-gc-job.yaml.j2`, the
+    `registry-gc-dockerhub-mirror-keep` ConfigMap, the stamp
+    `/var/lib/registry-gc/dockerhub-mirror-down`, and
+    `registry_k8s_dockerhub_mirror_keep_revisions` (3) kept per repository. Its Deployment
+    renders no `replicas:` for the ghcr-mirror's reason, and observability's
+    `DockerhubMirrorScaledToZero` pages one left at zero for 2h.
+  - The keep set and warm list read docker.io refs from every `image` and `imageID` value,
+    because a docker.io ref carries no host to match. A first path component holding `.` or
+    `:`, or `localhost`, names another registry. The script strips `docker.io/` and
+    `index.docker.io/`, and names a one-component image such as `alpine` as `library/alpine`,
+    the path containerd asks the mirror for.
+  - The warm reads Docker Hub only for what the store lacks, and Docker Hub's anonymous limit
+    counts manifest GETs. A cold first warm may therefore be refused partway. Each refusal is a
+    named failure that leaves the run up, and the store fills over the following weeks.
+  - node-exporter's `dockerhub-mirror-pull` sidecar proves it serves pulls, as the
+    `ghcr-mirror-pull` sidecar below does for the ghcr-mirror (#6535). It GETs the exporter's
+    own image by digest through port 5005, and observability's `DockerhubMirrorPullFailed` and
+    `DockerhubMirrorPullNotReporting` page on it.
 - **The push store is not collected** (D5, Wave D's registry bullet). Its GC scaled
   `deploy/registry`, whose `replicas: 1` Flux renders after the flip, so Flux would restore
   the pod mid-GC, the corruption the stop-the-world rule exists to prevent. Every
@@ -170,14 +191,14 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   and the mirror's answer, not the cache: with the WAN up, the proxy fetches a missing tag
   from GHCR and still answers 200.
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
-  static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
+  static in `k8s/uptime-kuma`, deadline two hours past the weekly period) and the off-site
   healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until
   2026-09-18 (#1937), so before that only the dead-man saw a run.
 - **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
   role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
   `manifests/registry/` outside the role's file list, which deleted them on every deploy.
-  Their `-job.yaml` suffix keeps them out of the derived list. `ghcr-mirror-gc-job.yaml` is
-  the one that mattered: `registry-gc.sh` reads it at cron time, so the prune left a window in
+  Their `-job.yaml` suffix keeps them out of the derived list. The two mirror GC manifests are
+  the ones that mattered: `registry-gc.sh` reads them at cron time, so the prune left a window in
   which GC failed on a missing manifest. That manifest, the script, `/var/lib/registry-gc` and
   the cron now install from `ansible/roles/setup/k8s_host_files/tasks/registry.yml`, because
   a Flux-owned role runs no tasks. The same file holds the retired push store's `gc-job.yaml`

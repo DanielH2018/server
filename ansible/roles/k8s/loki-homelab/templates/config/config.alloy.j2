@@ -191,6 +191,65 @@ loki.process "host" {
   }
 }
 
+// k3s's own output, warnings and worse only (issue #6177). The k3s units write it to a file
+// because journald stores nothing below notice and every k3s line is priority info (the WHY A
+// FILE AND NOT A PRIORITY comment in roles/setup/k3s/tasks/unit-logging.yml). That file keeps
+// 4 rotations, so without this a crash loop's reason was gone within days. Both nodes write
+// the same path, setup/k3s's `k3s_log_file`: the agent's drop-in reads it, and daniel-box's
+// package copies it (test_k3s_server_component.py holds the copy equal). The k8s render cannot
+// read a setup role's defaults, so this is a literal, which test_alloy_ships_k3s_log.py holds
+// equal to that default.
+//
+// The exact file, never `k3s.log*`: a glob would tail the rotated `.1` and the `.gz` files.
+// logrotate rotates with `copytruncate`, and the tailer resets to offset 0 on a size shrink.
+local.file_match "k3s" {
+  path_targets = [{"__path__" = "/var/log/k3s.log", "job" = "{{ loki_streams.host_k3s.job }}", "machine" = sys.env("HOSTNAME")}]
+}
+
+loki.source.file "k3s" {
+  targets    = local.file_match.k3s.targets
+  forward_to = [loki.process.k3s.receiver]
+}
+
+// Measured 2026-10-29 over one day's k3s.log.1: 39444 lines (7.3 MB) on daniel-box and 49707
+// (10.0 MB) on daniel-server. The two stages below keep 1481 and 1389 lines (0.5 and 0.6 MB).
+loki.process "k3s" {
+  forward_to = [loki.write.homelab.receiver]
+
+  // Keep a line only when it carries a warn-or-worse level, in one of the four shapes k3s
+  // writes: klog (`W1029 12:00:00.1 1234 file.go:1] …`, also E and F), logrus
+  // (`time="…" level=error msg=…`), embedded etcd's zap JSON (`{"level":"warn",…}`), and the Go
+  // runtime's own `panic: ` and `fatal error: ` lines, which carry no level. stage.drop cannot
+  // say "drop what does NOT match", because RE2 has no negative lookahead, so a match stage with
+  // a negated line filter does it.
+  //
+  // THE FILTER VALUE IS A DOUBLE-QUOTED LogQL STRING, NEVER A BACKTICK ONE. Alloy's match-stage
+  // parser rejects a backtick string ("unexpected IDENTIFIER, expecting STRING"), though Loki
+  // and lokitool accept it: that crash-looped the DaemonSet on 2026-10-29. Inside the double
+  // quotes a backslash is an escape and a quote ends the string, so neither regex holds either
+  // one. A `.` stands in for each JSON quote, and `[^ ]*` for logrus's quoted time.
+  //
+  // A continuation line (a tab-indented error, a ` > key=value` klog tail or a stack
+  // frame) is dropped with the info lines; the header line it belongs to is kept.
+  stage.match {
+    selector            = "{job=\"{{ loki_streams.host_k3s.job }}\"} !~ \"^[WEF][0-9]{4} |^time=[^ ]* level=(warning|error|fatal|panic)|^[{].level.:.(warn|error|dpanic|panic|fatal).|^panic: |^fatal error: \""
+    action              = "drop"
+    drop_counter_reason = "k3s_below_warn"
+  }
+
+  // kube-router warns once per IPv6 ipBlock of the traefik NetworkPolicy on every policy sync,
+  // because the cluster is single-stack IPv4: 29400 of daniel-box's 29688 klog warnings in the
+  // measured day, and 29701 lines on daniel-server. Shipping it would be the volume the
+  // unit-logging comment keeps k3s out of Loki for. Only that one message is dropped. A match
+  // stage rather than a bare stage.drop: test_traefik_access_log_drop.py holds every stage.drop
+  // in this file inside a stage.match, so no drop can reach the pod pipeline unscoped.
+  stage.match {
+    selector            = "{job=\"{{ loki_streams.host_k3s.job }}\"} |~ \"^W[0-9]{4} .* policy[.]go:[0-9]+[]] Ignoring IPv6 source IP blocks \""
+    action              = "drop"
+    drop_counter_reason = "k3s_kube_router_ipv6_ipblock"
+  }
+}
+
 {% if k3s_audit_log_enabled | default(false) %}
 // The apiserver audit log. Only daniel-box writes one — the file lives under the k3s SERVER
 // data directory and the agent node has no apiserver — but the source is declared on both
