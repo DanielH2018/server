@@ -67,8 +67,14 @@ it does not set itself: `TEXTFILE_DIR`, and `LEAKGUARD_CALLS` so a shim the chil
 records the call. Two tests once wrote fake verdicts into the real directory that way
 (#6191, #6238). The wrapper covers `subprocess.run`, `Popen`, `lib.proc_testing.run` and
 asyncio's subprocesses alike, because all of them construct a `Popen`. A test that sets its
-own `TEXTFILE_DIR` keeps it. The wrapper carries no `PATH` prefix; the `DECIDED:` marker at
-the wrapper says why.
+own `TEXTFILE_DIR` keeps it.
+
+The wrapper also shims a hand-built `PATH`, such as `/usr/bin:/bin`, which would otherwise
+reach the real `logger`, `curl` or `kubectl` with nothing recorded (#6418). It prepends a
+directory holding a shim for each binary whose first match on the child's `PATH` is the real
+binary, and for nothing else. A test's own stub earlier on that `PATH` still wins, and a binary
+the `PATH` hides stays hidden. The `DECIDED:` marker at the wrapper has the reasoning. A child
+started by absolute path, such as `/usr/bin/curl`, bypasses `PATH` and is not covered.
 
 ## Ansible's local temp directory points at a temp directory
 
@@ -245,6 +251,33 @@ def carry_vars(env, environ) -> dict[str, str]:
     return carried
 
 
+def names_reaching_real(child_path: str, real_binaries) -> list[str]:
+    """The names in `real_binaries` whose first match on `child_path` is the real binary.
+
+    `real_binaries` maps a name to `_in_real_dir` of the binary this process would run. A name
+    that resolves to anything else, such as a test's own stub, or to nothing, is left out.
+    Returns them sorted.
+    """
+    return sorted(
+        name
+        for name, real in real_binaries.items()
+        if (found := shutil.which(name, path=child_path)) is not None
+        and _in_real_dir(found) == real
+    )
+
+
+def _in_real_dir(found: str) -> str:
+    """`found` with its directory resolved and its own name kept.
+
+    Resolving the directory makes `/bin/curl` equal `/usr/bin/curl` on a merged-usr host.
+    Keeping the name unresolved makes a test's own symlink to the real binary, in a directory
+    the test owns, count as the test's stub: it chose to run the real thing.
+    """
+    return os.path.join(
+        os.path.realpath(os.path.dirname(found)), os.path.basename(found)
+    )
+
+
 ANSIBLE_LOCAL_TEMP_DIR = (
     Path(tempfile.gettempdir()) / f"pytest-ansible-local-{os.getuid()}"
 )
@@ -310,7 +343,61 @@ def _is_loopback(address: object) -> bool:
     return host.startswith("127.") or host in {"::1", "localhost", "", "0.0.0.0"}
 
 
-def _install_shims(stub_dir: Path) -> list[str]:
+def _write_shim(shim: Path) -> None:
+    """Write one shim, renaming it into place so a concurrent exec never sees a partial file."""
+    partial = shim.with_name(f".{shim.name}.{os.getpid()}")
+    partial.write_text(_SHIM)
+    partial.chmod(0o755)
+    partial.replace(shim)
+
+
+_STUB_PREFIX = "leakguard-"
+
+
+def without_stub_dirs(path: str) -> str:
+    """`path` without any leakguard stub directory, an outer run's included.
+
+    `test_leakguard.py` starts a nested pytest with a hand-built PATH, which the outer run's
+    wrapper shims. Kept, those entries would make the nested run's exempt tests reach the outer
+    shims, and its real binaries resolve to them. Matched by a path component rather than by
+    the temp directory, because the nested run need not share the outer run's `TMPDIR`.
+    """
+    return os.pathsep.join(
+        entry
+        for entry in path.split(os.pathsep)
+        if not any(part.startswith(_STUB_PREFIX) for part in Path(entry).parts)
+    )
+
+
+def _shim_dir_for(names: list[str]) -> Path:
+    """A directory under the stub directory holding a shim for exactly `names`, made once."""
+    stub_dir = _state["stub_dir"]
+    assert isinstance(stub_dir, str)
+    subset = Path(stub_dir) / "subset" / "+".join(names)
+    subset.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        if not (subset / name).exists():
+            _write_shim(subset / name)
+    return subset
+
+
+def shim_hand_built_path(env: dict[str, str]) -> dict[str, str]:
+    """`env` with a shim directory before its `PATH` for each name it would run for real.
+
+    An `env` without `PATH` is read as `os.defpath`, the path a child resolves through then.
+    Returns `env` itself when no name would reach the real binary.
+    """
+    real_binaries = _state.get("real_binaries")
+    if not isinstance(real_binaries, dict):
+        return env
+    child_path = env.get("PATH", os.defpath)
+    names = names_reaching_real(child_path, real_binaries)
+    if not names:
+        return env
+    return {**env, "PATH": f"{_shim_dir_for(names)}:{child_path}"}
+
+
+def _install_shims(stub_dir: Path, real_path: str) -> list[str]:
     """Write a recording shim for each SHIMMED_BINARIES entry the host actually has.
 
     Returns the names shimmed. A binary the host lacks is skipped so that a
@@ -318,24 +405,27 @@ def _install_shims(stub_dir: Path) -> list[str]:
     """
     installed = []
     for name in SHIMMED_BINARIES:
-        if shutil.which(name) is None:
+        if shutil.which(name, path=real_path) is None:
             continue
-        shim = stub_dir / name
-        shim.write_text(_SHIM)
-        shim.chmod(0o755)
+        _write_shim(stub_dir / name)
         installed.append(name)
     return installed
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    stub_dir = Path(tempfile.mkdtemp(prefix="leakguard-"))
+    stub_dir = Path(tempfile.mkdtemp(prefix=_STUB_PREFIX))
     calls = stub_dir / "calls"
     calls.touch()
 
     _state["stub_dir"] = str(stub_dir)
     _state["calls"] = calls
-    _state["installed"] = _install_shims(stub_dir)
-    _state["real_path"] = os.environ.get("PATH", "")
+    _state["real_path"] = real_path = without_stub_dirs(os.environ.get("PATH", ""))
+    _state["installed"] = installed = _install_shims(stub_dir, real_path)
+    _state["real_binaries"] = {
+        name: _in_real_dir(found)
+        for name in installed
+        if (found := shutil.which(name, path=real_path)) is not None
+    }
 
     os.environ["LEAKGUARD_CALLS"] = str(calls)
     textfile_dir = stub_dir / "textfile"
@@ -344,16 +434,20 @@ def pytest_configure(config: pytest.Config) -> None:
 
     real_popen_init = subprocess.Popen.__init__
 
-    # DECIDED: the wrapper carries no PATH prefix. Prepending the stub directory to an
-    # explicit env's PATH would put the shims in FRONT of the test's own stub directory, so a
-    # test's stub `curl` would lose to the shim, and a test that pins `/usr/bin:/bin` to hide
-    # a binary would find a shim instead. A child given a hand-built PATH reaches the real
-    # binaries, as it did before.
+    # DECIDED: the wrapper shims a hand-built PATH per binary, never by prepending the whole
+    # stub directory. That would put every shim in FRONT of the test's own stub directory, so
+    # a test's stub `curl` would lose to the shim, and a test that pins `/usr/bin:/bin` to hide
+    # a binary would find a shim instead. `shim_hand_built_path` shims only a name whose first
+    # match on the child's PATH is already the real binary, so neither case changes (#6418).
+    # It runs only while a non-exempt test owns the process, as the PATH prefix in
+    # `pytest_runtest_setup` does.
 
     def carrying_popen_init(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         # Every caller in this repo passes `env` by keyword; a positional one is not covered.
         if kwargs.get("env") is not None:
             kwargs["env"] = carry_vars(kwargs["env"], os.environ)
+            if _state.get("exempt") is False:
+                kwargs["env"] = shim_hand_built_path(kwargs["env"])
         real_popen_init(self, *args, **kwargs)
 
     subprocess.Popen.__init__ = carrying_popen_init  # type: ignore[method-assign]
