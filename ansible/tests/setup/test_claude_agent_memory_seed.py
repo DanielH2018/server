@@ -176,22 +176,29 @@ def _copy_argv(src: Path, dst: Path, check_mode: bool) -> list[str]:
     }
     argv = evaluate(task["ansible.builtin.command"]["argv"], variables)
     assert argv[0] == "rsync"
-    return [_real_rsync(), *argv[1:]]
+    return [_real_rsync(src.parent / "bin"), *argv[1:]]
 
 
-def _real_rsync() -> str:
-    """The installed rsync: leakguard's recording shim sits first on PATH and copies nothing.
+def _real_rsync(bin_dir: Path) -> str:
+    """The installed rsync, reached through a symlink in `bin_dir`, which the test owns.
 
-    This copy stays inside `tmp_path`, so nothing leaves the process.
+    leakguard's recording shim sits first on PATH and copies nothing, and leakguard also swaps
+    the shim in for the installed rsync named by absolute path. A link in a directory the test
+    owns is the test's own choice, which leakguard leaves alone. This copy stays inside
+    `tmp_path`, so nothing leaves the process.
     """
-    path = os.pathsep.join(
-        entry
-        for entry in os.environ["PATH"].split(os.pathsep)
-        if not Path(entry).name.startswith("leakguard-")
-    )
-    found = shutil.which("rsync", path=path)
-    assert found, "rsync is not installed; the copy task cannot run here either"
-    return found
+    link = bin_dir / "rsync"
+    if not link.exists():
+        path = os.pathsep.join(
+            entry
+            for entry in os.environ["PATH"].split(os.pathsep)
+            if not Path(entry).name.startswith("leakguard-")
+        )
+        found = shutil.which("rsync", path=path)
+        assert found, "rsync is not installed; the copy task cannot run here either"
+        bin_dir.mkdir(exist_ok=True)
+        link.symlink_to(found)
+    return str(link)
 
 
 def _tree(root: Path) -> dict[str, bytes]:

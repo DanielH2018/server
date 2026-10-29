@@ -3,9 +3,9 @@
 `ansible/tests/leakguard.py` points `TEXTFILE_DIR` at a temp directory, but a test that hands
 its child an explicit `env` used to drop it, and a check script the child ran wrote a fake
 verdict into node_exporter's real directory (#6191, #6238). The same wrapper shims a
-hand-built PATH without overriding a test's own stub or un-hiding a binary (#6418). These run
-in this process, under the plugin `pyproject.toml` loads, because the wrapper is what they
-check.
+hand-built PATH without overriding a test's own stub or un-hiding a binary (#6418), and swaps
+a real binary started by absolute path for its shim (#6463). These run in this process, under
+the plugin `pyproject.toml` loads, because the wrapper is what they check.
 
 Run: uv run pytest ansible/tests/repo/test_leakguard_child_env.py
 """
@@ -33,6 +33,19 @@ import subprocess
 def test_it_logs_through_a_hand_built_path():
     subprocess.run(["logger", "leakguard-6418"], env={"PATH": "/usr/bin:/bin"}, check=False)
 """
+
+
+# The real `logger` by absolute path, which no PATH reaches (#6463). None where the host has
+# none, and the test that runs it skips there.
+_REAL_LOGGER = shutil.which("logger", path="/usr/bin:/bin")
+
+# Both ways a child names its program by absolute path: as `argv[0]`, and as `executable`
+# beside a bare `argv[0]`. One child run each, because a teardown failure leaves the next test
+# in the same run erroring in setup.
+_ABSOLUTE_LAUNCHES = {
+    "argv": f"[{_REAL_LOGGER!r}, 'leakguard-6463-argv']",
+    "executable": f"['logger', 'leakguard-6463-executable'], executable={_REAL_LOGGER!r}",
+}
 
 
 def test_a_scratch_env_child_writes_its_textfile_under_the_temp_directory() -> None:
@@ -77,6 +90,41 @@ def test_a_child_with_a_hand_built_path_is_failed_for_its_call(tmp_path: Path) -
     )
     assert "reached outside the test process" in proc.stdout, proc.stdout
     assert "logger leakguard-6418" in proc.stdout, proc.stdout
+
+
+@pytest.mark.skipif(
+    _REAL_LOGGER is None,
+    reason="the host has no logger under /usr/bin:/bin to run by path",
+)
+@pytest.mark.parametrize("form", sorted(_ABSOLUTE_LAUNCHES))
+def test_a_child_started_by_absolute_path_is_failed_for_its_call(
+    tmp_path: Path, form: str
+) -> None:
+    """Reject case: an absolute `argv[0]` or `executable` no longer reaches the real binary."""
+    module = (
+        "import subprocess\n\n\ndef test_it_logs_by_absolute_path():\n"
+        f"    subprocess.run({_ABSOLUTE_LAUNCHES[form]}, check=False)\n"
+    )
+    proc = _run_child(tmp_path, module)
+    assert proc.returncode != 0, (
+        "the guard let an absolute path reach the real logger:\n" + proc.stdout
+    )
+    assert "reached outside the test process" in proc.stdout, proc.stdout
+    assert f"logger leakguard-6463-{form}" in proc.stdout, proc.stdout
+
+
+def test_a_tests_own_stub_started_by_absolute_path_still_runs(tmp_path: Path) -> None:
+    """Accept case: a test's own stub, named by absolute path, runs as given.
+
+    The code before #6463 swapped nothing, so this passes there too. It is the regression guard
+    against a swap that matches by name alone, which would run the shim in place of this stub.
+    The memory-seed test's rsync symlink depends on the same rule.
+    """
+    fake_bin(tmp_path, logger="echo own-stub\n")
+    seen = subprocess.run(
+        [str(tmp_path / "logger"), "x"], capture_output=True, text=True, timeout=60
+    )
+    assert seen.stdout == "own-stub\n", seen.stderr
 
 
 def test_a_hand_built_path_keeps_the_tests_own_stub_first(tmp_path: Path) -> None:

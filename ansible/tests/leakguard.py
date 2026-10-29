@@ -73,8 +73,14 @@ The wrapper also shims a hand-built `PATH`, such as `/usr/bin:/bin`, which would
 reach the real `logger`, `curl` or `kubectl` with nothing recorded (#6418). It prepends a
 directory holding a shim for each binary whose first match on the child's `PATH` is the real
 binary, and for nothing else. A test's own stub earlier on that `PATH` still wins, and a binary
-the `PATH` hides stays hidden. The `DECIDED:` marker at the wrapper has the reasoning. A child
-started by absolute path, such as `/usr/bin/curl`, bypasses `PATH` and is not covered.
+the `PATH` hides stays hidden. The `DECIDED:` marker at the wrapper has the reasoning.
+
+A child started by absolute path, such as `/usr/bin/logger`, never consults `PATH` at all. The
+wrapper swaps such a program for its shim when it names a shimmed binary in one of the
+directories the real `PATH` lists, whether it arrives as `argv[0]` or as `executable` (#6463).
+A program in any other directory, such as a test's own stub, runs as given. Two launches stay
+uncovered: a `shell=True` command string, and an absolute path a script hardcodes and runs
+itself, because the wrapper sees only the direct child.
 
 ## Ansible's local temp directory points at a temp directory
 
@@ -408,6 +414,73 @@ def shim_hand_built_path(env: dict[str, str]) -> dict[str, str]:
     return {**env, "PATH": f"{_shim_dir_for(names)}:{child_path}"}
 
 
+def shim_for_program(program, real_binaries, real_dirs, stub_dir: str) -> str | None:
+    """The shim to run instead of `program`, or None to run `program` as given.
+
+    `program` gets a shim only when it is an absolute path whose name is a key of
+    `real_binaries` and whose directory, resolved, is one of `real_dirs`. A relative name goes
+    through `PATH`, where the PATH prefix and `shim_hand_built_path` already cover it.
+    """
+    try:
+        path = os.fsdecode(program)
+    except TypeError:
+        return None
+    if not os.path.isabs(path):
+        return None
+    name = os.path.basename(path)
+    if name not in real_binaries:
+        return None
+    if os.path.realpath(os.path.dirname(path)) not in real_dirs:
+        return None
+    return os.path.join(stub_dir, name)
+
+
+def shim_absolute_program(args: tuple, kwargs: dict) -> tuple[tuple, dict]:
+    """`Popen`'s `args` and `kwargs` with an absolute real program swapped for its shim.
+
+    With `executable` set, that is the program the kernel runs and `argv[0]` is only the name
+    the child sees, so `executable` alone is swapped. A `shell=True` launch is left alone: its
+    program is the shell, and the command string is not parsed here.
+    """
+    real_binaries = _state.get("real_binaries")
+    real_dirs = _state.get("real_dirs")
+    stub_dir = _state.get("stub_dir")
+    if (
+        not isinstance(real_binaries, dict)
+        or not isinstance(real_dirs, frozenset)
+        or not isinstance(stub_dir, str)
+        or kwargs.get("shell")
+    ):
+        return args, kwargs
+    if kwargs.get("executable") is not None:
+        shim = shim_for_program(
+            kwargs["executable"], real_binaries, real_dirs, stub_dir
+        )
+        return (
+            (args, kwargs) if shim is None else (args, {**kwargs, "executable": shim})
+        )
+    if args:
+        argv = args[0]
+    elif "args" in kwargs:
+        argv = kwargs["args"]
+    else:
+        return args, kwargs
+    if isinstance(argv, (str, bytes, os.PathLike)):
+        shim = shim_for_program(argv, real_binaries, real_dirs, stub_dir)
+        swapped = shim
+    elif argv:
+        argv = list(argv)
+        shim = shim_for_program(argv[0], real_binaries, real_dirs, stub_dir)
+        swapped = [shim, *argv[1:]]
+    else:
+        return args, kwargs
+    if shim is None:
+        return args, kwargs
+    if args:
+        return (swapped, *args[1:]), kwargs
+    return args, {**kwargs, "args": swapped}
+
+
 def _install_shims(stub_dir: Path, real_path: str) -> list[str]:
     """Write a recording shim for each SHIMMED_BINARIES entry the host actually has.
 
@@ -437,6 +510,9 @@ def pytest_configure(config: pytest.Config) -> None:
         for name in installed
         if (found := shutil.which(name, path=real_path)) is not None
     }
+    _state["real_dirs"] = frozenset(
+        os.path.realpath(entry) for entry in real_path.split(os.pathsep) if entry
+    )
 
     os.environ["LEAKGUARD_CALLS"] = str(calls)
     textfile_dir = stub_dir / "textfile"
@@ -451,7 +527,8 @@ def pytest_configure(config: pytest.Config) -> None:
     # a binary would find a shim instead. `shim_hand_built_path` shims only a name whose first
     # match on the child's PATH is already the real binary, so neither case changes (#6418).
     # It runs only while a non-exempt test owns the process, as the PATH prefix in
-    # `pytest_runtest_setup` does.
+    # `pytest_runtest_setup` does. `shim_absolute_program` follows the same rule for a child
+    # started by absolute path: only a program in a real PATH directory is swapped (#6463).
 
     def carrying_popen_init(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         # Every caller in this repo passes `env` by keyword; a positional one is not covered.
@@ -459,6 +536,8 @@ def pytest_configure(config: pytest.Config) -> None:
             kwargs["env"] = carry_vars(kwargs["env"], os.environ)
             if _state.get("exempt") is False:
                 kwargs["env"] = shim_hand_built_path(kwargs["env"])
+        if _state.get("exempt") is False:
+            args, kwargs = shim_absolute_program(args, kwargs)
         real_popen_init(self, *args, **kwargs)
 
     subprocess.Popen.__init__ = carrying_popen_init  # type: ignore[method-assign]
