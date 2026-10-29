@@ -185,7 +185,7 @@ name = "Validate rendered docker-compose templates"
 entry = "uv run --frozen python scripts/validate/compose_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/containers/[^/]+/templates/docker-compose\\.yml\\.j2|hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(scripts/validate/validate_lib/ok_lines\\.py|hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
 # duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates

@@ -187,63 +187,6 @@ def test_setup_glance_lines_names_every_source_when_a_role_has_none(tmp_path):
     assert lines[1].startswith("- **Crons / timers:** none")
 
 
-# --- Pi compose-plane facts --------------------------------------------------------------
-
-COMPOSE = """\
-services:
-  proxy:
-    image: lscr.io/linuxserver/socket-proxy:latest@sha256:de8215f99a9ce4bbff5d8853d7a5ae4b
-    restart: unless-stopped
-  proxy-lifecycle:
-    image: lscr.io/linuxserver/socket-proxy:latest@sha256:de8215f99a9ce4bbff5d8853d7a5ae4b
-  helper:
-    image: "alpine:3.20"
-"""
-
-
-def test_compose_images_collapses_a_shared_image_onto_its_services(tmp_path):
-    role = tmp_path / "widget"
-    _write(role / "templates" / "docker-compose.yml.j2", COMPOSE)
-    assert f.compose_images(role) == [
-        ("lscr.io/linuxserver/socket-proxy", ["proxy", "proxy-lifecycle"]),
-        ("alpine", ["helper"]),
-    ]
-
-
-def test_config_change_wiring_finds_the_include_role_var_or_none(tmp_path):
-    wired = tmp_path / "wired"
-    _write(
-        wired / "tasks" / "main.yml",
-        "- name: Deploy\n  ansible.builtin.include_role:\n    name: common\n"
-        '  vars:\n    common_config_changed: "{{ cfg is changed }}"\n',
-    )
-    bare = tmp_path / "bare"
-    _write(
-        bare / "tasks" / "main.yml",
-        "- name: Deploy\n  ansible.builtin.include_role:\n    name: common\n",
-    )
-    assert f.config_change_wiring(wired) == "{{ cfg is changed }}"
-    assert f.config_change_wiring(bare) is None
-
-
-def test_pi_glance_lines_carry_the_target_and_the_entry_facts(tmp_path):
-    role = tmp_path / "widget"
-    _write(role / "templates" / "docker-compose.yml.j2", COMPOSE)
-    entry = {
-        "name": "widget",
-        "port": 8080,
-        "networks": ["proxy"],
-        "use_authelia": False,
-    }
-    lines = f.pi_glance_lines(entry, role)
-    assert lines[0] == '- **Deploy tag:** `--tags "widget" -e target=daniel-pi`'
-    assert (
-        lines[2]
-        == "- **Entry:** `host_vars/daniel-pi.yml` → port `8080`, networks `proxy`, no Authelia"
-    )
-    assert lines[3].startswith("- **Config-change wiring:** none")
-
-
 # --- the in-place writer -----------------------------------------------------------------
 
 BLOCK = g.render_block(['- **Deploy tag:** `--tags "x"`'])
@@ -327,12 +270,10 @@ def test_the_gate_covers_the_known_services():
     assert KNOWN_SERVICES <= names, sorted(KNOWN_SERVICES - names)
 
 
-def test_the_gate_covers_the_known_setup_roles_and_pi_services():
+def test_the_gate_covers_the_known_setup_roles():
     setup = {d.name for d in g.setup_role_dirs()}
     assert KNOWN_SETUP_ROLES <= setup, sorted(KNOWN_SETUP_ROLES - setup)
     assert "common" not in setup
-    pi = {e["name"] for e in g.Estate().pi_entries()}
-    assert pi == set(), sorted(pi)
 
 
 def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):
@@ -348,11 +289,9 @@ def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):
     assert [d.name for d in g.setup_role_dirs(tmp_path)] == ["real"]
 
 
-def test_every_setup_and_pi_doc_carries_the_marker_under_the_heading():
+def test_every_setup_doc_carries_the_marker_under_the_heading():
     """The heading, then the marker directly under it, on every doc."""
-    docs = [d / "CLAUDE.md" for d in g.setup_role_dirs()] + [
-        g.CONTAINERS_ROLES / e["name"] / "CLAUDE.md" for e in g.Estate().pi_entries()
-    ]
+    docs = [d / "CLAUDE.md" for d in g.setup_role_dirs()]
     missing = []
     for doc in docs:
         lines = doc.read_text().splitlines()
@@ -430,35 +369,6 @@ def test_a_hand_edited_setup_block_is_flagged(tmp_path):
     assert g.stale_setup_docs(
         write=False, setup_roles=roles, playbooks_dir=playbooks
     ) == ["setup/widget"]
-
-
-def test_a_hand_edited_pi_block_is_flagged(tmp_path):
-    """The Pi shape's rejecting half, over a fixture role and a one-entry host_vars."""
-    roles = tmp_path / "containers"
-    role = roles / "widget"
-    _write(role / "templates" / "docker-compose.yml.j2", COMPOSE)
-    _write(
-        role / "CLAUDE.md", "# widget\n\nIntro.\n\n## At a glance\n- **Why:** kept.\n"
-    )
-    _write(
-        tmp_path / "daniel-pi.yml",
-        yaml.safe_dump(
-            {"containers_list": [{"name": "widget", "networks": ["proxy"]}]}
-        ),
-    )
-    estate = g.Estate(Inventory(host_vars=tmp_path))
-    assert g.stale_pi_docs(write=True, estate=estate, containers_roles=roles) == [
-        "containers/widget"
-    ]
-    assert g.stale_pi_docs(write=False, estate=estate, containers_roles=roles) == []
-    doc = (role / "CLAUDE.md").read_text()
-    assert "- **Why:** kept." in doc
-    (role / "CLAUDE.md").write_text(
-        doc.replace("networks `proxy`", "networks `apps`", 1)
-    )
-    assert g.stale_pi_docs(write=False, estate=estate, containers_roles=roles) == [
-        "containers/widget"
-    ]
 
 
 # An entry that carries `owner` is not Ansible's to deploy (D2.4b): the deploy tag and the

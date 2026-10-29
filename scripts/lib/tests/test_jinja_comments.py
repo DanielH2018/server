@@ -23,8 +23,8 @@ def test_a_template_with_no_comment_is_returned_byte_for_byte():
 
 
 def test_the_lines_a_comment_spanned_survive_as_blank_lines():
-    """`glance_facts.compose_images` binds an `image:` to the indented service key above
-    it, so a multi-line comment must not join the line before it to the line after."""
+    """A line-based reader binds an `image:` to the indented service key above it, so a
+    multi-line comment must not join the line before it to the line after."""
     stripped = strip_jinja_comments(
         "  radarr:\n{# a\n   two-line note #}\n    image: x\n"
     )

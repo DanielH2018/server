@@ -134,19 +134,18 @@ def test_planes_are_grouped_by_path_prefix(tmp_path):
     assert rows["README.md"] == "other"
 
 
-def test_a_packaged_pi_service_shares_the_roles_containers_plane(tmp_path):
-    """A service that moved into the Pi package (H5) keeps the plane its marker came from, and
-    the page renders that plane once."""
-    role = "ansible/roles/containers/autoheal/templates/docker-compose.yml.j2"
-    packaged = "hosts/components/pi-compose/services/alloy/compose.yaml.j2"
-    _write(tmp_path, role, "# DECIDED: stays in the role.\n")
-    _write(tmp_path, packaged, "# DECIDED: moved into the package.\n")
+def test_a_pi_compose_service_is_in_the_pi_compose_plane(tmp_path):
+    """The Pi package's services (H5) form one plane, and the page renders it once."""
+    alloy = "hosts/components/pi-compose/services/alloy/compose.yaml.j2"
+    autoheal = "hosts/components/pi-compose/services/autoheal/compose.yaml.j2"
+    _write(tmp_path, alloy, "# DECIDED: one.\n")
+    _write(tmp_path, autoheal, "# DECIDED: two.\n")
     rows = _rows(tmp_path)
     assert {r["path"]: r["plane"] for r in rows} == {
-        role: "roles/containers",
-        packaged: "roles/containers",
+        alloy: "pi-compose",
+        autoheal: "pi-compose",
     }
-    assert g.render_markdown(rows, tmp_path).count("## roles/containers\n") == 1
+    assert g.render_markdown(rows, tmp_path).count("## pi-compose\n") == 1
 
 
 def test_the_generators_own_source_and_test_file_are_excluded(tmp_path):
@@ -286,15 +285,14 @@ def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
     assert matches, "expected the origin[:8] marker in deploy_handlers.py"
 
 
-def test_live_tree_includes_the_autoheal_marker_in_the_roles_containers_plane():
-    """A named member for the Pi's compose templates (H5.2b). Since H5.7 the marker sits in the package
-    component, and the plane follows it."""
+def test_live_tree_includes_the_autoheal_marker_in_the_pi_compose_plane():
+    """A named member for the Pi's compose templates, which sit in the package component."""
     matches = [
         r
         for r in _live_rows()
         if r["text"].startswith("autoheal runs with NO healthcheck")
     ]
-    assert [r["plane"] for r in matches] == ["roles/containers"]
+    assert [r["plane"] for r in matches] == ["pi-compose"]
 
 
 def test_live_tree_excludes_its_own_generator_and_test_file():

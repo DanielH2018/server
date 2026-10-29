@@ -8,8 +8,8 @@ master with nothing saying it is unapplied: the landing reports `needs-manual-ap
 Both mappers derive the setup plane from one shape, `ansible/roles/setup/<role>/`:
 `deploy_changes.role_of` on the deployer side, `land_reach._SETUP_ROLES_DIR` on the
 landing side. `ansible.cfg`'s `roles_path` resolves a bare `role: <name>` across
-`roles/containers`, `roles/setup` and `roles/`, so Ansible itself runs a role from any of the
-three and neither mapper is told. This guard closes that gap from the playbook's side: each
+`roles/setup` and `roles/`, so Ansible itself runs a role from either and neither mapper is
+told. This guard closes that gap from the playbook's side: each
 role in `initial_setup.yml`'s `roles:` must route through `services_from_changed_paths` to
 `setup_roles` and yield a `setup_tags_for` tag, unless the playbook gates it off the tick's
 host, and its directory must be the one `land_reach` reads.

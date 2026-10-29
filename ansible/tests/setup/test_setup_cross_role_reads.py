@@ -30,12 +30,8 @@ from deployer_lib.deploy_cross_role import (
 )
 
 # A setup role naming a plugin's filter where no rendered value can go stale, with the reason.
-_FILTER_CALLERS_EXEMPT = {
-    ("ansible/filter_plugins/toposort.py", "docker_install"): (
-        "`filter_by_platform` runs in the `loop:` of `engine-upgrade.yml`, a never-tagged "
-        "task file an operator runs by hand, so it renders nothing the plugin change leaves"
-    ),
-}
+# H5.12 deleted the last one, engine-upgrade.yml's per-project loop over `filter_by_platform`.
+_FILTER_CALLERS_EXEMPT: dict[tuple[str, str], str] = {}
 KNOWN_FILTER_CALLERS = {
     "ansible/filter_plugins/k8s_autodeploy.py": {"gitops_deploy"},
 }

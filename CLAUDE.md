@@ -8,7 +8,8 @@ Docker + k3s homelab managed with Ansible. ~50 containerized services deployed a
 - `daniel-server` — k3s agent node (Intel XE graphics, LVM storage, UPS hardware + the
   `nut_host` shutdown chain; Docker uninstalled 2026-08-14 — the migration's end state)
 - `daniel-pi` — Raspberry Pi, the **only** remaining Docker host (LAN-only: wg-easy, alloy,
-  autoheal, docker-proxy). Driven remotely over SSH with `-e target=daniel-pi`.
+  autoheal, docker-proxy). Its containers ship in its `homelab-daniel-pi` package; Ansible's
+  setup plays still reach it over SSH with `-e target=daniel-pi`.
 
 **Key technologies:** k3s (Kubernetes), Ansible, Docker Compose (Pi only), Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption), Longhorn (storage), CrowdSec (WAF)
 
@@ -16,7 +17,6 @@ Docker + k3s homelab managed with Ansible. ~50 containerized services deployed a
 ```
 ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HERE
   roles/k8s/        # One role per k3s workload (rendered manifests) — where most services live
-  roles/containers/ # One role per Docker service (the Pi's) + the shared `common` role
 scripts/          # Helper scripts, grouped by what they act on
   lib/              # The helpers everything else imports: repo_paths, render_guard, docs_provenance
   backup/ deploy_tools/ diagnostics/ docs/ grafana/
@@ -25,7 +25,7 @@ docs/             # Runbooks, design specs, security notes
   archive/          # Superseded planning docs, incl. the completed Docker → k3s migration
 ```
 
-> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `alloy`, `autoheal`, `docker-proxy`, `wg-easy` — plus the shared `common` deploy path. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 some roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
+> **The Pi's Docker services are not Ansible roles.** `alloy`, `autoheal`, `docker-proxy` and `wg-easy` are `compose_services` entries in `ansible/inventory/host_vars/daniel-pi.yml`, rendered from `hosts/components/pi-compose/services/<name>/` into the `homelab-daniel-pi` package, which runs them as one Compose project. H5.12 deleted the Ansible Compose path, `ansible/roles/containers/`. A service's config lives in the tree that deploys it: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the boundary.
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly. A task a skill
@@ -45,7 +45,7 @@ review — routes through the skill listing rather than this table.
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `ansible/roles/k8s/monitor-bridge/files/registry.py` (the check registry) **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server (`docs/claude-tooling.md`). `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A file embedded in a rendered ConfigMap needs nothing more; `ansible/roles/k8s/monitor-bridge/templates/script-configmap.yaml.j2` is the worked example. Content that reaches the cluster another way needs its own `checksum/<thing>` pod annotation from `ansible/templates/checksum-annotation.yml.j2`. |
-| A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
+| A config edit won't recreate the container (Docker, the Pi) | `hosts/components/pi-compose/services/alloy/compose.yaml.j2` — its `homelab.config-sha256` label carries the bind-mounted config's hash, so a config edit changes the service and `up -d` recreates it |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. Every setup role whose cron or timer changes state carries one, and every setup role has a `CLAUDE.md` (`ansible/tests/repo/test_role_claude_md.py`) — `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` derives the cron-installing set from `tasks/` and names the heartbeat-only exemptions |
 | Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `findings.py open --help`) — files a GitHub Issue labelled `claude`, deduped by title/file. `--repo OWNER/NAME` files into another repo's register, such as the dotfiles repo. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
@@ -54,7 +54,7 @@ review — routes through the skill listing rather than this table.
 
 **Default to k3s.** A new service belongs in `ansible/roles/k8s/<name>/` unless it must run
 on `daniel-pi` (LAN-only utilities, WireGuard) — `daniel-server` and `daniel-box` have no
-Docker at all, so a Compose role there deploys nothing.
+Docker at all, so a Compose service there deploys nothing.
 
 The step-by-step for each platform is a skill, because it is a procedure you follow once per
 service rather than a fact you need in every session:
@@ -64,9 +64,9 @@ service rather than a fact you need in every session:
   entry rather than leaving you to copy a sibling (#2855); the skill then covers secrets, the
   two censuses a new role joins, and what a `--dry-run` does *not* prove about a brand-new
   service.
-- **Docker on `daniel-pi`** → the `new-container` skill. It carries the canonical compose
-  skeleton, the shared macros in `ansible/templates/`, and the `common_config_changed`
-  wiring a bind-mounted config file needs.
+- **Docker on `daniel-pi`** → the `new-container` skill. It adds a `pi-compose` service: the
+  `compose_services` entry, the service's compose file, and the config-hash label a
+  bind-mounted config file needs.
 
 Two facts stay here because they bite from outside those procedures:
 
@@ -92,8 +92,8 @@ is where an uncommitted edit is meant to be exercised.
 
 **A failing run says what its exit code means — read its last two lines rather than looking
 the number up.** Which exits deployed nothing and which left changes live is owned by
-`docs/deploying.md`'s *Exit codes are resume points*. The Pi's `-e target=`, config-only runs
-and initial setup are in the **`deploy` skill**.
+`docs/deploying.md`'s *Exit codes are resume points*. Config-only runs and initial setup are
+in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and

@@ -69,6 +69,14 @@ def test_daniel_server_is_fully_drained():
     assert filter_by_platform(containers, "k8s") == []
 
 
+def test_daniel_pi_is_fully_drained():
+    # The Pi's services are `compose_services` entries, which its package deploys. H5.12 deleted
+    # the Ansible Compose path, so a containers_list entry here would be deployed by nothing.
+    containers = _containers(HOST_VARS / "daniel-pi.yml")
+
+    assert len(containers) == 0
+
+
 # The Docker play deploys containers_list in order, and the package's Compose project (H5) runs
 # `compose_services` through homelab-compose.service, independent of the play. Each pair is
 # (upstream, downstream): autoheal restarts containers through docker-proxy-lifecycle, and alloy

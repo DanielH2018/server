@@ -320,10 +320,7 @@ def render_expr(expression: str, **context):
     return jinja_env().from_string(expression).render(**context)
 
 
-_DOC_EXCLUDED_DIRS = (
-    REPO / "docs" / "archive",
-    REPO / "ansible" / "roles" / "containers" / "archive",
-)
+_DOC_EXCLUDED_DIRS = (REPO / "docs" / "archive",)
 
 
 def discover_docs() -> list[Path]:
