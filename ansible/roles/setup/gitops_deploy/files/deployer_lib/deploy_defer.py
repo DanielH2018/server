@@ -509,8 +509,8 @@ def record_reach(
     `roles` are the setup roles this tick applies itself. The tick's run reaches only its own
     host, so a change `hypervisor`'s install half carries to daniel-server was owed there with
     nothing durable saying so (#6510, #6411). Each line names the hosts in its `hosts` key,
-    which keeps the tick's own apply from clearing it; `clear-owed` or `land.sh` clears it once
-    a hand has applied the role there.
+    which keeps the tick's own apply from clearing it. `gitops_state.py clear-owed` clears it
+    once a hand has applied the role on each of those hosts.
 
     Any failure of the derivation records nothing and logs why: the tick has already
     fast-forwarded, and `land.sh` still prints the same hosts from the same derivation.
