@@ -209,9 +209,11 @@ these steps, and no new secret, because one project ping key covers every check.
 2. **Match the schedule type to the job.** A cron-driven job takes the console's **Cron** type
    with the same expression and timezone, so the two cannot drift. An interval job takes Simple.
    A check whose period disagrees with its cron fires false alarms, and false alarms get ignored.
-3. **Size the grace to the slowest legitimate run.** `registry-gc` allows an hour because it
-   collects two stores one after the other, each bounded by a 20-minute Job deadline plus up to
-   120 s for its pod to terminate and 180 s for the rollout back up. `etcd-snapshot-offbox` allows an hour because nothing bounds how long
+3. **Size the grace to the slowest legitimate run.** `registry-gc` allows two hours because it
+   collects two stores one after the other. Each phase is bounded by a 20-minute Job deadline,
+   120 s for its pod to terminate, 120 s for an unfinished Job's delete, 180 s for the rollout
+   back up and its warm budget (30 minutes, then 15). The worst case is about 6000 s, and
+   `ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py` derives it. `etcd-snapshot-offbox` allows an hour because nothing bounds how long
    `k3s etcd-snapshot save` may block, so the grace is what separates a slow run from a hung one.
 4. **Add the slug to the table, the fragment's cron variable and
    `monitor_bridge_healthchecks_expected` in the same PR**, as *The console drifts* below says.

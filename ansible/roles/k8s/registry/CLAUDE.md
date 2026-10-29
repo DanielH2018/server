@@ -191,7 +191,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   and the mirror's answer, not the cache: with the WAN up, the proxy fetches a missing tag
   from GHCR and still answers 200.
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
-  static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
+  static in `k8s/uptime-kuma`, deadline two hours past the weekly period) and the off-site
   healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until
   2026-09-18 (#1937), so before that only the dead-man saw a run.
 - **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this

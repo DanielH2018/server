@@ -8,7 +8,7 @@
 | `manifest-prune-check` | Cron | 2 hours |
 | `etcd-snapshot-offbox` | Cron | 1 hour |
 | `pi-peer-backup` | Cron | 2 hours |
-| `registry-gc` | Cron | 1 hour |
+| `registry-gc` | Cron | 2 hours |
 | `weekly-reboot-daniel-box` | Cron | 1 hour |
 | `weekly-reboot-daniel-server` | Cron | 1 hour |
 | `weekly-reboot-daniel-pi` | Cron | 1 hour |

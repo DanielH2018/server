@@ -366,9 +366,13 @@ collect_mirror_store() {
 }
 
 # ── Warming a mirror ─────────────────────────────────────────────────────────────────────────
-# Prints manifest $2 (a tag or a digest) of repository $1, read through the mirror.
+# Prints manifest $2 (a tag or a digest) of repository $1, read through the mirror. Reads
+# warm_mirror's `start`, so the read ends with the warm budget, and reads nothing once it is spent.
 mirror_manifest() {
-  curl -fs --max-time 60 -H "Accept: ${ACCEPT}" "${MIRROR_URL}/v2/${1}/manifests/${2}"
+  local left=$((WARM_BUDGET_S - (SECONDS - start)))
+  ((left > 0)) || return 1
+  ((left > 60)) && left=60
+  curl -fs --max-time "$left" -H "Accept: ${ACCEPT}" "${MIRROR_URL}/v2/${1}/manifests/${2}"
 }
 
 # Prints the config and layer digests of image $1 at $2, one per line. An index resolves to its
@@ -387,15 +391,15 @@ mirror_blob_digests() {
 
 # GETs each distinct blob of every ref in WARM_REFS through the mirror, and appends the counts to
 # MIRROR_MSG. A cached blob streams from the mirror's own store, so a warm store costs a local
-# read and no WAN. The whole phase stops starting new blobs after WARM_BUDGET_S, and each GET is
-# bounded by the budget left.
+# read and no WAN. The whole phase stops starting new reads after WARM_BUDGET_S, and each manifest
+# read and blob GET is bounded by the budget left, so the phase ends within its budget.
 # DECIDED: a blob that fails to warm is named in the journal and the message but leaves the run
 # up. It costs a cold pull later, never a corrupt store, and the likely cause is a slow GHCR
 # episode that a Kuma page cannot fix. #5654 has the measurements.
 warm_mirror() {
   local ref repo id blobs blob got left
   local -A seen=()
-  local warmed=0 failed=0 skipped=0 bytes=0 start=$SECONDS
+  local warmed=0 failed=0 skipped=0 unread=0 bytes=0 start=$SECONDS
   if [[ -z "$WARM_REFS" ]]; then
     MIRROR_MSG="${MIRROR_MSG}; mirror not warmed, no ${MIRROR_UPSTREAM} ref read"
     return 0
@@ -405,6 +409,10 @@ warm_mirror() {
       repo=${ref%@*} id=${ref#*@}
     else
       repo=${ref%:*} id=${ref##*:}
+    fi
+    if ((SECONDS - start >= WARM_BUDGET_S)); then
+      unread=$((unread + 1))
+      continue
     fi
     if ! blobs=$(mirror_blob_digests "$repo" "$id"); then
       failed=$((failed + 1))
@@ -432,6 +440,7 @@ warm_mirror() {
   MIRROR_MSG="${MIRROR_MSG}; warmed ${warmed} blob(s), $((bytes / 1000000)) MB in $((SECONDS - start))s"
   ((failed)) && MIRROR_MSG="${MIRROR_MSG}, ${failed} failed (journalctl -t registry-gc)"
   ((skipped)) && MIRROR_MSG="${MIRROR_MSG}, ${skipped} skipped past the ${WARM_BUDGET_S}s budget"
+  ((unread)) && MIRROR_MSG="${MIRROR_MSG}, ${unread} ref(s) unread past the ${WARM_BUDGET_S}s budget"
   return 0
 }
 
