@@ -33,6 +33,9 @@ import sys
 import time
 from collections.abc import Callable
 
+# The runner runs from /opt/claude-triage, where tasks/triage.yml installs host_lib.py beside it.
+from host_lib import ERR, WARNING, log, parse_env_file, write_textfile
+
 CONFIG = "/etc/claude-triage/config.env"
 # The instance name reaches systemd, polkit's regex and a file name, so it is held to one
 # shape here and in 50-claude-triage.rules.j2.
@@ -64,6 +67,9 @@ SCHEMA = {
     "required": ["summary", "root_cause", "confidence", "evidence", "proposed_fix"],
 }
 
+# The prefix on every journal line, as `log` writes it.
+TAG = "claude-triage"
+
 # Diagnose-only. The agent user cannot reach root or write the cluster anyway; these keep a
 # diagnosis from editing the clone or starting a landing it was not asked for.
 DENIED_TOOLS = (
@@ -74,39 +80,6 @@ DENIED_TOOLS = (
     "Bash(gh pr create*)",
     "Bash(git push*)",
 )
-
-
-def log(msg: str) -> None:
-    print(f"claude-triage: {msg}", flush=True)
-
-
-def parse_env_file(path: str) -> dict[str, str]:
-    """KEY=VALUE lines; blank lines and `#` comments skipped, one layer of quotes stripped."""
-    out: dict[str, str] = {}
-    with open(path, encoding="utf-8") as f:
-        for raw in f:
-            line = raw.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            value = value.strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-                value = value[1:-1]
-            out[key.strip()] = value
-    return out
-
-
-def atomic_write(path: str, text: str, mode: int = 0o644) -> None:
-    """Write via a temp file and rename, with an explicit mode.
-
-    The mode is explicit because the artifacts tree's default ACL cannot widen a file created
-    0600: neither the operator nor the artifacts pod could then read the report.
-    """
-    tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(text)
-    os.chmod(tmp, mode)
-    os.replace(tmp, path)
 
 
 def build_prompt(instructions: str, episode: dict) -> str:
@@ -161,11 +134,15 @@ def run_session(argv: list[str], cwd: str, timeout: int) -> tuple[dict, bool]:
     except subprocess.TimeoutExpired:
         return {}, True
     if p.returncode != 0:
-        log(f"session exited {p.returncode}: {(p.stderr or '').strip()[-400:]}")
+        log(
+            f"session exited {p.returncode}: {(p.stderr or '').strip()[-400:]}",
+            WARNING,
+            tag=TAG,
+        )
     try:
         result = json.loads(p.stdout or "{}")
     except json.JSONDecodeError:
-        log("session output is not JSON")
+        log("session output is not JSON", WARNING, tag=TAG)
         result = {}
     return (result if isinstance(result, dict) else {}), False
 
@@ -287,7 +264,7 @@ def start_report_unit(episode_id: str, state: str) -> None:
         ["systemctl", "start", "--no-block", unit], check=False
     ).returncode
     if rc != 0:
-        log(f"could not start {unit} (exit {rc})")
+        log(f"could not start {unit} (exit {rc})", ERR, tag=TAG)
 
 
 def main(
@@ -307,7 +284,9 @@ def main(
     episode_id = parser.parse_args(argv[1:]).episode
     if not EPISODE_ID.match(episode_id):
         log(
-            f"refusing episode id {episode_id!r}: lowercase letters, digits, dashes only"
+            f"refusing episode id {episode_id!r}: lowercase letters, digits, dashes only",
+            ERR,
+            tag=TAG,
         )
         return 2
     cfg = parse_env_file(config_path)
@@ -330,7 +309,10 @@ def main(
         result, timed_out, state = {}, False, "capped"
         error = f"the daily cap of {cap} runs was reached, so no session ran"
     else:
-        log(f"episode {episode_id}: starting (budget ${cfg.get('BUDGET_USD', '10')})")
+        log(
+            f"episode {episode_id}: starting (budget ${cfg.get('BUDGET_USD', '10')})",
+            tag=TAG,
+        )
         result, timed_out = run_session(
             build_argv(cfg, build_prompt(instructions, episode)),
             cfg.get("WORKDIR", os.path.expanduser("~/server")),
@@ -356,20 +338,22 @@ def main(
         "report": f"{cfg.get('REPORT_BASE_URL', '')}triage-{episode_id}.html",
     }
     if record["error"]:
-        log(f"episode {episode_id}: {record['error']}")
+        log(f"episode {episode_id}: {record['error']}", WARNING, tag=TAG)
     os.makedirs(os.path.join(state_dir, "runs"), exist_ok=True)
-    atomic_write(
+    # The mode is explicit because the artifacts tree's default ACL cannot widen a file created
+    # 0600: neither the operator nor the artifacts pod could then read the report.
+    write_textfile(
         os.path.join(state_dir, "runs", f"{episode_id}.json"),
         json.dumps(record, indent=2, sort_keys=True) + "\n",
         0o640,
     )
-    atomic_write(
+    write_textfile(
         os.path.join(report_dir, f"triage-{episode_id}.html"),
         render_report(record, finished.removesuffix(" UTC")),
     )
     os.makedirs(os.path.join(state_dir, "done"), exist_ok=True)
     os.replace(inbox, os.path.join(state_dir, "done", f"{episode_id}.json"))
-    log(f"episode {episode_id}: {state}; report {record['report']}")
+    log(f"episode {episode_id}: {state}; report {record['report']}", tag=TAG)
     page(episode_id, state)
     return 0
 

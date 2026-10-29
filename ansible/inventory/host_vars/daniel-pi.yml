@@ -90,15 +90,12 @@ containers_list: []
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
 # A service lives in exactly one of this key and containers_list: Ansible's Docker play
 # deploys containers_list, and the package deploys this key. Entries keep containers_list's
-# field names. It holds the canary, docker-proxy (H5.6), autoheal (H5.7), alloy (H5.8) and wg-easy (H5.9). Every
+# field names. It holds docker-proxy (H5.6), autoheal (H5.7), alloy (H5.8) and wg-easy (H5.9); H5.10
+# removed H5.2b's canary. Every
 # reader of the Pi's services reads both keys and fails on a missing one, so keep the key even
 # when it is empty. The cluster templates that read it are named in
 # docs/target-architecture/host/h5-pi-compose.md (The service list).
 compose_services:
-  # H5.2b's canary: a digest-pinned busybox that proves the package runs a service and that an
-  # included file receives a value from the Compose env file. It has no Ansible-era counterpart,
-  # so no legacy entry names it. H5.10 removes it.
-  - name: pi-canary
   # The read-only Docker socket proxy, which serves Alloy's docker_sd log discovery. The
   # package's service file also declares the docker-proxy-lifecycle sub-proxy (restart-only,
   # serves autoheal), and docker-proxy-codeserver under has_code_server. Legacy entry:

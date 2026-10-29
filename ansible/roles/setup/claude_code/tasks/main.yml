@@ -596,6 +596,28 @@
   when: inventory_hostname == claude_code_artifacts_node
   ansible.builtin.import_tasks: node_crons.yml
 
+# The way out of node_crons.yml on every other host. The node follows k8s_primary_node, so it
+# can move, and a host it left keeps the crons, their scripts and their check files. A stale
+# check file reads as an overdue check that never clears: daniel-server held a sync-artifacts.prom
+# 20 hours old with no producer behind it (#6355). A literal list, so `probe.py applied` reads
+# each path as an absent arm. test_claude_code_artifacts_node_crons.py holds it to every path
+# node_crons.yml writes.
+- name: Remove the artifacts node's crons, scripts and check files from every other host
+  tags: [claude_code]
+  when: inventory_hostname != claude_code_artifacts_node
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/cron.d/sync-artifacts
+    - /etc/cron.d/claude-otel-health
+    - /usr/local/bin/sync-artifacts.sh
+    - /usr/local/bin/claude-otel-health.sh
+    - /var/lib/node-exporter-textfile/sync-artifacts.prom
+    - /var/lib/node-exporter-textfile/claude-otel-health.prom
+    - /var/lib/homelab/setup-render-manifest.d/claude-code-node-crons
+  become: true
+
 # Render provenance for manifest-prune-check.sh's stale-script arm: without a stamp, an edit to
 # a rendered file can sit undeployed on this host with every repo-side check green. Last in the
 # role so a failed run leaves the previous checksums rather than claiming these. `import_tasks`,
@@ -693,3 +715,7 @@
         src: ansible/roles/setup/claude_code/files/claude_triage_run.py
       - live: /opt/claude-triage/claude_triage_poll.py
         src: ansible/roles/setup/claude_code/files/claude_triage_poll.py
+      - live: /opt/claude-triage/host_lib.py
+        src: hosts/lib/host_lib.py
+      - live: /opt/claude-triage/kuma_push.py
+        src: hosts/lib/kuma_push.py

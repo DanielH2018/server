@@ -31,6 +31,8 @@ from pathlib import Path
 _COMMON = "ansible/roles/setup/common"
 _HOST_LIB = frozenset(
     {
+        "claude_code",
+        "deploy_ui",
         "fake_remux",
         "gitops_deploy",
         "k3s",
@@ -40,7 +42,7 @@ _HOST_LIB = frozenset(
 )
 _K3S = frozenset({"k3s"})
 _LH = "scripts/lib/longhorn_lib"
-_STAMPED = _HOST_LIB | {"claude_code", "deploy_ui", "initial_setup"}
+_STAMPED = _HOST_LIB | {"initial_setup"}
 _KUMA_CHECK = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
 _ALERT_UNIT = frozenset(
     {

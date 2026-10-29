@@ -365,7 +365,10 @@ M2 to M6 build on these rules and do not restate them.
    check and the zero-series check in convention 2 cover PromQL only.
 4. **Annotations.** `summary` (one line), `description` (what fired and where to look) and,
    where a runbook exists, `runbook_url` pointing at `https://docs.local.<domain>/<page>/`.
-   These replace the Kuma tile `description` and the `runbook` tag.
+   These replace the Kuma tile `description` and the `runbook` tag. The rule files are plain
+   YAML, so the URL is a literal. `ansible/tests/services/test_alert_runbook_urls.py` pins its
+   host to `domain` in `group_vars/all.yml`, and requires a `runbook_url` on every alert whose
+   description cites a `docs/<page>.md` outside the design directories.
 5. **One pager per check at every commit.** This is C4's two-writer rule applied to paging. At
    every commit, each check pages from Kuma or from Alertmanager, never both. A migrated rule
    lands with `shadow: "true"`, which routes to the blackhole receiver. The cutover PR drops

@@ -16,6 +16,9 @@
 !.ansible-lint
 !/.shellcheckrc
 !/.gitleaks.toml
+# GitGuardian's path exclusions. Without this allow the deny-all hides the file, and GitGuardian
+# never reads it.
+!/.gitguardian.yaml
 !ansible.cfg
 !/.vscode
 !/.github

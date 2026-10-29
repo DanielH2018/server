@@ -160,10 +160,11 @@ operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
   that does not consult the bouncer. The Ansible gate named the hop. To tell the two apart,
   read the LAPI log's `GET /v1/decisions/stream` lines from the traefik pod. They are absent
   when the plugin's metrics ticker stalled or the traefik pod cannot reach LAPI.
-- **One edge 403 beside a LAPI restart is expected until #5761 is decided.** The probe
-  recorded one 403 during the roll of #5753 and of #5765, and neither cause is settled. The Job
-  starts after the `crowdsec` Kustomization reads Ready, so the restart window should not
-  reach it. A lone 403 in the probe file at a roll is that window, not an enforcement result.
+- **A 403 in the probe file at a roll is a ban on the Pi, not a restart window** (#5761).
+  Every probe 403 from 2026-10-19 to 2026-10-28 follows a ban on `10.0.0.139` in the LAPI log,
+  issued by the Ansible gate or by this Job. The edge refused only the Pi while it was banned,
+  and a LAPI restart with no ban produced no 403 for any client. `crowdsecAppsecFailureBlock`
+  therefore keeps its default of `true`. `docs/crowdsec-waf-record.md` has the measurements.
 - **The fence peers are in place.** netpol-baseline's LAPI fence admits `crowdsec-verify` on
   the LAPI port alone, and `prometheus-callers` admits it from `homelab`. The probe table's
   `crowdsec` and `prometheus` rows are their refused legs.
@@ -216,7 +217,10 @@ sources (`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`) lose 
 
 **Re-check #2124 on the next `crowdsec_k8s_image` bump**
 (set in `ansible/inventory/group_vars/all.yml`): a release carrying
-crowdsecurity/crowdsec#4678 closes it. Verify with
+crowdsecurity/crowdsec#4678 closes it, and v1.8.2 is the first such release. Upstream had not
+published its image on 2026-10-28, and `docs/crowdsec-waf-record.md` has the dates. The pin
+sits in the `k8s_autodeploy: false` Renovate group, so the bump arrives as a `manual —` PR.
+Verify with
 `probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h` returning
 nothing.
 

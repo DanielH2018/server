@@ -43,15 +43,17 @@ Each host installs `homelab-updater` and its own package, which `hosts/<host>/pa
 lists.
 
 - `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats.
-- `homelab-daniel-server` ships reconcile, the secrets unit, the `kuma-push` component and the
-  UPS shutdown chain.
+- `homelab-daniel-server` ships reconcile, the secrets unit, the `kuma-push` component, the
+  UPS shutdown chain and the `k3s-gates` component, whose `/usr/lib/homelab/k3s_gates.py` the
+  k3s-agent Plan's `prepare` runs (#6413).
 - `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
-  `k3s-restart` component. Its one credential is `k3s_readonly_token`, which
+  `k3s-restart` component, with the `k3s-gates` component that ships the script the restart
+  imports. Its one credential is `k3s_readonly_token`, which
   `ansible/vars/hosts/daniel-box.sops.yaml` carries. Ansible keeps the builder, the repository and
   every other daniel-box timer until H7, and the deployer keeps k3s's files until H6.4a. To
   remove the package before H6.4a, run `sudo apt-get remove homelab-daniel-box`. After H6.4a the
   package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
-  daniel-server's package does not ship the component yet, so a k3s-agent restart there stays a
+  daniel-server's package does not ship `k3s-restart` yet, so a k3s-agent restart there stays a
   hand step.
 
 ## The restart contract
@@ -120,7 +122,14 @@ changes. The grammar and the validations are the docstring of
   `homelab_host_reboot_pending{host}` and `homelab_host_activation_pending{host,unit}` in
   `homelab_host_reconcile.prom`, beside the updater's `homelab_host.prom`. While the flag
   exists, `homelab_host_reboot_pending_since_seconds{host}` carries its mtime, the time the
-  host first owed the reboot; a later reboot-class change leaves it alone.
+  host first owed the reboot; a later reboot-class change leaves it alone. The updater runs
+  reconcile only when a package changes, so `homelab-reconcile-metrics.service` runs
+  `homelab-reconcile --metrics` once per boot. It rewrites the file from `applied.json`, and
+  the reboot-pending series reads 0 after the reboot that cleared the flag (#6188).
+- **Start times.** Each time reconcile starts or restarts a unit in steps 2, 3 or 4b, it
+  records the time of the call and writes it as
+  `homelab_host_unit_started_seconds{host,unit}`. A rule compares it with the unit's own
+  result: `ComposeRestartUnreported` pages a Pi Compose run that wrote nothing (#6342).
 - **Drift is not a failure.** `homelab_host_reconcile_drift{host,arm}` counts items an arm
   left alone on purpose: UFW rules the floor kept, libvirt objects a running guest still
   references, users the floor kept, and legacy services that are still running.

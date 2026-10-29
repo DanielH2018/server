@@ -38,6 +38,7 @@ spec:
   jobTemplate:
     spec:
       activeDeadlineSeconds: {{ sonarr_k8s_air_date_guard_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ sonarr_k8s_air_date_guard_job_ttl_seconds }}
       # No retry. The next run is five minutes away and reads the queue afresh.
       backoffLimit: 0
       template:

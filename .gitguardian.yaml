@@ -1,0 +1,10 @@
+# GitGuardian's repository config, read by ggshield and by GitGuardian's monitoring of this repo.
+version: 2
+secret:
+  ignored_paths:
+    # docs/facts.lock/ holds one sha256 per cited atom, written by `scripts/dev/fact_status.py
+    # verify`. The "Generic High Entropy Secret" detector reads each digest as a secret: incidents
+    # 38306976 and 38837108 held 14 such false positives (#6366). A real secret cannot reach the
+    # file, because `ansible/tests/repo/test_facts_lock_matches_tree.py` refuses a hand edit.
+    # `.gitleaks.toml` exempts the same path for the same reason.
+    - "docs/facts.lock/**"

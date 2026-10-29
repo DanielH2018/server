@@ -311,8 +311,8 @@ def main() -> int:
     # a stale tree; a dry run into a record keyed by commit has nothing for it to protect.
     state = settings.checkout.parent
     log_path = state / "ansible.log"
-    # Truncated per run: ansible.cfg's `log_path = ./ansible.log` would append to the worktree
-    # forever, and the last run's log is the one that says why a service went unrefreshed.
+    # ansible.cfg sets no log_path (#6217), so this is the run's only log file. Truncated per
+    # run: the last run's log is the one that says why a service went unrefreshed.
     log_path.write_text("")
     env = {
         **os.environ,

@@ -23,12 +23,13 @@ groups:
           severity: critical
           service: system-upgrade
         annotations:
-          summary: A k3s upgrade Job in system-upgrade has failed.
+          summary: The k3s upgrade Job {{ $labels.job_name }} has failed.
           description: >-
-            Job {{ $labels.job_name }} carries a Failed condition. Read the Plan's conditions
-            with kubectl -n system-upgrade get plans, then the Job's pods. A refusing prepare
-            gate that outlasts the Job deadline ends here too. docs/k3s-upgrade.md says how to
-            clear the hold and retry.
+            Job {{ $labels.job_name }} carries a Failed condition. Read the Plan's conditions with
+            `kubectl -n system-upgrade get plans`, then the Job's pods. A refusing prepare gate that
+            outlasts the Job deadline ends here too. docs/k3s-upgrade.md says how to clear the hold
+            and retry.
+          runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
       # The nodes run one kubelet version except while SUC upgrades them, server first. The
       # server Plan finishes, Longhorn recovers and the agent waits 15 minutes after the
       # server's start, so a healthy bump holds two versions for well under the 2-hour hold.
@@ -49,8 +50,9 @@ groups:
           description: >-
             For 2 hours either kube_node_info has carried more than one kubelet_version, so an
             upgrade left one node behind, or the series has been absent, so the skew cannot be
-            judged. Read kubectl get nodes, then the Plans with kubectl -n system-upgrade get
-            plans. docs/k3s-upgrade.md says how to finish or retry the upgrade.
+            judged. Read `kubectl get nodes`, then the Plans with `kubectl -n system-upgrade get
+            plans`. docs/k3s-upgrade.md says how to finish or retry the upgrade.
+          runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
       # homelab-k3s-restart (H6.3b, hosts/components/k3s-restart) writes these two series on every
       # run, so a clean host reads 0 and an absent series is not a pass. Each rule names its host
       # as a literal `service`, the way host-checks.yaml does. daniel-box ships the unit first, and

@@ -191,10 +191,12 @@ extend-exclude = [
 # hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar. The
 # repository signer runs under daniel-box's /usr/bin/python3 for the same reason, and
 # ansible/roles/setup/homelab_builder/tests/test_repo_signer.py holds it to the same grammar.
+# The signer imports host_lib.py, which imports kuma_push.py, so both are py312 too, and
+# hosts/lib/tests/test_host_lib.py parses them with the 3.12 grammar (#6202).
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
 # user's home, which root must not execute from; ansible/roles/setup/claude_code/tests/test_rootq.py
 # parses it with the 3.12 grammar.
-per-file-target-version = { "ansible/roles/setup/claude_code/files/homelab_rootq.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312" }
+per-file-target-version = { "ansible/roles/setup/claude_code/files/homelab_rootq.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312", "hosts/lib/kuma_push.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -360,6 +362,7 @@ extra-paths = [
   "ansible/roles/k8s/home-assistant/files",
   "ansible/roles/k8s/tdarr/files",
   "ansible/roles/k8s/sonarr/files",
+  "ansible/roles/k8s/dri-device-plugin/files",
   "ansible/roles/k8s/n8n/files",
   "ansible/roles/k8s/prowlarr/files",
   "ansible/roles/k8s/headlamp/files",

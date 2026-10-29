@@ -1,7 +1,7 @@
 ---
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-peanut_k8s_image: brandawg93/peanut:latest@sha256:13e99d1fd1b599c41f18c51483c53a8ee4f5a1da64c1a67b6e66d6a265be111b
+peanut_k8s_image: brandawg93/peanut:latest@sha256:b58b9627f77448f25e29f772870ee01f0f5a245c6ad7d6e0d7f620d1bb0fb623
 # peanut's image has no cp, so the seed-config initContainer uses alpine instead. Same init image zigbee2mqtt and
 # home-assistant use.
 peanut_k8s_init_image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a

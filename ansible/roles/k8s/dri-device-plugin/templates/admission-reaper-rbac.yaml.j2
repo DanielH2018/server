@@ -1,0 +1,43 @@
+{#
+  The dri-admission-reaper CronJob's identity, in the workload namespace where jellyfin and
+  tdarr run. The job makes two calls (files/dri_admission_reaper.py):
+
+    list   pods   the Failed pods, by field selector
+    delete pods   each ReplicaSet-owned pod the kubelet rejected at admission
+
+  The grant cannot name pods: the tombstones' names are not known in advance, and RBAC has no
+  field selector, so `delete` reaches every pod in the namespace. The script narrows it, and
+  each delete carries a `uid` precondition. No `get`: the list returns every field it reads.
+  ansible/tests/k8s/test_rbac_against_rest_script.py runs the module's main with a recording
+  client and holds this Role to the calls it records.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ k8s_namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ k8s_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dri-admission-reaper
+subjects:
+  - kind: ServiceAccount
+    name: dri-admission-reaper
+    namespace: {{ k8s_namespace }}

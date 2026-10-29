@@ -70,6 +70,8 @@ _K8S_REFERENCE = re.compile(
 # empty table.
 KNOWN_EDGES = {
     "ansible/roles/setup/common/tasks/install_host_lib.yml": {
+        "claude_code",
+        "deploy_ui",
         "fake_remux",
         "gitops_deploy",
         "k3s",
@@ -77,6 +79,8 @@ KNOWN_EDGES = {
         "renovate_notify",
     },
     "hosts/lib/host_lib.py": {
+        "claude_code",
+        "deploy_ui",
         "fake_remux",
         "gitops_deploy",
         "k3s",

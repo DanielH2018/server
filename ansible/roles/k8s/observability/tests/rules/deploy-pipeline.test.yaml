@@ -117,9 +117,10 @@ tests:
             exp_annotations:
               summary: The repository variable DEPLOY_HOLD has held promotion for 15 minutes.
               description: >-
-                DEPLOY_HOLD reads something other than none, so promote moves prod nowhere.
-                Read it with gh variable get DEPLOY_HOLD and run probe.py landing;
+                DEPLOY_HOLD reads something other than none, so promote moves prod nowhere. Read it
+                with `gh variable get DEPLOY_HOLD` and run `probe.py landing`;
                 docs/flux-deploy-plane.md says how to clear each form of hold.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/
 
   # PromotionStalled fires at 3 hours with the hold and window gauges at 0, and stays silent at
   # 3 hours with either at 1. The age climbs 60s a minute from 0, so it passes 7200 at 2h.

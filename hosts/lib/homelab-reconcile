@@ -8,7 +8,12 @@ hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The
 the four arms and the metrics file live in the reconcile_lib package beside it, which the same
 component ships; the reconcile-size census counts both against one line ceiling.
 
-Usage: homelab-reconcile        (no arguments; exit 0 when every step succeeded, 1 otherwise)
+Usage: homelab-reconcile        (exit 0 when every step succeeded, 1 otherwise)
+       homelab-reconcile --metrics   (rewrite the metrics file from the record; acts on nothing)
+
+`--metrics` is what `homelab-reconcile-metrics.service` runs at boot, so the file stops reading
+`homelab_host_reboot_pending 1` once the boot has cleared the flag (#6188). It takes no lock and
+writes no record. It drops each pending unit that has restarted since, as a full run would.
 
 It takes dpkg's frontend lock with a blocking lockf, so a start from a postinst waits until the
 whole apt transaction has finished. Under the lock it reads the manifest, its own state and both
@@ -57,6 +62,7 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "retired": ["<legacy entry as canonical JSON>", ...],
      "files": {"<packaged path>": "<sha256>"},     (activated files, by the hash that ran)
      "pending": {"<unit>": "<InvocationID>"},      (units owed a restart: the manual: actions)
+     "started": {"<unit>": <epoch>},               (when steps 2, 3 or 4b last called the unit)
      "drift": {"<arm>": <items the arm left alone>},
      "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
      "users": {"names": [...]}, "libvirt": {"networks": {...}, "nwfilters": {...}},  (likewise)
@@ -87,7 +93,7 @@ import time
 from pathlib import Path
 
 from reconcile_lib import activate, libvirt, lines, textfile, udev, ufw, users
-from reconcile_lib.common import ROOT, run, say, systemctl, under_root
+from reconcile_lib.common import ERR, ROOT, run, say, systemctl, under_root
 
 LOCK = ROOT / "var/lib/dpkg/lock-frontend"
 MANIFEST = ROOT / "usr/lib/homelab/manifest.json"
@@ -292,7 +298,7 @@ def not_found_homelab_units() -> set[str]:
 def stop(unit: str) -> bool:
     result = systemctl("stop", unit)
     if result.returncode not in (0, NOT_LOADED):
-        say(f"stop {unit} failed: {result.stderr.strip()}")
+        say(f"stop {unit} failed: {result.stderr.strip()}", ERR)
         return False
     systemctl(
         "reset-failed", unit
@@ -319,7 +325,7 @@ def retire_path(path: Path) -> bool:
     """
     owner = owned(path)
     if owner is None:
-        say(f"dpkg -S {path} failed; not removing it")
+        say(f"dpkg -S {path} failed; not removing it", ERR)
         return False
     if owner:
         say(f"{path} is owned by a package; leaving it")
@@ -333,7 +339,7 @@ def retire_path(path: Path) -> bool:
         else:
             target.unlink()
     except OSError as exc:
-        say(f"cannot remove {path}: {exc}")
+        say(f"cannot remove {path}: {exc}", ERR)
         return False
     say(f"removed {path}")
     return True
@@ -393,7 +399,7 @@ def retire_cron(name: str, user: str) -> bool:
         else:
             kept.append(line)
     if run("crontab", "-u", user, "-", stdin="".join(kept)).returncode != 0:
-        say(f"cannot rewrite {user}'s crontab without {name}")
+        say(f"cannot rewrite {user}'s crontab without {name}", ERR)
         return False
     say(f"removed cron {name} from {user}'s crontab")
     return True
@@ -407,7 +413,7 @@ def retire_unit(unit: str) -> bool:
             say(f"{path} is owned by a package, or dpkg cannot say; leaving it")
             return owner is True
         if systemctl("disable", unit).returncode != 0:
-            say(f"disable {unit} failed")
+            say(f"disable {unit} failed", ERR)
             return False
         if not stop(unit) or not retire_path(path):
             return False
@@ -441,7 +447,7 @@ def read_pending() -> set[str]:
     except (OSError, ValueError):
         queue = None
     if not isinstance(queue, list):
-        say(f"{PENDING} is unreadable; reading it as empty")
+        say(f"{PENDING} is unreadable; reading it as empty", ERR)
         return set()
     return {unit for unit in queue if isinstance(unit, str)}
 
@@ -453,7 +459,7 @@ def update_pending(add: set[str], remove: set[str]) -> bool:
             PENDING_LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600
         )
     except OSError as exc:
-        say(f"cannot open {PENDING_LOCK}: {exc}")
+        say(f"cannot open {PENDING_LOCK}: {exc}", ERR)
         return False
     try:
         deadline = time.monotonic() + LOCK_SECONDS
@@ -463,7 +469,7 @@ def update_pending(add: set[str], remove: set[str]) -> bool:
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
-                    say(f"{PENDING_LOCK} stayed locked for {LOCK_SECONDS}s")
+                    say(f"{PENDING_LOCK} stayed locked for {LOCK_SECONDS}s", ERR)
                     return False
                 time.sleep(0.05)
         queue = read_pending()
@@ -475,7 +481,7 @@ def update_pending(add: set[str], remove: set[str]) -> bool:
             os.replace(tmp, PENDING)
         return True
     except OSError as exc:
-        say(f"cannot rewrite {PENDING}: {exc}")
+        say(f"cannot rewrite {PENDING}: {exc}", ERR)
         return False
     finally:
         os.close(fd)
@@ -501,7 +507,7 @@ def read_secrets_manifest() -> tuple[list[str], list[dict]] | None:
     except (OSError, ValueError, KeyError, TypeError):
         valid = False
     if not valid:
-        say(f"{SECRETS_JSON} is unusable")
+        say(f"{SECRETS_JSON} is unusable", ERR)
         return None
     return credentials, outputs
 
@@ -528,11 +534,15 @@ def secrets_ready(credentials: list[str], outputs: list[dict]) -> bool:
     )
 
 
-def bring_up(unit: str, verb: str, outputs: list[dict], queued: set[str]) -> bool:
+def bring_up(
+    unit: str, verb: str, outputs: list[dict], queued: set[str], started: dict
+) -> bool:
     """One `reset-failed` and one blocking `start` or `restart` of `unit`, behind the existence gate.
 
     A unit the gate skips, or whose call fails, joins pending.json, and the result is False.
-    A call that succeeds removes the unit from pending.json.
+    A call that succeeds removes the unit from pending.json. `started` records when the call
+    was made, whatever its result: a unit that writes a result of its own should have written
+    one after that time (#6342).
     """
     missing = missing_outputs(unit, outputs)
     if missing:
@@ -542,8 +552,9 @@ def bring_up(unit: str, verb: str, outputs: list[dict], queued: set[str]) -> boo
     systemctl(
         "reset-failed", unit
     )  # clears the start limit; harmless on a unit that is not failed
+    started[unit] = int(time.time())
     if systemctl(verb, unit).returncode != 0:
-        say(f"{verb} {unit} failed")
+        say(f"{verb} {unit} failed", ERR)
         update_pending({unit}, set())
         return False
     say(f"{verb} {unit}")
@@ -563,6 +574,12 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     links = set(manifest["enable_links"])
     units_state: dict = {}
     links_state = set(links)
+    raw_started = prev.get("started")
+    started = {
+        unit: when
+        for unit, when in (raw_started if isinstance(raw_started, dict) else {}).items()
+        if unit in units and isinstance(when, int)
+    }
     digest = manifest.get("secrets_inputs_sha256")
     manual = ALWAYS_MANUAL | ({SECRETS_UNIT} if digest else set())
     secrets = read_secrets_manifest() if digest else None
@@ -572,9 +589,11 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     try:
         if not RUN_DIR.is_dir():
             RUN_DIR.mkdir(parents=True, exist_ok=True)
-            RUN_DIR.chmod(0o755)  # whatever the umask; homelab-secrets corrects an older one
+            RUN_DIR.chmod(
+                0o755
+            )  # whatever the umask; homelab-secrets corrects an older one
     except OSError as exc:
-        say(f"cannot create {RUN_DIR}: {exc}")
+        say(f"cannot create {RUN_DIR}: {exc}", ERR)
 
     # Step 1: stop what the manifest dropped, and every homelab unit whose file has gone.
     dropped = {u for u in set(prev_units) - set(units) if is_homelab(u)}
@@ -603,7 +622,8 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         )
         if stale and systemctl("restart", SECRETS_UNIT).returncode != 0:
             say(
-                f"restart {SECRETS_UNIT} failed; carrying on with the outputs that exist"
+                f"restart {SECRETS_UNIT} failed; carrying on with the outputs that exist",
+                ERR,
             )
             secrets_ran = ok = False
         elif stale:
@@ -641,10 +661,12 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             continue
         if is_active(unit) or load_state(unit) == "masked":
             continue
-        ok = bring_up(unit, "start", outputs, queued) and ok
+        ok = bring_up(unit, "start", outputs, queued, started) and ok
 
     # Step 3: restart the set. A failed or skipped unit keeps its old hash, so it stays changed.
-    failed = {u for u in restart_set if not bring_up(u, "restart", outputs, queued)}
+    failed = {
+        u for u in restart_set if not bring_up(u, "restart", outputs, queued, started)
+    }
     ok = ok and not failed
 
     # Step 3b: the `activate:` action of each packaged file whose hash changed. A unit step 3
@@ -710,17 +732,25 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     # Step 4b: one daemon-reload after every shadow removal, then each packaged unit whose
     # fragment changed, in the order step 3 uses.
     if removed and systemctl("daemon-reload").returncode != 0:
-        say("daemon-reload failed after removing a shadowing copy")
+        say("daemon-reload failed after removing a shadowing copy", ERR)
         ok = False
     for unit in sorted(handed):
         if not left_alone(unit, units, links, manual):
-            ok = bring_up(unit, "restart", outputs, queued) and ok
+            ok = bring_up(unit, "restart", outputs, queued, started) and ok
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest["reconcilers"]:
-        say(f"the manifest lists reconciler {name!r}, which this version does not have")
+        say(
+            f"the manifest lists reconciler {name!r}, which this version does not have",
+            ERR,
+        )
         ok = False
-    ok = run_arms([name for name in ARMS if name not in EARLY], manifest, prev, arms, drift) and ok
+    ok = (
+        run_arms(
+            [name for name in ARMS if name not in EARLY], manifest, prev, arms, drift
+        )
+        and ok
+    )
     udev_ok, udev_state = udev.reconcile(prev.get("udev"))
     ok = ok and udev_ok
     if udev_state:
@@ -732,6 +762,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         "retired": sorted(retired),
         "files": files_state,
         "pending": pending,
+        "started": started,
         "drift": drift,
         **arms,
     }
@@ -786,8 +817,23 @@ def write_applied(state: dict) -> None:
     os.replace(tmp, APPLIED)
 
 
+def metrics(host: str) -> int:
+    """`--metrics`: rewrite the metrics file from the record, with the flag as it stands now."""
+    state = load_json(APPLIED)
+    try:
+        activations = parse_manifest(MANIFEST.read_text())["activations"]
+    except (OSError, ManifestError):
+        activations = None
+    if activations is not None and isinstance(state.get("pending"), dict):
+        state["pending"] = activate.refresh_pending(state["pending"], activations)
+    textfile.write(host, state)
+    return 0
+
+
 def main() -> int:
     host = run("hostname").stdout.strip()
+    if sys.argv[1:] == ["--metrics"]:
+        return metrics(host)
     packages = ["homelab-updater", f"homelab-{host}"]
     text, prev, installed = read_under_lock(packages)
     versions = {name: version for name, (_, version) in installed.items()}
@@ -799,6 +845,7 @@ def main() -> int:
         "secrets_inputs_sha256",
         "files",
         "pending",
+        "started",
         "drift",
         "libvirt",
         "udev",
@@ -808,7 +855,7 @@ def main() -> int:
     state = {k: prev[k] for k in kept if k in prev}
     broken = [name for name, (status, _) in installed.items() if status != "ii "]
     if broken:
-        say(f"{', '.join(broken)} is not installed as 'ii '; acting on nothing")
+        say(f"{', '.join(broken)} is not installed as 'ii '; acting on nothing", ERR)
         ok = False
     else:
         try:
@@ -816,7 +863,7 @@ def main() -> int:
                 raise ManifestError(f"{MANIFEST} does not exist")
             manifest = parse_manifest(text)
         except ManifestError as exc:
-            say(f"{exc}; acting on nothing")
+            say(f"{exc}; acting on nothing", ERR)
             ok = False
         else:
             ok, state = act(manifest, prev)

@@ -2,6 +2,7 @@
 # renderer's inputs: the Compose env template and the tmpfiles file. H5.2a3 ships the unit and its
 # two scripts. H5.2b lists this component in hosts/daniel-pi/package.yml, ships the unit's enable
 # link and adds the first service, `pi-canary`: the first PR that runs anything through the package.
+# H5.10 removed the canary, and `up --remove-orphans` removed its container (exit observation 3).
 #
 # Autonomous-role contract (compose-adopt removes containers unattended).
 # - Scope / exclusions: compose-adopt removes a container only when its name is a service the

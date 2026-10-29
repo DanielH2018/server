@@ -136,6 +136,11 @@ def _stale_worktree_lines(run, timeout):
     every other check here -- it reaches GitHub, and a slow API must never stall session
     start.
 
+    This is the only SessionStart pass that classifies this repo's worktrees (#6184). The
+    user-level `prune-worktrees.py --prune` hook returns before classifying any repo that
+    ships `scripts/dev/prune_worktrees.py`, the check its `OWN_PRUNER` constant names
+    (dotfiles a0f20e92), so no second classification runs to compare against or read.
+
     Args:
         run: the subprocess runner (session-health.py's `_run`, passed in rather than
             imported back -- this module cannot import from the hook that imports it).
