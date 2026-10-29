@@ -25,6 +25,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from fanout_lib.manifest import Batch
 from fanout_lib.target import SERVER_TARGET, Target
 from fanout_lib.transport import REPO
+from lib.gh import gh
 from lib.git import git
 from lib.worktrees import (
     REMOVABLE,
@@ -36,6 +37,10 @@ from lib.worktrees import (
     is_merged,
     remove,
 )
+
+
+# What GitHub's compare calls a base that is an ancestor of its head, or the same commit.
+CONTAINED = frozenset({"ahead", "identical"})
 
 
 def _first_line(proc, what: str) -> str:
@@ -88,10 +93,63 @@ def _drop_merged_branch(repo: str, tree: Worktree, merged: bool, brancher) -> st
     return "" if ok else f"— branch {tree.branch} not deleted: {err}"
 
 
+def contained_in_merged_pr(repo: str, head: str, branch: str, run_gh=gh) -> bool:
+    """True when a merged PR for `branch` has a head containing `head`: no local commit is unlanded.
+
+    `lib.worktrees.is_merged` matches the forge's merged head to the local tip exactly
+    (Ruling 38). That misses the batch `land.sh` landed after merging master into it on the
+    remote: the merged head is the local tip plus that merge commit, so the SHAs differ and
+    `clean` kept the batch for good (#6365). GitHub's compare answers `ahead` (or `identical`)
+    when `head` is an ancestor of the merged head, which proves every local commit was in the
+    merged PR. A tip that was never pushed, or has commits the merged head lacks, compares
+    `diverged`, `behind` or 404, and a `gh` that fails reads as not contained.
+
+    Still keyed on the SHA relation and never on "a merged PR exists under this name", so a
+    reused branch name cannot delete work that never landed.
+    """
+    if not head or not branch:
+        return False
+    try:
+        heads = run_gh(
+            "pr", "list", "--state", "merged", "--head", branch,
+            "--json", "headRefOid", "--jq", ".[].headRefOid",
+            check=False, cwd=repo,
+        )  # fmt: skip
+        if heads.returncode != 0:
+            return False
+        for merged_head in heads.stdout.split():
+            compared = run_gh(
+                "api", f"repos/{{owner}}/{{repo}}/compare/{head}...{merged_head}",
+                "--jq", ".status", check=False, cwd=repo,
+            )  # fmt: skip
+            if compared.returncode == 0 and compared.stdout.strip() in CONTAINED:
+                return True
+    except OSError, subprocess.TimeoutExpired:
+        return False
+    return False
+
+
+def landed(
+    repo: str,
+    head: str,
+    branch: str = "",
+    base: str = "origin/master",
+    merged=is_merged,
+    run_gh=gh,
+) -> bool:
+    """`is_merged`, or `head` sits inside the head of a merged PR for `branch`.
+
+    `merged` and `run_gh` are seams: the ladder's verdict and the forge reads behind it.
+    """
+    return merged(repo, head, branch, base=base) or contained_in_merged_pr(
+        repo, head, branch, run_gh
+    )
+
+
 def clean_one(
     repo: str,
     tree: Worktree,
-    ask=is_merged,
+    ask=landed,
     dirty=is_dirty,
     remover=remove,
     unlocker=unlock,
@@ -370,6 +428,12 @@ def remote_clean_command(
     digits, so a `gh` that is missing, unauthenticated or offline reads as not merged and the
     branch survives with a `kept:` line.
 
+    A tip that differs from the merged head still counts when GitHub's compare calls it an
+    ancestor of that head (`ahead` or `identical`, #6365): `land.sh` merges master into a
+    stale-base branch on the remote, so the merged head is the local tip plus a merge commit.
+    Every local commit is then in the merged PR. A diverged tip, a tip never pushed, or a failed
+    `gh` keeps the branch.
+
     The stale registration goes FIRST, before anything looks at the branch. Git refuses
     `branch -D` for a branch a registered worktree still holds, and a `rm -rf`'d directory
     leaves that registration behind — so deleting the branch first could never work. It
@@ -444,6 +508,13 @@ def remote_clean_command(
         f"--json headRefOid --jq '.[].headRefOid' 2>/dev/null "
         f'| grep -c -x "${{tip:-none}}"); '
         f"case \"${{merged}}\" in ''|*[!0-9]*) merged=0;; esac; "
+        f'if [ "${{merged}}" -eq 0 ] && [ -n "${{tip}}" ]; then '
+        f"for h in $(cd {repo} && gh pr list --state merged --head {branch} "
+        f"--json headRefOid --jq '.[].headRefOid' 2>/dev/null); do "
+        f"st=$(cd {repo} && gh api "
+        f'"repos/{{owner}}/{{repo}}/compare/${{tip}}...${{h}}" --jq .status 2>/dev/null); '
+        f'case "${{st}}" in ahead|identical) merged=1;; esac; '
+        f"done; fi; "
         f'if [ "${{merged}}" -gt 0 ]; then '
         f"git -C {repo} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "
         f'|| echo "kept: {wt} — branch {branch} not deleted"; '

@@ -144,6 +144,20 @@ def test_a_pin_wins_while_it_has_headroom_and_refuses_when_it_does_not():
         place(["a"], [_r("daniel-box", 12 * GIB, 11 * GIB)], pin="daniel-box")
 
 
+def test_a_host_with_no_batch_slots_left_is_skipped_for_the_next_host():
+    """#6421: the roomiest host is at its live-batch cap, so the batch goes to the other one."""
+    readings = [_r("daniel-box", 12 * GIB, 1), _r("daniel-server", 6 * GIB, 1)]
+    assert place(["1"], readings) == [("1", "daniel-box")]
+    slots = {"daniel-box": 0, "daniel-server": 1}
+    assert place(["1"], readings, slots=slots) == [("1", "daniel-server")]
+
+
+def test_slots_are_spent_one_per_placement():
+    readings = [_r("daniel-box", 12 * GIB, 1), _r("daniel-server", 12 * GIB, 1)]
+    with pytest.raises(NoHeadroom):
+        place(["1", "2"], readings, slots={"daniel-box": 0, "daniel-server": 1})
+
+
 def test_a_full_login_plane_refuses_a_batch_the_fleet_cap_would_allow():
     """12G/10G fleet with room, 8G plane full on both hosts."""
     readings = [

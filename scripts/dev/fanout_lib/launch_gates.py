@@ -124,6 +124,28 @@ def still_running(
     return [(run_id, b) for run_id, b in standing if not _stopped(statuses[b.batch])]
 
 
+def live_batch_slots(
+    root: Path, readings: Sequence[HostReading] = ()
+) -> dict[str, int]:
+    """How many more running batches each of `readings`' hosts fits before its live-batch cap.
+
+    Counts as `over_live_batch_cap` does: the uncleaned batches under `root` that
+    `still_running` finds running. `placement.place` takes this as its `slots`, so a batch
+    falls back to a host with cap room instead of `over_live_batch_cap` refusing the host it
+    preferred (#6421).
+
+    Args:
+        root: the manifest directory to read every run under.
+        readings: the headroom readings `read_host` took, carrying each host's unit states.
+    """
+    live = live_by_host(root)
+    return {
+        r.host: live_batch_cap(r.host)
+        - len(still_running(live.get(r.host, []), r.unit_states))
+        for r in readings
+    }
+
+
 def over_live_batch_cap(
     placed: list[tuple[str, str]],
     root: Path,

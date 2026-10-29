@@ -20,10 +20,9 @@ THE STATE.
     room             0       launch would place every one of the N batches
     no-signing-host  6       no readable host signs commits GitHub verifies
 
-`full` follows launch where launch is stricter than it needs to be. `placement.place` picks
-the host with the most memory headroom, and `over_live_batch_cap` then refuses when that host
-is at its batch cap, without trying the other host. An unpinned `full` therefore names each
-host a `--host` launch would place on.
+`full` is launch's own refusal. `place.placement` skips a host at its live-batch cap and
+places on the next host with memory headroom, so `room` means some host has both (#6421). With
+every host out of one or the other, `full` carries the refusal launch prints.
 
 A host that cannot be read drops out, as in launch, and is named in the detail. No readable
 host, or an unreadable GitHub signing-key list, is a failed read: the probe exits 1 and
@@ -114,15 +113,6 @@ def read(
         where = ", ".join(sorted({host for _, host in placed}))
         detail = f"{batches} batch(es) would place on {where}"
         return {"state": "room", "detail": "; ".join([detail, *warnings])[:600]}
-    if not pin:
-        # Launch tries only the host with the most memory headroom against the batch cap;
-        # a pinned launch can still place on the other one.
-        pinnable = [
-            r.host
-            for r in good
-            if _decide(names, good, r.host, root, tools.multiplexed())[0] is not None
-        ]
-        errors += [f"`--host {host}` would place" for host in pinnable]
     return {"state": "full", "detail": " | ".join(errors + warnings)[:600]}
 
 
