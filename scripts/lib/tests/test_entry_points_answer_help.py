@@ -196,7 +196,8 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
 
 # The entry points the test above once waited on: each ignored `--help` and ran its whole check,
 # which still exits 0 with output, so the subprocess test passed while
-# `k8s_manifests.py --help` took 7s to print its summary line (#5564).
+# `k8s_manifests.py --help` took 7s to print its summary line (#5564). The last three took no
+# argv at all, so an explicit `--help` could not reach them (#6561).
 WORK_BEFORE_HELP = (
     "validate.k8s_manifests",
     "validate.setup_templates",
@@ -291,6 +292,8 @@ def test_an_in_process_main_ignores_the_host_processes_help_flag(
     except SystemExit as exc:
         code = exc.code
     except Exception as exc:  # the job ran and failed at the refused boundary
+        if name not in REFUSED_BOUNDARY:
+            raise
         code = exc
     help_answer = (module.__doc__ or "").strip() + "\n"
     assert (code, capsys.readouterr().out) != (0, help_answer), (
