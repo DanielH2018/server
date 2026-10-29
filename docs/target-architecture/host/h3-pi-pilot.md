@@ -96,6 +96,9 @@ printed nothing, and `/usr/lib/homelab/bin/` holds `chezmoi` and `sops`.
 PR H3.12, staged rollout: the PR that carries this line. It adds the gate, the `canary` reason and
 the root-owned `release` override to the builder, and `PROMETHEUS_URLS` to its settings file. It
 changes nothing while the Pi is the only host with a package.
+PR H3.13, the daily fallback: undecided. It is owed only if the Pi's memory peaks cross the
+*Risks* threshold, and [#5206](https://github.com/DanielH2018/server/issues/5206) still owes those
+peaks (step H3.13).
 
 Depends on: R1
 Unblocks: H4, H5
@@ -982,8 +985,11 @@ publishes a second host package.
 - **Shared packages are outside the gate.** `homelab-updater` and `homelab-tools` publish
   in the run that builds them, and every host installs them at its next fire (*Open
   questions* 10).
-- **Under the Pi's daily fallback schedule** (*Risks*, apt memory), daniel-server is the
-  canary. A daily canary would hold every other host for up to a day and trip the lag arm.
+- **The Pi leads the order only while it fires more than once a day.** Under the daily
+  fallback schedule (*Risks*, apt memory), a Pi canary would hold every other host for up
+  to a day and trip the lag arm. The Pi runs the 15-minute schedule, so `CANARY_ORDER`
+  puts the Pi first. Step H3.13 owns moving daniel-server ahead of it if the fallback is
+  taken.
 
 ### CI (builds, never signs)
 
@@ -1803,6 +1809,27 @@ says otherwise.
       adds whatever row the defaults-read census in
       `ansible/tests/setup/test_setup_cross_role_files.py` requires for that read.
     - Add the root-owned `release` override and its runbook step.
+15. **H3.13 The daily fallback, only if the Pi's memory peaks call for it.** The trigger
+    is the threshold in *Risks*, apt memory. Nobody has evaluated it yet, because the
+    four peaks are unmeasured: H3.6 did not record them, and
+    [#5206](https://github.com/DanielH2018/server/issues/5206) owes them. Until then the
+    Pi runs the 15-minute drop-in that H3.9b armed,
+    `hosts/daniel-pi/units/homelab-updater.timer.conf`. The PR that records the peaks
+    decides this step. It applies the threshold and records the verdict in this step. If a
+    peak crosses the threshold, it opens the follow-up that takes the fallback. That
+    follow-up makes every change below in one PR, because each half alone leaves the
+    rollout or the paging wrong:
+    - Move the Pi's drop-in to once a day at 00:30.
+    - Raise daniel-pi's `limit_seconds` in `observability_expected_hosts` past a day, with
+      the matching `HostUpdateStale` rule in `host-checks.yaml`.
+      `scripts/renderer/tests/test_renderer_host_update_limits.py` fails until the limit
+      outlasts the new schedule.
+    - Put daniel-server ahead of daniel-pi in `hosts/lib/builder_rollout_gate.py:CANARY_ORDER`,
+      and update *Staged rollout*, `hosts/components/builder/CLAUDE.md`'s *The rollout gate
+      (H3.12)* and the rollout test in the same PR. A daily canary holds every other host
+      for up to a day, and the lag arm pages after 2 hours.
+    - Keep exit observation 4's by-hand route: the operator starts the updater once the
+      builder publishes, then re-runs the same `land.sh` command.
 
 ## Verification
 
@@ -2216,7 +2243,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       wait then ends `deferred` for the Pi unless its first query finds the Pi settled. The
       operator meets exit observation 4 by starting the updater by hand after the builder
       publishes, then re-running the same `land.sh` command. The limit test then requires
-      the Pi's limit to exceed a day, and daniel-server becomes the rollout canary.
+      the Pi's limit to exceed a day, and daniel-server becomes the rollout canary. Step
+      H3.13 lists what the PR that takes the fallback changes.
 - **H3 adds the first unattended path from master to root on the Pi.** The Pi carries the
   WireGuard endpoint. `daniel-pi.yml` sets `has_gitops: false`, so no deploy reaches the
   Pi unattended at `70591c307`. From H3.9b, a merged commit with a green CI verdict
