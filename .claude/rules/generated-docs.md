@@ -35,10 +35,12 @@ skipped the hook. The docs-refresh cron does not run the generator: a write unde
 dirty.
 
 **What the cron DOES stage is a closed list, and a generator outside it dirties the tree.**
-Three paths: `docs/reference/`, `docs/assets/generated/`, and `scripts/dev/pytest_shard_weights.json`
+Four paths: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_shard_weights.json`
 (the test shard-weights table, recorded by `pytest_shard.py --record-missing` since #2274, and
-re-measured where it drifted by `--refresh-drifted` since #4888).
-Adding a fourth means editing the cron's `git add`, the porcelain check in its
+re-measured where it drifted by `--refresh-drifted` since #4888), and
+`scripts/dev/pytest_shard_runner_weights.json` (the runner-seconds table the CI split packs on,
+refreshed from CI's own logs by `--refresh-runner` since #6178).
+Adding a fifth means editing the cron's `git add`, the porcelain check in its
 `restore_generated_tree`, and `ansible/tests/setup/test_docs_refresh_records_shard_weights.py`,
 which holds the first two against each other. A path written but not staged parks the GitOps
 deployer, which reads any porcelain output on the primary checkout as dirty.

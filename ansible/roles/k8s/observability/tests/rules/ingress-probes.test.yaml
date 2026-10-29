@@ -57,11 +57,10 @@ tests:
             exp_annotations:
               summary: The ingress probe of homepage is failing.
               description: >-
-                blackbox_exporter's http_sso_302 probe of https://homepage.local.example.com
-                has failed for 2 minutes. A probe behind SSO expects Authelia's 302, which
-                proves the edge and the middleware answer, not that the backend is up, so a
-                pass there does not clear the backend. Read probe_http_status_code for this
-                instance, then the Traefik and Authelia logs.
+                blackbox_exporter's http_sso_302 probe of https://homepage.local.example.com has
+                failed for 2 minutes. A probe behind SSO expects Authelia's 302 and never reaches
+                the backend, so a failure there is in Traefik or Authelia. Read
+                probe_http_status_code for this instance, then the Traefik and Authelia logs.
       - eval_time: 6m
         alertname: IngressProbeFailedCritical
         exp_alerts: []
@@ -95,10 +94,9 @@ tests:
             exp_annotations:
               summary: The ingress probe of authelia is failing.
               description: >-
-                blackbox_exporter's http_2xx probe of https://auth.local.example.com has
-                failed for 2 minutes. authelia is home-critical. A probe behind SSO expects
-                Authelia's 302, which proves the edge and the middleware answer, not that the
-                backend is up, so a pass there does not clear the backend. Read
+                blackbox_exporter's http_2xx probe of https://auth.local.example.com has failed for
+                2 minutes. authelia is home-critical. A probe behind SSO expects Authelia's 302 and
+                never reaches the backend, so a failure there is in Traefik or Authelia. Read
                 probe_http_status_code for this instance, then the Traefik and Authelia logs.
       - eval_time: 6m
         alertname: IngressProbeFailed

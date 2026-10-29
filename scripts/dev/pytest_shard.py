@@ -62,6 +62,9 @@ correctly recorded entries 1.1x to 13x their weight. A serial run on the recordi
 the cron runs `--refresh-drifted`: each run re-measures one hash slice of the table and rewrites
 only the entries `DRIFT_RATIO` or more away from what they measured. Measurement noise inside
 that band leaves the table alone, which is what keeps a twice-daily run from churning it.
+Noise outside the band is caught by a second run of only the drifted files: an entry is
+rewritten only when both runs drift and agree with each other within the band. One outlying
+run wrote 0.0s for a 16s module and 62s for a 1s one, and CI failed the bot's branch (#6286).
 
 THE GATE FAILS ONLY WHERE SOMEONE CAN APPLY THE REPAIR. On a pull request the author re-records
 and pushes. On a push to master nobody can, and a red master run still reaches the deployer's
@@ -85,6 +88,7 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --record-missing        # only the unweighted files
     uv run python scripts/dev/pytest_shard.py --record-files a.py b.py  # refresh these entries
     uv run python scripts/dev/pytest_shard.py --refresh-drifted 8     # one eighth, drifted rows only
+    uv run python scripts/dev/pytest_shard.py --refresh-runner 3      # runner table from CI's logs
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # CI's measured gate
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log --warn-only  # annotate, exit 0
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log --changed-files changed.txt
@@ -105,6 +109,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 
+from lib import gh as gh_mod
 from lib.git import git
 from lib.repo_paths import REPO
 from shard_weight_gate import (
@@ -113,8 +118,10 @@ from shard_weight_gate import (
     RUNNER_WEIGHTS_PATH,
     STALE_WEIGHT_RATIO,
     gate_complaints,
+    load_runner_weights,
     packing_table,
     parse_durations,
+    runner_weights,
     write_runner_weights,
 )
 
@@ -382,7 +389,8 @@ def refresh_drifted_weights(
 
     The unattended repair for a weight that has drifted but not far enough for the gate's
     ratio arms. Only an entry `drifted` judges out of band is rewritten, so re-measuring a
-    slice usually leaves the table byte-identical. A recorded path no longer in the census is
+    slice usually leaves the table byte-identical. A drifted entry is measured a second time,
+    and it is rewritten with that measurement only when the two runs agree. A recorded path no longer in the census is
     dropped, as `record_missing_weights` drops it.
 
     Args:
@@ -401,9 +409,113 @@ def refresh_drifted_weights(
     kept = {f: known[f] for f in files if f in known}
     chosen = [f for f in kept if refresh_slice(f, slices) == index and f not in pins]
     measured = measure(chosen) if chosen else {}
-    moved = sorted(f for f in chosen if drifted(kept[f], measured.get(f, 0.0)))
-    kept |= {f: measured.get(f, 0.0) for f in moved}
+    candidates = [f for f in chosen if drifted(kept[f], measured.get(f, 0.0))]
+    # One serial run is not enough to rewrite a row: a single outlier measured 0.0s for a 16s
+    # module and 62s for a 1s one, and CI then failed the bot's own branch on it (#6286). The
+    # drifted files run once more, and a row moves only when the second run drifts too and
+    # agrees with the first within DRIFT_RATIO.
+    confirmed = measure(candidates) if candidates else {}
+    moved = sorted(
+        f
+        for f in candidates
+        if drifted(kept[f], confirmed.get(f, 0.0))
+        and not drifted(measured.get(f, 0.0), confirmed.get(f, 0.0))
+    )
+    kept |= {f: confirmed.get(f, 0.0) for f in moved}
     _write_weights(kept, path, pins)
+    return moved
+
+
+# Where `--refresh-runner` reads its logs: the green runs of CI's workflow on pushes to master.
+# A pull request's run also measures modules that may never land, and a merge-queue run repeats
+# a commit master runs again, so only the push runs count.
+CI_WORKFLOW = "ci.yml"
+CI_BRANCH = "master"
+# Every pytest leg is named `pytest (shard N of M)` in ci.yml. A prefix rather than a count, so
+# changing the matrix needs no edit here.
+PYTEST_JOB_PREFIX = "pytest (shard "
+# How many green master runs `fetch_runner_logs` reads through to find the ones that ran pytest.
+# A push whose paths the matrix does not cover skips every leg: two of the newest three green
+# runs on 2026-10-28 did. The listing is one call whatever its length, and each run read costs
+# one more.
+RUN_WINDOW = 30
+
+
+def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
+    """The raw log of every pytest leg in the newest `runs` green master runs that ran them.
+
+    Each call goes through `lib.gh`, which is the deploy user's authenticated CLI with a 60s
+    bound: the docs-refresh cron holds the git-tree lock while this runs. Three runs of six
+    legs is at most 1 + `RUN_WINDOW` + 18 calls, against the authenticated 5000 an hour.
+
+    Raises:
+        RuntimeError: fewer than `runs` of the newest `RUN_WINDOW` green runs carried a pytest
+            log. A median over fewer
+            runs is one noisy reading per module (#3604), so nothing is written from it.
+        subprocess.CalledProcessError: any `gh` call failed. A missing log fails the whole
+            fetch rather than leaving one shard's modules unmeasured.
+    """
+    list_args = (
+        f"run list --workflow {CI_WORKFLOW} --branch {CI_BRANCH} --event push"
+        f" --status success --limit {RUN_WINDOW} --json databaseId"
+    ).split()
+    listed = json.loads(gh(*list_args, cwd=REPO).stdout or "[]")
+    reports, measured_runs = [], 0
+    for run in listed:
+        if measured_runs == runs:
+            break
+        view = gh("run", "view", str(run["databaseId"]), "--json", "jobs", cwd=REPO)
+        legs = [
+            job["databaseId"]
+            for job in json.loads(view.stdout)["jobs"]
+            if job["name"].startswith(PYTEST_JOB_PREFIX)
+            and job["conclusion"] == "success"
+        ]
+        measured_runs += bool(legs)
+        # The flag because ci.yml runs pytest with `--color yes`, and `gh api` refuses a body
+        # carrying escape sequences without it. `runner_weights` strips the colours.
+        reports += [
+            gh(
+                "api",
+                "--allow-escape-sequences",
+                f"repos/{{owner}}/{{repo}}/actions/jobs/{leg}/logs",
+                cwd=REPO,
+            ).stdout
+            for leg in legs
+        ]
+    if measured_runs < runs:
+        raise RuntimeError(
+            f"found pytest logs in {measured_runs} of the newest {len(listed)} green "
+            f"{CI_BRANCH} run(s) of {CI_WORKFLOW}, not the {runs} asked for"
+        )
+    return reports
+
+
+def refresh_runner_weights(
+    reports: list[str], keep: list[str], path: Path = RUNNER_WEIGHTS_PATH
+) -> list[str]:
+    """Merge the medians in `reports` into the runner table; return the modules it wrote.
+
+    A merge, not `write_runner_weights`'s rewrite. The newest runs change with every merge to
+    master, so a rewrite would move most rows on every cron run and publish a PR each time.
+    Here a module the table lacks is added, a present one is rewritten only when `drifted`
+    judges it out of band, and a module no longer in `keep` is dropped. A module the reports
+    did not measure keeps its row, so a module that skipped on these runs is not packed cold.
+    """
+    measured = runner_weights(reports)
+    if not measured:
+        raise ValueError(
+            "no durations line in any report, so there is nothing to record"
+        )
+    kept = set(keep)
+    table = {m: s for m, s in load_runner_weights(path).items() if m in kept}
+    moved = sorted(
+        m
+        for m, s in measured.items()
+        if m in kept and (m not in table or drifted(table[m], s))
+    )
+    table |= {m: measured[m] for m in moved}
+    path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n")
     return moved
 
 
@@ -461,6 +573,15 @@ def main(argv=None) -> int:
         type=Path,
         metavar="LOG",
         help="rewrite the runner table from CI shard logs, each module at its median",
+    )
+    parser.add_argument(
+        "--refresh-runner",
+        type=int,
+        metavar="RUNS",
+        help=(
+            "download every pytest leg's log from the newest RUNS green master runs of CI and "
+            "merge their medians into the runner table, rewriting only drifted rows"
+        ),
     )
     parser.add_argument(
         "--check-durations",
@@ -574,13 +695,25 @@ def main(argv=None) -> int:
         written = write_runner_weights(reports, census())
         print(f"recorded {len(written)} runner weights to {RUNNER_WEIGHTS_PATH}")
         return 0
+    if args.refresh_runner is not None:
+        if args.refresh_runner < 1:
+            parser.error("--refresh-runner needs at least one run")
+        reports = fetch_runner_logs(args.refresh_runner)
+        moved = refresh_runner_weights(reports, census())
+        print(
+            f"read {len(reports)} pytest log(s) from {args.refresh_runner} green run(s); "
+            f"wrote {len(moved)} runner weight(s){': ' + ', '.join(moved) if moved else ''} "
+            f"in {RUNNER_WEIGHTS_PATH}"
+        )
+        return 0
     if args.summary:
         print(_summary(args.of))
         return 0
     if args.shard is None:
         parser.error(
             "one of --shard, --summary, --record, --record-missing, --record-files, "
-            "--refresh-drifted, --record-runner or --check-durations is required"
+            "--refresh-drifted, --record-runner, --refresh-runner or --check-durations "
+            "is required"
         )
 
     files = shard_files(args.shard, args.of)
