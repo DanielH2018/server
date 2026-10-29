@@ -84,7 +84,9 @@ def _ships(k3s_block: str, line: str) -> bool:
         if kind == "match":
             selector = _river_attr(body, "selector")
             assert re.search(r'action\s*=\s*"drop"', body), body
-            m = re.fullmatch(r'\{job="k3s"\} (!~|\|~) `([^`]*)`', selector)
+            # Alloy's match-stage parser rejects a backtick LogQL string, and a quote or
+            # backslash inside the double-quoted one would need a LogQL escape.
+            m = re.fullmatch(r'\{job="k3s"\} (!~|\|~) "([^"\\`]*)"', selector)
             assert m, f"unexpected selector shape: {selector}"
             hit = re.search(m[2], line) is not None
             if hit == (m[1] == "|~"):
