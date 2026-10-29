@@ -6,11 +6,9 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_pace.py
 import subprocess
 from datetime import UTC, datetime
 
-import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import merge
-from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib import merge, pace
 
 HEAD = "a" * 40
 # The fakes' wall clock.
@@ -93,13 +91,29 @@ def test_a_cap_of_zero_turns_pacing_off(landing):
     assert not [c for c in calls if c[0] == "gh:master-runs"]
 
 
-def test_a_backlog_that_never_drains_ends_at_merge_timeout_naming_the_pacing(landing):
-    ln, calls = _landing(landing, 5, [BACKLOG], merge_timeout=1, merge_poll=1)
-    with pytest.raises(Outcome) as exc:
-        merge.await_merge(ln)
-    assert exc.value.verdict == "merge-timeout"
-    assert "pacing the merge" in exc.value.error
-    assert _merges(calls) == 0
+def test_a_hold_longer_than_merge_timeout_still_merges_once_the_backlog_drains(
+    landing, capsys
+):
+    # Five held polls against a 1s budget: a lander queued behind others (#6466).
+    ln, calls = _landing(
+        landing, 6, [*[BACKLOG] * 5, []], merge_timeout=1, merge_poll=1
+    )
+    merge.await_merge(ln)
+    assert _merges(calls) == 1
+    assert "merged after 5s, 5s of it held by pacing" in capsys.readouterr().out
+
+
+def test_the_cap_rises_by_one_for_each_half_hour_held(landing, capsys):
+    # Two unfinished runs never drain: a cap of 1 holds, the raised cap of 2 holds, and the
+    # cap of 3 reached after an hour held admits the merge.
+    ln, calls = _landing(landing, 3, [BACKLOG], merge_poll=pace.RAISE_CAP_EVERY_S)
+    merge.await_merge(ln)
+    assert _merges(calls) == 1
+    out = capsys.readouterr().out
+    assert "at or above LAND_PACE_MASTER_RUNS=1;" in out
+    assert (
+        "at or above 2 (LAND_PACE_MASTER_RUNS=1, raised by 1 after 1800s held)" in out
+    )
 
 
 def test_the_cap_reads_from_the_environment(monkeypatch):

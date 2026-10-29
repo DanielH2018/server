@@ -510,8 +510,8 @@ def await_merge(ln: Landing) -> None:
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
     reads its head green, unless master moved past the PR's base: then the branch is updated
     once and the merge waits for the updated head to go green. A green head also waits while
-    master CI has a backlog (`pace.hold`). Without --arm-merge this only polls, for a PR merged
-    some other way.
+    master CI has a backlog (`pace.hold`); a held poll does not count against `merge_timeout`.
+    Without --arm-merge this only polls, for a PR merged some other way.
 
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
     it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft ends the wait
@@ -525,6 +525,8 @@ def await_merge(ln: Landing) -> None:
     ci_pending = ""
     # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
     paced = ""
+    # Seconds of polls `pace.hold` held, kept out of `waited` so a queue never times out.
+    held = 0
     # The head this landing updated the branch from; empty until it does.
     updated_from = ""
     # The head the handback refusal and the pin gate last passed, so a merge GitHub refuses
@@ -590,7 +592,11 @@ def await_merge(ln: Landing) -> None:
             # never fire on a disarmed gate; a merge made some other way keeps the wait.
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
-            hold = pace.hold(ln) if rc == CI_GREEN and ln.direct_merge_subject else ""
+            hold = (
+                pace.hold(ln, held)
+                if rc == CI_GREEN and ln.direct_merge_subject
+                else ""
+            )
             if hold and hold != paced:
                 say(hold)
             paced = hold
@@ -634,5 +640,9 @@ def await_merge(ln: Landing) -> None:
                 Verdict.MERGE_TIMEOUT,
             )
         t.sleep(o.merge_poll)
-        waited += o.merge_poll
-    say(f"merged after {waited}s")
+        if paced:
+            held += o.merge_poll
+        else:
+            waited += o.merge_poll
+    paced_note = f", {held}s of it held by pacing" if held else ""
+    say(f"merged after {waited + held}s{paced_note}")

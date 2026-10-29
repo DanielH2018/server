@@ -13,8 +13,10 @@ The count is a read, not a lock: two landings that read at the same poll can bot
 both merge. Pacing lowers the average queue depth; it does not close the race that makes the
 `prove` job's tested-tree skip miss.
 
-The wait counts against `merge_timeout` like any other, so a backlog that never drains ends
-the landing at `merge-timeout`, and the timeout names the pacing. A failed read merges: pacing
+A held poll does not count against `merge_timeout`, so a landing queued behind other landings
+waits for its turn rather than ending at `merge-timeout` while the queue drains (#6466).
+Instead, the cap rises by one for each `RAISE_CAP_EVERY_S` the landing has been held, so a
+landing that keeps losing the race still merges in bounded time. A failed read merges: pacing
 is a throughput control, not a safety gate.
 
 `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off. A PR armed by hand with
@@ -37,6 +39,14 @@ from deploy_tools.land_lib.outcome import say
 # twice that is wedged rather than queued, and counting it would hold every landing until
 # GitHub expires its jobs after 24 hours.
 STUCK_AFTER_S = 2 * 60 * 60
+# DECIDED: a held landing's cap rises by one per 30 minutes held, rather than pacing ending
+# at a fixed budget. On 2026-10-28 eight landers raced for one slot and each lost often enough
+# to run out its 2700s `merge_timeout`, so five ended `merge-timeout` and needed a hand re-run
+# (#6466). Turning pacing off once a budget ran out would release every lander that arrived
+# together at once, the pile #5526 measured. Raising the cap lets the longest-held landers
+# merge one at a time first. 30 minutes is about one master run under load (29-61 minutes on
+# 2026-10-24), and a lander still merges well inside the units' 8-hour LAND_DEADLINE.
+RAISE_CAP_EVERY_S = 30 * 60
 # Enough to see every run inside the 2-hour window at today's merge rate.
 _RUNS_URL = (
     "repos/{owner}/{repo}/actions/workflows/ci.yml/runs"
@@ -74,14 +84,20 @@ def unfinished_master_runs(ln: Landing) -> int:
     return count
 
 
-def hold(ln: Landing) -> str:
+def hold(ln: Landing, held_s: int) -> str:
     """Why this poll does not merge; '' to merge now.
 
     Prints a line of its own only when the read fails, because the caller prints the hold.
+
+    Args:
+        ln: The landing.
+        held_s: The seconds this landing's earlier polls were held, which raise the cap.
     """
-    cap = ln.opts.pace_master_runs
-    if cap <= 0:
+    base = ln.opts.pace_master_runs
+    if base <= 0:
         return ""
+    raised = held_s // RAISE_CAP_EVERY_S
+    cap = base + raised
     try:
         backlog = unfinished_master_runs(ln)
     except (
@@ -96,7 +112,10 @@ def hold(ln: Landing) -> str:
         return ""
     if backlog < cap:
         return ""
+    limit = f"LAND_PACE_MASTER_RUNS={base}"
+    if raised:
+        limit = f"{cap} ({limit}, raised by {raised} after {raised * RAISE_CAP_EVERY_S}s held)"
     return (
         f"pacing the merge: {backlog} master CI run(s) unfinished, at or above "
-        f"LAND_PACE_MASTER_RUNS={cap}; merging once fewer are"
+        f"{limit}; merging once fewer are"
     )
