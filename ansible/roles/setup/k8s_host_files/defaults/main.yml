@@ -30,5 +30,7 @@ registry_k8s_netpol_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e68
 k8s_host_files_ghcr_mirror_warm_budget_s: 1800
 # The same bound on the dockerhub-mirror's warm phase, which runs after the ghcr-mirror's. Half
 # the ghcr-mirror's: Docker Hub's anonymous limit refuses a cold warm's manifest reads long before
-# bandwidth runs out, and the two phases together must stay near the dead-man's one-hour grace.
+# bandwidth runs out. Both watchers allow two hours past the schedule, and
+# ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py fails when the two
+# phases' worst case outgrows that.
 k8s_host_files_dockerhub_mirror_warm_budget_s: 900
