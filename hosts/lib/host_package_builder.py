@@ -325,8 +325,12 @@ class Builder(RolloutGate):
                         f"building {sha[:12]}, the newest green commit below {tip[:12]}"
                     )
                 return sha
+        # The line names the bound beside the count graded: "the 1 newest" alone read as a walk
+        # bound of 1 when one commit was unbuilt, and #6511 asked to widen a bound that was 10.
+        since = f"since the last build {last[:12]}" if last else "on master"
         log(
-            f"no green commit in the {min(len(candidates), int(walk))} newest; walking again next run"
+            f"no green commit: graded {min(len(candidates), int(walk))} of the "
+            f"{len(candidates)} commits {since}, walk bound {walk}; walking again next run"
         )
         return None
 
@@ -460,7 +464,9 @@ class Builder(RolloutGate):
             if str(p) in unconsumed
             or tree_files(out / p) != tree_files(self.published / p)
         ]
-        changed, deferred, gate = admit(changed, self.state.get("gate"), chosen)
+        changed, deferred, gate = admit(
+            changed, self.state.get("gate"), chosen, self.now()
+        )
         if not changed:
             self.note_rollout(deferred, gate)
             log(f"{chosen[:12]} changes no package")

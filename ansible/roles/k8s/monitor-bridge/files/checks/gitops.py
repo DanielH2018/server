@@ -34,8 +34,8 @@ from gitops_markers import (
     owed_clear_cmd,
     parse_behind,
     parse_contention,
+    on_hosts,
     server_tags,
-    target_arg,
 )
 from gitops_ledger import (
     OWED_K8S_DEFERRED,
@@ -75,11 +75,12 @@ def _apply_and_clear(pending, narrow) -> str:
         pins = agent_pin_cmds(role, entry.playbook, selected, entry.agent_hosts)
         how = by_hand(entry.playbook)
         if not how and server:
-            how = "apply `%s %s --tags %s%s` by hand%s%s%s" % (
-                PLAYBOOK_CMD,
-                entry.playbook,
-                ",".join(sorted(server)),
-                target_arg(entry.host),
+            how = "apply `%s` by hand%s%s%s" % (
+                on_hosts(
+                    "%s %s --tags %s"
+                    % (PLAYBOOK_CMD, entry.playbook, ",".join(sorted(server))),
+                    entry.apply_hosts(),
+                ),
                 " (WARNING: %s)" % warning if warning else "",
                 "".join(" and `%s`" % a for a in agents),
                 "".join(" and `%s` (run on %s)" % (cmd, host) for host, cmd in pins),

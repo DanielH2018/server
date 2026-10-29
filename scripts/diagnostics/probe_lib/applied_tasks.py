@@ -24,7 +24,10 @@ A `set_fact` the walk reaches is evaluated when it is unlooped, its gate reads t
 role's only setter of each name, and its values read static names only (#6359). From there on
 its names are static, with Ansible's native types; `applied_facts` has the rules. An import's
 `vars:` evaluate the same way. A template or `copy` content that reads a run-time name is not
-compared: its `Want` is `unchecked`, and `applied` prints it UNCHECKED (#6378).
+compared: its `Want` is `unchecked`, and `applied` prints it UNCHECKED (#6378). The exception
+is a `register` whose task reads a file over ssh, the walk's `reads`: when `applied` passes
+that file's text in `texts`, the walk reaches the register task with its gate read true, and
+the role registers that name once, the name takes the result Ansible would register (#6518).
 
 A task is SKIPPED, with the reason, when its `when:` cannot be read, its loop is not literal,
 a field still holds Jinja or a `STUB` after the render, or it includes a role. A task FILE the
@@ -56,6 +59,8 @@ from diagnostics.probe_lib.applied_facts import (
     expr_names,
     late_names,
     native,
+    registered,
+    remote_read,
     setters,
 )
 from jinja2 import StrictUndefined, TemplateSyntaxError
@@ -159,8 +164,11 @@ def _no_loop() -> list:
 class _Walk:
     """One walk of a role's tasks for one host; `wants` and `skips` collect as it goes."""
 
-    def __init__(self, role_dir: Path, host: str, ctx: dict):
+    def __init__(self, role_dir: Path, host: str, ctx: dict, texts: dict | None = None):
         self.role_dir, self.host = role_dir, host
+        # The text of each (host, path) a register reads over ssh, as `applied` read it.
+        self.texts = texts or {}
+        self.reads: set[tuple[str, str]] = set()
         # A shared task file names its own templates through these two, as Ansible sets them.
         self.ctx = {"role_path": str(role_dir), "playbook_dir": str(ANSIBLE), **ctx}
         self.wants: list[Want] = []
@@ -241,6 +249,7 @@ class _Walk:
         name = str(task.get("name") or "unnamed task")
         self.run_time |= set(setters([task]))
         self.learn(task, here)
+        self.resolve(task, here)
         if any(k in task for k in ("block", "rescue", "always")):
             for key in ("block", "rescue", "always"):
                 for sub in task.get(key) or []:
@@ -288,6 +297,20 @@ class _Walk:
                 self.facts[str(key)] = out
                 self.run_time.discard(str(key))
         self.ctx = {**self.ctx, **self.facts}
+
+    def resolve(self, task: dict, whens: list) -> None:
+        """Make static a `register` read over ssh, once `texts` holds the file it read."""
+        name = task.get("register")
+        if not isinstance(name, str) or self.setters[name] != 1:
+            return
+        if (src := remote_read(self, task)) is None or self.gate(whens) is not None:
+            return
+        self.reads.add(src)
+        # An empty or unread file stays run-time, so its row reads UNCHECKED, never DRIFT.
+        if (self.texts.get(src) or "").strip():
+            self.facts[name] = registered(self.texts[src])
+            self.run_time.discard(name)
+            self.ctx = {**self.ctx, **self.facts}
 
     def loop_items(self, task: dict) -> list | None:
         """The items a task loops over, `[None]` when it does not loop, None when unknown.
@@ -434,15 +457,32 @@ def _shown(path: Path, role_dir: Path) -> str:
     return str(path)
 
 
+def _walked(role_dir: Path, host: str, ctx: dict, files, texts) -> _Walk:
+    walk = _Walk(role_dir, host, ctx, texts)
+    for name in files:
+        walk.tasks(role_dir / "tasks" / f"{name}.yml", [])
+    return walk
+
+
 def expected(
-    role_dir: Path, host: str, ctx: dict, files: tuple[str, ...] = ("main",)
+    role_dir: Path,
+    host: str,
+    ctx: dict,
+    files: tuple[str, ...] = ("main",),
+    texts: dict | None = None,
 ) -> tuple[list[Want], list[Skip]]:
     """Every path the role writes on `host`, and the file-writing tasks it skipped.
 
     `files` names the task files a play runs there, under `tasks/` without `.yml`, as
-    `applied_hosts.task_files` gives them.
+    `applied_hosts.task_files` gives them. `texts` maps each (host, path) in `reads` to the
+    file's text.
     """
-    walk = _Walk(role_dir, host, ctx)
-    for name in files:
-        walk.tasks(role_dir / "tasks" / f"{name}.yml", [])
+    walk = _walked(role_dir, host, ctx, files, texts)
     return walk.wants, walk.skips
+
+
+def reads(
+    role_dir: Path, host: str, ctx: dict, files: tuple[str, ...] = ("main",)
+) -> set[tuple[str, str]]:
+    """The (host, path) of each file a `register` the walk reaches on `host` reads over ssh."""
+    return _walked(role_dir, host, ctx, files, None).reads

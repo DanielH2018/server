@@ -985,6 +985,12 @@ publishes a second host package.
 - **Shared packages are outside the gate.** `homelab-updater` and `homelab-tools` publish
   in the run that builds them, and every host installs them at its next fire (*Open
   questions* 10).
+- **A canary must fire within 30 minutes.** The Pi's schedule leaves two 2h15m gaps, 22:50
+  to 01:05 and 03:50 to 06:05. A Pi package published at 23:08 on 2026-10-28 held
+  daniel-server's and daniel-box's packages until 01:12, past the lag arm (#6524). So a run
+  passes over a canary whose updater next fires more than `CANARY_MAX_WAIT_S` away, and
+  takes the next host in the order. Every run closes an open gate on such a canary and
+  re-picks from the deferred packages, whether or not master moved.
 - **The Pi leads the order only while it fires more than once a day.** Under the daily
   fallback schedule (*Risks*, apt memory), a Pi canary would hold every other host for up
   to a day and trip the lag arm. The Pi runs the 15-minute schedule, so `CANARY_ORDER`
