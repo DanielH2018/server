@@ -1945,8 +1945,11 @@ promotion, an automerged one included, without having to page.
   only writer of Grafana's `deploy-annotation` line, and from the flux PR on `deploy.sh`
   deploys nothing in the cluster. `promote` cannot take over, because it runs on GitHub's
   runners and cannot write daniel-box's syslog. So the soak Job writes the cluster's
-  annotation. When it posts `success`, and only then, it prints one logfmt line to stdout:
+  annotation. When it posts `success`, it prints one logfmt line to stdout:
   `event=deploy services=flux sha=<R's first eight hex characters> result=ok source=flux`.
+  D5.3b3 printed it on success only. #6164 reversed that: a failed or erroring soak prints
+  the same line with `result=fail` and `duration_s`, so a failed promotion also draws a
+  marker (#5881).
   Alloy ships the line to loki-homelab under `loki_streams.cluster_pods`' job, `k8s`.
     - **A second annotation query.** observability's `observability_deploy_annotation_expr`
       selects `{job="syslog"}`, and a LogQL log query has one stream selector. So D5.3b3 adds
@@ -1955,8 +1958,8 @@ promotion, an automerged one included, without having to page.
       `ansible/filter_plugins/grafana_dashboards.py` injects both. The renderer names the
       soak Job's one container `soak`, so the selector reads a fixed value. The stream selector
       scopes the query, so a dashboard load reads only the soak's lines, never every pod's.
-    - **Tests.** `test_deploy_annotations.py` pins the soak's line shape and its
-      success-only print, with a failing soak fixture that prints nothing.
+    - **Tests.** `test_deploy_annotations.py` pins the soak's line shape, and
+      `test_flux_soak.py` pins the `result=fail` line a failing soak prints.
       `test_loki_stream_labels.py` reads the new expression's `job` against `loki_streams`.
 
 ### Images built by CI (D5.4)
