@@ -1,15 +1,14 @@
 {
-  "checksum": "4af706799becdf9f73464de1c0f14e0d9d66004a5e0961e6451fa9d9cdb37f88",
+  "checksum": "cae0310ba0d5f01fc202484387e790d25b4a52f476648a6d6b7758812d0bca37",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#Adding a New Service",
   "row": {
     "atoms": {
       "ansible/deploy.yml": "83efaa4b3f30584c15a7040620863d596818732916afa6870b9f534bf55c78a0",
       "ansible/filter_plugins/toposort.py": "54ea3ab5c1565b0d78cabe4f2e42f05bd074af5073bafedeb12e1ea92cf287d2",
-      "ansible/templates/": "070e3d1966fad0791d344c8c551cae73cc4cb5bba88f08682d4840579a6da53a",
       "scripts/dev/new_k8s_service.py": "800952afef0778e61b8df9293fedd740f7b572191d0a9a82a9da2fedb5b55001"
     },
     "python": "3.14",
-    "verified_sha": "1ab92bbd7"
+    "verified_sha": "908a1b626"
   }
 }

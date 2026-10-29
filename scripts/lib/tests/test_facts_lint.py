@@ -316,7 +316,7 @@ def test_retired_host_in_a_history_bullet_is_clean(tmp_path):
 # ── version-as-fact ──────────────────────────────────────────────────────────────────────
 
 _REGISTRY = "ansible/roles/k8s/registry"
-_ALLOY_COMPOSE = "ansible/roles/containers/alloy/templates/docker-compose.yml.j2"
+_ALLOY_COMPOSE = "hosts/components/pi-compose/services/alloy/compose.yaml.j2"
 
 
 def _version_findings(tmp_path, doc, **files):

@@ -76,7 +76,8 @@ container_healthcheck_timeout: 60s
 container_healthcheck_retries: 5
 # Empty since H5.9: every service moved to compose_services. The key stays, because every reader
 # of the Pi's services reads both keys and fails on a missing one (h5-pi-compose.md, *The service
-# list*). H5.12 drops the Ansible Compose path that read it.
+# list*). H5.12 deleted the Ansible Compose path that read it, so a Docker entry here deploys
+# nothing; scripts/validate/compose_templates.py refuses one.
 containers_list: []
   # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
   # host unit from roles/setup/optimize_pi (section 10), on the LAN IP and port 9100 the
@@ -88,8 +89,8 @@ containers_list: []
   # in monitor-bridge's check.py) because check_pi_pressure already owns Pi disk and memory
   # against thresholds sized for a 456 MB box.
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
-# A service lives in exactly one of this key and containers_list: Ansible's Docker play
-# deploys containers_list, and the package deploys this key. Entries keep containers_list's
+# The package deploys this key. containers_list stays empty: H5.12 deleted the Ansible Compose
+# path that deployed it. Entries keep containers_list's
 # field names. It holds docker-proxy (H5.6), autoheal (H5.7), alloy (H5.8) and wg-easy (H5.9); H5.10
 # removed H5.2b's canary. Every
 # reader of the Pi's services reads both keys and fails on a missing one, so keep the key even

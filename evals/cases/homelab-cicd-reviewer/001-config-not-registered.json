@@ -1,15 +1,15 @@
 {
   "id": "homelab-cicd-reviewer/001-config-not-registered",
   "agent": "homelab-cicd-reviewer",
-  "description": "A bind-mounted config that is templated but not wired into common_config_changed won't recreate the container on edit — must be flagged. The input is the Pi's former alloy role (moved into the package by H5.8) with its wiring stripped, filed under a live Pi role's path.",
-  "input": "Review this proposed edit to a daniel-pi role's tasks:\n```yaml\n# ansible/roles/containers/common/tasks/docker_deploy.yml (proposed)\n- name: Template the Alloy config\n  tags: [config]\n  ansible.builtin.template:\n    src: config.alloy.j2\n    dest: \"/home/{{ sys_user }}/server/containers/{{ container_item.name }}/config/config.alloy\"\n    mode: \"0640\"\n\n- name: Deploy Container\n  tags: [deploy]\n  ansible.builtin.include_role:\n    name: common\n    tasks_from: docker_deploy.yml\n```\nContext: The compose template bind-mounts `./config/config.alloy:/etc/alloy/config.alloy:ro`, and Alloy reads its config once, at startup. Deploys are idempotent (`recreate: auto`), so the container is recreated only when the compose file changes or the caller passes `common_config_changed` to `docker_deploy.yml`. The edit drops the template task's `register: alloy_config` and the `common_config_changed` var from the deploy include. Everything you need is above. You cannot run any commands or read any files, so do not attempt a tool call: review the snippet directly.",
+  "description": "A bind-mounted config whose content hash is not on the service's labels won't recreate the container on edit — must be flagged. The input is the Pi package's alloy service with its `homelab.config-sha256` label stripped.",
+  "input": "Review this proposed edit to a daniel-pi Compose service:\n```yaml\n# hosts/components/pi-compose/services/alloy/compose.yaml.j2 (proposed)\nservices:\n  alloy:\n    volumes:\n      - type: bind\n        source: /usr/lib/homelab/compose/alloy/config.alloy\n        target: /etc/alloy/config.alloy\n        read_only: true\n    labels:\n      - \"autokuma.alloy.enabled=false\"\n```\nContext: config.alloy is a plain package file installed beside the compose file and bind-mounted read-only, and Alloy reads its config once, at startup. The Pi's package applies the project with `docker compose up -d`, which recreates a container only when its compose definition changes; Compose cannot see the content of a bind-mounted file. The live template carries the label `homelab.config-sha256={{ alloy_config_sha256 }}`, the sha256 of the rendered config.alloy, so a config edit changes the definition and `up -d` recreates the container. The edit drops that label. Everything you need is above. You cannot run any commands or read any files, so do not attempt a tool call: review the snippet directly.",
   "assert": {
     "must_match": [
-      "common_config_changed"
+      "config-sha256"
     ],
     "must_not_match": []
   },
-  "rubric": "PASS only if the review flags that the config.alloy template task is not registered and common_config_changed is not passed to the docker_deploy.yml include, so (deploys being idempotent with recreate: auto) an edit to config.alloy will NOT recreate the container and the change sits inert on disk, and recommends registering the task (role-prefixed, e.g. alloy_config) and passing common_config_changed: \"{{ alloy_config is changed }}\".",
+  "rubric": "PASS only if the review flags that dropping the homelab.config-sha256 label means an edit to config.alloy no longer changes the compose definition, so `up -d` will NOT recreate the container and the change sits inert on disk while the deploy reports green, and recommends restoring the label carrying the rendered config's hash.",
   "k": 3,
   "threshold": "rate>=2/3"
 }

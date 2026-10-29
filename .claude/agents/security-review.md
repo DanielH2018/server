@@ -31,7 +31,7 @@ Focus your review on:
   and IngressRoutes that skip the `authelia` middleware. Note egress NetworkPolicies are **not
   enforced** by this cluster's CNI — never treat one as a control.
 - `ansible/roles/setup/k3s/` — cluster-level config, RBAC, the read-only ServiceAccount
-- `ansible/roles/containers/` — Docker Compose templates and deployment tasks (daniel-pi only)
+- `hosts/components/pi-compose/` — the Pi's Docker Compose templates and the unit that runs them (daniel-pi only)
 - `ansible/vars/` — Secrets files (check encryption, not contents)
 - `ansible/inventory/` — Variable files for credential exposure
 - `containers/` — Deployed compose files (read-only reference; flag plaintext secrets only)

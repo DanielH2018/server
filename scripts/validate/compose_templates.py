@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render every configured container's docker-compose.yml.j2 and assert it parses as YAML.
+"""Render every Pi Compose service's compose.yaml.j2 and assert it parses as YAML.
 
 This guards against template edits — especially to the shared ``autokuma.yml.j2``
 and ``networks.yml.j2`` macros — that silently produce malformed YAML or
@@ -7,14 +7,15 @@ broken indentation. It renders structure, not values: secrets and other runtime
 variables are stubbed, so no access to the SOPS-encrypted ``secrets.yml`` is
 needed.
 
-The container set and per-service parameters are taken from the real
-``containers_list`` in each ``inventory/host_vars/*.yml`` file, so each template
-is exercised with the same shape it is deployed with (port, hostname, networks,
+The service set and per-service parameters are taken from the real
+``compose_services`` in each ``inventory/host_vars/*.yml`` file (the Pi package's Compose
+project, H5), so each ``hosts/components/pi-compose/services/<name>/compose.yaml.j2`` is
+exercised with the same shape it is deployed with (port, hostname, networks,
 use_authelia). Commented-out services are skipped automatically (they are not in
 the parsed list).
 
-A service in ``compose_services`` (the Pi package's Compose project, H5) renders from
-``hosts/components/pi-compose/services/<name>/compose.yaml.j2`` and gets the same checks.
+A Docker entry in ``containers_list`` is a failure: H5.12 deleted ``ansible/roles/containers/``,
+so nothing deploys one.
 
 Run directly (``python3 scripts/validate/compose_templates.py``) or via the
 ``validate-compose-templates`` prek hook. Exits non-zero if any template fails to
@@ -42,16 +43,13 @@ from lib.ansible_inventory import containers_entries_in
 from lib.render_context import render_context
 from lib.repo_paths import REPO
 from lib.render_guard import (
-    ANSIBLE,
     HOST_VARS,
     dump_numbered,
     load_yaml,
     render_or_error,
 )
 
-ROLES = ANSIBLE / "roles" / "containers"
-# The Pi package's services (H5): one `compose.yaml.j2` tree per `compose_services` entry. A moved
-# service renders from here instead of ROLES, and both trees get the same checks.
+# The Pi package's services (H5): one `compose.yaml.j2` tree per `compose_services` entry.
 COMPONENT_SERVICES = REPO / "hosts" / "components" / "pi-compose" / "services"
 
 
@@ -162,7 +160,7 @@ def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
     can ever raise a PR against, and nothing in the repo records which bytes are running.
     ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
     the k8s plane already uses (see ansible/tests/k8s/test_base_images_digest_pinned.py, whose globs
-    reach roles/k8s and roles/setup but never roles/containers; this is that gate's Pi half).
+    reach roles/k8s and roles/setup but never the Pi's package; this is that gate's Pi half).
     """
     missing: list[tuple[str, str]] = []
     for doc in docs:
@@ -238,26 +236,18 @@ def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
     return missing
 
 
-def check_container(host: str, ci: dict) -> str | None:
-    """Render one container template for `host`; return an error string or None on success."""
-    name = ci.get("name")
-    if not name:
-        return None
-    role = ROLES / name
-    if not role.is_dir():
-        return (
-            f"no role at ansible/roles/containers/{name} — the inventory entry names a role "
-            "that "
-            "does not exist (moved, renamed, or retired without updating containers_list)"
-        )
-    tpl = role / "templates" / "docker-compose.yml.j2"
-    if not tpl.exists():
-        return (
-            f"role exists but has no ansible/roles/containers/{name}/templates/"
-            "docker-compose.yml.j2 — a Docker entry must render a compose file"
-        )
+def undeployed_docker_entries(containers: list[dict]) -> list[str]:
+    """Names of the Docker entries in a host's `containers_list`, which nothing deploys.
 
-    return _check_rendered(name, "docker-compose.yml.j2", tpl, host, ci)
+    H5.12 deleted `ansible/roles/containers/`, the Ansible Compose path, so only a `platform:
+    k8s` entry has a deploy path; validate/k8s_manifests.py owns those. A Pi service belongs in
+    `compose_services`.
+    """
+    return [
+        ci["name"]
+        for ci in containers
+        if ci.get("name") and ci.get("platform") != "k8s"
+    ]
 
 
 def check_component_service(
@@ -285,11 +275,7 @@ def _check_rendered(
     """Render `tpl` with `ci` as its `container_item` and run every check on the result."""
     env = template_env(tpl.parent)
     # A component template reads its secrets as plain names, and no role defaults sit under it.
-    ctx = render_context(
-        tpl if tpl.is_relative_to(ROLES) else None,
-        host=host,
-        overrides={"container_item": ci},
-    )
+    ctx = render_context(None, host=host, overrides={"container_item": ci})
     # A template reads its OWN entry through `container_item`; leaving the lists in would let
     # one render against another service's entry.
     ctx.pop("containers_list", None)
@@ -348,7 +334,7 @@ def _check_rendered(
 
 
 def main(argv: Sequence[str] = ()) -> int:
-    """Render every host's Docker `containers_list` entries and report render/parse failures.
+    """Render every host's `compose_services` entries and report render/parse failures.
 
     Args:
         argv: The command-line arguments. `-v` or `--verbose` also lists each clean
@@ -371,20 +357,13 @@ def main(argv: Sequence[str] = ()) -> int:
         host_vars = load_yaml(host_file)
         containers = containers_entries_in(host_vars)
 
-        # k8s entries render manifests, not compose — validate/k8s_manifests.py owns them.
-        # Excluding them here is what lets a *Docker* entry with no template be an error
-        # rather than a silent [ok]; that blind spot let a broken glances role ship.
-        docker = [ci for ci in containers if ci.get("platform") != "k8s"]
-        print(f"== {host_file.name} ({len(docker)} Docker services) ==")
-        for ci in docker:
-            err = check_container(host_file.stem, ci)
-            checked += 1
-            name = ci["name"]
-            if err:
-                failures += 1
-                print(f"  [FAIL] {name}: {err}", file=sys.stderr)
-            else:
-                ok(f"  [ok]   {name}")
+        for name in undeployed_docker_entries(containers):
+            failures += 1
+            print(
+                f"  [FAIL] {host_file.stem}: {name}: a Docker containers_list entry, which "
+                "nothing deploys since H5.12; a Pi service belongs in compose_services",
+                file=sys.stderr,
+            )
 
         # The Pi package's services (H5): a Docker platform of their own, so none is k8s.
         packaged = host_vars.get("compose_services") or []
