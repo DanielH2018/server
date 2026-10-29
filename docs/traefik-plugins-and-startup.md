@@ -107,7 +107,7 @@ published CA, public, provenance and expiry (2029-11-01) in the file header (#19
 
 The zone has Authenticated Origin Pulls on, so Cloudflare presents the certificate on every
 origin connection; a direct client with a public SNI fails the handshake even from inside
-`cloudflare_ips`, which is all the #1974 netpol on :8443 checks. Traefik picks TLS options by
+`cloudflare_ips`' IPv4 ranges, which are all the #1974 netpol on :8443 checks. Traefik picks TLS options by
 SNI, so the `ingressroute()` macro renders the public and `.local.` hosts as two objects
 (`<name>-public` and `<name>`) and only the public one names the option; a LAN or WireGuard
 client holds no certificate.

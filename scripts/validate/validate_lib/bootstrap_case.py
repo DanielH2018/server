@@ -15,6 +15,11 @@ systemd loads that unit:
   * The kit's two red fixtures, each the green kit with one file changed and each in a fresh
     container: with no k3s binary the script refuses and names `k3s`, and with an nfpm archive
     that differs from its pin it refuses and names the archive.
+  * The local build's red fixture (#6244): a second scratch clone, one commit past the first,
+    gives homelab-daniel-box a `Depends` on HOMELAB_ONLY, which only the homelab repository
+    carries. The offline build on daniel-box must then reach step 5's install, and apt's
+    simulation must refuse it. Without it the green cases prove only that today's Depends
+    resolve, never that the simulation can fail.
 
 The script runs unmodified, with three stand-ins around it:
 
@@ -27,9 +32,8 @@ The script runs unmodified, with three stand-ins around it:
   * The script runs with SUDO_UID set to the clone's owner, as `sudo` sets it, because git
     refuses a repository that another user owns unless it was reached through sudo.
 
-The image's own homelab.sources is removed first, so no homelab repository is configured. These
-cases do not cover the path that installs from the repository, because its archive key's private
-half lives only on daniel-box; H7.44's guest drill owns that proof.
+The image's own homelab.sources is removed first, so no homelab repository is configured. The
+path that installs from the repository has its own case, `bootstrap_repo_case.py`.
 """
 
 import sys as _sys
@@ -79,6 +83,10 @@ COPY = "/root/bootstrap"
 # A join address and token for the agent, which the installer writes and nothing contacts.
 AGENT_ENV = "K3S_URL=https://192.0.2.10:6443 K3S_TOKEN=bootstrap-case-token"
 UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
+# A package only the homelab repository carries, so no local build or Ubuntu archive provides it.
+HOMELAB_ONLY = "homelab-daniel-server"
+BOX_SPEC = "hosts/daniel-box/package.yml"
+INSTALL_REFUSED = "apt-get install of the local build failed"
 
 
 def script_value(script: str, name: str) -> str:
@@ -190,6 +198,37 @@ def scratch_clone(out: Path) -> Path:
     return out
 
 
+def add_depends(spec: str, package: str) -> str:
+    """A host package spec with `package` appended to its `depends:` list.
+
+    Raises:
+        CaseFailed: The spec holds no `depends:` list of block entries, or more than one.
+    """
+    changed, count = re.subn(
+        r"^(depends:\n(?:  - .*\n)+)", rf"\1  - {package}\n", spec, flags=re.MULTILINE
+    )
+    expect(count == 1, f"the spec holds {count} depends: lists, not one")
+    return changed
+
+
+def red_clone(clone: Path, out: Path) -> Path:
+    """`clone` with one more commit, which gives homelab-daniel-box a Depends on HOMELAB_ONLY."""
+    shutil.rmtree(out, ignore_errors=True)
+    _git("clone", "-q", str(clone), str(out), cwd=clone.parent)
+    spec = out / BOX_SPEC
+    spec.write_text(add_depends(spec.read_text(), HOMELAB_ONLY))
+    _git(
+        "commit", "-q", "-a", "-m", f"bootstrap case: depend on {HOMELAB_ONLY}", cwd=out
+    )
+    return out
+
+
+def install_apt_shim(c: Container) -> None:
+    """Put APT_SHIM ahead of the real apt-get on the container's PATH."""
+    c.ok(f"cat > /usr/local/sbin/apt-get << 'EOF'\n{APT_SHIM}EOF\n")
+    c.ok("chmod 0755 /usr/local/sbin/apt-get")
+
+
 def stock_kit(cases, clone: Path, kit: Path) -> Path:
     """The break-glass kit for amd64, as `docs/break-glass.md`, item 8, lists it."""
     shutil.rmtree(kit, ignore_errors=True)
@@ -275,8 +314,7 @@ class Bootstrap:
         c = self.container
         c.boot(self.cases.python)
         c.ok("rm -f /etc/apt/sources.list.d/homelab.sources")
-        c.ok(f"cat > /usr/local/sbin/apt-get << 'EOF'\n{APT_SHIM}EOF\n")
-        c.ok("chmod 0755 /usr/local/sbin/apt-get")
+        install_apt_shim(c)
         c.ok(
             f"install -d {COPY} && cp /srv/clone/hosts/bootstrap-host.sh"
             f" /srv/clone/hosts/keys/homelab-archive-keyring.gpg {COPY}/"
@@ -349,7 +387,13 @@ def _expect_green(run: Bootstrap, marker: str, absent: str | None = None) -> Non
         run.container.remove()
 
 
-def _expect_refused(run: Bootstrap, reason: str) -> None:
+def _expect_refused(run: Bootstrap, reason: str, apt_says: str | None) -> None:
+    """Expect the script to exit 1 naming `reason`.
+
+    With `apt_says` None the refusal comes before step 5, so apt-get ran no install. Otherwise
+    apt-get ran one install, and apt's output must hold `apt_says`, which tells the refusal
+    apart from an install that failed for another reason.
+    """
     try:
         result = run.run()
         expect(
@@ -362,7 +406,15 @@ def _expect_refused(run: Bootstrap, reason: str) -> None:
             for line in run.container.read(APT_CALLS).splitlines()
             if line.startswith("install")
         ]
-        expect(not installs, f"the refused run still installed: {installs}")
+        if apt_says is None:
+            expect(not installs, f"the refused run still installed: {installs}")
+        else:
+            expect(len(installs) == 1, f"apt-get ran {len(installs)} installs, not one")
+            output = result.stdout + result.stderr
+            expect(
+                apt_says in output,
+                f"apt's output holds no {apt_says!r}:\n{output[-3000:]}",
+            )
     finally:
         run.container.remove()
 
@@ -377,6 +429,9 @@ class Planned(NamedTuple):
         kit: The offline kit, or None for an online run.
         marker: A line a green run must print; None for a red one.
         refusal: The refusal a red run must print; None for a green one.
+        clone: Which scratch clone the run builds: "green", or "red-depends" for `red_clone`'s.
+        apt_says: What apt must print when a red run's refusal is apt's; None when the
+            refusal comes before any install.
     """
 
     name: str
@@ -385,6 +440,8 @@ class Planned(NamedTuple):
     kit: Path | None
     marker: str | None
     refusal: str | None
+    clone: str = "green"
+    apt_says: str | None = None
 
 
 def plan(work: Path, green: Path) -> list[Planned]:
@@ -431,6 +488,20 @@ def plan(work: Path, green: Path) -> list[Planned]:
                 reason,
             )
         )
+    # Offline, so the red needs no network and differs from the green offline case in its
+    # clone alone.
+    cases.append(
+        Planned(
+            f"refuse a local build whose homelab-daniel-box Depends on {HOMELAB_ONLY}",
+            "red-depends",
+            "daniel-box",
+            green,
+            None,
+            INSTALL_REFUSED,
+            "red-depends",
+            f"Depends: {HOMELAB_ONLY}",
+        )
+    )
     return cases
 
 
@@ -440,6 +511,10 @@ def run(cases) -> None:
     green = cases.work / "bootstrap-kit" / "green"
     try:
         scratch_clone(clone)
+        clones = {
+            "green": clone,
+            "red-depends": red_clone(clone, cases.work / "bootstrap-clone-red-depends"),
+        }
         stock_kit(cases, clone, green)
         planned = plan(cases.work, green)
     except (CaseFailed, OSError, subprocess.SubprocessError, StopIteration) as exc:
@@ -447,9 +522,13 @@ def run(cases) -> None:
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
         return
     for item in planned:
-        bootstrap = Bootstrap(cases, item.host, clone, item.kit, item.label)
+        bootstrap = Bootstrap(
+            cases, item.host, clones[item.clone], item.kit, item.label
+        )
         if item.refusal is not None:
-            body = functools.partial(_expect_refused, bootstrap, item.refusal)
+            body = functools.partial(
+                _expect_refused, bootstrap, item.refusal, item.apt_says
+            )
         else:
             # Offline the script makes neither GitHub read, so the anchor stub must not run.
             absent = ANCHOR_ACCEPTS if item.kit is not None else None
