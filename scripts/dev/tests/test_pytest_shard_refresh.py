@@ -340,3 +340,37 @@ def test_a_refresh_keeps_a_row_whose_two_runs_drift_but_disagree(tmp_path):
 
     assert moved == []
     assert json.loads(table.read_text()) == {module: 16.0}
+
+
+@pytest.mark.parametrize(
+    ("second", "expected"),
+    [
+        # docs-refresh/2026-10-29-1828: one run recorded 23.39s, CI measured 0.91s (#6587).
+        pytest.param(0.8, 0.8, id="a-loaded-first-run"),
+        pytest.param(24.0, 23.39, id="a-loaded-second-run"),
+        pytest.param(None, 23.39, id="a-second-run-that-measured-nothing"),
+    ],
+)
+def test_a_heavy_new_row_keeps_the_lower_of_two_readings(tmp_path, second, expected):
+    module = FILES[0]
+    table = tmp_path / "weights.json"
+    table.write_text("{}")
+    measure, calls = _runs({module: 23.39}, {} if second is None else {module: second})
+
+    pytest_shard.record_missing_weights(table, files=[module], measure=measure)
+
+    assert json.loads(table.read_text()) == {module: expected}
+    assert calls == [[module], [module]]
+
+
+def test_a_light_new_row_is_measured_once(tmp_path):
+    """Under the gate's floor no ratio arm compares the row, so a second run buys nothing."""
+    light, heavy = FILES[:2]
+    table = tmp_path / "weights.json"
+    table.write_text("{}")
+    measure, calls = _runs({light: 0.4, heavy: 9.0}, {heavy: 3.1})
+
+    pytest_shard.record_missing_weights(table, files=[light, heavy], measure=measure)
+
+    assert json.loads(table.read_text()) == {light: 0.4, heavy: 3.1}
+    assert calls[1:] == [[heavy]]

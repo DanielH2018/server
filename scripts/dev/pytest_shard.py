@@ -116,6 +116,7 @@ from shard_weight_gate import (
     RUNNER_HEAVY_FAIL_SECONDS,
     RUNNER_HEAVY_SECONDS,
     RUNNER_WEIGHTS_PATH,
+    STALE_WEIGHT_FLOOR_SECONDS,
     STALE_WEIGHT_RATIO,
     gate_complaints,
     load_runner_weights,
@@ -305,20 +306,33 @@ def record_weights(
     return _write_weights({f: measured.get(f, 0.0) for f in files}, path, pins)
 
 
-def record_missing_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
+def record_missing_weights(
+    path: Path = WEIGHTS_PATH,
+    *,
+    files: list[str] | None = None,
+    measure=measure_weights,
+) -> dict[str, float]:
     """Measure only the census files the table lacks, and write the merged table.
 
     Seconds rather than the full run's minutes, which is what lets the docs-refresh cron run
     this on every tick. A recorded path no longer in the census is dropped on the way
-    through, so the table does not keep a weight for a module that was deleted.
+    through, so the table does not keep a weight for a module that was deleted. A new row of
+    `STALE_WEIGHT_FLOOR_SECONDS` or more is measured twice and keeps the lower reading.
     """
-    files = census()
+    files = census() if files is None else files
     known = load_weights(path)
     kept = {f: known[f] for f in files if f in known}
     missing = [f for f in files if f not in known]
     if missing:
-        measured = measure_weights(missing)
+        measured = measure(missing)
         kept |= {f: measured.get(f, 0.0) for f in missing}
+        # One reading on a loaded host recorded 23.39s for a module CI measured at 0.91s, past
+        # the gate's fail ratio, and the cron's PR sat red (#6587). Load only adds time, so a
+        # new row heavy enough for the gate to compare runs once more and keeps the lower
+        # reading. A second run that measured nothing is no reading, not 0.0s (#6286).
+        heavy = [f for f in missing if kept[f] >= STALE_WEIGHT_FLOOR_SECONDS]
+        again = measure(heavy) if heavy else {}
+        kept |= {f: min(kept[f], again[f]) for f in heavy if again.get(f)}
     return _write_weights(kept, path)
 
 
