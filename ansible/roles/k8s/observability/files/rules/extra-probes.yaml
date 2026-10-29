@@ -29,10 +29,9 @@ groups:
         annotations:
           summary: The probe of {{ $labels.service }} is failing.
           description: >-
-            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
-            for 2 minutes. This is the replacement for a Kuma tile tagged critical. Read
-            probe_http_status_code or probe_dns_lookup_time_seconds for this instance, then the
-            workload's own log.
+            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed for
+            2 minutes. Read probe_http_status_code or probe_dns_lookup_time_seconds for this
+            instance, then the workload's own log.
       # The same, for every other probe in the job.
       - alert: ExtraProbeFailed
         expr: probe_success{job="blackbox-extra", page_tier="warning"} == 0
@@ -75,8 +74,8 @@ groups:
           summary: Prometheus cannot scrape daniel-pi's node_exporter at {{ $labels.instance }}.
           description: >-
             The node-pi scrape has failed for 2 minutes, so the Pi is off the network or its
-            node_exporter unit is down. Kuma's Daniel Pi Host ping tile read the first of those.
-            Ping the host, then read the unit with `ssh daniel-pi systemctl status node_exporter`.
+            node_exporter unit is down. Ping the host, then read the unit with `ssh daniel-pi
+            systemctl status node_exporter`.
       # This family's zero-series alert. A job dropped from prometheus.yml leaves every rule
       # above evaluating to nothing, and no Kuma tile watches the new jobs, so this pages
       # without a shadow label.

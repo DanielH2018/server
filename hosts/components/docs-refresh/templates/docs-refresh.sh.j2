@@ -307,17 +307,17 @@ EOF
   # in docs/reference) inside the run window. That window is small -- the top-of-script gate exits
   # on any dirty tree, so everything tracked and modified here arrived during this run -- and
   # fail-closed is the direction this script's own header demands.
-  # SCOPE (see lib.git.git_dirty, #1223): path-scoped to the three trees this script writes,
+  # SCOPE (see lib.git.git_dirty, #1223): path-scoped to the four paths this script writes,
   # untracked counted within them — the one of the three scopes limited by paths rather than by
   # tracked-ness.
   #
-  # THE WEIGHTS TABLE IS IN THIS LIST FOR THE SAME REASON IT IS IN THE `git add`. The per-path
+  # THE WEIGHTS TABLES ARE IN THIS LIST FOR THE SAME REASON THEY ARE IN THE `git add`. The per-path
   # restore above already covers it, because it arrives in $1 like any other staged path. This
   # check is what says the restore WORKED, and a check scoped to the two doc trees would report
   # "tree restored" over a weights table left modified under scripts/dev/ — which parks the
   # GitOps deployer exactly as a leftover page does (#2274).
   [ -z "$(git status --porcelain -- docs/reference docs/assets/generated \
-    scripts/dev/pytest_shard_weights.json)" ] || rc=1
+    scripts/dev/pytest_shard_weights.json scripts/dev/pytest_shard_runner_weights.json)" ] || rc=1
   return "$rc"
 }
 
@@ -502,15 +502,36 @@ if [ "$REFRESH_RC" -ne 0 ]; then
   GENERATORS_OK=0
 fi
 
-# The two generated trees, plus the shard-weights table the steps above write. Nothing else: a
+# REFRESH THE RUNNER-SECONDS TABLE THE CI SHARDS ARE PACKED ON, from CI's own logs (#6178). The
+# two steps above measure on this host; the split packs on what the runner measured instead
+# (#6149), and nothing else re-reads the runner. --refresh-runner 3 downloads every pytest leg's
+# log from the three newest green master runs through the deploy user's `gh`, the same CLI the
+# publish step uses. It adds modules the table lacks, drops deleted ones, and rewrites a present
+# row only past the same DRIFT_RATIO band, so most runs leave it byte-identical and publish nothing.
+#
+# A WAN outage does not reach this step: the unlanded check above reads origin first and exits.
+# Any other failure, such as a `gh` error or fewer than three green runs, writes nothing and
+# degrades the run like the two steps above, under its own `timeout`.
+RUNNER_MSG="$(timeout 300 "$UV" run --frozen python scripts/dev/pytest_shard.py \
+  --refresh-runner 3 2>&1)"
+RUNNER_RC=$?
+if [ "$RUNNER_RC" -ne 0 ]; then
+  alert "docs-refresh: refreshing runner shard weights failed (exit ${RUNNER_RC}); $(printf '%s' \
+    "$RUNNER_MSG" | tr '\n' ' ' | tail -c 300)"
+  DEGRADED_MSG="refreshing runner shard weights failed (exit ${RUNNER_RC})"
+  GENERATORS_OK=0
+fi
+
+# The two generated trees, plus the shard-weights tables the steps above write. Nothing else: a
 # generator that wrote outside this list would otherwise be committed silently by a cron, which
 # is exactly the class of change that must go through a PR.
 #
-# THE WEIGHTS TABLE IS A SANCTIONED THIRD PATH, not a generated tree. It is derived output like
-# the pages are — the two `pytest_shard.py` steps above reproduce it — and staging it is what keeps
-# it out of the primary checkout as dirt. restore_generated_tree's per-tree check names the same
-# path for that reason.
-git add docs/reference docs/assets/generated scripts/dev/pytest_shard_weights.json
+# THE WEIGHTS TABLES ARE SANCTIONED EXTRA PATHS, not generated trees. They are derived output like
+# the pages are — the `pytest_shard.py` steps above reproduce them — and staging them is what keeps
+# them out of the primary checkout as dirt. restore_generated_tree's per-tree check names the same
+# paths for that reason.
+git add docs/reference docs/assets/generated scripts/dev/pytest_shard_weights.json \
+  scripts/dev/pytest_shard_runner_weights.json
 
 if git diff --cached --quiet; then
   # The common outcome: the inputs are repo files and they only move when a PR merges, so most
@@ -608,7 +629,7 @@ fi
 # still local on master, 2 once the branch is on origin without a PR.
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages and test shard weights" \
-  --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, and the pytest shard-weights table. The first two are reproducible by scripts/docs/build_docs.py and the third by scripts/dev/pytest_shard.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
+  --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, and the two pytest shard-weights tables. The first two are reproducible by scripts/docs/build_docs.py and the tables by scripts/dev/pytest_shard.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
   2>&1)"
 PUB_RC=$?
 # The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock

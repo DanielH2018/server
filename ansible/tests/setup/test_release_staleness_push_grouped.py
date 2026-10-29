@@ -104,6 +104,10 @@ def _recorded(tmp_path):
     return path.read_text().split() if path.exists() else None
 
 
+def _verdict(tmp_path):
+    return (tmp_path / "state" / "verdict").read_text()
+
+
 def test_a_stale_fleet_pushes_the_grouped_line_verbatim(tmp_path):
     assert _run(tmp_path, GROUPED, 1) == [("down", GROUPED)]
 
@@ -167,3 +171,18 @@ def test_the_first_verdict_after_a_broken_check_is_flagged_as_a_change(tmp_path)
     pushes = _run(tmp_path, GROUPED, 1, names=["authelia"])
     assert [s for s, _ in pushes] == ["up", "down"]
     assert pushes[1][1] == f"Stale set changed: 1 newly stale (authelia). {GROUPED}"
+
+
+def test_the_verdict_file_holds_the_probe_line_without_the_realert_prefix(tmp_path):
+    # The SessionStart banner reads this file (#6183) and matches the probe's headline at the
+    # start of the line, which the journal's `Stale set changed:` prefix would hide.
+    _run(tmp_path, GROUPED, 1, names=["authelia", "bazarr"], prev=["artifacts"])
+    assert _verdict(tmp_path) == f"status=down {GROUPED}\n"
+    assert (tmp_path / "state" / "verdict").stat().st_mode & 0o777 == 0o644
+
+
+def test_a_clean_run_replaces_a_down_verdict_with_up(tmp_path):
+    clean = "0 service(s) stale; every known k8s service has a current record."
+    _run(tmp_path, GROUPED, 1, names=["authelia"])
+    _run(tmp_path, clean, 0, names=[], prev=["authelia"])
+    assert _verdict(tmp_path) == f"status=up {clean}\n"

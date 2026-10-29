@@ -126,13 +126,13 @@ PUSH_MONITOR_SILENCE_SECONDS = 1800
 
 def test_a_finished_job_is_reaped_after_its_logs_have_outlived_the_down_window():
     """A failed Job sits in `get pods` as Init:Error until two later failures displace it. The
-    TTL must keep the logs past the push monitor's silence window, and must not keep them for
-    days."""
+    TTL must keep the logs past the push monitor's silence window with time to read them. The
+    upper bound is test_reboot_window_cronjobs_age_out.py's, because a run of this */15 job is
+    in flight at the weekly reboot (#6367)."""
     doc = yaml.safe_load(render())
     ttl = doc["spec"]["jobTemplate"]["spec"]["ttlSecondsAfterFinished"]
     assert ttl == DEFAULTS["uptime_kuma_k8s_status_page_sync_job_ttl_seconds"]
-    assert ttl > PUSH_MONITOR_SILENCE_SECONDS * 2
-    assert ttl <= 2 * 24 * 3600
+    assert ttl >= PUSH_MONITOR_SILENCE_SECONDS + 900
 
 
 def test_a_longer_ttl_moves_the_rendered_value():

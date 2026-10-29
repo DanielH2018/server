@@ -983,9 +983,11 @@ notification-controller posts on T:
   the timeout ends it as `failed`, naming each name that had no `success`. *The timeout
   follows the chain* below derives it.
 - **A Longhorn hop's failures are provisional** (#5997). The longhorn-manager pods serve
-  the admission webhook that every PersistentVolumeClaim's dry run calls, and the manager
-  DaemonSet replaces both pods at once. A Kustomization holding a claim that reconciles in
-  that window posts `failure`, then recovers on its next retry. So while `longhorn` is in
+  the admission webhook that every PersistentVolumeClaim's dry run calls. Since #6009 the
+  manager DaemonSet rolls one pod at a time, so the rule covers a residual window rather
+  than a routine one: a webhook call can still fail while the one serving pod is busy, or
+  on a node loss. A Kustomization holding a claim that reconciles in that window posts
+  `failure`, then recovers on its next retry. So while `longhorn` is in
   the set, a `failure` or `error` on any other name is provisional, not only on a claim
   holder, because `crowdsec`'s failed claim also holds `traefik` and the routed tags behind
   it. A provisional failure ends the wait in one of two ways:

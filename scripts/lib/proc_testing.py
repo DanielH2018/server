@@ -51,7 +51,6 @@ import subprocess
 from pathlib import Path
 
 __all__ = [
-    "CARRIED_VARS",
     "DEFAULT_TIMEOUT",
     "SHEBANG",
     "fake_bin",
@@ -72,12 +71,6 @@ DEFAULT_TIMEOUT = 60
 # The interpreter line `write_exec` supplies when the text does not carry one. `sh` rather than
 # `bash`, so a stub runs the same under a container image that ships neither as `/bin/bash`.
 SHEBANG = "#!/bin/sh\n"
-
-# Variables `run` carries from this process into a replacement `env` that lacks them.
-# `ansible/tests/leakguard.py` points `TEXTFILE_DIR` at a temp directory for the whole run; a
-# caller that builds its child's environment from scratch would otherwise drop it, and a check
-# script the child runs would write node_exporter's real textfile directory (#6191).
-CARRIED_VARS = ("TEXTFILE_DIR",)
 
 
 def write_exec(path: Path, text: str) -> Path:
@@ -161,7 +154,7 @@ def run(
         env: The child's environment. Defaults to this process's, extended rather than
             replaced, so a caller wanting the real `PATH` and one extra variable passes
             `{**os.environ, "X": "1"}` — or `scrubbed_env(X="1")` where the child runs git.
-            A replacement still receives each `CARRIED_VARS` entry it does not set itself.
+            `ansible/tests/leakguard.py` still adds `TEXTFILE_DIR` to a replacement.
         stub_bin: A directory of fake binaries, put in FRONT of the environment's `PATH`.
             Pass what `fake_bin` returned. Handling the prefix here is the reason a caller
             never spells `os.pathsep` out.
@@ -179,9 +172,6 @@ def run(
         the terminal instead.
     """
     environ = dict(os.environ if env is None else env)
-    for name in CARRIED_VARS:
-        if name in os.environ:
-            environ.setdefault(name, os.environ[name])
     if stub_bin is not None:
         environ["PATH"] = path_with(stub_bin, env=environ)
     return subprocess.run(

@@ -420,7 +420,7 @@ jobs:
         # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
         # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
         # `real_tree`), so the hook here was a second render of every k8s role (#6150).
-        run: prek run --all-files --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-host-files --skip static-ratchet-tests-landing --skip static-ratchet-tests-deployer --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --color always
+        run: prek run --all-files --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-host-files --skip static-ratchet-tests-landing --skip static-ratchet-tests-deployer --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
 
   # The two PR-only refusals, the cross-plane order gate and the cluster pin checks, in a job of
   # their own (#6149). They ran serially inside `hooks`, ahead of its sweep, and on PR run
@@ -803,7 +803,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
-          node-version: "24.22.0"
+          node-version: "24.22.1"
 
       - name: Validate and test the deck mod
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'

@@ -43,6 +43,62 @@ all eight retries on every `--check` of this role. A dry run that always reports
 operator to skip the check, which is exactly what `.claude/rules/ansible.md` asks for before
 touching production state.
 
+## The probe's 403 at a LAPI roll was the gate's own ban (#5761)
+
+daniel-pi's edge probe recorded `http=403` at 2026-10-19T01:07:09Z, two minutes after the LAPI
+pod started at 01:05:19. #5761 read it as a restart window, possibly AppSec answering with an
+error while it loaded rules, which `crowdsecAppsecFailureBlock` turns into a 403. The record
+measured on 2026-10-28 refutes that. The 403 was the Ansible ban gate's own ban on the Pi:
+
+```text
+time="2026-10-18T20:05:54-05:00" level=info msg="(localhost/cscli) slice6-gate by ip 10.0.0.139 : 15m ban on Ip 10.0.0.139" module=db
+time="2026-10-18T20:06:39-05:00" level=info msg="127.0.0.1 - [...] \"DELETE /v1/decisions?ip=10.0.0.139 HTTP/1.1 200 [...]" module=lapi
+```
+
+The ban started at 01:05:54Z and was lifted at 01:06:39Z. The probe's 302 at 01:06:06Z and
+its 403 at 01:07:09Z both fit, because the bouncer runs in stream mode at
+`updateIntervalSeconds: 60`. A ban reaches the edge only at the next pull, and so does its
+lift. Traefik's access log shows the same thing from the other side. Every 403 the edge served
+from 01:06 to 01:07 went to `10.0.0.139`: ten to `loki-homelab.local` and five to
+`jellyfin.local`. The issue counted 13 edge 403s in the 30 minutes around the roll, and this
+query found 15 there, every one of them to the Pi.
+
+The same mapping holds for every increment of the probe counter
+(`loki_process_custom_crowdsec_edge_probe_total{status="403"}`) from 2026-10-19 to 2026-10-28.
+Each one follows a ban on `10.0.0.139` in the LAPI log, issued either by `slice6-gate` (the
+Ansible gate) or by `crowdsec-verify` (the Job). The times are UTC, and a counter time is the
+scrape after the probe line:
+
+| Ban issued | By | Probe 403 counted |
+|---|---|---|
+| 10-19 01:05:54 | `slice6-gate` | 01:07:09 (the probe line) |
+| 10-19 01:40:28 | `slice6-gate` | 01:42 |
+| 10-19 12:03:38 | `slice6-gate` | 12:05 |
+| 10-21 23:27:26 | `crowdsec-verify` | 23:29 |
+| 10-23 21:20:42, 21:24:45, 21:41:25 | `crowdsec-verify` (three runs) | 21:23, 21:26, 21:27, 21:42 |
+| 10-25 13:14:04 | `crowdsec-verify` | 13:15, 13:16 |
+
+Three observations rule out an AppSec failure window:
+
+- **Only the banned address was refused.** During the 10-23 21:20 run, the edge answered
+  `10.0.0.139` 403 46 times in ten minutes. In the same ten minutes it served a public client
+  (`173.249.254.192`) 200, 304 and 307, and served in-cluster clients 200 and 302. AppSec
+  inspects every client's request, so its failure-block would have refused other clients too.
+- **The refusals were cache hits.** Their `Duration` was 0.2 to 0.5 ms, too short for a round
+  trip to the AppSec engine.
+- **A LAPI restart with no ban produced no 403.** The CrowdSec pod restarted at
+  2026-10-25T07:41:23Z, beside a Traefik restart at 07:41:21, and nothing banned the Pi until
+  13:14. Traefik's access log holds no 403 for any client from 07:00 to 08:30, and the probe
+  counter did not move. That is one sample, and Traefik restarting alongside it means the
+  bouncer started fresh against a starting LAPI.
+
+**Decision:** `crowdsecAppsecFailureBlock` keeps its default of `true`. No restart window was
+observed, so turning off the secure default would trade a measured protection for an
+unmeasured risk. If a 403 to a client other than a banned one ever appears at a LAPI roll,
+reopen this with that client's access-log lines. For `crowdsec-verify`, a 403 at a roll is the
+enforcement result the Job reads, not noise. The Job starts after both the `crowdsec` and
+`traefik` Kustomizations read Ready, and it bans the Pi itself.
+
 ## How the bouncer rows accumulate, and what the prune cannot do
 
 LAPI authenticates a bouncer by its API-key hash and its client IP. When a known key arrives from
@@ -88,8 +144,12 @@ parser with no error at all, so nothing here can count that loss.
 Nothing in this repo fixes it. `CompleteLines` is not an `acquis.yaml` key, Traefik's
 `bufferingSize` batches entries into a channel and still writes one line per call, and
 `poll_without_inotify` only changes when the reader wakes. The fix is
-`crowdsecurity/crowdsec#4678`, which sets `CompleteLines: true`; on 2026-09-22 it was open and in no
-release. Building a patched image through `k8s/image-builder` was rejected: it would take the WAF
+`crowdsecurity/crowdsec#4678`, which sets `CompleteLines: true`. Upstream merged it on
+2026-10-19, and v1.8.2 is the first release that carries it. The v1.8.2 source release was
+published on 2026-10-26. Upstream publishes the Docker image through a separate, manually
+dispatched workflow (`publish-docker-release.yml`). On 2026-10-28 neither Docker Hub nor GHCR
+carried a v1.8.2 image, so `crowdsec_k8s_image` stays on v1.8.1. For comparison, the v1.8.1
+image was published 100 minutes after its release. Building a patched image through `k8s/image-builder` was rejected: it would take the WAF
 binary out of Renovate's view for a 0.05% loss.
 
 ## The Metabase dashboard was removed (2026-08-22)

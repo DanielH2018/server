@@ -269,3 +269,60 @@ def test_the_longhorn_reconcile_role_without_the_pvc_list_is_flagged(
     assert missing(needs, grants(docs, "longhorn-system", "longhorn-reconcile")) == [
         (None, "", "persistentvolumeclaims", "list", None)
     ]
+
+
+def _reaper_calls(monkeypatch) -> list[tuple[str, str]]:
+    """#6367: the dri-admission-reaper CronJob's calls on a run with one tombstone to delete."""
+    monkeypatch.syspath_prepend(str(K8S_ROLES / "dri-device-plugin" / "files"))
+    script = importlib.import_module("dri_admission_reaper")
+    calls = []
+    tombstone = {
+        "metadata": {
+            "name": "tdarr-1",
+            "uid": "u",
+            "ownerReferences": [{"kind": "ReplicaSet"}],
+        },
+        "status": {"phase": "Failed", "reason": "UnexpectedAdmissionError"},
+    }
+
+    class Recorder(script.Kube):
+        def __init__(self):
+            super().__init__("https://api", "token")
+
+        def call(self, method: str, path: str, body=None) -> tuple[int, dict]:
+            calls.append((method, path))
+            return 200, {"items": [tombstone]}
+
+    assert script.main([], {"REAPER_NAMESPACE": "homelab"}, Recorder()) == 0
+    return calls
+
+
+def _reaper_rbac() -> list[dict]:
+    return list(
+        yaml_fast.safe_load_all(
+            render_role_template("dri-device-plugin", "admission-reaper-rbac.yaml.j2")
+        )
+    )
+
+
+def test_the_admission_reaper_role_grants_every_call_its_script_makes(
+    monkeypatch,
+) -> None:
+    needs = rest_needs(_reaper_calls(monkeypatch))
+    assert needs == {
+        ("homelab", "", "pods", "list", None),
+        ("homelab", "", "pods", "delete", "tdarr-1"),
+    }
+    granted = grants(_reaper_rbac(), "homelab", "dri-admission-reaper")
+    assert missing(needs, granted) == []
+
+
+def test_the_admission_reaper_role_without_delete_is_flagged(monkeypatch) -> None:
+    needs = rest_needs(_reaper_calls(monkeypatch))
+    docs = _reaper_rbac()
+    for doc in docs:
+        for rule in doc.get("rules") or []:
+            rule["verbs"] = ["list"]
+    assert missing(needs, grants(docs, "homelab", "dri-admission-reaper")) == [
+        ("homelab", "", "pods", "delete", "tdarr-1")
+    ]
