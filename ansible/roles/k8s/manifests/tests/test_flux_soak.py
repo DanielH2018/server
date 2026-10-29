@@ -9,7 +9,6 @@ Run: uv run pytest ansible/roles/k8s/manifests/tests/test_flux_soak.py
 import re
 import subprocess
 
-
 import pytest
 
 import flux_soak
