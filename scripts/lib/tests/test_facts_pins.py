@@ -58,11 +58,6 @@ def test_the_real_tree_names_the_image_pins_it_must_find():
         "image:",
         "hosts/components/pi-compose/services/alloy/compose.yaml.j2",
     ) in {p[1:] for p in pins["grafana/alloy"]}
-    # The package component's canary (H5.2b), the first pin read from the second compose tree.
-    assert (
-        "image:",
-        "hosts/components/pi-compose/services/pi-canary/compose.yaml.j2",
-    ) in {p[1:] for p in pins["busybox"]}
     assert not [name for name in pins if "{{" in name or "code-server" in name]
 
 

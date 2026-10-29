@@ -212,7 +212,8 @@ restore under the GC's `flock`. [#5753](https://github.com/DanielH2018/server/pu
 (`ab684ae22`) landed in crowdsec's window. After its deploy, the `crowdsec-home-ips`
 ConfigMap held an IPv4 address and a /64, the sidecar logged `crowdsec-home-allowlist:
 status=up`, `up{job="alloy-pi"}` read 1, and the edge-probe counter read `status=302` five
-times. It also read one `403` at 01:07:09, during the LAPI restart (#5761).
+times. It also read one `403` at 01:07:09, during the LAPI restart. That 403 was the Ansible
+gate's own ban on the Pi, not a restart window (#5761).
 [#5739](https://github.com/DanielH2018/server/pull/5739) (`afbdd6e6f`) fixed the sidecar,
 whose every `cscli` call failed after #5711. The engine's entrypoint links `trace` into the
 data volume from `/staging`, which the python image lacks. #5756 records that a module only
@@ -227,7 +228,8 @@ the rendered `lapi-register` script twice in the pinned image with no network: t
 added the five machines and both allowlists, and the second printed nothing, so D5's
 `pods/exec` Job fallback is not needed. Live, `lapi-register` added only `crowdsec-verify`,
 because the four agents were already registered, and the new pod read `2/2 Running`. The
-edge answered the Pi's probe 403 once during the roll, as it did for #5753 (#5761). #5765
+edge answered the Pi's probe 403 once during the roll, as it did for #5753. Each 403 was a
+ban on the Pi, not a restart window (#5761). #5765
 carries #5764's head unchanged on a `worktree-claude+` branch, the only kind the `claude`
 user's GitHub account can update, because `land.sh` updates a PR branch whose base went
 stale.

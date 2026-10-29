@@ -66,6 +66,19 @@
       Disconnect immediately if you are not an authorized user.
   become: true
 
+- name: Deploy the weekly host-maintenance wrapper
+  tags: [crons, apt-hygiene, firmware]
+  # The three weekly maintenance crons run through it so each writes a homelab_check textfile
+  # that a NotReporting rule reads (#6179). `firmware` too, because crons.yml's firmware cron
+  # runs it, and every host gets it: the script is inert on a host whose cron never calls it.
+  ansible.builtin.copy:
+    src: host-maintenance.sh
+    dest: /usr/local/bin/host-maintenance.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Schedule weekly package autoremove
   tags: [crons, apt-hygiene]
   ansible.builtin.cron:
@@ -73,7 +86,7 @@
     minute: "0"
     hour: "2"
     weekday: "0"
-    job: "/usr/bin/apt-get autoremove -y -q 2>&1 | /usr/bin/logger -t apt-autoremove"
+    job: "/usr/local/bin/host-maintenance.sh apt-autoremove 2>&1 | /usr/bin/logger -t apt-autoremove"
     user: root
   become: true
 
@@ -84,6 +97,6 @@
     minute: "15"
     hour: "2"
     weekday: "0"
-    job: "dpkg -l | awk '/^rc/{print $2}' | xargs -r dpkg --purge 2>&1 | /usr/bin/logger -t dpkg-purge"
+    job: "/usr/local/bin/host-maintenance.sh dpkg-purge 2>&1 | /usr/bin/logger -t dpkg-purge"
     user: root
   become: true

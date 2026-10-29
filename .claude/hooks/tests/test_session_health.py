@@ -352,7 +352,7 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
     repo rule about verifying a moved entry point by RUNNING it rather than by running the suite.
 
     Deliberately a real subprocess reaching real external binaries: `curl` (via
-    `uv run probe.py targets`) and `journalctl`. The `_fence_external_binaries` conftest fixture
+    `uv run probe.py targets`). The `_fence_external_binaries` conftest fixture
     stubs them so this runs without side effects. `_fence_worktree_survey` stubs the worktree
     survey, whose runtime depends on how many worktrees the host carries. The calls file below
     is the proof that both fences held.
@@ -374,21 +374,22 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
         "other_live_sessions or master_moved_problems (both report through this string).\n"
         + proc.stdout
     )
-    # target_problems() and stale_release_problems() run unconditionally on every call to main(), so curl/journalctl
-    # are always exercised — unlike gh, which only fires per worktree on disk and so isn't
+    # target_problems() runs unconditionally on every call to main(), so its binary is
+    # always exercised — unlike gh, which only fires per worktree on disk and so isn't
     # asserted here. A stub silently dropped from PATH is
     # indistinguishable from a passing run without this: the real binaries would just run
     # underneath it.
     recorded = fenced_calls.read_text()
     for binary in (
         "curl",
-        "journalctl",
         "uv run python scripts/dev/prune_worktrees.py",
     ):
         assert binary in recorded, (
             f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"
             f"recorded calls:\n{recorded}"
         )
+    # stale_release_problems() reads the cron's verdict file and spawns nothing (#6183).
+    assert "journalctl" not in recorded, recorded
 
 
 def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch):

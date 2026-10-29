@@ -30,7 +30,6 @@ _INSTALL_MODULES = ("ansible.builtin.copy", "ansible.builtin.template")
 
 _KUMA = "pushes a Kuma heartbeat that pages a missed run; M6 moves it to a textfile"
 _HC = "pings a Healthchecks.io check that pages a missed run"
-_GAP = "GAP (#6179): changes the host with no deadman; a run that stops is silent"
 
 EXEMPT: dict[str, str] = {
     "claude_code: timer `claude-cgroup-metrics`": (
@@ -57,9 +56,6 @@ EXEMPT: dict[str, str] = {
         "writes /var/lib/gitops-deploy/last_run every tick, which monitor-bridge's GitOps-Alive "
         "check reads, and gitops_tick_metrics.py counts each tick by outcome"
     ),
-    "initial_setup: cron `Weekly apt autoremove`": _GAP,
-    "initial_setup: cron `Weekly dpkg purge orphaned configs`": _GAP,
-    "initial_setup: cron `Weekly firmware update`": _GAP,
     "initial_setup: cron `Weekly system restart`": _HC,
     "initial_setup: cron `Clean unused Docker images`": _HC,
     "k3s: cron `Longhorn filesystem trim`": (
@@ -221,7 +217,8 @@ def test_census_resolves_each_route_a_writer_takes():
         "renovate_agent: timer `renovate-agent`",
     }
     assert {key for key in writers if found.get(key)} == writers
-    assert found.get("initial_setup: cron `Weekly apt autoremove`") is False
+    assert found.get("initial_setup: cron `Weekly apt autoremove`") is True
+    assert found.get("initial_setup: cron `Weekly system restart`") is False
 
 
 # ── Fixture pairs ─────────────────────────────────────────────────────────────────────

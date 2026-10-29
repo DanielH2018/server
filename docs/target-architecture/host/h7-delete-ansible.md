@@ -1190,7 +1190,7 @@ H7.19b.
   H7.20a deletes. The exemption names a timer this PR removes. The removal therefore lands
   before H7.19b and H7.20a. It lands no earlier than the fifth PR, because until the timer
   stops a tick can still hold the `all` lock. `k3s_gates.py` ships in both hosts'
-  `k3s-restart` component (H6), so the PR publishes new versions of both host packages,
+  `k3s-gates` component (H6, #6413), so the PR publishes new versions of both host packages,
   and daniel-box gets the gate change in the same version that removes the timer. The PR
   body quotes H6's gate, parity and window tests passing at its head, and `git grep -n -E
   'server-deploy-all|SERVICE_LOCK_ALL' -- hosts/` printing nothing.

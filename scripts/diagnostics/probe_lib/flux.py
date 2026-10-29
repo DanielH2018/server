@@ -281,6 +281,22 @@ def failed_dependency(rows: dict[str, Row], name: str, seen=frozenset()) -> str 
     return None
 
 
+def _root_failure(rows: dict[str, Row], dep: str) -> Row:
+    """The row whose failure holds `dep`, the dependency `failed_dependency` named.
+
+    That is `dep` itself unless `dep` is DependencyNotReady, in which case the chain is
+    followed down to the dependency that failed.
+    """
+    seen = set()
+    while rows[dep].reason == "DependencyNotReady" and dep not in seen:
+        seen.add(dep)
+        nxt = failed_dependency(rows, dep)
+        if nxt is None:
+            break
+        dep = nxt
+    return rows[dep]
+
+
 def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
     """The table and the verdict for `flux <tags>`, as (text, exit code)."""
     kustomizations, sources = split(items)
@@ -379,17 +395,22 @@ def wait_state(
     requires the source to serve `expected` itself, so a failure at another commit keeps the
     wait open rather than ending it.
 
+    A DependencyNotReady row is `failed` when `failed_dependency` names a dependency, because
+    Flux holds it there until someone fixes that dependency (#6354). The dependency at the end
+    of that chain must have attempted the artifact its source serves, so a failure left over
+    from an older commit keeps the wait open.
+
     Args:
         contains: `contains`'s signature, injectable so a test needs no git history.
     """
     kustomizations, sources = split(items)
-    match = [k for k in kustomizations if kustomization_name(k) == name]
-    if not match:
+    rows = {r.name: r for r in (row(k, sources) for k in kustomizations)}
+    if name not in rows:
         return {
             "state": "absent",
             "detail": f"no Kustomization {name} in {FLUX_NAMESPACE}",
         }
-    r = row(match[0], sources)
+    r = rows[name]
     want = expected or r.served
     if r.suspended:
         return {
@@ -423,6 +444,22 @@ def wait_state(
         return {
             "state": "failed",
             "detail": f"{name} failed at {_short(r.served)}: {r.reason}: {r.message[:300]}",
+        }
+    dep = (
+        failed_dependency(rows, name)
+        if r.observed
+        and r.ready == "False"
+        and r.reason == "DependencyNotReady"
+        and source_at_want
+        else None
+    )
+    root = _root_failure(rows, dep) if dep else None
+    if root is not None and root.attempted_served:
+        return {
+            "state": "failed",
+            "detail": f"{name} is held at DependencyNotReady: dependency {dep} failed"
+            + (f" (held by {root.name})" if root.name != dep else "")
+            + f": {root.reason}: {root.message[:300]}",
         }
     return {
         "state": "progressing",

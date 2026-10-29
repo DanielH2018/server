@@ -13,7 +13,7 @@
 #
 # Since H5.2b it ships the Pi's Compose project (the pi-compose component) with its enable link and
 # the first service, `pi-canary`. The canary reads no secret, so `credentials:` is unchanged and
-# the Pi's SOPS file needs no new key.
+# the Pi's SOPS file needs no new key. H5.10 removed the canary from the project.
 #
 # Since H5.6 the project also runs docker-proxy and its docker-proxy-lifecycle sub-proxy, which
 # read no secret.

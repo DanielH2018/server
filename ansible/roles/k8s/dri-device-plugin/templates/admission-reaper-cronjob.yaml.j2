@@ -1,0 +1,86 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  Deletes the Failed pods the kubelet rejected at admission because this role's plugin had not
+  re-registered `devic.es/dri` yet, once their ReplicaSet has replaced them (#6367).
+  files/dri_admission_reaper.py holds the rule and what it leaves alone; this file schedules it.
+
+  It runs in the workload namespace rather than beside the DaemonSet in kube-system, because the
+  pods it deletes are there and a Role grants only in its own namespace. The namespace baseline
+  fences ingress only, and the job takes no connection, so it needs no `netpol_from` grant.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ k8s_namespace }}
+data:
+  dri_admission_reaper.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py') | indent(4, true) }}
+  flux_job_connect.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/manifests/files/flux_job_connect.py') | indent(4, true) }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ dri_device_plugin_reaper_schedule }}"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  # A missed run is not made up: the next one lists the Failed pods again.
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    metadata:
+      labels:
+        app: dri-admission-reaper
+    spec:
+      activeDeadlineSeconds: {{ dri_device_plugin_reaper_deadline_seconds }}
+      # No retry: the next run is one period away.
+      backoffLimit: 0
+      ttlSecondsAfterFinished: {{ dri_device_plugin_reaper_job_ttl_seconds }}
+      template:
+        metadata:
+          labels:
+            app: dri-admission-reaper
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          serviceAccountName: dri-admission-reaper
+          automountServiceAccountToken: true
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          priorityClassName: homelab-best-effort
+          containers:
+            - name: dri-admission-reaper
+              image: {{ dri_device_plugin_reaper_image }}
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/jobs/dri_admission_reaper.py"]
+              env:
+                - name: REAPER_NAMESPACE
+                  value: "{{ k8s_namespace }}"
+                # The API server's CA, which the automounted token volume carries.
+                - name: SSL_CERT_FILE
+                  value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+{{ job_hardened_security_context(read_only=true) }}
+              volumeMounts:
+                - name: dri-admission-reaper-code
+                  mountPath: /jobs
+                  readOnly: true
+{{ job_container_resources(cpu_limit='100m', mem_limit='64Mi', cpu_request='10m', mem_request='32Mi') }}
+          volumes:
+            - name: dri-admission-reaper-code
+              configMap:
+                name: dri-admission-reaper

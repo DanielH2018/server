@@ -16,6 +16,9 @@ and home-assistant's `jinja_harness.py` to the proc_testing rules.
 Run: uv run pytest scripts/tests/test_census_rows_test_modules.py
 """
 
+import re
+import tomllib
+
 import pytest
 from _row_table import (
     Census,
@@ -23,6 +26,7 @@ from _row_table import (
     check,
     lines_matching,
     proof_problems,
+    share,
 )
 from _test_module_rules import (
     GIT_SCRUB,
@@ -33,6 +37,8 @@ from _test_module_rules import (
     raw_git_calls,
     unbounded_launches,
 )
+
+from lib.repo_paths import REPO
 
 SELF = "scripts/tests/test_census_rows_test_modules.py"
 
@@ -242,6 +248,11 @@ ROWS = (
     ),
 )
 
+# Every row here and in its sibling file reads the same census, so they judge each module in
+# one pass over one tree (#6437, #6465).
+ROWS = share(ROWS)
+
+
 _IDS = [row.name for row in ROWS]
 
 
@@ -254,3 +265,20 @@ def test_census_row_holds_on_the_tree(row: Census):
 @pytest.mark.parametrize("row", ROWS, ids=_IDS)
 def test_census_row_flags_its_red_subjects_and_passes_its_green_ones(row: Census):
     assert not proof_problems(row)
+
+
+def test_the_census_hook_gate_matches_every_module_the_census_reads():
+    """These rows run in their own prek hook, gated on the census (#5599).
+
+    A module the census judges that the gate misses can change alone and skip both files.
+    """
+    hooks = tomllib.loads((REPO / "prek.toml").read_text())["repos"]
+    gate = next(
+        hook["files"]
+        for repo in hooks
+        for hook in repo.get("hooks", [])
+        if hook.get("id") == "static-ratchet-tests-test-modules"
+    )
+    census = pytest_only_modules()
+    assert "ansible/tests/k8s/_manifest_guards.py" in census
+    assert [path for path in census if not re.search(gate, path)] == []

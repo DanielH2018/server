@@ -1,6 +1,7 @@
 # H5 — Pi Compose
 
-Status: PLANNED
+Status: IN PROGRESS. H5.1 to H5.10 and H5.14 landed; H5.10 removed `pi-canary`. H5.11 to H5.13 are
+left.
 Depends on: H3, H4
 Unblocks: H7
 
@@ -300,8 +301,8 @@ reading `containers_list` alone. At `70591c307` the answer is:
 **Census.** A test in `ansible/tests/setup/` fails on three conditions:
 
 - a name appears in both keys;
-- a `compose_services` entry other than `pi-canary` has no legacy entry for its Ansible-era
-  compose file in the `pi-compose` component;
+- a `compose_services` entry has no legacy entry for its Ansible-era compose file in the
+  `pi-compose` component. H5.2b's canary was the one exemption until H5.10 removed it;
 - one of the three cluster readers, or the recovery script, renders differently after any one
   entry moves from `containers_list` to `compose_services`. The cluster readers render
   twice. One render goes through `ansible/tests/_k8s_render.py`, which builds its `hostvars`
@@ -1382,8 +1383,12 @@ upstream, revert its downstreams before it.
   covers a failed run that leaves every container running. H3's `HostReconcileFailed`
   (PR H3.5d, C7) pages for a Pi held with `homelab_host_reconcile_ok` at 0 for 15 minutes,
   whatever caused the hold. `ComposeUpStale` (#6187) pages a compose result older than the
-  Pi's last boot, once the boot is older than the unit's `TimeoutStartSec` plus 300 s. A
-  restart by reconcile that writes no result leaves the stale value until the next boot.
+  Pi's last boot, once the boot is older than the unit's `TimeoutStartSec` plus 300 s.
+  `ComposeRestartUnreported` (#6342) pages a start or restart by reconcile that wrote no
+  result. Reconcile records when it called the unit as `homelab_host_unit_started_seconds`,
+  and the rule fires for 5 minutes while the compose result's timestamp predates that call.
+  That catches a write that failed after a successful `up`, which exits 0 and leaves
+  `HostReconcileFailed` quiet.
 - **A compose run lengthens the Pi's reconcile.** One run takes up to the unit's derived
   `TimeoutStartSec`, 1390 s or about 23 minutes at `70591c307`'s healthcheck values. That is
   inside reconcile's `TimeoutStartSec=30min`, and the unit-timeout test holds the relation.

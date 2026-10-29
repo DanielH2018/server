@@ -7,8 +7,8 @@ rule applies to the pair, and so does a reader rule: a service that moves from o
 other must change nothing a reader renders. This census fails on three conditions:
 
 - a name appears in both keys;
-- a `compose_services` entry other than `pi-canary` has no legacy entry for its Ansible-era
-  compose file in the Pi package;
+- a `compose_services` entry has no legacy entry for its Ansible-era compose file in the Pi
+  package;
 - one of the three cluster readers (monitor-bridge, observability, artifacts) or the recovery
   heartbeat's script renders differently after any one entry moves.
 
@@ -41,8 +41,6 @@ HOST = "daniel-pi"
 HOSTS = (HOST, "daniel-box", "daniel-server")
 READERS = ("monitor-bridge", "observability", "artifacts")
 BRIDGE = frozenset({"monitor-bridge"})
-# The one `compose_services` entry with no Ansible-era compose file (H5.2b's canary).
-NO_LEGACY = "pi-canary"
 RECOVERY_SCRIPT = "/usr/lib/homelab/pi-recovery-health"
 # Named members the census must find, so a census that read neither key would fail.
 MUST_FIND = {"docker-proxy", "alloy"}
@@ -69,8 +67,7 @@ def without_legacy(doc: dict, legacy: list[dict]) -> set[str]:
     return {
         entry["name"]
         for entry in pi_lists(doc)[1]
-        if entry["name"] != NO_LEGACY
-        and not any(
+        if not any(
             p.endswith(f"/containers/{entry['name']}/docker-compose.yml") for p in paths
         )
     }
@@ -185,7 +182,6 @@ def test_a_compose_service_with_no_legacy_entry_is_flagged():
         "compose_services": [
             {"name": "alloy"},
             {"name": "autoheal"},
-            {"name": NO_LEGACY},
         ],
     }
     assert without_legacy(doc, legacy) == {"autoheal"}
