@@ -123,8 +123,15 @@ additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
 # their comments, which name the worktree and styles/ trees). Excluding paths is a chase:
 # every new untracked directory is another entry. Not walking is the fix.
 #
+# The `export` keeps ansible-core's local temp directory out of `~/.ansible/tmp`. ansible-galaxy
+# and ansible-lint both import ansible-core's constants, which create `ansible-local-<pid>…`
+# there and remove it only from an atexit handler. A hook killed by a signal, as when a
+# harness kills a background `git commit`, runs no handler and leaves the directory behind
+# (#6260). The target is the directory `ansible/tests/leakguard.py` sweeps of dead pids at
+# the start of every pytest run, so a killed lint's directory lasts until the next run.
+#
 # ENFORCED by scripts/tests/test_ansible_lint_hook.py.
-entry = "bash -c 'if [ \"$#\" -eq 0 ]; then exit 0; fi; ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint \"$@\"' --"
+entry = "bash -c 'if [ \"$#\" -eq 0 ]; then exit 0; fi; export ANSIBLE_LOCAL_TEMP=\"${TMPDIR:-/tmp}/pytest-ansible-local-$(id -u)\"; ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint \"$@\"' --"
 pass_filenames = true
 # REQUIRED, not a tuning knob. Without it prek shards the filenames across parallel
 # invocations — measured at 16 batches of ~21-39 files for a full run, each one re-running the

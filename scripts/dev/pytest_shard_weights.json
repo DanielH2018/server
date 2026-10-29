@@ -558,6 +558,7 @@
  "ansible/tests/repo/test_kind_node_image_follows_k3s.py": 0.0,
  "ansible/tests/repo/test_lan_facts_have_one_source.py": 1.06,
  "ansible/tests/repo/test_leakguard.py": 1.88,
+ "ansible/tests/repo/test_leakguard_child_env.py": 0.01,
  "ansible/tests/repo/test_m6_alerts_for_state_restart_reading.py": 0.0,
  "ansible/tests/repo/test_module_length_ratchet.py": 5.35,
  "ansible/tests/repo/test_owner_entry_points_census.py": 0.21,

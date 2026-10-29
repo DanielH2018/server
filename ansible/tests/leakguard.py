@@ -59,9 +59,16 @@ defaults to `/var/lib/node-exporter-textfile`, which node_exporter scrapes. On d
 the deploy user can write there, so a test that ran a check script published its fake verdict
 as a production metric (#6191). `pytest_configure` sets `TEXTFILE_DIR` to a directory under the
 stub directory, overriding any exported value, so every child that inherits this process's
-environment writes there. A child given an environment built from scratch inherits nothing:
-`lib.proc_testing.run` carries `TEXTFILE_DIR` into such an environment itself, and a test that
-calls `subprocess` directly passes `TEXTFILE_DIR` in its own `env`.
+environment writes there.
+
+A child given an environment built from scratch inherits nothing, so the plugin also wraps
+`subprocess.Popen.__init__`. Every launch that passes `env=` gets each `CARRIED_VARS` entry
+it does not set itself: `TEXTFILE_DIR`, and `LEAKGUARD_CALLS` so a shim the child reaches
+records the call. Two tests once wrote fake verdicts into the real directory that way
+(#6191, #6238). The wrapper covers `subprocess.run`, `Popen`, `lib.proc_testing.run` and
+asyncio's subprocesses alike, because all of them construct a `Popen`. A test that sets its
+own `TEXTFILE_DIR` keeps it. The wrapper carries no `PATH` prefix; the `DECIDED:` marker at
+the wrapper says why.
 
 ## Ansible's local temp directory points at a temp directory
 
@@ -119,6 +126,7 @@ import os
 import re
 import shutil
 import socket
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -222,6 +230,21 @@ def strip_env(environ, names) -> list[str]:
     return removed
 
 
+# What the `Popen` wrapper copies from this process into an explicit child `env` that lacks
+# them. `pytest_configure` sets both, so a child built from scratch still writes its textfile
+# under the stub directory and still records a shim call.
+CARRIED_VARS = ("TEXTFILE_DIR", "LEAKGUARD_CALLS")
+
+
+def carry_vars(env, environ) -> dict[str, str]:
+    """`env` as a new dict, plus each `CARRIED_VARS` entry `environ` has and `env` lacks."""
+    carried = dict(env)
+    for name in CARRIED_VARS:
+        if name in environ:
+            carried.setdefault(name, environ[name])
+    return carried
+
+
 ANSIBLE_LOCAL_TEMP_DIR = (
     Path(tempfile.gettempdir()) / f"pytest-ansible-local-{os.getuid()}"
 )
@@ -318,6 +341,22 @@ def pytest_configure(config: pytest.Config) -> None:
     textfile_dir = stub_dir / "textfile"
     textfile_dir.mkdir()
     os.environ["TEXTFILE_DIR"] = str(textfile_dir)
+
+    real_popen_init = subprocess.Popen.__init__
+
+    # DECIDED: the wrapper carries no PATH prefix. Prepending the stub directory to an
+    # explicit env's PATH would put the shims in FRONT of the test's own stub directory, so a
+    # test's stub `curl` would lose to the shim, and a test that pins `/usr/bin:/bin` to hide
+    # a binary would find a shim instead. A child given a hand-built PATH reaches the real
+    # binaries, as it did before.
+
+    def carrying_popen_init(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        # Every caller in this repo passes `env` by keyword; a positional one is not covered.
+        if kwargs.get("env") is not None:
+            kwargs["env"] = carry_vars(kwargs["env"], os.environ)
+        real_popen_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = carrying_popen_init  # type: ignore[method-assign]
 
     real_connect = socket.socket.connect
     real_connect_ex = socket.socket.connect_ex
