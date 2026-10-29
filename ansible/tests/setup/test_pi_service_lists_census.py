@@ -232,6 +232,9 @@ def test_a_reader_of_containers_list_alone_is_flagged(tmp_path):
     playbook = tmp_path / "ansible"
     roles = playbook / "roles" / "k8s"
     shutil.copytree(K8S_ROLES / "monitor-bridge", roles / "monitor-bridge")
+    # The env template reads the updater units from `../hosts` to size the lag grace (#6530).
+    for unit in ("packages/homelab-updater/units", "daniel-pi/units"):
+        shutil.copytree(REPO / "hosts" / unit, tmp_path / "hosts" / unit)
     template = roles / "monitor-bridge" / "templates" / "config" / "env.yaml.j2"
     source = template.read_text()
     second = " + (hostvars['daniel-pi'].compose_services | published_ports)"
