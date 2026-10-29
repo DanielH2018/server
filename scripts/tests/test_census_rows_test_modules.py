@@ -21,6 +21,7 @@ from _row_table import (
     Census,
     Subject,
     check,
+    drop_parsed,
     lines_matching,
     proof_problems,
 )
@@ -241,6 +242,14 @@ ROWS = (
         ),
     ),
 )
+
+
+# The shared trees are about 540 MiB, and the worker that ran this file goes on to run others.
+@pytest.fixture(autouse=True, scope="module")
+def _release_parsed_trees():
+    yield
+    drop_parsed()
+
 
 _IDS = [row.name for row in ROWS]
 

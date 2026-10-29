@@ -17,7 +17,7 @@ from _render_helper_rules import (
     local_repo_roots,
     shell_template_source_reads,
 )
-from _row_table import Census, Subject, check, proof_problems
+from _row_table import Census, Subject, check, drop_parsed, proof_problems
 from _test_module_rules import MODULE_FLOOR, pytest_only_modules
 
 from lib.repo_paths import REPO
@@ -356,6 +356,14 @@ ROWS = (
         },
     ),
 )
+
+
+# The shared trees are about 540 MiB, and the worker that ran this file goes on to run others.
+@pytest.fixture(autouse=True, scope="module")
+def _release_parsed_trees():
+    yield
+    drop_parsed()
+
 
 _IDS = [row.name for row in ROWS]
 

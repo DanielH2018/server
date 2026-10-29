@@ -8,7 +8,15 @@ Run: uv run pytest ansible/tests/repo/test_row_table.py
 
 from dataclasses import replace
 
-from _row_table import Census, Subject, check, proof_problems, tracked
+from _row_table import (
+    Census,
+    Subject,
+    check,
+    drop_parsed,
+    parse,
+    proof_problems,
+    tracked,
+)
 
 
 def _toy(**overrides) -> Census:
@@ -76,3 +84,12 @@ def test_tracked_reads_this_checkout():
     """Without this, a `tracked` that returned nothing would turn every row into `subject gone`
     rather than into a pass, which is loud, but the failure would name the wrong cause."""
     assert "ansible/tests/_row_table.py" in tracked("ansible/tests/*.py")
+
+
+def test_parse_shares_one_tree_until_drop_parsed_releases_it():
+    source = "x = 'test_row_table drop_parsed sample'\n"
+    first = parse(source)
+    assert parse(source) is first
+    drop_parsed()
+    assert parse.cache_info().currsize == 0
+    assert parse(source) is not first

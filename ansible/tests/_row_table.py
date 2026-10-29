@@ -103,6 +103,18 @@ def parse(source: str) -> ast.Module:
     return tree
 
 
+def drop_parsed() -> None:
+    """Release every tree `parse` holds, for a census file to call once its last row has run.
+
+    It bounds how long a worker holds the trees, not how many: a worker running both census
+    files back to back parses the census once per file. Each tree is acyclic, so dropping the
+    cache frees it by reference count. `gc.unfreeze` hands the frozen objects back to the
+    collector, so a cycle frozen with them can be collected again.
+    """
+    parse.cache_clear()
+    gc.unfreeze()
+
+
 # ── The textual census row ────────────────────────────────────────────────────────────
 
 
