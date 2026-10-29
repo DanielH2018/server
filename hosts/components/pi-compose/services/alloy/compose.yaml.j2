@@ -5,9 +5,9 @@
     ansible/templates on its search path. The values are the ones the macros rendered for the Pi.
     This header holds what the role's CLAUDE.md said; the comments below carry the rest.
 
-    - **Pin policy.** The image is pinned by tag AND digest, moved by hand when the cluster's
-      Alloy (`roles/k8s/loki-homelab/defaults/main.yml`) moves. H5.11 adds a Renovate manager
-      for this file.
+    - **Pin policy.** The image is pinned by tag AND digest. Renovate moves it in lockstep with
+      the cluster's Alloy (`roles/k8s/loki-homelab/defaults/main.yml`), in one manual PR
+      (H5.11).
     - **Host.** daniel-pi only. The cluster nodes run the loki-homelab DaemonSet.
     - **The port is on the Pi's LAN IP.** Prometheus scrapes it as `alloy-pi`, and everything
       but `/metrics` needs basic auth (the `DECIDED:` marker on `ports:` below).
@@ -86,9 +86,10 @@ services:
     container_name: alloy
     # Tag AND digest, unlike the :latest@sha256 the Promtail role carried: Alloy is the shipper
     # the cluster pins by tag in roles/k8s/loki-homelab/defaults/main.yml, and keeping the two
-    # on one version keeps one label contract. Renovate does not track hosts/components/pi-compose/** until H5.11 —
-    # no manager's matchFileNames reaches it (renovate.json) — so this pin moves by hand when
-    # the cluster's does. The digest is the arm64 manifest, resolved on daniel-pi 2026-09-02.
+    # on one version keeps one label contract. Renovate moves this pin and the cluster's in one
+    # manual PR: the `grafana/alloy (manual — lockstep ...)` group in renovate.json (H5.11).
+    # The digest is the arm64 manifest, resolved on daniel-pi 2026-09-02. A Renovate bump
+    # writes the multi-arch index digest instead, which Docker resolves to arm64 on the Pi.
     image: grafana/alloy:v1.19.2@sha256:b8ec653c44235fbe910879145dac3597d66b0aaecf60bcbbe82580767771a839
     restart: unless-stopped
     command:
