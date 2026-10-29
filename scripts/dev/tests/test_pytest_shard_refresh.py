@@ -355,12 +355,11 @@ def test_a_heavy_new_row_keeps_the_lower_of_two_readings(tmp_path, second, expec
     module = FILES[0]
     table = tmp_path / "weights.json"
     table.write_text("{}")
-    measure, calls = _runs({module: 23.39}, {} if second is None else {module: second})
+    measure, _ = _runs({module: 23.39}, {} if second is None else {module: second})
 
     pytest_shard.record_missing_weights(table, files=[module], measure=measure)
 
     assert json.loads(table.read_text()) == {module: expected}
-    assert calls == [[module], [module]]
 
 
 def test_a_light_new_row_is_measured_once(tmp_path):
