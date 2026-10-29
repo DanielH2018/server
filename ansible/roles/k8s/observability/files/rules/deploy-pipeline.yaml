@@ -23,9 +23,10 @@ groups:
         annotations:
           summary: The repository variable DEPLOY_HOLD has held promotion for 15 minutes.
           description: >-
-            DEPLOY_HOLD reads something other than none, so promote moves prod nowhere. Read
-            it with gh variable get DEPLOY_HOLD and run probe.py landing; docs/flux-deploy-plane.md
-            says how to clear each form of hold.
+            DEPLOY_HOLD reads something other than none, so promote moves prod nowhere. Read it with
+            `gh variable get DEPLOY_HOLD` and run `probe.py landing`; docs/flux-deploy-plane.md says
+            how to clear each form of hold.
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/
       # A green master commit that prod lacks, more than 2 hours after it went green, with no
       # hold to explain it: promote is not running, or its runs end without moving prod. The
       # first `and on()` drops the alert while a hold stands, which DeployHoldActive already
