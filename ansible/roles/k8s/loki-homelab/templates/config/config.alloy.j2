@@ -233,9 +233,12 @@ loki.process "k3s" {
   // kube-router warns once per IPv6 ipBlock of the traefik NetworkPolicy on every policy sync,
   // because the cluster is single-stack IPv4: 29400 of daniel-box's 29688 klog warnings in the
   // measured day, and 29701 lines on daniel-server. Shipping it would be the volume the
-  // unit-logging comment keeps k3s out of Loki for. Only that one message is dropped.
-  stage.drop {
-    expression          = "^W[0-9]{4} .* policy[.]go:[0-9]+[]] Ignoring IPv6 source IP blocks "
+  // unit-logging comment keeps k3s out of Loki for. Only that one message is dropped. A match
+  // stage rather than a bare stage.drop: test_traefik_access_log_drop.py holds every stage.drop
+  // in this file inside a stage.match, so no drop can reach the pod pipeline unscoped.
+  stage.match {
+    selector            = "{job=\"{{ loki_streams.host_k3s.job }}\"} |~ `^W[0-9]{4} .* policy[.]go:[0-9]+[]] Ignoring IPv6 source IP blocks `"
+    action              = "drop"
     drop_counter_reason = "k3s_kube_router_ipv6_ipblock"
   }
 }

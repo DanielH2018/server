@@ -9,7 +9,7 @@ wrong:
 - the filter lets info lines through, and the volume the unit-logging comment guards against
   reaches Loki.
 
-The selector and the drop expression are READ OUT of the rendered config rather than restated.
+The match selectors are READ OUT of the rendered config rather than restated.
 Alloy compiles them as RE2. Python's `re` stands in, which is equivalent for these patterns:
 anchors, bracket classes, bounded repeats and alternation, with no backslash escapes.
 """
@@ -88,10 +88,6 @@ def _ships(k3s_block: str, line: str) -> bool:
             assert m, f"unexpected selector shape: {selector}"
             hit = re.search(m[2], line) is not None
             if hit == (m[1] == "|~"):
-                return False
-        elif kind == "drop":
-            expression = _river_attr(body, "expression")
-            if re.search(expression, line):
                 return False
         else:
             raise AssertionError(f"unexpected stage.{kind} in the k3s block")
