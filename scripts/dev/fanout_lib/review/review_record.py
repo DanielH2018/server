@@ -68,6 +68,9 @@ class Record:
     findings: list[dict] = field(default_factory=list)
     actionable: list[dict] = field(default_factory=list)
     remaining: list[dict] = field(default_factory=list)
+    # The findings the delta review reported without a quote the fix head's file holds near
+    # the cited line (`delta_confirm`, #6547). They are carried, not left: they hold nothing.
+    unverified: list[dict] = field(default_factory=list)
     # The red gate's verdict (#3674): "" when the batch had no red phase, else "passed" or the
     # gate's reason. The test author reruns its tests until they fail, so a refusal is rare
     # whatever the tests are worth; `green_first` and the `red_hunks` fields measure them.
@@ -271,6 +274,11 @@ def comment_body(record: Record) -> str:
         f"{CONFIDENCE_FLOOR} or more), "
         f"{len(record.remaining)} left after the fix round."
     )
+    if record.unverified:
+        lines.append(
+            f"{len(record.unverified)} more carried unverified: the delta review reported "
+            "them without quoting a line the fix head still has, so they do not hold the PR."
+        )
     if held:
         lines.append(
             f"{held} security findings are held off this public page and kept in the "
