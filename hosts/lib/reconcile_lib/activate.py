@@ -176,7 +176,7 @@ def activate(
         kind, _, unit = action.partition(":")
         problem = validate(kind, unit, paths)
         if problem:
-            say(f"{action}: {problem}; leaving the running service as it is")
+            say(f"{action}: {problem}; leaving the running service as it is", ERR)
             VALIDATE_FAILED.parent.mkdir(parents=True, exist_ok=True)
             VALIDATE_FAILED.touch()
         succeeded = problem is None and perform(kind, unit, policies, called, pending)
