@@ -19,7 +19,7 @@ Re-examined 2026-09-28 (#2808). Both renders share one derivation, so moving the
 single source of truth, and it loses locality: inject-nested-docs puts a role doc's head, this
 block first, in front of a session that touches the role, and nothing injects `services.md`.
 
-ONE FIELD SET PER ROLE SHAPE, not one schema (#2096). The three planes declare different
+ONE FIELD SET PER ROLE SHAPE, not one schema (#2096). The two planes declare different
 facts in different places, and a single schema would print "none" for most fields on most
 roles:
 
@@ -39,15 +39,9 @@ roles:
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
   `roles:` lists and `include_role` tasks of the bring-up playbooks; every cron it installs,
   with its schedule; every systemd timer it ships, with its `[Timer]` cadence keys;
-- a Pi compose role (`roles/containers/<name>/`, every entry of the Pi's `containers_list`):
-  the deploy tag with the `-e target=daniel-pi` the Pi needs, the image repositories the
-  compose template pins and the services that carry each, the entry's port, networks and
-  Authelia stance, and whether the role passes
-  `common_config_changed` into `docker_deploy` (the wiring a bind-mounted config file needs
-  to recreate the container — `roles/containers/common/CLAUDE.md`).
 
 A doc with no `## At a glance` heading is refused on the k8s plane (all of them carry it,
-and `test_service_role_claude_md_has_at_a_glance.py` requires it) and given one on the other two: the
+and `test_service_role_claude_md_has_at_a_glance.py` requires it) and given one on the setup plane: the
 setup docs never had the heading, so the generator inserts it before the doc's first
 level-2 heading, or at the end of a doc that has none.
 
@@ -57,9 +51,7 @@ non-major or digest bump to an eligible role's `_image:` pin (`renovate.json`, t
 resolved pin would fall stale on exactly those PRs, and the gate would turn every one of
 them red — an automerge path traded for a doc field. The repository moves only in a
 deliberate PR, where regenerating is one command. The tag is one `grep` away in the var
-the line names. The Pi's compose pins are moved by hand (Renovate's built-in compose
-manager does not read a `.j2`), so the rule costs nothing there and is kept for one shape
-of image line across every plane.
+the line names.
 
 RUN AT COMMIT TIME, NOT BY THE DOCS-REFRESH CRON. The `regen-role-glance` prek hook runs
 `--fix` on every commit that touches a source this generator reads (#3698). It rewrites a
@@ -115,10 +107,8 @@ from docs.catalog_lib.catalog_backup import (
 from docs.catalog_lib.catalog_facts import auth_tier, k8s_route
 from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES
 from docs.catalog_lib.glance_facts import (
-    CONTAINERS_ROLES,
     SETUP_ROLES,
     image_repository,
-    pi_glance_lines,
     setup_glance_lines,
     setup_role_dirs,
 )
@@ -152,7 +142,6 @@ BEGIN = begin_marker(
 BEGIN_SETUP = begin_marker(
     "tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml"
 )
-BEGIN_PI = begin_marker("compose template, tasks or containers_list entry")
 END = "<!-- /generated_from -->"
 # Where promote's `images` job pushes each built image. `renderer_lib/images.py` holds the same
 # prefix, and importing it would pull the whole renderer into this hook's `files` closure, so
@@ -165,7 +154,7 @@ class MissingHeading(ValueError):
     """The doc has no `## At a glance` heading to put the block under."""
 
 
-# --- k8s-plane facts (the setup and Pi readers are in glance_facts.py) ---------------------
+# --- k8s-plane facts (the setup readers are in glance_facts.py) ---- ---------------------
 
 
 def image_vars(
@@ -478,31 +467,10 @@ def stale_setup_docs(
     return stale
 
 
-def stale_pi_docs(
-    *,
-    write: bool,
-    estate: Estate | None = None,
-    containers_roles: Path = CONTAINERS_ROLES,
-) -> list[str]:
-    """`containers/<name>` for every Pi compose role whose block differs from a fresh render."""
-    stale: list[str] = []
-    for entry in (estate or Estate()).pi_entries():
-        name = entry["name"]
-        role_dir = containers_roles / name
-        block = render_block(pi_glance_lines(entry, role_dir), BEGIN_PI)
-        if _refresh(role_dir / "CLAUDE.md", block, write=write, create_heading=True):
-            stale.append(f"containers/{name}")
-    return stale
-
-
 def stale_docs(*, write: bool) -> list[str]:
     """Every plane's stale docs, `<plane>/<role>`; writes them if asked."""
     estate = Estate()
-    return (
-        stale_k8s_docs(write=write, estate=estate)
-        + stale_setup_docs(write=write)
-        + stale_pi_docs(write=write, estate=estate)
-    )
+    return stale_k8s_docs(write=write, estate=estate) + stale_setup_docs(write=write)
 
 
 def report(stale: list[str], *, check: bool, fix: bool) -> int:

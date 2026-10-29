@@ -21,6 +21,14 @@
   become: true
   notify: Restart deploy-ui
 
+- name: Install the shared host_lib helper beside deploy-ui
+  tags: [deploy-ui-code]
+  # Before deploy_ui.py: its request line comes from host_lib's `logfmt` (#6202).
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: "{{ deploy_ui_dir }}"
+    host_lib_notify: Restart deploy-ui
+
 - name: Install the deploy-ui files
   tags: [deploy-ui-code]
   ansible.builtin.copy:
@@ -73,3 +81,7 @@
         src: ansible/roles/setup/gitops_deploy/files/gitops_hold.py
       - live: "{{ deploy_ui_dir }}/deploy_ui.html"
         src: ansible/roles/setup/deploy_ui/files/deploy_ui.html
+      - live: "{{ deploy_ui_dir }}/host_lib.py"
+        src: hosts/lib/host_lib.py
+      - live: "{{ deploy_ui_dir }}/kuma_push.py"
+        src: hosts/lib/kuma_push.py

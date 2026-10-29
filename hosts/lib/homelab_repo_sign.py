@@ -45,7 +45,8 @@ the set's chosen SHA), `key`, `index`, `sign`, `staged` (it is not a plain direc
 `io`, a filesystem or tool error.
 
 It runs under the host's `/usr/bin/python3`, Ubuntu 24.04's 3.12, with the standard library
-only, so pyproject.toml formats it for 3.12.
+only, so pyproject.toml formats it for 3.12. It imports `host_lib.py`, which the builder component
+installs beside it and which pyproject.toml holds to the same grammar (#6202).
 
 Run: /usr/bin/python3 homelab_repo_sign.py
 `--help` prints this text and exits 0.
@@ -68,6 +69,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from host_lib import ERR, write_textfile
+from host_lib import log as host_log
 
 HOLD = "/etc/homelab-builder/hold"
 FINGERPRINT = "/etc/homelab-builder/archive-key.fpr"
@@ -99,10 +103,6 @@ class Failure(Exception):
         self.reason = reason
 
 
-def log(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
-
-
 def read_no_follow(name: str, dir_fd: int) -> bytes:
     """Read the regular file `name` inside the directory `dir_fd`, never through a symlink.
 
@@ -120,19 +120,6 @@ def read_no_follow(name: str, dir_fd: int) -> bytes:
         raise Refusal(f"{name} is not a regular file")
     with os.fdopen(fd, "rb") as handle:
         return handle.read()
-
-
-def write_file(path: Path, data: bytes, mode: int = 0o644) -> None:
-    """Write `data` to `path` through a temporary file in the same directory, at `mode`."""
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(data)
-        os.chmod(tmp, mode)
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
 
 
 def release_fields(text: str) -> dict[str, str]:
@@ -186,7 +173,7 @@ class Signer:
             if self.staged_fd is not None:
                 os.close(self.staged_fd)
             shutil.rmtree(self.incoming, ignore_errors=True)
-            write_file(
+            write_textfile(
                 self.signer_dir / "state.json",
                 json.dumps(self.state, indent=2, sort_keys=True).encode(),
                 0o600,
@@ -201,7 +188,10 @@ class Signer:
             # OnSuccess= start the signer after a held run so the daily re-sign continues;
             # stopping it too would let Valid-Until lapse on every host a week into a hold.
             if os.path.lexists(self.hold_path):
-                log(f"held by {self.hold_path}; staged/ left as it is")
+                host_log(
+                    f"held by {self.hold_path}; staged/ left as it is",
+                    stream=sys.stderr,
+                )
             else:
                 self.open_staged()
                 accepted = self.take_staged()
@@ -209,10 +199,13 @@ class Signer:
                 if accepted:
                     self.publish(fingerprint)
                     self.empty_staged()
-                    log(f"published {', '.join(p.name for p in accepted)}")
+                    host_log(
+                        f"published {', '.join(p.name for p in accepted)}",
+                        stream=sys.stderr,
+                    )
                 elif self.resign_due(fingerprint):
                     self.publish(fingerprint)
-                    log("re-signed the published tree")
+                    host_log("re-signed the published tree", stream=sys.stderr)
             except BaseException:
                 # A package copied into the pool but never indexed would otherwise be indexed
                 # by the next re-sign, a held one included. publish() empties the list once
@@ -233,7 +226,7 @@ class Signer:
 
     def _failed(self, record: dict[str, str], message: str) -> int:
         """Record a failure; return 1 for a new one, 0 for a repeat of the last run's."""
-        log(f"{record['reason']}: {message}")
+        host_log(f"{record['reason']}: {message}", ERR, stream=sys.stderr)
         repeat = self.state.get("failure") == record
         self.state["failure"] = record
         return 0 if repeat else 1
@@ -333,7 +326,7 @@ class Signer:
             if not name.endswith(".deb"):
                 raise Refusal(f"{name} is neither chosen nor a .deb")
             copy = self.incoming / f"{len(debs)}.deb"
-            write_file(copy, data)
+            write_textfile(copy, data)
             debs.append((copy, self.control_fields(copy, name)))
         if not debs:
             self.empty_staged()
@@ -369,7 +362,7 @@ class Signer:
                 raise Refusal(f"{target.name} would land outside the pool")
             if not target.exists():
                 self.new_in_pool.append(target)
-            write_file(target, copy.read_bytes())
+            write_textfile(target, copy.read_bytes())
             written.append(target)
         return written
 
@@ -397,9 +390,11 @@ class Signer:
         where.mkdir(mode=0o700, parents=True, exist_ok=True)
         for name in sorted(os.listdir(self.staged_dir())):
             try:
-                write_file(where / name, read_no_follow(name, self.staged_dir()), 0o600)
+                write_textfile(
+                    where / name, read_no_follow(name, self.staged_dir()), 0o600
+                )
             except (OSError, Refusal):
-                write_file(where / f"{name}.not-a-file", b"", 0o600)
+                write_textfile(where / f"{name}.not-a-file", b"", 0o600)
         self.empty_staged()
         return where
 
@@ -413,7 +408,7 @@ class Signer:
                 else:
                     os.unlink(name, dir_fd=fd)
             except OSError as exc:
-                log(f"could not remove staged/{name}: {exc}")
+                host_log(f"could not remove staged/{name}: {exc}", stream=sys.stderr)
 
     # ── the re-sign arm ───────────────────────────────────────────────────────────────────
 
@@ -572,7 +567,7 @@ class Signer:
                 f'homelab_repo_published_info{{package="{package}",sha="{sha}",'
                 f'version="{version}"}} 1'
             )
-        write_file(self.signer_dir / PROM, ("\n".join(lines) + "\n").encode())
+        write_textfile(self.signer_dir / PROM, ("\n".join(lines) + "\n").encode())
 
     def newer(self, left: str, right: str) -> bool:
         proc = self.run(

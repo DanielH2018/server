@@ -1,0 +1,78 @@
+{#
+  The identities of the two reaper CronJobs (templates/admission-reaper-cronjob.yaml.j2):
+  `dri-admission-reaper` in the workload namespace where jellyfin and tdarr run, and
+  `addon-job-reaper` in kube-system, with a Role in each add-on namespace it reaps (#6460). The
+  cronjob template's DECIDED note says why the add-on grant has its own account. Each job makes
+  two calls per namespace (files/dri_admission_reaper.py):
+
+    list   pods   the Failed pods, by field selector
+    delete pods   each ReplicaSet-owned pod the kubelet rejected at admission
+
+  The grant cannot name pods: the tombstones' names are not known in advance, and RBAC has no
+  field selector, so `delete` reaches every pod in the namespace. The script narrows it, and
+  each delete carries a `uid` precondition. No `get`: the list returns every field it reads.
+  ansible/tests/k8s/test_rbac_against_rest_script.py runs the module's main with a recording
+  client and holds this Role to the calls it records.
+#}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ k8s_namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ k8s_namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ k8s_namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dri-admission-reaper
+subjects:
+  - kind: ServiceAccount
+    name: dri-admission-reaper
+    namespace: {{ k8s_namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: addon-job-reaper
+  namespace: kube-system
+{% for namespace in dri_device_plugin_reaper_job_namespaces %}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: addon-job-reaper
+  namespace: {{ namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: addon-job-reaper
+  namespace: {{ namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: addon-job-reaper
+subjects:
+  - kind: ServiceAccount
+    name: addon-job-reaper
+    namespace: kube-system
+{% endfor %}

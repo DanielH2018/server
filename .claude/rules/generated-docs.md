@@ -23,8 +23,7 @@ tunable it reads. A commit that skipped prek fails
 `scripts/docs/gen_role_glance.py` writes one field set per role shape between two
 `generated_from` markers under that heading: a deployed k8s role's deploy tag, image
 repositories, route, claims with the Longhorn backup tier of each, and auto-deploy stance; a
-setup role's applying playbook and tag, crons and timers; a Pi compose role's deploy tag,
-image repositories, `containers_list` facts and `common_config_changed` wiring. The prose below the markers stays hand-written. Changing a
+setup role's applying playbook and tag, crons and timers. The prose below the markers stays hand-written. Changing a
 role's defaults, templates, tasks, playbook entry or `containers_list` entry — or, for a
 claim's tier, its StorageClass or the `longhorn-reconcile` role's `k3s_longhorn_*_volumes` lists — moves the
 block. The `regen-role-glance` prek hook runs `gen_role_glance.py --fix` on that commit. It
@@ -35,10 +34,12 @@ skipped the hook. The docs-refresh cron does not run the generator: a write unde
 dirty.
 
 **What the cron DOES stage is a closed list, and a generator outside it dirties the tree.**
-Three paths: `docs/reference/`, `docs/assets/generated/`, and `scripts/dev/pytest_shard_weights.json`
+Four paths: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_shard_weights.json`
 (the test shard-weights table, recorded by `pytest_shard.py --record-missing` since #2274, and
-re-measured where it drifted by `--refresh-drifted` since #4888).
-Adding a fourth means editing the cron's `git add`, the porcelain check in its
+re-measured where it drifted by `--refresh-drifted` since #4888), and
+`scripts/dev/pytest_shard_runner_weights.json` (the runner-seconds table the CI split packs on,
+refreshed from CI's own logs by `--refresh-runner` since #6178).
+Adding a fifth means editing the cron's `git add`, the porcelain check in its
 `restore_generated_tree`, and `ansible/tests/setup/test_docs_refresh_records_shard_weights.py`,
 which holds the first two against each other. A path written but not staged parks the GitOps
 deployer, which reads any porcelain output on the primary checkout as dirty.

@@ -165,7 +165,9 @@ list, and the caps and the poll mode are pinned block vars. `docs/claude-agent-u
 
 `Sync peer Claude artifacts` and `Claude Code telemetry health` run only on
 `claude_code_artifacts_node` (daniel-box); every task in `tasks/node_crons.yml` skips on
-daniel-server. H2.7 moved them here from the k8s artifacts and observability roles under the
+daniel-server. A skip removes nothing, so the task after the import removes the crons, their
+scripts, their check files and their render stamp from every other host. daniel-server held a
+stale `sync-artifacts.prom` until that task existed (#6355). H2.7 moved them here from the k8s artifacts and observability roles under the
 same cron file names and script paths. `ansible/roles/k8s/artifacts/CLAUDE.md` documents how
 the sync behaves, and the heartbeat's template carries why it is a host cron at all.
 

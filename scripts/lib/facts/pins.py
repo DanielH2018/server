@@ -147,11 +147,9 @@ def pinned_keys(repo: Path, rel: str) -> frozenset[str]:
 _VAR_FILES = re.compile(
     r"^ansible/(?:roles/[^/]+/[^/]+/defaults/[^/]+|inventory/(?:group|host)_vars/[^/]+)\.ya?ml$"
 )
-# The Pi's compose templates live in two trees while H5 moves them: the roles not yet moved, and
-# the package component's per-service trees (H5.2b). A moved template's pin stays a pin.
+# The Pi's compose templates: the package component's per-service trees (H5).
 _COMPOSE_FILES = re.compile(
-    r"^(?:ansible/roles/containers/[^/]+/templates/docker-compose"
-    r"|hosts/components/pi-compose/services/[^/]+/compose)\.ya?ml\.j2$"
+    r"^hosts/components/pi-compose/services/[^/]+/compose\.ya?ml\.j2$"
 )
 _IMAGE_VAR = re.compile(r"^(?P<var>[a-z0-9_]+_image):\s*['\"]?(?P<ref>[^\s'\"]+)", re.M)
 _COMPOSE_IMAGE = re.compile(r"^\s*image:\s*['\"]?(?P<ref>[^\s'\"]+)", re.M)

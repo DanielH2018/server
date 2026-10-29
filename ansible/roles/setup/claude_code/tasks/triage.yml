@@ -64,6 +64,14 @@
       become: true
       when: claude_code_agent_user_enabled and claude_code_triage_enabled
 
+    # Before the scripts below: both `from host_lib import` the copy beside them (#6202).
+    - name: Install the shared host_lib helper beside the triage scripts
+      tags: [claude_code]
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+      ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+      vars:
+        host_lib_dir: /opt/claude-triage
+
     - name: Install the triage runner and poller
       tags: [claude_code]
       ansible.builtin.copy:

@@ -26,24 +26,20 @@ highest-signal findings.
   Traefik-CRD and authelia edges, so a new entry's position no longer needs checking.)
 - **Egress NetworkPolicies are not enforced** by this cluster's CNI. Never report one as a control,
   and don't propose an egress policy as a fix.
-- **Retired Compose roles live in git history only.** #2385 deleted
-  `ansible/roles/containers/archive/`. Every role left under `roles/containers/` except `common`
-  is a live daniel-pi service named in `host_vars/daniel-pi.yml` `containers_list`.
-- **Docker (daniel-pi only)** — `containers/` is generated/read-only; the source of truth is
-  `ansible/roles/containers/<svc>/templates/docker-compose.yml.j2` + `tasks/main.yml`. Always cite
-  the ansible path, never `containers/`.
-- **Shared macros** (`ansible/templates/`) are the house style — new services USE them, don't
-  hand-roll: `autokuma.yml.j2` `kuma()`,
-  `networks.yml.j2` `service_networks()`/`external_networks()`, `resources.yml.j2`
-  `resources(cpu_limit, mem_limit, cpu_res, mem_res)`. There is **no shared healthcheck
-  macro** — it was deleted, and the one compose file that still inlined its jittered-interval
-  body (`roles/containers/dozzle/`) retired 2026-08-29, so no live template uses it at all;
-  write the `healthcheck:` block directly. There is **no shared port-exposure macro** either —
-  it was deleted once no compose file called it; write the `ports:` block directly, publishing
-  a UI port bound to `{{ server_ip }}` (the Pi's LAN IP, never `0.0.0.0`) with no Traefik
-  labels, since the Pi has no Traefik in front of it.
+- **Retired Compose roles live in git history only.** H5.12 deleted `ansible/roles/containers/`.
+  daniel-pi's Docker services are the `compose_services` entries in `host_vars/daniel-pi.yml`,
+  which its `homelab-daniel-pi` package deploys as one Compose project.
+- **Docker (daniel-pi only)** — the source of truth is
+  `hosts/components/pi-compose/services/<svc>/compose.yaml.j2`. Always cite that path, never
+  the rendered project under `/usr/lib/homelab/compose/` on the Pi.
+- **A service tree has no `ansible/templates` on its search path**, so the Pi's compose files
+  write out what the shared macros (`autokuma.yml.j2`, `networks.yml.j2`, `resources.yml.j2`)
+  render; don't flag the inlined blocks. Write the `healthcheck:` and `ports:` blocks
+  directly, publishing a UI port bound to `{{ server_ip }}` (the Pi's LAN IP, never
+  `0.0.0.0`) with no Traefik labels, since the Pi has no Traefik in front of it.
 - **The service set + per-service shape** (port/use_authelia/networks) live in
-  `ansible/inventory/host_vars/<host>.yml` `containers_list`.
+  `ansible/inventory/host_vars/daniel-box.yml` `containers_list` for the cluster and in
+  `host_vars/daniel-pi.yml` `compose_services` for the Pi.
 - **Pinning:** **Watchtower is retired** — nothing auto-updates any more. Every image is
   pin-and-Renovate-managed, and residual `watchtower.enable=false` labels are dead metadata
   (don't flag them as missing elsewhere). A floating `:latest` tag is now a reproducibility
@@ -53,8 +49,8 @@ highest-signal findings.
   (no per-service block needed).
 
 ## Tools (read-only)
-- `Grep` across `ansible/roles/containers/*/templates/*.j2` to audit coverage at a glance — e.g.
-  templates missing a `resources(` call, a `healthcheck`, or hand-rolling a `networks:` loop.
+- `Grep` across `hosts/components/pi-compose/services/*/compose.yaml.j2` to audit the Pi's
+  coverage at a glance — e.g. a service missing a `deploy.resources` cap or a `healthcheck`.
 - `uv run python scripts/validate/compose_templates.py` (renders all → catches malformed YAML),
   `uv run python scripts/diagnostics/probe.py health <svc>` (running + healthy). Never run a command that writes.
 - Read the role's CLAUDE.md before flagging — most deviations are documented decisions.

@@ -104,6 +104,22 @@ seed_empty_set() {
   return 0
 }
 
+# The run's verdict as one line, `status=<up|down> <text>`, which the SessionStart banner reads
+# (.claude/hooks/hooklib/service_lines.py:stale_release_problems, #6183). The text is the probe's
+# own output, never the re-alert's `Stale set changed:` prefix, so the banner's parser always sees
+# one of msgfmt's shapes. chmod by hand: sessions run as another user than this cron, and the file
+# is replaced by a rename so the banner never reads a half-written line.
+VERDICT_FILE="${STATE_DIR}/verdict"
+write_verdict() {
+  [[ -n "$TRACK_SET" ]] || return 0
+  if ! { printf 'status=%s %s\n' "$1" "$2" > "${VERDICT_FILE}.tmp" \
+    && chmod 0644 "${VERDICT_FILE}.tmp" \
+    && mv -f "${VERDICT_FILE}.tmp" "$VERDICT_FILE"; }; then
+    logger -t release-staleness-check "verdict write to ${VERDICT_FILE} failed (status=$1)"
+  fi
+  return 0
+}
+
 REPO_DIR=/home/{{ sys_user }}/server
 # The link is probed BEFORE the fetch as well as after a failed one (#5308). A fetch started inside
 # an outage can hang until the link is back, so a probe run only after it fails sees a healthy link
@@ -137,6 +153,7 @@ if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   fi
   MSG="${REACHOUT_NOTE}git fetch origin master failed in ${REPO_DIR}: ${FETCH_ERR}"
   logger -t release-staleness-check "status=${STATUS} ${MSG}"
+  write_verdict "$STATUS" "$MSG"
   # The textfile, before the push, as at the end of the script. This run's verdict is the fetch's.
   SUCCESS=0
   [[ "$STATUS" == "up" ]] && SUCCESS=1
@@ -219,6 +236,7 @@ if [[ -n "$REALERT" ]]; then
 fi
 
 logger -t release-staleness-check "status=${STATUS} ${MSG}"
+write_verdict "$STATUS" "$OUTPUT"
 # The textfile, before the push: the verdict must not wait on Kuma. This is the run's one verdict.
 # The "Not a recovery" UP above is a notification marker, so it writes nothing. The producer metric
 # contract is docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh

@@ -10,6 +10,7 @@ Run: uv run pytest ansible/roles/k8s/node-exporter/tests/test_ghcr_mirror_pull.p
 """
 
 import re
+import shutil
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,6 +69,14 @@ def _write_once(
     target: Path, out: Path, node: str, local: str, remote: str
 ) -> dict[str, str]:
     """Run the script once on `node`, with daniel-box as the registry node."""
+    # The host's wget, reached through a directory this test owns: leakguard shims a wget the
+    # child would find in a system directory, and this one only talks to the loopback mirror.
+    bin_dir = target.parent / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    if not (bin_dir / "wget").exists():
+        real_wget = shutil.which("wget", path="/usr/bin:/bin")
+        assert real_wget is not None, "these tests need the host's wget"
+        (bin_dir / "wget").symlink_to(real_wget)
     env = {
         "NODE_NAME": node,
         "REGISTRY_NODE": "daniel-box",
@@ -77,7 +86,7 @@ def _write_once(
         "TEXTFILE_DIR": str(out),
         "TIMEOUT_S": "5",
         "ONCE": "1",
-        "PATH": "/usr/bin:/bin",
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
     }
     result = run(["sh", str(SCRIPT)], env=env, check=False)
     assert result.returncode == 0, result.stderr

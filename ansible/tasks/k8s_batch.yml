@@ -12,8 +12,8 @@
 
 - name: Run k8s roles
   ansible.builtin.include_role:
-    # Path-qualified: a bare `wg-easy` would resolve to roles/containers/wg-easy, which is first in
-    # roles_path. See the roles_path comment in ansible.cfg.
+    # Path-qualified: roles_path does not list roles/k8s, so a bare name resolves only in
+    # roles/setup. See the roles_path comment in ansible.cfg.
     name: "k8s/{{ container_item.name }}"
     apply:
       tags: "{{ container_item.tags | default([container_item.name]) }}"

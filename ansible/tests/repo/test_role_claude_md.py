@@ -7,7 +7,7 @@ A row carries what differs between planes and nothing else:
 
 - `deploy_tag`: the doc must name the role beside a literal `--tags`. Only k8s, where the
   deploy tag IS the role's directory name. Setup roles are applied through `initial_setup.yml`
-  with tags that do not follow that convention, and both `common` roles are include-only.
+  with tags that do not follow that convention, and setup's `common` role is include-only.
 - `floor` and `members`: non-vacuity. A row whose tree yields no roles fails with "subject gone:
   delete this row" instead of passing over nothing, and each row names roles a broken census
   must still find.
@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from _helpers import CONTAINER_ROLES, K8S_ROLES, REPO, SETUP_ROLES, run
+from _helpers import K8S_ROLES, REPO, SETUP_ROLES, run
 from _role_census import role_dirs
 
 MIN_NON_BLANK_LINES = 8
@@ -56,15 +56,6 @@ PLANES = [
         SETUP_ROLES,
         floor=12,
         members=frozenset({"gitops_deploy", "k3s", "common", "nut_host"}),
-    ),
-    # `common` is the include-only shared deploy path, the member a deploy-tag arm would wrongly
-    # fail. It is the only role left since H5.9 moved wg-easy, the last Pi service, into the
-    # package; H5.12 deletes it and this plane with it.
-    Plane(
-        "containers",
-        CONTAINER_ROLES,
-        floor=1,
-        members=frozenset({"common"}),
     ),
 ]
 PLANE_IDS = [p.name for p in PLANES]

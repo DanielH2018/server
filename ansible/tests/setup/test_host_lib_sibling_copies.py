@@ -3,7 +3,7 @@
 
 `hosts/lib/host_lib.py` has no single home on a host. Each consumer is a
 directly-invoked script, so it gets its own directory on `sys.path` and nothing else, and the
-file has to be copied in beside it. Six roles do that, at seven sites, through
+file has to be copied in beside it. Seven roles do that, at eight sites, through
 `roles/setup/common/tasks/install_host_lib.yml`, which owns the source path, the `host_lib.py`
 basename and the 0755 mode.
 
@@ -15,7 +15,7 @@ list someone maintains, so a new consumer is in scope the moment it imports the 
 
 WHY THE SHARED FILE DOES NOT WRITE THE STAMP PAIR, and this test asserts it instead. A
 `stamp_deployed` fragment is named per group and holds that group's whole pair list, so a
-second fragment written from inside the shared file would overwrite the caller's. All seven
+second fragment written from inside the shared file would overwrite the caller's. All eight
 sites record a host_lib pair in a group their own role declares, and which pairs belong in that
 group is the caller's knowledge, not the shared file's. The copy and the pair are therefore
 joined here rather than in the task file, in both directions:
@@ -49,6 +49,8 @@ INSTALLED_SRCS = {
 # is exactly what this exists to catch, and `<=` would wave it through.
 EXPECTED_CONSUMERS = frozenset(
     {
+        "claude_code",
+        "deploy_ui",
         "fake_remux",
         "gitops_deploy",
         "k3s",

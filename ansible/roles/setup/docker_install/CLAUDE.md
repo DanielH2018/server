@@ -40,14 +40,13 @@ swapped under running containers.
 ```
 uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e docker_install_engine_upgrade=true -e target=daniel-pi
 ```
-It refuses a host with no `~/server` checkout. It then masks `homelab-updater.timer` (unless the
+It masks `homelab-updater.timer` (unless the
 operator already did) and waits until neither `homelab-updater.service` nor
 `homelab-reconcile.service` is active, because the play and reconcile both write the `homelab`
 project. The wait's limit is `docker_install_updater_wait_limit_s`, which exceeds the updater
 unit's `TimeoutStartSec`. The play unholds, and asks apt in check mode whether
 `docker_install_package_specs` would change anything. Nothing pending: re-hold and
-report. Otherwise it stops every Compose project in `containers_list` (reverse order) and then
-the `homelab` project, upgrades, re-holds in `always:` so a failed apt run leaves the hold in place, and brings
+report. Otherwise it stops the `homelab` project, upgrades, re-holds in `always:` so a failed apt run leaves the hold in place, and brings
 `homelab` and then every other project back with `recreate: always` — the recreate docker-proxy
 needs to pick up the new socket inode. Its last task unmasks and starts the timer, unless the timer
 was masked before the play. **A failed play leaves the timer masked**, so the Pi installs no

@@ -8,7 +8,8 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=dri-device-plugin` with exit 5
-- **Image:** `ghcr.io/squat/generic-device-plugin` (`dri_device_plugin_k8s_image`)
+- **Images:** `ghcr.io/squat/generic-device-plugin` (`dri_device_plugin_k8s_image`), `python`
+  (`dri_device_plugin_reaper_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
@@ -38,6 +39,40 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
   physical render node, multiplexed across however many pods request it concurrently.
 - `priorityClassName: system-node-critical` — this must not be the pod evicted to make room
   for jellyfin or tdarr, which is exactly backwards from what losing it does to them.
+- **The `dri-admission-reaper` CronJob deletes the pods a reboot rejects** (#6367). After a
+  reboot the kubelet can re-admit a GPU pod before this plugin re-registers. The pod ends
+  `Failed` with `UnexpectedAdmissionError`, its ReplicaSet replaces it, and nothing else
+  deletes it, because the controller-manager's `terminated-pod-gc-threshold` is 12500 pods.
+  Every 15 minutes the job deletes each `Failed` pod a ReplicaSet owns whose reason is
+  `UnexpectedAdmissionError` or `OutOf<resource>`, and nothing else; the rule is
+  `ansible/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py:is_tombstone`. It runs
+  in `homelab`, not `kube-system`, because a Role grants only in its own namespace. Its Role
+  grants `list` and `delete` on every pod there: RBAC cannot name pods it has not seen.
+  Lowering the GC threshold instead was rejected, because PodGC also deletes the Job pods
+  whose logs the health readers read.
+- **The `addon-job-reaper` CronJob deletes every Failed Job pod in `kube-system` and
+  `longhorn-system`** (#6460). It runs the same script from `kube-system`.
+  Those namespaces run Jobs this repo does not render, k3s's helm-install Jobs and Longhorn's
+  backup Jobs, so no `ttlSecondsAfterFinished` ages a run the reboot interrupts. The Job object
+  keeps the failure on record and Loki keeps the output; the rule is
+  `ansible/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py:is_failed_job_pod`.
+  `homelab` keeps its Job pods, because the health readers read their logs. The rule also
+  takes the failed pods of the one rendered CronJob in those namespaces, `longhorn-reconcile`;
+  its `failedJobsHistoryLimit` keeps the failed Jobs, and Loki keeps their output. Each listed
+  namespace (`dri_device_plugin_reaper_job_namespaces`) gets a Role and a RoleBinding to the
+  `addon-job-reaper` ServiceAccount in `kube-system`. That grant reaches every pod in both
+  namespaces, so it has its own account in `kube-system`: a pod in `homelab` cannot run as it,
+  and the `homelab` reaper's account holds no grant outside `homelab`. `system-upgrade` is not listed: the SUC controller's
+  `SYSTEM_UPGRADE_JOB_TTL_SECONDS_AFTER_FINISH` of 900 ages its Plan Jobs out. The sweep stays
+  in this role rather than a role of its own because it runs the same script; a second role
+  would add a `containers_list` entry and an image pin for one more predicate.
+- **A handback to Ansible must defer the reaper's documents first.** The role's Ansible path
+  arms its prune with `manifests_prune_namespace: kube-system`, and an armed apply refuses a
+  document in another namespace. The reapers' objects sit in `homelab`, `kube-system`
+  and `longhorn-system`, so a handback lists `admission-reaper-cronjob.yaml` and
+  `admission-reaper-rbac.yaml` in `manifests_deferred_files`, as netpol-baseline does. Flux applies a role's documents in the
+  namespaces they name, so the Flux render needs neither.
 
 ## Editing
-- Manifest: `templates/daemonset.yaml.j2`.
+- Manifests: `templates/daemonset.yaml.j2`, and the reaper's
+  `templates/admission-reaper-cronjob.yaml.j2` and `templates/admission-reaper-rbac.yaml.j2`.

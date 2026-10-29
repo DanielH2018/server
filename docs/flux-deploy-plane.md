@@ -983,9 +983,11 @@ notification-controller posts on T:
   the timeout ends it as `failed`, naming each name that had no `success`. *The timeout
   follows the chain* below derives it.
 - **A Longhorn hop's failures are provisional** (#5997). The longhorn-manager pods serve
-  the admission webhook that every PersistentVolumeClaim's dry run calls, and the manager
-  DaemonSet replaces both pods at once. A Kustomization holding a claim that reconciles in
-  that window posts `failure`, then recovers on its next retry. So while `longhorn` is in
+  the admission webhook that every PersistentVolumeClaim's dry run calls. Since #6009 the
+  manager DaemonSet rolls one pod at a time, so the rule covers a residual window rather
+  than a routine one: a webhook call can still fail while the one serving pod is busy, or
+  on a node loss. A Kustomization holding a claim that reconciles in that window posts
+  `failure`, then recovers on its next retry. So while `longhorn` is in
   the set, a `failure` or `error` on any other name is provisional, not only on a claim
   holder, because `crowdsec`'s failed claim also holds `traefik` and the routed tags behind
   it. A provisional failure ends the wait in one of two ways:
@@ -1709,8 +1711,9 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   mounts a ConfigMap whole and `<script>.py` is one of its keys. No `-c`, no `-m` and no
   shell. The one exception is the pre-pull Job's fixed no-op (*The pre-pull Job*). Each ConfigMap a Job mounts ends its name in `-<digest8>` of its content
   (`configmap_digest8`). The Job's spec names the ConfigMap, so a script fix renames the Job.
-- **`backoffLimit`.** Every Job sets one: 1 for a snapshot Job, 0 for a soak or verify Job,
-  and a mutation Job's own value, with its reason beside it.
+- **`backoffLimit`.** Every Job sets one: 1 for a snapshot Job, 3 for a pre-pull Job (*The
+  pre-pull Job*), 0 for a soak or verify Job, and a mutation Job's own value, with its reason
+  beside it.
 - **Rerun safety.** A mutation Job carries `homelab/rerun-safe`, naming as `<path>::<test>`
   the test that runs it twice and finds the second run changes nothing.
 - **Connections.** A Python script in a ConfigMap the Job mounts opens every connection
@@ -1758,6 +1761,11 @@ Loki, Tempo and kube-state-metrics pin no node and ship no shell.
   revision that kept the image would hold `<tag>` at `DependencyNotReady`. Without one, a
   pull that outlasts the `timeout` costs that revision its verdict, the Job keeps pulling,
   and a later retry applies `<tag>`.
+- **The Job retries a failed Pod three times** (#5552). A Pod can fail without a deadline: the
+  kubelet evicts it under disk pressure, or a node reboot interrupts the pull. With no retry,
+  either one left a Failed Job that held `<tag>` at `DependencyNotReady` for every revision
+  that kept the image, until a new content tag renamed the Job. An image without `sh` fails
+  every attempt, so that Job still fails, about a minute later than before.
 - **A revision that keeps the images keeps the Job.** The Job's name carries a digest of its
   spec, image refs and placement included, so only a content-tag change runs a new pull.
 - **The Job and the pod are scheduled separately.** A node cordoned between the two sends the
