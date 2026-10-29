@@ -133,6 +133,11 @@ RETIRED: frozenset[str] = frozenset(
         # Published as an inventory variable by the operator's 2026-10-14 ruling;
         # ansible/inventory/group_vars/all.yml holds it (target slice R2, domain PR 3).
         "domain",
+        # The push tokens of the bridge's Loki ingestion, Loki-reachable and Kuma notification
+        # checks, which M5's PR 4a deleted. M5's PR 5 retired them a week later.
+        "monitor_bridge_kuma_notify_failures_push_token",
+        "monitor_bridge_loki_push_token",
+        "monitor_bridge_loki_reachable_push_token",
     }
 )
 
