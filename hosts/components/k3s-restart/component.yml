@@ -29,10 +29,12 @@
 # A host that lists this component sets `k3s_restart_window` (an OnCalendar value) in its
 # `host_vars`, and the component has no default for it, so a host without one fails the render. It
 # must also list `secrets-unit` and declare `k3s_readonly_token` under
-# `credentials:`, because the unit loads that credential through `LoadCredential=`.
+# `credentials:`, because the unit loads that credential through `LoadCredential=`. It also lists
+# `k3s-gates`, which ships `/usr/lib/homelab/k3s_gates.py`: the unit imports that script from its
+# own directory.
 #
 # ENFORCED: hosts/lib/tests/test_k3s_restart.py, test_k3s_restart_component.py and
-# test_k3s_restart_window.py.
+# test_k3s_restart_window.py; the `k3s-gates` pairing by test_k3s_gates_component.py.
 defaults:
   # The unit this host restarts, and the API it asks. daniel-box hosts the only API server.
   k3s_restart_unit: k3s.service
@@ -46,7 +48,6 @@ defaults:
   k3s_restart_guard_server_restart: false
 files:
   - {lib: homelab-k3s-restart, dst: /usr/lib/homelab/homelab-k3s-restart, mode: "0755"}
-  - {lib: k3s_gates.py, dst: /usr/lib/homelab/k3s_gates.py, mode: "0755"}
   - {src: units/homelab-k3s-restart.service.j2, dst: /usr/lib/systemd/system/homelab-k3s-restart.service}
   - {src: units/homelab-k3s-restart.timer.j2, dst: /usr/lib/systemd/system/homelab-k3s-restart.timer}
 enable:

@@ -19,6 +19,7 @@ LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
 # The shared check library, minus the textfile write, which test_k3s_cron_textfiles.py covers.
 CHECK_LIB = ANSIBLE / "roles/setup/initial_setup/files/homelab-check-lib.sh"
 TEMPLATE = ("setup", "k3s", "release-staleness-check.sh.j2")
+STATE_DIR = "/var/lib/homelab/release-staleness"
 FETCH_ERR = "fatal: unable to access 'https://github.com/DanielH2018/server.git/'"
 
 
@@ -29,6 +30,7 @@ def _run(tmp_path, link_at_start, link_after_fetch):
         "/usr/local/lib/kuma-push-lib.sh",
         "/usr/local/lib/homelab-check-lib.sh",
         "/etc/rancher/k3s/kuma-push.env",
+        STATE_DIR,
     ):
         assert literal in body, f"{'/'.join(TEMPLATE)} no longer references {literal}"
 
@@ -50,11 +52,15 @@ def _run(tmp_path, link_at_start, link_after_fetch):
     check_lib.write_text(f"source {CHECK_LIB}\nwrite_check_textfile() {{ :; }}\n")
     env = tmp_path / "kuma-push.env"
     env.write_text("RELEASE_STALENESS_PUSH_TOKEN=stubtoken\n")
+    # Redirected so a run on daniel-box, where the real directory exists, cannot write it.
+    state = tmp_path / "state"
+    state.mkdir()
     script = write_exec(
         tmp_path / "release-staleness-check.sh",
         body.replace("/usr/local/lib/kuma-push-lib.sh", str(lib))
         .replace("/usr/local/lib/homelab-check-lib.sh", str(check_lib))
-        .replace("/etc/rancher/k3s/kuma-push.env", str(env)),
+        .replace("/etc/rancher/k3s/kuma-push.env", str(env))
+        .replace(STATE_DIR, str(state)),
     )
     run(["bash", str(script)], check=True)
     return pushed.read_text().splitlines(), logs.read_text().splitlines()
@@ -78,6 +84,9 @@ def test_a_fetch_that_fails_with_the_link_up_throughout_reads_down(tmp_path):
     assert [p.split()[0] for p in pushes] == ["down"], pushes
     assert "skipped" not in pushes[0]
     assert [line.split()[0] for line in _status_lines(logs)] == ["status=down"], logs
+    # The banner's verdict file carries the fetch's verdict, so it reads as a broken check.
+    verdict = (tmp_path / "state" / "verdict").read_text()
+    assert verdict.startswith("status=down git fetch origin master failed"), verdict
 
 
 def test_a_fetch_that_fails_after_the_link_drops_reads_skipped(tmp_path):

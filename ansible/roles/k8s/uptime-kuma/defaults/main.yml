@@ -192,11 +192,13 @@ uptime_kuma_k8s_status_page_sync_dump_attempt_seconds: 15
 # Job sits in `get pods` as Init:Error until two LATER failures displace it, so a stale
 # failure reads as a live fault. The Status Page
 # Sync push monitor goes DOWN after 30 min of silence and its description sends the reader to
-# the newest Job logs, so the TTL has to outlive that window with room to be read. Two hours
-# does, and the render stage's output is in Loki (`{namespace="homelab", container="render"}`)
-# past that; a day keeps a red row in Headlamp far longer than anyone needs it.
+# the newest Job logs, so the TTL has to outlive that window with room to be read. The */15
+# schedule also puts a run in flight at the weekly reboot's shutdown, and that run's failed Job
+# must be gone within the hour after boot (#6367,
+# ansible/tests/k8s/test_reboot_window_cronjobs_age_out.py). 45 minutes meets both, and the
+# render stage's output is in Loki (`{namespace="homelab", container="render"}`) past that.
 # `failedJobsHistoryLimit: 2` still caps how many sit inside the window.
-uptime_kuma_k8s_status_page_sync_job_ttl_seconds: 7200
+uptime_kuma_k8s_status_page_sync_job_ttl_seconds: 2700
 
 # Ordered. Each declared monitor lands in the FIRST group one of whose patterns matches its
 # AutoKuma id (the filename in static-monitors.yaml.j2, not the display name), and group order
