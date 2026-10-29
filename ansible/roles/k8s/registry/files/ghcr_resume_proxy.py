@@ -16,6 +16,7 @@ response, so distribution sees a short body and stores nothing, rather than a sp
 Standard library only, because it runs in the stock python image from a ConfigMap.
 """
 
+import argparse
 import http.client
 import json
 import os
@@ -299,6 +300,11 @@ class ResumeProxy(ThreadingHTTPServer):
 
 
 def main() -> None:
+    argparse.ArgumentParser(
+        description="Relay a registry to ghcr.io, resuming a cut blob GET with Range.",
+        epilog="Configured by environment: LISTEN_PORT (required), LISTEN_HOST (127.0.0.1), "
+        "UPSTREAM (https://ghcr.io), READ_TIMEOUT_S (60) and MAX_RESUMES (100).",
+    ).parse_args()
     proxy = ResumeProxy(
         (os.environ.get("LISTEN_HOST", "127.0.0.1"), int(os.environ["LISTEN_PORT"])),
         os.environ.get("UPSTREAM", "https://ghcr.io"),
