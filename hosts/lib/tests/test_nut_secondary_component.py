@@ -183,7 +183,9 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     manifest = json.loads(text(package, "/usr/lib/homelab/manifest.json"))
     assert "nut-monitor.service" in manifest["units"]
     assert "homelab-ups-watchdog.timer" in manifest["enable_links"]
-    assert manifest["legacy"] == [
+    # daniel-server's other components retire their own entries; these are the package's and nut's.
+    nut = [e for e in manifest["legacy"] if "unit" not in e and "claude" not in str(e)]
+    assert nut == [
         {"path": "/etc/apt/sources.list.d/github-cli.list"},
         {"cron_file": "ups-secondary-health"},
         {"path": "/usr/local/bin/ups-secondary-health.sh"},

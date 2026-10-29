@@ -1,0 +1,109 @@
+#!/bin/bash
+# Shipped by homelab-daniel-server. Run as root by homelab-claude-agent.service.
+#
+# Usage: claude-agent-setup [-h|--help]
+# Takes no arguments. Running it by hand applies every step below for real.
+#
+# Gives the {{ claude_code_agent_user }} agent user what its home and groups need on every run:
+# the groups it reads the host through, its login profile, git identity and instructions, its
+# commit-signing key, the operator's read-only kubeconfig, its dotfiles source and its clone.
+# The users arm creates the user itself (/usr/lib/sysusers.d/homelab.conf). The dotfiles sync
+# installs its tooling (uv, Python, prek, Claude Code) once the dotfiles source exists, and the
+# clone sync keeps its clone, venv and collections current.
+#
+# Every step is idempotent: a step whose result exists already changes nothing.
+set -euo pipefail
+
+case "${1-}" in
+  -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+esac
+
+agent={{ claude_code_agent_user }}
+home={{ claude_code_agent_user_home }}
+operator={{ sys_user }}
+templates=/usr/lib/homelab/claude-agent
+
+as_agent() {
+  runuser -u "$agent" -- env HOME="$home" USER="$agent" TMPDIR=/tmp \
+    PATH="$home/.local/bin:/usr/local/bin:/usr/bin:/bin" "$@"
+}
+
+# The groups: the worktree holder scan's socket, the root inspector's socket, the journal and
+# the ssh login. `usermod -G` sets the whole list, so a group dropped here is left.
+groups=({{ claude_code_worktree_holders_group }}{{ ' ' ~ claude_code_rootq_socket_group if claude_code_rootq_socket_armed else '' }}{{ ' systemd-journal' if claude_code_agent_journal_access else '' }}{{ ' ssh-users' if claude_agent_ssh_login_enabled else '' }})
+for group in "${groups[@]}"; do
+  getent group "$group" > /dev/null || groupadd --system "$group"
+done
+usermod --groups "$(IFS=,; echo "${groups[*]}")" "$agent"
+# A user the users arm expired and then declared again gets its account back.
+usermod --expiredate '' "$agent"
+# Its user manager outlives a logout, so its fan-out batches survive; so does the operator's.
+loginctl enable-linger "$agent" "$operator"
+
+dir() { install -d -o "$agent" -g "$operator" -m "$1" "$2"; }
+dir 2750 "$home"
+dir 0755 "$home/.local"
+dir 0755 "$home/.local/bin"
+dir 0750 "$home/.ssh"
+dir 0755 "$home/.config"
+dir 0755 "$home/.config/git"
+dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/gh"
+dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/chezmoi"
+dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.claude"
+dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.claude/projects"
+dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$(dirname "{{ claude_code_agent_memory_dir }}")"
+dir 0700 "$home/.kube"
+# The operator reads what the agent writes to its artifacts and memory directories: setgid on
+# the operator's group, and a default ACL that gives each new file the group's read.
+for shared in "$home/.claude/artifacts" "{{ claude_code_agent_memory_dir }}"; do
+  dir {{ '2750' if claude_code_agent_operator_read else '0700' }} "$shared"
+{% if claude_code_agent_operator_read %}
+  setfacl --default --modify "group:$operator:rX" "$shared"
+{% else %}
+  setfacl --default --remove "group:$operator" "$shared" 2> /dev/null || true
+{% endif %}
+done
+
+put() { install -o "$agent" -g "$operator" -m "$1" "$templates/$2" "$home/$3"; }
+put 0644 profile .profile
+put 0644 gitconfig .gitconfig
+put 0644 CLAUDE.md .claude/CLAUDE.md
+put {{ '0640' if claude_code_agent_operator_read else '0600' }} chezmoi-seed.toml .config/chezmoi/seed.toml
+# chezmoi's first init needs the answers in its config; later runs render the config themselves.
+[ -e "$home/.config/chezmoi/chezmoi.toml" ] || put 0600 chezmoi-seed.toml .config/chezmoi/chezmoi.toml
+
+# The commit-signing key, generated as the agent so the private half never leaves its home.
+key={{ claude_code_agent_signing_key }}
+[ -e "$key" ] || as_agent ssh-keygen -q -t ed25519 -N "" \
+  -C "{{ claude_code_agent_github_login }} commit signing ($(hostname))" -f "$key"
+chown "$agent:$operator" "$key" "$key.pub"
+chmod 0600 "$key"
+chmod 0644 "$key.pub"
+printf '%s namespaces="git" %s\n' "{{ claude_code_agent_git_email }}" "$(cat "$key.pub")" \
+  > "$home/.config/git/allowed_signers"
+chown "$agent:$operator" "$home/.config/git/allowed_signers"
+chmod 0644 "$home/.config/git/allowed_signers"
+
+# The operator's read-only kubeconfig, copied on every run so a re-issued token reaches it.
+if [ -f "/home/$operator/.kube/config" ]; then
+  install -o "$agent" -g "$operator" -m 0600 "/home/$operator/.kube/config" "$home/.kube/config"
+fi
+
+{% if claude_code_agent_dotfiles %}
+# The dotfiles source. The dotfiles sync applies it on its timer.
+if [ ! -x "$home/.local/bin/chezmoi" ] && [ -x "/home/$operator/.local/bin/chezmoi" ]; then
+  install -o "$agent" -g "$operator" -m 0755 "/home/$operator/.local/bin/chezmoi" "$home/.local/bin/chezmoi"
+fi
+if [ ! -e "$home/.local/share/chezmoi/.git" ]; then
+  as_agent "$home/.local/bin/chezmoi" init --no-tty {{ claude_code_agent_dotfiles_repo }}
+fi
+{% endif %}
+
+# Its own clone: git refuses a repository whose gitdir another uid owns.
+clone={{ claude_code_agent_user_clone_dir }}
+if [ ! -e "$clone/.git" ]; then
+  as_agent git clone --quiet "https://github.com/{{ claude_code_agent_user_repo }}.git" "$clone"
+fi
+if [ ! -e "$clone/.git/hooks/pre-commit" ] && [ -x "$home/.local/bin/prek" ]; then
+  (cd "$clone" && as_agent "$home/.local/bin/prek" install)
+fi

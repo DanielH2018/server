@@ -1886,6 +1886,20 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
     both host PRs. Old H7.12c's text decides which of H7.39 and H7.40 carries them, and that
     PR's body quotes the sentence it followed. Restarting a host's `claude-rc.service` drops the phone's sessions, so H7.39 and
     H7.40 each land in a window the operator picks (**operator-only**).
+    - **What H7.39 carries, and what it leaves to H7.40.** `hosts/components/claude-code/`
+      renders the role's templates in place through `role: claude_code`, as H4 did for
+      `nut_host`, and H7.40 moves them. The window-test exemptions name daniel-box's timers,
+      which keep their Ansible-era names until H7.40, so H7.40 renames the four entries. It
+      also changes the `claude-land@` callers, because only daniel-box runs the lander. Old
+      H7.12c's sentence decides both: "The PR renames those four entries to the `homelab-*`
+      names, each with its exclusion unchanged, so the test still exempts them once H7.18a
+      points it at the packages."
+    - **The agent's groups.** The users arm declares no group membership, so
+      `homelab-claude-agent.service` sets the agent's groups on every run.
+    - **The old slice drop-ins stay.** Reconcile treats a legacy path under
+      `/etc/systemd/system/` as a shadow copy and keeps it, so the Ansible-era
+      `claude-*caps.conf` drop-ins are removed by hand. The packaged drop-ins sort after
+      them, so the packaged values govern until then.
 16. **H7.40** stays alone as the second canary host. It carries the artifacts directories'
     `tmpfiles.d` lines and empties `claude_code`.
 17. **H7.41 splits in two, ruled on 2026-10-24.** Wherever another row or entry names H7.41

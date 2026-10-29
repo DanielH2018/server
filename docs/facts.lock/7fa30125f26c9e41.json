@@ -1,0 +1,13 @@
+{
+  "checksum": "65d59e3e34ed797324fff56108e0fe7f3b0b04f372ff8357b48e84b20fa9fa38",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#daniel-server: the host package owns it",
+  "row": {
+    "atoms": {
+      "hosts/components/claude-code/": "0c7d7c48948f71952dce53fd0751b7c0c4df73b56724f2b6883863c36ef7bfcd",
+      "hosts/lib/tests/test_claude_code_component.py": "63e1788f1ae83ed0a6599561f903d285d5b8fe17eacfd0bce6ab7b864e62e440"
+    },
+    "python": "3.14",
+    "verified_sha": "d7acbd6ca"
+  }
+}

@@ -50,7 +50,10 @@ declare -A CGROUPS=(
 # and claude_code_fleet_caps_enabled: false moves it back — so resolve the path instead of
 # hardcoding either one, or this label goes silently absent on whichever side of that toggle
 # the host is not, leaving a green scrape with one plane missing.
-for candidate in user.slice/claude-rc.service system.slice/claude-rc.service; do
+# homelab-claude-rc.service is the same host under its packaged name (H7.39); the label stays
+# claude-rc so the dashboards read one series across hosts.
+for candidate in user.slice/claude-rc.service system.slice/claude-rc.service \
+  user.slice/homelab-claude-rc.service system.slice/homelab-claude-rc.service; do
   if [ -d "$CGROOT/$candidate" ]; then
     CGROUPS[claude-rc]=$candidate
     break

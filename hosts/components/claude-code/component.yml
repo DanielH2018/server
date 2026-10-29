@@ -1,0 +1,155 @@
+# daniel-server's Claude Code host (H7.39, docs/target-architecture/host/h7-delete-ansible.md).
+# Until H7.39 the claude_code role installed all of it; the role now ends on daniel-server
+# (`meta: end_role` in its tasks/main.yml), and daniel-box keeps the role until H7.40.
+#
+# What it ships, by subject:
+#   - the agent user: the users arm creates `claude` with its live uid, and
+#     homelab-claude-agent.service gives it its groups, home, identity and clone;
+#   - the Remote Control host (homelab-claude-rc.service), installed but not enabled while
+#     claude_code_rc_enabled is false, its weekly restart and its failure page;
+#   - the background-session resume at boot, the cgroup metrics timer, and the agent's clone and
+#     dotfiles syncs;
+#   - the fleet and login-session caps, and the pytest fan-out cap;
+#   - the session stop alert and the fan-out alert, with the polkit rules that let a session start
+#     them;
+#   - the root inspector: the operator's sudo grant and the agent's socket.
+#
+# The component renders the role's own templates and copies its scripts in place (`role:
+# claude_code`), H4's pattern, so daniel-box's Ansible render and this package read one source.
+# Each role template that names a sibling unit takes that name from a variable whose default is
+# the Ansible-era name; the defaults below give the packaged names. H7.40 moves the sources here.
+#
+# DECIDED: the scripts keep their /usr/local paths (/usr/local/bin/rootq, the clone and dotfiles
+# syncs, homelab-rootq and its socket helper). The scripts, the sudoers grant and the dotfiles'
+# claude-guard allowlist name those paths, and daniel-box's role installs the same bytes there
+# until H7.40. dpkg takes each unowned file over at install.
+#
+# Not moved, because nothing re-applies it on daniel-server:
+#   - the operator's own Claude Code install, which the dotfiles repo owns since H7.38;
+#   - the agent's authorized peer key, which the role read over ssh from daniel-box. The file
+#     Ansible wrote stays, and a rotation of daniel-box's key no longer reaches it.
+role: claude_code
+defaults:
+  # The packaged unit names the role templates read (see the header).
+  claude_code_rc_unit: homelab-claude-rc.service
+  claude_code_rc_alert_unit: homelab-claude-rc-alert.service
+  claude_code_cgroup_metrics_unit: homelab-claude-cgroup-metrics.service
+  claude_code_sync_alert_unit: homelab-alert@%n.service
+  # What the role computes in tasks: the agents switched on, and the group initial_setup names.
+  claude_code_agents_present: [claude]
+  claude_code_worktree_holders_group: worktree-holders
+depends:
+  - acl
+users:
+  # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
+  - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
+outputs:
+  - src: templates/agent-gh-hosts.yml.j2
+    path: /var/lib/claude/.config/gh/hosts.yml
+    owner: claude
+    group: ubuntu
+    mode: "0600"
+    keys: [claude_code_agent_gh_token]
+    persist: false
+    link: true
+files:
+  # The agent user.
+  - {src: templates/claude-agent-setup.sh.j2, dst: /usr/lib/homelab/claude-agent-setup, mode: "0755", activate: "try-restart:homelab-claude-agent.service"}
+  - {src: "role:agent-user-profile.j2", dst: /usr/lib/homelab/claude-agent/profile, activate: "try-restart:homelab-claude-agent.service"}
+  - {src: "role:agent-gitconfig.j2", dst: /usr/lib/homelab/claude-agent/gitconfig, activate: "try-restart:homelab-claude-agent.service"}
+  - {src: "role:agent-user-claude-md.j2", dst: /usr/lib/homelab/claude-agent/CLAUDE.md, activate: "try-restart:homelab-claude-agent.service"}
+  - {src: "role:agent-chezmoi-seed.toml.j2", dst: /usr/lib/homelab/claude-agent/chezmoi-seed.toml, activate: "try-restart:homelab-claude-agent.service"}
+  - {src: units/homelab-claude-agent.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent.service}
+  # The Remote Control host.
+  - {src: "role:claude-rc.service.j2", dst: /usr/lib/systemd/system/homelab-claude-rc.service}
+  - {src: units/homelab-claude-rc-alert.service, dst: /usr/lib/systemd/system/homelab-claude-rc-alert.service}
+  - {src: "role:claude-rc-restart.service.j2", dst: /usr/lib/systemd/system/homelab-claude-rc-restart.service}
+  - {src: "role:claude-rc-restart.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-rc-restart.timer}
+  # Background sessions come back at boot.
+  - {src: "role-file:bg_session_resume.py", dst: /usr/local/lib/claude-bg-resume/bg_session_resume.py}
+  - {src: "role:claude-bg-resume.service.j2", dst: /usr/lib/systemd/system/homelab-claude-bg-resume.service}
+  # The cgroup metrics.
+  - {src: "role-file:claude-cgroup-metrics.sh", dst: /usr/local/bin/claude-cgroup-metrics.sh, mode: "0755"}
+  - {src: "role:claude-cgroup-metrics.service.j2", dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.service}
+  - {src: "role:claude-cgroup-metrics.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.timer}
+  # The agent's clone and dotfiles syncs. Their textfiles keep the names `claude-clone-sync` and
+  # `claude-dotfiles-sync`, which observability's host-checks rules read.
+  - {src: "role-file:claude-clone-sync.sh", dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755"}
+  - {src: "role:claude-clone-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-clone-sync.service}
+  - {src: "role:claude-clone-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-clone-sync.timer}
+  - {src: "role-file:claude-dotfiles-sync.sh", dst: /usr/local/bin/claude-dotfiles-sync.sh, mode: "0755"}
+  - {src: "role:claude-dotfiles-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.service}
+  - {src: "role:claude-dotfiles-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.timer}
+  # The caps. systemd merges drop-ins by file name across /etc and /usr/lib, so these sort after
+  # the Ansible-era claude-*.conf copies and their values govern while those remain. The login
+  # caps cover uid 1000 (the operator) and uid 995 (the agent above).
+  - {src: "role:fleet-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf}
+  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf}
+  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-995.slice.d/homelab-claude-caps.conf}
+  # Every user manager on the host reads it, where the role wrote one copy per capped home.
+  - {src: "role:pytest-fanout-cap.conf.j2", dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf}
+  # The stop and fan-out alerts.
+  - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service}
+  - {src: "role:50-claude-stop-alert.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules}
+  - {src: units/fanout-alert@.service, dst: /usr/lib/systemd/system/fanout-alert@.service}
+  - {src: "role:50-claude-fanout-alert.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-fanout-alert.rules}
+  # The root inspector.
+  - {src: "role-file:homelab_rootq.py", dst: /usr/local/sbin/homelab-rootq, mode: "0755"}
+  - {src: "role-file:rootq.sh", dst: /usr/local/bin/rootq, mode: "0755"}
+  - {src: "role:claude-rootq.sudoers.j2", dst: /etc/sudoers.d/homelab-rootq, mode: "0440"}
+  - {src: "role-file:homelab_rootq_socket.py", dst: /usr/local/libexec/homelab-rootq-socket, mode: "0700"}
+  - {src: "role-file:rootq_socket.py", dst: /usr/local/bin/rootq-socket, mode: "0755"}
+  - {src: "role:homelab-rootq.socket.j2", dst: /usr/lib/systemd/system/homelab-rootq.socket}
+  - {src: "role:homelab-rootq@.service.j2", dst: /usr/lib/systemd/system/homelab-rootq@.service}
+units:
+  # A restart drops every session the host runs, so a changed unit waits for the operator.
+  homelab-claude-rc.service: {policy: manual}
+  # Its job is the next boot; a restart would respawn sessions the operator stopped.
+  homelab-claude-bg-resume.service: {policy: manual}
+enable:
+  homelab-claude-agent.service: multi-user.target
+  homelab-claude-rc.service: {target: multi-user.target, when: claude_code_rc_enabled}
+  homelab-claude-rc-restart.timer: {target: timers.target, when: claude_code_rc_enabled}
+  homelab-claude-bg-resume.service: {target: multi-user.target, when: claude_code_bg_resume_enabled}
+  homelab-claude-cgroup-metrics.timer: timers.target
+  homelab-claude-clone-sync.timer: timers.target
+  homelab-claude-dotfiles-sync.timer: {target: timers.target, when: claude_code_agent_dotfiles}
+  homelab-rootq.socket: {target: sockets.target, when: claude_code_rootq_socket_armed}
+# What the role installed. Reconcile retires each unit not shipped under its old name (disable,
+# stop, remove), and hands off each /etc copy of a unit shipped under the same name.
+# Retiring claude-rc.service stops the Remote Control host and drops the phone's sessions, so the
+# PR that adds this list merges in a window the operator picks.
+legacy:
+  - {unit: claude-rc.service}
+  - {unit: claude-rc-alert.service}
+  - {unit: claude-rc-restart.service}
+  - {unit: claude-rc-restart.timer}
+  - {unit: claude-bg-resume.service}
+  - {unit: claude-cgroup-metrics.service}
+  - {unit: claude-cgroup-metrics.timer}
+  - {unit: claude-clone-sync.service}
+  - {unit: claude-clone-sync.timer}
+  - {unit: claude-clone-sync-alert.service}
+  - {unit: claude-dotfiles-sync.service}
+  - {unit: claude-dotfiles-sync.timer}
+  - {unit: claude-dotfiles-sync-alert.service}
+  - {unit: claude-stop-alert@.service}
+  - {unit: fanout-alert@.service}
+  - {unit: homelab-rootq.socket}
+  - {unit: homelab-rootq@.service}
+  - {path: /etc/claude-rc/alert-webhook.env}
+  - {path: /etc/claude-rc}
+  - {path: /etc/claude-stop-alert/alert-webhook.env}
+  - {path: /etc/claude-stop-alert}
+  - {path: /etc/claude-fanout/alert-webhook.env}
+  - {path: /etc/claude-fanout}
+  - {path: /etc/polkit-1/rules.d/50-claude-stop-alert.rules}
+  - {path: /etc/polkit-1/rules.d/50-claude-fanout-alert.rules}
+  - {path: /etc/sudoers.d/claude-rootq}
+  - {path: "/home/{{ sys_user }}/.config/environment.d/90-claude-pytest-cap.conf"}
+  - {path: /var/lib/claude/.config/environment.d/90-claude-pytest-cap.conf}
+  - {path: /var/lib/homelab/setup-render-manifest.d/claude-code}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-bg-resume}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-cgroup-metrics}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-clone-sync}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-dotfiles-sync}
