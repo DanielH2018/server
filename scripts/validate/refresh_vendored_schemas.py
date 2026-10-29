@@ -38,6 +38,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from pathlib import Path
 
 # `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its
@@ -211,7 +212,7 @@ def refresh_core() -> int:
     return failures
 
 
-def main() -> int:
+def main(argv: Sequence[str] = ()) -> int:
     """Download every vendored schema and write it under `schemas/`.
 
     The CRD schemas in `VENDORED` come from the CRDs-catalog; Authelia's configuration schema
@@ -222,7 +223,7 @@ def main() -> int:
     """
     # Before any download: `--help` ran a full refresh until this line, so the entry-point
     # help test rewrote the vendored schemas on every run and failed on any refused fetch.
-    answer_help(__doc__)
+    answer_help(__doc__, list(argv))
     SCHEMA_DIR.mkdir(exist_ok=True)
     failures = refresh_core()
     targets = [
@@ -255,4 +256,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

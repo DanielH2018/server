@@ -27,6 +27,7 @@ import json
 import os
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 # `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its
@@ -152,9 +153,9 @@ def dump(d):
     return json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
-def main():
+def main(argv: Sequence[str] = ()) -> None:
     """Export every non-skipped live dashboard to a normalized JSON file under OUTDIR."""
-    answer_help(__doc__)
+    answer_help(__doc__, list(argv))
     index = gapi("/api/search?type=dash-db")
     untracked = []
     for entry in sorted(index, key=lambda e: e["title"]):
@@ -188,4 +189,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

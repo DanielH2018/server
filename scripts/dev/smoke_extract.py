@@ -12,6 +12,7 @@ here needs an exception list.
 
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 # `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its own
@@ -47,10 +48,14 @@ def extract_changed_images(diff_text: str) -> list[str]:
     return seen
 
 
-if __name__ == "__main__":
+def main(argv: Sequence[str] = ()) -> None:
+    """Print every image ref the diff on stdin adds, one per line."""
     # Before the read: the diff arrives on stdin, so `--help` would hang on a terminal
     # rather than answer.
-    answer_help(__doc__)
-    images = extract_changed_images(sys.stdin.read())
-    for img in images:
+    answer_help(__doc__, list(argv))
+    for img in extract_changed_images(sys.stdin.read()):
         print(img)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
