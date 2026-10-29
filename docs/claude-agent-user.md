@@ -342,6 +342,9 @@ of the pod would drop the capability.
   seed as `ubuntu` (#6408). `rootq` cannot answer for it, because its ancestor rule refuses every
   directory the agent owns. The seed holds three chezmoi answers and no credential, and
   `chezmoi.toml` beside it stays `0600`.
+- `~/.config/gh` and `~/.config/homelab-ui` are `0710` for the same reason. `probe.py applied`
+  stats the `0600` gh token and homelab-ui login as `ubuntu` (#6484, #6487). The group gets
+  traverse only, so it can neither list the directories nor read the files.
 - A task creates `~/.claude/artifacts` and the memory directory as root, owned by the agent,
   `setgid`, with group `ubuntu`. It cannot run as the agent, because the agent belongs to no
   group and so cannot `chgrp` to `ubuntu`. The ACL task runs as root for the same reason. It gives
@@ -663,9 +666,10 @@ The script has three guards:
   directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
   in place, and the role deletes the renamed tree on its next apply. A refused source therefore
   leaves the subset where it was, and the agent always has one of the two.
-- It applies in two passes, every directory but `~/.claude` and then everything but
-  directories. The source names the directory `private_dot_claude`, and a plain apply sets its mode
-  to 0700. That would cut the operator off from the agent's memory store and artifacts, which
+- It applies in two passes, every directory but `~/.claude` and `~/.config/gh` and then
+  everything but directories. The first pass is non-recursive. chezmoi applies a directory
+  target's whole tree below it, so applying `~/.config` reopened `~/.config/gh` to `0755`.
+  The source names the directory `private_dot_claude`, and a plain apply sets its mode to 0700. That would cut the operator off from the agent's memory store and artifacts, which
   `agent_github.yml` opens at 0710 for the operator's group.
 
 **What the agent loses:** root ownership of its copied config. The subset was root-owned, which

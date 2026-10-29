@@ -234,8 +234,8 @@ def behind_park_lines(marker, now):
         return []
     return [
         f"  ✗ the GitOps deployer has not fast-forwarded for {int(age // 60)} min and is behind "
-        "origin/master — that is a park, not a queue; check `journalctl -t gitops-deploy` for "
-        "the skip reason"
+        "origin/master — that is a park, not a queue; check "
+        "`journalctl -u gitops-deploy.service` for the skip reason"
     ]
 
 

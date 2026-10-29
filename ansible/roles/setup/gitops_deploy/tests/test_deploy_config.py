@@ -81,6 +81,24 @@ def test_the_rendered_config_carries_the_ancestor_walk_bound():
     assert shared["ci_ancestor_walk_max"] >= 1
 
 
+def test_the_rollback_fallback_equals_the_role_default():
+    """A config without the key (a hand run, an older render) keeps the budget the role sizes.
+
+    The fallback read 1320 while the role default was 1620, so a missing key granted 300s less
+    rollback than test_gitops_deploy_k8s_rollback_budget.py checks against (#6249).
+    """
+    import pathlib
+
+    import yaml
+
+    role = pathlib.Path(__file__).resolve().parents[1]
+    defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text())
+    assert (
+        deploy_io.load_config({}).k8s_rollback_timeout_s
+        == defaults["gitops_deploy_k8s_rollback_timeout_s"]
+    )
+
+
 def test_a_boolean_is_true_only_for_the_literal_word():
     """`true` and nothing else, case-insensitively — the same test the module made inline."""
 

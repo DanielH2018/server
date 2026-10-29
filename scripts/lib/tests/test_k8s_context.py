@@ -188,3 +188,14 @@ def test_resolve_vars_reads_a_default_through_dirname_and_basename():
     out = resolve_vars(raw, raw)
     assert out["tarball"] == "/usr/local/lib/coredns/1.14.7/coredns.tgz"
     assert out["name"] == "coredns"
+
+
+def test_resolve_vars_reads_a_default_through_the_search_test():
+    """netpol-baseline drops `cloudflare_ips`' IPv6 half with `reject('search', ':')` (#6495)."""
+    raw = {
+        "cidrs": ["104.16.0.0/13", "2400:cb00::/32"],
+        "v4": "{{ cidrs | reject('search', ':') | list }}",
+    }
+    assert resolve_vars(raw, raw, undefined_cls=StrictChainableUndefined)["v4"] == [
+        "104.16.0.0/13"
+    ]

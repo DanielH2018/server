@@ -166,7 +166,7 @@ def park_note(marker: str | None, now: float | None = None) -> str:
         "  behind origin/master -- that is a park, not a queue, and it is the more likely\n"
         "  reason this tree is behind. Rebasing here does not clear it: the primary checkout\n"
         "  is what has to converge.\n"
-        "  Read the skip reason: journalctl -t gitops-deploy | tail -20"
+        "  Read the skip reason: journalctl -u gitops-deploy.service -n 20"
     )
 
 

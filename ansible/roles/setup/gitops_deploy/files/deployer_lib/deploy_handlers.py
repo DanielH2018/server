@@ -53,7 +53,7 @@ def handle_dirty(
 ) -> int:
     """A dirty working tree: log the paths every tick, page at most twice a day."""
     # Say so in the journal on EVERY tick, before the throttle. The Discord page is throttled to
-    # twice a day, so between slots `journalctl -t gitops-deploy` was the only place left to look
+    # twice a day, so between slots `journalctl -u gitops-deploy.service` was the only place left to look
     # and it said `-- No entries --` — indistinguishable from "ticked, nothing to do". On
     # 2026-08-30 one untracked file parked the primary checkout 7 commits behind for ~40 minutes,
     # and reading the empty journal is most of what that cost: every other signal (last_run fresh,

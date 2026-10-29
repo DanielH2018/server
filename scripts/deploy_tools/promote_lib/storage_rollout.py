@@ -23,6 +23,11 @@ A `failure` of STORAGE_TAG itself stays final. The cost is that a real failure d
 Longhorn hop holds up to `storage_rollout_s` later, 14 minutes with a `10m` timeout and a
 `2m` `retryInterval`.
 
+DECIDED: keep the full `storage_rollout_s` hold after #6009 (operator, 2026-10-29, #6439). A
+hop with no failure pays nothing. A real failure is already live when `verify` reads it, so
+the hold only delays `settle`'s reset, while a transient read as final writes a hold that
+only a hand clear lifts. More hops without provisional failures would not change that.
+
 `verify_promotion.expected_set` reads `grace_s` and `rollout_s` into `Expected`, and
 `verify_promotion.verify` asks a `Window` whether the failures it read end the wait.
 

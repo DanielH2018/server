@@ -89,11 +89,14 @@ spec:
     # addresses sit inside the /16, so host-originated callers (the three host crons that dial
     # traefik, a cross-node hop) need no separate /32 grant.
     #
-    # Seven of the Cloudflare entries are IPv6. kube-router buckets ipBlocks per address family
-    # (evalIPBlockPeer in pkg/controllers/netpol/policy.go, v2.6) and installs an ipset only for
-    # a family the node runs, so on this single-stack v4 cluster the v6 entries are inert rather
-    # than a broken ipset. They stay so the list equals `cloudflare_ips` exactly, which is what
-    # cloudflare-ip-drift.sh compares against upstream.
+    # The list carries only the IPv4 half of `cloudflare_ips`. kube-router buckets ipBlocks per
+    # address family (evalIPBlockPeer in pkg/controllers/netpol/policy.go, v2.6) and installs an
+    # ipset only for a family the node runs, so on this single-stack v4 cluster an IPv6 entry
+    # fences nothing. It is not silent, though: kube-router logs a warning per IPv6 CIDR on every
+    # policy sync, which was 75% of daniel-box's k3s.log (#6495). The drift check compares
+    # `cloudflare_ips` itself against upstream, not this list, so dropping the v6 half here
+    # hides no drift. A dual-stack cluster needs the filter in defaults/main.yml removed, or
+    # every IPv6 client of a public name is refused at this port.
     - from:
 {% for cidr in netpol_baseline_traefik_https_sources %}
         - ipBlock:
