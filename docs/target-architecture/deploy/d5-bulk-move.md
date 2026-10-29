@@ -375,10 +375,12 @@ also depends on H2's family PRs for six roles, as *Host-side rows* lists, and ne
   authelia's, D3's `mqtt_password_hash` colon refusal gates mosquitto's, and the `_push_token`
   format refusal from uptime-kuma's conversion PR (#5712) gates uptime-kuma's (*How each kind
   of task moves*).
-- M2's PR 4b gates dri-device-plugin's flip. dri-device-plugin's verify is M2's
-  `K8sExtendedResourceMissing`, which carries `verify="true"` and `shadow: "true"`. The soak
-  reads neither a shadow rule's `for:` nor its alert, so the verify is inert until PR 4b drops
-  `shadow` from k8s-workloads. M2 does not depend on D5, so the edge adds no loop.
+- M2's PR 4b gated dri-device-plugin's flip, and it landed at `39c163646`. dri-device-plugin's
+  verify is M2's `K8sExtendedResourceMissing`, which carries `verify="true"`. The soak reads
+  neither a shadow rule's `for:` nor its alert, so the verify was inert until PR 4b dropped
+  `shadow` from k8s-workloads (#5530).
+  `scripts/renderer/tests/test_renderer_soak.py::test_the_soak_verifies_dri_device_plugin_through_its_unshadowed_rule`
+  fails if the rule is shadowed again. M2 does not depend on D5, so the edge adds no loop.
 - R2 PR 7b and a green run of D3.3d's `sops-manifest-type-proof` job gate qbittorrent's flip,
   because R2 PR 7b moves `mullvad_account` into a dedicated SOPS Secret whose all-digit value
   only that job measures (*How each kind of task moves*). Neither R2 nor D3 waits on D5, so
