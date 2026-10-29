@@ -43,7 +43,7 @@
  ".claude/hooks/tests/test_setup_wiring.py": 0.01,
  ".claude/hooks/tests/test_strip_cd_cwd.py": 0.0,
  ".claude/hooks/tests/test_uv_python.py": 0.06,
- ".claude/hooks/tests/test_uv_python_in_batch.py": 23.39,
+ ".claude/hooks/tests/test_uv_python_in_batch.py": 0.79,
  "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py": 0.0,
  "ansible/roles/k8s/arr-notification/tests/test_seed_job.py": 3.46,
  "ansible/roles/k8s/artifacts/tests/test_artifact_server.py": 0.09,
