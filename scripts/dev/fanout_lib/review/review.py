@@ -21,7 +21,9 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    batch whose PR fails `red_gate.green_gate` gets that failure as one more finding, and the
    gate runs again after the fix; a batch still failing it is not landed. A batch passing it
    has each fix hunk reverted on its own under the red tests (`hunk_check`), for the record.
-4. delta review — a fresh reviewer reads only the fix's commits.
+4. delta review — a fresh reviewer reads the fix's commits inside the whole change. A finding
+   it reports is left only if it quotes a line the fix head's file has (`delta_confirm`,
+   #6547); the rest are carried unverified and hold nothing.
 4b. ready — `review_ci.ready_gate` marks a draft PR ready and waits for its CI run (#5563).
 5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
    the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
@@ -112,6 +114,7 @@ from fanout_lib.review.red_gate import (
     red_section,
     labelled_skip_reason,
 )
+from fanout_lib.review.delta_confirm import split_confirmed
 from fanout_lib.review.green_contest import contested, settle
 from fanout_lib.review.hardened_runs import ResetFailed
 from fanout_lib.review.red_tests import issue_subjects
@@ -289,6 +292,13 @@ class Pipeline:
             len(denials) if isinstance(denials, list) else 0
         )
         return phase
+
+    def _read_at(self, rev: str, path: str) -> str | None:
+        """`path` as commit `rev` holds it, or None when it has no such file."""
+        shown = self.run(
+            ["git", "-C", str(self.worktree), "show", f"{rev}:{path}"], None
+        )
+        return shown.stdout if shown.returncode == 0 else None
 
     def _git(self, *args: str) -> str:
         return self.run(["git", "-C", str(self.worktree), *args], None).stdout.strip()
@@ -572,11 +582,16 @@ class Pipeline:
                 )
                 left, delta_error = findings_of(delta)
                 # A failed delta review proves nothing was resolved.
-                self.record.remaining = (
-                    actionable(left)
-                    if left is not None
-                    else list(self.record.actionable)
-                )
+                if left is None:
+                    self.record.remaining = list(self.record.actionable)
+                else:
+                    # A reported finding is left only if the fix head's file holds the line
+                    # it quotes (#6547); the rest are carried unverified and hold nothing.
+                    held, unverified = split_confirmed(
+                        actionable(left), lambda path: self._read_at(after, path)
+                    )
+                    self.record.remaining = held
+                    self.record.unverified = unverified
                 if delta_error:
                     self.record.review_error = f"delta review: {delta_error}"
             # The fix may touch the red tests even when the first run passed, so the PR that

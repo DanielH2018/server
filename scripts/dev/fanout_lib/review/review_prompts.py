@@ -50,6 +50,9 @@ FINDINGS_SCHEMA = {
                         ],
                     },
                     "detail": {"type": "string"},
+                    # The delta review quotes the line it cites as the fix head holds it;
+                    # `delta_confirm` counts the finding as left only if that quote is there.
+                    "evidence": {"type": "string"},
                     # Only on a `test` finding; `review_record.actionable` reads it (#4023).
                     "subkind": {
                         "type": "string",
@@ -139,6 +142,13 @@ Report each earlier finding the fix does not resolve, keeping its title. The aut
 may argue a finding is wrong; report it again only if the argument does not hold. Report any
 new defect the fix introduces as well, including one that only shows against the rest of the
 change.
+
+Judge each earlier finding against the tree at `{after}`, in this worktree, not against the
+change as the first review read it: the fix commit may have resolved it, and the line it cites
+may have moved. For every finding you report, set `line` to the line where the defect is in
+the tree at `{after}`, and set `evidence` to that line's text copied verbatim from the file
+there. The pipeline checks the quote against `{after}`; a finding without a quote that the
+file holds there is recorded as unverified and does not hold the PR.
 
 A finding on `(red/green gate)` says a red test, written from the issue text before the fix,
 still fails. The reply may contest that test by citing a `file:line` that contradicts its
