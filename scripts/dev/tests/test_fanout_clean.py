@@ -170,7 +170,7 @@ def test_the_lock_is_released_only_for_a_tree_about_to_be_removed():
     assert calls == [("unlock", tree.path), ("lock", tree.path, "fanout-b")]
 
 
-def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_the_script():
+def test_the_remote_command_resets_fetches_then_runs_the_primary_checkouts_copy_of_the_script():
     cmd = as_operator(remote_clean_command(B))
     # The active-unit refusal is the outermost test; everything else is its else.
     assert cmd.startswith(
@@ -181,13 +181,15 @@ def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_t
         "git -C /home/ubuntu/server fetch --quiet origin master && "
     )
     # The interpreter leg is the else of the tree-exists test (Ruling 30), and runs from
-    # the primary checkout's cwd against the worktree's own copy of the script.
+    # the primary checkout's cwd against the primary checkout's copy of the script, never the
+    # batch worktree's, which is frozen at launch and cannot carry a later fix (#6571).
     assert (
         "else cd /home/ubuntu/server && "
         "uv run --no-project --no-python-downloads --python 3.14.6 python "
-        f"{B.worktree}/scripts/dev/fanout_place.py clean-one {B.worktree} {B.branch}"
+        f"/home/ubuntu/server/scripts/dev/fanout_place.py clean-one {B.worktree} {B.branch}"
         in cmd
     )
+    assert f"{B.worktree}/scripts/dev" not in cmd
 
 
 def _porcelain(*paths: str, locked_reason: str | None = None) -> str:
