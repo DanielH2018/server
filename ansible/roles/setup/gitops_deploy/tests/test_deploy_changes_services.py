@@ -349,6 +349,20 @@ def test_a_common_task_file_change_reaches_the_roles_importing_it():
     assert setup_tags_for([path]) == consumers
 
 
+def test_a_checkout_file_a_setup_role_copies_reaches_that_role():
+    """hypervisor copies the etcd drill script from the checkout, under no role's directory, so
+    an edit to it must name hypervisor (#6411). k3s gets `prune_releases.py` through
+    `common/tasks/release_bin.yml`, and only `k3s-bringup.yml` runs k3s, so no tag applies it."""
+    drill = ["scripts/backup/etcd_restore_drill.sh"]
+    cs = services_from_changed_paths(drill)
+    assert cs.setup_roles == {"hypervisor"}
+    assert cs.broad_setup
+    assert setup_tags_for(drill) == {"hypervisor"}
+    pruner = ["scripts/deploy_tools/prune_releases.py"]
+    assert setup_tags_for(pruner) == set()
+    assert services_from_changed_paths(pruner).setup_roles == {"k3s"}
+
+
 def test_a_kuma_check_template_change_reaches_the_roles_importing_its_task_file():
     """`kuma_check_timer.yml` renders the kuma-check pair, so a template edit reaches a host
     only through that task file's importers (#3319). `common` is not recorded, so the alert
