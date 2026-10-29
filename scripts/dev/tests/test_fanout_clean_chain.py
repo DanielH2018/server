@@ -132,7 +132,7 @@ def _run_chain(repo, worktree, stub_bin, proc_root=None):
     # `remote_clean_command` takes no proc-root seam, so the scan it calls is wrapped here.
     scan = partial(live_process_scan, proc_root=str(proc_root))
     with mock.patch.object(clean, "live_process_scan", scan):
-        cmd = remote_clean_command(batch, repo=str(repo))
+        cmd = remote_clean_command(batch, repo=str(repo), script_root=str(repo))
     # The guard that makes running this safe: never let it name the shared checkout.
     assert str(repo) in cmd and "/home/ubuntu/server" not in cmd
     return run(["bash", "-c", cmd], env=_scrubbed_env(extra_path=str(stub_bin)))
