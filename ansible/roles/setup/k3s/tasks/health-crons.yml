@@ -462,7 +462,8 @@
 - name: Create the release-staleness check's state directory
   tags: [release-staleness]
   # Holds the stale set the last DOWN pushed, so the check can re-alert when that set changes
-  # while the tile stays DOWN. Owned by the cron's own user, and outside the primary
+  # while the tile stays DOWN, and the run's verdict the SessionStart banner reads (0755, so a
+  # session's own user can reach it). Owned by the cron's own user, and outside the primary
   # checkout: an untracked file there would park the GitOps deployer.
   ansible.builtin.file:
     path: /var/lib/homelab/release-staleness

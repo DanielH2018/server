@@ -308,9 +308,9 @@ def test_the_real_node_crons_gate_resolves_for_each_host():
         node_crons = [s for s in skips if "node_crons.yml" in s.task]
         assert all("does not apply" in s.reason for s in node_crons), (host, node_crons)
     assert any("node_crons" in s.task for s in walked["daniel-server"][1])
-    # The three task files #6359 tracks read set_fact values; a fourth must not appear unseen.
+    # The three task files #6359 tracked read static set_facts, which the walk evaluates.
     for host, (_, skips) in walked.items():
-        assert sorted(s.task.rsplit("/", 1)[-1] for s in skips if s.unchecked) == ["main.yml: import agent.yml", "stamp_deployed.yml", "stamp_deployed.yml"], host  # fmt: skip
+        assert [s.task for s in skips if s.unchecked] == [], host
 
 
 GATED = """\
@@ -370,8 +370,11 @@ def test_a_type_test_or_filter_does_not_make_a_run_time_name_readable(tmp_path, 
 
 def test_a_set_fact_name_is_not_read_from_a_default_of_the_same_name(tmp_path):
     tasks = (
+        "- name: Read the list\n"
+        "  ansible.builtin.command: cat /etc/x/list\n"
+        "  register: x_out\n"
         "- name: Work out the list\n"
-        "  ansible.builtin.set_fact: {x_list: '{{ [1] }}'}\n"
+        "  ansible.builtin.set_fact: {x_list: '{{ x_out.stdout_lines }}'}\n"
         + GATED.format(when="x_list | length > 0")
     )
     _, skips = applied_tasks.expected(
@@ -418,3 +421,53 @@ def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_pat
     assert {w.path for w in wants} == {"/etc/a", "/etc/b"}
     _, skips = applied_tasks.expected(role, "daniel-box", {})
     assert [(s.reason, s.unchecked) for s in skips] == [("it loops over a list that is not literal", True)]  # fmt: skip
+
+
+def test_a_loop_item_holding_jinja_is_rendered_before_the_task_reads_it(tmp_path):
+    """Ansible templates the loop before it binds `item`, so a dict item's Jinja values and
+    a `dirname` item both reach a literal path (#6409)."""
+    tasks = (
+        "- name: Make the dict items' directories\n"
+        "  ansible.builtin.file: {path: '{{ item.path }}', state: directory, mode: '{{ item.mode }}'}\n"
+        "  loop:\n"
+        "    - {path: '{{ home }}/.ssh', mode: '0750'}\n"
+        "    - {path: /opt/x, mode: \"{{ '0710' if opened else '0700' }}\"}\n"
+        "    - {path: '{{ nowhere }}/y', mode: '0700'}\n"
+        "- name: Make the string items' directories\n"
+        "  ansible.builtin.file: {path: '{{ item }}', state: directory}\n"
+        "  loop: ['{{ creds | dirname }}']\n"
+    )
+    ctx = {
+        "home": "/var/lib/a",
+        "opened": True,
+        "creds": "/var/lib/a/.config/ui/c.json",
+    }
+    wants, skips = applied_tasks.expected(_role(tmp_path, tasks), "daniel-box", ctx)
+    assert {(w.path, w.mode) for w in wants} == {
+        ("/var/lib/a/.ssh", "0750"),
+        ("/opt/x", "0710"),
+        ("/var/lib/a/.config/ui", None),
+    }
+    # An item naming a variable the context lacks stays as written, and its task is skipped.
+    assert [(s.task, s.reason) for s in skips] == [
+        ("Make the dict items' directories", "its path does not render to a literal")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "kept"),
+    [("/etc/x/user-1000.slice.d", False), ("/etc/x/user-1001.slice.d", True)],
+)
+def test_a_gate_through_basename_or_dirname_is_evaluated(tmp_path, path, kept):
+    """ansible-core's path filters are registered, so such a gate is read, not refused (#6407)."""
+    tasks = (
+        "- name: Remove the uncapped drop-in\n"
+        "  ansible.builtin.file: {path: /etc/x/drop-in, state: absent}\n"
+        "  when:\n"
+        "    - (p | basename | replace('user-', '') | replace('.slice.d', '') | int) not in uids\n"
+        "    - p | dirname == '/etc/x'\n"
+    )
+    ctx = {"p": path, "uids": [1000]}
+    wants, skips = applied_tasks.expected(_role(tmp_path, tasks), "daniel-box", ctx)
+    assert skips == []
+    assert [w.path for w in wants] == (["/etc/x/drop-in"] if kept else [])

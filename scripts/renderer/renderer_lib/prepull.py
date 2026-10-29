@@ -24,12 +24,22 @@ old pod keeps serving through the pull. The Kustomization's `timeout` is the rol
 holds a kustomize-controller worker and still sits on `verify`'s chained timeout.
 
 DECIDED: the Job sets no `activeDeadlineSeconds`. A slow pull never fails a Pod: it waits in
-`ContainerCreating` or `ImagePullBackOff`. So a deadline is the only way the Job could fail,
+`ContainerCreating` or `ImagePullBackOff`. So a deadline is the only way a slow pull could fail the Job,
 and Flux never re-runs a failed Job under the same name. Every later revision that kept the
 image would then hold `<tag>` at `DependencyNotReady` until a new content tag renamed the
 Job. Without a deadline, a pull that outlasts the Kustomization's `timeout` costs that
 revision its verdict, and the Job keeps pulling. Flux's next retry finds it complete and
 applies `<tag>`.
+
+DECIDED: the Job retries a failed Pod `BACKOFF_LIMIT` times (#5552). A slow pull leaves the
+Pod waiting, never failed, but a Pod can still fail: the kubelet evicts it under disk pressure,
+which an 851 MB pull onto a full disk invites, or a node reboot interrupts the pull, which the
+missing deadline makes likelier to overlap. With `backoffLimit: 0` either one leaves a Failed
+Job under the same name, and Flux never re-runs it, so `<tag>` sits at `DependencyNotReady`
+until a new content tag renames the Job. A plain retry count covers every such cause, where a
+`podFailurePolicy` counting only `DisruptionTarget` failures would leave out any failure the
+kubelet does not mark. An image without `sh` fails every attempt, and the kubelet's
+exponential backoff fails that Job about a minute after the first attempt.
 
 Each Job's spec carries the image refs and the placement, so a content-tag change renames the
 Job and Flux runs it again, while a revision that leaves the images alone keeps the completed
@@ -84,6 +94,8 @@ SCRIPT = (
     'echo "image present on this node"\n'
 )
 COMMAND = ["sh", f"{MOUNT}/{SCRIPT_NAME}"]
+# How many failed Pods the Job replaces before it fails (#5552). The census holds this kind to it.
+BACKOFF_LIMIT = 3
 
 
 def _pod_specs(files: Mapping[str, str]) -> list[tuple[str, dict]]:
@@ -218,9 +230,9 @@ def prepull_files(tag: str, pulls: Iterable[tuple[dict, list[str]]]) -> dict[str
                 "annotations": {"homelab/job-kind": "prepull"},
             },
             "spec": {
-                # A slow or failing pull leaves the pod waiting, not failed, so a retry
-                # would add nothing. No deadline: the module docstring's DECIDED says why.
-                "backoffLimit": 0,
+                # Retries a Pod that failed rather than waited, and sets no deadline: the
+                # module docstring's first two DECIDEDs say why.
+                "backoffLimit": BACKOFF_LIMIT,
                 "template": {
                     "metadata": {"labels": {"app": base}},
                     "spec": {

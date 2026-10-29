@@ -110,10 +110,8 @@ _SENTENCE_END_RE = re.compile(r"\.(?:\s|$)")
 _PLANES: list[tuple[str, str]] = [
     ("ansible/roles/k8s/", "roles/k8s"),
     ("ansible/roles/setup/", "roles/setup"),
-    ("ansible/roles/containers/", "roles/containers"),
-    # A Pi service that moved into the package (H5) keeps its markers in the plane it came from,
-    # so a move PR does not shuffle the page's rows between sections.
-    ("hosts/components/pi-compose/services/", "roles/containers"),
+    # The Pi's Compose services (H5); H5.12 deleted the `roles/containers` tree they came from.
+    ("hosts/components/pi-compose/services/", "pi-compose"),
     ("scripts/", "scripts"),
     ("docs/", "docs"),
 ]

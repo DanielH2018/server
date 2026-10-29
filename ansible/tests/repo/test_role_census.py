@@ -1,11 +1,11 @@
 """`role_dirs` returns real roles and skips a retired role's `__pycache__` shell.
 
-The census is what every guard reads a role tree through — `roles/k8s/`, `roles/setup/` and
-the Pi's `roles/containers/` alike — so its two edges, debris is skipped and an empty
-directory is not, need their own coverage rather than each caller's.
+The census is what every guard reads a role tree through — `roles/k8s/` and `roles/setup/`
+alike — so its two edges, debris is skipped and an empty directory is not, need their own
+coverage rather than each caller's.
 """
 
-from _helpers import CONTAINER_ROLES, SETUP_ROLES
+from _helpers import SETUP_ROLES
 from _role_census import role_dirs, task_files, task_files_by_role
 
 
@@ -57,8 +57,6 @@ def test_the_default_census_finds_the_real_k8s_roles():
     assert {"manifests", "image-builder", "volume-snapshot"} <= names
 
 
-def test_the_census_finds_the_real_setup_and_pi_roles():
-    """Non-vacuity for the setup and Pi trees, each named by a role."""
+def test_the_census_finds_the_real_setup_roles():
+    """Non-vacuity for the setup tree, named by two roles."""
     assert {"common", "gitops_deploy"} <= {p.name for p in role_dirs(SETUP_ROLES)}
-    # H5.9 moved wg-easy, the last Pi service, into the package; `common` is what remains.
-    assert {"common"} <= {p.name for p in role_dirs(CONTAINER_ROLES)}

@@ -1,10 +1,9 @@
-"""The setup-plane and Pi-plane fact readers behind `gen_role_glance.py`, and what every plane shares.
+"""The setup-plane fact readers behind `gen_role_glance.py`, and what every plane shares.
 
 `gen_role_glance.py` owns the k8s readers, the in-place writer and the CLI; its docstring says which
-facts each role shape prints and why. This module holds the readers for the setup and Pi planes — a
-setup role's applying playbook, crons and timers; a Pi compose role's image pins, `containers_list`
-facts and `common_config_changed` wiring — and `image_repository`, which
-every plane's image line goes through.
+facts each role shape prints and why. This module holds the readers for the setup plane — a setup
+role's applying playbook, crons and timers — and `image_repository`, which every plane's image line
+goes through.
 
 STATIC PARSING ONLY: tasks and playbooks through `yaml.safe_load`, templates by line with
 a regex. A cron schedule or timer key's Jinja resolves to its fleet-wide value where no host
@@ -22,13 +21,10 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from pathlib import Path
-from typing import Any
 
 from deploy_tools.setup_lib.setup_gates import role_end_guard
 from lib import yaml_fast
-from lib.ansible_inventory import PI_HOST
 from lib.json_types import JsonObject, JsonValue, as_object
-from lib.render_guard import entry_tags
 from lib.jinja_comments import strip_jinja_comments
 from lib.jinja_defaults import resolve
 from lib.k8s_roles import role_dirs
@@ -36,7 +32,6 @@ from lib.repo_paths import ANSIBLE, ROLES
 from docs.reference.crons import schedule_text
 
 SETUP_ROLES = ROLES / "setup"
-CONTAINERS_ROLES = ROLES / "containers"
 # The playbooks that apply setup roles. `deploy.yml` applies none of them.
 SETUP_PLAYBOOKS = ("initial_setup.yml", "bootstrap.yml", "k3s-bringup.yml")
 # Include-only: no `tasks/main.yml`, no playbook entry, nothing to print.
@@ -50,11 +45,6 @@ _TIMER_KEYS = (
     "OnStartupSec",
 )
 _TIMER_KEY_RE = re.compile(r"^\s*(" + "|".join(_TIMER_KEYS) + r")\s*=\s*(.*?)\s*$")
-# A compose service key is a two-space-indented bare key; its `image:` sits deeper.
-_COMPOSE_SERVICE_RE = re.compile(
-    r"^  ([A-Za-z0-9_.-]+|\{\{[^}]*\}\}[A-Za-z0-9_.-]*):\s*$"
-)
-_COMPOSE_IMAGE_RE = re.compile(r"^\s{4,}image:\s*[\"']?([^\"'#\s]+)")
 _NESTING_KEYS = ("block", "rescue", "always")
 
 _DIGEST_RE = re.compile(r"@sha256:[0-9a-f]+$")
@@ -287,90 +277,5 @@ def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list
         lines.append(
             "- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, "
             "no `templates/*.timer.j2`)"
-        )
-    return lines
-
-
-# --- Pi compose-plane facts ------------------------------------------------------------------
-
-
-def compose_images(role_dir: Path) -> list[tuple[str, list[str]]]:
-    """`(repository, [service, …])` for every image the compose template pins, first seen first.
-
-    The template is Jinja over YAML, so it is read by line: a two-space-indented key opens
-    a service, and the next `image:` under it belongs to that service. docker-proxy's three
-    services share one image and collapse to one line naming all three.
-    """
-    tmpl = role_dir / "templates" / "docker-compose.yml.j2"
-    if not tmpl.is_file():
-        return []
-    found: dict[str, list[str]] = {}
-    service = "?"
-    for line in strip_jinja_comments(tmpl.read_text()).splitlines():
-        m = _COMPOSE_SERVICE_RE.match(line)
-        if m:
-            service = m.group(1)
-            continue
-        m = _COMPOSE_IMAGE_RE.match(line)
-        if m:
-            found.setdefault(image_repository(m.group(1)), []).append(service)
-    return list(found.items())
-
-
-def config_change_wiring(role_dir: Path) -> str | None:
-    """The `common_config_changed` expression the role hands `docker_deploy`, or None.
-
-    `roles/containers/common/CLAUDE.md`: a role that bind-mounts a templated config file
-    registers those tasks and passes the flag as an `include_role` var, which is what turns
-    a config-only edit into a container recreate.
-    """
-    for tasks_file in sorted((role_dir / "tasks").glob("*.yml")):
-        for task in _walk_tasks(load_yaml_list(tasks_file)):
-            vars_ = task.get("vars")
-            if isinstance(vars_, dict) and "common_config_changed" in vars_:
-                return str(vars_["common_config_changed"])
-    return None
-
-
-def pi_glance_lines(entry: dict[str, Any], role_dir: Path) -> list[str]:
-    """The block's bullet lines for one Pi compose role, unwrapped."""
-    tags = ",".join(entry_tags(entry))
-    lines: list[str] = [f'- **Deploy tag:** `--tags "{tags}" -e target={PI_HOST}`']
-
-    images = compose_images(role_dir)
-    if images:
-        label = "Image" if len(images) == 1 else "Images"
-        cells = ", ".join(
-            f"`{repo}` (" + ", ".join(f"`{svc}`" for svc in services) + ")"
-            for repo, services in images
-        )
-        lines.append(f"- **{label}:** {cells}")
-    else:
-        lines.append("- **Image:** none found in `templates/docker-compose.yml.j2`")
-
-    facts = []
-    if entry.get("port") is not None:
-        facts.append(f"port `{entry['port']}`")
-    if entry.get("udp_port") is not None:
-        facts.append(f"UDP port `{entry['udp_port']}`")
-    networks = entry.get("networks") or []
-    facts.append(
-        "networks " + ", ".join(f"`{n}`" for n in networks)
-        if networks
-        else "no networks"
-    )
-    facts.append("Authelia" if entry.get("use_authelia") else "no Authelia")
-    lines.append(f"- **Entry:** `host_vars/{PI_HOST}.yml` → " + ", ".join(facts))
-
-    wiring = config_change_wiring(role_dir)
-    if wiring:
-        lines.append(
-            f"- **Config-change wiring:** `common_config_changed: {wiring}` — a config edit "
-            "recreates the container"
-        )
-    else:
-        lines.append(
-            "- **Config-change wiring:** none — the compose file is the only config, and a "
-            "compose change recreates on its own"
         )
     return lines

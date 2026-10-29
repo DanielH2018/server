@@ -198,6 +198,14 @@ the `down` with the added and cleared names prefixed. A DOWN that is not a verdi
 failing, or the probe exiting above 1) keeps the recorded set, or records an empty one so the
 first verdict after it still notifies. An `up` clears it.
 
+**The SessionStart banner reads the run's verdict from a file** (#6183). Every run that reaches
+a verdict writes `status=<up|down> <probe output>` to `/var/lib/homelab/release-staleness/verdict`,
+0644 so a session running as another user can read it. The text omits the re-alert prefix,
+which the banner's parser (`.claude/hooks/hooklib/service_lines.py`) would read as an
+unrecognised verdict. The banner ignores a file older than two hours. When the state directory
+exists with no verdict file in it, the banner names the apply that installs the writing cron,
+`k3s-bringup.yml --tags release-staleness`, rather than staying silent.
+
 ## Both nodes pin their LAN address, because k3s binds it
 
 k3s binds `server_ip` itself, through etcd's peer listener and the apiserver's advertise

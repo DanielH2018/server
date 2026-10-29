@@ -345,3 +345,19 @@ def test_the_poller_answers_help(capsys) -> None:
         poll.main(["claude_triage_poll.py", "--help"], "/nonexistent")
     assert exit_.value.code == 0
     assert "Poll Kuma and Alertmanager" in capsys.readouterr().out
+
+
+def test_a_failed_prometheus_read_is_logged_with_its_url_at_warning(
+    capsys, monkeypatch
+) -> None:
+    # read_all falls back to the next URL, so a silent None hid a dead loopback Prometheus
+    # behind an answering ClusterIP (#6202).
+    def refuse(url, timeout):
+        raise OSError("connection refused")
+
+    monkeypatch.delenv("JOURNAL_STREAM", raising=False)
+    assert poll.prom_vector("http://127.0.0.1:9090", "up", urlopen=refuse) is None
+    assert capsys.readouterr().out == (
+        "claude-triage-poll: Prometheus read failed: connection refused "
+        "url=http://127.0.0.1:9090 query=up\n"
+    )

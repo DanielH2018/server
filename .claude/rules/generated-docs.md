@@ -23,8 +23,7 @@ tunable it reads. A commit that skipped prek fails
 `scripts/docs/gen_role_glance.py` writes one field set per role shape between two
 `generated_from` markers under that heading: a deployed k8s role's deploy tag, image
 repositories, route, claims with the Longhorn backup tier of each, and auto-deploy stance; a
-setup role's applying playbook and tag, crons and timers; a Pi compose role's deploy tag,
-image repositories, `containers_list` facts and `common_config_changed` wiring. The prose below the markers stays hand-written. Changing a
+setup role's applying playbook and tag, crons and timers. The prose below the markers stays hand-written. Changing a
 role's defaults, templates, tasks, playbook entry or `containers_list` entry — or, for a
 claim's tier, its StorageClass or the `longhorn-reconcile` role's `k3s_longhorn_*_volumes` lists — moves the
 block. The `regen-role-glance` prek hook runs `gen_role_glance.py --fix` on that commit. It

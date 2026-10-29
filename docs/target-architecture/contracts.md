@@ -153,6 +153,12 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
     `DIR/images/`. The content tag is `sha-<12 hex>` over the context's `data`, as
     `image_builder_content_tag` computes it. A flux-owned consumer's image ref reads that tag
     from the same render, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS` (D5).
+- **The deploy-tag label.** The renderer stamps `homelab/role: <tag>` on every document a
+  prune-armed role renders into `DIR/cluster/<tag>/`, through
+  `ansible/templates/role-labelled.yaml.j2`. C7's workload-service mapping reads it to name
+  an object's deploy tag. R4 keeps the stamping in the renderer when it deletes
+  `k8s/manifests`. C7 does not adopt `kustomize.toolkit.fluxcd.io/name` in its place (M2 Open
+  question 1, ruled 2026-10-28).
 - **Vendored files.** A role may ship verbatim upstream files and kustomize `patches:` in its
   `kustomization.yaml` (H1). The renderer refuses a directory that holds vendored files and a
   placeholder, so such a directory never substitutes.
@@ -782,9 +788,6 @@ No request on the slice index is open.
   Host mode renders a secret reference as `${<key>}` in two kinds of file, a component's
   declared outputs and its compose files, and escapes those files by the cluster-mode rule.
   Every other host file keeps every `${` literal. Gate: before H4.1a3 merges.
-- **The label that names a deploy tag** (M2 Open question 1). The renderer keeps stamping
-  `homelab/role`, or C7 adopts `kustomize.toolkit.fluxcd.io/name` with `-deferred` stripped.
-  Gate: before D6 merges.
 
 ### Requests on C2
 
@@ -1323,3 +1326,11 @@ Applied to this page:
   restores, named by its slice", with H2's `longhorn-restore-drill-stamps` as its first
   member. The row left *Wider prune exemptions*, which keeps the PersistentVolume and
   StorageClass request. This clears the gate before H2.3b merges.
+
+### Operator ruling (2026-10-28)
+
+- **The label that names a deploy tag** (M2 Open question 1). The operator ruled on
+  2026-10-28 that the renderer keeps stamping `homelab/role`, and C7 does not adopt
+  `kustomize.toolkit.fluxcd.io/name`. C1 gains *The deploy-tag label*. The row left
+  *Requested amendments not yet applied*, which clears this gate before D6 merges, and D6.0's
+  third check, that C1 or C7 names the label, now passes.

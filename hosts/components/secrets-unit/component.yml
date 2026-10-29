@@ -14,6 +14,10 @@
 #   - /usr/lib/homelab/secret-templates/, where each declared output installs;
 #   - `secrets_inputs_sha256` in the manifest, which reconcile compares.
 #
+# The script imports reconcile_lib's `log` from /usr/lib/homelab, which the reconcile component
+# ships, so a host that lists this component lists reconcile too.
+# ENFORCED: hosts/lib/tests/test_reconcile_component.py, the secrets-unit test (#6202).
+#
 # Not enabled at boot: a dependent's Wants=/After=homelab-secrets.service pulls it in, and
 # reconcile restarts it when its inputs change or it is not active.
 depends:

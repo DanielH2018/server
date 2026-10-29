@@ -93,7 +93,7 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     this to decide, so that landing a helper-role change alongside all of its callers stops
     reading as `needs-manual-apply`.
 
-    Only ``roles/k8s`` is walked. The Pi's Compose roles include `containers/common`, not a k8s
+    Only ``roles/k8s`` is walked. The Pi's deleted Compose roles included `containers/common`, not a k8s
     role, and no k8s role is reachable from them.
 
     ``repo`` names the checkout to walk, for a caller that reads a tree other than the one

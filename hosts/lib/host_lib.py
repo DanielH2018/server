@@ -2,8 +2,9 @@
 """Shared I/O-shell helpers for the host-run scripts.
 
 Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
-longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py, render_records.py, live_drift_check.py
-and secret rotation's rotation_tools.py. Each runs via
+longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py, render_records.py, live_drift_check.py,
+the triage poller and runner, deploy_ui.py, the fake-remux scripts and secret rotation's
+rotation_tools.py. Each runs via
 ``uv run --no-project --python <pin>`` (host_python_version in
 ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed into its own
 ``/opt`` dir, where it does a ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...``
@@ -12,6 +13,10 @@ scripts: the Cloudflare-1010 User-Agent on the Discord POST and its length cap, 
 torn-write-safe atomic state write, the config.env parser, the kubectl runner, the RFC3339
 parser, the Uptime Kuma push, the GitHub token lookup and REST read, the journal-aware ``log``
 with its ``logfmt`` fields and crash hook, and the node-exporter textfile write. Stdlib only.
+
+The repository signer (homelab_repo_sign.py) imports it under the host's /usr/bin/python3,
+Ubuntu 24.04's 3.12, so this file and kuma_push.py keep to the 3.12 grammar (#6202):
+pyproject.toml formats both for py312, and tests/test_host_lib.py parses them with it.
 """
 
 from __future__ import annotations
@@ -91,14 +96,14 @@ def _fd_is_journal(fd: int) -> bool:
         dev, ino = os.environ["JOURNAL_STREAM"].split(":")
         st = os.fstat(fd)
         return (st.st_dev, st.st_ino) == (int(dev), int(ino))
-    except KeyError, ValueError, OSError:
+    except (KeyError, ValueError, OSError):
         return False
 
 
 def _stream_is_journal(stream) -> bool:
     try:
         return _fd_is_journal(stream.fileno())
-    except AttributeError, OSError, ValueError:  # pytest's capture has no fd
+    except (AttributeError, OSError, ValueError):  # pytest's capture has no fd
         return False
 
 
@@ -188,7 +193,9 @@ def install_excepthook() -> None:
     sys.excepthook = hook
 
 
-def write_textfile(path: str, text: str | bytes, mode: int = 0o644) -> None:
+def write_textfile(
+    path: str | os.PathLike[str], text: str | bytes, mode: int = 0o644
+) -> None:
     """Replace `path` with `text` atomically, at `mode`, for a reader polling the directory.
 
     The temp file is `mkstemp`'s, in the same directory, named `.<basename>.<random>`, so it
@@ -638,7 +645,7 @@ def journal_reader(binary, window_hours, timeout):
                 text=True,
                 timeout=timeout,
             )
-        except subprocess.SubprocessError, OSError:
+        except (subprocess.SubprocessError, OSError):
             return None
         if proc.returncode != 0:
             return None

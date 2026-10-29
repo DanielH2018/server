@@ -10,8 +10,9 @@ governs: []
 
 ## Status
 
-Accepted. Decided with [ADR-0002](0002-k3s-over-docker-compose-for-the-cluster-nodes.md) and
-unchanged since.
+Accepted. Decided with [ADR-0002](0002-k3s-over-docker-compose-for-the-cluster-nodes.md).
+Amended 2026-10-28: the Pi's services ship in its host package, and `ansible/roles/containers/`
+is retired (*Amendment* below).
 
 ## Context
 
@@ -32,6 +33,32 @@ an operator uses to get back in when something else has broken.
 
 `daniel-pi` keeps Docker Compose and stays out of the cluster. It is driven remotely over
 SSH with `-e target=daniel-pi`, sets `has_gitops: false`, and is not a k3s node of any kind.
+
+## Amendment (2026-10-28): the Pi's services ship in its host package
+
+The operator accepted this amendment on 2026-10-24, before H5.2b merged
+([h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md), *Open questions* 7). H5.12
+records it here.
+
+**The deploy path changes, and the decision does not.** `daniel-pi` keeps Docker Compose and
+stays out of the cluster. Its Docker services are no longer Ansible roles that
+`deploy.sh -e target=daniel-pi` renders and applies over SSH. They are `compose_services`
+entries in `ansible/inventory/host_vars/daniel-pi.yml`, rendered from
+`hosts/components/pi-compose/services/<name>/` into the `homelab-daniel-pi` host package. The
+Pi's updater installs each package version, and `homelab-compose.service` runs the services as
+one Compose project, `homelab`. A merged change reaches the Pi without a hand-run deploy.
+
+**`ansible/roles/containers/` is retired.** H5.6 to H5.9 moved docker-proxy, autoheal, alloy and
+wg-easy into the package, and H5.12 deleted the shared `common` role and the tree with it. A
+service's configuration still lives in the tree that deploys it: the Pi's under
+`hosts/components/pi-compose/`, the cluster's under `ansible/roles/k8s/`.
+
+**`-e target=daniel-pi` stays for the setup plays.** `initial_setup.yml` and the Docker engine
+upgrade still reach the Pi over SSH with it. It no longer deploys a service.
+
+The first two consequences below are read with this amendment: the second platform's tree is
+`hosts/components/pi-compose/`, and a Compose service on either cluster node still deploys
+nothing.
 
 ## Consequences
 
@@ -62,5 +89,6 @@ both are the standing cost of keeping the platform.
 
 ## Governs
 
-No single line. The decision is expressed by the Pi's inventory entry and by the continued
-existence of `ansible/roles/containers/`, so `governs:` is empty.
+No single line. The decision is expressed by the Pi's inventory entry and its
+`compose_services` key, and by the existence of `hosts/components/pi-compose/`, so `governs:`
+is empty.

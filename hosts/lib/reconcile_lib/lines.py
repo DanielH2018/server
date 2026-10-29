@@ -29,7 +29,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from reconcile_lib.common import under_root, run, say
+from reconcile_lib.common import ERR, under_root, run, say
 
 KEYS = ({"path", "line", "regexp"}, {"path", "block", "marker"})
 MODE = re.compile(r"[0-7]{3,4}")
@@ -156,7 +156,7 @@ def write(target: Path, text: str, mode: str) -> None:
 def apply(edit: dict) -> bool:
     problem = refusal(edit["path"])
     if problem:
-        say(f"lines: {problem}; refusing the edit")
+        say(f"lines: {problem}; refusing the edit", ERR)
         return False
     target = under_root(Path(edit["path"]))
     try:
@@ -166,7 +166,7 @@ def apply(edit: dict) -> bool:
             write(target, new, edit.get("mode", "0644"))
             say(f"lines: edited {edit['path']}")
     except (OSError, UnicodeDecodeError) as exc:
-        say(f"lines: cannot edit {edit['path']}: {exc}")
+        say(f"lines: cannot edit {edit['path']}: {exc}", ERR)
         return False
     return True
 

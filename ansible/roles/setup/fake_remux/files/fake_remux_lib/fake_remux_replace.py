@@ -40,12 +40,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fake_remux_lib import fake_remux_logic as frl
 from fake_remux_lib import fake_remux_replace_logic as frl_replace
 from fake_remux_lib import fake_remux_scan as scan
-from host_lib import atomic_write, discord_post
+from host_lib import atomic_write, discord_post, log
 
 CONFIG_PATH = os.environ.get(
     "FAKE_REMUX_REPLACE_CONFIG", "/etc/autofix-fake-remux/config.env"
 )
-log = scan.log  # reuse verbatim — no reason for a second timestamp-prefixed printer
 
 
 class Sonarr(scan.Sonarr):
@@ -544,7 +543,7 @@ def main() -> int:
         Exception
     ) as e:  # a tick that can't run at all is this check's own failure -> page
         ok, msg = False, "fake-remux reconcile error: %s" % e
-    log("OK  " if ok else "DOWN", msg)
+    log(f"{'OK  ' if ok else 'DOWN'} {msg}")
     scan.write_state(state_file, ok, msg)
     scan.flush_queued_posts(cfg)
     return 0

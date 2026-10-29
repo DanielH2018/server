@@ -300,11 +300,13 @@ def test_a_file_other_roles_ship_reaches_every_role_shipping_it():
 
 
 def test_a_host_lib_change_reaches_its_consumers_and_not_common():
-    """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The four
+    """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The six
     initial_setup consumers apply on the tick, `k3s` is the one role left to record, and
     `common` is named nowhere. A `common` file no role ships still names `common`."""
     host_lib = ["hosts/lib/host_lib.py"]
     consumers = {
+        "claude_code",
+        "deploy_ui",
         "fake_remux",
         "gitops_deploy",
         "renovate_agent",
@@ -333,9 +335,11 @@ def test_a_table_holding_only_the_old_host_lib_key_routes_the_moved_file_nowhere
 def test_a_common_task_file_change_reaches_the_roles_importing_it():
     """An `import_tasks` of a `common/tasks/` file is static, so the imported tasks run under
     each importer's tags and only re-applying the importers applies the change (#3317). The
-    same four initial_setup roles apply on the tick, and `k3s` is the one left to record."""
+    same six initial_setup roles apply on the tick, and `k3s` is the one left to record."""
     path = "ansible/roles/setup/common/tasks/install_host_lib.yml"
     consumers = {
+        "claude_code",
+        "deploy_ui",
         "fake_remux",
         "gitops_deploy",
         "renovate_agent",

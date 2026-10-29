@@ -5,11 +5,23 @@ directly. This is the behavioural home of the Discord User-Agent + 2xx-only cont
 un-importable discord() previously pinned via AST guards (test_gitops_deploy_alert_delivery.py).
 """
 
+import ast
 import json
 import os
+from pathlib import Path
 from unittest import mock
 
 import host_lib
+
+
+def test_host_lib_and_kuma_push_parse_with_the_3_12_grammar():
+    # fact: hosts/components/builder/CLAUDE.md#The signer and the publish (H3.5b)
+    # The repository signer imports host_lib under daniel-box's /usr/bin/python3, which is 3.12
+    # on Ubuntu 24.04 (#6202). A 3.14-only construct, such as an unparenthesised `except A, B:`,
+    # would fail every signer run there and none here. pyproject.toml formats both for py312.
+    for name in ("host_lib.py", "kuma_push.py"):
+        source = (Path(host_lib.__file__).parent / name).read_text()
+        ast.parse(source, feature_version=(3, 12))
 
 
 def test_parse_env_file_skips_comments_and_splits_on_first_equals(tmp_path):

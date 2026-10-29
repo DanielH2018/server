@@ -28,7 +28,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from reconcile_lib.common import run, say, under_root
+from reconcile_lib.common import ERR, run, say, under_root
 
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 # Per kind: the virsh verb prefix, and the command that fails for an object libvirt lacks.
@@ -81,7 +81,7 @@ def start(name: str) -> bool:
 def define(kind: str, name: str, path: str) -> bool:
     verb = KINDS[kind][0]
     if virsh(f"{verb}-define", str(under_root(Path(path)))).returncode != 0:
-        say(f"{verb}-define {name} failed")
+        say(f"{verb}-define {name} failed", ERR)
         return False
     return kind != "networks" or start(name)
 
@@ -94,7 +94,7 @@ def converge(kind: str, entries: list[dict], old: dict) -> tuple[dict, bool]:
         try:
             digest = hashlib.sha256(under_root(Path(entry["path"])).read_bytes())
         except OSError as exc:
-            say(f"cannot read {entry['path']}: {exc}")
+            say(f"cannot read {entry['path']}: {exc}", ERR)
             ok = False
         else:
             if old.get(name) == digest.hexdigest() and known(kind, name):
@@ -112,7 +112,7 @@ def undefine(kind: str, name: str) -> bool:
     verb = KINDS[kind][0]
     done = virsh(f"{verb}-undefine", name).returncode == 0
     if not done:
-        say(f"{verb}-undefine {name} refused; leaving it recorded as drift")
+        say(f"{verb}-undefine {name} refused; leaving it recorded as drift", ERR)
     return done
 
 
