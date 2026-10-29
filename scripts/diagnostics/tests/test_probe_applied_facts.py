@@ -176,18 +176,19 @@ def _peer_run(tmp_path, live_sha, key_row, host="daniel-server"):
 _AUTHORIZED = hashlib.sha256(f"restrict {KEY.strip()}\n".encode()).hexdigest()
 # fmt: off
 PEER_CASES = {
-    "key-matches": (_AUTHORIZED, {"status": "ok", "text": KEY}, PROBE_OK, "ok       /etc/x/keys  0644 None:None, content matches"),
-    "key-differs": ("0" * 64, {"status": "ok", "text": KEY}, PROBE_FAILED, "DRIFT    /etc/x/keys  content differs from the render"),
-    "key-unread": (_AUTHORIZED, {"status": "absent"}, PROBE_UNREADABLE, "UNCHECKED /etc/x/keys  0644 None:None, content not compared: it reads run-time name(s) x_pub"),
+    "key-matches": (_AUTHORIZED, {"status": "ok", "text": KEY}, PROBE_OK, ["ok       /etc/x/keys  0644 None:None, content matches"]),
+    "key-differs": ("0" * 64, {"status": "ok", "text": KEY}, PROBE_FAILED, ["DRIFT    /etc/x/keys  content differs from the render"]),
+    "key-unread": (_AUTHORIZED, {"status": "absent"}, PROBE_UNREADABLE, ["UNCHECKED /etc/x/keys  0644 None:None, content not compared: it reads run-time name(s) x_pub", "applied: /k/peer.pub on daniel-box was not read (absent), so content that reads it is not compared"]),
 }
 # fmt: on
 
 
-@pytest.mark.parametrize(("live_sha", "key_row", "code", "line"), PEER_CASES.values(), ids=PEER_CASES)  # fmt: skip
-def test_a_register_read_over_ssh_renders_from_the_key_hosts_file(tmp_path, capsys, live_sha, key_row, code, line):  # fmt: skip
-    """#6518: the content is compared against the file the register reads; an unread one stays UNCHECKED."""
+@pytest.mark.parametrize(("live_sha", "key_row", "code", "lines"), PEER_CASES.values(), ids=PEER_CASES)  # fmt: skip
+def test_a_register_read_over_ssh_renders_from_the_key_hosts_file(tmp_path, capsys, live_sha, key_row, code, lines):  # fmt: skip
+    """#6518: the content is compared against the file the register reads; an unread one stays UNCHECKED and says why."""
     assert _peer_run(tmp_path, live_sha, key_row)[0] == code
-    assert line in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert [line for line in lines if line not in out] == []
 
 
 def test_the_key_host_carries_the_file_in_its_own_read(tmp_path):
