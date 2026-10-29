@@ -47,6 +47,11 @@ def worst_case_s(script: str) -> int:
     # One warm budget per mirror phase: the ghcr-mirror's, then the dockerhub-mirror's.
     warms = _bounds(r"WARM_BUDGET_S=(\d+)", script, "warm budget")
     assert len(warms) == 2, f"expected two mirror phases, found warm budgets {warms}"
+    # The warm budget bounds a phase only while every warm read is cut at the budget left.
+    warm_reads = re.findall(r'--max-time "\$left"', script)
+    assert len(warm_reads) == 2, (
+        "a manifest read or blob GET is no longer bounded by the budget"
+    )
     (lock,) = _bounds(r"flock -w (\d+)", script, "lock wait")
     return lock + sum(per_phase + warm for warm in warms)
 
@@ -70,8 +75,8 @@ def _worst() -> int:
 
 
 def test_the_worst_case_sums_both_phases_and_the_lock():
-    # 60 + (120 + 120 + 1200 + 180) * 2 + 1800 + 900 at the defaults this guard was written at.
-    assert _worst() >= 6000
+    # The lock, both phases' waits and Job deadline, and the two warm budgets.
+    assert _worst() == 60 + (120 + 120 + 1200 + 180) * 2 + 1800 + 900
 
 
 def test_the_healthchecks_grace_covering_the_worst_run_is_clean():
