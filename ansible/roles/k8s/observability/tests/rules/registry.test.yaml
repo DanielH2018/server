@@ -159,3 +159,93 @@ tests:
             exp_annotations:
               summary: daniel-server's ghcr.io mirror pull check has stopped reporting.
               description: "No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-server's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-server."
+
+  # daniel-box's docker.io mirror pull fails from minute 0 while daniel-server's passes. It fires
+  # after its 45m hold for daniel-box alone, and the ghcr.io check's alert stays silent.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="dockerhub-mirror-pull", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x60'
+      - series: 'homelab_check_success{check="dockerhub-mirror-pull", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dockerhub-mirror-pull", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dockerhub-mirror-pull", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x60'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x60'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 44m
+        alertname: DockerhubMirrorPullFailed
+        exp_alerts: []
+      - eval_time: 46m
+        alertname: DockerhubMirrorPullFailed
+        exp_alerts:
+          - exp_labels:
+              check: dockerhub-mirror-pull
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: registry
+              severity: warning
+            exp_annotations:
+              summary: daniel-box cannot pull a manifest through its docker.io mirror endpoint.
+              description: "The dockerhub-mirror-pull check on daniel-box has failed for 45 minutes. A GET of node-exporter's own manifest, by digest, through the node's docker.io mirror endpoint was refused, timed out or answered an error. containerd still pulls docker.io images straight from Docker Hub, so nothing breaks until a WAN outage, when a pod whose image is not on its node cannot start. Read the `dockerhub-mirror-pull` container log of the node-exporter pod on daniel-box, then the dockerhub-mirror pod, its NetworkPolicy and the node's registries.yaml."
+      - eval_time: 46m
+        alertname: GhcrMirrorPullFailed
+        exp_alerts: []
+      - eval_time: 46m
+        alertname: DockerhubMirrorPullNotReporting
+        exp_alerts: []
+
+  # daniel-server's docker.io check file stopped being refreshed at 0 while its exporter stays
+  # up. The stale-file arm fires between minutes 50 and 51.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dockerhub-mirror-pull", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x60'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x60'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dockerhub-mirror-pull", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x60'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: DockerhubMirrorPullNotReporting
+        exp_alerts: []
+      - eval_time: 51m
+        alertname: DockerhubMirrorPullNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: dockerhub-mirror-pull
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              service: registry
+              severity: warning
+            exp_annotations:
+              summary: daniel-server's docker.io mirror pull check has stopped reporting.
+              description: "No dockerhub-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-server's textfile collector, so nothing is watching whether the node's docker.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `dockerhub-mirror-pull` container on daniel-server."
+
+  # No docker.io check file on daniel-box at all: the absent arm fires once 3000s pass.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="dockerhub-mirror-pull", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x60'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x60'
+    alert_rule_test:
+      - eval_time: 51m
+        alertname: DockerhubMirrorPullNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: dockerhub-mirror-pull
+              origin: daniel-box
+              service: registry
+              severity: warning
+            exp_annotations:
+              summary: daniel-box's docker.io mirror pull check has stopped reporting.
+              description: "No dockerhub-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-box's textfile collector, so nothing is watching whether the node's docker.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `dockerhub-mirror-pull` container on daniel-box."

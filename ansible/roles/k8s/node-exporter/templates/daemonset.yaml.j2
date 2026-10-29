@@ -1,6 +1,10 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
+{# The dockerhub-mirror-pull sidecar GETs this image's own manifest by digest. docker.io names a
+   one-component repository under library/. #}
+{% set exporter_repository = node_exporter_k8s_image.split('@')[0].rsplit(':', 1)[0] %}
+{% set exporter_repository = exporter_repository if '/' in exporter_repository else 'library/' ~ exporter_repository %}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -49,6 +53,8 @@ spec:
             - --collector.textfile.directory=/iscsi-textfile
             # The ghcr-mirror-pull sidecar's directory, a third instance.
             - --collector.textfile.directory=/ghcr-mirror-textfile
+            # The dockerhub-mirror-pull sidecar's directory, a fourth.
+            - --collector.textfile.directory=/dockerhub-mirror-textfile
           ports:
             - containerPort: 9100
           # Host access here is READ-ONLY and comes from the four hostPath mounts below, not
@@ -144,6 +150,9 @@ spec:
             - name: node-exporter-ghcr-mirror-textfile
               mountPath: /ghcr-mirror-textfile
               readOnly: true
+            - name: node-exporter-dockerhub-mirror-textfile
+              mountPath: /dockerhub-mirror-textfile
+              readOnly: true
           # 1 core, not 200m. This exporter renders ~320 metric families per request and was
           # throttled on 42.4% of CFS periods (daniel-box) / 31.7% (daniel-server), measured
           # 2026-08-29. On its own that ratio is close to an artifact — absolute throttled
@@ -214,6 +223,42 @@ spec:
             - name: node-exporter-ghcr-mirror-textfile
               mountPath: /ghcr-mirror-textfile
 {{ container_resources(cpu_limit='100m', mem_limit='16Mi', cpu_request='5m', mem_request='8Mi') }}
+        # The same script against the docker.io mirror's endpoint (#6535), written as
+        # dockerhub-mirror-pull.prom. It GETs this pod's own image by digest, which Renovate moves
+        # with the exporter, so it needs no other role's ConfigMap. A digest GET is served from the
+        # mirror's store once cached and spends none of Docker Hub's anonymous pull limit.
+        - name: dockerhub-mirror-pull
+          image: {{ node_exporter_k8s_image }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              {{ lookup('file', playbook_dir + '/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh') | indent(14) }}
+          env:
+            - name: CHECK
+              value: dockerhub-mirror-pull
+            - name: REPOSITORY
+              value: "{{ exporter_repository }}"
+            - name: REFERENCE
+              value: "{{ node_exporter_k8s_image.split('@')[1] }}"
+            - name: TEXTFILE_DIR
+              value: /dockerhub-mirror-textfile
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: REGISTRY_NODE
+              value: "{{ k8s_registry_node }}"
+            - name: LOCAL_ENDPOINT
+              value: "http://localhost:{{ k8s_registry_dockerhub_mirror_port }}"
+            - name: REMOTE_ENDPOINT
+              value: "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_dockerhub_mirror_port }}"
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
+          volumeMounts:
+            - name: node-exporter-dockerhub-mirror-textfile
+              mountPath: /dockerhub-mirror-textfile
+{{ container_resources(cpu_limit='100m', mem_limit='16Mi', cpu_request='5m', mem_request='8Mi') }}
       volumes:
         - name: node-exporter-proc
           hostPath:
@@ -237,6 +282,10 @@ spec:
             sizeLimit: 1Mi
         # The ghcr-mirror-pull sidecar writes here and the exporter reads it.
         - name: node-exporter-ghcr-mirror-textfile
+          emptyDir:
+            sizeLimit: 1Mi
+        # The dockerhub-mirror-pull sidecar's.
+        - name: node-exporter-dockerhub-mirror-textfile
           emptyDir:
             sizeLimit: 1Mi
         # nut's role renders the repository and tag the sidecar GETs. A directory mount, never a

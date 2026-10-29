@@ -137,8 +137,10 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     unchanged for longer than the TTL needs the WAN again.
     `ansible/roles/k8s/registry/templates/dockerhub-mirror.yaml.j2:DECIDED: a long TTL` has
     the trade-off.
-  - Nothing proves it serves pulls the way node-exporter's `ghcr-mirror-pull` sidecar proves
-    the ghcr-mirror does, and `registry-gc.sh` does not warm it.
+  - node-exporter's `dockerhub-mirror-pull` sidecar proves it serves pulls, as the
+    `ghcr-mirror-pull` sidecar below does for the ghcr-mirror (#6535). It GETs the exporter's
+    own image by digest through port 5005, and observability's `DockerhubMirrorPullFailed` and
+    `DockerhubMirrorPullNotReporting` page on it. `registry-gc.sh` does not warm it.
 - **The push store is not collected** (D5, Wave D's registry bullet). Its GC scaled
   `deploy/registry`, whose `replicas: 1` Flux renders after the flip, so Flux would restore
   the pod mid-GC, the corruption the stop-the-world rule exists to prevent. Every
