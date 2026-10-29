@@ -105,12 +105,14 @@ measurement and the condition for reverting it.
   Pacing lowers the average queue depth; it does not close the race that makes the `prove`
   job's tested-tree skip miss.
 - A run unfinished more than 2 hours after its creation is wedged and not counted.
-- A held poll does not count against `merge_timeout`, so a landing queued behind other
-  landings waits its turn rather than ending at `merge-timeout`. On 2026-10-28 eight
-  landings raced for the one slot, and five ended `merge-timeout` while the queue was
-  still draining (#6466).
-- The cap rises by one for each 30 minutes a landing has been held, so a landing that keeps
-  losing the race still merges. The longest-held landings pass first, one at a time.
+- A held poll never ends the wait at `merge-timeout`. On 2026-10-28 eight landings raced
+  for the one slot, and five ended `merge-timeout` while the queue was still draining
+  (#6466).
+- The cap rises by one for each 15 minutes a landing has been held, so the longest-held
+  landings pass first, one at a time.
+- Once the whole wait, held time included, reaches `merge_timeout`, the landing merges without
+  pacing. The pre-merge wait therefore stays inside `merge_timeout`, which the
+  `LAND_DEADLINE` sizing below counts on.
 - A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 - A PR armed by hand with `gh pr merge --auto` merges without this check.

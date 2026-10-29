@@ -15,9 +15,9 @@ both merge. Pacing lowers the average queue depth; it does not close the race th
 
 A held poll does not count against `merge_timeout`, so a landing queued behind other landings
 waits for its turn rather than ending at `merge-timeout` while the queue drains (#6466).
-Instead, the cap rises by one for each `RAISE_CAP_EVERY_S` the landing has been held, so a
-landing that keeps losing the race still merges in bounded time. A failed read merges: pacing
-is a throughput control, not a safety gate.
+Instead, the cap rises by one for each `RAISE_CAP_EVERY_S` the landing has been held, and once
+the whole wait, held and unheld, reaches `merge_timeout`, the landing merges without pacing. A
+failed read merges too: pacing is a throughput control, not a safety gate.
 
 `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off. A PR armed by hand with
 `gh pr merge --auto` merges without passing through here.
@@ -39,14 +39,14 @@ from deploy_tools.land_lib.outcome import say
 # twice that is wedged rather than queued, and counting it would hold every landing until
 # GitHub expires its jobs after 24 hours.
 STUCK_AFTER_S = 2 * 60 * 60
-# DECIDED: a held landing's cap rises by one per 30 minutes held, rather than pacing ending
-# at a fixed budget. On 2026-10-28 eight landers raced for one slot and each lost often enough
-# to run out its 2700s `merge_timeout`, so five ended `merge-timeout` and needed a hand re-run
-# (#6466). Turning pacing off once a budget ran out would release every lander that arrived
-# together at once, the pile #5526 measured. Raising the cap lets the longest-held landers
-# merge one at a time first. 30 minutes is about one master run under load (29-61 minutes on
-# 2026-10-24), and a lander still merges well inside the units' 8-hour LAND_DEADLINE.
-RAISE_CAP_EVERY_S = 30 * 60
+# DECIDED: a held landing's cap rises by one per 15 minutes held, and pacing ends once the
+# whole wait reaches `merge_timeout`. On 2026-10-28 eight landers raced for one slot and each
+# lost often enough to run out its 2700s budget, so five ended `merge-timeout` and needed a hand
+# re-run (#6466). Ending pacing at the budget alone would release every lander that arrived
+# together at once, the pile #5526 measured; the rising cap lets the longest-held landers merge
+# first, one at a time. The budget stays `merge_timeout` rather than growing, because
+# `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` sizes LAND_DEADLINE on it.
+RAISE_CAP_EVERY_S = 15 * 60
 # Enough to see every run inside the 2-hour window at today's merge rate.
 _RUNS_URL = (
     "repos/{owner}/{repo}/actions/workflows/ci.yml/runs"
@@ -84,7 +84,7 @@ def unfinished_master_runs(ln: Landing) -> int:
     return count
 
 
-def hold(ln: Landing, held_s: int) -> str:
+def hold(ln: Landing, held_s: int, waited_s: int) -> str:
     """Why this poll does not merge; '' to merge now.
 
     Prints a line of its own only when the read fails, because the caller prints the hold.
@@ -92,9 +92,17 @@ def hold(ln: Landing, held_s: int) -> str:
     Args:
         ln: The landing.
         held_s: The seconds this landing's earlier polls were held, which raise the cap.
+        waited_s: The seconds its other polls took. With `held_s`, it ends pacing at
+          `merge_timeout`.
     """
     base = ln.opts.pace_master_runs
     if base <= 0:
+        return ""
+    if held_s + waited_s >= ln.opts.merge_timeout:
+        say(
+            f"the merge has waited {held_s + waited_s}s, {held_s}s of it held by pacing, "
+            f"reaching merge_timeout={ln.opts.merge_timeout}s; merging without pacing"
+        )
         return ""
     raised = held_s // RAISE_CAP_EVERY_S
     cap = base + raised

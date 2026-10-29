@@ -510,7 +510,8 @@ def await_merge(ln: Landing) -> None:
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
     reads its head green, unless master moved past the PR's base: then the branch is updated
     once and the merge waits for the updated head to go green. A green head also waits while
-    master CI has a backlog (`pace.hold`); a held poll does not count against `merge_timeout`.
+    master CI has a backlog (`pace.hold`). A held poll never ends the wait at `merge_timeout`:
+    once held and unheld time reach it, the merge goes ahead without pacing.
     Without --arm-merge this only polls, for a PR merged some other way.
 
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
@@ -525,7 +526,7 @@ def await_merge(ln: Landing) -> None:
     ci_pending = ""
     # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
     paced = ""
-    # Seconds of polls `pace.hold` held, kept out of `waited` so a queue never times out.
+    # Seconds of polls `pace.hold` held, kept out of `waited` because they raise the pacing cap.
     held = 0
     # The head this landing updated the branch from; empty until it does.
     updated_from = ""
@@ -539,6 +540,8 @@ def await_merge(ln: Landing) -> None:
     draft_head = ""
     draft_since = 0
     while True:
+        # This poll's pacing hold; a held poll never ends the wait at merge-timeout.
+        hold = ""
         view = ln.view("state,mergeable,headRefOid")
         state = view.get("state", "")
         if state == "MERGED":
@@ -593,7 +596,7 @@ def await_merge(ln: Landing) -> None:
             if rc == CI_DISARMED and ln.direct_merge_subject:
                 ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
             hold = (
-                pace.hold(ln, held)
+                pace.hold(ln, held, waited)
                 if rc == CI_GREEN and ln.direct_merge_subject
                 else ""
             )
@@ -621,7 +624,7 @@ def await_merge(ln: Landing) -> None:
                             f"{refusal}"
                         )
                         last_refusal = refusal
-        if waited >= o.merge_timeout:
+        if not hold and waited + held >= o.merge_timeout:
             # A run cancelled on the head never supplies a verdict on its own (#5931). A run
             # skipped as a draft names its own remedy in await_ci's line, because a re-run of
             # it skips again (#6077).
@@ -640,7 +643,7 @@ def await_merge(ln: Landing) -> None:
                 Verdict.MERGE_TIMEOUT,
             )
         t.sleep(o.merge_poll)
-        if paced:
+        if hold:
             held += o.merge_poll
         else:
             waited += o.merge_poll
