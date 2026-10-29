@@ -13,6 +13,7 @@ from functools import cache
 
 import pytest
 from _workflow_rows import WORKFLOW_ROWS
+from _shimmed_path_row import SHIMMED_PATHS
 from _deploy_sh_callers_row import (
     DEPLOY_SH_CALLERS,
     DEPLOY_SH_ENTRY_POINTS,
@@ -382,6 +383,7 @@ ROWS = (
 )
 
 ROWS += WORKFLOW_ROWS
+ROWS += (SHIMMED_PATHS,)
 
 _IDS = [row.name for row in ROWS]
 

@@ -106,7 +106,7 @@ def test_is_diverged_false_when_in_sync():
 # ── the dirty skip's journal line ───────────────────────────────────────────────────────────
 #
 # The skip itself is deliberate and healthy (operator mid-edit). The journal line leaves a
-# trace of it between the two throttled Discord slots, so `journalctl -t gitops-deploy`
+# trace of it between the two throttled Discord slots, so `journalctl -u gitops-deploy.service`
 # never reads `-- No entries --`, identical to "ticked, nothing to do".
 
 

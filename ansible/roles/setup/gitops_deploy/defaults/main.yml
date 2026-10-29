@@ -136,8 +136,11 @@ gitops_deploy_k8s_autodeploy_max_per_tick: 3
 # claim-declaring services pay a snapshot+revert phase — serially, inside the one playbook run —
 # while gitops_deploy_k8s_rollback_timeout_s is derived for the worst SINGLE such service.
 #
-# Two co-batched claim-declaring services need ~1680s against that 1320s budget and three ~2160s;
-# past it killpg fires mid-revert, leaving a workload at zero replicas with its volume attached in
+# Two co-batched radarr/sonarr-shaped services need ~1680s against the 1620s rollback budget below
+# and three ~2160s; ansible/tests/longhorn/test_rollback_timeout_budget.py prices the batch from
+# role sources (test_two_claim_services_overrun_the_rollback_budget). Every such role is
+# flux-owned since the D5 flips, so this binds once one is handed back. Past the budget killpg
+# fires mid-revert, leaving a workload at zero replicas with its volume attached in
 # Longhorn maintenance mode. The lscr.io/linuxserver/* siblings share one Renovate automerge
 # window with no stagger, so a 2-3 sibling tick is ordinary rather than rare.
 #

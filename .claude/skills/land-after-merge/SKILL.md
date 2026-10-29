@@ -42,9 +42,10 @@ which is to rebase onto origin/master, push and get the new head approved.
 
 **A master CI backlog holds the merge.** While any master `ci.yml` run is unfinished,
 a green PR waits to merge and `land.sh` prints `pacing the merge: …`. Merging faster than
-master CI clears only deepens the runner queue every landing waits on (#5526). The wait counts
-against the merge budget, so a backlog that never drains ends at `merge-timeout`, a resume
-point. `LAND_PACE_MASTER_RUNS` sets the cap and `0` turns pacing off; `land_lib/pace.py` owns
+master CI clears only deepens the runner queue every landing waits on (#5526). A held landing
+never ends at `merge-timeout`: the cap rises by one per 15 minutes held, and once the merge
+budget is spent the landing merges without pacing (#6466).
+`LAND_PACE_MASTER_RUNS` sets the cap and `0` turns pacing off; `land_lib/pace.py` owns
 the rule.
 
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
