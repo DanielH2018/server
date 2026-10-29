@@ -210,6 +210,14 @@ class Fakes:
     master_runs: list[list[dict[str, str]] | Exception] = field(
         default_factory=lambda: [[]]
     )
+    # What the PR head's `ci.yml` runs listing answers on every call, as `merge._ready_run_on`
+    # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped,
+    # and an exception is raised in place of an answer.
+    head_runs: Any = field(
+        default_factory=lambda: [
+            {"id": 1, "status": "completed", "conclusion": "skipped"}
+        ]
+    )
     # `tools.owners_at`: each tag that sets `owner` at a ref, by ref. A ref absent here has
     # none. An exception is raised in place of a map.
     owners: dict[str, dict[str, str] | Exception] = field(default_factory=dict)
@@ -320,6 +328,11 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             if isinstance(answer, Exception):
                 raise answer
             return answer
+        if args[0] == "api" and "/workflows/ci.yml/runs?head_sha=" in args[1]:
+            calls.append(("gh:head-runs", args, kwargs))
+            if isinstance(f.head_runs, Exception):
+                raise f.head_runs
+            return f.head_runs
         if args[0] == "api" and "/workflows/ci.yml/runs?branch=" in args[1]:
             answer = runs_seq(*args, **kwargs)
             if isinstance(answer, Exception):

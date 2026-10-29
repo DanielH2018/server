@@ -502,6 +502,37 @@ def _draft_skipped_dead_end(ln: Landing, head: str, retriggered: bool = False) -
     )
 
 
+def _ready_run_on(ln: Landing, head: str) -> str:
+    """Why the PR's `ci.yml` runs on `head` forbid the draft toggle; "" when every one skipped.
+
+    A run that is not completed, or that completed with any conclusion but `skipped`, ran
+    while the PR was ready. Its `prek` gate `needs` every other job, so the gate gets no check
+    run until they finish, and for those minutes `await_ci` reads only the draft run's skipped
+    gate. Converting to draft then cancels the ready run (#6566). A failed read also forbids
+    it, because the toggle is the one action here that can cancel a run.
+    """
+    url = f"repos/{{owner}}/{{repo}}/actions/workflows/ci.yml/runs?head_sha={head}&event=pull_request"
+
+    def call() -> list:
+        got = ln.tools.gh_json(
+            "api", url, "--jq", "[.workflow_runs[] | {id, status, conclusion}]"
+        )
+        return as_list(got, "gh api ci.yml runs")
+
+    try:
+        runs = gh_read.read(call, ln.tools.sleep, "gh api ci.yml runs")
+    except (gh_read.GhReadFailed, ValueError) as exc:
+        return f"its CI runs could not be read ({exc})"
+    for run in runs:
+        if not isinstance(run, dict):
+            return f"its CI runs read as {runs!r}"
+        if run.get("status") != "completed" or run.get("conclusion") != "skipped":
+            return (
+                f"run {run.get('id')} is {run.get('conclusion') or run.get('status')}"
+            )
+    return ""
+
+
 def _retrigger_ready_run(ln: Landing, head: str) -> str:
     """Convert the PR to draft and back so GitHub starts a ready run; "" on success.
 
@@ -554,7 +585,8 @@ def await_merge(ln: Landing) -> None:
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
     it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft is converted
     to draft and back once for that head (`_retrigger_ready_run`) and the grace starts again.
-    If the head is still skipped after it, the wait ends (`_draft_skipped_dead_end`).
+    If the head is still skipped after it, the wait ends (`_draft_skipped_dead_end`). Neither
+    happens while a ready `ci.yml` run exists on the head (`_ready_run_on`); the grace restarts.
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -623,7 +655,14 @@ def await_merge(ln: Landing) -> None:
                 say(f"{line}; waiting up to {DRAFT_SKIPPED_GRACE_S}s for a ready run")
             elif waited - draft_since >= DRAFT_SKIPPED_GRACE_S:
                 dead_end = _draft_skipped_dead_end(ln, head, head == retriggered_head)
-                if dead_end and head != retriggered_head:
+                ready_run = _ready_run_on(ln, head) if dead_end else ""
+                if ready_run:
+                    say(
+                        f"{head[:8]} reads as skipped as a draft, but {ready_run}; "
+                        "not converting it to draft, which would cancel that run"
+                    )
+                    draft_since = waited
+                elif dead_end and head != retriggered_head:
                     retriggered_head = head
                     failure = _retrigger_ready_run(ln, head)
                     if failure:
