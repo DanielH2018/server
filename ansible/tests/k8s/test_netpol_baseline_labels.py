@@ -78,6 +78,10 @@ BORN_FENCED_ROLES = {
     # kind — it reads the kernel through a read-only /host/sys mount, so unlike its two
     # exporter neighbours it needs no podSelector added anywhere.
     "gpu-exporter",
+    # The dri-admission-reaper CronJob, the role's one pod in the workload namespace (#6367). It
+    # takes no connection at all, and its one outbound call is to the API server, which is
+    # egress. The DaemonSet sits in kube-system, which no baseline selects, so it stays unlabelled.
+    "dri-device-plugin",
     # The ingress probes (docs/target-architecture/monitoring/m4-blackbox-ingress.md). It
     # departs from this set's preamble twice. Traefik never calls it, since it has no route;
     # its only caller is the prometheus pod, which the baseline already admits. And it dials

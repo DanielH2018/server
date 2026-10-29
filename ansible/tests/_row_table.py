@@ -30,10 +30,13 @@ What a row buys over a file:
 Run: uv run pytest ansible/tests/repo/test_row_table.py
 """
 
+import ast
+import hashlib
 import re
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
-from functools import cache
+from dataclasses import dataclass, field, replace
+from functools import cache, partial
+from pathlib import Path
 from types import MappingProxyType
 
 from _helpers import REPO
@@ -196,3 +199,115 @@ def proof_problems(row: Census) -> list[str]:
     if not row.red or not row.green:
         problems.append("a row needs at least one red and one green subject")
     return problems
+
+
+# ── Rows that share one census's parse ───────────────────────────────────────────────
+#
+# Every row of `scripts/tests/test_census_rows_test_*.py` reads the same modules, and parsing
+# was 5.15s of the 9.23s one row took over 1620 of them (#6437). `share` makes those rows judge
+# a module together. The first shared row to ask about a module runs every shared row's offence
+# on it from one tree, keeps only their hits, and drops the tree.
+#
+# DECIDED: keep each module's hits, not its tree. Holding every tree cut the two census files
+# from 11.7s to 8.4s but held 618 MiB per process (measured 2026-10-29, 1624 modules), and
+# dropping the trees did not lower RSS: pymalloc keeps the freed arena pages resident (#6465).
+# An LRU of trees never hits, because each row sweeps the census in the same order. The hits
+# are a few strings per module, and PR #6464 records the measurements.
+
+
+def _digest(rel: str, text: str) -> tuple[str, bytes]:
+    return rel, hashlib.blake2b(text.encode(), digest_size=16).digest()
+
+
+@dataclass
+class Sharing:
+    """One process's shared rows, the hits they found, and the trees still to be read.
+
+    The census files use the one instance below. A test builds its own, so its toy rows never
+    run over the real census.
+    """
+
+    # Each shared row's own offence, by row name.
+    offences: dict[str, Offence] = field(default_factory=dict)
+    selectors: list[Files] = field(default_factory=list)
+    census: frozenset[str] | None = None
+    # A subject's hits per shared row, keyed on its path and a digest of its text: two
+    # fixtures can share a path, and the key need not hold every census module's text alive.
+    hits: dict[tuple[str, bytes], dict[str, tuple[str, ...] | Exception]] = field(
+        default_factory=dict
+    )
+    # The trees `parse` hands out instead of reparsing. A module is here while its hits are
+    # being found, or from when another module's import reads it until its own hits are found.
+    held: dict[str, ast.Module | None] = field(default_factory=dict)
+
+    def share(self, rows: Iterable[Census]) -> tuple[Census, ...]:
+        """`rows`, each judging a subject through the hits every shared row finds in one pass.
+
+        Call it on a census file's rows at import. A row's offence still runs on its own `red`
+        and `green` subjects, through the same pass the census takes.
+        """
+        rows = tuple(rows)
+        self.census = None
+        for row in rows:
+            self.offences[row.name] = row.offence
+            if row.files not in self.selectors:
+                self.selectors.append(row.files)
+        return tuple(
+            replace(row, offence=partial(self._hits, row.name)) for row in rows
+        )
+
+    def _hits(self, name: str, subject: Subject) -> list[str]:
+        text = subject.text
+        hits = self.hits.setdefault(_digest(subject.rel, text), {})
+        if missing := [other for other in self.offences if other not in hits]:
+            self.held.setdefault(text, None)
+            try:
+                for other in missing:
+                    try:
+                        hits[other] = tuple(self.offences[other](subject))
+                    # A red subject for a textual row need not parse; only that row's own
+                    # verdict may fail on what its offence raised.
+                    except Exception as error:
+                        hits[other] = error
+            finally:
+                self.held.pop(text, None)
+        if isinstance(found := hits[name], Exception):
+            raise found
+        return list(found)
+
+    def _census(self) -> frozenset[str]:
+        if self.census is None:
+            self.census = frozenset(
+                item.rel if isinstance(item, Subject) else item
+                for files in self.selectors
+                for item in files()
+            )
+        return self.census
+
+    def parse(self, source: str) -> ast.Module:
+        """The AST of `source`: the tree held for it while a shared pass needs it, else a new one."""
+        tree = self.held.get(source)
+        if tree is None:
+            tree = ast.parse(source)
+            if source in self.held:
+                self.held[source] = tree
+        return tree
+
+    def parse_ahead(self, path: Path, source: str) -> ast.Module:
+        """`parse` for a module read because another imports it.
+
+        A shared census module whose own hits are not found yet keeps the tree until they are,
+        so reading it early does not cost it a second parse.
+        """
+        tree = self.parse(source)
+        if path.is_relative_to(REPO):
+            rel = path.relative_to(REPO).as_posix()
+            if _digest(rel, source) not in self.hits and rel in self._census():
+                self.held[source] = tree
+        return tree
+
+
+_SHARING = Sharing()
+share = _SHARING.share
+parse = _SHARING.parse
+parse_ahead = _SHARING.parse_ahead

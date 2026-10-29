@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """The banner's scrape-target and stale-release sections.
 
-These drive `hooklib.service_lines` through its `run` and `scaled_to_zero` seams rather than
-patching a module attribute, so they need no live cluster or Prometheus.
+These drive `hooklib.service_lines` through its `run` and `scaled_to_zero` seams, and its
+verdict-file path, rather than patching a module attribute, so they need no live cluster or
+Prometheus.
 
 Run: uv run pytest .claude/hooks
 """
@@ -149,7 +150,7 @@ def test_k8s_namespace_is_none_when_the_file_is_missing(tmp_path):
 # ── the release-staleness cron's last verdict ─────────────────────────────
 #
 # The cron runs `probe.py releases --stale-only --kuma`, so every verdict reaching the
-# journal is one of `bridge.msgfmt`'s three DOWN shapes. The fixtures below are those three;
+# verdict file is one of `bridge.msgfmt`'s three DOWN shapes. The fixtures below are those three;
 # `test_..._parses_what_msgfmt_actually_renders` holds them against the producer so a shape
 # change goes red here rather than putting every DOWN on the banner as a broken check.
 
@@ -170,13 +171,23 @@ _MANY_REASONS = (
 )
 
 
-def _stale_line(journal):
-    (line,) = service_lines.stale_release_problems(_answers(_result(journal)))
+def _verdict_file(tmp_path, verdict):
+    path = tmp_path / "verdict"
+    path.write_text(verdict)
+    return path
+
+
+def _stale_problems(tmp_path, verdict):
+    return service_lines.stale_release_problems(_verdict_file(tmp_path, verdict))
+
+
+def _stale_line(tmp_path, verdict):
+    (line,) = _stale_problems(tmp_path, verdict)
     return line
 
 
-def test_stale_release_problems_reads_the_one_service_shape():
-    line = _stale_line(_ONE_SERVICE)
+def test_stale_release_problems_reads_the_one_service_shape(tmp_path):
+    line = _stale_line(tmp_path, _ONE_SERVICE)
     assert line.startswith(
         "  ⚠ release staleness: 1 service runs manifests behind origin/master, "
         "e.g. freshrss"
@@ -184,9 +195,9 @@ def test_stale_release_problems_reads_the_one_service_shape():
     assert "releases --stale-only" in line
 
 
-def test_stale_release_problems_reads_the_single_reason_shape():
+def test_stale_release_problems_reads_the_single_reason_shape(tmp_path):
     # The reason carries parentheses of its own — `(lan_subnet)` must not read as a service.
-    line = _stale_line(_ONE_REASON)
+    line = _stale_line(tmp_path, _ONE_REASON)
     assert line.startswith(
         "  ⚠ release staleness: 4 services run manifests behind origin/master, "
         "e.g. freshrss, jellyfin, sonarr"
@@ -194,54 +205,74 @@ def test_stale_release_problems_reads_the_single_reason_shape():
     assert "lan_subnet" not in line
 
 
-def test_stale_release_problems_reads_the_grouped_reasons_shape():
-    line = _stale_line(_MANY_REASONS)
+def test_stale_release_problems_reads_the_grouped_reasons_shape(tmp_path):
+    line = _stale_line(tmp_path, _MANY_REASONS)
     assert line.startswith(
         "  ⚠ release staleness: 4 services run manifests behind origin/master, "
         "e.g. jellyfin, sonarr, freshrss"
     )
 
 
-def test_stale_release_problems_keeps_the_headline_count_over_the_names_it_recovered():
+def test_stale_release_problems_keeps_the_headline_count_over_the_names_it_recovered(
+    tmp_path,
+):
     # msgfmt cuts a long message from the right, so the names can run out while the count
     # stays exact. The banner must report the count it was given, not len(names).
     truncated = (
         "status=down 57 services stale — 2 reasons. manifests/tasks/apply.yml "
         "(56: alloy, authelia, +54). freshrss/defaults/main.yml (1 …(+240 chars)\n"
     )
-    line = _stale_line(truncated)
+    line = _stale_line(tmp_path, truncated)
     assert "57 services run manifests behind" in line
     assert "e.g. alloy, authelia" in line
 
 
-def test_stale_release_problems_reports_a_count_with_no_recoverable_names():
+def test_stale_release_problems_reports_a_count_with_no_recoverable_names(tmp_path):
     hard_cut = "status=down 9 services stale — 9 reasons …(+412 chars)\n"
-    line = _stale_line(hard_cut)
+    line = _stale_line(tmp_path, hard_cut)
     assert line.startswith(
         "  ⚠ release staleness: 9 services run manifests behind origin/master — "
     )
 
 
-def test_stale_release_problems_is_silent_on_an_up_verdict():
+def test_stale_release_problems_is_silent_on_an_up_verdict(tmp_path):
     up = "status=up 0 services stale; every known k8s service has a current record.\n"
-    assert service_lines.stale_release_problems(_answers(_result(up))) == []
+    assert _stale_problems(tmp_path, up) == []
 
 
-def test_stale_release_problems_is_silent_when_the_cron_never_ran_here():
-    assert service_lines.stale_release_problems(_answers(_result(""))) == []
-    assert (
-        service_lines.stale_release_problems(_raises(FileNotFoundError("journalctl")))
-        == []
-    )
+def test_stale_release_problems_is_silent_when_the_cron_never_ran_here(tmp_path):
+    # No state directory: a host the k3s role never set up, such as an agent node.
+    assert service_lines.stale_release_problems(tmp_path / "absent" / "verdict") == []
+    assert _stale_problems(tmp_path, "") == []
 
 
-def test_stale_release_problems_shows_a_failed_probe_as_broken():
+def test_stale_release_problems_names_the_apply_when_the_cron_predates_the_file(
+    tmp_path,
+):
+    # The role created the directory but its cron writes no verdict: the apply is owed.
+    (line,) = service_lines.stale_release_problems(tmp_path / "verdict")
+    assert "--tags release-staleness" in line
+
+
+def test_stale_release_problems_is_silent_on_a_dead_crons_last_verdict(tmp_path):
+    # The Kuma tile pages for the dead cron itself; its last DOWN must not sit on the banner.
+    path = _verdict_file(tmp_path, _ONE_SERVICE)
+    written = path.stat().st_mtime
+    fresh = written + service_lines.STALE_VERDICT_MAX_AGE_S - 60
+    dead = written + service_lines.STALE_VERDICT_MAX_AGE_S + 60
+    assert service_lines.stale_release_problems(path, now=fresh)
+    assert service_lines.stale_release_problems(path, now=dead) == []
+
+
+def test_stale_release_problems_shows_a_failed_probe_as_broken(tmp_path):
     broken = "status=down probe.py releases --stale-only exited 2: no release records\n"
-    line = _stale_line(broken)
+    line = _stale_line(tmp_path, broken)
     assert line.startswith("  ⚠ release staleness check is broken: probe.py releases")
 
 
-def test_stale_release_problems_shows_a_traceback_as_broken_not_as_a_stale_list():
+def test_stale_release_problems_shows_a_traceback_as_broken_not_as_a_stale_list(
+    tmp_path,
+):
     # A probe that raises exits 1, which the cron maps to status=down with the output
     # unmodified — the same status a real stale list arrives under, and with no `exited N:`
     # prefix. Only the text shape separates them, which is why an unrecognised verdict has
@@ -250,21 +281,21 @@ def test_stale_release_problems_shows_a_traceback_as_broken_not_as_a_stale_list(
         "status=down Traceback (most recent call last): "
         'File "scripts/diagnostics/probe.py", line 1, in <module>\n'
     )
-    line = _stale_line(crash)
+    line = _stale_line(tmp_path, crash)
     assert line.startswith(
         "  ⚠ release staleness check returned an unrecognised verdict"
     )
 
 
-def test_stale_release_problems_shows_a_failed_git_fetch_as_unrecognised():
+def test_stale_release_problems_shows_a_failed_git_fetch_as_unrecognised(tmp_path):
     # The cron pushes this one itself, before probe.py runs at all.
     fetch = "status=down git fetch origin master failed in /home/ubuntu/server: boom\n"
-    assert _stale_line(fetch).startswith(
+    assert _stale_line(tmp_path, fetch).startswith(
         "  ⚠ release staleness check returned an unrecognised verdict"
     )
 
 
-def test_stale_release_problems_parses_what_msgfmt_actually_renders():
+def test_stale_release_problems_parses_what_msgfmt_actually_renders(tmp_path):
     """The producer is the oracle: msgfmt renders, this parser reads, the count agrees.
 
     Without this the fixtures above are only assertions that the parser matches text
@@ -292,7 +323,7 @@ def test_stale_release_problems_parses_what_msgfmt_actually_renders():
         rendered = msgfmt.format_down(
             "service", "stale", items, details="probe.py releases --stale-only"
         )
-        line = _stale_line(f"status=down {rendered}\n")
+        line = _stale_line(tmp_path, f"status=down {rendered}\n")
         assert f"{count} service" in line, rendered
         assert "check is broken" not in line and "unrecognised" not in line, rendered
         # Every name is recovered — none of these cases is long enough for msgfmt to drop

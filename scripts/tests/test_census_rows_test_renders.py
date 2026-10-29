@@ -17,7 +17,7 @@ from _render_helper_rules import (
     local_repo_roots,
     shell_template_source_reads,
 )
-from _row_table import Census, Subject, check, proof_problems
+from _row_table import Census, Subject, check, proof_problems, share
 from _test_module_rules import MODULE_FLOOR, pytest_only_modules
 
 from lib.repo_paths import REPO
@@ -356,6 +356,11 @@ ROWS = (
         },
     ),
 )
+
+# Every row here and in its sibling file reads the same census, so they judge each module in
+# one pass over one tree (#6437, #6465).
+ROWS = share(ROWS)
+
 
 _IDS = [row.name for row in ROWS]
 

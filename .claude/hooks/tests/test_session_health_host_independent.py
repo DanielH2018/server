@@ -6,6 +6,10 @@ runner has no such checkouts, so the file measured 0.77s there (PR #5430's shard
 39061304325) and 4-5s on daniel-box. `pytest_shard.py`'s weight, recorded on daniel-box, then
 trips the shard gate's over-recorded arm on CI.
 
+No test here times the file: a wall-clock bound goes red on a loaded fan-out host with no code
+change (#5916). The subprocess test's `_fence_worktree_survey` assertion guards host
+independence instead.
+
 Run: uv run pytest .claude/hooks/tests/test_session_health_host_independent.py
 """
 
@@ -16,18 +20,6 @@ _FILE = ".claude/hooks/tests/test_session_health.py"
 
 # What CI's runner measured for _FILE in run 39061304325, quoted in #5432.
 _CI_SECONDS = 0.77
-
-
-def test_record_files_measures_the_file_within_2x_of_ci():
-    """Verify-by: `--record-files` on this host measures the file within 2x of CI.
-
-    `measure_weights` is the measurement `--record-files` (`record_named_weights`) writes.
-    """
-    measured = pytest_shard.measure_weights([_FILE])[_FILE]
-    assert measured <= 2 * _CI_SECONDS, (
-        f"{_FILE} measured {measured:.2f}s here against {_CI_SECONDS}s on CI's runner "
-        f"(run 39061304325): over 2x, so its runtime still depends on this host's state."
-    )
 
 
 def test_recorded_weight_does_not_trip_the_over_recorded_check():

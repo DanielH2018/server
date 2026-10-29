@@ -498,10 +498,11 @@ def gate_complaints(
 #
 # STALENESS IS GRACEFUL, as with the weight table. A module this table lacks is packed at its
 # recorded weight times the median runner-to-recorded ratio, and an entry for a deleted module
-# is ignored. Nothing refreshes the table on a schedule. To refresh it, download each shard's
-# log from two or three recent green runs and run
-# `pytest_shard.py --record-runner LOG...`; each module takes the median of what the logs
-# measured, because one module measured about 8s on one run and 15.6s on the next (#3604).
+# is ignored. The docs-refresh cron refreshes it twice a day with `pytest_shard.py
+# --refresh-runner 3`, which downloads every pytest leg's log from the three newest green master
+# runs and rewrites only the rows that drifted (#6178). Each module takes the median of what the
+# logs measured, because one module measured about 8s on one run and 15.6s on the next (#3604).
+# `--record-runner LOG...` is the by-hand full rewrite from logs you downloaded yourself.
 RUNNER_WEIGHTS_PATH = (
     Path(__file__).resolve().with_name("pytest_shard_runner_weights.json")
 )
