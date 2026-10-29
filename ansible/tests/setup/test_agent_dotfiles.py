@@ -248,7 +248,9 @@ def test_the_operator_reads_the_seed_only_under_operator_read(
     operator_read: bool, modes: tuple[str, str]
 ) -> None:
     """`probe.py applied` reads seed.toml as the operator, since rootq refuses any path under
-    the agent-owned home (#6408). chezmoi.toml keeps 0600 either way."""
+    the agent-owned home (#6408). chezmoi.toml keeps 0600 either way. The False case is the
+    reverse state, not the change: it holds the flag-off modes, so an expression that always
+    opens the seed fails it."""
     dotfiles = tasks("agent_dotfiles.yml")
     env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     ctx = {"claude_code_agent_operator_read": operator_read}
