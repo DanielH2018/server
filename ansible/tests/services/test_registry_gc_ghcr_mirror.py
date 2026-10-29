@@ -447,9 +447,14 @@ def _curl_stub(calls: Path) -> str:
     )
     return f"""
 curl() {{
-  local url=${{@: -1}} accept="" arg
-  for arg; do [[ "$arg" == Accept:* ]] && accept=$arg; done
+  local url=${{@: -1}} accept="" arg prev="" max_time=""
+  for arg; do
+    [[ "$arg" == Accept:* ]] && accept=$arg
+    [[ "$prev" == --max-time ]] && max_time=$arg
+    prev=$arg
+  done
   printf 'curl %s\\n' "$url" >> {shlex.quote(str(calls))}
+  [[ "$url" == */manifests/* ]] && printf 'max-time %s\\n' "$max_time" >> {shlex.quote(str(calls))}
   [[ "$url" != */manifests/* || "$accept" == *image.index.v1+json* ]] || return 22
   case "$url" in
 {arms}
@@ -510,12 +515,20 @@ def test_a_blob_that_fails_to_warm_is_named_and_the_rest_still_warm(tmp_path):
     assert ", 2 failed (journalctl -t registry-gc)" in msg, msg
 
 
-def test_warm_starts_no_blob_once_the_budget_is_spent(tmp_path):
-    calls, msg = _warm(tmp_path, "plain@2", budget=0)
+def test_warm_starts_no_read_once_the_budget_is_spent(tmp_path):
+    # A manifest read too: two 60s reads per ref would run the phase past its budget.
+    calls, msg = _warm(tmp_path, "idx:1\nplain@2", budget=0)
 
-    assert not any("/blobs/" in c for c in calls), calls
+    assert not any("/blobs/" in c or "/manifests/" in c for c in calls), calls
     assert "warmed 0 blob(s)" in msg, msg
-    assert "3 skipped past the 0s budget" in msg, msg
+    assert "2 ref(s) unread past the 0s budget" in msg, msg
+
+
+def test_a_manifest_read_is_bounded_by_the_budget_left(tmp_path):
+    calls, _ = _warm(tmp_path, "plain@2", budget=30)
+
+    max_times = [c for c in calls if c.startswith("max-time ")]
+    assert max_times in (["max-time 30"], ["max-time 29"]), calls
 
 
 def test_no_ref_warms_nothing_and_says_so(tmp_path):

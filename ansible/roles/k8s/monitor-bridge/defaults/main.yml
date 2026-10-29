@@ -120,7 +120,9 @@ monitor_bridge_healthchecks_expected:
   - {slug: manifest-prune-check, kind: cron, schedule: "15 5 * * *", tz: UTC, grace: 7200}
   - {slug: etcd-snapshot-offbox, kind: cron, schedule: "45 2 * * *", tz: UTC, grace: 3600}
   - {slug: pi-peer-backup, kind: cron, schedule: "0 23 * * *", tz: "{{ tz }}", grace: 7200}
-  - {slug: registry-gc, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}
+  # Two hours covers registry-gc.sh's worst case of two mirror phases, about 6000s.
+  # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py derives it.
+  - {slug: registry-gc, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 7200}
   # initial_setup's three pinging crons: the weekly reboot pings one slug per host, the Docker
   # prune one per has_docker host, and the worktree sweep one on ops_cron_host.
   - {slug: weekly-reboot-daniel-box, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}

@@ -234,7 +234,9 @@ stringData:
    plus two hours. The run pushes at its end, and its worst case is about 6000s: two mirror
    phases, each the pod-exit, Job-delete and rollout waits, registry_k8s_gc_deadline_s (1200s)
    and its warm budget (1800s, then 900s), plus 60s for the lock. A fast week followed by a
-   worst-case one moves the push by that much. The dead-man's grace is still one hour (#6569). Only the two mirror
+   worst-case one moves the push by that much. The healthchecks.io grace is the same two hours, and
+   ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py derives both from the
+   budgets (#6569). Only the two mirror
    stores are collected since the push store's GC was retired. Gated on the
    token like the tiles below: an ungated tile sits red from creation until the secret exists. #}
 {% if registry_gc_push_token is defined %}

@@ -664,7 +664,9 @@ script through one `NOPASSWD` sudoers line, and its verbs come in two tiers:
   rule keywords, addresses, ports, paths and flag names. Every other value becomes a
   placeholder.
 
-Anything not listed is refused. `rootq --help` lists the verbs and the allowlist.
+Anything not listed is refused. `rootq --help` lists the verbs and the allowlist. The agent
+user has no sudo, so it runs `rootq-socket` with the same verbs, which asks a root helper
+through `/run/homelab-rootq.sock` (#6350).
 `ansible/roles/setup/claude_code/CLAUDE.md` (*The root inspector*) has the grant, its limits
 and how to take it back.
 

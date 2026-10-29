@@ -8,9 +8,18 @@ sessions do not.
 
 ## Never probe sudo
 
-You have no sudo, so do not probe with `sudo -n true`. To learn root-only host state, such as
-the nftables ruleset, `/etc/netplan` or root's crontab, ask the operator to run `rootq`, the
-read-only inspector their account holds, and say which verb and path you need.
+You have no sudo, so do not probe with `sudo -n true`.
+{% if claude_code_rootq_socket_armed %}
+To learn root-only host state, such as the nftables ruleset, `/etc/netplan` or root's crontab,
+run `rootq-socket`, which takes the same verbs as the operator's `rootq` through a socket
+(`rootq-socket --help` lists them and the allowed paths). It refuses what `rootq` refuses. If
+it cannot reach the socket, your session started before your user joined the group, so ask
+the operator to restart it.
+{% else %}
+To learn root-only host state, such as the nftables ruleset, `/etc/netplan` or root's crontab,
+ask the operator to run `rootq`, the read-only inspector their account holds, and say which
+verb and path you need.
+{% endif %}
 
 ## Name every worktree `{{ claude_code_agent_worktree_prefix }}/<slug>`
 

@@ -6,7 +6,9 @@ Run: uv run pytest ansible/roles/setup/claude_code/tests/test_rootq_install.py
 import hashlib
 import shutil
 
+import homelab_rootq_socket
 import pytest
+import rootq_socket
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
@@ -130,7 +132,7 @@ def tasks() -> list[dict]:
 
 
 def test_enabling_installs_the_grant_last_and_validates_it() -> None:
-    (install, _) = tasks()
+    install = tasks()[0]
     assert install["when"] == "claude_code_rootq_enabled"
     copies = [t["ansible.builtin.copy"] for t in install["block"][:-1]]
     assert [(c["dest"], c["owner"], c["mode"]) for c in copies] == [
@@ -147,7 +149,7 @@ def test_enabling_installs_the_grant_last_and_validates_it() -> None:
 
 
 def test_disabling_removes_the_grant_the_shim_and_the_script_in_order() -> None:
-    (_, remove) = tasks()
+    remove = tasks()[-1]
     assert remove["when"] == "not claude_code_rootq_enabled"
     removed = [
         (t["ansible.builtin.file"]["path"], t["ansible.builtin.file"]["state"])
@@ -173,3 +175,143 @@ def test_daniel_box_and_daniel_server_enable_the_inspector() -> None:
         if (yaml_fast.safe_load(p.read_text()) or {}).get("claude_code_rootq_enabled")
     }
     assert enabled == {"daniel-box", "daniel-server"}
+
+
+# ── The agent user's socket (#6350) ───────────────────────────────────────────────────────
+
+
+def directives(template: str) -> dict[str, str]:
+    """`Key=Value` for every directive line of a rendered unit. A repeated key keeps its last."""
+    found = {}
+    for line in render_setup_text("claude_code", template).splitlines():
+        if "=" in line and not line.startswith(("#", "[")):
+            key, _, value = line.partition("=")
+            found[key.strip()] = value.strip()
+    return found
+
+
+def defaults() -> dict:
+    return yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+
+
+def test_the_socket_admits_only_its_group_and_runs_the_installed_helper() -> None:
+    socket = directives("homelab-rootq.socket.j2")
+    service = directives("homelab-rootq@.service.j2")
+    d = defaults()
+    assert socket["ListenStream"] == d["claude_code_rootq_socket_path"]
+    assert socket["ListenStream"] == rootq_socket.SOCKET
+    assert (socket["Accept"], socket["SocketUser"], socket["SocketMode"]) == (
+        "yes",
+        "root",
+        "0660",
+    )
+    assert socket["SocketGroup"] == d["claude_code_rootq_socket_group"]
+    assert service["ExecStart"] == d["claude_code_rootq_socket_helper"]
+    assert service["StandardInput"] == "socket"
+    # Only the helper's own sendall may reach the socket; a traceback goes to the journal.
+    assert (service["StandardOutput"], service["StandardError"]) == (
+        "journal",
+        "journal",
+    )
+    assert service["NoNewPrivileges"] == "yes"
+    assert int(service["RuntimeMaxSec"]) > homelab_rootq_socket.RUN_TIMEOUT_S
+
+
+def test_the_service_keeps_the_hosts_network_namespace_for_nft_and_ufw() -> None:
+    """A private namespace would make `nft list ruleset` print an empty ruleset, not refuse."""
+    service = directives("homelab-rootq@.service.j2")
+    assert not {
+        "PrivateNetwork",
+        "RestrictAddressFamilies",
+        "CapabilityBoundingSet",
+    } & set(service)
+
+
+def test_the_helper_runs_the_script_the_sudo_grant_names() -> None:
+    assert homelab_rootq_socket.SCRIPT == SCRIPT
+    assert defaults()["claude_code_rootq_script"] == SCRIPT
+
+
+def socket_blocks() -> tuple[dict, dict]:
+    (install, install_socket, remove_socket, remove) = tasks()
+    assert install["when"] == "claude_code_rootq_enabled"
+    assert remove["when"] == "not claude_code_rootq_enabled"
+    return install_socket, remove_socket
+
+
+def test_the_socket_exists_only_while_the_script_it_runs_does() -> None:
+    install, remove = socket_blocks()
+    assert install["when"] == "claude_code_rootq_socket_armed"
+    assert remove["when"] == "not claude_code_rootq_socket_armed"
+    d = defaults()
+    assert d["claude_code_rootq_socket_enabled"] is False
+    assert d["claude_code_rootq_socket_armed"] == (
+        "{{ claude_code_rootq_enabled and claude_code_rootq_socket_enabled }}"
+    )
+
+
+def test_enabling_installs_the_helper_the_client_and_the_units_before_listening() -> (
+    None
+):
+    install, _ = socket_blocks()
+    names = [t["name"] for t in install["block"]]
+    assert names[0].startswith("Create the group")
+    assert names[-1].startswith("Listen on")
+    copies = [
+        t["ansible.builtin.copy"]
+        for t in install["block"]
+        if "ansible.builtin.copy" in t
+    ]
+    assert {c["dest"]: (c["owner"], c["mode"]) for c in copies} == {
+        "{{ claude_code_rootq_socket_helper }}": ("root", "0700"),
+        "{{ claude_code_rootq_socket_client }}": ("root", "0755"),
+    }
+    listen = install["block"][-1]["ansible.builtin.systemd_service"]
+    assert (listen["name"], listen["enabled"]) == ("homelab-rootq.socket", True)
+    assert all(t["become"] is True for t in install["block"])
+
+
+def test_disabling_stops_the_socket_before_its_units_go_and_removes_the_group_last() -> (
+    None
+):
+    _, remove = socket_blocks()
+    steps = remove["block"]
+    stop = next(
+        i for i, t in enumerate(steps) if "ansible.builtin.systemd_service" in t
+    )
+    unit_files = next(i for i, t in enumerate(steps) if "ansible.builtin.file" in t)
+    assert steps[stop]["ansible.builtin.systemd_service"]["state"] == "stopped"
+    assert steps[stop]["when"] == "claude_code_rootq_socket_unit.stat.exists"
+    assert stop < unit_files
+    assert steps[unit_files]["ansible.builtin.file"]["state"] == "absent"
+    group = steps[-1]["ansible.builtin.group"]
+    assert (group["name"], group["state"]) == (
+        "{{ claude_code_rootq_socket_group }}",
+        "absent",
+    )
+
+
+def test_the_agent_brief_names_the_socket_client_only_while_the_socket_is_armed() -> (
+    None
+):
+    def brief(armed: bool) -> str:
+        return render_setup_text(
+            "claude_code",
+            "agent-user-claude-md.j2",
+            {"claude_code_rootq_socket_armed": armed},
+        )
+
+    assert "`rootq-socket`" in brief(True)
+    assert "rootq-socket" not in brief(False)
+    assert "ask the operator to run `rootq`" in brief(False)
+
+
+def test_daniel_box_and_daniel_server_arm_the_socket() -> None:
+    armed = {
+        p.stem
+        for p in HOST_VARS.glob("*.yml")
+        if (yaml_fast.safe_load(p.read_text()) or {}).get(
+            "claude_code_rootq_socket_enabled"
+        )
+    }
+    assert armed == {"daniel-box", "daniel-server"}

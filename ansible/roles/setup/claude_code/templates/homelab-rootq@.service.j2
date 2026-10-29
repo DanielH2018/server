@@ -1,0 +1,33 @@
+# Managed by Ansible (roles/setup/claude_code, tasks/rootq.yml) — edits here are overwritten.
+#
+# One answer of the read-only root inspector, started by homelab-rootq.socket for each
+# connection (#6350). The helper reads one request line from the connection, validates it, runs
+# {{ claude_code_rootq_script }} and writes the answer back on the connection.
+[Unit]
+Description=Read-only root inspector for one caller
+# A failed instance is collected rather than left in the unit list, one per connection.
+CollectMode=inactive-or-failed
+
+[Service]
+Type=simple
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+ExecStart={{ claude_code_rootq_socket_helper }}
+StandardInput=socket
+# Only the helper's own sendall reaches the socket. A traceback on stdout or stderr would
+# otherwise arrive in the answer, where the caller would have to tell it from a refusal.
+StandardOutput=journal
+StandardError=journal
+# rootq bounds a command it runs at 30 s and the helper bounds rootq at 45 s, so a hung
+# instance must not hold a connection open past this.
+RuntimeMaxSec=90
+NoNewPrivileges=yes
+# DECIDED: no PrivateNetwork=, RestrictAddressFamilies= or CapabilityBoundingSet= here, unlike
+# worktree-holders@.service. rootq runs `nft list ruleset` and `ufw status verbose`, which read
+# the host's network namespace through netlink. A private namespace would print an empty
+# ruleset, and the answer would look healthy.
+# `full` rather than `strict`: ufw and crontab are programs rootq starts, and a read-only /var
+# and /run could make one of them fail where this host's apply cannot show it.
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes

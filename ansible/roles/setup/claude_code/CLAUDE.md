@@ -380,8 +380,10 @@ line in `/etc/sudoers.d/claude-rootq` (issue #6323). The operator approved the s
 is true: daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
 only, where fan-out batches and the operator's sessions run. The agent user stays without
 sudo: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297), and
-`NoNewPrivileges=yes` in `claude-rc.service` stops sudo there anyway. The four files that
-decide what the grant reaches are on the lander's approval list.
+`NoNewPrivileges=yes` in `claude-rc.service` stops sudo there anyway. The agent reaches the
+same script through a socket instead (*The agent's socket* below). The four files that decide
+what the grant reaches, and the four that decide what the socket reaches, are on the
+lander's approval list.
 
 Everything rootq accepts is an explicit allowlist, and anything not listed is refused. The
 list is deliberately minimal: the files and sources #6323's sessions needed. It grows only when
@@ -432,4 +434,46 @@ a need appears.
   for why the filter redacts its grammar cleanly, with must-pass and must-redact cases in
   `tests/test_rootq_redaction.py`.
 - **To take it back:** set `claude_code_rootq_enabled: false` and apply the role. The role
-  removes the sudoers file, the shim and the script, in that order.
+  removes the socket first, then the sudoers file, the shim and the script, in that order.
+
+### The agent's socket
+
+The operator approved this on 2026-10-29 (#6350). `homelab-rootq.socket`
+(`templates/homelab-rootq.socket.j2`) listens on `/run/homelab-rootq.sock`, mode 0660, group
+`homelab-rootq`, with `Accept=yes`. For each connection systemd runs the root helper
+`ansible/roles/setup/claude_code/files/homelab_rootq_socket.py`, installed as
+`/usr/local/libexec/homelab-rootq-socket`, through `homelab-rootq@.service`. The agent runs
+`rootq-socket` (`files/rootq_socket.py`, the same verbs as `rootq`). `agent_access.yml` puts
+each present agent in the group. The group is the whole grant, because the helper checks no
+uid.
+
+- **The helper adds no allowlist of its own.** It reads one line, `VERB [PATH [HEX]]`, of at
+  most 4200 bytes within 5 seconds, and refuses anything else before rootq runs: a verb outside
+  `ansible/roles/setup/claude_code/files/homelab_rootq_socket.py:ARITY`, a wrong argument
+  count, a non-ASCII byte, a PATH holding an empty, `.` or `..` component, and a `matches` hash
+  that is not 64 lowercase hex. It then runs `/usr/local/sbin/homelab-rootq` by absolute path
+  with an argument list, a fixed environment and stdin closed, never a shell. Whether a PATH is
+  on the allowlist is rootq's decision, so the caller gets rootq's own refusal text. The
+  helper's own refusals use the same `refused: ...` text and exit 2.
+- **The answer is one JSON line** with `exit`, `stdout` and `stderr`, because a socket carries
+  no exit status. `rootq-socket` fails with 70 on an answer that is missing, truncated or not
+  that object, and with 69 when it cannot connect.
+- **`matches` sends a hash, never a file name.** The client hashes REPO_FILE as the caller, with
+  the shim's checks, and sends `matches PATH HEX`.
+- **The service keeps the host's network namespace.** `nft list ruleset` and `ufw status
+  verbose` read it, and a `PrivateNetwork=` would print an empty ruleset instead of refusing.
+- **A session sees the group after `claude-rc.service` restarts.** Group membership reaches a
+  process at its start. The weekly `claude-rc-restart.timer` restarts the service, or the
+  operator restarts it, and an older session gets exit 69 from `rootq-socket` until then.
+- **The approval list covers the socket's four files.** #6350 expected the sudo grant's
+  entries to cover it, and they cover only the script. The helper, the client and the two unit
+  templates are listed in `templates/claude-land-approval-paths.j2` and in `FLOOR` in
+  `ansible/tests/setup/test_claude_lander.py`.
+- **To take it back:** set `claude_code_rootq_socket_enabled: false`, or
+  `claude_code_rootq_enabled: false`, and apply the role. The role stops and disables the
+  socket, removes the units, the helper, the client and the group, and `agent_access.yml`
+  drops the agent from the group. The operator's sudo path is untouched. The setting is
+  `claude_code_rootq_socket_enabled` in the host's `host_vars`.
+- **How to apply it:** `uv run ansible-playbook ansible/initial_setup.yml --tags claude_code`
+  on each of daniel-box and daniel-server. Both nodes are `connection=local`, so the play runs
+  on the host it is started on.

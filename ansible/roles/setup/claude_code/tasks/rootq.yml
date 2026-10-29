@@ -41,6 +41,122 @@
         validate: visudo -cf %s
       become: true
 
+# The agent user's route to the same script (#6350): a socket-activated root helper, in the
+# shape of initial_setup's worktree-holders.socket. Gated on claude_code_rootq_socket_armed, so
+# the socket never outlives the script it runs. agent_access.yml puts each present agent in
+# the socket's group and creates the group first, because agent.yml runs before this file.
+- name: Install the root inspector's socket
+  when: claude_code_rootq_socket_armed
+  block:
+    - name: Create the group that may connect to the root inspector's socket
+      tags: [claude_code]
+      ansible.builtin.group:
+        name: "{{ claude_code_rootq_socket_group }}"
+        system: true
+      become: true
+
+    # A root-owned COPY, never a path into the checkout: the operator and every agent can
+    # write the repo, so a root unit naming a file there is root for whoever edits it. 0700,
+    # because only the service runs it.
+    - name: Install the root inspector's socket helper
+      tags: [claude_code]
+      ansible.builtin.copy:
+        src: homelab_rootq_socket.py
+        dest: "{{ claude_code_rootq_socket_helper }}"
+        owner: root
+        group: root
+        mode: "0700"
+      become: true
+
+    - name: Install the root inspector's socket client
+      tags: [claude_code]
+      ansible.builtin.copy:
+        src: rootq_socket.py
+        dest: "{{ claude_code_rootq_socket_client }}"
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: Install the root inspector's socket and its per-connection service
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - homelab-rootq.socket
+        - homelab-rootq@.service
+      register: claude_code_rootq_socket_units
+      become: true
+
+    # Restarted when a unit changed, because a running socket keeps its old SocketGroup and
+    # mode. Skipped by a --check run that has not written a changed unit,
+    # which systemd cannot load.
+    - name: Listen on the root inspector's socket
+      tags: [claude_code]
+      when: not (ansible_check_mode and claude_code_rootq_socket_units is changed)
+      ansible.builtin.systemd_service:
+        name: homelab-rootq.socket
+        enabled: true
+        state: "{{ 'restarted' if claude_code_rootq_socket_units is changed else 'started' }}"
+        daemon_reload: "{{ claude_code_rootq_socket_units is changed }}"
+      become: true
+
+# The way out of the socket, ahead of the script's removal below so the socket never outlives
+# the script it runs. Its group goes last, after agent_access.yml dropped the membership.
+- name: Take the root inspector's socket back
+  when: not claude_code_rootq_socket_armed
+  block:
+    - name: Read whether the root inspector's socket is installed
+      tags: [claude_code]
+      ansible.builtin.stat:
+        path: /etc/systemd/system/homelab-rootq.socket
+      register: claude_code_rootq_socket_unit
+
+    # Before its unit file goes, because systemd cannot stop a unit it no longer finds.
+    - name: Stop the root inspector's socket
+      tags: [claude_code]
+      when: claude_code_rootq_socket_unit.stat.exists
+      ansible.builtin.systemd_service:
+        name: homelab-rootq.socket
+        enabled: false
+        state: stopped
+      become: true
+
+    - name: Remove the root inspector's socket units, helper and client
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/homelab-rootq.socket
+        - /etc/systemd/system/homelab-rootq@.service
+        - "{{ claude_code_rootq_socket_helper }}"
+        - "{{ claude_code_rootq_socket_client }}"
+      register: claude_code_rootq_socket_removed
+      become: true
+
+    - name: Forget the removed root inspector socket units
+      tags: [claude_code]
+      # Two conditions, because ansible-lint's no-handler rule reads a lone `is changed` as a
+      # handler; the second repeats the block's own gate.
+      when:
+        - not claude_code_rootq_socket_armed
+        - claude_code_rootq_socket_removed is changed
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      become: true
+
+    - name: Remove the root inspector's socket group
+      tags: [claude_code]
+      ansible.builtin.group:
+        name: "{{ claude_code_rootq_socket_group }}"
+        state: absent
+      become: true
+
 - name: Take the root inspector back
   when: not claude_code_rootq_enabled
   block:

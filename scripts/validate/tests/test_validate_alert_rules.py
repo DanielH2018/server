@@ -111,6 +111,28 @@ def test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged():
     )
 
 
+def test_alloy_rejecting_the_rendered_config_is_flagged():
+    """The #6177 shape: Alloy's match-stage parser refusing a selector Loki accepts."""
+    problems = alert_rules.check_tree(
+        run=lambda argv: (
+            (1, "invalid selector syntax for match stage")
+            if argv[:2] == ["alloy", "run"]
+            else _tools_pass(argv)
+        )
+    )
+    assert len(problems) == 1, problems
+    assert "alloy run" in problems[0], problems
+    assert "invalid selector syntax for match stage" in problems[0], problems
+
+
+def test_the_alloy_load_finds_the_component_it_gives_a_kubeconfig():
+    """Non-vacuity: without the injection the run dies on the missing service-account token,
+    so a render that stopped carrying `discovery.kubernetes` must fail here, not in CI."""
+    config = alert_rules.rendered_alloy_config()
+    assert alert_rules.ALLOY_KUBE_COMPONENT.search(config), config[:400]
+    assert 'loki.process "k3s"' in config
+
+
 def test_a_rejected_alertmanager_config_is_flagged():
     problems = alert_rules.check_tree(
         run=lambda argv: (
@@ -233,6 +255,7 @@ def test_every_proof_names_fixtures_that_exist():
         ("promtool", "check", "config", "--syntax-only"),
         ("pint", *alert_rules.PINT_ARGS),
         ("lokitool", "rules", "lint", "--dry-run"),
+        ("alloy", "run"),
     }
     # promtool test rules has two proofs, and the set above holds the command once. The
     # second shows condition 3 of the third `service` source rests on promtool.
