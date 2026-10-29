@@ -404,7 +404,8 @@ def refresh_drifted_weights(
     The unattended repair for a weight that has drifted but not far enough for the gate's
     ratio arms. Only an entry `drifted` judges out of band is rewritten, so re-measuring a
     slice usually leaves the table byte-identical. A drifted entry is measured a second time,
-    and it is rewritten with the lower of the two only when the two runs agree. A recorded path no longer in the census is
+    and it is rewritten with the lower of the two only when the two runs agree. A run that
+    omits a file measured nothing and reads as 0.0. A recorded path no longer in the census is
     dropped, as `record_missing_weights` drops it.
 
     Args:
@@ -435,7 +436,7 @@ def refresh_drifted_weights(
         if drifted(kept[f], confirmed.get(f, 0.0))
         and not drifted(measured.get(f, 0.0), confirmed.get(f, 0.0))
     )
-    kept |= {f: min(measured[f], confirmed[f]) for f in moved}
+    kept |= {f: min(measured.get(f, 0.0), confirmed.get(f, 0.0)) for f in moved}
     _write_weights(kept, path, pins)
     return moved
 

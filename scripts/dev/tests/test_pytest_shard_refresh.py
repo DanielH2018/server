@@ -342,6 +342,28 @@ def test_a_refresh_keeps_a_row_whose_two_runs_drift_but_disagree(tmp_path):
     assert json.loads(table.read_text()) == {module: 16.0}
 
 
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        pytest.param({}, {}, id="both-runs-omit-it"),
+        pytest.param({}, {FILES[0]: 0.3}, id="only-the-first-run-omits-it"),
+    ],
+)
+def test_a_refresh_reads_a_file_a_run_omitted_as_0_0(tmp_path, first, second):
+    """A file whose tests are all deselected is absent from a run and costs its import (#6587)."""
+    module = FILES[0]
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({module: 16.0}))
+    measure, _ = _runs(first, second)
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    assert moved == [module]
+    assert json.loads(table.read_text()) == {module: 0.0}
+
+
 def test_a_refresh_writes_the_lower_of_two_agreeing_runs(tmp_path):
     """#6587: two loaded runs can agree with each other and still both overshoot."""
     module = FILES[0]
