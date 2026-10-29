@@ -18,13 +18,15 @@ import yaml
 from _helpers import K8S_ROLES, load_defaults
 from lib import yaml_fast
 from lib.ansible_inventory import inventory_hosts
-from lib.repo_paths import HOST_VARS
+from lib.repo_paths import ALL_VARS, HOST_VARS
 
 ROLE = K8S_ROLES / "observability"
 RULES = ROLE / "files" / "rules" / "host-checks.yaml"
 FIXTURE = ROLE / "tests" / "rules" / "fixtures" / "host-update-stale.yaml"
 # A host no inventory declares, so the fixture never shadows a shipped rule for a real host.
 FIXTURE_HOSTS = {"fixture-host": {"job": "node-fixture", "limit_seconds": 11400}}
+# The page both host-plane alerts link as their runbook.
+RUNBOOK_URL = f"https://docs.local.{yaml_fast.safe_load(ALL_VARS.read_text())['domain']}/host-packages/"
 # Non-vacuity: the hosts hosts.ini must keep declaring for the reconcile census to mean much.
 FLEET = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 # Non-vacuity: the k3s nodes that pin their address on a wired link with a WiFi fallback.
@@ -61,6 +63,7 @@ def update_stale_rule(host: str, job: str, limit_seconds: int) -> dict:
                 f"`journalctl -u homelab-updater` on {host}, and docs/host-packages.md, "
                 '"Host-plane pages".'
             ),
+            "runbook_url": RUNBOOK_URL,
         },
     }
 

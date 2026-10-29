@@ -143,6 +143,7 @@ groups:
             unavailable backup target, a stale or errored backup, a failed job, or a restore drill
             that is overdue. `journalctl -t longhorn-backup-health` names the check. Read
             docs/longhorn-disaster-recovery.md after it.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - alert: LonghornBackupHealthNotReporting
         expr: |
           (
@@ -174,6 +175,7 @@ groups:
             etcd-snapshot-offbox.sh on daniel-box could not take or upload the etcd snapshot, or the
             cluster token changed since the off-box copy was stamped. `journalctl -t
             etcd-snapshot-offbox` names which. Read docs/k3s-etcd-restore.md after it.
+          runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/
       - alert: EtcdSnapshotOffboxNotReporting
         expr: |
           (
@@ -506,6 +508,246 @@ groups:
             textfile collector, so nothing confirms the malware scan still runs. Read the
             `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`, then
             /var/lib/node-exporter-textfile/rkhunter-check.prom on the host.
+      # The weekly host-maintenance crons (#6179): apt autoremove and the dpkg purge on every
+      # host, the firmware update on daniel-box, the one host with fwupd. Each runs through
+      # initial_setup's files/host-maintenance.sh, which writes the check's textfile with
+      # success 0 when the job's command failed. No Kuma tile or Healthchecks.io check watches
+      # these crons, so every rule here pages, and none is shadow: a shadow NotReporting source
+      # would still inhibit HostCheckOverdue and leave a stopped cron paging nobody.
+      #
+      # The absent arm differs from DiskHealthNotReporting's. A bare absent_over_time fires for a
+      # series that never existed, and no file exists until each cron's first Sunday run, so it
+      # would page from the Flux apply for up to a week with nothing wrong. The arm therefore
+      # also requires the series within the last 2419200s (28 days, inside Prometheus's 30-day
+      # retention). A file that vanishes after a run pages from its deadline until 28 days after
+      # its last sample; a cron that stops but leaves its file pages through the stale arm for as
+      # long as it stays stopped. Both literals of each NotReporting rule
+      # equal the script's DEADLINE_S, and ansible/tests/setup/test_host_maintenance.py pins
+      # them to it and the rule set to the hosts that run each cron.
+      - alert: AptAutoremoveFailed
+        expr: homelab_check_success{check="apt-autoremove",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly apt autoremove failed.
+          description: >-
+            host-maintenance.sh apt-autoremove on daniel-box wrote success 0: apt-get autoremove exited non-zero. Read
+            `journalctl -t apt-autoremove` on daniel-box for the command's output.
+      - alert: AptAutoremoveNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-box"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly apt autoremove has stopped reporting.
+          description: >-
+            No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-box's textfile
+            collector, so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron in
+            root's crontab and `journalctl -t apt-autoremove`, then
+            /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      - alert: AptAutoremoveFailed
+        expr: homelab_check_success{check="apt-autoremove",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's weekly apt autoremove failed.
+          description: >-
+            host-maintenance.sh apt-autoremove on daniel-server wrote success 0: apt-get autoremove exited non-zero. Read
+            `journalctl -t apt-autoremove` on daniel-server for the command's output.
+      - alert: AptAutoremoveNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-server"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's weekly apt autoremove has stopped reporting.
+          description: >-
+            No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-server's textfile
+            collector, so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron in
+            root's crontab and `journalctl -t apt-autoremove`, then
+            /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      - alert: AptAutoremoveFailed
+        expr: homelab_check_success{check="apt-autoremove",origin="daniel-pi"} == 0
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's weekly apt autoremove failed.
+          description: >-
+            host-maintenance.sh apt-autoremove on daniel-pi wrote success 0: apt-get autoremove exited non-zero. Read
+            `journalctl -t apt-autoremove` on daniel-pi for the command's output.
+      - alert: AptAutoremoveNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="apt-autoremove",origin="daniel-pi"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's weekly apt autoremove has stopped reporting.
+          description: >-
+            No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-pi's textfile
+            collector, so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron in
+            root's crontab and `journalctl -t apt-autoremove`, then
+            /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+      - alert: DpkgPurgeFailed
+        expr: homelab_check_success{check="dpkg-purge",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly dpkg purge of orphaned configs failed.
+          description: >-
+            host-maintenance.sh dpkg-purge on daniel-box wrote success 0: the dpkg purge of removed packages' configs exited non-zero. Read
+            `journalctl -t dpkg-purge` on daniel-box for the command's output.
+      - alert: DpkgPurgeNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-box"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
+          description: >-
+            No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-box's textfile
+            collector, so nothing confirms the weekly dpkg purge of orphaned configs still runs. Read the `Weekly dpkg purge orphaned configs` cron in
+            root's crontab and `journalctl -t dpkg-purge`, then
+            /var/lib/node-exporter-textfile/dpkg-purge.prom on the host.
+      - alert: DpkgPurgeFailed
+        expr: homelab_check_success{check="dpkg-purge",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's weekly dpkg purge of orphaned configs failed.
+          description: >-
+            host-maintenance.sh dpkg-purge on daniel-server wrote success 0: the dpkg purge of removed packages' configs exited non-zero. Read
+            `journalctl -t dpkg-purge` on daniel-server for the command's output.
+      - alert: DpkgPurgeNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-server"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: daniel-server's weekly dpkg purge of orphaned configs has stopped reporting.
+          description: >-
+            No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-server's textfile
+            collector, so nothing confirms the weekly dpkg purge of orphaned configs still runs. Read the `Weekly dpkg purge orphaned configs` cron in
+            root's crontab and `journalctl -t dpkg-purge`, then
+            /var/lib/node-exporter-textfile/dpkg-purge.prom on the host.
+      - alert: DpkgPurgeFailed
+        expr: homelab_check_success{check="dpkg-purge",origin="daniel-pi"} == 0
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's weekly dpkg purge of orphaned configs failed.
+          description: >-
+            host-maintenance.sh dpkg-purge on daniel-pi wrote success 0: the dpkg purge of removed packages' configs exited non-zero. Read
+            `journalctl -t dpkg-purge` on daniel-pi for the command's output.
+      - alert: DpkgPurgeNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="dpkg-purge",origin="daniel-pi"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's weekly dpkg purge of orphaned configs has stopped reporting.
+          description: >-
+            No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-pi's textfile
+            collector, so nothing confirms the weekly dpkg purge of orphaned configs still runs. Read the `Weekly dpkg purge orphaned configs` cron in
+            root's crontab and `journalctl -t dpkg-purge`, then
+            /var/lib/node-exporter-textfile/dpkg-purge.prom on the host.
+      - alert: FirmwareUpdateFailed
+        expr: homelab_check_success{check="firmware-update",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly firmware update failed.
+          description: >-
+            host-maintenance.sh firmware-update on daniel-box wrote success 0: fwupdmgr update exited with an error rather than 0 or 2 (nothing to update). Read
+            `journalctl -t fwupd-auto` on daniel-box for the command's output.
+      - alert: FirmwareUpdateNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"} > 612000
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"}[612000s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="firmware-update",origin="daniel-box"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: daniel-box's weekly firmware update has stopped reporting.
+          description: >-
+            No firmware-update verdict newer than 612000s reached Prometheus from daniel-box's textfile
+            collector, so nothing confirms the weekly firmware update still runs. Read the `Weekly firmware update` cron in
+            root's crontab and `journalctl -t fwupd-auto`, then
+            /var/lib/node-exporter-textfile/firmware-update.prom on the host.
       # The catch-all deadman (#6166), one rule per host so `service` stays a literal. It reads
       # each check's own homelab_check_deadline_seconds, so a producer that writes the textfile
       # is covered the day it ships, before anyone writes its NotReporting pair. It is the
@@ -651,6 +893,7 @@ groups:
             its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes the pod
             every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A stale iSCSI
             session blocks an attach".
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - alert: IscsiSessionStale
         expr: homelab_iscsi_session_info{state!="LOGGED_IN",origin="daniel-server"} == 1
         for: 15m
@@ -665,6 +908,7 @@ groups:
             its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes the pod
             every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A stale iSCSI
             session blocks an attach".
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - alert: IscsiSessionsNotReporting
         expr: |
           (
@@ -905,6 +1149,7 @@ groups:
             reruns reconcile and clears the hold if it passes, and `sudo
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       - alert: HostReconcileFailed
         expr: homelab_host_reconcile_ok{origin="daniel-pi"} == 0
         for: 15m
@@ -921,6 +1166,7 @@ groups:
             reconcile and clears the hold if it passes, and `sudo
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       - alert: HostReconcileFailed
         expr: homelab_host_reconcile_ok{origin="daniel-box"} == 0
         for: 15m
@@ -937,6 +1183,7 @@ groups:
             reconcile and clears the hold if it passes, and `sudo
             /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
             then installs the newest packages as a timer run does.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       # The Pi's Compose project (H5). compose-run writes homelab_compose_up_result each time
       # homelab-reconcile starts homelab-compose.service, and a failed `up --wait` writes 0. The
       # Pi's recovery heartbeat pages the same 0 through its Kuma tile, so this rule is SHADOW
@@ -990,25 +1237,48 @@ groups:
             TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
             failed. Read `systemctl status homelab-compose` and `journalctl -b -u
             homelab-compose` on daniel-pi.
+      # Reconcile also starts or restarts homelab-compose.service: when its file changes, when
+      # pending.json lists it after an env-file rotation, and in step 2 when it is not active.
+      # Reconcile records the time it made the call, blocks until compose-run returns, and then
+      # writes that time as homelab_host_unit_started_seconds. A compose-run that wrote its
+      # result ended after that time, so a result older than it means the run wrote nothing:
+      # systemd killed it at TimeoutStartSec, or the write failed after `up` succeeded. The
+      # second exits 0, so HostReconcileFailed stays quiet for it (#6342). ComposeUpStale covers
+      # the boot run, which reconcile does not start, and a file that is gone. Reconcile writes
+      # its file after compose-run's, so no scrape between the two writes can fire this; the 5m
+      # `for` is defensive.
+      - alert: ComposeRestartUnreported
+        expr: |
+          homelab_host_unit_started_seconds{origin="daniel-pi",unit="homelab-compose.service"}
+            > on (origin) group_left homelab_compose_up_timestamp_seconds{origin="daniel-pi"}
+        for: 5m
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: The Pi's Compose project wrote no result for reconcile's last start of it.
+          description: >-
+            homelab-reconcile started homelab-compose.service on daniel-pi, and
+            homelab_compose_up_timestamp_seconds still predates that call, so compose-run wrote
+            no result for it. systemd killed the run at its TimeoutStartSec, or the write to
+            /var/lib/node-exporter-textfile/homelab_compose.prom failed. Read `journalctl -u
+            homelab-compose -u homelab-reconcile` on daniel-pi.
       # One rule per inventory host, so `service` stays a literal (#6166). Reconcile writes
       # homelab_host_reboot_pending 1 when a package change needs a reboot, and the weekly
       # reboot is what applies it. homelab_host_reboot_pending_since_seconds is when the host
       # first owed that reboot, the flag's mtime, which a later change never moves. The age is
       # read from it rather than from the file's mtime, because every later package change
-      # rewrites the file. The `> node_boot_time_seconds` arm drops a 1 left in the file from
-      # before the last boot: the updater runs reconcile only when a package changes, so the
-      # file can outlive the boot that cleared the flag. 691200s is 8 days, a weekly reboot
-      # slot plus a day.
+      # rewrites the file. homelab-reconcile-metrics.service rewrites the file at boot, so a 1
+      # does not outlive the reboot that cleared the flag (#6188). The 15m `for` covers the
+      # scrapes between boot and that unit. 691200s is 8 days, a weekly reboot slot plus a day.
       - alert: HostRebootOverdue
         expr: |
           (
               homelab_host_reboot_pending{origin="daniel-box"} == 1
             and on (origin)
-              homelab_host_reboot_pending_since_seconds{origin="daniel-box"}
-              > on (origin) node_boot_time_seconds{origin="daniel-box"}
-            and on (origin)
               time() - homelab_host_reboot_pending_since_seconds{origin="daniel-box"} > 691200
           )
+        for: 15m
         labels:
           severity: warning
           service: daniel-box
@@ -1019,16 +1289,15 @@ groups:
             ago, and the host has not booted since, so the weekly reboot did not run or was
             refused. Read `journalctl -t weekly-restart` on daniel-box and docs/host-packages.md,
             "Reboot-pending and activation-pending", then reboot the host.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       - alert: HostRebootOverdue
         expr: |
           (
               homelab_host_reboot_pending{origin="daniel-server"} == 1
             and on (origin)
-              homelab_host_reboot_pending_since_seconds{origin="daniel-server"}
-              > on (origin) node_boot_time_seconds{origin="daniel-server"}
-            and on (origin)
               time() - homelab_host_reboot_pending_since_seconds{origin="daniel-server"} > 691200
           )
+        for: 15m
         labels:
           severity: warning
           service: daniel-server
@@ -1039,16 +1308,15 @@ groups:
             ago, and the host has not booted since, so the weekly reboot did not run or was
             refused. Read `journalctl -t weekly-restart` on daniel-server and docs/host-packages.md,
             "Reboot-pending and activation-pending", then reboot the host.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       - alert: HostRebootOverdue
         expr: |
           (
               homelab_host_reboot_pending{origin="daniel-pi"} == 1
             and on (origin)
-              homelab_host_reboot_pending_since_seconds{origin="daniel-pi"}
-              > on (origin) node_boot_time_seconds{origin="daniel-pi"}
-            and on (origin)
               time() - homelab_host_reboot_pending_since_seconds{origin="daniel-pi"} > 691200
           )
+        for: 15m
         labels:
           severity: warning
           service: daniel-pi
@@ -1059,6 +1327,7 @@ groups:
             ago, and the host has not booted since, so the weekly reboot did not run or was
             refused. Read `journalctl -t weekly-restart` on daniel-pi and docs/host-packages.md,
             "Reboot-pending and activation-pending", then reboot the host.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       # SHADOW UNTIL #5658's ruling on unattended launches decides whether idle slots page
       # anyone (#5672). No batch ran for 16.4h on the night of 2026-10-13 while 9 filed issues
       # waited, and nothing said so. The server lander writes findings_issues from issue labels
@@ -1108,3 +1377,4 @@ groups:
             a firewall rule, a keyring mismatch and a stopped timer each leave it stale. Read
             `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
             daniel-pi, and docs/host-packages.md, "Host-plane pages".
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/

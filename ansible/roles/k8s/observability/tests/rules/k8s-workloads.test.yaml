@@ -52,7 +52,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: Deployment homelab/valheim has unavailable replicas.
-              description: "valheim has had 1 unavailable replicas for 15 minutes. The hold is per Deployment, where the bridge's streak counted any workload."
+              description: "valheim has had 1 unavailable replicas for 15 minutes."
       - alertname: K8sDeploymentZeroAvailable
         eval_time: 9m
         exp_alerts: []
@@ -170,7 +170,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: Deployment homelab/valheim has unavailable replicas.
-              description: "valheim has had 1 unavailable replicas for 15 minutes. The hold is per Deployment, where the bridge's streak counted any workload."
+              description: "valheim has had 1 unavailable replicas for 15 minutes."
       - alertname: WorkloadServiceUnmapped
         eval_time: 31m
         exp_alerts:

@@ -27,6 +27,7 @@ description: daniel-box's homelab host package
 components:
   - reconcile
   - secrets-unit
+  - k3s-gates
   - k3s-restart
   - kuma-push
   - nut-secondary

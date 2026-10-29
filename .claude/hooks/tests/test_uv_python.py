@@ -474,8 +474,11 @@ def _dispatch(command, monkeypatch, capsys):
 
 
 def test_the_dispatcher_emits_the_rewrite(monkeypatch, capsys):
-    out = _dispatch("pytest ansible/tests", monkeypatch, capsys)
-    assert out["updatedInput"] == {"command": "uv run pytest ansible/tests"}
+    # One module, not a suite: run from a fan-out batch, `block-batch-full-suite` denies a
+    # command selecting over 300 modules, and `_REPO` is then the batch worktree (#6146).
+    command = "pytest .claude/hooks/tests/test_uv_python.py"
+    out = _dispatch(command, monkeypatch, capsys)
+    assert out["updatedInput"] == {"command": f"uv run {command}"}
     assert "permissionDecision" not in out
 
 
