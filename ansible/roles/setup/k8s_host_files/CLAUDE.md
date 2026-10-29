@@ -51,7 +51,9 @@ its script. uptime-kuma's PR wrote `tasks/uptime-kuma.yml`, the absent arm that 
 the directory k8s/volume-claim staged autokuma-data's claim under. registry's push-store GC
 retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` manifest nothing
 reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it: the Job
-manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. crowdsec's first conversion
+manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. #6536 added the
+dockerhub-mirror's Job manifest, `templates/dockerhub-mirror-gc-job.yaml.j2`, which the same
+script applies in a second phase. crowdsec's first conversion
 PR wrote `tasks/crowdsec.yml`, which installed the edge probe's script, service and timer on
 daniel-pi for crowdsec's off-cluster verify. H5.14 moved those into the Pi package
 (`hosts/components/crowdsec-probe/`) and deleted the tasks, so no timer is left here.
@@ -104,8 +106,8 @@ its path, owner, group or mode changes, and pins a looped row's `loop`. Each
 conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
 census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
 
-`ansible/roles/setup/k8s_host_files/tests/test_ghcr_mirror_prune.py` runs the Job's prune
-script against a store tree built in `tmp_path`.
+`ansible/roles/setup/k8s_host_files/tests/test_ghcr_mirror_prune.py` runs the Jobs' prune
+script against a store tree built in `tmp_path`. Both mirrors' Jobs run that one script.
 
 ## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
 
@@ -116,10 +118,12 @@ crowdsec's retired crons.
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a
   Kubernetes object, never a `kubectl` write from a task, and never a row outside the D5 list
-  above. One cron is the exception: `registry-gc.sh` runs weekly as root, scales
-  `deploy/ghcr-mirror` and applies the Job manifest this role stages. The task installs the
-  script and the cron and runs neither. The operator accepted that script as the one writer of
-  the mirror's `spec.replicas` (#5732). No task writes on daniel-pi.
+  above. One cron is the exception: `registry-gc.sh` runs weekly as root. It scales
+  `deploy/ghcr-mirror` and then `deploy/dockerhub-mirror`, one at a time, and applies the Job
+  manifest this role stages for each. The task installs the script and the cron and runs
+  neither. The operator accepted that script as the one writer of the ghcr-mirror's
+  `spec.replicas` (#5732), and #6536 extends that to the dockerhub-mirror's. No task writes on
+  daniel-pi.
 - **Mode (explicit + reversible):** each row carries the arm variable its source role used.
   `registry_k8s_manage_gc: false` skips the whole registry GC block, as it did in the registry
   role. It only skips: a host that already has the cron keeps it, so disarming a host means
@@ -135,7 +139,7 @@ crowdsec's retired crons.
   changes this role.
 - **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes a `Registry GC`
   Kuma push and a `registry-gc` healthchecks.io ping, and the `registry-gc` journal
-  (`journalctl -t registry-gc`) shows the mirror phase. A conversion apply leaves the cron
+  (`journalctl -t registry-gc`) shows both mirror phases. A conversion apply leaves the cron
   file and the script's hash unchanged. After the restore the run warms the mirror: it GETs
   blobs through the mirror's loopback hostPort and writes nothing to the cluster. The push
   message ends with the warm counts, such as `warmed 354 blob(s), 6207 MB in 133s`.

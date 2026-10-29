@@ -17,13 +17,15 @@
     quiet: true
   no_log: true
 
+# 0710 under operator_read, as for ~/.config/gh: group sys_user stats the 0600 login for
+# `probe.py applied` without listing the directory or reading the file.
 - name: Create the agent user's homelab-ui config directory
   ansible.builtin.file:
     path: "{{ claude_code_homelab_ui_credentials | dirname }}"
     state: directory
     owner: "{{ claude_code_agent_user }}"
     group: "{{ sys_user }}"
-    mode: "0700"
+    mode: "{{ '0710' if claude_code_agent_operator_read else '0700' }}"
   become: true
 
 - name: Give the agent user its homelab-ui login

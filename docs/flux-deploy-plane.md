@@ -1043,7 +1043,9 @@ the variable with `prod`'s live digest and pages on a mismatch.
 - `prod` and `last-good` name the same digest except between a run's `tag` and its `settle`,
   or after a hold without a reset. While they differ and `prod` is not the `held` digest,
   `decide` waits, re-reading `DEPLOY_HOLD` each 30 seconds, and gives up as `current` after
-  350 minutes (*The cap*).
+  350 minutes (*The cap*). A read of `DEPLOY_HOLD` or of a tag's digest, `superseding`
+  included, that answers with a 5xx is tried again 10 seconds later, three reads in all,
+  before it ends the run as `error` (#6269, #6499). Any other read failure ends it at once.
 - `tag` moves `prod` only while it still names the digest `decide` read. Two runs can decide on
   the same `prod` when the second run's `promote` job runs while the first run's `tag` waits
   on the group. The first `tag` moves `prod`, and the second finds it moved, logs a warning,

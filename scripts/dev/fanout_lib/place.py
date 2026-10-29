@@ -85,6 +85,7 @@ from fanout_lib.review.api import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
     live_by_host,
+    live_batch_slots,
     over_live_batch_cap,
     over_ssh_budget,
     refuse_shared_files,
@@ -203,10 +204,20 @@ def placement(
     manifests under `root`. The `fanout-headroom` wait source calls it with placeholder
     batch names, which is why its verdict and `launch`'s exit 3 cannot disagree.
     """
+    slots = live_batch_slots(root, good)
     try:
-        placed = place(batches, good, pin=pin)
+        placed = place(batches, good, pin=pin, slots=slots)
     except NoHeadroom as exc:
-        error(str(exc))
+        # Capped hosts were skipped, so a refusal may name the cap rather than memory. Without
+        # the cap, placement succeeding means memory was not the reason: the cap gate then
+        # names each host that cannot fit the whole run, and the batches it holds.
+        try:
+            place(batches, good, pin=pin)
+        except NoHeadroom:
+            error(str(exc))
+            return None
+        full = [h for h, n in slots.items() if n < len(batches) and h in (pin or h)]
+        over_live_batch_cap([(b, h) for h in sorted(full) for b in batches], root, good)
         return None
     if over_ssh_budget(placed, multiplexed) or over_live_batch_cap(placed, root, good):
         return None
@@ -444,9 +455,10 @@ def cmd_clean_one(
 
     from fanout_lib.clean import clean_one as default_clean
     from fanout_lib.clean import delete_branch as default_brancher
+    from fanout_lib.clean import landed
     from fanout_lib.clean import lock as default_locker
     from fanout_lib.clean import unlock as default_unlocker
-    from lib.worktrees import is_dirty, is_merged, parse_worktree_list, remove
+    from lib.worktrees import is_dirty, parse_worktree_list, remove
 
     target = resolve(args.repo)
     checkout = target.checkout
@@ -473,7 +485,7 @@ def cmd_clean_one(
     state, why = (clean if clean is not None else default_clean)(
         checkout,
         tree,
-        ask=ask if ask is not None else functools.partial(is_merged, base=target.base),
+        ask=ask if ask is not None else functools.partial(landed, base=target.base),
         dirty=dirty if dirty is not None else is_dirty,
         remover=remover if remover is not None else remove,
         unlocker=unlocker if unlocker is not None else default_unlocker,

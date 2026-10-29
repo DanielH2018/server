@@ -2360,6 +2360,19 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           repository, and that path has no case
           ([#6245](https://github.com/DanielH2018/server/issues/6245)). The `Depends` red has
           no fixture ([#6244](https://github.com/DanielH2018/server/issues/6244)).
+      **Amended 2026-10-29 ([#6244](https://github.com/DanielH2018/server/issues/6244),
+      [#6245](https://github.com/DanielH2018/server/issues/6245)):** both gaps have a case.
+        - *The `Depends` red.* A second scratch clone, one commit past the first, gives
+          `homelab-daniel-box` a `Depends` on `homelab-daniel-server`. The offline build on
+          daniel-box must exit 1 at `apt-get install of the local build failed`, with apt's
+          output naming that `Depends`. It runs offline so that it differs from the green
+          offline case in its clone alone.
+        - *The repository path.* `scripts/validate/validate_lib/bootstrap_repo_case.py` runs
+          the script without `--local-build` on a container named daniel-pi. The script is a
+          scratch copy whose `REPO_URL` and `ARCHIVE_FINGERPRINT` lines are rewritten to the
+          test repository and its throwaway key, and each rewrite must match exactly one line.
+          The install is the shim's `--simulate`, as in the other bootstrap cases. H7.44's
+          guest drill still owns the proof against the real archive key.
     - **H7.15b** The Pi runbook, then the Pi rebuild, which is exit observation 2. The
       operator keeps the old SD card as the rollback. The cluster's wg-easy on 51820 is
       proven first, as in H5.5.

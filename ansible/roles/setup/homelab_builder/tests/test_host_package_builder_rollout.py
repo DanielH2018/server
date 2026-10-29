@@ -10,6 +10,7 @@ Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_host_package_b
 
 import json
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,8 @@ from test_host_package_builder import (
 )
 
 URLS = "http://127.0.0.1:9090 http://10.43.0.9:9090"
+# Inside the Pi's 23:00 to 00:59 gap, where #6524's publish landed.
+QUIET = datetime(2026, 10, 28, 23, 8, 33, tzinfo=UTC).timestamp()
 
 
 class HostsBuilder(FixtureBuilder):
@@ -83,14 +86,19 @@ def edit(origin, host: str, text: str) -> str:
     return git(origin.path, "rev-parse", "HEAD")
 
 
-def run(lab, prom: Prom, **overrides) -> FixtureBuilder:
-    """One builder run with every commit green and `prom` as its Prometheus."""
+def run(
+    lab, prom: Prom, at: float | None = None, pending: str = "", **overrides
+) -> FixtureBuilder:
+    """One builder run, at `at` when given, with every commit but `pending` green and `prom` as its Prometheus."""
     origin, _state, etc, github = lab
     for sha in git(origin.path, "rev-list", "master").split():
-        github.runs[sha] = GREEN
+        if sha != pending:
+            github.runs[sha] = GREEN
     b = make_builder(lab, cls=HostsBuilder, PROMETHEUS_URLS=URLS, **overrides)
     b.release_path = etc / "release"
     b.prom_fetch = prom
+    if at is not None:
+        b.now = lambda: at
     assert b.main() == 0
     return b
 
@@ -183,6 +191,18 @@ def test_a_canary_at_a_descendant_closes_the_gate(opened):
     # The tip moved, so this run builds the new commit and every package still owed.
     run(lab, prom)
     assert "homelab-daniel-server" in debs(state)
+
+
+def test_a_gate_closing_behind_a_pending_commit_builds_the_deferred_package_at_the_last_build(
+    opened,
+):
+    lab, prom, v, state, _ = opened
+    newer = edit(lab[0], "daniel-box", "box 1")
+    prom.applied["daniel-pi"], prom.reconcile["daniel-pi"] = v[:12], 1
+    run(lab, prom, pending=newer)
+    assert debs(state) == ["homelab-daniel-server"]
+    assert (state / "staged" / "chosen").read_text() == v[:12] + "\n"
+    assert json.loads((state / "state.json").read_text())["deferred"] == []
 
 
 def test_no_answer_on_either_address_keeps_the_gate_open(opened):
@@ -278,3 +298,18 @@ def test_without_the_pi_s_package_daniel_server_is_the_canary(lab):
 def test_the_canary_order_and_the_shared_packages(changed, staged_now, deferred):
     got = gate.admit(changed, None, "a" * 40)
     assert (got[0], got[1]) == (staged_now, deferred)
+
+
+def test_the_pi_leads_and_holds_the_gate_through_its_quiet_hours(lab):
+    """#6530: the Pi is the canary at all hours, so a 23:08 publish waits for its 01:05 fire."""
+    origin, state, _, _ = lab
+    edit(origin, "daniel-pi", "pi 1")
+    edit(origin, "daniel-server", "server 1")
+    published = edit(origin, "daniel-box", "box 1")
+    run(lab, Prom(), at=QUIET)
+    sign(state)
+    run(lab, Prom(), at=QUIET + 11 * 60)
+    saved = json.loads((state / "state.json").read_text())
+    assert saved["gate"] == {"host": "daniel-pi", "sha": published}
+    assert saved["deferred"] == ["hosts/daniel-box", "hosts/daniel-server"]
+    assert debs(state) == []

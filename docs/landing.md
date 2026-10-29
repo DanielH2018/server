@@ -88,30 +88,35 @@ merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both
 run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
 **A master CI backlog holds a green PR's merge.** Before the direct merge, `land_lib/pace.py`
-counts the master push runs of `ci.yml` that are not completed. At 1 or more it prints
+counts the master push runs of `ci.yml` that are not completed. At 2 or more it prints
 `pacing the merge: …` and waits for the next poll. A full sweep is about 18 jobs against the
 account's 20-job runner cap, so a second unfinished sweep already queues. On 2026-10-24, eight
 concurrent landings left six master runs unfinished, their jobs waited 8-17 minutes for a
 runner, and each landing waited 29-61 minutes for its merge commit's verdict (#5526).
 
-The cap was 2 until 2026-10-25. A landing that updated its branch merged into a master that
-had moved during the re-test, so its merge commit's tree was never tested and its push run
-swept all 18 jobs. One landing in a burst then paid three full runs. Merging only into an idle
-master makes the re-tested tree the merged tree more often, which lets `prove` skip the push
-sweep. The `DECIDED:` marker on `PACE_MASTER_RUNS` in `land_lib/options.py` has the
-measurement and the condition for reverting it.
+A cap of 1 ran from 2026-10-25 to 2026-10-29 (#6308). It aimed to merge a re-tested PR into
+the tree it tested, so that `prove` skips the push sweep. The share of push runs that skipped
+the sweep did not rise, because the untested tree comes from master moving during the PR's
+re-test rather than at merge time (#6309). The `DECIDED:` marker on `PACE_MASTER_RUNS` in
+`land_lib/options.py` has the measurement. Batching the merges is the open route (#6521).
 
 - The count is a read, not a lock. Two landings that read at the same poll can both merge.
   Pacing lowers the average queue depth; it does not close the race that makes the `prove`
   job's tested-tree skip miss.
 - A run unfinished more than 2 hours after its creation is wedged and not counted.
-- The wait counts against `merge_timeout`. A backlog that never drains ends at
-  `merge-timeout`, whose message names the pacing; re-run the same command.
+- A held poll never ends the wait at `merge-timeout`. On 2026-10-28 eight landings raced
+  for the one slot, and five ended `merge-timeout` while the queue was still draining
+  (#6466).
+- The cap rises by one for each 15 minutes a landing has been held, so the longest-held
+  landings pass first, one at a time.
+- Once the whole wait, held time included, reaches `merge_timeout`, the landing merges without
+  pacing. The pre-merge wait therefore stays inside `merge_timeout`, which the
+  `LAND_DEADLINE` sizing below counts on.
 - A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 - A PR armed by hand with `gh pr merge --auto` merges without this check.
 
-**A head whose only CI skipped as a draft ends the wait once the PR is ready.** `ci.yml` runs
+**A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`
 reads the head as pending. GitHub may start no run on a ready flip made seconds after the push.
 PR #6069 was marked ready at 01:39:31 on 2026-10-24, its head's only run was created at
@@ -120,10 +125,22 @@ cancelled, so `ci.yml`'s concurrency group did not cause it.
 
 - The merge wait prints the cause on the first poll that reads such a head.
 - Once the head has stayed so for `DRAFT_SKIPPED_GRACE_S` (180s), the wait reads the PR's
-  draft state. A ready PR ends at `merge-timeout`, whose message names the remedy. A PR still
-  a draft keeps waiting, because marking it ready starts its run.
-- A re-run of the skipped run replays its draft event and skips again. The remedy is
-  `gh pr ready --undo <n>`, then `gh pr ready <n>`, or a push.
+  draft state. A PR still a draft keeps waiting, because marking it ready starts its run.
+- A ready PR is converted to draft and back by the landing itself (`gh pr ready --undo <n>`,
+  then `gh pr ready <n>`), once per head, and the grace starts again. The landing prints a
+  line saying it did, and the toggled run's verdict then arrives inside the existing
+  `merge_timeout` budget (#6546). A re-run of the skipped run would replay its draft event and
+  skip again, which is why the landing toggles instead.
+- The landing does not toggle while the head has a `ci.yml` run that did not skip: one queued,
+  in progress, or finished with any other conclusion. It prints why and restarts the grace.
+  The ready run's `prek` gate gets its check run only once every job it needs has finished,
+  so for those minutes `await_ci` reads only the draft run's skipped gate. A toggle then
+  cancels the ready run: on PR 6443 it cancelled a run 32 seconds old, and on PR 6531 one 20
+  minutes old (#6566). A failed read of the runs also stops the toggle.
+- A second draft-skip on the same head after the toggle ends at `merge-timeout`, whose message
+  says the toggle already ran. A toggle that fails also ends there, and names a PR left as a
+  draft, because a draft PR never merges. The remedy is then a push, or the same two commands
+  by hand.
 
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
@@ -746,7 +763,10 @@ Four things sit in that position:
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger. Run the
 printed apply and clear commands as printed, including any `--applied <tags>`. A bring-up
 playbook gets no such line, because the tick parks on those and writes no marker. A landing
-behind a recorded role reads `settled`, because the tree converged. The clear, `--applied` and
+behind a recorded role reads `settled`, because the tree converged. A role the tick DID apply
+on daniel-box gets a line too when its change reaches another host (#6510): the line's `hosts`
+key names the hosts the "also reaches" note names, and the banner and monitor-bridge print the
+apply for each. Apply it there, then `clear-owed manual_plane <role>`. The clear, `--applied` and
 the six-hour page are in
 [A role only a hand can apply is recorded, not parked](gitops-pipeline.md#a-role-only-a-hand-can-apply-is-recorded-not-parked).
 

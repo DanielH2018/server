@@ -273,6 +273,8 @@ jobs:
       # version alert_tools.sh pins, for the `validate-alert-rules` hook. The script fetches
       # each release archive, checks it against its release's sums file, and unpacks the
       # binary into alert-tools/ under the git common dir, .git/alert-tools/ in this checkout.
+      # Alloy is not fetched here: its 167 MB release is provisioned on first use, by the
+      # red-proof step below.
       # It is the tool path the hook itself calls, so CI and a worktree provision the same way.
       - name: Provision promtool, amtool, pint and lokitool
         run: scripts/validate/alert_tools.sh
@@ -803,7 +805,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
-          node-version: "24.22.1"
+          node-version: "26.13.0"
 
       - name: Validate and test the deck mod
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -1191,6 +1193,7 @@ jobs:
             scripts/validate/host_packages.py
             scripts/validate/validate_lib/host_container.py
             scripts/validate/validate_lib/bootstrap_case.py
+            scripts/validate/validate_lib/bootstrap_repo_case.py
             scripts/validate/validate_lib/conffile_case.py
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/package_roots.py

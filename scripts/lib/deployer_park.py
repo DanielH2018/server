@@ -81,7 +81,7 @@ from gitops_markers import (
     maximal_apply_warning,
     owed_clear_cmd,
     server_tags,
-    target_arg,
+    on_hosts,
 )
 from gitops_ledger import (
     OWED_K8S_DEFERRED,
@@ -166,7 +166,7 @@ def park_note(marker: str | None, now: float | None = None) -> str:
         "  behind origin/master -- that is a park, not a queue, and it is the more likely\n"
         "  reason this tree is behind. Rebasing here does not clear it: the primary checkout\n"
         "  is what has to converge.\n"
-        "  Read the skip reason: journalctl -t gitops-deploy | tail -20"
+        "  Read the skip reason: journalctl -u gitops-deploy.service -n 20"
     )
 
 
@@ -252,8 +252,10 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
         apply = (
             ""
             if hand or not server
-            else f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}"
-            f"{target_arg(e.host)}"
+            else on_hosts(
+                f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}",
+                e.apply_hosts(),
+            )
         )
         remedies.append(
             ManualPlaneRemedy(

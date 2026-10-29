@@ -23,6 +23,13 @@ from host_lib import log as host_log
 
 RELEASE = "/etc/homelab-builder/release"
 # The canary order (*Staged rollout*): daniel-box runs the builder, so it always comes last.
+# DECIDED: daniel-pi leads this order at all hours, including its two 2h15m gaps (23:00 to 00:59
+# and 04:00 to 05:59 UTC). A Pi package published at 23:08 holds the other host packages until
+# the Pi's 01:05 fire and its run, which the operator accepted on 2026-10-29 (#6530). PR 6531
+# passed the Pi over while its updater was in a gap, and the ruling reverted that skip, which
+# had made the builder restate the Pi's drop-in schedule in a table of its own. The delay does
+# not page because monitor-bridge derives its builder lag grace from the Pi's longest gap
+# (ansible/filter_plugins/updater_lag_grace.py, rendered in monitor-bridge's env.yaml.j2).
 CANARY_ORDER = ("daniel-pi", "daniel-server", "daniel-box")
 APPLIED = "homelab_host_applied_info"
 RECONCILE_OK = "homelab_host_reconcile_ok"

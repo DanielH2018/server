@@ -4,18 +4,23 @@ Decides; does not fetch. The one read it needs is transport.HOST_READ_COMMAND â€
 memory lines plus the signing-key line transport appends â€” run by transport.read_host.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-# DECIDED: 2.5 GiB per agent. daniel-box's 24h peak for user-1000.slice was 7.2 GiB
-# (claude_code defaults/main.yml derivation) with three to four `claude` processes live, so
-# ~2 GiB each at peak; 2.5 GiB adds a pytest fan-out's worth (4 workers x ~150 MB). The
-# per-batch series confirmed it on 2026-10-18 (#5667): the 12 batches measured since #5665
-# peaked at 2473 MiB of anon on daniel-server and 2352 MiB on daniel-box, so the reservation
-# sits about 90 MiB above the largest. Do not lower it on that sample, and raise it if a
-# week of `max_over_time(claude_fanout_batch_memory_bytes{kind="anon"}[1w])` passes it.
+# DECIDED: 2.0 GiB per agent (#5667, 2026-10-29). Over the 7 days to 2026-10-29, 177 batches
+# on the per-batch series (`claude_fanout_batch_memory_bytes{kind="anon"}`, 30s samples)
+# peaked at 1781 MiB of anon on daniel-server (112 batches, p50 843 MiB, p95 1042 MiB) and
+# 1544 MiB on daniel-box (65 batches, p50 900 MiB, p95 1330 MiB). The 2473 MiB peaks that
+# sized the earlier 2.5 GiB reservation were whole-suite runs, which #5722 refuses inside a
+# batch. 2.0 GiB sits 267 MiB above the largest batch, and the margin is there because 30s
+# sampling understates a short pytest spike. Raise it if a week of that query passes 2 GiB.
 # The `peak` kind counts page cache (p95 about 6 GiB) and is not what this reserves.
-RESERVATION_BYTES = 2_684_354_560
+# The change is nearly inert, and that is measured, not hoped: headroom subtracts the whole
+# cgroup's memory.current, page cache included, so what binds is the cache and not the
+# reservation. Box's login plane had less than one reservation free 17.3% of the week at
+# 2.5 GiB and 15.0% at 2.0 GiB; daniel-server's had 0.03%, so its live cap binds first.
+# Do not read a launch refusal on daniel-box as a reservation problem.
+RESERVATION_BYTES = 2_147_483_648
 
 # SIX lines, in this fixed order: user.slice's memory.current and memory.high, then the
 # reading user's user-<uid>.slice memory.current and memory.high, then the count of live
@@ -187,6 +192,7 @@ def place(
     readings: Sequence[HostReading],
     pin: str | None = None,
     reservation: int = RESERVATION_BYTES,
+    slots: Mapping[str, int] | None = None,
 ) -> list[tuple[str, str]]:
     """Assign each batch a host, most headroom first, spending one reservation per placement.
 
@@ -196,6 +202,10 @@ def place(
         pin: when given, place every batch on this host and refuse rather than fall back
             when it runs out of headroom.
         reservation: bytes reserved per placed batch (default RESERVATION_BYTES).
+        slots: how many more batches each host may take before its live-batch cap, keyed by
+            host. A host at zero is skipped, so a batch falls back to the host with the next
+            most headroom instead of being refused for the cap of the one it preferred. A
+            host absent from the mapping is not capped here; None caps none.
 
     Returns:
         One (batch, host) pair per batch, in input order.
@@ -205,11 +215,14 @@ def place(
             left for a batch.
     """
     used = {r.host: 0 for r in readings}
+    placed_on = {r.host: 0 for r in readings}
     placed = []
     for batch in batches:
         candidates = []
         for r in readings:
             if pin and r.host != pin:
+                continue
+            if slots is not None and slots.get(r.host, 1) - placed_on[r.host] <= 0:
                 continue
             room = headroom(r, reservation)
             if room is None:
@@ -224,5 +237,6 @@ def place(
             )
         _, host = max(candidates)
         used[host] += reservation
+        placed_on[host] += 1
         placed.append((batch, host))
     return placed

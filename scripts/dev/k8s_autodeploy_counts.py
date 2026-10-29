@@ -14,6 +14,7 @@ gitops_deploy denylist from, and the same source `ansible/tests/deploy/_autodepl
 every role exactly, so eligible + denylist always equals the role count.
 """
 
+from collections.abc import Sequence
 import sys
 from pathlib import Path
 
@@ -63,8 +64,8 @@ def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:
     return eligible, denied, not_declaring
 
 
-def main(argv: list[str] | None = None) -> None:
-    answer_help(__doc__, argv)
+def main(argv: Sequence[str] = ()) -> None:
+    answer_help(__doc__, list(argv))
     eligible, denied, not_declaring = autodeploy_stances()
     print(f"eligible: {len(eligible)}")
     print(f"denylist: {len(denied)}")
@@ -72,4 +73,4 @@ def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

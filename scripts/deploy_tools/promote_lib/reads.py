@@ -71,7 +71,8 @@ class Reads:
             record of `prod`'s `flux/<name>` statuses that `verify` excuses from (H1.1i).
         reboot: the weekly reboot's schedule, from which T's no-promotion window derives.
         now: the wall-clock time, for the gate status's age bound and the reboot window.
-        sleep: waits the given seconds, between polls of a verification in flight.
+        sleep: waits the given seconds, before a retried read and between polls of a
+            verification in flight.
         clock: monotonic seconds.
     """
 
@@ -156,13 +157,16 @@ def live_reads(
     repo: Path,
     master_ref: str = MASTER_REF,
     now: datetime | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> Reads:
     """The reads `promote.py decide` makes, against the forge and the checkout at `repo`.
 
-    `now`, when given, fixes the time the gate status's age is measured from.
+    `now`, when given, fixes the time the gate status's age is measured from. `sleep` waits
+    before a retried read and between polls of a verification in flight.
     """
     return Reads(
         now=(lambda: now) if now is not None else (lambda: datetime.now(UTC)),
+        sleep=sleep,
         hold=lambda: f.github.variable(HOLD_VARIABLE),
         contexts=lambda: read_ci_contexts(repo / CI_CONTEXTS_SOURCE),
         prod=lambda: prod_commit(f.registry.manifest(PROD_TAG)),

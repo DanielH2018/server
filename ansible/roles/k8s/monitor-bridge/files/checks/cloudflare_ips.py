@@ -1,11 +1,11 @@
 """Cloudflare published IP ranges against the `cloudflare_ips` allowlist, for monitor-bridge.
 
 That allowlist is baked into traefik's static config as the forwardedHeaders.trustedIPs of both
-entrypoints, and since #1974 into netpol-baseline's ipBlock allow on traefik's :8443. A range
-Cloudflare adds that the list lacks is DENIED at the policy and untrusted at the proxy, with no
-error anywhere: CrowdSec bans land on an edge IP, Authelia logs the edge as the client, Home
-Assistant's X-Forwarded-For trust chain reads the edge. This check alerts on the drift; it never
-applies a fetched list.
+entrypoints, and since #1974 its IPv4 half into netpol-baseline's ipBlock allow on traefik's
+:8443 (the cluster is single-stack IPv4, #6495). A range Cloudflare adds that the list lacks is
+DENIED at the policy and untrusted at the proxy, with no error anywhere: CrowdSec bans land on
+an edge IP, Authelia logs the edge as the client, Home Assistant's X-Forwarded-For trust chain
+reads the edge. This check alerts on the drift; it never applies a fetched list.
 
 It ran as a daily root cron on daniel-box from 2026-08-15 to 2026-09-19 (k8s/traefik's
 cloudflare-ip-drift.sh), pushing its tile directly. Moved here because it needs no host state

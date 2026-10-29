@@ -299,13 +299,13 @@ class Builder(RolloutGate):
             raise Failure(
                 "ci", f"CI_ANCESTOR_WALK_MAX={walk!r} is not a positive integer"
             )
+        # A gate that just closed leaves deferred packages to build at the last commit, which
+        # is green, so they need no newer green commit (#6540).
+        owed = (
+            last if self.state.get("deferred") and not self.state.get("gate") else None
+        )
         if last == tip:
-            # A gate that just closed leaves deferred packages to build at the last commit.
-            return (
-                last
-                if self.state.get("deferred") and not self.state.get("gate")
-                else None
-            )
+            return owed
         chain = self.git("rev-list", "--first-parent", tip).split()
         if last is not None and last not in chain:
             raise Failure(
@@ -325,10 +325,16 @@ class Builder(RolloutGate):
                         f"building {sha[:12]}, the newest green commit below {tip[:12]}"
                     )
                 return sha
+        # The line names the bound beside the count graded: "the 1 newest" alone read as a walk
+        # bound of 1 when one commit was unbuilt, and #6511 asked to widen a bound that was 10.
+        since = f"since the last build {last[:12]}" if last else "on master"
         log(
-            f"no green commit in the {min(len(candidates), int(walk))} newest; walking again next run"
+            f"no green commit: graded {min(len(candidates), int(walk))} of the "
+            f"{len(candidates)} commits {since}, walk bound {walk}; walking again next run"
         )
-        return None
+        if owed:
+            log(f"building the deferred packages at the last build {owed[:12]}")
+        return owed
 
     def verdict(self, sha: str, contexts: frozenset[str]) -> str:
         if self.cache.get(sha) == "pass":

@@ -44,6 +44,17 @@ registry_k8s_ghcr_mirror_debug_port: 5003
 registry_k8s_ghcr_resume_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 registry_k8s_ghcr_resume_port: 5004
 
+# The docker.io pull-through mirror (the `dockerhub-mirror` Deployment in
+# dockerhub-mirror.yaml.j2, #6257). Its own claim for the ghcr-mirror's reason: about 47 live
+# docker.io images pull through it. Its TTL is zero, so the weekly GC bounds it, as it does the
+# ghcr-mirror's (#6536). Losing it costs re-pulls, hence longhorn-nobackup.
+registry_k8s_dockerhub_mirror_claim: registry-dockerhub-mirror
+registry_k8s_dockerhub_mirror_size: 40Gi
+# The newest top-level revisions per repository the dockerhub-mirror's prune keeps beside its
+# keep set, as registry_k8s_ghcr_mirror_keep_revisions does for the ghcr-mirror.
+registry_k8s_dockerhub_mirror_keep_revisions: 3
+registry_k8s_dockerhub_mirror_debug_port: 5006
+
 # The claim the renderer emits for this role, which the registry Kustomization applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ registry_k8s_claim }}"
@@ -52,9 +63,12 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ registry_k8s_ghcr_mirror_claim }}"
     storage_class: "{{ registry_k8s_storage_class }}"
     size: "{{ registry_k8s_ghcr_mirror_size }}"
+  - name: "{{ registry_k8s_dockerhub_mirror_claim }}"
+    storage_class: "{{ registry_k8s_storage_class }}"
+    size: "{{ registry_k8s_dockerhub_mirror_size }}"
 
-# ── garbage collection (registry-gc.sh, ghcr-mirror-gc-job.yaml) ───────────────────────────
-# Only the ghcr-mirror store is collected. The push store's GC was retired once no image-builder
+# ── garbage collection (registry-gc.sh and the two mirror GC Job manifests) ──────────────────
+# Only the two mirror stores are collected. The push store's GC was retired once no image-builder
 # caller was Ansible-owned, because under Flux its scale-down of deploy/registry would have a
 # second writer on `spec.replicas` (D5, Wave D's registry bullet).
 #

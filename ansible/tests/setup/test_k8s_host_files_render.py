@@ -36,6 +36,7 @@ ROLE = SETUP_ROLES / "k8s_host_files"
 # The templates the live role ships.
 EXPECTED_TEMPLATES: frozenset[str] = frozenset(
     {
+        "dockerhub-mirror-gc-job.yaml.j2",
         "ghcr-mirror-gc-job.yaml.j2",
         "registry-gc.sh.j2",
     }

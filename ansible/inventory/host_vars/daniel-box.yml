@@ -1285,12 +1285,18 @@ claude_code_memory_sync_enabled: true
 # autoland.py's rule (issue #5496, the operator's go-ahead of 2026-10-18). False removes the
 # timer and its units, and every server batch stops at its PR again.
 claude_code_fanout_server_lander_enabled: true
+# Snapshots the per-PR pipeline timeline daily, before its journal inputs rotate (issue #5661).
+# False removes the timer and its units; the snapshots stay.
+claude_code_pipeline_timeline_enabled: true
 # The D5 flip pre-merge checks as one sudoers-granted wrapper (issue #5494); daniel-box holds the
 # cluster-admin kubeconfig. False removes the grant, the wrapper, the flux copy and the state dir.
 claude_code_takeover_check_enabled: true
 # The read-only root inspector, `rootq` (issue #6323), for the operator's account.
 # False removes the grant, the shim and the script.
 claude_code_rootq_enabled: true
+# The same inspector for the agent user through a socket (issue #6350). False removes the
+# socket, its units, the helper, the client and the group, and the agent leaves the group.
+claude_code_rootq_socket_enabled: true
 # The `claude` Unix user the operator's Claude sessions move to, with no sudo and no read on
 # /home/ubuntu. It needs one interactive `claude` login as that user, like has_claude_code
 # above. False expires the account and keeps its home.

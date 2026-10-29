@@ -14,6 +14,8 @@ function that logs each call and answers from canned output.
     again, and a run that finds it restores the mirror first.
   * the run holds the lock from before its scale-down until after its restore (#5736). The
     deploy-time restore that took the same lock was deleted with registry's Ansible tasks.
+  * lscr.io refs join the keep set and the warm list under their ghcr.io repository path,
+    because registries.yaml points lscr.io at the same mirror (#6257).
   * `warm_mirror()` GETs each distinct amd64 blob of every ghcr.io ref through the mirror,
     only after the restore succeeded, and a blob that fails to warm leaves the run up (#5654).
 """
@@ -27,8 +29,9 @@ from pathlib import Path
 from _shell_render import rendered_shell_function, rendered_shell_text
 from lib.proc_testing import run
 
-KEEP_SET = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "write_mirror_keep_set"
+KEEP_SET = "\n".join(
+    rendered_shell_function("setup", "k8s_host_files", "registry-gc.sh.j2", name)
+    for name in ("ghcr_refs", "write_mirror_keep_set")
 )
 LIVE = "sha256:" + "a" * 64
 PINNED = "sha256:" + "b" * 64
@@ -40,6 +43,7 @@ def _write(tmp_path: Path, get_rc: int, get_body: str) -> tuple[list[str], str]:
     script = f"""
 KUBECTL="k3s kubectl -n homelab"
 MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
+MIRROR_REFS=ghcr_refs
 MIRROR_NOTE=""
 k3s() {{
   printf '%s\\n' "$*" >> {shlex.quote(str(calls))}
@@ -78,10 +82,40 @@ def test_tag_only_ghcr_refs_are_written_beside_the_digests(tmp_path):
     assert f"--from-literal=digests={LIVE}\ndanielh2018/nut:abc123" in written, calls
 
 
+def test_lscr_refs_are_kept_and_warmed_under_their_ghcr_path(tmp_path):
+    """registries.yaml sends lscr.io pulls to the ghcr-mirror, which caches them as ghcr.io paths.
+
+    A keep set without them would let the prune delete a digest-pinned lscr.io image (#6257).
+    """
+    script = f"""
+KUBECTL="k3s kubectl -n homelab"
+MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
+MIRROR_REFS=ghcr_refs
+MIRROR_NOTE=""
+WARM_REFS=""
+k3s() {{ printf '%s\\n' "$*" >> {shlex.quote(str(tmp_path / "calls"))}
+  [[ "$*" == *" get "* ]] && printf '%s' "$GET_BODY"; return 0; }}
+{KEEP_SET}
+write_mirror_keep_set
+printf '%s' "$WARM_REFS"
+"""
+    body = (
+        f'{{"items": [{{"image": "lscr.io/linuxserver/sonarr:4.0@{PINNED}"}},'
+        f' {{"image": "lscr.io/linuxserver/radarr:5.1"}}]}}'
+    )
+    env = {**os.environ, "GET_BODY": body}
+    refs = run(["bash", "-c", script], env=env, check=True).stdout.splitlines()
+
+    assert refs == ["linuxserver/radarr:5.1", f"linuxserver/sonarr@{PINNED}"], refs
+    kept = (tmp_path / "calls").read_text().splitlines()
+    assert {"linuxserver/radarr:5.1", "linuxserver/sonarr:4.0"} <= set(kept), kept
+
+
 def test_warm_refs_keep_the_digest_and_drop_a_bare_repository(tmp_path):
     script = f"""
 KUBECTL="k3s kubectl -n homelab"
 MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
+MIRROR_REFS=ghcr_refs
 MIRROR_NOTE=""
 WARM_REFS=""
 k3s() {{ [[ "$*" == *" get "* ]] && printf '%s' "$GET_BODY"; return 0; }}
@@ -141,8 +175,14 @@ TAKE_LOCK = rendered_shell_function(
 # The script's top-level sequence, everything after take_lock's definition, as cron runs it.
 _SCRIPT = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
 MAIN = _SCRIPT[_SCRIPT.index("\n}\n", _SCRIPT.index("take_lock() {")) + 3 :]
-STRANDED = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "restore_stranded_mirror"
+STRANDED = "\n".join(
+    rendered_shell_function("setup", "k8s_host_files", "registry-gc.sh.j2", name)
+    for name in (
+        "restore_stranded_mirror",
+        "run_mirror_phase",
+        "use_dockerhub_store",
+        "dockerhub_refs",
+    )
 )
 PRUNED_LINE = f"pruned danielh2018/nut@{LIVE} tags=none"
 
@@ -151,9 +191,13 @@ _VARS = """
 KUBECTL="k3s kubectl -n homelab"
 NS=homelab
 MIRROR_DEPLOY=ghcr-mirror
+MIRROR_UPSTREAM=ghcr.io
+MIRROR_REFS=ghcr_refs
 MIRROR_JOB=registry-gc-ghcr-mirror
 MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep
 MIRROR_JOB_MANIFEST=/m/ghcr-mirror-gc-job.yaml
+DOCKERHUB_JOB_MANIFEST=/m/dockerhub-mirror-gc-job.yaml
+DONE_MSG=""
 MIRROR_STARTED=0
 MIRROR_DONE=0
 MIRROR_DOWN=0
@@ -220,7 +264,9 @@ def test_a_finished_mirror_job_is_journaled_and_kept_for_its_log(tmp_path):
     assert not any("delete job" in c for c in calls), calls
 
 
-def _phase(tmp_path: Path, function: str, rollout_rc: int = 0) -> list[str]:
+def _phase(
+    tmp_path: Path, function: str, rollout_rc: int = 0, rc: int = 0
+) -> list[str]:
     """Run the mirror's whole GC phase against a cluster where every call succeeds.
 
     Each call is logged with whether the GC lock was held and whether the stamp existed
@@ -263,7 +309,7 @@ logger() {{ cat > /dev/null; }}
         "PRUNED_LINE": PRUNED_LINE,
         "ROLLOUT_RC": str(rollout_rc),
     }
-    run(["bash", "-c", script], env=env, check=True)
+    assert run(["bash", "-c", script], env=env, check=False).returncode == rc
     return calls.read_text().splitlines() if calls.exists() else []
 
 
@@ -308,10 +354,12 @@ def test_the_run_warms_the_mirror_only_after_it_serves_again(tmp_path):
 
 
 def test_a_mirror_that_did_not_come_back_is_not_warmed(tmp_path):
-    calls = _phase(tmp_path, MAIN, rollout_rc=1)
+    calls = _phase(tmp_path, MAIN, rollout_rc=1, rc=1)
 
     assert any("--replicas=1" in c for c in calls), calls
     assert not any(c.startswith("curl ") for c in calls), calls
+    # Its stamp stays, so the dockerhub-mirror is not taken down beside it (#6536).
+    assert not any("dockerhub-mirror" in c for c in calls), calls
 
 
 def test_a_run_that_finds_the_stamp_restores_the_mirror_first(tmp_path):
@@ -399,9 +447,14 @@ def _curl_stub(calls: Path) -> str:
     )
     return f"""
 curl() {{
-  local url=${{@: -1}} accept="" arg
-  for arg; do [[ "$arg" == Accept:* ]] && accept=$arg; done
+  local url=${{@: -1}} accept="" arg prev="" max_time=""
+  for arg; do
+    [[ "$arg" == Accept:* ]] && accept=$arg
+    [[ "$prev" == --max-time ]] && max_time=$arg
+    prev=$arg
+  done
   printf 'curl %s\\n' "$url" >> {shlex.quote(str(calls))}
+  [[ "$url" == */manifests/* ]] && printf 'max-time %s\\n' "$max_time" >> {shlex.quote(str(calls))}
   [[ "$url" != */manifests/* || "$accept" == *image.index.v1+json* ]] || return 22
   case "$url" in
 {arms}
@@ -420,6 +473,8 @@ def _warm(
     calls = tmp_path / "calls"
     script = f"""
 MIRROR_URL=http://127.0.0.1:5002
+MIRROR_DEPLOY=ghcr-mirror
+MIRROR_UPSTREAM=ghcr.io
 {_ACCEPT}
 WARM_BUDGET_S={budget}
 WARM_REFS="$REFS"
@@ -460,12 +515,20 @@ def test_a_blob_that_fails_to_warm_is_named_and_the_rest_still_warm(tmp_path):
     assert ", 2 failed (journalctl -t registry-gc)" in msg, msg
 
 
-def test_warm_starts_no_blob_once_the_budget_is_spent(tmp_path):
-    calls, msg = _warm(tmp_path, "plain@2", budget=0)
+def test_warm_starts_no_read_once_the_budget_is_spent(tmp_path):
+    # A manifest read too: two 60s reads per ref would run the phase past its budget.
+    calls, msg = _warm(tmp_path, "idx:1\nplain@2", budget=0)
 
-    assert not any("/blobs/" in c for c in calls), calls
+    assert not any("/blobs/" in c or "/manifests/" in c for c in calls), calls
     assert "warmed 0 blob(s)" in msg, msg
-    assert "3 skipped past the 0s budget" in msg, msg
+    assert "2 ref(s) unread past the 0s budget" in msg, msg
+
+
+def test_a_manifest_read_is_bounded_by_the_budget_left(tmp_path):
+    calls, _ = _warm(tmp_path, "plain@2", budget=30)
+
+    max_times = [c for c in calls if c.startswith("max-time ")]
+    assert max_times in (["max-time 30"], ["max-time 29"]), calls
 
 
 def test_no_ref_warms_nothing_and_says_so(tmp_path):

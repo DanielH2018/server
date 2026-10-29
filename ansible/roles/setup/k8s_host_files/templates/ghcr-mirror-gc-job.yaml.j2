@@ -14,7 +14,7 @@ data:
 # Prune and collect the ghcr-mirror store (#5541). A registry in proxy mode refuses manifest
 # DELETE, so the prune edits the store offline. registry-gc.sh scales only deploy/ghcr-mirror to
 # zero around this Job, never the push store, so the push store's `spec.replicas` keeps one
-# writer.
+# writer. dockerhub-mirror-gc-job.yaml.j2 is the same Job for the dockerhub-mirror's store.
 apiVersion: batch/v1
 kind: Job
 metadata:

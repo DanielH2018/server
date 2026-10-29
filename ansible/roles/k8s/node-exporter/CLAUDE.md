@@ -50,7 +50,7 @@ The `node-exporter-textfile` hostPath, `/var/lib/node-exporter-textfile` on each
 mounted at `/textfile` and read by `--collector.textfile.directory`. A host producer drops a
 `*.prom` file there, and Prometheus scrapes it with no change to this role.
 
-- **Three producers.** One is a host timer writing into the hostPath, and the other two are
+- **Four producers.** One is a host timer writing into the hostPath, and the other three are
   sidecars of this DaemonSet, each writing into its own directory.
 - **The host producer: `claude_cgroup.prom`.** The `setup/claude_code` role installs
   `ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh` and
@@ -91,6 +91,14 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   `nut-ghcr-mirror-probe` ConfigMap, the one ConfigMap this pod names from another role's
   render. It is mounted as an optional directory, so a new tag arrives without a roll and a
   missing ConfigMap writes a down verdict. The registry role's `CLAUDE.md` names the two alerts.
+- **The sidecar producer: `dockerhub-mirror-pull.prom` (#6535).** The `dockerhub-mirror-pull`
+  container runs the same script against the node's docker.io mirror endpoint, on
+  `k8s_registry_dockerhub_mirror_port`. It sets `CHECK`, `REPOSITORY` and `REFERENCE` in its
+  environment, so it reads no ConfigMap: it GETs the exporter's own image,
+  `node_exporter_k8s_image`, by digest. A digest GET is served from the mirror's store once
+  cached, so the check spends none of Docker Hub's anonymous pull limit. It writes into the
+  `node-exporter-dockerhub-mirror-textfile` emptyDir, a fourth textfile directory.
+  observability's `DockerhubMirrorPullFailed` and `DockerhubMirrorPullNotReporting` page on it.
 - **M3's producer metric contract governs every file here**
   (`docs/target-architecture/monitoring/m3-textfile-timer.md`, *The producer metric
   contract*). A *check file* carries a verdict and follows the whole contract. A *gauge set*,

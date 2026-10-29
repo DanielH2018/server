@@ -127,6 +127,9 @@ def test_a_park_and_a_pending_role_are_both_reported():
     lines = _problems(manual=_K3S, marker=park, now=1000.0)
     assert len(lines) == 2
     assert "not fast-forwarded" in lines[0]
+    # `-t gitops-deploy` matches nothing: the unit's ExecStart is flock, so its lines carry
+    # SYSLOG_IDENTIFIER=flock (#6343).
+    assert "journalctl -u gitops-deploy.service" in lines[0]
     assert "`k3s`" in lines[1]
 
 
@@ -204,3 +207,32 @@ def test_a_role_with_no_gated_tasks_carries_no_warning():
     """`common` is applied by no playbook, and nothing about it takes the cluster down."""
     (line,) = _problems(manual=_COMMON)
     assert "WARNING" not in line
+
+
+def _owed_elsewhere(hosts):
+    """A role the tick applied on its own host, still owed on `hosts` (#6510)."""
+    line = json.loads(
+        _line(
+            "dead1230000000000000000000000000000000000",
+            "ansible/initial_setup.yml",
+            "hypervisor",
+            1000,
+        )
+    )
+    return json.dumps({**line, "hosts": list(hosts)}, sort_keys=True)
+
+
+def test_a_role_owed_on_daniel_server_is_applied_there_over_ssh():
+    """`-e target=daniel-server` from daniel-box would run the play on daniel-box."""
+    (line,) = _problems(manual=_owed_elsewhere(["daniel-server"]), now=1000 + 3600)
+    assert "ssh daniel-server" in line
+    assert "git pull --ff-only" in line
+    assert "--tags hypervisor" in line
+    assert "-e target=daniel-server" not in line
+
+
+def test_a_role_owed_on_an_ssh_host_keeps_its_target_and_no_ssh_hop():
+    """The rejecting half: daniel-pi is driven over ssh by the play itself, from here."""
+    (line,) = _problems(manual=_owed_elsewhere(["daniel-pi"]), now=1000 + 3600)
+    assert "--tags hypervisor -e target=daniel-pi" in line
+    assert "ssh " not in line

@@ -140,7 +140,11 @@ holds the refusal.
 
 A run whose changed set holds more than one host package (`hosts/<host>/`) stages only the
 canary's and defers the rest. The canary is the first of daniel-pi, daniel-server and daniel-box
-whose package changed. The shared packages under `packages/` never wait. The run records the gate
+whose package changed, at every hour. daniel-pi's drop-in skips 23:00 to 00:59 and 04:00 to
+05:59, so a Pi package published at the start of a gap holds the other hosts' packages for up to
+2h15m plus one updater run. The operator accepted that delay on 2026-10-29 and kept the Pi as
+canary (`# DECIDED:` at `CANARY_ORDER`, #6530). monitor-bridge derives its builder lag grace from
+that gap, so the wait does not page. The shared packages under `packages/` never wait. The run records the gate
 `{host, sha}` and the deferred directories in `state.json`, and moves the gate to each newer
 canary version it stages. While the gate is open the builder builds no other host package, and
 the unbuilt-since series reads `reason="canary"` with the gate's commit as `sha`. A hold or a
@@ -152,8 +156,9 @@ Prometheus is not asked. Otherwise the builder reads `homelab_host_applied_info`
 `homelab_host_reconcile_ok` for the canary from the addresses in the settings file's
 `PROMETHEUS_URLS`, loopback first and then the pinned ClusterIP. It closes the gate when the
 applied SHA equals or descends from the gate's commit with reconcile at 1. Any other answer, an
-unreadable file or an unreachable Prometheus leaves the gate open. After the gate closes with
-nothing new on master, the next run rebuilds the deferred packages at the last built commit.
+unreadable file or an unreachable Prometheus leaves the gate open. After the gate closes, a run
+that finds no green commit above the last built one rebuilds the deferred packages at the last
+built commit. A pending or red commit on master therefore does not hold them back.
 
 `PROMETHEUS_URLS` renders from `builder_prom_urls` in `component.yml`. The component cannot read
 the observability role's `observability_prometheus_cluster_ip`, so the default repeats the address,

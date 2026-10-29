@@ -27,6 +27,7 @@ narrows the class; it does not close it.
 Run: uv run python scripts/secrets_mgmt/secret_bearing_host_paths.py
 """
 
+from collections.abc import Sequence
 import re
 import sys as _sys
 from pathlib import Path as _Path
@@ -206,8 +207,8 @@ def world_readable_secret_bearing_tasks(
     return offenders
 
 
-def main(argv: list[str] | None = None) -> int:
-    answer_help(__doc__, argv)
+def main(argv: Sequence[str] = ()) -> int:
+    answer_help(__doc__, list(argv))
     paths = secret_bearing_host_paths()
     for dest, names in sorted(paths.items()):
         print(f"{dest}\t{','.join(names)}")
@@ -218,4 +219,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(_sys.argv[1:]))

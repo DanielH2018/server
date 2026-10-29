@@ -37,8 +37,16 @@
         owner: root
         group: root
 
-    # Root-owned and root-run: it uses the root kubeconfig because it must scale the ghcr-mirror
-    # Deployment. 0700 so the credential path it implies isn't readable by other local accounts.
+    - name: Render the dockerhub-mirror garbage-collection job
+      ansible.builtin.template:
+        src: dockerhub-mirror-gc-job.yaml.j2
+        dest: /etc/rancher/k3s/manifests/registry-jobs/dockerhub-mirror-gc-job.yaml
+        mode: "0644"
+        owner: root
+        group: root
+
+    # Root-owned and root-run: it uses the root kubeconfig because it must scale the two mirror
+    # Deployments. 0700 so the credential path it implies isn't readable by other local accounts.
     - name: Deploy the registry garbage-collection script
       ansible.builtin.template:
         src: registry-gc.sh.j2

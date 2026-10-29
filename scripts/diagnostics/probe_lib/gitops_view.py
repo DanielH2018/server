@@ -70,7 +70,7 @@ from gitops_markers import (
     parse_behind,
     parse_contention,
     server_tags,
-    target_arg,
+    on_hosts,
 )
 
 SET, ABSENT, UNREADABLE = "set", "absent", "unreadable"
@@ -109,7 +109,10 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
             [
                 (
                     hand
-                    or f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}{target_arg(e.host)}"
+                    or on_hosts(
+                        f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}",
+                        e.apply_hosts(),
+                    )
                 )
                 + (f" (WARNING: {warning})" if warning else "")
             ]

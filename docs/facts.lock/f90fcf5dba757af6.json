@@ -1,0 +1,14 @@
+{
+  "checksum": "4a57e3231fe375e8c8e7a8e111cf81385c3c285e8f92aa2870b92fc76d4e24a3",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The agent's socket",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/claude_code/files/homelab_rootq_socket.py": "6276d2cf7170f9cea7d814f44267f3f075e6a9b199711e60543fc96074d8f320",
+      "ansible/roles/setup/claude_code/files/homelab_rootq_socket.py:ARITY": "8fa31398da0538ec95551be501af94bbc26cb8aa6f389170c8dfef39eabeae47",
+      "ansible/tests/setup/test_claude_lander.py": "095d7acdeaab8b7422d6e889c3d583a68917fef4395e05d96113270240eacdf8"
+    },
+    "python": "3.14",
+    "verified_sha": "4ac7e5d43"
+  }
+}

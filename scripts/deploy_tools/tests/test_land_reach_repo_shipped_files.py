@@ -21,6 +21,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_repo_shipped_files
 
 import pytest
 
+from deployer_lib import deploy_cross_role
 from deploy_tools.land_lib import land_reach
 from deploy_tools.land_lib import land_tags
 from _land_fakes import MERGE_SHA
@@ -113,9 +114,29 @@ def test_the_note_survives_the_quiet_set_land_sh_passes():
 
 
 # --- A PR that puts no role in the change set at all -------------------------
+#
+# The deployer's table names hypervisor for `_SHIPPED` since #6411, so a PR changing it alone
+# puts hypervisor in the change set. These cases adopt a table without that row: the arm they
+# hold is the backstop for a checkout copy the table lacks, such as one whose `src:` is
+# templated and so escapes `test_setup_cross_role_files.py`'s census.
 
 
-def test_a_repo_file_only_pr_names_the_installing_host():
+@pytest.fixture
+def table_without_the_row():
+    live = deploy_cross_role.current_tables()
+    shipped = {
+        p: r
+        for p, r in deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
+        if p != _SHIPPED
+    }
+    deploy_cross_role.use_tables(
+        {**live, "SETUP_FILES_SHIPPED_BY_OTHER_ROLES": shipped}
+    )
+    yield
+    deploy_cross_role.use_tables(live)
+
+
+def test_a_repo_file_only_pr_names_the_installing_host(table_without_the_row):
     """The accept half: no path under `ansible/roles/setup/hypervisor/` at all.
 
     `cs.setup_roles` is built by path classification, so this PR leaves it empty and the
@@ -131,7 +152,9 @@ def test_a_repo_file_only_pr_of_a_file_no_task_ships_names_nobody():
     assert land_reach.remaining_setup_hosts_note([_NOT_SHIPPED], "daniel-box") == ""
 
 
-def test_the_ticks_own_host_is_owed_when_the_role_entered_by_the_file_alone():
+def test_the_ticks_own_host_is_owed_when_the_role_entered_by_the_file_alone(
+    table_without_the_row,
+):
     """No `- {local_host}` here: with no role path in the PR the tick applied the role nowhere.
 
     Landing the same PR ON daniel-server must still name daniel-server, and with the plain
@@ -145,7 +168,7 @@ def test_the_ticks_own_host_is_owed_when_the_role_entered_by_the_file_alone():
     ), note
 
 
-def test_a_repo_file_only_pr_ends_needs_manual_apply(landing):
+def test_a_repo_file_only_pr_ends_needs_manual_apply(landing, table_without_the_row):
     """The verify-by: the LANDING names it.
 
     `no_tag_outcome` read `self_applied` and ended at `nothing-to-deploy` with
@@ -165,3 +188,36 @@ def test_a_repo_file_only_pr_ends_needs_manual_apply(landing):
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
     assert (exc.value.verdict, exc.value.rc) == ("needs-manual-apply", 1)
+
+
+def test_the_tables_row_puts_hypervisor_in_the_change_set_and_still_names_daniel_server():
+    """With the row (#6411) the tick applies hypervisor on its own host, which installs nothing
+    there, so the note must still send a hand to daniel-server."""
+    assert land_tags.self_applied([_SHIPPED])
+    note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-box")
+    assert "`hypervisor` also reaches daniel-server" in note, note
+
+
+# --- A task NAME that mentions a repo path ships nothing (#6538) -------------
+#
+# `sops_setup`'s seed task is named after `ansible/.sops.yaml` and writes it from inline
+# `content:` on a first host. A match over the whole task read the name as the ship site, so a
+# range changing only the SOPS config put `sops_setup` in the unapplied half on every host.
+
+_SOPS_CONFIG = "ansible/.sops.yaml"
+_SOPS_TASKS = "ansible/roles/setup/sops_setup/tasks/main.yml"
+
+
+def test_the_sops_seed_task_still_names_the_config():
+    """Non-vacuity: the cases below pass trivially once no task name carries the path."""
+    assert f"- name: Seed {_SOPS_CONFIG} " in (REPO_ROOT / _SOPS_TASKS).read_text()
+
+
+def test_a_task_name_mentioning_a_repo_path_does_not_ship_it():
+    assert land_reach.setup_repo_file_hosts("sops_setup", _SOPS_CONFIG) == frozenset()
+
+
+def test_a_sops_config_only_range_leaves_sops_setup_unapplied_nowhere():
+    """The verify-by: `_remaining_hosts`' unapplied half carries no `sops_setup`."""
+    _, unapplied = land_reach._remaining_hosts([_SOPS_CONFIG], "daniel-box")
+    assert "sops_setup" not in unapplied, unapplied

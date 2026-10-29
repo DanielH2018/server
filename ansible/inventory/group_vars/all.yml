@@ -360,6 +360,8 @@ loki_streams:
     job: authlog
   k8s_audit:
     job: k8s-audit
+  host_k3s:
+    job: k3s
   pi_containers:
     job: pi
     machine: daniel-pi
@@ -667,6 +669,10 @@ k8s_registry_cluster_ip: 10.43.51.14
 # not 5001: the image's baked config already binds its debug server to :5001 in the shared pod
 # netns. The mirror KEY in registries.yaml is `ghcr.io`; this port is only its endpoint.
 k8s_registry_ghcr_mirror_port: 5002
+# The pull-through mirror of docker.io, its own Deployment behind the same Service (#6257).
+# The mirror KEY in registries.yaml is `docker.io`. 5003 and 5004 are the ghcr-mirror pod's
+# loopback debug and resume ports, so this takes 5005.
+k8s_registry_dockerhub_mirror_port: 5005
 # The node that runs the registry Deployment (nodeSelector) and therefore resolves the
 # mirror to its own loopback hostPort. Follows the cluster: a staging deploy must push and
 # pull its own images, never the prod registry, where a staging build could overwrite a tag

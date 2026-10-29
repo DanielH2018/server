@@ -1,9 +1,10 @@
 """A systemd timer's triggers read from its unit text, and a daily `OnCalendar=` expanded.
 
-Two readers share it: `test_renderer_host_update_limits.py`, which bounds the longest gap
-between two updater fires, and the landing's host wait (`land_lib/host_wait.py`), which needs
-the fires after a merge. Both read the timer as the host renderer emits it, so neither asks
-systemd on the machine it runs on.
+Three readers share it: `test_renderer_host_update_limits.py`, which bounds the longest gap
+between two updater fires, the landing's host wait (`land_lib/host_wait.py`), which needs the
+fires after a merge, and `ansible/filter_plugins/updater_lag_grace.py`, which sizes
+monitor-bridge's builder lag grace from the same gap (#6530). All read the timer as the host
+renderer emits it, so none asks systemd on the machine it runs on.
 
 Only the forms the host packages use are read. Anything else raises `ValueError`, so a
 schedule neither reader can expand fails rather than reads as some other schedule.
@@ -20,6 +21,8 @@ DAY_S = 86400
 
 _SPAN = re.compile(r"(\d+)\s*(h|hr|min|m|s|sec)?")
 _UNITS = {"h": 3600, "hr": 3600, "min": 60, "m": 60, "s": 1, "sec": 1, None: 1}
+# Triggers that fire once after boot. They add no gap once the host is up.
+_BOOT_ONLY = frozenset({"OnBootSec", "OnStartupSec"})
 TRIGGERS = frozenset(
     {
         "OnActiveSec",
@@ -85,6 +88,39 @@ def calendar_fires(expression: str) -> list[int]:
     return sorted(
         h * 3600 + m * 60 + s for h in hours for m in minutes for s in seconds
     )
+
+
+def longest_gap_s(unit: str, dropins: list[str]) -> int:
+    """The longest a timer can go between two fires once the host is up, in seconds.
+
+    Raises:
+        ValueError: A trigger this module cannot bound, or no trigger that repeats.
+    """
+    triggers, delay = timer_settings(unit, dropins)
+    bounds = []
+    for key, values in triggers.items():
+        if key == "OnCalendar":
+            fires = sorted({t for v in values for t in calendar_fires(v)})
+            bounds.append(
+                max(
+                    b - a
+                    for a, b in zip(fires, [*fires[1:], fires[0] + DAY_S], strict=True)
+                )
+            )
+        elif key == "OnUnitActiveSec":
+            bounds.append(min(span_s(v) for v in values))
+        elif key not in _BOOT_ONLY:
+            raise ValueError(f"{key}= is not a trigger this module bounds")
+    if not bounds:
+        raise ValueError("the timer has no trigger that repeats")
+    # Every trigger fires at least once within its own bound, so the nearest one wins.
+    return min(bounds) + delay
+
+
+def timeout_start_s(unit: str) -> int:
+    """The unit's `TimeoutStartSec=` in seconds."""
+    (value,) = re.findall(r"^TimeoutStartSec=(.+)$", unit, re.MULTILINE)
+    return span_s(value)
 
 
 def timer_settings(unit: str, dropins: list[str]) -> tuple[dict[str, list[str]], int]:

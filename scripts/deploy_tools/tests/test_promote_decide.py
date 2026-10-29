@@ -12,6 +12,7 @@ import dataclasses
 import pytest
 
 import promote
+from deploy_tools.promote_lib import verify_promotion as verify
 from _promote_fakes import CONTEXT, World, digest_of
 
 
@@ -136,6 +137,8 @@ def test_a_prod_fetch_that_returns_500_is_refused(world, monkeypatch, capsys):
     world.publish(world.commits[-1])
     world.transport.forced["prod"] = 500
     _assert_refused(world.decide(monkeypatch, capsys), "error", "HEAD prod: HTTP 500")
+    retries = verify.READ_ATTEMPTS - 1
+    assert world.retry_pauses == [verify.READ_RETRY_S] * retries
 
 
 def test_a_prod_manifest_without_the_revision_annotation_is_refused(

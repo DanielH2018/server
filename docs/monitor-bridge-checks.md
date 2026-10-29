@@ -283,7 +283,9 @@ checks each gate suppresses.
   `monitor_bridge_builder_max_fetch_age_s`) or absent, which covers a dead builder timer, a missing
   token and a fetch that keeps failing, because a failed fetch writes nothing. The **lag arm**:
   `homelab_builder_unbuilt_since_timestamp_seconds` is non-zero and older than `BUILDER_MAX_LAG_S`
-  (7200 s, `monitor_bridge_builder_max_lag_s`), which covers a trust, keyring or tools refusal, a
+  (11760 s: the larger of `monitor_bridge_builder_max_lag_s`, 7200 s, and the Pi canary's longest
+  gap between updater fires plus the timer's delay, the run timeout and 600 s of slack, which
+  `filter_plugins/updater_lag_grace.py` derives from the unit files, #6530), which covers a trust, keyring or tools refusal, a
   rewritten master, an empty CI context list, a CI context that no longer matches, a builder hold,
   a rollout gate the canary never closes and a master that stays red. In each lag case the builder
   runs and exits 0 while no host receives a change, so no unit failure reports it. The bound
@@ -370,8 +372,8 @@ checks each gate suppresses.
   Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` disables the check (stays up). Pure
   `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
 - **Cloudflare IP Drift** (`checks/cloudflare_ips.py`: the two published range pages against
-  `CLOUDFLARE_IPS_EXPECTED`, the `cloudflare_ips` allowlist traefik trusts and netpol-baseline
-  admits. A success is cached for `CLOUDFLARE_IPS_PROBE_INTERVAL_S` (a day). Drift, a page with
+  `CLOUDFLARE_IPS_EXPECTED`, the `cloudflare_ips` allowlist traefik trusts and whose IPv4
+  half netpol-baseline admits. A success is cached for `CLOUDFLARE_IPS_PROBE_INTERVAL_S` (a day). Drift, a page with
   under 10 ranges, or a fetch that did not answer is DOWN and re-probed every cycle, so the tile
   clears one cycle after `cloudflare_ips` is fixed. That is why the check lives here and not in
   k8s/traefik's daily root cron, which left a red tile until the next 05:25. Empty expected list

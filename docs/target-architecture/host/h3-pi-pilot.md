@@ -778,7 +778,8 @@ Two alert paths report the host plane, so a hold or a stall is never silent:
       `monitor_bridge_builder_max_fetch_age_s`, 1800 seconds by default, or absent. That
       covers a dead builder timer, a missing token and a fetch that keeps failing;
     - `homelab_builder_unbuilt_since_timestamp_seconds` is non-zero and older than
-      `monitor_bridge_builder_max_lag_s`, 2 hours by default. That covers a trust refusal,
+      `monitor_bridge_builder_max_lag_s`, 2 hours by default, raised to the canary's
+      schedule need (*Staged rollout*, the Pi canary bullet). That covers a trust refusal,
       a keyring refusal, a tools refusal, a rewritten master, an empty CI context list, a
       CI context that no longer matches, a builder hold, a rollout gate the canary never
       closes, and a master that stays red for 2 hours. In each of these the builder runs
@@ -979,12 +980,23 @@ publishes a second host package.
   descendant, closes the gate at once. The operator removes the file after use.
 - **An open gate pages.** While a gate is open, the unbuilt-since series carries
   `reason="canary"`, its `sha` names V's commit, and its value is that commit's committer
-  time. H3.5c's lag arm fires once the gate stays open past 2 hours. A held canary fires
-  `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
+  time. H3.5c's lag arm fires once the gate stays open past its grace, which is derived from
+  the Pi's schedule and is 11760 seconds (*The Pi canary holds the gate
+  through its quiet hours*, below). A held canary fires `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
   closed.
 - **Shared packages are outside the gate.** `homelab-updater` and `homelab-tools` publish
   in the run that builds them, and every host installs them at its next fire (*Open
   questions* 10).
+- **The Pi canary holds the gate through its quiet hours.** The Pi's schedule leaves two 2h15m
+  gaps, 22:50 to 01:05 and 03:50 to 06:05. A Pi package published at 23:08 on 2026-10-28
+  held daniel-server's and daniel-box's packages until 01:12, past the 2-hour lag arm
+  (#6524). PR 6531 passed the Pi over as canary while its updater was in a gap. The operator
+  ruled on 2026-10-29 to keep the Pi as canary at all hours and accept the delay (#6530), so
+  the builder carries no schedule table. The lag arm's grace follows the schedule instead:
+  `ansible/filter_plugins/updater_lag_grace.py` renders the larger of
+  `monitor_bridge_builder_max_lag_s` and the Pi's longest gap between fires (8100 s), plus the
+  timer's `RandomizedDelaySec` (60 s), the updater's `TimeoutStartSec` (3000 s) and 600 s of
+  slack. That is 11760 s. Moving the Pi's drop-in moves the grace with it.
 - **The Pi leads the order only while it fires more than once a day.** Under the daily
   fallback schedule (*Risks*, apt memory), a Pi canary would hold every other host for up
   to a day and trip the lag arm. The Pi runs the 15-minute schedule, so `CANARY_ORDER`

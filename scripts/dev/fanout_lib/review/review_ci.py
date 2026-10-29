@@ -26,11 +26,16 @@ run, a failed read and a slice that ended all read the same here: wait again aft
 batch `needs input:` with the last `WAIT:` line. It never reads as a pass or as red.
 
 THE BUDGET, `CI_WAIT_S`, applies to each wait, and a batch makes at most two: one before the
-resume and one after it. Measured on 2026-10-13 over the last 34 `ci.yml` pull-request runs
-that finished with success or failure (`gh run list --workflow ci.yml`), a run took 143s at the
-shortest, 176s at the median, 248s at the 90th percentile and 344s at the longest. 15 minutes
-is about 2.6 times the longest, which leaves room for a queue behind other runs and for one
-cancelled run to be replaced by its successor.
+resume and one after it. On 2026-10-13 the last 34 `ci.yml` pull-request runs that finished
+with success or failure took 143s at the shortest, 176s at the median and 344s at the longest.
+That sized the first budget at 15 minutes. On 2026-10-24 and 2026-10-29 a fan-out launching
+several batches at once slowed the same runs: of the 40 finished runs among the 60 newest on
+2026-10-29, 12 took 1089s to 1404s (runs 40893690313, 40923262400, 40913469512, 40921080107,
+40914146732, 40908876093, 40919912025, 40896956629, 40892178310 and 40903936455 among them),
+and PR #6185's run 40134967214 took 16m18s on 2026-10-24. The 15-minute wait spent its whole
+budget and ended `needs input:` on green CI (#6195). The last line of such a wait reads
+"timeout still running after 300s" because the budget is three 300s slices. It is not a
+single slice. 35 minutes is about 1.5 times the longest run measured, 1404s.
 
 THE FAILURE the resumed implementer gets is read from the PR's `statusCheckRollup`: each failed
 check's name and the tail of its job's log (`gh run view --job <id> --log-failed`). A failed
@@ -63,7 +68,7 @@ if TYPE_CHECKING:
     from fanout_lib.review.review import Pipeline
 
 # The longest one wait lasts. Derived from measured `ci.yml` run durations in the docstring.
-CI_WAIT_S = 15 * 60
+CI_WAIT_S = 35 * 60
 # One `cc-wait` call lasts at most this long, so the wait rechecks the unit's time left.
 CI_SLICE_S = 300
 # The pause after a wait that ended without a verdict and without using its slice.
@@ -76,6 +81,9 @@ MAX_FAILING = 8
 # seconds of the event, so two minutes is a queue that is stuck, not slow.
 READY_WAIT_S = 120
 READY_POLL_S = 10
+# GitHub reports `UNKNOWN` for a PR's `mergeable` while it computes it, so a read of `UNKNOWN`
+# is repeated once after this pause.
+MERGEABLE_RECHECK_S = 5
 # The conclusions cc-wait's `gh-ci` source fails on (`cc_wait/github.py:FAILED_CONCLUSIONS`),
 # and `error`, which a commit status reports. `cancelled` is deliberately absent: it is no
 # verdict.
@@ -107,11 +115,13 @@ class CiResult:
         state: `PASSED`, `FAILED` or `NO_VERDICT`.
         line: the last `WAIT:` line cc-wait printed, "" when it printed none.
         failures: the failed checks, for `FAILED`.
+        waited: the seconds the wait spent, all slices and pauses together.
     """
 
     state: str
     line: str = ""
     failures: list[Failure] = field(default_factory=list)
+    waited: float = 0.0
 
     def names(self) -> str:
         return ", ".join(f.name for f in self.failures) or "an unnamed check"
@@ -174,7 +184,8 @@ def wait_for_ci(
     short by `time_left()` is the same.
     """
     pr = pr_url.rstrip("/").rsplit("/", 1)[-1]
-    end = clock() + min(CI_WAIT_S, time_left() - WAIT_MARGIN_S)
+    start = clock()
+    end = start + min(CI_WAIT_S, time_left() - WAIT_MARGIN_S)
     line = ""
     while (left := end - clock()) > 0:
         budget = str(min(CI_SLICE_S, math.ceil(left)))
@@ -184,13 +195,14 @@ def wait_for_ci(
         line = found[-1].group(0) if found else line
         state = found[-1].group(1) if found else ""
         if done.returncode == 0:
-            return CiResult(PASSED, line)
+            return CiResult(PASSED, line, waited=clock() - start)
         if done.returncode == 1 and state == "failed":
-            return CiResult(FAILED, line, failing_checks(run, pr, repo))
+            failures = failing_checks(run, pr, repo)
+            return CiResult(FAILED, line, failures, clock() - start)
         # Exit 75 used its slice. Any other end, `cancelled` among them, returned at once.
         if done.returncode != 75:
             sleep(CI_RECHECK_S)
-    return CiResult(NO_VERDICT, line)
+    return CiResult(NO_VERDICT, line, waited=clock() - start)
 
 
 def _ci_run_ids(run: Runner, repo: str, sha: str) -> set[int] | None:
@@ -210,6 +222,25 @@ def _ci_run_ids(run: Runner, repo: str, sha: str) -> set[int] | None:
     except ValueError:
         return None
     return {i for i in ids if isinstance(i, int)} if isinstance(ids, list) else None
+
+
+def _mergeable(run: Runner, pr: str, repo: str, sleep: Callable[[float], None]) -> str:
+    """The PR's `mergeable` state (`CONFLICTING`, `MERGEABLE`, ...), "" when unreadable.
+
+    One `UNKNOWN` read is repeated after `MERGEABLE_RECHECK_S`, since GitHub is still computing.
+    """
+    state = ""
+    for attempt in range(2):
+        out = run(["gh", "pr", "view", pr, "-R", repo, "--json", "mergeable"], None)
+        try:
+            state = str(json.loads(out.stdout)["mergeable"]).upper()
+        except ValueError, KeyError, TypeError:
+            return ""
+        if state != "UNKNOWN":
+            break
+        if attempt == 0:
+            sleep(MERGEABLE_RECHECK_S)
+    return state
 
 
 def ready_for_ci(
@@ -259,6 +290,15 @@ def ready_for_ci(
         if now is not None and now - before:
             return ""
         sleep(READY_POLL_S)
+    # GitHub starts no `pull_request` run while the PR conflicts with its base (#5629), so a
+    # conflict, not Actions, is why none started. The PR stays ready: GitHub cannot merge it
+    # while it conflicts, and the push that resolves the conflict starts CI with no second
+    # `gh pr ready`.
+    if _mergeable(run, pr, repo, sleep) == "CONFLICTING":
+        return (
+            f"PR #{pr} conflicts with master, so marking it ready started no CI on head "
+            f"{sha[:8]}. Merge or rebase master into the branch and push; the push starts CI"
+        )
     # A ready PR whose only checks are the draft run's skipped ones reads green to GitHub's
     # ruleset and to auto-merge, so the PR goes back to a draft, which GitHub refuses to merge.
     undo = run(["gh", "pr", "ready", pr, "-R", repo, "--undo"], None)
@@ -341,9 +381,11 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
         why = f"CI is red{again}, so the PR needs a hand: {result.names()}"
     else:
         detail = result.line or "cc-wait printed no state"
-        record.ci_gate = f"no verdict{again}: {detail}"
+        spent = f"{result.waited / 60:.0f} min"
+        record.ci_gate = f"no verdict{again}: {detail} (waited {spent})"
         why = (
-            f"CI gave no verdict{again} within its wait ({detail}). Check the PR's runs, "
+            f"CI gave no verdict{again} within its wait of {spent} ({detail}). "
+            f"Check the PR's runs, "
             f"and re-run `cc-wait gh-ci --pr <n> --repo {pipe.target.repo}`"
         )
     return last, _needs_input(record, why)

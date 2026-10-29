@@ -84,10 +84,12 @@ agent gets a lander of the same shape.
   the `setgid` bit do not pass that check, and a shared `.git/config` lets either user run code as the
   other.
 - **The agent belongs to none of `ubuntu`, `sudo`, `adm`, `docker`, `lxd` or `kvm`.** Its
-  groups are `systemd-journal`, `worktree-holders` and, on a peer, `ssh-users`. Without
+  groups are `systemd-journal`, `worktree-holders`, `homelab-rootq` and, on a peer,
+  `ssh-users`. Without
   `adm` or `systemd-journal`, `journalctl` shows the agent only its own units. The operator
   granted `systemd-journal` after a secrets scan of the journal (`claude_code_agent_journal_access`).
-- **The agent has no sudo grant. Its one root service is the worktree holder scan.** The
+- **The agent has no sudo grant. Its root services are two sockets: the worktree holder scan
+  and the read-only root inspector.** The
   operator granted the scan on 2026-10-10 (#4021) and ruled the same day that a socket replaces
   the sudo grant it first used (#4297). Under `NoNewPrivileges=yes`, sudo cannot gain root, so
   no `claude-rc.service` session could use that grant. `worktree-holders.socket` listens on
@@ -100,6 +102,19 @@ agent gets a lander of the same shape.
   the map does not name. The `claude_code` role's `agent_access.yml` puts each present agent in
   the group. A session started before its user joined the group falls back to the
   unprivileged scan until it restarts. `sudo -n true` still fails.
+
+  The operator approved the second socket on 2026-10-29 (#6350), for the same reason: the
+  operator's `rootq` runs through sudo, which `NoNewPrivileges=yes` stops in a
+  `claude-rc.service` session. `homelab-rootq.socket` listens on `/run/homelab-rootq.sock`,
+  mode 0660, group `homelab-rootq`. For each connection systemd runs
+  `/usr/local/libexec/homelab-rootq-socket` as root. The helper reads one request line of at
+  most 4200 bytes, refuses a verb outside rootq's, a `..` component and any malformed line,
+  and runs `/usr/local/sbin/homelab-rootq`, so the allowlist and the redaction are the sudo
+  path's own. The agent runs `rootq-socket`, which takes `rootq`'s verbs. The group is the
+  whole grant, so unlike the holder scan there is no per-user map. A session sees the group
+  after `claude-rc.service` restarts. `ansible/roles/setup/claude_code/CLAUDE.md` (*The
+  agent's socket*) has the protocol, and the approval list names the helper, the client and
+  both units.
 - **The agent has its own GitHub identity and signing key.** A PR author cannot approve their
   own PR, so any approval gate needs a second identity.
 - **Remote Control needs one interactive step.** It requires a claude.ai `/login`, and without a
@@ -222,6 +237,13 @@ checks and the merge live in `land.sh`, and the lander does not re-implement the
   (`scripts/dev/fanout_lib/notify.py`) starts the alert instead, and the polkit rule
   `50-claude-fanout-alert.rules` lets `ubuntu` and each agent user start it for the paging
   states only. `claude_code_fanout_alert_enabled: false` removes the unit and the rule.
+- **A session that ends on an API error pages Discord with its own message**, as
+  `claude-stop-alert@<cause>.service` (#6021). The StopFailure hook runs as a user and cannot
+  read the webhook, so it starts the alert, and the polkit rule `50-claude-stop-alert.rules`
+  lets `ubuntu` and each agent user start an instance named `[a-z0-9_]+` and nothing else.
+  The message speaks about a session. Before this unit the hook borrowed `fanout-alert@`,
+  whose body pointed at `fanout.py place status`. `claude_code_stop_alert_enabled: false`
+  removes the unit and the rule.
 
 ### The approval floor
 
@@ -342,6 +364,9 @@ of the pod would drop the capability.
   seed as `ubuntu` (#6408). `rootq` cannot answer for it, because its ancestor rule refuses every
   directory the agent owns. The seed holds three chezmoi answers and no credential, and
   `chezmoi.toml` beside it stays `0600`.
+- `~/.config/gh` and `~/.config/homelab-ui` are `0710` for the same reason. `probe.py applied`
+  stats the `0600` gh token and homelab-ui login as `ubuntu` (#6484, #6487). The group gets
+  traverse only, so it can neither list the directories nor read the files.
 - A task creates `~/.claude/artifacts` and the memory directory as root, owned by the agent,
   `setgid`, with group `ubuntu`. It cannot run as the agent, because the agent belongs to no
   group and so cannot `chgrp` to `ubuntu`. The ACL task runs as root for the same reason. It gives
@@ -663,9 +688,10 @@ The script has three guards:
   directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
   in place, and the role deletes the renamed tree on its next apply. A refused source therefore
   leaves the subset where it was, and the agent always has one of the two.
-- It applies in two passes, every directory but `~/.claude` and then everything but
-  directories. The source names the directory `private_dot_claude`, and a plain apply sets its mode
-  to 0700. That would cut the operator off from the agent's memory store and artifacts, which
+- It applies in two passes, every directory but `~/.claude` and `~/.config/gh` and then
+  everything but directories. The first pass is non-recursive. chezmoi applies a directory
+  target's whole tree below it, so applying `~/.config` reopened `~/.config/gh` to `0755`.
+  The source names the directory `private_dot_claude`, and a plain apply sets its mode to 0700. That would cut the operator off from the agent's memory store and artifacts, which
   `agent_github.yml` opens at 0710 for the operator's group.
 
 **What the agent loses:** root ownership of its copied config. The subset was root-owned, which
@@ -718,7 +744,8 @@ To add a further agent:
 
 To retire one, set `state: absent` rather than deleting the entry. Ansible removes nothing it
 no longer declares. Absent expires the account, keeps the home, and removes the GitHub token
-and the clone sync units. It also takes the agent out of the `worktree-holders` socket group.
+and the clone sync units. It also takes the agent out of the `worktree-holders` and
+`homelab-rootq` socket groups.
 
 ## Checking and rolling back
 
@@ -733,6 +760,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 | 4 | From the phone, a session prints `id` (it must show `claude`), names the entries in the copied `MEMORY.md`, and writes an artifact and a new memory file. The artifact renders under `/a/daniel-box-claude/`, which proves the artifacts pod can traverse to the file. As `ubuntu`, `cat` of both new files succeeds. A permission error on the memory file means Claude Code created it `0600`, which `UMask=0027` cannot widen, so file a finding with `findings.py open`. `journalctl -u claude-memory-sync` shows a run that copied the file to daniel-server. | `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live sessions. |
 | 5 | As `claude` on daniel-box, `uv run python scripts/dev/fanout.py place read` prints a reading for both hosts, each with `signing=ok`. For the login alone, `uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage` succeeds, and homelab-ui renders a service page. | `claude_agent_ssh_login_enabled: false` in daniel-server's host_vars removes the key and the group. `claude_code_agent_user_enabled: false` there also expires the account and stops its linger. `claude_code_agent_homelab_ui_enabled: false` removes the browser, and deleting the `claude-agent` block from the authelia role revokes the login. |
 | 6 | Starting `claude` as `ubuntu` shows up as `claude_uid_processes{uid="1000"}` within one 30-second timer interval. | Delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns to uid 1000, and an empty `claude_code_watch_uids` stops the series and the page with it. |
+| rootq socket | After `claude-rc.service` restarts, in a session as `claude` on each host: `rootq-socket nft` prints the host's ruleset (several chains, not an empty one), `rootq-socket cat /etc/shadow` and `rootq-socket cat /etc/netplan/../shadow` exit 2, and `id` lists `homelab-rootq`. As `ubuntu`, `rootq nft` still works through sudo. | `claude_code_rootq_socket_enabled: false` in that host's `host_vars` removes the socket, its units, the helper, the client and the group, and the agent leaves the group. The operator's `rootq` stays. |
 | dotfiles | A scratch run of the sync script as `claude` against the dotfiles branch applies the agent variant, leaves `~/.claude` at the mode it started with and keeps a pre-existing `.profile` and `.gitconfig`. The rendered `settings.json` carries every guard hook with `SUDO_ASKPASS` unset, `CLAUDE_ARTIFACTS_HOST=daniel-box-claude` and `OTEL_RESOURCE_ATTRIBUTES=process.owner=claude`. A second run is a no-op with an empty `chezmoi diff`. A source that predates the flag makes the script exit 1 and apply nothing. | Delete `claude_code_agent_dotfiles: true` from that host's `host_vars`. The next apply there stops the timer, removes its units, and installs the subset again. |
 
 ## What the `claude` user cannot do

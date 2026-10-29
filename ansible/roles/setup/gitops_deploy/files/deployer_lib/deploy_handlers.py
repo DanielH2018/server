@@ -53,7 +53,7 @@ def handle_dirty(
 ) -> int:
     """A dirty working tree: log the paths every tick, page at most twice a day."""
     # Say so in the journal on EVERY tick, before the throttle. The Discord page is throttled to
-    # twice a day, so between slots `journalctl -t gitops-deploy` was the only place left to look
+    # twice a day, so between slots `journalctl -u gitops-deploy.service` was the only place left to look
     # and it said `-- No entries --` — indistinguishable from "ticked, nothing to do". On
     # 2026-08-30 one untracked file parked the primary checkout 7 commits behind for ~40 minutes,
     # and reading the empty journal is most of what that cost: every other signal (last_run fresh,
@@ -217,6 +217,12 @@ def handle_broad(
         if pending
         else deploy_defer.nothing_recorded()
     )
+    # The other half of the same ledger: a role this tick applies whose change reaches a host
+    # its run does not (#6510). Recorded with the rest, so a contention reset takes it back.
+    reached = deploy_defer.record_reach(
+        tools, state, config, target, sorted(appliable.values())
+    )
+    recorded = recorded._replace(roles=recorded.roles + reached)
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
     # a rollback re-run now fits, so the budget is no longer the reason — but a rollback
