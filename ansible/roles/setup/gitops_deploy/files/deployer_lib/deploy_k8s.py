@@ -338,8 +338,9 @@ def split_k8s_auto_deploy(
     # declares k8s_autodeploy_snapshot_pvcs — but deploy_k8s joins the whole batch into one
     # playbook run, and each such service pays its own snapshot + revert phase serially inside
     # it (only the rollout WAIT is deduped, by k8s/manifests/tasks/drain.yml). Measured from role sources:
-    # one radarr/sonarr-shaped service is ~1200s against a 1320s budget, two co-batched ~1680s,
-    # three ~2160s. Past the budget `run()`'s killpg fires MID-REVERT — after volume-revert has
+    # one radarr/sonarr-shaped service is ~1200s against the 1620s budget, two co-batched ~1680s,
+    # three ~2160s; ansible/tests/longhorn/test_rollback_timeout_budget.py recomputes the batch
+    # and fails if two stop overrunning. Past the budget `run()`'s killpg fires MID-REVERT — after volume-revert has
     # scaled the workload to zero replicas and attached the volume with disableFrontend: true —
     # stranding a service at zero replicas with its volume in Longhorn maintenance mode.
     #
