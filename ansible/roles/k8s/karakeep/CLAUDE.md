@@ -44,6 +44,15 @@ loop to auto-tag bookmarks.
   (as `OPENAI_API_KEY`), `karakeep_python_api_key` (the tagger's).
 
 ## Notable
+- **`AUTH_TRUSTED_ORIGINS` lists the two names the role routes, not upstream's `*`** (#5781).
+  Since 0.34 the app signs in through better-auth, which accepts a sign-in only from
+  `NEXTAUTH_URL` and the origins in this variable. Upstream defaults it to `*`, meaning
+  whatever address the request arrived on. `deployment.yaml.j2` sets it to
+  `https://<hostname>.<domain>,https://<hostname>.local.<domain>`, built from the same
+  variables as `NEXTAUTH_URL`. A browser that reaches the app by a LAN IP or any other name
+  is refused, so add that origin to the list if one is ever needed. The row
+  `karakeep-auth-trusted-origins-are-its-own-names` in `ansible/tests/k8s/_image_property_rows.py`
+  fails on a `*`, on a missing variable and on an origin outside the `NEXTAUTH_URL` domain.
 - **The images are pulled before the old pod stops** (#5778). `karakeep` and
   `karakeep-meilisearch` are `Recreate`. On 2026-10-19 a digest bump of the 511 MB app image
   pulled from GHCR for 16.5 minutes, failed on a corrupt layer, and karakeep was down from the

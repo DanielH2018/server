@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Provision promtool, amtool, pint and lokitool, then run one of them.
+# Provision promtool, amtool, pint, lokitool and alloy, then run one of them.
 #
-# PROMTOOL, AMTOOL AND LOKITOOL FOLLOW THE IMAGE PINS. `observability_k8s_prometheus_image` and
-# `observability_k8s_alertmanager_image` in the observability role's defaults, and
-# `loki_homelab_k8s_image` in the loki-homelab role's, decide which release is fetched. A
+# PROMTOOL, AMTOOL, LOKITOOL AND ALLOY FOLLOW THE IMAGE PINS. `observability_k8s_prometheus_image`
+# and `observability_k8s_alertmanager_image` in the observability role's defaults, and
+# `loki_homelab_k8s_image` and `loki_homelab_k8s_alloy_image` in the loki-homelab role's, decide
+# which release is fetched. A
 # Renovate image bump therefore moves the tool in the same PR, and the tool CI checks with is
 # the one the pod runs.
 #
@@ -31,11 +32,15 @@
 # on a deleted inode. The parent is opened read-only on fd 9, so no lock file is created. The
 # lock and the stamp together make concurrent provisions from several worktrees safe.
 #
-# With no arguments the script provisions all four tools and exits 0. That is how CI
-# provisions before the hooks run. With `promtool ...`, `amtool ...`, `pint ...` or
-# `lokitool ...` it provisions, then runs that tool with the remaining arguments.
+# ALLOY IS PROVISIONED ONLY WHEN ASKED FOR. Its release binary is 570 MB unpacked (167 MB
+# zipped), against about 100 MB for each other tool, and only the Alloy config check runs it.
+# The other four tools do not wait on that fetch.
 #
-# Run: scripts/validate/alert_tools.sh [promtool|amtool|pint|lokitool [arg ...]]
+# With no arguments the script provisions the four other tools and exits 0. That is how CI
+# provisions before the hooks run. With `promtool ...`, `amtool ...`, `pint ...`,
+# `lokitool ...` or `alloy ...` it provisions, then runs that tool with the remaining arguments.
+#
+# Run: scripts/validate/alert_tools.sh [promtool|amtool|pint|lokitool|alloy [arg ...]]
 set -euo pipefail
 
 # `--help` answers before any fetch. The awk prints this file's leading comment block, which
@@ -172,8 +177,15 @@ case "${1:-}" in
   amtool) tool="$cache/alertmanager-$alertmanager_version/amtool" ;;
   pint) tool="$cache/pint-$pint_version/pint" ;;
   lokitool) tool="$cache/loki-$loki_version/lokitool" ;;
+  alloy)
+    alloy_version="$(image_version "$loki_defaults" loki_homelab_k8s_alloy_image)"
+    provision alloy "$alloy_version" \
+      "https://github.com/grafana/alloy/releases/download/v$alloy_version" \
+      "alloy-linux-$arch" zip SHA256SUMS "alloy-linux-$arch" alloy
+    tool="$cache/alloy-$alloy_version/alloy"
+    ;;
   *)
-    echo "alert_tools.sh: unknown tool '$1'; expected promtool, amtool, pint or lokitool" >&2
+    echo "alert_tools.sh: unknown tool '$1'; expected promtool, amtool, pint, lokitool or alloy" >&2
     exit 2
     ;;
 esac

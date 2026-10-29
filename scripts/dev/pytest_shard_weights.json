@@ -378,6 +378,7 @@
  "ansible/tests/k8s/test_alloy_labels_host_program.py": 0.0,
  "ansible/tests/k8s/test_alloy_redacts_arr_apikey.py": 0.0,
  "ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py": 0.0,
+ "ansible/tests/k8s/test_alloy_ships_k3s_log.py": 0.0,
  "ansible/tests/k8s/test_arr_deployments_share_one_macro.py": 0.0,
  "ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py": 0.36,
  "ansible/tests/k8s/test_base_images_digest_pinned.py": 0.0,

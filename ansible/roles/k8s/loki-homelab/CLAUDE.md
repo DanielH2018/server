@@ -65,6 +65,18 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   only `stage.regex` and `stage.labels`, because probe.py and the alert-history dashboard parse
   the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
   label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.
+- **k3s's own log ships warnings and worse only, as `{job="k3s"}` on each node** (#6177).
+  `/var/log/k3s.log` is kept out of the journal and syslog on purpose, and Alloy tails the file
+  directly. The `loki.process "k3s"` stage drops every line without a warn, error or fatal
+  level, and it drops kube-router's per-sync IPv6 ipBlock warning by name. That warning was
+  95% of the remaining volume. An empty stream on a quiet day is the filter working, so nothing
+  watches this stream for freshness. `ansible/tests/k8s/test_alloy_ships_k3s_log.py` runs the
+  filter over real line shapes and holds the path to setup/k3s's `k3s_log_file`.
+  **A selector is a double-quoted LogQL string, never a backtick one.** Alloy's match-stage
+  parser rejects a backtick string that Loki accepts, and that crash-looped the DaemonSet on
+  2026-10-29. The `validate-alert-rules` hook boots the pinned Alloy on the rendered config
+  (`scripts/validate/alert_rules.py:run_alloy_load`), because `alloy validate` never builds
+  the stages and so accepts the bad selector.
 
 ## Ruler
 

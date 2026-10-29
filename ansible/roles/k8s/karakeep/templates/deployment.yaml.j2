@@ -116,6 +116,14 @@ spec:
             # for them. Same treatment as speedtest's APP_URL.
             - name: NEXTAUTH_URL
               value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
+            # better-auth refuses a sign-in whose origin is not listed here, on top of NEXTAUTH_URL.
+            # Upstream defaults this to `*`, which trusts whatever address the request arrived on
+            # (packages/shared/config.ts). Listing the public name and the `.local.` LAN name, the
+            # two this role routes (ingressroute.yaml.j2), keeps a sign-in on either working and
+            # refuses any other origin. A browser that reaches the app by a LAN IP is signed out
+            # of that address; add its origin here if one is ever needed.
+            - name: AUTH_TRUSTED_ORIGINS
+              value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }},https://{{ container_item.hostname | default(container_item.name) }}.local.{{ domain }}"
             # These two are what make the public /api/trpc/ bypass safe, because that prefix also
             # reaches the app's public procedures: users.create (signup) and apiKeys.exchange
             # (email and password in, API key out). Both names are the ones the app reads

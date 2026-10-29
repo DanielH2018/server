@@ -58,9 +58,10 @@ nothing else re-tests a PR against the master it merges into. 4 of 5 sampled red
 followed a PR whose every job was green, and two of them came from a master commit merged
 after the PR's base. Once the head reads green, `_master_paths_since` asks GitHub which paths
 master changed since the master commit the head's green CI run tested it against (the PR's
-merge base when that cannot be read). When any did, `_update_branch` merges master into the
-PR branch, and the merge waits for CI on the updated head instead. A landing updates the
-branch at most once. It never updates the branch of a head the landing policy admitted on
+merge base when that cannot be read). When one of them is a path the PR changes, or GitHub
+reads the PR as conflicting with master, `_update_branch` merges master into the PR branch,
+and the merge waits for CI on the updated head instead. A PR whose files master did not touch
+merges as it stands (#6565). A landing updates the branch at most once. It never updates the branch of a head the landing policy admitted on
 an approval, which the update would void: a stale approved head is refused with a rebase
 remedy instead.
 """
@@ -73,13 +74,13 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
-from lib.json_types import JsonObject, as_list, as_object
+from lib.json_types import JsonObject, as_list, as_object, as_object_list
 from lib import removes_object
 from deploy_tools import await_ci
 from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
-from deploy_tools.land_lib.pr_json import CommitMessage
+from deploy_tools.land_lib.pr_json import CommitMessage, parse_file
 
 
 # GitHub's closing keywords, all three tenses of all three verbs. A keyword anywhere in the
@@ -96,6 +97,10 @@ _CANONICAL_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#\d+[.,;:)\]]*\s*", re.IGNOR
 # reference at all inside one.
 _DECORATION = re.compile(r"^[\s>*_#`~-]+|[\s>*_#`~-]+$")
 _SENTENCE_END = re.compile(r"[.!?]$")
+# GitHub's compare endpoint lists at most this many files; a list this long may omit a path.
+COMPARE_CAP = 300
+# Each path the compare lists, and a renamed path's old name as well.
+_COMPARE_PATHS = "[.files[]? | .filename, (.previous_filename // empty)]"
 # How long a head whose every CI run skipped as a draft waits for a ready run before the PR is
 # read for its draft state (#6077). GitHub registered PR #6069's ready run 3s after the flip
 # at 02:09:58 on 2026-10-24, and the push-delivery grace await_ci already allows is far wider.
@@ -256,27 +261,22 @@ def _master_paths_since(ln: Landing, head: str) -> list[str]:
     That base is the master commit the head's green `ci.yml` PR run checked out
     (`tools.tested_base`), and the merge base of `head` and master when it cannot be read.
 
-    GitHub's compare endpoint lists at most 300 files. A capped list is still non-empty, so a
-    capped answer still reads as stale.
+    A renamed path counts under its old name as well as its new one. GitHub's compare endpoint
+    lists at most `COMPARE_CAP` files, so `_stale_paths` reads a capped list as stale.
 
     Dies when the read fails: an unknown base is an unknown test result, and the cost is one
     landing to re-run.
     """
-    # DECIDED: every path master moved counts as one the PR's tests read. The `pytest` job runs
-    # unscoped over the whole tree, and both stale-base reds the issue cites came from a path
-    # sharing no directory with the PR: #2922 (cc2a71fd8) added a size test while master grew the
-    # claude-otel role's CLAUDE.md past it, and #2266 (b86d87d60) changed initial_setup
-    # while master changed docs/facts.lock and ansible/roles/setup/k3s/CLAUDE.md. A directory
-    # or overlap filter passes both. Only the base moves: a PR pushed after master moved was
-    # tested against that newer master, so the merge base alone would update a branch CI had
-    # already tested in full (149 of 235 landings in 2026-10-15..17, 642 CI minutes, #5487).
-    # The tested base is the master commit in the checkout log's `Merge <head> into <base>`;
-    # when it cannot be read the merge base stands, which costs one CI run at worst.
+    # Only the base moves: a PR pushed after master moved was tested against that newer master,
+    # so the merge base alone would update a branch CI had already tested in full (149 of 235
+    # landings in 2026-10-15..17, 642 CI minutes, #5487). The tested base is the master commit
+    # in the checkout log's `Merge <head> into <base>`; when it cannot be read the merge base
+    # stands, which costs one CI run at worst.
     base = ln.tools.tested_base(head) or head
     url = f"repos/{{owner}}/{{repo}}/compare/{base}...{BRANCH}"
 
     def call() -> list:
-        got = ln.tools.gh_json("api", url, "--jq", "[.files[]?.filename]")
+        got = ln.tools.gh_json("api", url, "--jq", _COMPARE_PATHS)
         return as_list(got, "gh api compare")
 
     try:
@@ -291,12 +291,52 @@ def _master_paths_since(ln: Landing, head: str) -> list[str]:
     return [p for p in paths if isinstance(p, str)]
 
 
-def _stale_paths(ln: Landing, head: str) -> list[str]:
+def _pr_paths(ln: Landing) -> set[str] | None:
+    """Every path the PR's REST `files` listing names, a rename's old path included.
+
+    None when the listing is at GitHub's cap, where a path may be missing. Dies when the read
+    fails, as `_master_paths_since` does.
+    """
+    url = f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/files"
+
+    def call() -> list:
+        got = ln.tools.gh_json("api", "--paginate", "--slurp", url) or []
+        pages = as_list(got, "gh api pulls/files")
+        return [parse_file(e) for p in pages for e in as_object_list(p, "files page")]
+
+    try:
+        files = gh_read.read(call, ln.tools.sleep, "gh api pulls/files")
+    except (gh_read.GhReadFailed, ValueError) as exc:
+        ln.die(f"could not list PR #{ln.opts.pr}'s files: {exc}", 1)
+    if len(files) >= policy.FILE_CAP:
+        return None
+    names = [(f["filename"], f.get("previous_filename", "")) for f in files]
+    return {p for pair in names for p in pair if p}
+
+
+def _stale_paths(ln: Landing, head: str, conflicting: bool) -> list[str]:
     """The paths that make `head` stale enough to update; [] to merge it as it stands.
 
-    Dies instead when `head` is one the operator approved and master moved past its base.
+    `head` is stale when master changed a path the PR changes since its tested base, or when
+    `conflicting` says GitHub reads the PR as conflicting with master. Dies instead when `head`
+    is one the operator approved and is stale.
     """
     moved = _master_paths_since(ln, head)
+    # DECIDED: only a path both master and the PR changed makes a green head stale (operator
+    # ruling 2026-10-29, #6565). The update never cancelled an in-flight run; its cost was a
+    # second full CI run, about 22% of ci.yml runner-minutes. The accepted risk is the shape of
+    # #2922 and #2266, which went red on master from a path the PR never touched. A conflict,
+    # a capped compare list and a capped file listing still update, since overlap is unknown.
+    if moved and not conflicting and len(moved) < COMPARE_CAP:
+        pr_paths = _pr_paths(ln)
+        if pr_paths is not None:
+            overlap = sorted(set(moved) & pr_paths)
+            if not overlap:
+                say(
+                    f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base, "
+                    "none of them one the PR changes; merging without a branch update"
+                )
+            moved = overlap
     if moved and head == ln.approved_head:
         # DECIDED: a stale approved head is refused, not updated and not merged. The update
         # would make a head the operator's approval does not name, so the policy would refuse
@@ -691,7 +731,8 @@ def await_merge(ln: Landing) -> None:
                 say(hold)
             paced = hold
             if rc == CI_GREEN and ln.direct_merge_subject and not hold:
-                moved = [] if updated_from else _stale_paths(ln, head)
+                conflicts = view.get("mergeable") == "CONFLICTING"
+                moved = [] if updated_from else _stale_paths(ln, head, conflicts)
                 if moved:
                     _update_branch(ln, head, moved)
                     updated_from = head
