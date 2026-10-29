@@ -44,6 +44,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from functools import cache
 from pathlib import Path
 
 from deploy_tools.setup_lib.setup_gates import HOSTS
@@ -53,6 +54,7 @@ from diagnostics.probe_lib.applied_facts import STUB
 from diagnostics.probe_lib.applied_tasks import Skip, Want, expected
 from diagnostics.probe_lib.host_reader import dry_run_text, read_host
 from lib import yaml_fast
+from lib.ansible_inventory import inventory_hosts
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
 from lib.render_context import render_context
 from lib.repo_paths import ANSIBLE
@@ -86,8 +88,33 @@ def secret_stubs(secrets: Path = SECRETS) -> dict[str, str]:
     return {str(k): STUB for k in data or {} if k != "sops"}
 
 
+@cache
+def inventory_magic() -> tuple[dict[str, list[str]], dict[str, dict]]:
+    """Ansible's `groups` and `hostvars` for the repo's inventory, as a play sees them.
+
+    `hostvars[<host>]` holds the host's inventory vars: all.yml under its host_vars, with no
+    role defaults, as Ansible keeps them. Without both, a template such as the agent's ssh
+    config, which loops over `groups['all']` and reads each peer's flag, reads as run-time
+    and is never compared (#6484).
+    """
+    hosts = inventory_hosts()
+    groups: dict[str, list[str]] = {"all": [h.name for h in hosts], "ungrouped": []}
+    for h in hosts:
+        for group in h.groups or ("ungrouped",):
+            groups.setdefault(group, []).append(h.name)
+    hostvars = {
+        h.name: {
+            **render_context(None, host=h.name, overrides=secret_stubs()),
+            **h.settings,
+            "inventory_hostname": h.name,
+        }
+        for h in hosts
+    }
+    return groups, hostvars
+
+
 def context(role_dir: Path, host: str) -> dict:
-    return render_context(
+    ctx = render_context(
         role_dir,
         host=host,
         overrides={
@@ -96,6 +123,9 @@ def context(role_dir: Path, host: str) -> dict:
             "inventory_hostname": host,
         },
     )
+    # Set after the render, so a value already resolved is never templated a second time.
+    ctx["groups"], ctx["hostvars"] = inventory_magic()
+    return ctx
 
 
 def credential_refusal(live: dict) -> str | None:

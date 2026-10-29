@@ -369,9 +369,10 @@ a need appears.
   refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
   before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
   it exists or not. The one DENY entry in `PATHS` is the exact path
-  `/etc/claude-rc/alert-webhook.env`. homelab-ui's `credentials.json` sits in the agent
-  user's home, which root does not own, so rootq cannot stat it. `probe.py applied` reports it
-  `UNCHECKED`.
+  `/etc/claude-rc/alert-webhook.env`. rootq cannot stat a file in the agent user's home,
+  which root does not own. The role therefore makes `~/.config/gh` and `~/.config/homelab-ui`
+  0710 under `claude_code_agent_operator_read`, so `probe.py applied` stats the 0600 token
+  and login files as the operator, without listing either directory or reading either file.
 - **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a
   webhook URL, is withheld whole. The rest is redacted by default. A value prints only when it
   matches one of the token classes the script defines in one block, such as a number of up to
