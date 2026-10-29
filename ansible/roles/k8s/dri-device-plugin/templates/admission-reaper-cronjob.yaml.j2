@@ -5,8 +5,11 @@
   re-registered `devic.es/dri` yet, once their ReplicaSet has replaced them (#6367).
   files/dri_admission_reaper.py holds the rule and what it leaves alone; this file schedules it.
 
+  It also deletes the Failed Job pods in the add-on namespaces that
+  `dri_device_plugin_reaper_job_namespaces` lists (#6460), through a Role in each.
+
   It runs in the workload namespace rather than beside the DaemonSet in kube-system, because the
-  pods it deletes are there and a Role grants only in its own namespace. The namespace baseline
+  pods it was written for are there and a Role grants only in its own namespace. The namespace baseline
   fences ingress only, and the job takes no connection, so it needs no `netpol_from` grant.
 #}
 ---
@@ -68,6 +71,8 @@ spec:
               env:
                 - name: REAPER_NAMESPACE
                   value: "{{ k8s_namespace }}"
+                - name: REAPER_JOB_NAMESPACES
+                  value: "{{ dri_device_plugin_reaper_job_namespaces | join(' ') }}"
                 # The API server's CA, which the automounted token volume carries.
                 - name: SSL_CERT_FILE
                   value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt

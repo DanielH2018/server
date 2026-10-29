@@ -1,6 +1,8 @@
 {#
   The dri-admission-reaper CronJob's identity, in the workload namespace where jellyfin and
-  tdarr run. The job makes two calls (files/dri_admission_reaper.py):
+  tdarr run, and a Role in each add-on namespace it also reaps (#6460). Every Role binds the
+  one ServiceAccount in the workload namespace, because the CronJob runs there. The job makes
+  two calls per namespace (files/dri_admission_reaper.py):
 
     list   pods   the Failed pods, by field selector
     delete pods   each ReplicaSet-owned pod the kubelet rejected at admission
@@ -41,3 +43,29 @@ subjects:
   - kind: ServiceAccount
     name: dri-admission-reaper
     namespace: {{ k8s_namespace }}
+{% for namespace in dri_device_plugin_reaper_job_namespaces %}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dri-admission-reaper
+  namespace: {{ namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dri-admission-reaper
+subjects:
+  - kind: ServiceAccount
+    name: dri-admission-reaper
+    namespace: {{ k8s_namespace }}
+{% endfor %}

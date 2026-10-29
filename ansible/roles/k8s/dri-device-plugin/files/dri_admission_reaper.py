@@ -9,8 +9,8 @@ once the plugin is back, but nothing deletes the rejected pod: the kube-controll
 `terminated-pod-gc-threshold` is 12500 pods, so the tombstone stays Failed and dashboards list
 it as Down (#6367, tdarr after the 2026-10-25 reboot).
 
-The `dri-admission-reaper` CronJob runs this in the workload namespace. A pod is deleted only
-when all three hold:
+The `dri-admission-reaper` CronJob runs this in the workload namespace and in each add-on
+namespace. In the workload namespace a pod is deleted only when all three hold:
 
 - its phase is `Failed`;
 - its reason is `UnexpectedAdmissionError` or starts with `OutOf`, so the kubelet refused it
@@ -19,11 +19,24 @@ when all three hold:
   Job's record and ages out with the Job's `ttlSecondsAfterFinished`; an `Evicted` pod is
   evidence of memory or disk pressure. Neither is touched.
 
+The add-on namespaces, `kube-system` and `longhorn-system`, run Jobs this repo does not render:
+k3s's helm-install Jobs and Longhorn's backup Jobs. No `ttlSecondsAfterFinished` reaches them,
+so a run the weekly reboot interrupts stays Failed (#6460). There a pod is deleted when it is a
+workload-namespace tombstone, or when both of these hold:
+
+- its phase is `Failed`;
+- a `Job` owns it. The Job object keeps its failure count and conditions, so the failure stays
+  on record, and the pod's output is in Loki. The Job controller counts a pod before it lets the
+  pod go, through its `batch.kubernetes.io/job-tracking` finalizer, so a delete cannot hide a
+  failure from the Job's backoff.
+
+The workload namespace keeps its Job pods, because the health readers read their logs.
+
 Each delete carries a `uid` precondition, so a pod recreated under the same name in between is
 left alone. A 404 means another actor deleted it first, which is fine.
 
 It talks to the API server with the pod's ServiceAccount token, which may `list` and `delete`
-pods in the one namespace (`templates/admission-reaper-rbac.yaml.j2`), and the API server's CA
+pods in each namespace it reaps (`templates/admission-reaper-rbac.yaml.j2`), and the API server's CA
 reaches `urlopen` through `SSL_CERT_FILE`, which the CronJob sets. Every connection goes
 through `flux_job_connect`.
 
@@ -31,8 +44,9 @@ Usage:
 
     python3 /jobs/dri_admission_reaper.py
 
-`REAPER_NAMESPACE` names the namespace. Exit 0 means every matching pod is gone, and the last
-stdout line counts them. Exit 1 means the list or a delete failed. `-h` and `--help` print this
+`REAPER_NAMESPACE` names the workload namespace. `REAPER_JOB_NAMESPACES` names the add-on
+namespaces, separated by spaces; unset or empty means none. Exit 0 means every matching pod is
+gone, and one stdout line per namespace counts them. Exit 1 means the list or a delete failed. `-h` and `--help` print this
 text and exit 0.
 """
 
@@ -55,6 +69,20 @@ CALL_TIMEOUT = 10
 # `OutOf<resource>` (pkg/kubelet/lifecycle/predicate.go).
 ADMISSION_REASON = "UnexpectedAdmissionError"
 OUT_OF_PREFIX = "OutOf"
+
+
+def is_failed_job_pod(pod: Mapping) -> bool:
+    """Whether `pod` is a Failed pod that a Job owns."""
+    status = pod.get("status") or {}
+    owners = (pod.get("metadata") or {}).get("ownerReferences") or []
+    return status.get("phase") == "Failed" and any(
+        owner.get("kind") == "Job" for owner in owners
+    )
+
+
+def is_addon_debris(pod: Mapping) -> bool:
+    """Whether `pod` is a pod to delete in an add-on namespace."""
+    return is_tombstone(pod) or is_failed_job_pod(pod)
 
 
 class Failed(Exception):
@@ -171,26 +199,37 @@ def main(
     )
     parser.parse_args(argv)
     environ = os.environ if env is None else env
-    namespace = environ["REAPER_NAMESPACE"]
+    rules = {environ["REAPER_NAMESPACE"]: is_tombstone}
+    for namespace in environ.get("REAPER_JOB_NAMESPACES", "").split():
+        rules[namespace] = is_addon_debris
     if kube is None:
         kube = Kube(API, Path(TOKEN_FILE).read_text().strip())
-    try:
-        pods = failed_pods(kube, namespace)
-        deleted = 0
-        for pod in filter(is_tombstone, pods):
-            if delete(kube, namespace, pod):
-                deleted += 1
-                meta, status = pod["metadata"], pod["status"]
-                print(
-                    f"dri-admission-reaper: deleted {meta['name']} ({status['reason']})"
-                )
-    except Failed as err:
-        print(f"dri-admission-reaper: {err}", file=sys.stderr)
-        return 1
+    # One namespace's failure does not stop the next: each is reaped on its own grant.
+    code = 0
+    for namespace, rule in rules.items():
+        try:
+            reap(kube, namespace, rule)
+        except Failed as err:
+            print(f"dri-admission-reaper: {err}", file=sys.stderr)
+            code = 1
+    return code
+
+
+def reap(kube: Kube, namespace: str, rule: Callable[[Mapping], bool]) -> None:
+    """Delete each Failed pod in `namespace` that `rule` matches, and print the count."""
+    pods = failed_pods(kube, namespace)
+    deleted = 0
+    for pod in filter(rule, pods):
+        if delete(kube, namespace, pod):
+            deleted += 1
+            meta, status = pod["metadata"], pod["status"]
+            reason = status.get("reason") or "no reason"
+            print(
+                f"dri-admission-reaper: deleted {namespace}/{meta['name']} ({reason})"
+            )
     print(
         f"dri-admission-reaper: deleted {deleted} of {len(pods)} Failed pods in {namespace}"
     )
-    return 0
 
 
 if __name__ == "__main__":

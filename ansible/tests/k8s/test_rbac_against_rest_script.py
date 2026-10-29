@@ -284,6 +284,15 @@ def _reaper_calls(monkeypatch) -> list[tuple[str, str]]:
         },
         "status": {"phase": "Failed", "reason": "UnexpectedAdmissionError"},
     }
+    # #6460: in an add-on namespace a failed Job pod is deleted too.
+    job_pod = {
+        "metadata": {
+            "name": "helm-install-1",
+            "uid": "j",
+            "ownerReferences": [{"kind": "Job"}],
+        },
+        "status": {"phase": "Failed"},
+    }
 
     class Recorder(script.Kube):
         def __init__(self):
@@ -291,9 +300,11 @@ def _reaper_calls(monkeypatch) -> list[tuple[str, str]]:
 
         def call(self, method: str, path: str, body=None) -> tuple[int, dict]:
             calls.append((method, path))
-            return 200, {"items": [tombstone]}
+            namespace = path.split("/")[4]
+            return 200, {"items": [tombstone if namespace == "homelab" else job_pod]}
 
-    assert script.main([], {"REAPER_NAMESPACE": "homelab"}, Recorder()) == 0
+    env = {"REAPER_NAMESPACE": "homelab", "REAPER_JOB_NAMESPACES": "kube-system"}
+    assert script.main([], env, Recorder()) == 0
     return calls
 
 
@@ -312,6 +323,8 @@ def test_the_admission_reaper_role_grants_every_call_its_script_makes(
     assert needs == {
         ("homelab", "", "pods", "list", None),
         ("homelab", "", "pods", "delete", "tdarr-1"),
+        ("kube-system", "", "pods", "list", None),
+        ("kube-system", "", "pods", "delete", "helm-install-1"),
     }
     granted = grants(_reaper_rbac(), "homelab", "dri-admission-reaper")
     assert missing(needs, granted) == []
@@ -324,5 +337,6 @@ def test_the_admission_reaper_role_without_delete_is_flagged(monkeypatch) -> Non
         for rule in doc.get("rules") or []:
             rule["verbs"] = ["list"]
     assert missing(needs, grants(docs, "homelab", "dri-admission-reaper")) == [
-        ("homelab", "", "pods", "delete", "tdarr-1")
+        ("homelab", "", "pods", "delete", "tdarr-1"),
+        ("kube-system", "", "pods", "delete", "helm-install-1"),
     ]
