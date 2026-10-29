@@ -205,8 +205,8 @@ _502 = "failed to get variable DEPLOY_HOLD: HTTP 502: Server Error"
 @pytest.mark.parametrize(
     ("errors", "verdict", "reason"),
     [
-        ([_502] * (vp.HOLD_READ_ATTEMPTS - 1), "promote", ""),
-        ([_502] * vp.HOLD_READ_ATTEMPTS, "error", "HTTP 502"),
+        ([_502] * 2, "promote", ""),
+        ([_502] * 3, "error", "HTTP 502"),
         (["HTTP 401: Bad credentials"], "error", "HTTP 401"),
     ],
     ids=["5xx-recovers", "5xx-every-attempt", "4xx-not-retried"],
