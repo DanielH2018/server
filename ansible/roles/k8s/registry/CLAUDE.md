@@ -138,7 +138,8 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     `ansible/roles/k8s/registry/templates/dockerhub-mirror.yaml.j2:DECIDED: a zero TTL and the weekly GC`
     has the trade-off.
   - `registry-gc.sh` collects it in a second phase, after the ghcr-mirror serves again, so
-    the two are never down at once. The phase is the ghcr-mirror's with its own names: the
+    a run takes down one mirror at a time. A dockerhub-mirror a killed run left at zero stays
+    down through the next run's ghcr-mirror phase, until its own phase restores it. The phase is the ghcr-mirror's with its own names: the
     `registry-gc-dockerhub-mirror` Job from
     `ansible/roles/setup/k8s_host_files/templates/dockerhub-mirror-gc-job.yaml.j2`, the
     `registry-gc-dockerhub-mirror-keep` ConfigMap, the stamp

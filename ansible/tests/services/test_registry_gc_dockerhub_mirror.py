@@ -6,8 +6,8 @@ ghcr-mirror's phase.
 
   * `dockerhub_refs()` reads docker.io refs, which carry no host to grep for, and names each
     by the path the mirror caches it under.
-  * the run collects the dockerhub-mirror only after the ghcr-mirror serves again, so the two
-    are never down at once, and its message reports both phases.
+  * the run collects the dockerhub-mirror only after the ghcr-mirror serves again, so it takes
+    down one mirror at a time, and its message reports both phases.
   * a stamp a killed run left for the dockerhub-mirror is repaired in that mirror's phase.
 """
 

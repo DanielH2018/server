@@ -135,6 +135,8 @@ def test_the_sidecar_gets_the_exporters_own_digest_through_the_docker_io_port():
     env = {e["name"]: e.get("value") for e in sidecar["env"]}
     image = load_defaults(ROLE)["node_exporter_k8s_image"]
     repository, digest = image.split("@")
+    # A first component naming a registry would leave docker.io, and the GET would 404.
+    assert "." not in repository.split("/")[0], image
     assert env["CHECK"] == CHECK
     assert env["REPOSITORY"] == repository.rsplit(":", 1)[0]
     assert env["REFERENCE"] == digest

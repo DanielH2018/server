@@ -10,8 +10,9 @@
 # TTL too (#6536): a TTL counts from the fetch, so it deleted an image a pod still ran one TTL
 # after its first pull. Each store gets the same phase in turn: stamp, scale-down, prune Job,
 # restore, warm. The globals below describe the ghcr-mirror, and use_dockerhub_store points them
-# at the dockerhub-mirror between the two phases, so at most one mirror is ever down and the
-# EXIT trap restores whichever one is.
+# at the dockerhub-mirror between the two phases. A phase starts only once the previous mirror
+# serves again, so this run takes down one mirror at a time, and the EXIT trap restores the one
+# the current phase holds. A mirror a killed run stranded stays down until its own phase.
 #
 # STOP-THE-WORLD, NOT OPTIONAL. Upstream: "You should ensure that the registry is in read-only
 # mode or not running at all. If you were to upload an image while garbage collection is running,
@@ -467,8 +468,8 @@ if ! take_lock; then
   exit 1
 fi
 run_mirror_phase || FAILED=1
-# The next phase starts only with this mirror serving, so both are never down at once. The stamp,
-# not MIRROR_DOWN, says so: a failed restore clears MIRROR_DOWN and leaves the stamp.
+# The next phase starts only with this mirror serving, so this run never holds both down. The
+# stamp, not MIRROR_DOWN, says so: a failed restore clears MIRROR_DOWN and leaves the stamp.
 if [[ -e "$MIRROR_STAMP" ]]; then
   MIRROR_MSG="${MIRROR_MSG}; dockerhub-mirror not collected"
   exit 1
