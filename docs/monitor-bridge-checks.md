@@ -370,8 +370,8 @@ checks each gate suppresses.
   Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` disables the check (stays up). Pure
   `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
 - **Cloudflare IP Drift** (`checks/cloudflare_ips.py`: the two published range pages against
-  `CLOUDFLARE_IPS_EXPECTED`, the `cloudflare_ips` allowlist traefik trusts and netpol-baseline
-  admits. A success is cached for `CLOUDFLARE_IPS_PROBE_INTERVAL_S` (a day). Drift, a page with
+  `CLOUDFLARE_IPS_EXPECTED`, the `cloudflare_ips` allowlist traefik trusts and whose IPv4
+  half netpol-baseline admits. A success is cached for `CLOUDFLARE_IPS_PROBE_INTERVAL_S` (a day). Drift, a page with
   under 10 ranges, or a fetch that did not answer is DOWN and re-probed every cycle, so the tile
   clears one cycle after `cloudflare_ips` is fixed. That is why the check lives here and not in
   k8s/traefik's daily root cron, which left a red tile until the next 05:25. Empty expected list
