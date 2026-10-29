@@ -31,11 +31,11 @@ tests:
             exp_annotations:
               summary: The nodes report more than one kubelet version, or none at all.
               description: >-
-                For 2 hours either kube_node_info has carried more than one kubelet_version, so
-                an upgrade left one node behind, or the series has been absent, so the skew
-                cannot be judged. Read kubectl get nodes, then the Plans with kubectl -n
-                system-upgrade get plans. docs/k3s-upgrade.md says how to finish or retry the
-                upgrade.
+                For 2 hours either kube_node_info has carried more than one kubelet_version, so an
+                upgrade left one node behind, or the series has been absent, so the skew cannot be
+                judged. Read `kubectl get nodes`, then the Plans with `kubectl -n system-upgrade get
+                plans`. docs/k3s-upgrade.md says how to finish or retry the upgrade.
+              runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
       - eval_time: 2h
         alertname: K3sUpgradeJobFailed
         exp_alerts: []
@@ -85,12 +85,13 @@ tests:
               severity: critical
               service: system-upgrade
             exp_annotations:
-              summary: A k3s upgrade Job in system-upgrade has failed.
+              summary: The k3s upgrade Job apply-k3s-server-on-daniel-box-with-abc has failed.
               description: >-
                 Job apply-k3s-server-on-daniel-box-with-abc carries a Failed condition. Read the
-                Plan's conditions with kubectl -n system-upgrade get plans, then the Job's pods.
-                A refusing prepare gate that outlasts the Job deadline ends here too.
+                Plan's conditions with `kubectl -n system-upgrade get plans`, then the Job's pods. A
+                refusing prepare gate that outlasts the Job deadline ends here too.
                 docs/k3s-upgrade.md says how to clear the hold and retry.
+              runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
       - eval_time: 2h
         alertname: K3sUpgradeJobFailed
         exp_alerts: *failed

@@ -6,8 +6,8 @@
 # ansible/tests/setup/test_claude_code_artifacts_node_crons.py pins all three.
 #
 # main.yml imports this file under `when: inventory_hostname == claude_code_artifacts_node`, so
-# on daniel-server every task here skips. daniel-server never held either cron, so the skip
-# leaves nothing behind there either.
+# on daniel-server every task here skips. A skip removes nothing, so main.yml's next task
+# removes every path this file writes from every other host (#6355).
 
 # Both crons write a check file here for node_exporter's textfile collector (M6 batch B6), as
 # sys_user. The k3s role's disk-health task sets the same owner, group and mode, so the two

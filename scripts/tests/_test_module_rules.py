@@ -18,7 +18,7 @@ import ast
 import re
 from pathlib import Path
 
-from _row_table import tracked
+from _row_table import parse, tracked
 from test_script_bootstraps_present import is_pytest_only
 
 # Every `testpaths` entry that holds Python, plus `.claude/tests`.
@@ -98,7 +98,7 @@ def raw_git_calls(source: str) -> list[str]:
     if "subprocess" not in source:
         return []
     found = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(parse(source)):
         if not (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
@@ -192,7 +192,7 @@ def handwritten_executables(source: str) -> list[str]:
     if "chmod" not in source:
         return []
     found = []
-    for scope in ast.walk(ast.parse(source)):
+    for scope in ast.walk(parse(source)):
         if not isinstance(scope, ast.FunctionDef | ast.AsyncFunctionDef | ast.Module):
             continue
         writes = [
@@ -232,7 +232,7 @@ def handbuilt_path_prefixes(source: str) -> list[str]:
     the subject's own environment rather than a prefix, and is not a hit.
     """
     found = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(parse(source)):
         if not isinstance(node, ast.JoinedStr | ast.BinOp):
             continue
         text = ast.unparse(node)
@@ -265,7 +265,7 @@ def unbounded_launches(source: str) -> list[str]:
     of it to demand here.
     """
     found = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(parse(source)):
         if isinstance(node, ast.ImportFrom) and node.module == "subprocess":
             found += [
                 f"from subprocess import {alias.name}"

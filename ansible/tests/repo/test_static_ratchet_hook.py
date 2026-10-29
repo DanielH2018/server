@@ -342,3 +342,120 @@ def test_the_guard_flags_only_an_unpinned_multi_module_entry(entry, flagged):
     weights = {"a.py": 0.5, "b.py": 0.5, "c.py": 0.5}
     hooks = [{"id": "h", "entry": entry}]
     assert _left_to_auto(hooks, weights) == (["h"] if flagged else [])
+
+
+# #5599's bar: the hook takes under 15s on daniel-server at a load average near 3.
+SERVER_BUDGET_SECONDS = 15.0
+NEAR_LOAD_3 = 4.0
+_RANGE = r"(\d+(?:\.\d+)?)(?:[-–](\d+(?:\.\d+)?))?"
+_LOAD_THEN_TIME = re.compile(rf"load(?: average)? {_RANGE},? (?:it )?took {_RANGE}s")
+_TIME_THEN_LOAD = re.compile(rf"{_RANGE}s at load(?: average)? {_RANGE}")
+
+
+def _cost_comment() -> str:
+    """The comment block directly above the hook's `[[repos.hooks]]` table, joined to prose."""
+    lines = (REPO / "prek.toml").read_text().splitlines()
+    at = lines.index(f'id = "{HOOK_ID}"') - 1
+    block = list(
+        itertools.takewhile(lambda line: line.startswith("#"), lines[at - 1 :: -1])
+    )
+    return " ".join(line.lstrip("# ") for line in reversed(block))
+
+
+def _server_figures(comment: str) -> list[tuple[float, float]]:
+    """(lowest load, slowest seconds) for each measurement a daniel-server sentence quotes."""
+    out = []
+    for sentence in re.split(r"(?<=\.)\s+", comment):
+        if "daniel-server" not in sentence:
+            continue
+        for lo, _, t1, t2 in _LOAD_THEN_TIME.findall(sentence):
+            out.append((float(lo), float(t2 or t1)))
+        for t1, t2, lo, _ in _TIME_THEN_LOAD.findall(sentence):
+            out.append((float(lo), float(t2 or t1)))
+    return out
+
+
+def test_the_cost_comment_quotes_a_daniel_server_run_under_budget_near_load_3():
+    """The slowest census module bounds the hook, so the fix must bring a measured run under 15s."""
+    figures = _server_figures(_cost_comment())
+    assert figures, (
+        f"the {HOOK_ID} cost comment quotes no daniel-server load and seconds"
+    )
+    near = [(load, secs) for load, secs in figures if load <= NEAR_LOAD_3]
+    assert any(secs < SERVER_BUDGET_SECONDS for _, secs in near), (
+        f"no daniel-server run at load <= {NEAR_LOAD_3} under {SERVER_BUDGET_SECONDS}s "
+        f"in the {HOOK_ID} cost comment; quoted (load, seconds): {figures}"
+    )
+
+
+CENSUS_SIBLING = "static-ratchet-tests-test-modules"
+
+
+def _census_modules() -> set[str]:
+    """The two census files over the pytest-only modules, which #5599 moved to the sibling."""
+    return {
+        "scripts/tests/test_census_rows_test_modules.py",
+        "scripts/tests/test_census_rows_test_renders.py",
+    }
+
+
+def _sibling(hook_id: str) -> dict:
+    return next(h for h in _ratchet_hooks() if h["id"] == hook_id)
+
+
+def test_the_test_module_censuses_run_in_their_own_sibling():
+    """They bounded the main hook under `--dist loadscope`, so they run apart from it (#5599)."""
+    assert _modules(_sibling(CENSUS_SIBLING)) == _census_modules()
+    assert not _modules(_hook()) & _census_modules()
+
+
+def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
+    """By recorded seconds, the main hook's slowest module is faster than the one that moved.
+
+    `--dist loadscope` keeps each module on one worker, so the slowest module bounds the hook.
+    The oracle is CI's recorded weights, not the cost comment. If a module left in the hook
+    grows past the moved census, the split no longer buys what the comment says it does.
+    """
+    weights = xdist_width.load_weights(REPO)
+    assert weights, "scripts/dev/pytest_shard_weights.json did not load"
+    main = sorted(_modules(_hook()))
+    seconds = xdist_width.module_seconds([REPO / m for m in main], REPO, weights)
+    moved = xdist_width.module_seconds(
+        [REPO / m for m in sorted(_census_modules())], REPO, weights
+    )
+    slowest = max(zip(seconds, main, strict=True))
+    assert slowest[0] < max(moved), (
+        f"{slowest[1]} records {slowest[0]}s, at least the moved census's {max(moved)}s"
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/lib/repo_paths.py",
+        "scripts/lib/proc_testing.py",
+        "prek.toml",
+        "pyproject.toml",
+    ],
+)
+def test_the_census_sibling_gate_matches_the_import_closure_and_its_config(path):
+    """The gate covers the inputs the census does not return.
+
+    test_census_rows_test_modules.py checks the census's own members against the gate.
+    """
+    assert re.search(_sibling(CENSUS_SIBLING)["files"], path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/dev/findings.py",
+        "scripts/deploy_tools/land_lib/ledger.py",
+        "ansible/roles/k8s/monitor-bridge/files/registry.py",
+        "ansible/filter_plugins/toposort.py",
+        "ansible/roles/k8s/traefik/defaults/main.yml",
+    ],
+)
+def test_the_census_sibling_gate_skips_a_non_test_module(path):
+    """The census reads only modules `is_pytest_only` accepts, so other `.py` pays nothing."""
+    assert not re.search(_sibling(CENSUS_SIBLING)["files"], path)

@@ -46,6 +46,7 @@ spec:
         app: crowdsec-home-ips
     spec:
       activeDeadlineSeconds: {{ crowdsec_k8s_home_ips_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ crowdsec_k8s_home_ips_job_ttl_seconds }}
       # No retry: the next run is one period away, and the sidecar pages a stale lookup.
       backoffLimit: 0
       template:

@@ -19,6 +19,7 @@ import os
 import tomllib
 from pathlib import Path
 
+import leakguard
 from lib.proc_testing import fake_bin, run
 from lib.repo_paths import REPO
 
@@ -99,3 +100,36 @@ def test_the_hook_still_declares_its_scope():
     assert hook["files"] == "^ansible/.*\\.ya?ml$", hook["files"]
     assert hook["pass_filenames"] is True
     assert hook["require_serial"] is True
+
+
+def test_both_commands_get_a_swept_ansible_local_temp(tmp_path):
+    """A killed lint leaves its `ansible-local-*` wherever ANSIBLE_LOCAL_TEMP points (#6260).
+
+    The child gets no ANSIBLE_LOCAL_TEMP of its own, because leakguard exports one into this
+    process, and a scratch HOME and TMPDIR so the expected path is this test's alone.
+    """
+    log = tmp_path / "temp.log"
+    stubs = fake_bin(
+        tmp_path / "bin",
+        **{
+            name: f'#!/bin/sh\necho "{name} $ANSIBLE_LOCAL_TEMP" >> "{log}"\n'
+            for name in ("ansible-galaxy", "ansible-lint")
+        },
+    )
+    env = {k: v for k, v in os.environ.items() if k != "ANSIBLE_LOCAL_TEMP"}
+    env |= {"HOME": str(tmp_path / "home"), "TMPDIR": str(tmp_path / "tmp")}
+    entry = ansible_lint_hook()["entry"]
+    done = run(
+        f"{entry} ansible/deploy.yml",
+        shell=True,
+        cwd=REPO,
+        env=env,
+        stub_bin=stubs,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr
+    swept = tmp_path / "tmp" / leakguard.ANSIBLE_LOCAL_TEMP_DIR.name
+    assert log.read_text().splitlines() == [
+        f"ansible-galaxy {swept}",
+        f"ansible-lint {swept}",
+    ]
