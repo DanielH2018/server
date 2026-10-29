@@ -9,6 +9,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_ci.py
 import json
 
 from _review_fakes import PR, _finding, _pipeline, _report
+from fanout_lib.launch import REVIEW_RUNTIME_MAX_S, RUNTIME_MAX_S
 from fanout_lib.review.review_ci import (
     CI_RECHECK_S,
     CI_SLICE_S,
@@ -16,6 +17,8 @@ from fanout_lib.review.review_ci import (
     READY_POLL_S,
     READY_WAIT_S,
 )
+from fanout_lib.review.review import LAND_MARGIN_S
+from fanout_lib.review.review_land import WAIT_MARGIN_S
 from fanout_lib.status import BLOCKER, PR_URL
 from fanout_lib.target import Target
 
@@ -150,6 +153,33 @@ def test_a_wait_that_uses_its_slice_is_re_run_without_a_pause(tmp_path):
     run.ci = [timeout, timeout, PASSED]
     assert pipeline.run_all()["result"] == f"Opened {PR}"
     assert len(run.ci_calls) == 3 and clock.sleeps == []
+
+
+def test_ci_that_runs_twenty_minutes_on_a_loaded_host_still_ends_done(tmp_path):
+    # Runs took 1089-1404s on 2026-10-29 (#6195). Four 300s slices exceed a 15-minute budget.
+    pipeline, run, clock = _server_batch(tmp_path, _clean_review())
+    timeout = (75, "WAIT: timeout still running after 300s; re-run: cc-wait ...\n")
+    run.ci = [timeout] * 4 + [PASSED]
+    assert pipeline.run_all()["result"] == f"Opened {PR}"
+    assert len(run.ci_calls) == 5 and clock.sleeps == []
+
+
+def test_ci_still_running_at_the_budget_ends_needs_input_naming_the_time_waited(
+    tmp_path,
+):
+    pipeline, run, _ = _server_batch(tmp_path, _clean_review())
+    run.ci = [(75, "WAIT: timeout still running after 300s; re-run: cc-wait ...\n")]
+    final = pipeline.run_all()
+    assert "within its wait of 35 min (WAIT: timeout still running" in final["result"]
+    assert len(run.ci_calls) == CI_WAIT_S // CI_SLICE_S
+    assert "(waited 35 min)" in _record(tmp_path)["ci_gate"]
+
+
+def test_two_full_ci_waits_fit_in_a_review_batchs_run_time_and_still_leave_room_to_land():
+    # The implementer can use RUNTIME_MAX_S; the CI waits and the landing share what is left.
+    slack = REVIEW_RUNTIME_MAX_S - RUNTIME_MAX_S
+    assert 2 * CI_WAIT_S + WAIT_MARGIN_S <= slack
+    assert 2 * CI_WAIT_S + LAND_MARGIN_S <= slack
 
 
 def test_a_daniel_box_batch_with_red_ci_is_resumed_once_then_lands(tmp_path):
