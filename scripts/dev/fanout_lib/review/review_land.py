@@ -3,7 +3,7 @@
 WHY (#3960). The land phase used to resume the implementer with the brief's Landing section
 and let it run `land.sh --detach && cc-wait land <n>` itself. The model got the mechanics
 wrong: eight exit-75 re-runs, calls to the retired `--await-verdict`, a bad cc-wait source. A
-session holding its turn open through CI and the tick also kept the batch's 2.5 GiB
+session holding its turn open through CI and the tick also kept the batch's 2 GiB
 reservation, which bounds fan-out width. The pipeline now starts the landing and waits on it,
 and resumes the implementer only for a verdict that needs judgement: `RESUME_VERDICTS`.
 

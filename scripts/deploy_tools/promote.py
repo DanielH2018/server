@@ -107,6 +107,7 @@ Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
 import argparse
 import os
 import sys
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -394,6 +395,7 @@ def main(
     f: forge.Forge | None = None,
     now: datetime | None = None,
     post: Callable[[str], None] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     parser = ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -467,7 +469,9 @@ def main(
         return reset.run(f, args, output)
     try:
         decision = hand_off(
-            write_hold(decide(live_reads(f, args.repo, args.master_ref, now)), f),
+            write_hold(
+                decide(live_reads(f, args.repo, args.master_ref, now, sleep)), f
+            ),
             args.bundle_dir,
         )
     except Exception as err:

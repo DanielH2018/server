@@ -1,0 +1,58 @@
+---
+# The page a Claude Code session sends when it ends on an API error (#6021). Imported from
+# main.yml after the agent users are named, because the polkit rule lists them.
+#
+# The session's StopFailure hook (the dotfiles repo's stop-failure.sh) runs as the operator or an
+# agent user, which cannot read the root-only webhook. It starts claude-stop-alert@<cause>.service
+# instead, which the rule below lets those accounts start. The webhook stays in a root-0600 file;
+# no user account gains a copy. The page used to ride fanout-alert@, whose body sends the reader
+# to `fanout.py place status`, a command that means nothing for an interactive session.
+
+- name: Create the stop alert's config directory
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: /etc/claude-stop-alert
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: claude_code_stop_alert_enabled
+
+- name: Install the stop alert
+  tags: [claude_code]
+  when: claude_code_stop_alert_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: claude-stop
+    alert_unit_instanced: true
+    alert_unit_time_label: Ended at
+    alert_unit_description: Alert that a Claude Code session ended on an API error (%i)
+    alert_unit_message: "a Claude Code session on {{ inventory_hostname }} ended on an API error and stopped answering. The page opens with the error cause. Open the session to read the error, then resume it or start a new one to continue the work."
+    alert_unit_env_dir: /etc/claude-stop-alert
+
+- name: Let the accounts that run sessions start the stop alert and nothing else (polkit)
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: 50-claude-stop-alert.rules.j2
+    dest: /etc/polkit-1/rules.d/50-claude-stop-alert.rules
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: claude_code_stop_alert_enabled
+  # No handler: polkitd watches rules.d and reloads a changed rule on its own.
+
+# The way out. The rule goes first, so no account can start the alert once removal begins.
+- name: Remove the stop alert when it is switched off
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/polkit-1/rules.d/50-claude-stop-alert.rules
+    - /etc/systemd/system/claude-stop-alert@.service
+    - /etc/claude-stop-alert
+  become: true
+  when: not claude_code_stop_alert_enabled
+  notify: Reload systemd for claude_code

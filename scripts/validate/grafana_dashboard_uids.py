@@ -11,6 +11,7 @@ Run directly (`python3 scripts/validate/grafana_dashboard_uids.py`) or via the
 a run that exits non-zero prints every line on stderr.
 """
 
+from collections.abc import Sequence
 import json
 import sys
 from pathlib import Path
@@ -192,13 +193,13 @@ def validate(
     return errors + duplicate_dashboard_uids(dashboard_uids(dashboards_dir))
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Sequence[str] = ()) -> int:
     """Run `validate` and print its errors, if any, on stderr.
 
     Returns:
         0 if `validate` found no errors, 1 otherwise.
     """
-    answer_help(__doc__, argv)
+    answer_help(__doc__, list(argv))
     errors = validate()
     if errors:
         # Each error opens with the dashboard's path, so this is `[FAIL] <path>: <reason>`.
@@ -214,4 +215,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

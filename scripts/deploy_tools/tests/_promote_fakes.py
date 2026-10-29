@@ -323,6 +323,8 @@ class World:
         self.run = FakeRun()
         # The pause before each package delete, recorded rather than slept.
         self.pauses: list[float] = []
+        # The pause before each retried read in `decide`, recorded rather than slept.
+        self.retry_pauses: list[float] = []
 
     def commit(self, message: str) -> str:
         """Add an empty commit to master with `message`, append it to `commits`, return it."""
@@ -418,7 +420,9 @@ class World:
             "--master-ref",
             "master",
         ]
-        exit_code = promote.main(argv, f=self.clients(registry), now=now)
+        exit_code = promote.main(
+            argv, f=self.clients(registry), now=now, sleep=self.retry_pauses.append
+        )
         captured = capsys.readouterr()
         stdout = captured.out.splitlines()
         assert len(stdout) == 1, stdout
