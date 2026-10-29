@@ -9,10 +9,9 @@ import subprocess
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting. Both inserts are
-# relative to THIS file — when the remote leg runs a worktree's own copy of fanout_place.py
-# (Ruling E), `parents[2]` resolves to the worktree's `scripts`, so `clean-one` imports the
-# worktree's OWN lib.worktrees rather than the primary checkout's stale one. Never change
-# either to an absolute path.
+# relative to THIS file, so `clean-one` imports the `lib.worktrees` sitting beside the copy of
+# fanout_place.py it was started from (the primary checkout's, see `remote_clean_command`).
+# Never change either to an absolute path.
 import sys as _sys
 from pathlib import Path as _Path
 
@@ -355,7 +354,10 @@ def busy_refusal(wt: str) -> str:
 
 
 def remote_clean_command(
-    b: Batch, repo: str | None = None, target: Target = SERVER_TARGET
+    b: Batch,
+    repo: str | None = None,
+    target: Target = SERVER_TARGET,
+    script_root: str | None = None,
 ) -> str:
     """The command `clean` runs on `b.host` to clean up one batch.
 
@@ -380,20 +382,26 @@ def remote_clean_command(
     fallback able to say "merged" at all. A failed fetch stops the command (`&&`) rather than
     silently falling through to that stale state.
 
-    The `clean-one` leg runs the fan-out worktree's OWN copy of this script
-    (`<b.worktree>/scripts/dev/fanout_place.py`), not the primary checkout's, because that
-    checkout is stale by design and the fresh worktree is the only checkout there guaranteed
-    to carry this code (Ruling E). It runs from the primary checkout's cwd (`cd {REPO}`) so a
+    The `clean-one` leg runs the PRIMARY checkout's copy of this script
+    (`{REPO}/scripts/dev/fanout_place.py`), on every host and for every repo. It used to run
+    the batch worktree's own copy for the homelab repo (Ruling E), on the theory that the
+    primary checkout there lags. That froze the merge judgement at whatever the batch was
+    launched from: a batch started before #6552 kept running the `clean-one` that has no
+    `landed`, so every squash-merged batch read "not merged into origin/master" for as long
+    as it stood (#6571). The GitOps deployer fast-forwards the primary checkout on both hosts,
+    so the primary is the copy that carries the current fix. A host whose primary lacks the
+    script fails loudly (`python: can't open file`, exit 2, reported as `failed`) rather than
+    keeping the tree silently. It runs from the primary checkout's cwd (`cd {REPO}`) so a
     relative path elsewhere in the command still resolves there, and under the same pinned,
     project-free interpreter as `HEALTH_CMD` (`--no-project --no-python-downloads --python
     3.14.6`) — every import in `clean-one`'s own chain is stdlib, so a stale primary whose
     lock file fails to sync with the worktree's `uv.lock` can't take the clean down with it.
 
-    That copy goes with the worktree the first pass deletes, so the absent-tree case is
-    answered in shell BEFORE the interpreter is needed (Ruling 30). Without this the second
-    pass runs a script path that no longer exists, python exits 2, the batch reads `kept`, and
-    the run manifest is never deleted — the re-run-once-merged flow `clean` itself prints
-    could not converge.
+    The absent-tree case is answered in shell BEFORE the interpreter is needed (Ruling 30).
+    Until #6571 the interpreter leg ran the worktree's own script, which the first pass
+    deletes, so the second pass hit a path that no longer existed, python exited 2, the batch
+    read `kept`, and the run manifest was never deleted. The shell answer stays because it
+    also drops the stale registration and the merged branch, which `clean-one` does not.
 
     "Absent" is decided by the `.git` file every linked worktree carries, not by the
     directory. An agent that removes its own worktree on exit leaves a `.remember/`
@@ -466,28 +474,27 @@ def remote_clean_command(
             repo instead of the shared primary checkout, where `branch -D` and `worktree
             remove` would hit whatever every other live session is doing.
         target: the repo the batch works, which names its default branch.
+        script_root: the checkout whose `fanout_place.py` the `clean-one` leg runs, defaulting
+            to `REPO`. A seam for the same reason as `repo`: a test that executes the chain
+            points it at a scratch checkout.
     """
     wt, branch = b.worktree, b.branch
     repo = repo or target.checkout
-    # DECIDED: both legs run the `fanout_place.py` shim, not `fanout.py place`. The server leg
-    # runs the batch worktree's own copy, and a batch launched before #4346 has no `fanout.py`;
-    # the other leg runs the primary checkout, which can lag by design. The shim exists in old
-    # and new checkouts alike. Repoint these once no live batch predates #4346.
-    if target.is_server:
-        clean_one_leg = (
-            f"python {wt}/scripts/dev/fanout_place.py clean-one {wt} {branch}"
-        )
-    else:
-        clean_one_leg = (
-            f"python {REPO}/scripts/dev/fanout_place.py clean-one {wt} {branch} "
-            f"--repo {target.repo}"
-        )
+    # DECIDED: both legs run the `fanout_place.py` shim, not `fanout.py place`, from the PRIMARY
+    # checkout. A batch launched before #4346 has no `fanout.py`; the shim exists in old and new
+    # checkouts alike. The worktree's own copy is not run: it is frozen at the batch's launch
+    # and kept every squash-merged batch launched before #6552 (#6571). Full reasoning in this
+    # function's docstring.
+    clean_one_leg = (
+        f"python {script_root or REPO}/scripts/dev/fanout_place.py clean-one {wt} {branch}"
+        + ("" if target.is_server else f" --repo {target.repo}")
+    )
     gone_branch = f'echo "removed: {wt} (already gone)"'
     # DECIDED: the gone-tree leg keeps its own `gh pr list` merged check in shell rather than
-    # calling `lib.worktrees.is_merged`. The interpreter leg runs the worktree's own copy of
-    # this code, and that copy is deleted with the tree, so when the tree is gone there is no
-    # Python left to import (Ruling 30). The shell answers before an interpreter is needed. It
-    # asks only the forge question because a squash-merged branch fails every local layer.
+    # calling `lib.worktrees.is_merged`. The interpreter leg starts only for a tree that is
+    # still a checkout, and a gone tree has no cwd for it to judge (Ruling 30). The shell
+    # answers before an interpreter is needed. It asks only the forge question because a
+    # squash-merged branch fails every local layer.
     # Full reasoning in this function's docstring.
     return (
         f"if systemctl --user is-active --quiet {b.unit}; then "

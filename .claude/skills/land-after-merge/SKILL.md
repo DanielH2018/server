@@ -30,14 +30,16 @@ PR once CI is green, from the operator's account or the agent's, with no review 
 Use it when the merge should not wait on your session. Then run the command above as usual:
 `--arm-merge` on a merged PR is a no-op, and the landing deploys the merge commit.
 
-**A stale base costs one branch update first.** Before the merge, `land.sh` asks whether master
-changed any path since the base the head's green CI run tested it against (the PR's merge base
-when that run's log cannot be read). When it did, it merges master into the PR branch
-once, prints `updating its branch so CI re-tests it against master before the merge`, and
-merges only after CI is green on the updated head. That is the normal path for about half of
-PRs and adds a CI run's worth of time, not a fault. The exception is a head the operator
-approved: the update would void the approval, so `land.sh` refuses it and names the remedy,
-which is to rebase onto origin/master, push and get the new head approved.
+**A stale base costs one branch update first.** Before the merge, `land.sh` asks which paths
+master changed since the base the head's green CI run tested it against (the PR's merge base
+when that run's log cannot be read). When one of them is a path the PR changes, or GitHub reads
+the PR as conflicting, it merges master into the PR branch once, prints `updating its branch so
+CI re-tests it against master before the merge`, and merges only after CI is green on the
+updated head. That adds a CI run's worth of time, not a fault. When master changed only paths
+the PR does not, it prints `none of them one the PR changes` and merges as it stands. The
+exception is a stale head the operator approved: the update would void the approval, so
+`land.sh` refuses it and names the remedy, which is to rebase onto origin/master, push and get
+the new head approved.
 `land_lib/merge.py`'s module docstring owns the rule.
 
 **A master CI backlog holds the merge.** While two master `ci.yml` runs are unfinished,
