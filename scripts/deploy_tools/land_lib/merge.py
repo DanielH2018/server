@@ -479,7 +479,12 @@ def arm_merge(ln: Landing) -> None:
     _leave_for_a_direct_merge(ln, subject)
 
 
-def _draft_skipped_dead_end(ln: Landing, head: str) -> str:
+_RETRIGGER_DONE = (
+    "The landing already converted it to draft and back once for this head. "
+)
+
+
+def _draft_skipped_dead_end(ln: Landing, head: str, retriggered: bool = False) -> str:
     """Why a ready PR whose head's CI skipped as a draft cannot merge; "" while it is a draft.
 
     PR #6069 was marked ready one second after its push, and GitHub created only the push's
@@ -492,9 +497,41 @@ def _draft_skipped_dead_end(ln: Landing, head: str) -> str:
     return (
         f"PR #{pr} is ready, but {head[:8]}'s only CI ran while it was a draft and skipped "
         "every job, and GitHub started no run on the ready flip; a re-run replays the draft "
-        f"event and skips again. Convert it to draft and back (`gh pr ready --undo {pr}`, "
-        f"then `gh pr ready {pr}`) or push, then re-run this"
+        f"event and skips again. {_RETRIGGER_DONE if retriggered else ''}Convert it to draft and back "
+        f"(`gh pr ready --undo {pr}`, then `gh pr ready {pr}`) or push, then re-run this"
     )
+
+
+def _retrigger_ready_run(ln: Landing, head: str) -> str:
+    """Convert the PR to draft and back so GitHub starts a ready run; "" on success.
+
+    GitHub starts no `ci.yml` run for the ready flip of a PR whose push run skipped as a
+    draft (#6546), and a re-run replays the draft event. The conversion is the only thing
+    that makes one, so the landing does it once per head instead of ending `merge-timeout`
+    for a person to do the same two commands. A failure is returned as the reason, and names
+    the PR's state when the first command had already run, because a draft PR never merges.
+    """
+    pr = str(ln.opts.pr)
+    say(
+        f"PR #{pr} is ready but {head[:8]}'s only CI skipped as a draft; converting it to draft and back"
+    )
+    for step, args in (
+        ("to draft", ("pr", "ready", "--undo", pr)),
+        ("back to ready", ("pr", "ready", pr)),
+    ):
+        try:
+            ln.tools.gh(*args)
+        except subprocess.CalledProcessError as exc:
+            why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
+            left = (
+                ""
+                if step == "to draft"
+                else f"; PR #{pr} is left as a draft, run `gh pr ready {pr}`"
+            )
+            return f"converting it {step} failed: {why}{left}"
+        except subprocess.TimeoutExpired:
+            return f"converting it {step} timed out"
+    return ""
 
 
 def await_merge(ln: Landing) -> None:
@@ -515,8 +552,9 @@ def await_merge(ln: Landing) -> None:
     Without --arm-merge this only polls, for a PR merged some other way.
 
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
-    it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft ends the wait
-    (`_draft_skipped_dead_end`).
+    it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft is converted
+    to draft and back once for that head (`_retrigger_ready_run`) and the grace starts again.
+    If the head is still skipped after it, the wait ends (`_draft_skipped_dead_end`).
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -539,6 +577,9 @@ def await_merge(ln: Landing) -> None:
     # The head await_ci last read as skipped in a draft, and the `waited` it was first read at.
     draft_head = ""
     draft_since = 0
+    # The head this landing converted to draft and back, once (#6546); a second draft-skip on
+    # it ends the wait, because another conversion would loop.
+    retriggered_head = ""
     while True:
         # This poll's pacing hold; a held poll never ends the wait at merge-timeout.
         hold = ""
@@ -581,8 +622,15 @@ def await_merge(ln: Landing) -> None:
                 draft_head, draft_since = head, waited
                 say(f"{line}; waiting up to {DRAFT_SKIPPED_GRACE_S}s for a ready run")
             elif waited - draft_since >= DRAFT_SKIPPED_GRACE_S:
-                dead_end = _draft_skipped_dead_end(ln, head)
-                if dead_end:
+                dead_end = _draft_skipped_dead_end(ln, head, head == retriggered_head)
+                if dead_end and head != retriggered_head:
+                    retriggered_head = head
+                    failure = _retrigger_ready_run(ln, head)
+                    if failure:
+                        ln.die(f"{dead_end}; {failure}", 75, Verdict.MERGE_TIMEOUT)
+                    # The new run takes a moment to register, so the grace starts again.
+                    draft_since = waited
+                elif dead_end:
                     ln.die(dead_end, 75, Verdict.MERGE_TIMEOUT)
             if rc == CI_RED:
                 ln.die(
