@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the alert plane's inputs with promtool, amtool, pint and lokitool, the tools that load them.
+"""Check the alert plane's inputs and loki-homelab's Alloy config with the tools that load them.
 
 A `prometheus.yml` that Prometheus rejects at startup leaves the `Recreate` Deployment with no
 running Prometheus, and monitor-bridge reads that Prometheus every cycle. Neither `check-yaml`
@@ -91,8 +91,19 @@ take away by rewriting the expression:
   rewritten outside its raw block is still required;
 - `{{ .Status }}`, the Watchdog's payload.
 
+THE ALLOY LOAD. loki-homelab's `config.alloy` holds stage selectors that Alloy parses itself,
+and neither Loki nor lokitool parses them the same way. A backtick LogQL string after `!~` is
+valid to both and crash-looped the DaemonSet on 2026-10-29 (#6177). `alloy validate` accepts
+that selector too, because it never builds the components. Only `alloy run` builds them, and
+a config it rejects at the initial load ends the process. The script renders the role's
+ConfigMap and boots the pinned Alloy on the `config.alloy` key for `ALLOY_LOAD_SECONDS`. An
+exit before then fails the check, and a process still running after it passes.
+`discovery.kubernetes` gets a kubeconfig (`ALLOY_KUBECONFIG`) because the run has no
+service-account token to read, which shifts the line number of any error after that block by
+one. The run sets `HOSTNAME` because the config reads it.
+
 THE TOOLS. `scripts/validate/alert_tools.sh` provisions promtool and amtool at the observability
-role's image tags, lokitool at loki-homelab's, and pint at the version it pins, into
+role's image tags, lokitool and alloy at loki-homelab's, and pint at the version it pins, into
 `alert-tools/` under the git common dir, which every worktree of a clone shares. Every tool call
 goes through it.
 
@@ -107,7 +118,9 @@ Run directly or via the `validate-alert-rules` prek hook. Exits non-zero on any 
 prints each one, with the tool's output, on stderr.
 """
 
+import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -187,6 +200,29 @@ LOKI_GROUP_FLOOR = frozenset({"homelab-logs"})
 # lokitool's arguments before the rule file. `--dry-run` keeps lint from rewriting the file.
 LOKITOOL_ARGS = ("rules", "lint", "--dry-run")
 
+# loki-homelab's Alloy config: the template that renders the ConfigMap carrying it, that
+# ConfigMap, and its data key. THE ALLOY LOAD (module docstring) boots the rendered file.
+ALLOY_CONFIG_TEMPLATE = "configmap.yaml.j2"
+ALLOY_CONFIGMAP = "loki-homelab-config"
+ALLOY_CONFIG_KEY = "config.alloy"
+# How long a booted Alloy may run before the load counts as accepted. A config Alloy rejects
+# ends the process in under a second (measured 2026-10-29 on daniel-box, v1.20.1), so the
+# window only bounds the passing case.
+ALLOY_LOAD_SECONDS = 8
+# `discovery.kubernetes` builds its client when the component loads, and in-cluster it reads
+# the service-account token, which does not exist outside a pod. A kubeconfig for an address
+# nothing listens on lets the component build; its discovery then fails later, which is not a
+# load error.
+ALLOY_KUBE_COMPONENT = re.compile(r'^(discovery\.kubernetes "[^"]+" \{)$', re.MULTILINE)
+ALLOY_KUBECONFIG = """\
+apiVersion: v1
+kind: Config
+clusters: [{name: c, cluster: {server: "http://127.0.0.1:1"}}]
+contexts: [{name: x, context: {cluster: c, user: u}}]
+current-context: x
+users: [{name: u, user: {}}]
+"""
+
 
 # A tool run: the argv after `alert_tools.sh`, returning (exit code, combined output).
 Runner = Callable[[list[str]], tuple[int, str]]
@@ -197,7 +233,7 @@ class Proof:
     """One tool's red proof: a fixture it must accept and one it must reject.
 
     Attributes:
-        tool: `promtool`, `amtool` or `pint`.
+        tool: `promtool`, `amtool`, `pint`, `lokitool` or `alloy`.
         args: The tool's arguments, ending before the fixture path.
         good: The fixture the tool must accept.
         bad: The fixture the tool must reject.
@@ -262,11 +298,85 @@ PROOFS = (
         "bad-loki-rules.yaml",
         "could not parse expression",
     ),
+    Proof(
+        "alloy",
+        ("run",),
+        "good-alloy.alloy",
+        "bad-alloy.alloy",
+        "invalid selector syntax for match stage",
+    ),
 )
 
 
+def _free_port() -> int:
+    """A TCP port on loopback that nothing held a moment ago."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def run_alloy_load(config: Path) -> tuple[int, str]:
+    """Boot the pinned Alloy on `config` and report whether its initial load succeeded.
+
+    Returns:
+        (0, "") when Alloy is still running after `ALLOY_LOAD_SECONDS`, else the exit code
+        (1 for an exit with code 0) and the combined output of the process that ended.
+    """
+    # Provision first, so a cold cache's 167 MB fetch is not counted against the window.
+    fetched = subprocess.run(
+        [str(TOOLS), "alloy", "--version"],
+        capture_output=True,
+        text=True,
+        timeout=1500,
+        check=False,
+    )
+    if fetched.returncode != 0:
+        return fetched.returncode, fetched.stdout + fetched.stderr
+    with tempfile.TemporaryDirectory(prefix="alloy-load-") as tmp:
+        work = Path(tmp)
+        kubeconfig = work / "kubeconfig"
+        kubeconfig.write_text(ALLOY_KUBECONFIG)
+        booted = work / "config.alloy"
+        booted.write_text(
+            ALLOY_KUBE_COMPONENT.sub(
+                rf'\1\n  kubeconfig_file = "{kubeconfig}"', config.read_text()
+            )
+        )
+        log = work / "alloy.log"
+        with log.open("w") as sink:
+            proc = subprocess.Popen(
+                [
+                    str(TOOLS),
+                    "alloy",
+                    "run",
+                    f"--server.http.listen-addr=127.0.0.1:{_free_port()}",
+                    "--disable-reporting",
+                    f"--storage.path={work / 'data'}",
+                    str(booted),
+                ],
+                stdout=sink,
+                stderr=subprocess.STDOUT,
+                env={**os.environ, "HOSTNAME": "alloy-config-check"},
+            )
+            try:
+                proc.wait(timeout=ALLOY_LOAD_SECONDS)
+            except subprocess.TimeoutExpired:
+                # alert_tools.sh execs the tool, so this is Alloy itself. SIGKILL because a
+                # graceful stop of a loaded config took over two minutes to finish.
+                proc.kill()
+                proc.wait()
+                return 0, ""
+        return proc.returncode or 1, log.read_text()
+
+
 def run_tool(argv: list[str]) -> tuple[int, str]:
-    """Run `alert_tools.sh <argv>` and return its exit code and combined output."""
+    """Run `alert_tools.sh <argv>` and return its exit code and combined output.
+
+    `alloy run <config>` is the exception: it goes through `run_alloy_load`, because the
+    process never ends on its own when the config loads.
+    """
+    if argv[:2] == ["alloy", "run"]:
+        return run_alloy_load(Path(argv[-1]))
     proc = subprocess.run(
         [str(TOOLS), *argv],
         capture_output=True,
@@ -403,6 +513,37 @@ def rendered_loki_rule_keys() -> tuple[list[str], set[str]]:
     )
 
 
+def rendered_alloy_config() -> str:
+    """The `config.alloy` key of loki-homelab's rendered `loki-homelab-config` ConfigMap.
+
+    Raises:
+        RuntimeError: the template failed to render or the ConfigMap carries no such key.
+    """
+    from validate import k8s_manifests as validator
+
+    entries = validator.k8s_entries()
+    ctx = validator.render_context(
+        LOKI_ROLE_DIR, overrides={"container_item": entries[LOKI_ROLE]}, strict=True
+    )
+    template = LOKI_ROLE_DIR / "templates" / ALLOY_CONFIG_TEMPLATE
+    err, docs = validator.check_template(LOKI_ROLE, template, ctx)
+    if err:
+        raise RuntimeError(
+            f"{LOKI_ROLE}/{ALLOY_CONFIG_TEMPLATE} failed to render: {err}"
+        )
+    for doc in docs:
+        if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
+            continue
+        if doc.get("metadata", {}).get("name") == ALLOY_CONFIGMAP:
+            text = (doc.get("data") or {}).get(ALLOY_CONFIG_KEY)
+            if text:
+                return text
+    raise RuntimeError(
+        f"{LOKI_ROLE}/{ALLOY_CONFIG_TEMPLATE} renders no {ALLOY_CONFIGMAP} ConfigMap with a "
+        f"{ALLOY_CONFIG_KEY} key, so nothing checked the Alloy config"
+    )
+
+
 def loki_group_problems(
     groups: list[str], keys: set[str], rules_dir: Path = LOKI_RULES_DIR
 ) -> list[str]:
@@ -468,6 +609,7 @@ def check_tree(
     render_loki_rules: Callable[[], tuple[list[str], set[str]]] | None = None,
     loki_rules_dir: Path = LOKI_RULES_DIR,
     render_cases: Path = RENDER_CASES,
+    render_alloy: Callable[[], str] | None = None,
 ) -> list[str]:
     """Render the role, apply the floors and the rule conventions, and run every tool check.
 
@@ -482,11 +624,14 @@ def check_tree(
             `rendered_loki_rule_keys` unless a test passes another.
         loki_rules_dir: The Loki ruler's rule files.
         render_cases: The alert groups and expected text of the notification renders.
+        render_alloy: Returns loki-homelab's rendered Alloy config; `rendered_alloy_config`
+            unless a test passes another.
     """
     try:
         found = (render or rendered_files)()
         groups, keys = (render_rules or rendered_rule_keys)()
         loki_groups, loki_keys = (render_loki_rules or rendered_loki_rule_keys)()
+        alloy_config = (render_alloy or rendered_alloy_config)()
     except RuntimeError as err:
         # A Go expression outside a raw block usually lands here, as a Jinja syntax error.
         return [str(err)]
@@ -513,6 +658,14 @@ def check_tree(
             code, output = run(argv)
             if code != 0:
                 problems.append(f"`{' '.join(argv)}` exited {code}:\n{output.rstrip()}")
+        alloy_path = Path(tmp) / ALLOY_CONFIG_KEY
+        alloy_path.write_text(alloy_config)
+        code, output = run(["alloy", "run", str(alloy_path)])
+        if code != 0:
+            problems.append(
+                f"`alloy run {ALLOY_CONFIG_KEY}` exited {code} on loki-homelab's rendered "
+                f"config:\n{output.rstrip()}"
+            )
     problems += render_problems(run, cases=render_cases)
     return problems
 

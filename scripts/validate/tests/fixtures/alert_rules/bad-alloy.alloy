@@ -1,0 +1,17 @@
+// The same pipeline with a backtick LogQL string after `!~`. Loki and lokitool accept it and
+// Alloy's match-stage parser does not: it crash-looped the DaemonSet on 2026-10-29 (#6177).
+loki.write "fixture" {
+  endpoint {
+    url = "http://loki.invalid/loki/api/v1/push"
+  }
+}
+
+loki.process "fixture" {
+  forward_to = [loki.write.fixture.receiver]
+
+  stage.match {
+    selector            = "{job=\"fixture\"} !~ `^[WEF][0-9]{4} |^panic: `"
+    action              = "drop"
+    drop_counter_reason = "below_warn"
+  }
+}
