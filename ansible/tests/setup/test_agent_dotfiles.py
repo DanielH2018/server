@@ -4,9 +4,10 @@
 claude-dotfiles-sync.sh pulls the agent's chezmoi source and applies it as the agent. Two
 properties carry the safety. A source that does not render the dotfiles' `is-agent` template
 as true would hand the agent the operator's .gitconfig, so the script refuses to apply it. And
-a plain apply chmods ~/.claude to 0700, which cuts the operator off from the agent's memory
-store and artifacts, so the script applies every directory but ~/.claude first and everything
-else without directories second. The script runs here against real scratch repositories and a
+a plain apply sets every directory to the source's mode: ~/.claude to 0700, which cuts the
+operator off from the agent's memory store and artifacts, and ~/.config/gh, which holds the
+agent's GitHub token, to 0755. So the script applies every directory but those two first and
+everything else without directories second. The script runs here against real scratch repositories and a
 chezmoi stand-in that records each call.
 
 Run: uv run pytest ansible/tests/setup/test_agent_dotfiles.py
@@ -28,15 +29,15 @@ ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 SCRIPT = ROLE / "files" / "claude-dotfiles-sync.sh"
 TASKS = ROLE / "tasks"
 
-# Answers the subcommands the script uses. `managed` lists ~/.claude itself, which the first
-# pass must leave out, and two directories it must keep.
+# Answers the subcommands the script uses. `managed` lists ~/.claude and ~/.config/gh, whose
+# modes the role sets and the first pass must leave out, and two directories it must keep.
 CHEZMOI_STUB = """\
 log="$STUB_CALLS"
 case "$1" in
   source-path) echo "$STUB_SOURCE/home" ;;
   init) echo "init agent=$(grep -c 'agent = true' "$HOME/.config/chezmoi/chezmoi.toml")" >> "$log" ;;
   execute-template) printf '%s' "$STUB_IS_AGENT" ;;
-  managed) printf '%s\\n' "$HOME/.claude" "$HOME/.claude/skills" "$HOME/.config/nvim" ;;
+  managed) printf '%s\\n' "$HOME/.claude" "$HOME/.claude/skills" "$HOME/.config/gh" "$HOME/.config/nvim" ;;
   apply) echo "$*" >> "$log" ;;
   *) echo "unexpected: $*" >> "$log"; exit 2 ;;
 esac
@@ -107,7 +108,7 @@ def agent(tmp_path: Path) -> Agent:
     return Agent(tmp_path)
 
 
-def test_the_agent_variant_is_applied_in_two_passes_that_spare_the_claude_dir(
+def test_the_agent_variant_is_applied_in_two_passes_that_spare_the_role_owned_dirs(
     agent: Agent,
 ) -> None:
     result = agent.sync()
