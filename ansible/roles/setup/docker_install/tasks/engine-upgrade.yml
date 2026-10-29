@@ -9,28 +9,19 @@
 # containerd shim binary under every running container, and a docker.socket restart gives
 # /var/run/docker.sock a new inode that a container bind-mounting the FILE never sees. A
 # dist-upgrade does both: autoheal's shim dies and docker-proxy sits unhealthy (503) until a
-# redeploy recreates it. Stopping the projects
+# redeploy recreates it. Stopping the project
 # first means no shim is live when dpkg swaps it; the forced recreate afterwards gives every
 # container the new socket.
 #
-# The Compose projects are the ones deploy.yml renders under ~/server/containers/<name>,
-# owned 0600 by the connecting user, so the compose tasks run as that user (become: false)
-# the way deploy.yml runs them. A project that was never deployed to this host fails the stop
-# task before anything is upgraded. The `homelab` project (H5) is the package's
-# /usr/lib/homelab/compose, whose env file is root 0600, so its tasks run with become: true.
+# The one Compose project is `homelab` (H5), the package's /usr/lib/homelab/compose, whose env
+# file is root 0600, so its tasks run with become: true. H5.12 deleted the per-project loop over
+# containers_list, whose projects Ansible's Compose path rendered under ~/server/containers/.
 #
 # The play and homelab-reconcile both write the `homelab` project. The play therefore masks
 # homelab-updater.timer first (H3's per-host lever), waits out any updater or reconcile run
 # already in progress, and unmasks the timer only as its last task. A failed play leaves the
 # timer masked on purpose: the Pi installs no package until the operator clears it
 # (docs/target-architecture/host/h5-pi-compose.md, *The engine upgrade*).
-
-- name: Refuse to move the engine where the Compose projects cannot be reached
-  ansible.builtin.assert:
-    that: has_repo_checkout
-    fail_msg: >-
-      This host has no ~/server checkout, so nothing here can stop or recreate its Compose
-      projects -- and an engine upgrade under running containers is #1961.
 
 - name: Look for the homelab project's compose file
   ansible.builtin.stat:
@@ -121,19 +112,6 @@
         msg: "Docker engine packages are at their pinned versions; nothing stopped, nothing upgraded."
       when: not docker_install_engine_upgrade_pending
 
-    - name: Stop every Compose project before the engine moves
-      # Reverse list order, so a dependent stops before what it depends on.
-      community.docker.docker_compose_v2:
-        project_src: "/home/{{ sys_user }}/server/containers/{{ item.name }}"
-        state: stopped
-      loop: "{{ containers_list | default([]) | filter_by_platform('docker') | reverse }}"
-      loop_control:
-        label: "{{ item.name }}"
-      become: false
-      when:
-        - docker_install_engine_upgrade_pending
-        - has_repo_checkout
-
     - name: Stop the homelab project before the engine moves
       community.docker.docker_compose_v2:
         project_src: "{{ docker_install_homelab_compose_dir }}"
@@ -167,8 +145,9 @@
   when: docker_install_engine_upgrade_pending
 
 - name: Recreate the homelab project on the upgraded engine
-  # First, so what the other projects depend on is up before they are. `recreate: always` is
-  # `up -d --force-recreate`, which gives every container the new shim and the socket inode.
+  # `recreate: always`, not `auto`: the compose config-hash did not change, so `auto` would only
+  # start the stopped containers. `up -d --force-recreate` gives every container the new shim,
+  # and gives the one that bind-mounts the daemon socket the socket's new inode.
   community.docker.docker_compose_v2:
     project_src: "{{ docker_install_homelab_compose_dir }}"
     files: [compose.yaml]
@@ -178,23 +157,6 @@
   when:
     - docker_install_engine_upgrade_pending
     - compose_services | default([]) | length > 0
-
-- name: Recreate every Compose project on the upgraded engine
-  # `recreate: always`, not `auto`: the compose config-hash did not change, so `auto` would
-  # only start the stopped containers -- and the one that bind-mounts the daemon socket would
-  # come back holding the old inode.
-  community.docker.docker_compose_v2:
-    project_src: "/home/{{ sys_user }}/server/containers/{{ item.name }}"
-    state: present
-    recreate: always
-    remove_orphans: true
-  loop: "{{ containers_list | default([]) | filter_by_platform('docker') }}"
-  loop_control:
-    label: "{{ item.name }}"
-  become: false
-  when:
-    - docker_install_engine_upgrade_pending
-    - has_repo_checkout
 
 - name: Release the updater timer
   # Last on purpose: a failed play never reaches it, and the timer stays masked. A timer that

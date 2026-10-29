@@ -3,7 +3,7 @@
 
 WHY THIS PAGE IS WORTH HAVING. Some of these jobs commit, push, deploy or delete without a
 human in the loop. That set is the reason to read the page, and it is not obvious from any
-single role: the tasks are spread across roles/setup/, roles/k8s/ and roles/containers/.
+single role: the tasks are spread across roles/setup/ and roles/k8s/.
 
 STATIC PARSING ONLY. Every `ansible.builtin.cron` task is read with yaml.safe_load. Jinja
 in a schedule or user, and a variable a `when:` compares `inventory_hostname` against, resolve

@@ -2,12 +2,12 @@
 
 WireGuard VPN with the wg-easy admin UI, running on daniel-box. This is the **server-side**
 instance: the one whose UDP port the router forwards, and the path back in when something else
-is broken. `roles/containers/wg-easy/CLAUDE.md` documents a different instance: the Pi's
+is broken. `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2` documents a different instance: the Pi's
 LAN-only **Docker** wg-easy, on an older version with a different auth model.
 
 **Do not read the two as one service.** They differ in platform, version, auth and UDP port:
 
-| | this role (k3s) | `roles/containers/wg-easy` (Docker) |
+| | this role (k3s) | the Pi's `pi-compose` wg-easy (Docker) |
 |---|---|---|
 | Host | daniel-box | daniel-pi |
 | Version | v15 | v14 |

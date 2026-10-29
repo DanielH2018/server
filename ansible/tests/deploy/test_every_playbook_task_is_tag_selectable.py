@@ -33,7 +33,7 @@ from _helpers import ANSIBLE
 # a task it cannot select is the same full-run cost, paid on the control plane.
 PLAYBOOKS = ("deploy.yml", "initial_setup.yml", "k3s-bringup.yml")
 # The roles_path entries of ansible/ansible.cfg, in its first-match order.
-ROLES_PATH = ("roles/containers", "roles/setup", "roles")
+ROLES_PATH = ("roles/setup", "roles")
 _BLOCK_KEYS = ("block", "rescue", "always")
 _IMPORTS = {"import_tasks", "import_role"}
 _INCLUDES = {"include_tasks", "include_role"}
