@@ -111,7 +111,7 @@ def test_a_pending_role_is_named_on_every_later_tick(
 
     After the ff-merge the tick converges and never re-enters the broad arm, so a line
     written only where the marker is written would appear once and never again — and an
-    operator reading `journalctl -t gitops-deploy` an hour later would see an idle deployer.
+    operator reading `journalctl -u gitops-deploy.service` an hour later would see an idle deployer.
     """
     tick.paths = [K3S_SETUP]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
