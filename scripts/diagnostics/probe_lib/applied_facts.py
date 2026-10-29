@@ -16,6 +16,10 @@ never by whether a render happens to succeed:
 - `template_late`: the late names a template's own text reads (#6378). A file rendered from
   one has content nobody can predict before the run, so `content_hash` gives no hash and a
   reason starting `LATE`, and `applied` reports the file UNCHECKED.
+
+One kind of `register` is not late once `applied` has read a file: a `command` whose argv is
+`ssh [-o OPT]... HOST cat PATH`. `remote_read` names its HOST and PATH, `applied` reads PATH on
+HOST, and `registered` gives the walk the result Ansible would register (#6518).
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
@@ -44,6 +48,7 @@ RUN_TIME = frozenset({"item", "hostvars", "groups", "group_names", "play_hosts"}
 STATIC_ANSIBLE = frozenset({"ansible_managed"})
 _LOOKUPS = frozenset({"lookup", "query", "q"})
 SET_FACTS = ("set_fact", "ansible.builtin.set_fact", "ansible.legacy.set_fact")
+COMMANDS = ("command", "ansible.builtin.command", "ansible.legacy.command")
 # The reason `content_hash` gives for content it cannot predict, an unchecked `Want` (#6378).
 LATE = "it reads run-time name(s)"
 _SINGLE = re.compile(r"^\s*\{\{((?:(?!\{\{|\}\}).)*)\}\}\s*$", re.S)
@@ -63,6 +68,31 @@ def setters(tasks) -> Counter:
         for key in ("block", "rescue", "always"):
             names.update(setters(task.get(key)))
     return names
+
+
+def remote_read(walk, task: dict) -> tuple[str, str] | None:
+    """The (host, path) a task reads with `ssh [-o OPT]... HOST cat PATH`, else None.
+
+    Both render with the walk's context, and None means one did not render to a literal.
+    """
+    args = next((task[k] for k in COMMANDS if isinstance(task.get(k), dict)), None)
+    argv = (args or {}).get("argv")
+    if not isinstance(argv, list) or len(argv) < 4 or argv[0] != "ssh":
+        return None
+    opts, (host, cat, path) = argv[1:-3], argv[-3:]
+    if cat != "cat" or opts[::2] != ["-o"] * (len(opts) // 2) or len(opts) % 2:
+        return None
+    host, path = walk.render(host), walk.render(path)
+    return None if host is None or path is None else (host, path)
+
+
+def registered(text: str) -> dict:
+    """What a `command` that printed `text` and exited 0 registers.
+
+    The command module strips the trailing newline from stdout, as `strip_empty_ends` does.
+    """
+    out = text.rstrip("\r\n")
+    return {"stdout": out, "stdout_lines": out.splitlines(), "rc": 0, "failed": False}
 
 
 def expr_names(env: Environment, text: str) -> set[str]:
