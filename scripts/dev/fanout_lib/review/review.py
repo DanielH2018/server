@@ -89,6 +89,7 @@ from fanout_lib.branch_pr import OwnPr, needs_input_report, worktree_own_pr
 from fanout_lib.brief import ISSUES_HEADING, lands
 from fanout_lib.review.held_hooks import (
     held_secret_paths,
+    labelled,
     pointed_settings,
     read_hooks,
     with_batch_env,
@@ -263,7 +264,7 @@ class Pipeline:
         )
         (fanout / "stop-blocks").write_text("0\n")
         started = self.clock()
-        proc = self.run(["env", otel_attributes(self.batch, name), *argv], stdin)
+        proc = self.run(labelled(argv, otel_attributes(self.batch, name)), stdin)
         try:
             report = json.loads(proc.stdout)
         except json.JSONDecodeError:
