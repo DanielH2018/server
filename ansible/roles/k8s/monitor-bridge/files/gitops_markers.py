@@ -172,17 +172,21 @@ LOCAL_CONNECTION_HOSTS = frozenset({"daniel-box", "daniel-server"})
 def on_host(cmd: str, host: str | None) -> str:
     """`cmd`, an `ansible-playbook` line, as run against `host`, or as is when `host` is None.
 
-    `host` is the `manual_plane` line's own `host` key: the host the routing gates an off-host
-    role onto (#3734), or a host the tick's own run did not reach (#6510). Without it the
-    command runs on the operator's host, skips the role and exits 0 (#3933). A
-    `LOCAL_CONNECTION_HOSTS` member is reached over ssh, and pulls first: nothing else keeps
-    that host's checkout current, and a stale one applies the pre-merge tree with a green recap.
+    Printed for a role on a host other than the operator's: without the host the command runs
+    where it is typed, skips the role and exits 0 (#3933). A `LOCAL_CONNECTION_HOSTS` member is
+    reached over ssh, and pulls first: nothing else keeps that host's checkout current, and a
+    stale one applies the pre-merge tree with a green recap.
     """
     if host is None:
         return cmd
     if host in LOCAL_CONNECTION_HOSTS:
         return f'ssh {host} "cd /home/ubuntu/server && git pull --ff-only && {cmd}"'
     return f"{cmd} -e target={host}"
+
+
+def on_hosts(cmd: str, hosts) -> str:
+    """`cmd` run against each of `hosts` in turn, chained with `&&`, or as is when empty."""
+    return " && ".join(on_host(cmd, h) for h in hosts) or cmd
 
 
 # The prefix of every playbook command a surface prints for an operator to paste. A bare
@@ -477,10 +481,14 @@ class ManualPlaneEntry(NamedTuple):
             gives is what monitor-bridge pages on, so it is NEVER refreshed for a role
             already listed.
         host: the one host the playbook gates the role onto, for a role the tick's host
-            does not run, else None. Every printed apply command goes through `on_host`.
+            does not run, else None.
         agent_hosts: the hosts the playbook's join plays apply the role's agent half to, from
             the routing when the deployer recorded the line (#5627). Empty for every role
             `AGENT_JOIN_TAGS` does not name. Every printer passes it to `agent_join_cmds`.
+        hosts: the hosts beyond the tick's own that a change to a role the tick applied
+            still reaches (#6510). The tick's own apply never clears such a line.
+
+    Every printed apply command runs against `apply_hosts()`.
     """
 
     origin: str
@@ -489,6 +497,11 @@ class ManualPlaneEntry(NamedTuple):
     at: float
     host: str | None = None
     agent_hosts: tuple[str, ...] = ()
+    hosts: tuple[str, ...] = ()
+
+    def apply_hosts(self) -> tuple[str, ...]:
+        """The hosts the apply command runs against; () means the operator's own."""
+        return self.hosts or ((self.host,) if self.host else ())
 
 
 class K8sDeferredEntry(NamedTuple):
