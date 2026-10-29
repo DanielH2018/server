@@ -27,9 +27,11 @@ RELEASE = "/etc/homelab-builder/release"
 # The canary order (*Staged rollout*): daniel-box runs the builder, so it always comes last.
 CANARY_ORDER = ("daniel-pi", "daniel-server", "daniel-box")
 # DECIDED: a host whose updater next fires more than CANARY_MAX_WAIT_S away is passed over as
-# the canary, and a run that builds a new commit re-picks an open gate on it. A run with nothing
-# new on master leaves an open gate alone, so a gate opened before the Pi's last fire ahead
-# of a gap waits on that fire. daniel-pi's drop-in skips 23:00 to 00:59
+# the canary, and every run closes an open gate on such a host so that the run re-picks the
+# canary from the deferred packages. The check runs on every run, not only on one that builds a
+# new commit, because a Pi package published just after the Pi's last fire before a gap
+# would otherwise hold the gate through the gap. The cost: a Pi fire still running when the
+# gap starts goes unwaited. daniel-pi's drop-in skips 23:00 to 00:59
 # and 04:00 to 05:59, so a Pi package published at 23:08 held every other host until the Pi's
 # 01:05 fire (#6524). The next host in the order is a canary the gate already uses whenever the
 # Pi's package is unchanged. The bound covers the Pi's 15-minute spacing, and with the
@@ -100,12 +102,6 @@ def admit(
         canary's package is staged.
     """
     hosts = [p for p in changed if host_of(p)]
-    if gate is not None and too_far(gate["host"], now):
-        log(
-            f"rollout gate at {gate['sha'][:12]} re-picks its canary: {gate['host']}'s "
-            f"updater does not fire within {CANARY_MAX_WAIT_S}s"
-        )
-        gate = None
     if gate is None:
         if len(hosts) < 2:
             return changed, [], None
@@ -132,13 +128,15 @@ def fetch_url(url: str, timeout: float) -> bytes:
 class RolloutGate:
     """The gate's reads, for `Builder` to inherit.
 
-    The inheriting class supplies `git`, `state`, `config`, `release_path` and `prom_fetch`.
+    The inheriting class supplies `git`, `state`, `config`, `release_path`, `prom_fetch`
+    and `now`.
     """
 
     state: dict
     config: dict[str, str]
     release_path: Path
     prom_fetch: Callable[[str, float], bytes] | None
+    now: Callable[[], float]
 
     def git(self, *args: str) -> str:
         raise NotImplementedError
@@ -152,6 +150,9 @@ class RolloutGate:
             why = f"{self.release_path} names it or a descendant"
         elif self.canary_reports(gate):
             why = f"{gate['host']} reports it at reconcile_ok 1"
+        elif too_far(gate["host"], self.now()):
+            # The run then rebuilds the deferred packages, and admit() picks a new canary.
+            why = f"{gate['host']}'s updater does not fire within {CANARY_MAX_WAIT_S}s"
         else:
             return
         log(f"rollout gate at {gate['sha'][:12]} closed: {why}")

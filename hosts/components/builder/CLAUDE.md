@@ -142,7 +142,7 @@ A run whose changed set holds more than one host package (`hosts/<host>/`) stage
 canary's and defers the rest. The canary is the first of daniel-pi, daniel-server and daniel-box
 whose package changed and whose updater next fires within 30 minutes. daniel-pi's drop-in skips
 23:00 to 00:59 and 04:00 to 05:59, so a run from 22:51 to 00:34 or 03:51 to 05:34 passes the Pi
-over, and a run there that builds a new commit re-picks a gate already open on it (#6524). The
+over, and a run there closes a gate already open on it and re-picks the canary (#6524). The
 shared packages under `packages/` never wait. The run records the gate
 `{host, sha}` and the deferred directories in `state.json`, and moves the gate to each newer
 canary version it stages. While the gate is open the builder builds no other host package, and

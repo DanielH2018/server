@@ -310,6 +310,18 @@ def test_a_newer_pi_version_in_its_quiet_hours_re_picks_the_open_gate(opened):
     assert saved["deferred"] == ["hosts/daniel-pi"]
 
 
+def test_an_open_pi_gate_closes_with_master_idle_once_the_pi_stops_firing(opened):
+    """The Pi's package published after its 22:50 fire, and nothing new reached master.
+
+    daniel-server is the only deferred package, so it builds with no gate of its own.
+    """
+    lab, prom, _v, state, _ = opened
+    run(lab, prom, at=QUIET)
+    assert debs(state) == ["homelab-daniel-server"]
+    saved = json.loads((state / "state.json").read_text())
+    assert (saved["gate"], saved["deferred"]) == (None, [])
+
+
 def test_the_fire_table_is_every_host_drop_in_s_schedule():
     """CALENDAR_FIRES restates each drop-in, which the builder cannot read, fire for fire."""
     dropins = sorted(REPO.glob("hosts/*/units/homelab-updater.timer.conf"))
