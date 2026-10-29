@@ -95,7 +95,8 @@ spec:
     # fences nothing. It is not silent, though: kube-router logs a warning per IPv6 CIDR on every
     # policy sync, which was 75% of daniel-box's k3s.log (#6495). The drift check compares
     # `cloudflare_ips` itself against upstream, not this list, so dropping the v6 half here
-    # hides no drift.
+    # hides no drift. A dual-stack cluster needs the filter in defaults/main.yml removed, or
+    # every IPv6 client of a public name is refused at this port.
     - from:
 {% for cidr in netpol_baseline_traefik_https_sources %}
         - ipBlock:
