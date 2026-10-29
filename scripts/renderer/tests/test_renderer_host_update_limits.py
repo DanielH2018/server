@@ -10,7 +10,6 @@ emits them, so a drop-in that outgrows a limit fails here before the rule pages 
 Run: uv run pytest scripts/renderer/tests/test_renderer_host_update_limits.py
 """
 
-import re
 from pathlib import PurePosixPath
 
 import pytest
@@ -18,7 +17,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.repo_paths import REPO
-from lib.systemd_timer import DAY_S, calendar_fires, span_s, timer_settings
+from lib.systemd_timer import DAY_S, calendar_fires, longest_gap_s, timeout_start_s
 from renderer.renderer_lib import host as host_mode
 
 DEFAULTS = (
@@ -31,41 +30,6 @@ DROPIN = UNITS / "homelab-updater.timer.d" / "50-homelab.conf"
 # The Pi's drop-in, as H3 specifies it and the container cases install it. H3.6 ships it in
 # hosts/daniel-pi/; until then this copy is the Pi's schedule.
 PI_DROPIN = REPO / "hosts/lib/tests/container/fixture/units/updater-timer.conf"
-# Triggers that fire once after boot. They add no gap once the host is up.
-_BOOT_ONLY = frozenset({"OnBootSec", "OnStartupSec"})
-
-
-def longest_gap_s(unit: str, dropins: list[str]) -> int:
-    """The longest a timer can go between two fires once the host is up, in seconds.
-
-    Raises:
-        ValueError: A trigger this test cannot bound, or no trigger that repeats.
-    """
-    triggers, delay = timer_settings(unit, dropins)
-    bounds = []
-    for key, values in triggers.items():
-        if key == "OnCalendar":
-            fires = sorted({t for v in values for t in calendar_fires(v)})
-            bounds.append(
-                max(
-                    b - a
-                    for a, b in zip(fires, [*fires[1:], fires[0] + DAY_S], strict=True)
-                )
-            )
-        elif key == "OnUnitActiveSec":
-            bounds.append(min(span_s(v) for v in values))
-        elif key not in _BOOT_ONLY:
-            raise ValueError(f"{key}= is not a trigger this test bounds")
-    if not bounds:
-        raise ValueError("the timer has no trigger that repeats")
-    # Every trigger fires at least once within its own bound, so the nearest one wins.
-    return min(bounds) + delay
-
-
-def timeout_start_s(unit: str) -> int:
-    """The unit's `TimeoutStartSec=` in seconds."""
-    (value,) = re.findall(r"^TimeoutStartSec=(.+)$", unit, re.MULTILINE)
-    return span_s(value)
 
 
 def limit_needed_s(timer: str, dropins: list[str], service: str) -> int:

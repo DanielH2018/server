@@ -432,7 +432,7 @@ sudo rm /etc/homelab-builder/hold
 
 The next builder run builds the newest green commit and stages again any set the hold kept.
 The signer then publishes it. The "Host Packages — Status" tile pages once a hold has left a
-commit waiting to be built for 2 hours.
+commit waiting to be built for 11760 seconds, the lag grace (*The rollout gate*).
 
 To stop the pipeline for longer than an incident, pause the timer instead. Run
 `sudo systemctl mask --now homelab-builder.timer`, and `sudo systemctl unmask homelab-builder.timer
@@ -447,8 +447,11 @@ A run whose changed set holds more than one host package stages only the canary'
 (daniel-pi, then daniel-server, then daniel-box) and opens a gate at that commit. While the gate
 is open, the unbuilt-since series reads `reason="canary"`, and its `sha` names the gate's commit.
 The gate closes by itself once Prometheus reports the canary at that commit or a descendant with
-`homelab_host_reconcile_ok` at 1. The "Host Packages — Status" tile pages once the gate has stayed
-open for 2 hours.
+`homelab_host_reconcile_ok` at 1. The Pi leads at every hour, so a Pi package published at the
+start of one of its 2h15m gaps (22:50 to 01:05, 03:50 to 06:05) keeps the gate open until its next
+fire, and the other hosts' packages wait that long (#6530). The "Host Packages — Status" tile
+pages once the gate has stayed open for 11760 seconds, a grace derived from that gap, which
+`ansible/filter_plugins/updater_lag_grace.py` reads from the Pi's timer drop-in.
 
 To close the gate before the canary reports, name the gate's commit on daniel-box. The gate's
 commit is the `sha` label of the series, and a descendant of it also works:
@@ -620,7 +623,8 @@ Drift") pages on a condition that persists, in two cases:
 
 - the builder's last good fetch of master is older than 30 minutes, or its series is absent.
   That covers a dead `homelab-builder.timer`, a missing token and a fetch that keeps failing;
-- a commit of master has waited more than 2 hours to be built. The builder runs and exits 0 in each of these cases,
+- a commit of master has waited more than 11760 seconds to be built (2 hours, raised to cover the
+  Pi canary's longest gap between updater fires). The builder runs and exits 0 in each of these cases,
   so only the tile reports them.
 
 The tile's message names the `reason` and `sha` labels of
