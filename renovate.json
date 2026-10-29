@@ -1200,7 +1200,7 @@
       "matchFileNames": [
         "hosts/components/pi-compose/services/wg-easy/compose.yaml.j2"
       ],
-      "groupName": "pi image wg-easy (manual — the Pi's remote-access path; a v15 bump is a migration, not a redeploy)",
+      "groupName": "pi image wg-easy (manual — a person lands it, then connects a peer from outside the LAN; a v15 bump is a migration, not a redeploy)",
       "groupSingleUpdates": true,
       "automerge": false,
       "schedule": [
