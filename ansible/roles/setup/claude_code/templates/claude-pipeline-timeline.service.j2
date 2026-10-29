@@ -1,0 +1,31 @@
+[Unit]
+Description=Snapshot the per-PR pipeline timeline before its journal inputs rotate
+After=network-online.target
+Wants=network-online.target
+OnFailure=claude-pipeline-timeline-alert.service
+
+[Service]
+Type=oneshot
+# The operator's user: it is in the adm group that reads the landing ledger and the lander's
+# journal, it holds the `gh` token, and its ssh key reaches daniel-server. The run writes only
+# under ~/.local/state/pipeline-timeline/.
+User={{ sys_user }}
+# DECIDED: the operator's checkout, for the reason claude-fanout-server-lander.service.j2
+# gives: the agent's clone is not `ubuntu`'s to read.
+WorkingDirectory={{ claude_code_operator_checkout }}
+Environment=HOME=/home/{{ sys_user }}
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+# Without it the summary the run prints is dropped.
+SyslogLevel=notice
+# The window is {{ claude_code_pipeline_timeline_days }} days, so a snapshot survives {{ claude_code_pipeline_timeline_days - 1 }} missed runs: a later snapshot's
+# rows supersede an earlier one's for the same PR. One rsync of daniel-server's review records
+# per run stays inside the `ufw limit ssh` budget.
+TimeoutStartSec=30min
+ExecStart=/usr/local/bin/uv run --no-python-downloads python scripts/dev/pipeline_timeline.py --days {{ claude_code_pipeline_timeline_days }} --pull-reviews {{ claude_code_pipeline_timeline_server_host }}
+# The textfile that tells a timer which stopped firing from one that runs clean (#6165).
+# timer-textfile.j2 has the shape and the deadline rule.
+# 1800 is TimeoutStartSec above, the longest a healthy run may take.
+{% from 'timer-textfile.j2' import timer_textfile with context %}
+{{ timer_textfile('claude-pipeline-timeline', claude_code_pipeline_timeline_interval, 1800) }}

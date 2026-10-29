@@ -1722,11 +1722,37 @@ tests:
         values: '0x60'
       - series: 'homelab_check_last_run_timestamp_seconds{check="claude-fanout-server-lander", instance="daniel-box", job="node", origin="daniel-box"}'
         values: '0x60'
+      # The daily snapshot's file was taken 171600s before time 0, so it is 174900s old at 55m.
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-pipeline-timeline", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '-171600x60'
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '1x60'
       - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
         values: '1x60'
     alert_rule_test:
+      - eval_time: 55m
+        alertname: ClaudePipelineTimelineNotReporting
+        exp_alerts: []
+      - eval_time: 56m
+        alertname: ClaudePipelineTimelineNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-pipeline-timeline
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The pipeline timeline snapshot on daniel-box has stopped reporting.
+              description: >-
+                No claude-pipeline-timeline verdict newer than 174900s reached Prometheus from
+                daniel-box's textfile collector, so the daily snapshot of the PR timeline has not
+                completed a clean run: the timer stopped firing, or every run since failed and
+                OnFailure has posted to Discord. The journal inputs it saves rotate after about ten
+                days. Read `systemctl status claude-pipeline-timeline.timer` and `journalctl -u
+                claude-pipeline-timeline` on daniel-box. If `claude_code_pipeline_timeline_enabled`
+                was set false on purpose, delete this rule.
       - eval_time: 11m
         alertname: ClaudeTriagePollNotReporting
         exp_alerts: []

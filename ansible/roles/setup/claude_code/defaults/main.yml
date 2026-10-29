@@ -556,6 +556,20 @@ claude_code_fanout_server_lander_interval: 10min
 claude_code_fanout_server_lander_branch_prefix: worktree-fanout-
 claude_code_fanout_server_lander_author: DanielH2018
 
+# ── The pipeline timeline snapshot (issue #5661) ────────────────────────────────────────
+# `scripts/dev/pipeline_timeline.py` joins each merged PR's stamps, and two of its inputs are in
+# daniel-box's journal, which rotates after about ten days. This timer runs it daily so the
+# journal halves are copied into ~/.local/state/pipeline-timeline/ first. True only in
+# daniel-box's host_vars. False stops the timer and removes its units; the snapshots stay.
+claude_code_pipeline_timeline_enabled: false
+# Must be <N>min: timer-textfile.j2 derives the NotReporting deadline from it.
+claude_code_pipeline_timeline_interval: 1440min
+# How far back each run joins. A later snapshot's rows supersede an earlier one's, so
+# N days survives N-1 missed runs.
+claude_code_pipeline_timeline_days: 3
+# The host whose review records the run copies with a read-only rsync.
+claude_code_pipeline_timeline_server_host: daniel-server
+
 # ── The fan-out alert ───────────────────────────────────────────────────────────────────
 # fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any
 # state but `done` (#4602). The batch's ExecStopPost= starts it
