@@ -63,7 +63,8 @@ def test_the_embedded_nfpm_and_uv_blocks_equal_the_packages():
 
 
 def test_a_package_bump_the_script_did_not_follow_is_flagged():
-    bumped = TOOLS.replace("version: 0.13.4", "version: 0.13.5")
+    uv = group(r"^  uv:\n(?:.*\n)*?\s+version: (\S+)$", TOOLS, re.MULTILINE)
+    bumped = TOOLS.replace(f"version: {uv}", f"version: {uv}.1")
 
     assert script_pins(SCRIPT) != package_pins(bumped)
 
