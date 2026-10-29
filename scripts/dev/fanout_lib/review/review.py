@@ -85,6 +85,7 @@ import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from fanout_lib.branch_pr import OwnPr, needs_input_report, worktree_own_pr
 from fanout_lib.brief import ISSUES_HEADING, lands
 from fanout_lib.review.held_hooks import (
     held_secret_paths,
@@ -531,14 +532,20 @@ class Pipeline:
         if red is not None:
             brief = brief.replace(ISSUES_HEADING, red_section(*red) + ISSUES_HEADING, 1)
         impl = self._claude("implement", self._first_implementer(), brief)
-        pr = PR_URL.search(impl.text)
-        if impl.failed or not pr:
+        found = OwnPr()
+        if not impl.failed:
+            found = worktree_own_pr(
+                impl.text, self.worktree, self.target.repo, self.run
+            )
+        # A text naming only another PR is the #6551 defect: end here naming both.
+        report = needs_input_report(found.problem) if found.problem else impl.report
+        if impl.failed or not found.url:
             # Saved whether or not the batch is red-green: a batch that never reached a PR is
             # the failure rate the records exist to measure (#3940).
-            self.record.outcome = outcome(impl.report, has_pr=False)
+            self.record.outcome = outcome(report, has_pr=False)
             self._save()
-            return impl.report
-        self.record.pr = pr.group(0)
+            return report
+        self.record.pr = found.url
         self.session = str(impl.report.get("session_id") or "")
         base = self._git("merge-base", "HEAD", self.target.base)
         head = self.record.head = self._git("rev-parse", "HEAD")
