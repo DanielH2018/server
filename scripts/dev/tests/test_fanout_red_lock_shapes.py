@@ -137,3 +137,41 @@ def test_deleting_a_conftest_constant_that_reads_an_import_is_flagged():
     assert problem == (
         "deletes `assign at line 3`, which reads `sep`, which no constant above it binds"
     )
+
+
+# #5520: the fix appended a table of lambdas that only its own appended test reads.
+LAMBDA_TABLE = '_TABLE = {"a": (1, lambda x: x), "b": ([2], lambda x: judge(x))}'
+
+
+def _with_table(statement):
+    return (
+        f"{RENDERER_RED}\n\n{statement}\n\n\n"
+        "def test_table():\n    assert all(f(v) for v, f in _TABLE.values())\n"
+    )
+
+
+def test_an_appended_lambda_table_no_red_test_reads_is_clean():
+    assert _renderer_change(_with_table(LAMBDA_TABLE)) == ""
+
+
+@pytest.mark.parametrize(
+    ("statement", "reason"),
+    [
+        ('RENDERER_ONLY = {"a": lambda x: x}', "rebinds `RENDERER_ONLY`"),
+        ('judge = {"a": lambda x: x}', "rebinds `judge`"),
+        ('_TABLE = {"a": lambda x=judge([]): x}', "is not allowed"),
+        ('_TABLE = {"a": judge([])}', "is not allowed"),
+        ('_TABLE = {**RENDERER_ONLY, "a": lambda x: x}', "is not allowed"),
+        ('_TABLE = {"a": lambda x: x}["a"]', "is not allowed"),
+    ],
+    ids=[
+        "a-name-a-red-test-reads",
+        "a-locked-helper",
+        "default",
+        "call",
+        "star",
+        "subscript",
+    ],
+)
+def test_an_appended_table_that_rebinds_or_runs_code_is_flagged(statement, reason):
+    assert reason in _renderer_change(_with_table(statement))
