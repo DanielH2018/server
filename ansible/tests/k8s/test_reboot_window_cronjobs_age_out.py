@@ -5,8 +5,9 @@ whose pod reads `Unknown` until `failedJobsHistoryLimit` more runs fail. The 202
 left `crowdsec-home-ips-29881895` Failed for 15 hours (#6367). So every rendered CronJob with a
 run in flight at the shutdown minute sets `ttlSecondsAfterFinished`, at most `TTL_BUDGET`.
 Which CronJobs those are is derived from the `weekly_reboot_*` group vars and each CronJob's
-schedule, time zone and `activeDeadlineSeconds`, so a moved reboot or a new frequent CronJob
-reaches this test without an edit here.
+schedule, time zone and `activeDeadlineSeconds`, so a new frequent CronJob reaches this test
+without an edit here. A moved reboot fails `test_the_shutdown_is_the_one_the_issue_measured`
+first, which is the cue to re-read `KNOWN_IN_WINDOW`.
 
 Run: uv run pytest ansible/tests/k8s/test_reboot_window_cronjobs_age_out.py
 """
@@ -127,8 +128,9 @@ def test_the_shutdown_is_the_one_the_issue_measured() -> None:
 
 
 def test_the_derivation_finds_the_known_in_window_cronjobs() -> None:
+    shutdown = shutdown_time(host_context())
     found = {
-        doc["metadata"]["name"] for doc in _cronjobs() if in_flight_at(doc, SHUTDOWN)
+        doc["metadata"]["name"] for doc in _cronjobs() if in_flight_at(doc, shutdown)
     }
     assert found >= KNOWN_IN_WINDOW
 

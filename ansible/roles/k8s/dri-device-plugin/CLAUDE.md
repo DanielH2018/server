@@ -50,6 +50,12 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
   grants `list` and `delete` on every pod there: RBAC cannot name pods it has not seen.
   Lowering the GC threshold instead was rejected, because PodGC also deletes the Job pods
   whose logs the health readers read.
+- **A handback to Ansible must defer the reaper's documents first.** The role's Ansible path
+  arms its prune with `manifests_prune_namespace: kube-system`, and an armed apply refuses a
+  document in another namespace. The reaper's four objects sit in `homelab`, so a handback
+  lists `admission-reaper-cronjob.yaml` and `admission-reaper-rbac.yaml` in
+  `manifests_deferred_files`, as netpol-baseline does. Flux applies a role's documents in the
+  namespaces they name, so the Flux render needs neither.
 
 ## Editing
 - Manifests: `templates/daemonset.yaml.j2`, and the reaper's
