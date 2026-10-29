@@ -10,7 +10,7 @@ the hook payload on stdin and prints the decision: `uv run --no-sync python
 WHY. A fan-out batch's local full-suite run was its largest memory spike. Measured on
 daniel-box on 2026-10-18, the whole suite held 2.3 GiB of anon memory for about six minutes at
 the four xdist workers a Claude session allows. The brief's guard set held 0.8 GiB for 52s.
-The spike is what sizes each batch's 2.5 GiB reservation, and the reservation is what limits
+The spike is what sizes each batch's 2 GiB reservation, and the reservation is what limits
 how many batches a host fits. In the week to 2026-10-18, 89 of 222 batches ran the whole suite
 locally, 143 times in all. CI runs the whole suite on every PR, and the review pipeline waits
 on it and resumes the agent with the failing checks when it is red, so a local run repeats the

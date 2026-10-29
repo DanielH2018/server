@@ -21,8 +21,8 @@ def _reply(cap_gib: int) -> str:
 
 
 ROOMY = _reply(12)
-# Under one 2.5 GiB reservation, so placement has no headroom here.
-TIGHT = _reply(2)
+# Under one 2 GiB reservation, so placement has no headroom here.
+TIGHT = _reply(1)
 # Room for one reservation, but less than ROOMY, so unpinned placement prefers the other host.
 SMALLER = _reply(6)
 
