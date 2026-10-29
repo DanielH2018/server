@@ -116,7 +116,7 @@ re-test rather than at merge time (#6309). The `DECIDED:` marker on `PACE_MASTER
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 - A PR armed by hand with `gh pr merge --auto` merges without this check.
 
-**A head whose only CI skipped as a draft ends the wait once the PR is ready.** `ci.yml` runs
+**A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`
 reads the head as pending. GitHub may start no run on a ready flip made seconds after the push.
 PR #6069 was marked ready at 01:39:31 on 2026-10-24, its head's only run was created at
@@ -125,10 +125,16 @@ cancelled, so `ci.yml`'s concurrency group did not cause it.
 
 - The merge wait prints the cause on the first poll that reads such a head.
 - Once the head has stayed so for `DRAFT_SKIPPED_GRACE_S` (180s), the wait reads the PR's
-  draft state. A ready PR ends at `merge-timeout`, whose message names the remedy. A PR still
-  a draft keeps waiting, because marking it ready starts its run.
-- A re-run of the skipped run replays its draft event and skips again. The remedy is
-  `gh pr ready --undo <n>`, then `gh pr ready <n>`, or a push.
+  draft state. A PR still a draft keeps waiting, because marking it ready starts its run.
+- A ready PR is converted to draft and back by the landing itself (`gh pr ready --undo <n>`,
+  then `gh pr ready <n>`), once per head, and the grace starts again. The landing prints a
+  line saying it did, and the toggled run's verdict then arrives inside the existing
+  `merge_timeout` budget (#6546). A re-run of the skipped run would replay its draft event and
+  skip again, which is why the landing toggles instead.
+- A second draft-skip on the same head after the toggle ends at `merge-timeout`, whose message
+  says the toggle already ran. A toggle that fails also ends there, and names a PR left as a
+  draft, because a draft PR never merges. The remedy is then a push, or the same two commands
+  by hand.
 
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge

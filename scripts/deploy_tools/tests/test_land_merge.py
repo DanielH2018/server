@@ -367,3 +367,83 @@ def test_a_head_ci_skipped_as_a_draft_ends_the_wait_once_the_pr_is_ready(
     assert ("gh pr ready --undo 999" in exc.value.error) is ends_early
     assert ("still OPEN after" in exc.value.error) is not ends_early
     assert capsys.readouterr().out.count(merge.await_ci.DRAFT_SKIPPED) == 1
+
+
+def _ready_toggles(calls):
+    return [c[1] for c in calls if c[0] == "gh" and c[1][:2] == ("pr", "ready")]
+
+
+def test_a_ready_pr_whose_head_skipped_as_a_draft_is_converted_once_and_the_wait_goes_on(
+    landing, capsys
+):
+    """#6546: GitHub starts no run on the ready flip, so the landing converts the PR to draft
+    and back itself. The second poll after the toggle reads a run, so the wait proceeds to the
+    merge instead of ending merge-timeout."""
+    skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
+    grace = merge.DRAFT_SKIPPED_GRACE_S
+    # One skipped poll per third of the grace, then the run the toggle started goes green.
+    polls = [(75, skipped)] * 4 + [(0, "dead1234: green")]
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,mergeable,headRefOid": _wait(
+                    ["OPEN MERGEABLE dead"] * 5 + ["MERGED MERGEABLE dead"]
+                ),
+                "isDraft": {"isDraft": False},
+            },
+            await_ci=polls,
+        ),
+        merge_timeout=grace * 3,
+        merge_poll=grace // 3,
+    )
+    merge.await_merge(ln)
+    assert _ready_toggles(calls) == [
+        ("pr", "ready", "--undo", "999"),
+        ("pr", "ready", "999"),
+    ]
+    assert "converting it to draft and back" in capsys.readouterr().out
+
+
+def test_a_second_draft_skip_on_the_same_head_after_the_toggle_ends_merge_timeout(
+    landing,
+):
+    """No loop: the toggle is once per head, and the dead end after it says it already ran."""
+    skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
+    grace = merge.DRAFT_SKIPPED_GRACE_S
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"]),
+                "isDraft": {"isDraft": False},
+            },
+            await_ci=[(75, skipped)],
+        ),
+        merge_timeout=grace * 10,
+        merge_poll=grace // 3,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
+    assert len(_ready_toggles(calls)) == 2
+    assert "already converted it to draft and back" in exc.value.error
+
+
+def test_a_failed_conversion_ends_merge_timeout_and_names_a_draft_left_behind(landing):
+    skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
+    grace = merge.DRAFT_SKIPPED_GRACE_S
+    ln, _calls = landing(
+        Fakes(
+            gh_views={
+                "state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"]),
+                "isDraft": {"isDraft": False},
+            },
+            await_ci=[(75, skipped)],
+            gh_merge_rc=[0, 1],
+        ),
+        merge_timeout=grace * 10,
+        merge_poll=grace // 3,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
+    assert "left as a draft" in exc.value.error
