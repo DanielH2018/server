@@ -47,7 +47,7 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             # Named for the Service's targetPort.
-            - name: dockerhub-mirror
+            - name: dockerhub
               containerPort: {{ k8s_registry_dockerhub_mirror_port }}
               # Loopback only. Without hostIP this binds 0.0.0.0 and an unauthenticated
               # pull-through cache of every public Docker Hub image becomes open to the LAN.
