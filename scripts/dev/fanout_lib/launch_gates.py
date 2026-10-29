@@ -39,21 +39,25 @@ LOCAL_HOST = GITOPS_HOST
 # own ssh connection — before the run risks the 6th.
 MAX_BATCHES_PER_REMOTE_HOST = 3
 # The memory cap, which is a DIFFERENT constraint that happens to share the number. An agent
-# reserves RESERVATION_BYTES (2.5 GiB) against a login plane capped at 10 to 17 GiB
+# reserves RESERVATION_BYTES (2 GiB) against a login plane capped at 10 to 17 GiB
 # (`claude_code_rc_memory_high`), which also holds the operator's own sessions. Unlike the ssh
 # budget above, this one stacks ACROSS runs: a second launch minutes after the first measures
 # a memory.current the first run's agents have not yet grown into, so headroom alone underprices
 # them. Counted from the run manifests, which cost no ssh to read, less the batches whose
 # unit has stopped (`still_running`).
 MAX_LIVE_BATCHES_PER_HOST = 3
-# DECIDED: daniel-server holds a 4th live batch (#5667, 2026-10-18). Its 7 batches
-# measured since #5665 peaked at 2473 MiB of anon each and 4.3 GiB in total across
-# three, against an 18G fleet cap, a 17G login-plane cap and 26 GiB available, so four
-# at the observed peak come to about 9.9 GiB. Three batches reached 5.8 of 8 cores at
-# p95, and k8s workloads hold 3.1x the fleet slice's CPU weight (313 against 100), so a
-# 4th batch yields to them under contention. daniel-box stays at 3: its fleet cap is 14G
-# and the fleet slice peaked at 13.95 GiB in the week to 2026-10-18. #5667's check-in on
-# 2026-10-26 re-reads both with a week of data.
+# DECIDED: daniel-server holds a 4th live batch (#5667, 2026-10-18), and the 2026-10-29
+# re-read of a week of data keeps it there. With 4 batches live, which was 26% of the time
+# any batch ran, its fleet slice peaked at 15.5 GiB of 18G, memory PSI stalled 0.6 us/s
+# (1 us/s before the 4th), and the node ran above 90% CPU 0.05% of the week (1-2% before).
+# The batches summed to at most 3.35 GiB of anon, so memory does not bind; CPU does: the
+# fleet's p95 draw with 4 live was 6.0 of 8 cores and its peak 7.05, so a 5th batch is not
+# supported. k8s workloads hold 3.1x the fleet slice's CPU weight (313 against 100), so a
+# 4th batch yields to them under contention. daniel-box stays at 3: its fleet slice sat at
+# its 14G cap again, with 96,855 MemoryHigh events in the week (436 before) and PSI of
+# 116-140 us/s (20 before), though the CPU (2.6 of 16 cores at p95) and anon (2.2 GiB at 3
+# batches) would fit a 4th. Raise it only if a week shows the cap refusing launches while
+# that PSI and event count fall.
 LIVE_BATCH_CAP_BY_HOST = {"daniel-server": 4}
 
 
@@ -155,7 +159,7 @@ def over_live_batch_cap(
 
     `over_ssh_budget` above counts only THIS run, which is right for an ssh rate limit that
     refills in 30 seconds. Memory does not refill: a batch launched five minutes ago still
-    holds its 2.5 GiB reservation, and `placement.headroom` cannot see the part of that
+    holds its 2 GiB reservation, and `placement.headroom` cannot see the part of that
     reservation the agent has not yet grown into. So this counts the batches every manifest
     shows uncleaned — no `removed_at` — that `still_running` finds running, and adds this
     run's placements to them.

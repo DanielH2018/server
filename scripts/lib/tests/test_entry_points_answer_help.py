@@ -216,6 +216,28 @@ def test_an_entry_point_answers_help_before_its_work(name, capsys):
     assert capsys.readouterr().out == (module.__doc__ or "").strip() + "\n"
 
 
+# These five defaulted `argv` to None, which `wants_help` reads as the HOST process's
+# `sys.argv[1:]`. An in-process `main()` under a runner started with `--help` then answered
+# help and exited 0 without running its check (#5638).
+HOST_ARGV_DEFAULTERS = (
+    "validate.grafana_dashboard_uids",
+    "validate.jinja_bash_collisions",
+    "home_assistant.validate_ha_config",
+    "secrets_mgmt.secret_bearing_host_paths",
+    "dev.k8s_autodeploy_counts",
+)
+
+
+@pytest.mark.parametrize("name", HOST_ARGV_DEFAULTERS)
+def test_an_in_process_main_ignores_the_host_processes_help_flag(
+    name, monkeypatch, capsys
+):
+    module = importlib.import_module(name)
+    monkeypatch.setattr(sys, "argv", ["runner", "--help"])
+    module.main()  # a SystemExit here is the help answer, which is the defect
+    assert capsys.readouterr().out != (module.__doc__ or "").strip() + "\n"
+
+
 # -- cc-wait's repo probes: the one exit that is not 0 ------------------------------------
 
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
