@@ -360,8 +360,6 @@ loki_streams:
     job: authlog
   k8s_audit:
     job: k8s-audit
-  host_k3s:
-    job: k3s
   pi_containers:
     job: pi
     machine: daniel-pi

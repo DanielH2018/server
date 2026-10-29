@@ -1,5 +1,5 @@
 {
-  "checksum": "8012e5df937a49df5462bc13da7ac90230558e4c2d9959ecb192cd5716bb2829",
+  "checksum": "2a9c02ea9bbef4b2cf4598156af67797c93e9ec0010042d9d34e6f5fa3b8c97a",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/loki-homelab/CLAUDE.md#Notable",
   "row": {
@@ -7,10 +7,9 @@
       "ansible/tests/k8s/test_alloy_labels_host_program.py": "dc2a76374f7ac5b1d4808bb6b0418dfcd09c29eb09aa862520e5765d45eb7c3f",
       "ansible/tests/k8s/test_alloy_redacts_arr_apikey.py": "50fa4cbb9b8549d1536e772f8ba79d7d99789035e4ab69f764a276bc1024a134",
       "ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py": "ac618e2ca3126c8d761518b02828ed9276559872a5cfbcb4a098d54850500e53",
-      "ansible/tests/k8s/test_alloy_ships_k3s_log.py": "c37ed160e604f456291e0dc3bcda1467189a981f520046c05da13da8bd2ad7a0",
       "ansible/tests/services/test_loki_stream_labels.py": "51ff4081ca2a5406c15b209f6f6e20cbfa6d3920b1716dd732322e5f642acda3"
     },
     "python": "3.14",
-    "verified_sha": "cb6baef2f"
+    "verified_sha": "9d269008b"
   }
 }
