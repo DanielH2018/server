@@ -647,6 +647,7 @@
  "ansible/tests/services/test_homepage_tiles_filter.py": 0.02,
  "ansible/tests/services/test_homepage_widget_urls_carry_no_credentials.py": 0.0,
  "ansible/tests/services/test_host_check_rule_literals.py": 0.37,
+ "ansible/tests/services/test_host_job_series_have_a_board.py": 0.01,
  "ansible/tests/services/test_host_plane_rule_literals.py": 0.0,
  "ansible/tests/services/test_ical_proxy_pins_match_uv_lock.py": 0.0,
  "ansible/tests/services/test_initial_setup_check_rule_literals.py": 0.11,
