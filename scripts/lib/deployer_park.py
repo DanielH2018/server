@@ -81,7 +81,7 @@ from gitops_markers import (
     maximal_apply_warning,
     owed_clear_cmd,
     server_tags,
-    target_arg,
+    on_hosts,
 )
 from gitops_ledger import (
     OWED_K8S_DEFERRED,
@@ -252,8 +252,10 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
         apply = (
             ""
             if hand or not server
-            else f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}"
-            f"{target_arg(e.host)}"
+            else on_hosts(
+                f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}",
+                e.apply_hosts(),
+            )
         )
         remedies.append(
             ManualPlaneRemedy(

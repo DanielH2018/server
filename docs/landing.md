@@ -751,7 +751,10 @@ Four things sit in that position:
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger. Run the
 printed apply and clear commands as printed, including any `--applied <tags>`. A bring-up
 playbook gets no such line, because the tick parks on those and writes no marker. A landing
-behind a recorded role reads `settled`, because the tree converged. The clear, `--applied` and
+behind a recorded role reads `settled`, because the tree converged. A role the tick DID apply
+on daniel-box gets a line too when its change reaches another host (#6510): the line's `hosts`
+key names the hosts the "also reaches" note names, and the banner and monitor-bridge print the
+apply for each. Apply it there, then `clear-owed manual_plane <role>`. The clear, `--applied` and
 the six-hour page are in
 [A role only a hand can apply is recorded, not parked](gitops-pipeline.md#a-role-only-a-hand-can-apply-is-recorded-not-parked).
 

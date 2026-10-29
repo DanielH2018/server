@@ -29,8 +29,8 @@ from gitops_markers import (
     agent_pin_cmds,
     PLAYBOOK_CMD,
     owed_clear_cmd,
+    on_hosts,
     server_tags,
-    target_arg,
 )
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
@@ -179,7 +179,9 @@ def broad_remediation(
 
 
 def manual_plane_remediation(
-    setup_roles: set[str], narrow_tags: dict[str, frozenset[str]] | None = None
+    setup_roles: set[str],
+    narrow_tags: dict[str, frozenset[str]] | None = None,
+    hosts: dict[str, tuple[str, ...]] | None = None,
 ) -> str:
     """The commands that clear a `manual_plane` marker: apply each role, then clear its line.
 
@@ -196,9 +198,12 @@ def manual_plane_remediation(
     role's whole line, and a second range can widen the row between this text being printed
     and the operator running it — so the bare form would clear a tag nobody applied. A role
     set prints one clear per role; `manual_plane_clear_for` says why.
+
+    `hosts` maps a role tag to the `hosts` key of its ledger line: the hosts the tick's own run
+    did not reach (#6510).
     """
     return (
-        " and ".join(_setup_commands(setup_roles, narrow_tags))
+        " and ".join(_setup_commands(setup_roles, narrow_tags, hosts=hosts))
         + f", then `{manual_plane_clear_for(setup_roles, narrow_tags)}`"
     )
 
@@ -311,6 +316,7 @@ def _setup_commands(
     setup_roles: set[str] | None,
     narrow_tags: dict[str, frozenset[str]] | None = None,
     playbooks: Iterable[str] = (),
+    hosts: dict[str, tuple[str, ...]] | None = None,
 ) -> list[str]:
     """One command per setup role, or the generic placeholder when no roles are known.
 
@@ -324,6 +330,8 @@ def _setup_commands(
             `--tags k3s` with its maximal-tag warning. Any other is named as a whole run:
             `bootstrap.yml` and `initial_setup.yml` have no single role a playbook-level edit
             maps to.
+        hosts: role tag -> the hosts its command runs against, where those are not the
+            host the routing gates it onto. A role absent from it takes the routing's host.
 
     A role in `_MAXIMAL_ROLE_TAGS` gets its command annotated with what that command does, so
     every surface quoting this composer — land.sh's `needs-manual-apply` note, the deployer's
@@ -353,12 +361,15 @@ def _setup_commands(
         if playbook is None:
             cmds.append(_consumers_command(role))
             continue
-        cmds.append(_role_command(role, playbook, narrow_tags))
+        cmds.append(_role_command(role, playbook, narrow_tags, hosts or {}))
     return cmds
 
 
 def _role_command(
-    role: str, playbook: str, narrow_tags: dict[str, frozenset[str]]
+    role: str,
+    playbook: str,
+    narrow_tags: dict[str, frozenset[str]],
+    hosts: dict[str, tuple[str, ...]],
 ) -> str:
     """The commands that apply a routed setup role, with its maximal-tag warning.
 
@@ -371,8 +382,10 @@ def _role_command(
     narrowed = _narrowed_tags(role, narrow_tags)
     selected = narrowed or {role_tag}
     server = server_tags(role, selected)
-    target = target_arg(setup_role_host(role))
-    cmd = f"`{PLAYBOOK_CMD} {playbook} --tags {','.join(sorted(server))}{target}`"
+    gated = setup_role_host(role)
+    targets = hosts.get(role_tag) or ((gated,) if gated else ())
+    apply = f"{PLAYBOOK_CMD} {playbook} --tags {','.join(sorted(server))}"
+    cmd = f"`{on_hosts(apply, targets)}`"
     if not narrowed:
         warning = maximal_tag_warning(role)
     elif server & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
@@ -413,7 +426,7 @@ def _consumers_command(role: str) -> str:
         if playbook is None:
             cmds.append(f"`{consumer}` (not routed to a playbook)")
         else:
-            cmds.append(_role_command(consumer, playbook, {}))
+            cmds.append(_role_command(consumer, playbook, {}, {}))
     each = (
         f"apply each consumer ({', '.join(cmds)})"
         if cmds

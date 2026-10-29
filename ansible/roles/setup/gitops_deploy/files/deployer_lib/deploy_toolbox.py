@@ -214,6 +214,11 @@ class DeployTools:
     secret_k8s_readers: Callable[[str, str, str], tuple[int, str]] = (
         deploy_setup_roles.secret_k8s_readers
     )
+    # The hosts beyond this one a setup-role change the tick applies still reaches (#6510): a
+    # subprocess that parses YAML, and a field so a tick test scripts the answer.
+    setup_reach_hosts: Callable[[str, str, str, str], dict[str, tuple[str, ...]]] = (
+        deploy_setup_roles.setup_reach_hosts
+    )
     # `(services, sha, result="ok", duration_s=None)`; see `deploy_io.emit_deploy_annotation`.
     emit_deploy_annotation: Callable[..., None] = deploy_io.emit_deploy_annotation
     # `datetime.now`, NOT a zero-argument clock: `deploy_handlers.handle_dirty` calls it with

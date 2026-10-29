@@ -26,6 +26,11 @@ role, so the direct scan alone finds no consumer. `SETUP_FILES_ROUTED_TO_OWNER` 
 exclusion, and its `DECIDED:` marker in `deploy_cross_role` says why `resolv.conf.j2` records
 `common` instead.
 
+A repo file a setup task copies from the checkout by a literal `src: "{{ playbook_dir
+}}/../<path>"` is a row too (#6411). It sits under no role, so without one the deployer maps
+it to nothing. `checkout_files` finds it; a copy in a `common/tasks/` file maps to that file's
+importers, since `common` is applied only through them.
+
 The k8s roles importing a setup file are a second table, `K8S_ROLES_IMPORTING_SETUP_FILES`
 (#3320). Their import spelling climbs one more level (`{{ role_path }}/../../setup/<owner>/`),
 and the deployer defer-and-alerts them rather than re-applying them.
@@ -98,6 +103,9 @@ KNOWN_EDGES = {
         "k3s",
         "render_records",
     },
+    # Copied from the checkout by a literal `src:`; the second through release_bin.yml.
+    "scripts/backup/etcd_restore_drill.sh": {"hypervisor"},
+    "scripts/deploy_tools/prune_releases.py": {"k3s"},
 }
 KNOWN_K8S_EDGES = {
     "hosts/lib/host_lib.py": {"configarr", "janitorr"},
@@ -255,11 +263,50 @@ def _tree_edges() -> dict[str, frozenset[str]]:
     found = with_rendered_templates(
         direct, lambda p: (ROLES.parent.parent / p).read_text(), _templates_of
     )
+    for path, roles in checkout_files(_setup_task_files(), direct).items():
+        found[path] = found.get(path, frozenset()) | roles
     return {p: r for p, r in found.items() if p not in SETUP_FILES_ROUTED_TO_OWNER}
 
 
 def _setup_task_texts() -> dict[str, str]:
     return _task_texts("setup")
+
+
+# A task copying a repo file from the checkout by a literal path. A `{{ item }}` source names
+# no file, and a comment line never starts with `src:`, so neither matches.
+_CHECKOUT_SRC = re.compile(
+    r'^\s*src:\s*"\{\{ playbook_dir \}\}/\.\./([\w./-]+)"\s*$', re.M
+)
+
+
+def checkout_files(
+    task_files: dict[str, str], edges: dict[str, frozenset[str]]
+) -> dict[str, frozenset[str]]:
+    """Each repo file a setup task copies from the checkout, mapped to the roles that apply it.
+
+    A copy in a role's own task file is that role's. A copy in a `common/tasks/` file reaches a
+    host only through that file's importers, which `edges` holds (#6411).
+
+    Args:
+        task_files: a repo-relative task file path -> its text.
+        edges: the cross-role edges `cross_role_files` found.
+    """
+    out: dict[str, set[str]] = {}
+    for path, text in task_files.items():
+        role = path.split("/")[3]
+        appliers = edges.get(path, frozenset()) if role == "common" else {role}
+        for src in _CHECKOUT_SRC.findall(text):
+            out.setdefault(src, set()).update(appliers)
+    return {path: frozenset(roles) for path, roles in out.items()}
+
+
+def _setup_task_files() -> dict[str, str]:
+    repo = ROLES.parent.parent
+    return {
+        p.relative_to(repo).as_posix(): p.read_text()
+        for role_dir in role_dirs(ROLES / "setup")
+        for p in role_task_files(role_dir)
+    }
 
 
 def test_the_deployers_table_equals_the_trees_cross_role_files():
@@ -394,3 +441,25 @@ def test_a_role_shipping_a_shared_module_from_outside_the_setup_tree_is_flagged(
 def test_a_path_that_only_ends_like_a_shared_module_is_clean():
     prose = "see old_hosts/lib/host_lib.py and hosts/lib/homelab-reconcile\n"
     assert cross_role_files({"consumer": prose}) == {}
+
+
+def test_a_role_copying_a_checkout_file_is_flagged():
+    shared = "ansible/roles/setup/common/tasks/shared.yml"
+    copy = '    src: "{{ playbook_dir }}/../scripts/x/tool.sh"\n'
+    files = {
+        "ansible/roles/setup/owner/tasks/main.yml": copy,
+        shared: copy.replace("x/tool", "y/lib"),
+    }
+    assert checkout_files(files, {shared: frozenset({"importer"})}) == {
+        "scripts/x/tool.sh": frozenset({"owner"}),
+        "scripts/y/lib.sh": frozenset({"importer"}),
+    }
+
+
+def test_a_templated_or_commented_checkout_source_is_clean():
+    text = (
+        '    src: "{{ playbook_dir }}/../{{ item }}"\n'
+        '  # src: "{{ playbook_dir }}/../scripts/x/tool.sh"\n'
+        '    creates: "{{ playbook_dir }}/../.git/hooks/pre-commit"\n'
+    )
+    assert checkout_files({"ansible/roles/setup/owner/tasks/main.yml": text}, {}) == {}

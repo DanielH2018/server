@@ -404,18 +404,44 @@ def remaining_setup_hosts_note(
     `ref` is the merge commit: the checkout can predate it (`setup_role_chains.tree_at`), and
     a ref git cannot archive falls back to `repo`'s checkout and says so on stderr.
     """
+    return _remaining_note(
+        *_remaining_at(files, local_host, quiet, pr_range, ref, repo), local_host
+    )
+
+
+def remaining_setup_hosts(
+    files,
+    local_host: str,
+    quiet=(),
+    pr_range: str = "",
+    ref: str = "",
+    repo: Path = REPO,
+) -> dict[str, frozenset[str]]:
+    """Role -> the hosts beyond `local_host` a role the tick applied there still reaches.
+
+    The first half of `remaining_setup_hosts_note`, as data: the GitOps tick records each pair
+    in its `owed` ledger (#6510). A role reached only through a changed repo file is not in it,
+    because the tick crosses such a range without applying any setup role.
+    """
+    return _remaining_at(files, local_host, quiet, pr_range, ref, repo)[0]
+
+
+def _remaining_at(
+    files, local_host: str, quiet, pr_range: str, ref: str, repo: Path
+) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
+    """`_remaining_hosts` over `ref`'s `ansible/` tree, or `repo`'s checkout without one."""
     paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
     with tree_at(ref, repo) if ref else contextlib.nullcontext() as root:
         at = [(root or repo) / p.relative_to(REPO) for p in paths]
         # Which roles the tick applied is a question about the same tree, and about the tick's
         # host (`has_gitops`), not the host this landing runs on.
         with setup_routing.routed_by(root or repo):
-            return _remaining_note(
+            return _remaining_hosts(
                 files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
             )
 
 
-def _remaining_note(
+def _remaining_hosts(
     files,
     local_host: str,
     quiet=(),
@@ -425,8 +451,12 @@ def _remaining_note(
     roles_dir: Path = _SETUP_ROLES_DIR,
     pr_range: str = "",
     repo: Path = REPO,
-) -> str:
-    """What a self-applied setup-role change still needs beyond `local_host`, or "" if nothing does.
+) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
+    """What a self-applied setup-role change still needs beyond `local_host`.
+
+    Returns:
+        (remaining, unapplied): role -> hosts for a role the tick applied on `local_host`
+        that reaches others, and for a role reached only through a changed repo file.
 
     `local_host` is the host the tick just ran on. Additive to `plane_note`'s `unroutable`
     case, not a duplicate of it: that flags a role no playbook ever reaches; this flags a
@@ -523,6 +553,15 @@ def _remaining_note(
         )
         if hosts:
             unapplied[role] = hosts
+    return remaining, unapplied
+
+
+def _remaining_note(
+    remaining: dict[str, frozenset[str]],
+    unapplied: dict[str, frozenset[str]],
+    local_host: str,
+) -> str:
+    """The landing's line naming each host `_remaining_hosts` found, or "" if none."""
     if not (remaining or unapplied):
         return ""
     return "; ".join(

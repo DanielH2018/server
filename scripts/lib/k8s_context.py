@@ -38,7 +38,7 @@ __all__ = [
 # DECIDED: lazy, not registered with `register_ansible_filters` at the top of this module. The
 # heavy tier imports ansible-core, and this module stays light for `probe.py monitors` (the
 # `DECIDED:` marker in `resolve_vars` below gives the measurement). A wrapper here costs nothing
-# until a default calls the filter, and then the call builds the heavy filter table once.
+# until a default calls the filter, and then the call builds the heavy environment once.
 _DEFAULTS_PLUGIN_FILTERS = (
     "tier_backup_claims",
     "longhorn_weekly_claims",
@@ -47,20 +47,32 @@ _DEFAULTS_PLUGIN_FILTERS = (
     "dirname",
 )
 
+# The heavy-tier tests a role's DEFAULTS call, wrapped the same lazy way. netpol-baseline's
+# `netpol_baseline_traefik_https_sources` drops the IPv6 half of `cloudflare_ips` with
+# `reject('search', ':')` (#6495).
+_DEFAULTS_PLUGIN_TESTS = ("search",)
+
 
 @functools.cache
-def _heavy_filters() -> dict:
-    """The filter table `register_ansible_filters` builds, imported on first use."""
+def _heavy_env():
+    """The environment `register_ansible_filters` builds, imported on first use."""
     from jinja2 import Environment
 
     from lib.ansible_jinja_env import register_ansible_filters
 
-    return register_ansible_filters(Environment()).filters
+    return register_ansible_filters(Environment())
 
 
 def _lazy_plugin_filter(name: str):
     def call(*args, **kwargs):
-        return _heavy_filters()[name](*args, **kwargs)
+        return _heavy_env().filters[name](*args, **kwargs)
+
+    return call
+
+
+def _lazy_plugin_test(name: str):
+    def call(*args, **kwargs):
+        return _heavy_env().tests[name](*args, **kwargs)
 
     return call
 
@@ -111,6 +123,8 @@ def resolve_vars(
     env.filters["bool"] = ansible_bool
     for name in _DEFAULTS_PLUGIN_FILTERS:
         env.filters[name] = _lazy_plugin_filter(name)
+    for name in _DEFAULTS_PLUGIN_TESTS:
+        env.tests[name] = _lazy_plugin_test(name)
 
     def expand(node, ctx):
         """Recursively render every `{{ ... }}` string in `node`, not just a top-level one.
