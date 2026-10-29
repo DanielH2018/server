@@ -70,6 +70,7 @@ Run: uv run python scripts/deploy_tools/promote.py verify <sha> --bundle-dir <di
 """
 
 import argparse
+import functools
 import json
 import re
 import sys
@@ -92,7 +93,7 @@ from lib.cli_help import error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 
 import forge
-from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG
+from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG, SUPERSEDING_TAG
 from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
@@ -595,7 +596,7 @@ def wait_settled(
     Each poll re-reads the hold, so a `failed=` hold that a `settle` writes ends the wait. A
     `prod` that names the `held` tag's digest ends it too: a hold without a reset settled it.
     A read of the hold or a digest that fails with a 5xx is retried (`_read`) before it ends
-    the run.
+    the run, and so is the `superseding` digest read that `supersedable` makes.
 
     Args:
         hold: DEPLOY_HOLD's value, or None when the variable is missing.
@@ -607,8 +608,8 @@ def wait_settled(
             it answers True under a `none` hold, the wait ends at once with `in_flight`.
 
     Raises:
-        Whatever `hold` and `digest` raise, other than a 5xx they recover from within
-        READ_ATTEMPTS reads.
+        Whatever `hold`, `digest` and `supersedable` raise, other than a 5xx they recover
+        from within READ_ATTEMPTS reads.
     """
     started = clock()
     while True:
@@ -627,7 +628,11 @@ def wait_settled(
             return Settled(None, held, prod, last_good, value)
         if _read(lambda: digest(HELD_TAG), HELD_TAG, sleep) == prod:
             return Settled(None, held, prod, last_good, value)
-        if supersedable is not None and value == "none" and supersedable(prod):
+        if (
+            supersedable is not None
+            and value == "none"
+            and _read(functools.partial(supersedable, prod), SUPERSEDING_TAG, sleep)
+        ):
             return Settled(None, held, prod, last_good, value, in_flight=True)
         waited = int(clock() - started)
         if waited >= IN_FLIGHT_WAIT_S:
