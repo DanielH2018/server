@@ -42,6 +42,8 @@ KNOWN_ALERTS = frozenset(
         "claude-land",
         "claude-memory-sync",
         "claude-rc",
+        # Instanced, and started by a session's StopFailure hook (#6021).
+        "claude-stop",
         "claude-triage",
         "claude-triage-poll",
         # Instanced, and started by the triage runner itself rather than OnFailure=.
@@ -111,9 +113,10 @@ def test_every_onfailure_alert_renders_from_the_shared_template() -> None:
         f"alerts no longer wired through alert_unit.yml: {sorted(missing)}"
     )
     texts = [p.read_text() for p in SETUP_ROLES.glob("*/templates/*.j2")]
-    assert KNOWN_ALERTS - {"fanout", "claude-triage-report"} <= onfailure_alerts(
-        texts
-    ), "the OnFailure= scan found too few"
+    instanced = {"fanout", "claude-stop", "claude-triage-report"}
+    assert KNOWN_ALERTS - instanced <= onfailure_alerts(texts), (
+        "the OnFailure= scan found too few"
+    )
     unwired = unwired_alerts(texts, set(wired))
     assert not unwired, (
         f"OnFailure= names {sorted(unwired)}-alert.service, but no import of "
