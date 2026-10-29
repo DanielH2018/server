@@ -181,6 +181,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     and pairs names with declarations through ``zip``. ``combine`` is ansible-core's too:
     observability's ``manifests_self_rollouts`` adds each workload's namespace with it, and
     ``homelab-render`` evaluates that list to stamp ``checksum/restart`` on those workloads.
+    ``basename`` and ``dirname`` are ansible-core's for the setup-role task expressions
+    ``probe.py applied`` reads: claude_code's slice-cap prune gates on a ``basename``, and its
+    homelab-ui and memory-store directories are a ``dirname`` (#6407, #6409).
 
     Args:
         env: The environment to register on, modified in place.
@@ -222,6 +225,9 @@ def register_ansible_filters(env: Environment) -> Environment:
             to_uuid,
         )
         from ansible.plugins.test.core import search
+
+        # Not module-level names: ansible-core builds them in its FilterModule.
+        from ansible.plugins.filter.core import FilterModule as CoreFilters
 
     env.filters["b64encode"] = b64encode
     env.filters["bool"] = to_bool
@@ -282,6 +288,9 @@ def register_ansible_filters(env: Environment) -> Environment:
         "longhorn_nobackup_claims",
     ):
         env.filters[name] = longhorn_filters[name]
+    core_filters = CoreFilters().filters()
+    for name in ("basename", "dirname"):
+        env.filters[name] = core_filters[name]
     env.tests["search"] = search
     return env
 

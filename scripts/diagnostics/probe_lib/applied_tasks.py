@@ -293,7 +293,9 @@ class _Walk:
         """The items a task loops over, `[None]` when it does not loop, None when unknown.
 
         A literal list is read as written. A loop written as a bare `{{ name }}` whose name
-        the context holds as a list is read from the context; any other is unknown.
+        the context holds as a list is read from the context; any other is unknown. Each
+        item's Jinja is rendered, as Ansible templates the loop before it binds `item`, so
+        `path: "{{ item.path }}"` over `{path: "{{ home }}/.ssh"}` reaches a literal (#6409).
         """
         loop = next((task[k] for k in _LOOPS if k in task), None)
         if loop is None:
@@ -301,8 +303,21 @@ class _Walk:
         if isinstance(loop, str) and (m := _BARE_NAME.match(loop.strip())):
             loop = self.ctx.get(m.group(1))
         if isinstance(loop, list) and all(isinstance(i, (str, dict)) for i in loop):
-            return loop
+            return [self.render_item(i) for i in loop]
         return None
+
+    def render_item(self, value):
+        """`value` with each string in it rendered; one that does not render stays as written.
+
+        A string left as written still holds Jinja, so the field render that reads it skips
+        the task with its usual reason.
+        """
+        if isinstance(value, dict):
+            return {k: self.render_item(v) for k, v in value.items()}
+        if isinstance(value, str):
+            rendered = self.render(value)
+            return value if rendered is None else rendered
+        return value
 
     def follow(self, task: dict, target: str, whens: list) -> None:
         """Walk an imported task file with the import's `vars:` on top, or record a skip.

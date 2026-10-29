@@ -11,8 +11,13 @@
 # apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits and login hardening.
 # initial_setup skips each on this host through `initial_setup_packaged_hosts`. No file needs a
 # credential. The rsyslog info filter stays an Ansible task gated on has_rsyslog.
+#
+# #6413 adds `k3s-gates` alone: the k3s-agent Plan's `prepare` runs /usr/lib/homelab/k3s_gates.py
+# from the host's root (H6.3d). The windowed restart, `k3s-restart`, stays off this package until
+# H6 *Open questions* 7 and H6.5a decide it, so daniel-server's k3s config changes stay a hand
+# apply through the `k3s_agent` join play.
 description: daniel-server's homelab host package
-components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning]
+components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates]
 credentials:
   - ups_secondary_daniel_server_push_token
 maintainer_scripts: [preinst, postinst, prerm]

@@ -85,7 +85,8 @@ tag lists every Kustomization. It exits 1 when a printed row is not Ready for an
 Ready at a commit other than its source's, and when a named tag has no Kustomization. A row
 that Flux is still reconciling, or that waits on a dependency (reason `Progressing`,
 `ProgressingWithRetry` or `DependencyNotReady`), prints under `PENDING` and does not fail the
-probe. A failed read exits 75.
+probe. A `DependencyNotReady` row whose dependency failed is the exception: it fails the probe,
+and `cc-wait flux` reads it as failed. A failed read exits 75.
 
 To wait for Flux to apply a commit, run `cc-wait flux <name> [--revision SHA]`. It exits 0 when
 the Kustomization is Ready at that commit, 1 when it failed there and 3 when it is suspended.

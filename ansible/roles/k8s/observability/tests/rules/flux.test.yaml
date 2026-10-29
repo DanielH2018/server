@@ -340,6 +340,7 @@ tests:
                 Flux applies nothing it owns. If its role sets flux_suspend, land the PR that
                 removes it; otherwise the suspend was made by hand, and its resume is in
                 docs/flux-deploy-plane.md.
+              runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/
 
   # Resumed: suspended for 23h56m, then resumed, which drops the `suspended` label. The 10m
   # window still holds the suspended series at 24h, so only the `unless` on the resumed
@@ -427,11 +428,11 @@ tests:
             exp_annotations:
               summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
               description: >-
-                All 4 of kustomize-controller-5d94ff85cc-bfhww's reconcile workers have been
-                busy for 30 minutes with Kustomizations still queued, so a changed
-                Kustomization waits for a free worker. Unhealthy Kustomizations that each hold
-                a worker for their timeout are the usual cause. List them with kubectl get
-                kustomizations -A; suspending one frees its worker once its current wait ends.
+                All 4 of kustomize-controller-5d94ff85cc-bfhww's reconcile workers have been busy
+                for 30 minutes with Kustomizations still queued, so a changed Kustomization waits
+                for a free worker. Unhealthy Kustomizations that each hold a worker for their
+                timeout are the usual cause. List them with `kubectl get kustomizations -A`;
+                suspending one frees its worker once its current wait ends.
 
   # One worker below the maximum, with the queue still full, never fires.
   - interval: 1m
@@ -491,8 +492,8 @@ tests:
             exp_annotations:
               summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
               description: >-
-                All 5 of kustomize-controller-5d94ff85cc-bfhww's reconcile workers have been
-                busy for 30 minutes with Kustomizations still queued, so a changed
-                Kustomization waits for a free worker. Unhealthy Kustomizations that each hold
-                a worker for their timeout are the usual cause. List them with kubectl get
-                kustomizations -A; suspending one frees its worker once its current wait ends.
+                All 5 of kustomize-controller-5d94ff85cc-bfhww's reconcile workers have been busy
+                for 30 minutes with Kustomizations still queued, so a changed Kustomization waits
+                for a free worker. Unhealthy Kustomizations that each hold a worker for their
+                timeout are the usual cause. List them with `kubectl get kustomizations -A`;
+                suspending one frees its worker once its current wait ends.

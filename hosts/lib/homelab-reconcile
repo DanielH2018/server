@@ -8,7 +8,12 @@ hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The
 the four arms and the metrics file live in the reconcile_lib package beside it, which the same
 component ships; the reconcile-size census counts both against one line ceiling.
 
-Usage: homelab-reconcile        (no arguments; exit 0 when every step succeeded, 1 otherwise)
+Usage: homelab-reconcile        (exit 0 when every step succeeded, 1 otherwise)
+       homelab-reconcile --metrics   (rewrite the metrics file from the record; acts on nothing)
+
+`--metrics` is what `homelab-reconcile-metrics.service` runs at boot, so the file stops reading
+`homelab_host_reboot_pending 1` once the boot has cleared the flag (#6188). It takes no lock and
+writes no record. It drops each pending unit that has restarted since, as a full run would.
 
 It takes dpkg's frontend lock with a blocking lockf, so a start from a postinst waits until the
 whole apt transaction has finished. Under the lock it reads the manifest, its own state and both
@@ -57,6 +62,7 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "retired": ["<legacy entry as canonical JSON>", ...],
      "files": {"<packaged path>": "<sha256>"},     (activated files, by the hash that ran)
      "pending": {"<unit>": "<InvocationID>"},      (units owed a restart: the manual: actions)
+     "started": {"<unit>": <epoch>},               (when steps 2, 3 or 4b last called the unit)
      "drift": {"<arm>": <items the arm left alone>},
      "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
      "users": {"names": [...]}, "libvirt": {"networks": {...}, "nwfilters": {...}},  (likewise)
@@ -528,11 +534,15 @@ def secrets_ready(credentials: list[str], outputs: list[dict]) -> bool:
     )
 
 
-def bring_up(unit: str, verb: str, outputs: list[dict], queued: set[str]) -> bool:
+def bring_up(
+    unit: str, verb: str, outputs: list[dict], queued: set[str], started: dict
+) -> bool:
     """One `reset-failed` and one blocking `start` or `restart` of `unit`, behind the existence gate.
 
     A unit the gate skips, or whose call fails, joins pending.json, and the result is False.
-    A call that succeeds removes the unit from pending.json.
+    A call that succeeds removes the unit from pending.json. `started` records when the call
+    was made, whatever its result: a unit that writes a result of its own should have written
+    one after that time (#6342).
     """
     missing = missing_outputs(unit, outputs)
     if missing:
@@ -542,6 +552,7 @@ def bring_up(unit: str, verb: str, outputs: list[dict], queued: set[str]) -> boo
     systemctl(
         "reset-failed", unit
     )  # clears the start limit; harmless on a unit that is not failed
+    started[unit] = int(time.time())
     if systemctl(verb, unit).returncode != 0:
         say(f"{verb} {unit} failed")
         update_pending({unit}, set())
@@ -563,6 +574,12 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     links = set(manifest["enable_links"])
     units_state: dict = {}
     links_state = set(links)
+    raw_started = prev.get("started")
+    started = {
+        unit: when
+        for unit, when in (raw_started if isinstance(raw_started, dict) else {}).items()
+        if unit in units and isinstance(when, int)
+    }
     digest = manifest.get("secrets_inputs_sha256")
     manual = ALWAYS_MANUAL | ({SECRETS_UNIT} if digest else set())
     secrets = read_secrets_manifest() if digest else None
@@ -572,7 +589,9 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     try:
         if not RUN_DIR.is_dir():
             RUN_DIR.mkdir(parents=True, exist_ok=True)
-            RUN_DIR.chmod(0o755)  # whatever the umask; homelab-secrets corrects an older one
+            RUN_DIR.chmod(
+                0o755
+            )  # whatever the umask; homelab-secrets corrects an older one
     except OSError as exc:
         say(f"cannot create {RUN_DIR}: {exc}")
 
@@ -641,10 +660,12 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             continue
         if is_active(unit) or load_state(unit) == "masked":
             continue
-        ok = bring_up(unit, "start", outputs, queued) and ok
+        ok = bring_up(unit, "start", outputs, queued, started) and ok
 
     # Step 3: restart the set. A failed or skipped unit keeps its old hash, so it stays changed.
-    failed = {u for u in restart_set if not bring_up(u, "restart", outputs, queued)}
+    failed = {
+        u for u in restart_set if not bring_up(u, "restart", outputs, queued, started)
+    }
     ok = ok and not failed
 
     # Step 3b: the `activate:` action of each packaged file whose hash changed. A unit step 3
@@ -714,13 +735,18 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         ok = False
     for unit in sorted(handed):
         if not left_alone(unit, units, links, manual):
-            ok = bring_up(unit, "restart", outputs, queued) and ok
+            ok = bring_up(unit, "restart", outputs, queued, started) and ok
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest["reconcilers"]:
         say(f"the manifest lists reconciler {name!r}, which this version does not have")
         ok = False
-    ok = run_arms([name for name in ARMS if name not in EARLY], manifest, prev, arms, drift) and ok
+    ok = (
+        run_arms(
+            [name for name in ARMS if name not in EARLY], manifest, prev, arms, drift
+        )
+        and ok
+    )
     udev_ok, udev_state = udev.reconcile(prev.get("udev"))
     ok = ok and udev_ok
     if udev_state:
@@ -732,6 +758,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         "retired": sorted(retired),
         "files": files_state,
         "pending": pending,
+        "started": started,
         "drift": drift,
         **arms,
     }
@@ -786,8 +813,23 @@ def write_applied(state: dict) -> None:
     os.replace(tmp, APPLIED)
 
 
+def metrics(host: str) -> int:
+    """`--metrics`: rewrite the metrics file from the record, with the flag as it stands now."""
+    state = load_json(APPLIED)
+    try:
+        activations = parse_manifest(MANIFEST.read_text())["activations"]
+    except (OSError, ManifestError):
+        activations = None
+    if activations is not None and isinstance(state.get("pending"), dict):
+        state["pending"] = activate.refresh_pending(state["pending"], activations)
+    textfile.write(host, state)
+    return 0
+
+
 def main() -> int:
     host = run("hostname").stdout.strip()
+    if sys.argv[1:] == ["--metrics"]:
+        return metrics(host)
     packages = ["homelab-updater", f"homelab-{host}"]
     text, prev, installed = read_under_lock(packages)
     versions = {name: version for name, (_, version) in installed.items()}
@@ -799,6 +841,7 @@ def main() -> int:
         "secrets_inputs_sha256",
         "files",
         "pending",
+        "started",
         "drift",
         "libvirt",
         "udev",
