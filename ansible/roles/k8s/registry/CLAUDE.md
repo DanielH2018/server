@@ -139,7 +139,8 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     has the trade-off.
   - `registry-gc.sh` collects it in a second phase, after the ghcr-mirror serves again, so
     a run takes down one mirror at a time. A dockerhub-mirror a killed run left at zero stays
-    down through the next run's ghcr-mirror phase, until its own phase restores it. The phase is the ghcr-mirror's with its own names: the
+    down through the next run's ghcr-mirror phase. Its own phase restores it, or the run's exit
+    path does when the ghcr-mirror phase leaves its own stamp. The phase is the ghcr-mirror's with its own names: the
     `registry-gc-dockerhub-mirror` Job from
     `ansible/roles/setup/k8s_host_files/templates/dockerhub-mirror-gc-job.yaml.j2`, the
     `registry-gc-dockerhub-mirror-keep` ConfigMap, the stamp

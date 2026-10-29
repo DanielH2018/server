@@ -470,8 +470,12 @@ fi
 run_mirror_phase || FAILED=1
 # The next phase starts only with this mirror serving, so this run never holds both down. The
 # stamp, not MIRROR_DOWN, says so: a failed restore clears MIRROR_DOWN and leaves the stamp.
+# A dockerhub-mirror a killed run stranded is still restored: that scales nothing down, and
+# skipping it would leave the mirror at zero for another week.
 if [[ -e "$MIRROR_STAMP" ]]; then
-  MIRROR_MSG="${MIRROR_MSG}; dockerhub-mirror not collected"
+  DONE_MSG="${MIRROR_MSG}; dockerhub-mirror not collected"
+  use_dockerhub_store
+  restore_stranded_mirror || FAILED=1
   exit 1
 fi
 DONE_MSG=$MIRROR_MSG

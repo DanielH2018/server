@@ -102,8 +102,11 @@ def test_dockerhub_refs_name_each_docker_io_image_by_its_cached_path():
     ]
 
 
-def _run(tmp_path: Path) -> tuple[list[str], str]:
-    """Run the whole top-level sequence; return every stubbed call and the reported result."""
+def _run(tmp_path: Path, failing_rollout: str = "none") -> tuple[list[str], str]:
+    """Run the whole top-level sequence; return every stubbed call and the reported result.
+
+    The rollout of the Deployment named `failing_rollout` never completes.
+    """
     calls = tmp_path / "calls"
     body = {
         "items": [
@@ -125,6 +128,7 @@ k3s() {{
     *" get job "*) ;;
     *" get "*) printf '%s' "$GET_BODY" ;;
     *" logs "*" prune"*) printf 'pruned library/old@%s tags=none\\n' "$DIGEST" ;;
+    *"rollout status deploy/$FAILING_ROLLOUT "*) return 1 ;;
   esac
 }}
 curl() {{
@@ -145,6 +149,7 @@ trap scale_up_and_report EXIT
         "GET_BODY": json.dumps(body),
         "MANIFEST": manifest,
         "DIGEST": DIGEST,
+        "FAILING_ROLLOUT": failing_rollout,
     }
     run(["bash", "-c", script], env=env, check=False)
     return calls.read_text().splitlines(), (tmp_path / "result").read_text()
@@ -188,3 +193,20 @@ def test_a_stranded_dockerhub_mirror_is_restored_before_its_phase(tmp_path):
         calls, "delete job registry-gc-dockerhub-mirror --ignore-not-found --cascade"
     )
     assert delete < calls.index(first[0]), calls
+
+
+def test_a_stranded_dockerhub_mirror_is_restored_when_the_ghcr_mirror_does_not_return(
+    tmp_path,
+):
+    """The run stops before the dockerhub phase, but restoring a stranded mirror scales nothing
+    down, so it must not wait another week."""
+    (tmp_path / "dockerhub-mirror-down").touch()
+    calls, result = _run(tmp_path, failing_rollout="ghcr-mirror")
+
+    dockerhub = [c for c in calls if " scale deploy/dockerhub-mirror " in c]
+    assert len(dockerhub) == 1 and "--replicas=1" in dockerhub[0], calls
+    assert not (tmp_path / "dockerhub-mirror-down").exists()
+    assert (tmp_path / "ghcr-mirror-down").exists()
+    status, msg = result.split("|", 1)
+    assert status == "down", msg
+    assert "dockerhub-mirror not collected" in msg, msg
