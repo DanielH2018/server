@@ -376,6 +376,7 @@ tests:
                 unavailable backup target, a stale or errored backup, a failed job, or a restore
                 drill that is overdue. `journalctl -t longhorn-backup-health` names the check. Read
                 docs/longhorn-disaster-recovery.md after it.
+              runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - eval_time: 4m
         alertname: LonghornBackupHealthNotReporting
         exp_alerts: []
@@ -399,6 +400,7 @@ tests:
                 etcd-snapshot-offbox.sh on daniel-box could not take or upload the etcd snapshot, or
                 the cluster token changed since the off-box copy was stamped. `journalctl -t
                 etcd-snapshot-offbox` names which. Read docs/k3s-etcd-restore.md after it.
+              runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/
       - eval_time: 4m
         alertname: EtcdSnapshotOffboxNotReporting
         exp_alerts: []
@@ -691,6 +693,7 @@ tests:
                 hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
                 --install-newest` clears the hold and then installs the newest packages as a
                 timer run does.
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # daniel-pi reconciles, and the two k3s nodes hold. Each node's rule fires with its own
   # `service`, and daniel-pi's stays quiet.
@@ -723,6 +726,7 @@ tests:
                 hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
                 --install-newest` clears the hold and then installs the newest packages as a
                 timer run does.
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
           - exp_labels:
               instance: daniel-server
               job: node
@@ -740,6 +744,7 @@ tests:
                 hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
                 --install-newest` clears the hold and then installs the newest packages as a
                 timer run does.
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # The fixture host's last success stays at 0 while its exporter is up. HostUpdateStale is
   # quiet at 189 minutes (11340s) and fires at 191 (11460s), past the 11400s limit.
@@ -771,6 +776,7 @@ tests:
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
                 `journalctl -u homelab-updater` on fixture-host, and docs/host-packages.md,
                 "Host-plane pages".
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # A success timestamp that follows the clock keeps HostUpdateStale quiet.
   - interval: 1m
@@ -808,6 +814,7 @@ tests:
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
                 `journalctl -u homelab-updater` on fixture-host, and docs/host-packages.md,
                 "Host-plane pages".
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # The exporter is down, so every series of the target is stale and the success timestamp
   # reads as absent. `up` at 0 keeps the absent arm quiet: a failed scrape is not a stale host.
@@ -851,6 +858,7 @@ tests:
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
                 `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
                 "Host-plane pages".
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # A success timestamp that follows the clock keeps daniel-pi's rule quiet. This is the
   # control for the group above.
@@ -888,6 +896,7 @@ tests:
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
                 `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
                 "Host-plane pages".
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # node-pi fails its scrape (`up` at 0, a 30s-timeout miss on the Zero 2 W), so the success
   # timestamp reads as absent. The rule stays quiet: a failed scrape is not a stale host.
@@ -1065,6 +1074,7 @@ tests:
                 fails its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes
                 the pod every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A
                 stale iSCSI session blocks an attach".
+              runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - eval_time: 16m
         alertname: IscsiSessionsNotReporting
         exp_alerts: []
@@ -1664,6 +1674,7 @@ tests:
                 refused. Read `journalctl -t weekly-restart` on daniel-box and
                 docs/host-packages.md, "Reboot-pending and activation-pending", then reboot the
                 host.
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # daniel-box's rkhunter scan writes a fresh red verdict, and RkhunterScanFailed fires for it.
   - interval: 1m

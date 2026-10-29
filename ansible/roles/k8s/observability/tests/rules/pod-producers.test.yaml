@@ -47,7 +47,7 @@ tests:
             exp_annotations:
               summary: The crowdsec remote allowlist job failed its last run.
               description: The crowdsec-jobs sidecar's remote allowlist run failed, so a new VPN exit
-                or phone address is not exempted from CrowdSec bans. The cause is kubectl or cscli failing,
+                or phone address is not exempted from CrowdSec bans. The cause is `kubectl` or `cscli` failing,
                 no router carrying the authelia middleware, or the list at its cap. Read the crowdsec-remote-allowlist
                 lines in the crowdsec-jobs container log.
       - eval_time: 5m
