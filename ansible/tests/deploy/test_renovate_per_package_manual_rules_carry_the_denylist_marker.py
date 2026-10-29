@@ -26,7 +26,7 @@ Run: uv run pytest ansible/tests/deploy/test_renovate_per_package_manual_rules_c
 
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from _autodeploy import _denylist
 from _helpers import REPO
@@ -92,12 +92,24 @@ def _read(rel: str) -> str:
     return (REPO / rel).read_text(errors="replace")
 
 
+def _in_file_scope(rel: str, file_names: list[str]) -> bool:
+    """Whether a rule's `matchFileNames` (minimatch globs or `/regex/`) selects `rel`."""
+    for entry in file_names:
+        if len(entry) > 1 and entry.startswith("/") and entry.endswith("/"):
+            if re.search(entry[1:-1], rel):
+                return True
+        elif PurePosixPath(rel).full_match(entry):
+            return True
+    return False
+
+
 def pin_owner_roles(
     package: str,
     managers: list[dict],
     files: list[str],
     read=_read,
     datasources: set[str] | None = None,
+    file_names: list[str] | None = None,
 ) -> set[str]:
     """The k8s roles whose files a custom manager reads `package` from.
 
@@ -106,7 +118,12 @@ def pin_owner_roles(
     `astral-sh/uv` read as karakeep's, because the docker `_image:` manager's file names
     `ghcr.io/astral-sh/uv` -- a different package in a different datasource. None
     means the rule matches every datasource.
+
+    `file_names` is the rule's `matchFileNames`, which narrows the files the same way: a
+    Pi-only wg-easy rule does not own `roles/k8s/wg-easy`'s pin (#6503). None means every file.
     """
+    if file_names:
+        files = [rel for rel in files if _in_file_scope(rel, file_names)]
     owners: set[str] = set()
     for manager in managers + BUILTIN_MANAGERS:
         # A manager names its package by depNameTemplate or, where the two differ, by
@@ -133,15 +150,26 @@ def pin_owner_roles(
     return owners
 
 
-def _reads_no_role(rule: dict) -> bool:
+def _reads_no_role(rule: dict, role_files: list[str] | None) -> bool:
     managers = set(rule.get("matchManagers", []))
-    return bool(managers) and managers <= NON_ROLE_MANAGERS.keys()
+    if managers and managers <= NON_ROLE_MANAGERS.keys():
+        return True
+    file_names = rule.get("matchFileNames")
+    if not file_names:
+        return False
+    if role_files is None:
+        role_files = _role_relative_files()
+    return not any(_in_file_scope(rel, file_names) for rel in role_files)
 
 
-def per_package_manual_rules(rules: list[dict]) -> list[dict]:
+def per_package_manual_rules(
+    rules: list[dict], role_files: list[str] | None = None
+) -> list[dict]:
     """The `manual` rules after the denylist rule that match by package name.
 
-    A rule scoped to `NON_ROLE_MANAGERS` alone is left out, because no role owns its pin.
+    A rule scoped to `NON_ROLE_MANAGERS` alone, or whose `matchFileNames` select no file in
+    `role_files` (default: every file under `ansible/roles/`), is left out, because no role
+    owns its pin.
     """
     manual_at, _ = find_rule(rules, MANUAL_GROUP_PREFIX)
     return [
@@ -149,12 +177,15 @@ def per_package_manual_rules(rules: list[dict]) -> list[dict]:
         for r in rules[manual_at + 1 :]
         if r.get("matchPackageNames")
         and "(manual" in str(r.get("groupName", ""))
-        and not _reads_no_role(r)
+        and not _reads_no_role(r, role_files)
     ]
 
 
 def per_package_marker_problems(
-    rules: list[dict], owners_by_package: dict[str, set[str]], denylist: set[str]
+    rules: list[dict],
+    owners_by_package: dict[str, set[str]],
+    denylist: set[str],
+    role_files: list[str] | None = None,
 ) -> list[str]:
     """Every per-package manual rule whose marker disagrees with who owns its pin. Empty means none.
 
@@ -162,7 +193,7 @@ def per_package_marker_problems(
     below can hand it a denied owner without editing the tree.
     """
     problems: list[str] = []
-    for rule in per_package_manual_rules(rules):
+    for rule in per_package_manual_rules(rules, role_files):
         group = str(rule["groupName"])
         owners: set[str] = set()
         for package in rule["matchPackageNames"]:
@@ -205,8 +236,9 @@ def _owners_by_package(config: dict) -> dict[str, set[str]]:
             managers,
             files,
             datasources=set(rule.get("matchDatasources", [])) or None,
+            file_names=rule.get("matchFileNames"),
         )
-        for rule in per_package_manual_rules(config["packageRules"])
+        for rule in per_package_manual_rules(config["packageRules"], files)
         for package in rule["matchPackageNames"]
     }
 
@@ -394,3 +426,54 @@ def test_a_promoted_owner_whose_rule_still_carries_the_marker_is_flagged() -> No
         rules, {"vendor/plugin": {"jellyfin"}}, _DENYLIST
     )
     assert len(problems) == 1 and "drop the marker" in problems[0], problems
+
+
+# --- a rule's matchFileNames narrows the files its pin is read from (#6503) ---
+
+_WG_EASY = "ghcr.io/wg-easy/wg-easy"
+_WG_EASY_ROLE_FILES = ["ansible/roles/k8s/wg-easy/defaults/main.yml"]
+
+
+def _wg_easy_problems(rule_extra: dict) -> list[str]:
+    rules = _rule_set("pi image wg-easy (manual — finish it)", package=_WG_EASY)
+    rules[1].update(rule_extra)
+    owners = pin_owner_roles(
+        _WG_EASY,
+        [{"managerFilePatterns": [_DEFAULTS_PATTERN]}],
+        _WG_EASY_ROLE_FILES,
+        read=lambda _: f"wg_easy_image: {_WG_EASY}:15\n",
+        file_names=rules[1].get("matchFileNames"),
+    )
+    return per_package_marker_problems(
+        rules, {_WG_EASY: owners}, {"wg-easy"}, role_files=_WG_EASY_ROLE_FILES
+    )
+
+
+def test_a_rule_scoped_to_a_file_outside_the_roles_tree_is_clean() -> None:
+    scope = ["hosts/components/pi-compose/services/wg-easy/compose.yaml.j2"]
+    assert _wg_easy_problems({"matchFileNames": scope}) == []
+
+
+def test_the_same_rule_without_its_file_scope_is_flagged() -> None:
+    problems = _wg_easy_problems({})
+    assert len(problems) == 1 and "['wg-easy']" in problems[0], problems
+
+
+def test_a_file_scope_keeps_only_the_roles_its_globs_select() -> None:
+    managers = [{"managerFilePatterns": [_DEFAULTS_PATTERN]}]
+    files = [
+        "ansible/roles/k8s/loki-homelab/defaults/main.yml",
+        "ansible/roles/k8s/alloy-edge/defaults/main.yml",
+    ]
+    read = lambda _: "alloy_image: grafana/alloy:v1\n"
+    assert pin_owner_roles("grafana/alloy", managers, files, read=read) == {
+        "loki-homelab",
+        "alloy-edge",
+    }
+    for scope in (
+        ["ansible/roles/k8s/loki-homelab/**"],
+        ["/^ansible/roles/k8s/loki-homelab/defaults/main\\.yml$/"],
+    ):
+        assert pin_owner_roles(
+            "grafana/alloy", managers, files, read=read, file_names=scope
+        ) == {"loki-homelab"}, scope
