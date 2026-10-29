@@ -338,6 +338,10 @@ of the pod would drop the capability.
   list. The grant relies on `.credentials.json` staying `0600`.
 - `~/.claude/projects` and `~/.claude/projects/<key>` get group `ubuntu` and `0710` too. The
   memory directory sits under both.
+- `~/.config/chezmoi` is `0710` and its `seed.toml` is `0640`, so `probe.py applied` reads the
+  seed as `ubuntu` (#6408). `rootq` cannot answer for it, because its ancestor rule refuses every
+  directory the agent owns. The seed holds three chezmoi answers and no credential, and
+  `chezmoi.toml` beside it stays `0600`.
 - A task creates `~/.claude/artifacts` and the memory directory as root, owned by the agent,
   `setgid`, with group `ubuntu`. It cannot run as the agent, because the agent belongs to no
   group and so cannot `chgrp` to `ubuntu`. The ACL task runs as root for the same reason. It gives

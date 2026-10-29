@@ -362,6 +362,7 @@ extra-paths = [
   "ansible/roles/k8s/home-assistant/files",
   "ansible/roles/k8s/tdarr/files",
   "ansible/roles/k8s/sonarr/files",
+  "ansible/roles/k8s/dri-device-plugin/files",
   "ansible/roles/k8s/n8n/files",
   "ansible/roles/k8s/prowlarr/files",
   "ansible/roles/k8s/headlamp/files",
