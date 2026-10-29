@@ -176,3 +176,15 @@ def test_resolve_vars_resolves_a_whole_value_expression_as_ansible_core_does(sou
     expected = _ansible_core_resolves(source, variables)
     resolved = resolve_vars({"y": source}, variables)["y"]
     assert (resolved, type(resolved)) == (expected, type(expected))
+
+
+def test_resolve_vars_reads_a_default_through_dirname_and_basename():
+    """k3s's `k3s_host_coredns_tarball` is a `dirname`; it rendered as STUB before (#6475)."""
+    raw = {
+        "bin": "/usr/local/lib/coredns/1.14.7/coredns",
+        "tarball": "{{ bin | dirname }}/coredns.tgz",
+        "name": "{{ bin | basename }}",
+    }
+    out = resolve_vars(raw, raw)
+    assert out["tarball"] == "/usr/local/lib/coredns/1.14.7/coredns.tgz"
+    assert out["name"] == "coredns"

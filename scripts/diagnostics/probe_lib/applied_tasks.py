@@ -434,8 +434,15 @@ def _shown(path: Path, role_dir: Path) -> str:
     return str(path)
 
 
-def expected(role_dir: Path, host: str, ctx: dict) -> tuple[list[Want], list[Skip]]:
-    """Every path the role writes on `host`, and the file-writing tasks it skipped."""
+def expected(
+    role_dir: Path, host: str, ctx: dict, files: tuple[str, ...] = ("main",)
+) -> tuple[list[Want], list[Skip]]:
+    """Every path the role writes on `host`, and the file-writing tasks it skipped.
+
+    `files` names the task files a play runs there, under `tasks/` without `.yml`, as
+    `applied_hosts.task_files` gives them.
+    """
     walk = _Walk(role_dir, host, ctx)
-    walk.tasks(role_dir / "tasks" / "main.yml", [])
+    for name in files:
+        walk.tasks(role_dir / "tasks" / f"{name}.yml", [])
     return walk.wants, walk.skips

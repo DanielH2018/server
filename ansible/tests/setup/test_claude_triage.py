@@ -17,6 +17,7 @@ from _helpers import ANSIBLE
 from _k8s_render import render_role_template
 from _setup_render import render_setup_text
 from deploy_tools.land_lib import policy
+from lib.ansible_jinja_env import make_ansible_env
 from lib import yaml_fast
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
@@ -310,3 +311,47 @@ def test_a_token_pasted_across_a_wrapped_line_reaches_systemd_whole() -> None:
         {"claude_code_triage_claude_oauth_token": "sk-ant-oat01-abc  def\n"},
     )
     assert "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-abcdef\n" in rendered
+
+
+@pytest.mark.parametrize(
+    "operator_read, group, mode",
+    [(True, "ubuntu", "0710"), (False, "claude", "0750")],
+)
+def test_the_operator_traverses_the_triage_state_dir_only_under_operator_read(
+    operator_read, group, mode
+) -> None:
+    """0710 lets `probe.py applied` stat the inbox without listing the records (#6452)."""
+    (task,) = [
+        t
+        for t in triage_block()["block"]
+        if t.get("name") == "Create triage's code, config and state directories"
+    ]
+    (item,) = [
+        i for i in task["loop"] if i["path"] == "{{ claude_code_triage_state_dir }}"
+    ]
+    ctx = {
+        "sys_user": "ubuntu",
+        "claude_code_agent_operator_read": operator_read,
+        "claude_code_triage_agent_user": "claude",
+    }
+    env = make_ansible_env()
+    assert env.from_string(item["group"]).render(**ctx).strip() == group
+    assert env.from_string(item["mode"]).render(**ctx) == mode
+
+
+@pytest.mark.parametrize("template", [UNIT, "claude-triage-poll.service.j2"])
+def test_what_the_triage_units_write_is_kept_from_the_operators_group(template) -> None:
+    """The operator traverses the state dir, so a file there is reachable by its fixed name."""
+    text = render_setup_text("claude_code", template)
+    assert directive(text, "UMask") == ["0027"]
+
+
+def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
+    """`runs/` and `done/` made under the old 0022 umask were 0755; the role resets them."""
+    (task,) = [
+        t
+        for t in triage_block()["block"]
+        if t.get("name") == "Create triage's code, config and state directories"
+    ]
+    modes = {i["path"].rsplit("/", 1)[-1]: i["mode"] for i in task["loop"]}
+    assert modes["runs"] == modes["done"] == "0750"

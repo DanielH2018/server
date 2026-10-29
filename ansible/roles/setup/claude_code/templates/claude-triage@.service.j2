@@ -34,6 +34,11 @@ KillSignal=SIGINT
 # trip first: it still writes the record, the report and the page.
 TimeoutStartSec={{ claude_code_triage_run_timeout_s + 600 }}
 NoNewPrivileges=yes
+# DECIDED: UMask=0027, as claude-rc.service.j2 sets it. tasks/triage.yml gives the operator's
+# group traverse on the state directory, so under systemd's default 0022 a record, a log or a
+# directory this unit creates there would be world-readable by its fixed name. A report lands
+# in the setgid artifacts directory, where 0640 keeps the operator's group read.
+UMask=0027
 ProtectHome=yes
 ProtectProc=invisible
 PrivateTmp=yes
