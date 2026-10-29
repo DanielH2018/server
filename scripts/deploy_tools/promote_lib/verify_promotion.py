@@ -140,6 +140,14 @@ POLL_S = 30
 IN_FLIGHT_WAIT_S = 350 * 60
 IN_FLIGHT_POLL_S = 30
 
+# A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times, so one GitHub
+# 5xx among them ended a wait that would have succeeded (run 40197827680, #6269). A read that
+# fails with a 5xx is tried again, HOLD_RETRY_S apart, up to HOLD_READ_ATTEMPTS reads in all.
+# Any other failure, and a missing or empty variable, still ends the run at once.
+HOLD_READ_ATTEMPTS = 3
+HOLD_RETRY_S = 10
+_SERVER_ERROR = re.compile(r"\bHTTP 5\d\d\b")
+
 # `<T> failed=<names>`, the one hold form the revert rule may pass. `settle` writes it.
 _FAILED_HOLD = re.compile(r"([0-9a-f]{40}) failed=([a-z0-9-]+(?:,[a-z0-9-]+)*)")
 # A soak verdict covers every service in the changed set, so no footprint shows it reverted.
@@ -541,6 +549,30 @@ class Settled:
     in_flight: bool = False
 
 
+def _read_hold(
+    hold: Callable[[], str | None], sleep: Callable[[float], None]
+) -> str | None:
+    """DEPLOY_HOLD's value, read again after a GitHub 5xx up to HOLD_READ_ATTEMPTS reads.
+
+    Raises:
+        forge.ForgeError: the read failed with anything but a 5xx, or with a 5xx on every
+            attempt.
+    """
+    for _ in range(HOLD_READ_ATTEMPTS - 1):
+        try:
+            return hold()
+        except forge.ForgeError as err:
+            if not _SERVER_ERROR.search(str(err)):
+                raise
+            print(
+                f"promote.py: reading {forge.HOLD_VARIABLE} failed ({err}); "
+                f"retrying in {HOLD_RETRY_S}s",
+                file=sys.stderr,
+            )
+            sleep(HOLD_RETRY_S)
+    return hold()
+
+
 # DECIDED: a hold without a reset (H1.1b) leaves `prod` on the failed T while `last-good` stays
 # behind, and that difference outlives the operator's clear of DEPLOY_HOLD. So `settle` tags
 # T's digest `held` when it leaves `prod` there, and a `prod` that names the `held` digest is
@@ -559,6 +591,7 @@ def wait_settled(
 
     Each poll re-reads the hold, so a `failed=` hold that a `settle` writes ends the wait. A
     `prod` that names the `held` tag's digest ends it too: a hold without a reset settled it.
+    A read that fails with a GitHub 5xx is retried (`_read_hold`) before it ends the run.
 
     Args:
         hold: DEPLOY_HOLD's value, or None when the variable is missing.
@@ -570,11 +603,12 @@ def wait_settled(
             it answers True under a `none` hold, the wait ends at once with `in_flight`.
 
     Raises:
-        Whatever `hold` and `digest` raise.
+        Whatever `digest` raises, and whatever `hold` raises other than a 5xx it recovers
+        from within HOLD_READ_ATTEMPTS reads.
     """
     started = clock()
     while True:
-        value = hold()
+        value = _read_hold(hold, sleep)
         if value is None:
             return Settled(("error", f"{forge.HOLD_VARIABLE} does not exist"))
         value = value.strip()

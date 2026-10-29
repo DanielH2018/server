@@ -199,6 +199,37 @@ def test_a_hold_written_during_the_wait_ends_it_as_held(world):
     assert decision.reason == f"DEPLOY_HOLD={c1} failed=bento-pdf"
 
 
+_502 = "failed to get variable DEPLOY_HOLD: HTTP 502: Server Error"
+
+
+@pytest.mark.parametrize(
+    ("errors", "verdict", "reason"),
+    [
+        ([_502] * (vp.HOLD_READ_ATTEMPTS - 1), "promote", ""),
+        ([_502] * vp.HOLD_READ_ATTEMPTS, "error", "HTTP 502"),
+        (["HTTP 401: Bad credentials"], "error", "HTTP 401"),
+    ],
+    ids=["5xx-recovers", "5xx-every-attempt", "4xx-not-retried"],
+)
+def test_a_5xx_reading_the_hold_mid_wait_is_retried_and_nothing_else_is(
+    world, errors, verdict, reason
+):
+    c0, c1, _, tip = world.commits
+    world.set_prod(c1)
+    world.set_last_good(c0)
+    world.publish(tip)
+
+    def settle(now: float) -> None:
+        if now == vp.IN_FLIGHT_POLL_S:  # one poll in, GitHub errors on the next reads
+            world.run.hold_errors = list(errors)
+        if now >= 90:
+            world.set_last_good(c1)
+
+    decision = promote.decide(_reads(world, Clock(settle)), supersede_on=False)
+    assert decision.verdict == verdict, decision.reason
+    assert reason in decision.reason
+
+
 # -- the revert rule -------------------------------------------------------------------------
 
 
