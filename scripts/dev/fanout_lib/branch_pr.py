@@ -12,7 +12,9 @@ to review: `OwnPr.problem` says so, and both callers end `needs input:` on it.
 
 import json
 import re
-from collections.abc import Sequence
+import subprocess
+from collections.abc import Callable, Sequence
+from pathlib import Path
 from dataclasses import dataclass
 
 # `.claude/hooks/fanout-stop.py` copies this pattern (the hooks stay stdlib-only) and
@@ -93,3 +95,33 @@ def own_pr(text: str, branch: str, branch_prs: Sequence[str] | None) -> OwnPr:
         else f"branch {branch} has no PR on GitHub"
     )
     return OwnPr(problem=f"the final text names {', '.join(named)}, but {why}")
+
+
+def worktree_own_pr(
+    text: str,
+    worktree: Path,
+    repo: str,
+    run: Callable[[list[str], str | None], subprocess.CompletedProcess],
+) -> OwnPr:
+    """`own_pr` for the branch `worktree` has checked out, its PRs read through `run`.
+
+    Asks GitHub only when the text names a PR, so a `no-pr` batch makes no `gh` call.
+    """
+    if not PR_URL.search(text):
+        return OwnPr()
+    head = run(["git", "-C", str(worktree), "symbolic-ref", "--short", "HEAD"], None)
+    branch = head.stdout.strip()
+    prs = None
+    if branch:
+        proc = run(branch_pr_argv(branch, repo), None)
+        prs = parse_branch_prs(proc.stdout) if proc.returncode == 0 else None
+    return own_pr(text, branch or "(no branch)", prs)
+
+
+def needs_input_report(problem: str) -> dict:
+    """The result a batch ends on when its text names a PR that is not its branch's."""
+    return {
+        "type": "result",
+        "is_error": False,
+        "result": f"needs input: {problem}, so nothing was reviewed or landed.",
+    }
