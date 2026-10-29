@@ -162,8 +162,10 @@ def test_discover_templates_finds_the_known_set():
         "unit-failure-alert.service.j2",
         "worktree-holders.socket.j2",
         "worktree-holders@.service.j2",
+        "homelab-rootq.socket.j2",
+        "homelab-rootq@.service.j2",
     } <= names
-    assert len(names) == 35
+    assert len(names) == 37
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

@@ -647,3 +647,6 @@ cicd
 Sigstore
 OCIRepository
 keyless
+
+# The read-only root inspector and its socket client (docs/claude-agent-user.md, #6350)
+rootq('s)?
