@@ -36,8 +36,10 @@ package back, and the line must survive to the next reconcile (#6088; `validate_
 Another installs the three apt-source components over seeded copies of the files the roles
 wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). The last cases run
 `hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
-branch with a break-glass kit, and the kit's two red fixtures (H7.15a;
-`validate_lib/bootstrap_case.py`).
+branch with a break-glass kit, the kit's two red fixtures and a local build whose Depends only
+the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`). The last runs the
+script without `--local-build` on daniel-pi, against the test repository with a rewritten copy of
+the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
@@ -87,7 +89,7 @@ from validate.validate_lib.host_container import (
     release_fetched,
     success_timestamp,
 )
-from validate.validate_lib import bootstrap_case
+from validate.validate_lib import bootstrap_case, bootstrap_repo_case
 from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
@@ -157,11 +159,7 @@ class Cases:
                 "case can upgrade; a dispatch needs a branch with a commit past master"
             )
         build_root = self.work / "build"
-        fixture_versions = {
-            "base": base,
-            "head": head,
-            "payload": f"{head}.2",
-        }
+        fixture_versions = {"base": base, "head": head, "payload": f"{head}.2"}
         for variant, version in fixture_versions.items():
             rendered = render_fixture(variant, build_root / variant)
             self.add(
@@ -576,6 +574,7 @@ def main(argv: list[str] | None = None) -> int:
     shadow_case.run(cases)
     repos_case.run(cases)
     bootstrap_case.run(cases)
+    bootstrap_repo_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr
