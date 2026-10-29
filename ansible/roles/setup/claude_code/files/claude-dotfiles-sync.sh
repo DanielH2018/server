@@ -12,9 +12,10 @@
 # `private_dot_claude`, so an apply chmods it to 0700 and cuts the operator off from the agent's
 # memory store and artifacts, which the role opens with mode 0710. It names ~/.config/gh
 # `dot_config/gh`, so an apply opens the directory holding the agent's GitHub token to 0755,
-# where the role sets 0700 (#6453). The first pass applies every managed directory but those
-# two, creating any new one; the second applies everything else and no directory, which leaves
-# an existing directory's mode alone.
+# where the role sets 0710 (#6453). The first pass applies every managed directory but those
+# two, creating any new one. It passes --recursive=false: chezmoi applies a directory target's
+# whole subtree, so applying ~/.config would reach ~/.config/gh anyway. The second pass applies
+# everything else and no directory, which leaves an existing directory's mode alone.
 #
 # Runs as the agent user, with HOME set to its home. The claude_code role runs it on each apply,
 # and <name>-dotfiles-sync.timer runs it between applies, since a dotfiles merge applies no role
@@ -76,7 +77,7 @@ done
 mapfile -t dirs < <("$chezmoi" managed --include=dirs --path-style=absolute |
   grep -vxF -e "$HOME/.claude" -e "$HOME/.config/gh")
 if ((${#dirs[@]})); then
-  "$chezmoi" apply --force --no-tty --include=dirs "${dirs[@]}"
+  "$chezmoi" apply --force --no-tty --include=dirs --recursive=false "${dirs[@]}"
 fi
 "$chezmoi" apply --force --no-tty --exclude=dirs
 
