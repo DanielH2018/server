@@ -57,7 +57,10 @@ def test_the_note_names_the_primary_checkout_when_parked():
     note = park_note(_MARKER, 1000 + 3600)
     assert "primary checkout" in note
     assert "60 min" in note
-    assert "journalctl -t gitops-deploy" in note
+    # The unit's ExecStart is flock, so its lines carry SYSLOG_IDENTIFIER=flock and
+    # `journalctl -t gitops-deploy` prints `-- No entries --` (#6343).
+    assert "journalctl -u gitops-deploy.service" in note
+    assert "journalctl -t gitops-deploy" not in note
 
 
 def test_the_note_is_empty_when_the_deployer_is_merely_behind():

@@ -127,6 +127,9 @@ def test_a_park_and_a_pending_role_are_both_reported():
     lines = _problems(manual=_K3S, marker=park, now=1000.0)
     assert len(lines) == 2
     assert "not fast-forwarded" in lines[0]
+    # `-t gitops-deploy` matches nothing: the unit's ExecStart is flock, so its lines carry
+    # SYSLOG_IDENTIFIER=flock (#6343).
+    assert "journalctl -u gitops-deploy.service" in lines[0]
     assert "`k3s`" in lines[1]
 
 
