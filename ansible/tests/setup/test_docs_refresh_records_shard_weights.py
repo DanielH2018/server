@@ -11,11 +11,15 @@ Three things have to hold together, and each has a way of failing that reads gre
 
 - The record runs BEFORE `git diff --cached --quiet`. That gate exits the script when the
   generated trees did not move, which is most runs, so a record after it never publishes.
-- The weights table is in the `git add`. Written and left unstaged, it is a modified file in
-  the primary checkout, which `deploy_git.py` reads as dirty and which parks every deploy.
-- `restore_generated_tree`'s per-tree check names it too. That check is what decides between
+- Both weights tables are in the `git add`: the recorded one, and the runner-seconds one that
+  `--refresh-runner` rewrites from CI's logs (#6178). Written and left unstaged, a table is a
+  modified file in the primary checkout, which `deploy_git.py` reads as dirty and which parks
+  every deploy.
+- `restore_generated_tree`'s per-tree check names them too. That check is what decides between
   `tree restored` and `TREE STILL DIRTY` after a failed commit, and it is path-scoped: scoped
   to the two doc trees it would report restored over a weights table left modified.
+
+The runner refresh runs before the gate for the same reason the record does.
 
 Every path here is derived from `pytest_shard` rather than spelled, so renaming the table or
 the script breaks this test instead of silently leaving the cron pointing at nothing.
@@ -34,6 +38,7 @@ from _shell_render import rendered_shell_text, shell_template_path
 TEMPLATE = shell_template_path("components", "docs-refresh", "docs-refresh.sh.j2")
 SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
 WEIGHTS = pytest_shard.WEIGHTS_PATH.relative_to(REPO).as_posix()
+RUNNER_WEIGHTS = pytest_shard.RUNNER_WEIGHTS_PATH.relative_to(REPO).as_posix()
 SHARD_SCRIPT = (REPO / "scripts/dev/pytest_shard.py").relative_to(REPO).as_posix()
 PUBLISH_GATE = "if git diff --cached --quiet; then"
 
@@ -43,18 +48,20 @@ def _code_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if not line.lstrip().startswith("#")]
 
 
-def _record_before_gate(text: str) -> str | None:
-    """The complaint about a script's record/publish ordering, or None when it is right.
+def _record_before_gate(text: str, flag: str = "--record-missing") -> str | None:
+    """The complaint about where a script runs `flag` against its publish gate, or None.
+
+    `flag` is a mode that writes a table the gate's `git add` stages.
 
     A function rather than inline asserts, so the rejecting half below can hand it a reordered
     script and watch the same rule go red — the ordering is the one claim here that a later
     edit could invert while every other assertion still passed.
     """
     lines = _code_lines(text)
-    record = [i for i, line in enumerate(lines) if "--record-missing" in line]
+    record = [i for i, line in enumerate(lines) if flag in line]
     gate = [i for i, line in enumerate(lines) if line.startswith(PUBLISH_GATE)]
     if len(record) != 1:
-        return f"expected exactly one --record-missing invocation, found {len(record)}"
+        return f"expected exactly one {flag} invocation, found {len(record)}"
     if len(gate) != 1:
         return f"expected exactly one {PUBLISH_GATE!r}, found {len(gate)}"
     if record[0] > gate[0]:
@@ -84,9 +91,10 @@ def test_the_cron_records_the_weights_it_is_missing():
     )
 
 
-def test_the_record_runs_before_the_publish_gate():
-    """CLEAN half: the real template orders the two the only way that publishes."""
-    assert _record_before_gate(SCRIPT) is None
+@pytest.mark.parametrize("flag", ["--record-missing", "--refresh-runner"])
+def test_the_record_runs_before_the_publish_gate(flag):
+    """CLEAN half: the real template orders each write the only way that publishes."""
+    assert _record_before_gate(SCRIPT, flag) is None
 
 
 def test_a_record_after_the_publish_gate_is_flagged():
@@ -104,13 +112,17 @@ def test_a_record_after_the_publish_gate_is_flagged():
 
 
 @pytest.mark.parametrize(
+    "table",
+    [pytest.param(WEIGHTS, id="recorded"), pytest.param(RUNNER_WEIGHTS, id="runner")],
+)
+@pytest.mark.parametrize(
     "marker",
     [
         pytest.param("git add ", id="staged-for-the-commit"),
         pytest.param("git status --porcelain -- ", id="checked-by-the-restore"),
     ],
 )
-def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker):
+def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker, table):
     """Both places name docs/reference; a weights table missing from either parks the deployer.
 
     The `git add` is the issue's own first bullet. The porcelain check is one layer under it:
@@ -124,16 +136,19 @@ def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker):
     for start in hits:
         span = " ".join(lines[start : start + 2])
         assert "docs/reference" in span, f"{marker!r} at line {start} names no doc tree"
-        assert WEIGHTS in span, (
+        assert table in span, (
             f"{TEMPLATE.name}: the {marker!r} covering docs/reference does not name "
-            f"{WEIGHTS}, so the table the cron writes is left loose in the primary checkout"
+            f"{table}, so the table the cron writes is left loose in the primary checkout"
         )
 
 
-# The modes that read the table or fill its gaps, and so leave a present entry as it is.
+# The modes that read the table or fill its gaps, and so leave a present entry as it is. The
+# two runner modes write the other table, so they refresh nothing in this one either.
 _NON_REFRESHING_FLAGS = frozenset(
     {
         "--record-missing",
+        "--refresh-runner",
+        "--record-runner",
         "--of",
         "--shard",
         "--out",
