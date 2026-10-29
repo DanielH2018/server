@@ -52,15 +52,48 @@
         # cannot change what the next run executes or how much it may spend.
         - {path: /opt/claude-triage, owner: root, group: root, mode: "0755"}
         - {path: /etc/claude-triage, owner: root, group: root, mode: "0755"}
-        # The inbox, the records and the lock, written by the agent.
+        # The inbox, the records and the lock, written by the agent. Under operator_read the
+        # operator's group gets traverse and no listing, as agent_access.yml opens the memory
+        # store, so `probe.py applied` can stat the inbox below (#6452). This file sits
+        # outside main.yml's agent loop, so it reads the role default, not a profile's.
+        # Traverse reaches any file here by name, so it is the triage units' UMask=0027 that
+        # keeps what they write out of the operator's read, not the group.
         - path: "{{ claude_code_triage_state_dir }}"
           owner: "{{ claude_code_triage_agent_user }}"
-          group: "{{ claude_code_triage_agent_user }}"
-          mode: "0750"
+          group: >-
+            {{ sys_user if claude_code_agent_operator_read
+            else claude_code_triage_agent_user }}
+          mode: "{{ '0710' if claude_code_agent_operator_read else '0750' }}"
         - path: "{{ claude_code_triage_state_dir }}/inbox"
           owner: "{{ claude_code_triage_agent_user }}"
           group: "{{ claude_code_triage_agent_user }}"
           mode: "0750"
+        # The runner creates these two itself. Declared here so one created under the old
+        # 0022 umask, as 0755, loses its listing too.
+        - path: "{{ claude_code_triage_state_dir }}/runs"
+          owner: "{{ claude_code_triage_agent_user }}"
+          group: "{{ claude_code_triage_agent_user }}"
+          mode: "0750"
+        - path: "{{ claude_code_triage_state_dir }}/done"
+          owner: "{{ claude_code_triage_agent_user }}"
+          group: "{{ claude_code_triage_agent_user }}"
+          mode: "0750"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_triage_enabled
+
+    # The poller appends to this file, so the units' UMask=0027 never reaches one it created
+    # under the old 0022 umask. poll-state.json needs nothing: atomic_write replaces it on
+    # every poll. Touch keeps the times and only creates an empty log where none exists.
+    - name: Keep the poller's shadow log out of the operator's read
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ claude_code_triage_state_dir }}/shadow.jsonl"
+        state: touch
+        owner: "{{ claude_code_triage_agent_user }}"
+        group: "{{ claude_code_triage_agent_user }}"
+        mode: "0640"
+        modification_time: preserve
+        access_time: preserve
       become: true
       when: claude_code_agent_user_enabled and claude_code_triage_enabled
 
