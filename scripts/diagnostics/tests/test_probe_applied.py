@@ -14,7 +14,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import applied, applied_hosts, applied_tasks
+from lib.ansible_jinja_env import template_env
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
+from lib.render_guard import render_or_error
 
 TASKS = """\
 - name: Install the script
@@ -146,6 +148,23 @@ def test_the_real_claude_code_role_yields_its_units_with_content():
     for unit in ("claude-rc.service", "claude-cgroup-metrics.timer"):
         want = by_path[f"/etc/systemd/system/{unit}"]
         assert want.sha256 is not None and want.mode == "0644"
+
+
+def test_the_agent_ssh_config_renders_its_peers_from_the_inventory():
+    """The template loops over `groups['all']` and reads each peer's `hostvars` flag (#6484)."""
+    role = applied.SETUP / "claude_code"
+    ctx = applied.context(role, "daniel-box")
+    wants, _ = applied_tasks.expected(role, "daniel-box", ctx)
+    want = {w.path: w for w in wants}["/var/lib/claude/.ssh/config"]
+    assert not want.unchecked and want.sha256 is not None
+    text, err = render_or_error(
+        template_env(role / "templates"), "agent-ssh-config.j2", ctx
+    )
+    assert text is not None, err
+    assert hashlib.sha256(text.encode()).hexdigest() == want.sha256
+    # daniel-server sets claude_agent_ssh_login_enabled; the Pi does not, and daniel-box holds the key.
+    hosts = [line.split()[1] for line in text.splitlines() if line.startswith("Host ")]
+    assert hosts == ["daniel-server"]
 
 
 def _live(want, **changes):

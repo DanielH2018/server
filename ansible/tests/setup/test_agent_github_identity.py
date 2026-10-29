@@ -12,11 +12,14 @@ Run: uv run pytest ansible/tests/setup/test_agent_github_identity.py
 
 import re
 
+import jinja2
+
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 from lib.git_testing import git
 
 TASKS = ANSIBLE / "roles" / "setup" / "claude_code" / "tasks"
@@ -64,7 +67,12 @@ def test_the_token_file_is_the_agents_alone_and_never_printed() -> None:
         "Create the agent user's ssh and git config directories",
     )
     modes = {i["path"].rsplit("/", 1)[-1]: i["mode"] for i in gh_dir["loop"]}
-    assert modes["gh"] == "0700"
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    # The operator's group traverses to stat the token file (#6487); it never lists or reads.
+    assert [
+        env.from_string(modes["gh"]).render(claude_code_agent_operator_read=flag)
+        for flag in (True, False)
+    ] == ["0710", "0700"]
 
 
 def test_the_private_key_is_the_agents_alone_and_the_public_half_readable() -> None:
