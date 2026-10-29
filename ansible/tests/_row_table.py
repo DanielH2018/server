@@ -31,6 +31,7 @@ Run: uv run pytest ansible/tests/repo/test_row_table.py
 """
 
 import ast
+import gc
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -87,10 +88,18 @@ def verdict(
 # modules); under `--dist loadscope` each worker that runs a census file holds its own share.
 # Unbounded on purpose: every row sweeps the census in the same order, so an LRU smaller than
 # the census never hits. A caller only reads the tree; one that edited it would edit every row's.
+#
+# DECIDED: freeze the collector's view after each parse. Millions of retained nodes made every
+# full collection rescan them: the cache alone cut the two census files from 18.1-18.4s to
+# 14.8-16.3s in-process, with GC time up from 1.1s to 3.4-3.9s. Frozen, they ran in
+# 11.5-12.1s with 0.14s of GC (interleaved runs, load 3-5, 2026-10-29). The cost is that a
+# reference cycle already unreachable at a freeze is never freed, which a test process outlives.
 @cache
 def parse(source: str) -> ast.Module:
     """The AST of `source`, parsed once per process however many rows ask for it."""
-    return ast.parse(source)
+    tree = ast.parse(source)
+    gc.freeze()
+    return tree
 
 
 # ── The textual census row ────────────────────────────────────────────────────────────
