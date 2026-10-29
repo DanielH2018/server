@@ -8,7 +8,7 @@ networkpolicy-traefik.yaml.j2 is the origin lock; `netpol_baseline_traefik_https
 the role's defaults composes it from the four inventory ranges.
 
 Four things have to hold, and each drops a different caller if it stops holding:
-  - Cloudflare's ranges, or the public names go dark.
+  - Cloudflare's IPv4 ranges, or the public names go dark.
   - `lan_subnet`, or every `.local.` route dies from a browser on the LAN.
   - `wg_client_subnet`, or a WireGuard client whose traffic is not masqueraded is locked out.
   - `k3s_pod_cidr`, or the Kuma prober, monitor-bridge and homepage's widgets lose every
@@ -16,8 +16,13 @@ Four things have to hold, and each drops a different caller if it stops holding:
 The rejecting half renders the policy with each source removed in turn and asserts the reader
 below names the missing one, so a policy that drops a source fails by name rather than by count.
 
+The list carries no IPv6 CIDR. The cluster is single-stack IPv4, so a v6 ipBlock fences nothing,
+and kube-router logs a warning per v6 CIDR on every policy sync (#6495).
+
 Run: uv run pytest ansible/tests/k8s/test_traefik_netpol_https_origin_lock.py
 """
+
+import ipaddress
 
 import pytest
 
@@ -39,7 +44,9 @@ CTX = render_context(K8S_ROLES / ROLE, strict=True)
 # The four sources by the inventory name each comes from, so a failure says which caller
 # the policy would drop rather than which index moved.
 EXPECTED = {
-    "cloudflare_ips": frozenset(CTX["cloudflare_ips"]),
+    "cloudflare_ips": frozenset(
+        c for c in CTX["cloudflare_ips"] if ipaddress.ip_network(c).version == 4
+    ),
     "lan_subnet": frozenset([CTX["lan_subnet"]]),
     "wg_client_subnet": frozenset([CTX["wg_client_subnet"]]),
     "k3s_pod_cidr": frozenset([CTX["k3s_pod_cidr"]]),
@@ -89,6 +96,10 @@ def _missing_sources(admitted: frozenset[str] | None) -> set[str]:
     return {name for name, cidrs in EXPECTED.items() if not cidrs <= admitted}
 
 
+def _ipv6_sources(admitted: frozenset[str]) -> set[str]:
+    return {c for c in admitted if ipaddress.ip_network(c).version == 6}
+
+
 def test_the_composed_source_list_is_exactly_the_four_inventory_ranges():
     """Non-vacuity, and the fact the render tests below rest on.
 
@@ -116,6 +127,30 @@ def test_the_https_port_admits_exactly_the_four_sources_is_clean():
     assert not extra, (
         f"the :{HTTPS_POD_PORT} rule admits ranges nothing in the inventory names: {extra}"
     )
+
+
+def test_the_https_port_admits_no_ipv6_range_is_clean():
+    """Non-vacuity: `cloudflare_ips` still carries IPv6 ranges for the filter to remove."""
+    assert any(":" in c for c in CTX["cloudflare_ips"]), (
+        "cloudflare_ips holds no IPv6 range, so this test no longer proves the filter"
+    )
+    admitted = _sources_admitted(_policy(CTX), HTTPS_POD_PORT)
+    assert admitted is not None
+    assert not _ipv6_sources(admitted)
+
+
+def test_a_render_that_admits_ipv6_ranges_is_flagged():
+    """The rejecting half: the unfiltered `cloudflare_ips` puts its IPv6 ranges in the policy."""
+    unfiltered = CTX["cloudflare_ips"] + [
+        CTX["lan_subnet"],
+        CTX["wg_client_subnet"],
+        CTX["k3s_pod_cidr"],
+    ]
+    admitted = _sources_admitted(
+        _policy({**CTX, SOURCES_VAR: unfiltered}), HTTPS_POD_PORT
+    )
+    assert admitted is not None
+    assert _ipv6_sources(admitted) == {c for c in CTX["cloudflare_ips"] if ":" in c}
 
 
 @pytest.mark.parametrize("dropped", sorted(EXPECTED))
