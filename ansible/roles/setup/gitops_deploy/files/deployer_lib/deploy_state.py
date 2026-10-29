@@ -373,15 +373,17 @@ class DeployerState:
         now: float,
         host: str | None = None,
         agent_hosts: tuple[str, ...] = (),
+        hosts: tuple[str, ...] = (),
     ) -> bool:
         """Record that `role` changed in `origin`'s range and no tick can apply it.
 
         Args:
-            origin, playbook, role, host, agent_hosts: the line's fields, as
+            origin, playbook, role, host, agent_hosts, hosts: the line's fields, as
                 `ManualPlaneEntry` names them. `origin` is the SHA the tick fast-forwarded to.
             now: a first-seen stamp, in `time.time()` terms.
 
-        Returns True when a line was appended, False when this role was already pending.
+        Returns True when a line was appended, False when this role was already pending. A
+        pending line that names `hosts` takes the union with this range's, keeping its stamp.
 
         A new line names the whole role until `record_manual_plane_tags` narrows it, so a
         reader between the two calls prints the blunt answer rather than a narrow one.
@@ -392,9 +394,21 @@ class DeployerState:
         monitor-bridge could never page. `behind_marker` is the opposite: it re-stamps on
         every fast-forward, because a tick that moves the tree has made progress.
         """
-        if any(e.role == role for e in self.manual_plane_pending()):
+        pending = next((e for e in self.manual_plane_pending() if e.role == role), None)
+        if pending is not None:
+            if pending.hosts and not set(hosts) <= set(pending.hosts):
+                widened = tuple(sorted(set(pending.hosts) | set(hosts)))
+                tags = self.manual_plane_tags_pending().get(role, frozenset())
+                self.write(
+                    "owed",
+                    put_manual_plane(
+                        self.read("owed"), pending._replace(hosts=widened), tags
+                    ),
+                )
             return False
-        entry = ManualPlaneEntry(origin, playbook, role, now, host, tuple(agent_hosts))
+        entry = ManualPlaneEntry(
+            origin, playbook, role, now, host, tuple(agent_hosts), tuple(hosts)
+        )
         self.write("owed", put_manual_plane(self.read("owed"), entry, frozenset()))
         return True
 
@@ -525,12 +539,14 @@ class DeployerState:
         drops those). It is the clearing half of a marker whose writer
         would otherwise have no reverse, and it is what a role promoted into
         `initial_setup.yml` needs on the day it is.
+
+        A line naming `hosts` stays: those are the hosts this apply did not reach (#6510).
         """
         wanted = set(tags)
         cleared = [
             e.role
             for e in self.manual_plane_pending()
-            if e.playbook == playbook and e.role in wanted
+            if e.playbook == playbook and e.role in wanted and not e.hosts
         ]
         for role in cleared:
             self.clear_manual_plane(role)

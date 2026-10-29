@@ -88,18 +88,17 @@ merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both
 run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
 **A master CI backlog holds a green PR's merge.** Before the direct merge, `land_lib/pace.py`
-counts the master push runs of `ci.yml` that are not completed. At 1 or more it prints
+counts the master push runs of `ci.yml` that are not completed. At 2 or more it prints
 `pacing the merge: …` and waits for the next poll. A full sweep is about 18 jobs against the
 account's 20-job runner cap, so a second unfinished sweep already queues. On 2026-10-24, eight
 concurrent landings left six master runs unfinished, their jobs waited 8-17 minutes for a
 runner, and each landing waited 29-61 minutes for its merge commit's verdict (#5526).
 
-The cap was 2 until 2026-10-25. A landing that updated its branch merged into a master that
-had moved during the re-test, so its merge commit's tree was never tested and its push run
-swept all 18 jobs. One landing in a burst then paid three full runs. Merging only into an idle
-master makes the re-tested tree the merged tree more often, which lets `prove` skip the push
-sweep. The `DECIDED:` marker on `PACE_MASTER_RUNS` in `land_lib/options.py` has the
-measurement and the condition for reverting it.
+A cap of 1 ran from 2026-10-25 to 2026-10-29 (#6308). It aimed to merge a re-tested PR into
+the tree it tested, so that `prove` skips the push sweep. The share of push runs that skipped
+the sweep did not rise, because the untested tree comes from master moving during the PR's
+re-test rather than at merge time (#6309). The `DECIDED:` marker on `PACE_MASTER_RUNS` in
+`land_lib/options.py` has the measurement. Batching the merges is the open route (#6521).
 
 - The count is a read, not a lock. Two landings that read at the same poll can both merge.
   Pacing lowers the average queue depth; it does not close the race that makes the `prove`
@@ -752,7 +751,10 @@ Four things sit in that position:
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger. Run the
 printed apply and clear commands as printed, including any `--applied <tags>`. A bring-up
 playbook gets no such line, because the tick parks on those and writes no marker. A landing
-behind a recorded role reads `settled`, because the tree converged. The clear, `--applied` and
+behind a recorded role reads `settled`, because the tree converged. A role the tick DID apply
+on daniel-box gets a line too when its change reaches another host (#6510): the line's `hosts`
+key names the hosts the "also reaches" note names, and the banner and monitor-bridge print the
+apply for each. Apply it there, then `clear-owed manual_plane <role>`. The clear, `--applied` and
 the six-hour page are in
 [A role only a hand can apply is recorded, not parked](gitops-pipeline.md#a-role-only-a-hand-can-apply-is-recorded-not-parked).
 

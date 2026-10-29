@@ -1,9 +1,11 @@
 """Tests for the static values `probe.py applied` reads (`probe_lib/applied_facts.py`).
 
 Each test writes a small role to `tmp_path` and walks it, or runs `run_applied` on it with a
-fake host read. Two walk the real `claude_code` role, whose set_facts #6359 and #6378 name.
+fake host read. Three walk the real `claude_code` role, whose set_facts #6359 and #6378 name
+and whose ssh-read register #6518 names.
 """
 
+import hashlib
 import os
 import sys
 from types import SimpleNamespace
@@ -11,8 +13,8 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from diagnostics.probe_lib import applied, applied_tasks
-from lib.exit_codes import PROBE_FAILED, PROBE_UNREADABLE
+from diagnostics.probe_lib import applied, applied_hosts, applied_tasks
+from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
 
 GATED = "- name: Write the gated file\n  ansible.builtin.copy: {content: x, dest: /etc/x/gated}\n"  # fmt: skip
 REGISTER = "- name: Read the host\n  ansible.builtin.command: hostname\n  register: x_out\n"  # fmt: skip
@@ -137,3 +139,71 @@ def test_the_real_fanout_alert_rule_renders_from_the_evaluated_agent_list():
     wants, _ = applied_tasks.expected(role, "daniel-box", applied.context(role, "daniel-box"))  # fmt: skip
     rule = next(w for w in wants if w.path.endswith("50-claude-fanout-alert.rules"))
     assert rule.sha256 is not None and not rule.unchecked, rule
+
+
+PEER_READ = """\
+- name: Read the key
+  delegate_to: localhost
+  ansible.builtin.command:
+    argv: [ssh, -o, BatchMode=yes, "{{ x_key_host }}", cat, "{{ x_key_path }}.pub"]
+  register: x_pub
+  when: [x_login, inventory_hostname != x_key_host]
+- name: Authorize it
+  ansible.builtin.copy: {content: "restrict {{ x_pub.stdout | trim }}\\n", dest: /etc/x/keys, mode: "0644"}
+  when: [x_login, inventory_hostname != x_key_host]
+"""
+KEY = "ssh-ed25519 AAAAkey x@daniel-box\n"
+PEER_CTX = {"x_key_host": "daniel-box", "x_key_path": "/k/peer", "x_login": True}
+
+
+def _peer_run(tmp_path, live_sha, key_row, host="daniel-server"):
+    """`run_applied` over PEER_READ; returns the exit code and the hosts each read went to."""
+    _walk(tmp_path, PEER_READ, PEER_CTX)
+    calls = []
+
+    def read(plan, at):
+        calls.append(at)
+        files = {p: key_row for p in plan.get("files", [])}
+        stat = {p: {"status": "ok", "mode": "0644", "sha256": live_sha} for p in plan.get("stat", [])}  # fmt: skip
+        return {"user": "u", "files": files, "stat": stat}
+
+    ns = SimpleNamespace(role="x", host=host, dry_run=False)
+    files_of = lambda *_: {h: ["main"] for h in ("daniel-box", "daniel-server") if host in (None, h)}  # fmt: skip
+    code = applied.run_applied(ns, read=read, setup=tmp_path, render_ctx=lambda *_: PEER_CTX, files_of=files_of)  # fmt: skip
+    return code, calls
+
+
+_AUTHORIZED = hashlib.sha256(f"restrict {KEY.strip()}\n".encode()).hexdigest()
+# fmt: off
+PEER_CASES = {
+    "key-matches": (_AUTHORIZED, {"status": "ok", "text": KEY}, PROBE_OK, ["ok       /etc/x/keys  0644 None:None, content matches"]),
+    "key-differs": ("0" * 64, {"status": "ok", "text": KEY}, PROBE_FAILED, ["DRIFT    /etc/x/keys  content differs from the render"]),
+    "key-unread": (_AUTHORIZED, {"status": "absent"}, PROBE_UNREADABLE, ["UNCHECKED /etc/x/keys  0644 None:None, content not compared: it reads run-time name(s) x_pub", "applied: /k/peer.pub on daniel-box was not read (absent), so content that reads it is not compared"]),
+}
+# fmt: on
+
+
+@pytest.mark.parametrize(("live_sha", "key_row", "code", "lines"), PEER_CASES.values(), ids=PEER_CASES)  # fmt: skip
+def test_a_register_read_over_ssh_renders_from_the_key_hosts_file(tmp_path, capsys, live_sha, key_row, code, lines):  # fmt: skip
+    """#6518: the content is compared against the file the register reads; an unread one stays UNCHECKED and says why."""
+    assert _peer_run(tmp_path, live_sha, key_row)[0] == code
+    out = capsys.readouterr().out
+    assert [line for line in lines if line not in out] == []
+
+
+def test_the_key_host_carries_the_file_in_its_own_read(tmp_path):
+    """One read per host when the run compares the key host: `ufw limit ssh` refuses a sixth."""
+    code, calls = _peer_run(tmp_path, _AUTHORIZED, {"status": "ok", "text": KEY}, host=None)  # fmt: skip
+    assert (code, calls) == (PROBE_OK, ["daniel-box", "daniel-server"])
+
+
+def test_the_real_agent_authorized_keys_renders_from_the_key_hosts_pub():
+    """#6518's UNCHECKED row: daniel-server's walk reads the agent's peer key on daniel-box."""
+    role = applied.SETUP / "claude_code"
+    ctx = applied.context(role, "daniel-server")
+    files = tuple(applied_hosts.task_files("claude_code", role, "daniel-server")["daniel-server"])  # fmt: skip
+    src = ("daniel-box", "/var/lib/claude/.ssh/peers_ed25519.pub")
+    assert applied_tasks.reads(role, "daniel-server", ctx, files) == {src}
+    wants, _ = applied_tasks.expected(role, "daniel-server", ctx, files, {src: KEY})
+    keys = next(w for w in wants if w.path.endswith("/.ssh/authorized_keys"))
+    assert (keys.sha256, keys.unchecked) == (_AUTHORIZED, False)

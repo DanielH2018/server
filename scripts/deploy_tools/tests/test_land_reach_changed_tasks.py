@@ -223,3 +223,20 @@ def test_a_tree_without_the_changed_tasks_says_the_note_stays_wide(
     assert f"reach 0 of the 1 tasks {old[:8]}..{new[:8]} changed in {_TASKS}" in err
     assert "land.py: warning: the task chains read from" in err, err
     assert ("could not read" in err) == bool(ref), err
+
+
+def test_the_tick_owes_a_hypervisor_drill_edit_to_daniel_server():
+    """The pair the GitOps tick records in its `owed` ledger (#6510): it ran the role here."""
+    reach = land_reach.remaining_setup_hosts(
+        ["ansible/roles/setup/hypervisor/tasks/etcd_drill.yml"], "daniel-box"
+    )
+    assert "daniel-server" in reach["hypervisor"]
+    assert "daniel-box" not in reach["hypervisor"]
+
+
+def test_the_tick_owes_nothing_for_a_role_only_its_own_host_runs():
+    """The rejecting half: `gitops_deploy` installs on the deployer alone."""
+    reach = land_reach.remaining_setup_hosts(
+        ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"], "daniel-box"
+    )
+    assert "gitops_deploy" not in reach

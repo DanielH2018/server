@@ -18,9 +18,15 @@ are separate plays, as k3s's are, is walked half by half (#6475). The rows:
 - `UNCHECKED`: a credential file rootq refused even to stat, so nothing about it was
   verified (#6372), or a file whose content reads a name only the run sets, such as a
   `register`, so the render cannot predict it (#6378). Mode and owner are still compared, and
-  a difference there is DRIFT;
+  a difference there is DRIFT. A `register` filled by `ssh HOST cat PATH` is the exception:
+  `applied` reads PATH on HOST first and renders with its text (#6518). When that read
+  fails, the file stays UNCHECKED and a line says why;
 - `unread`: the path could not be stat'ed as this user, and rootq did not answer for it,
   because the path is not on rootq's allowlist or the host has no rootq.
+
+The file a register reads over ssh rides in its host's own read when the run compares that
+host and its walk reads no such file itself; so `applied claude_code` reads daniel-box once.
+Otherwise it costs one more read of that host, as `--host daniel-server` does.
 
 A path this user cannot stat or open is asked of `rootq` on its host, inside the same host
 read: `rootq stat` for mode and owner, and `rootq matches PATH HEX` against the render's hash.
@@ -51,7 +57,7 @@ from deploy_tools.setup_lib.setup_gates import HOSTS
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.applied_hosts import task_files
 from diagnostics.probe_lib.applied_facts import STUB
-from diagnostics.probe_lib.applied_tasks import Skip, Want, expected
+from diagnostics.probe_lib.applied_tasks import Skip, Want, expected, reads
 from diagnostics.probe_lib.host_reader import dry_run_text, read_host
 from lib import yaml_fast
 from lib.ansible_inventory import inventory_hosts
@@ -208,6 +214,16 @@ def report_host(
     return lines, seen
 
 
+def take_texts(host: str, doc: dict, texts: dict) -> None:
+    """Add each file `doc` read on `host` to `texts`, and print why one was not read."""
+    for path, row in (doc.get("files") or {}).items():
+        if row.get("status") == "ok":
+            texts[(host, path)] = row.get("text", "")
+        else:
+            why = row.get("error") or row.get("status")
+            print(f"applied: {path} on {host} was not read ({why}), so content that reads it is not compared")  # fmt: skip
+
+
 def run_applied(
     ns, read=read_host, setup: Path = SETUP, render_ctx=None, files_of=task_files
 ) -> int:
@@ -231,20 +247,42 @@ def run_applied(
             f"applied: no host runs {ns.role}: its gate or end_role guard admits none"
         )
         return PROBE_UNREADABLE
+    ctxs = {host: render_ctx(role_dir, host) for host in hosts}
+    need: dict[str, set[str]] = {}
+    readers = set()
+    for host, files in hosts.items():
+        found = reads(role_dir, host, ctxs[host], tuple(files))
+        readers |= {host} if found else set()
+        # Only an inventory host is read: the path came from a render, not from a person.
+        for src, path in found:
+            if src in HOSTS:
+                need.setdefault(src, set()).add(path)
+    texts: dict[tuple[str, str], str] = {}
+    # A host whose walk needs no file is read first, carrying the files the others need.
+    carried = {h for h in need if h in hosts and h not in readers}
+    for src in sorted(need.keys() - carried):
+        request = {"files": sorted(need[src])}
+        if ns.dry_run:
+            print(dry_run_text(request, src))
+            continue
+        try:
+            take_texts(src, read(request, src), texts)
+        except core.Unreadable as exc:
+            print(f"applied: {exc.message}, so content that reads its files is not compared")  # fmt: skip
     statuses: set[str] = set()
     compared = False
-    for host, files in hosts.items():
-        wants, skips = expected(
-            role_dir, host, render_ctx(role_dir, host), tuple(files)
-        )
+    for host in sorted(hosts, key=lambda h: h not in carried):
+        wants, skips = expected(role_dir, host, ctxs[host], tuple(hosts[host]), texts)
         # A path two tasks write takes the hash of the one that has one.
         asks = {w.path: w.sha256 for w in sorted(wants, key=lambda w: bool(w.sha256))}
         request = {"stat": sorted(asks), "rootq": asks}
+        if host in carried:
+            request["files"] = sorted(need[host])
         if ns.dry_run:
             print(dry_run_text(request, host))
             continue
         # A host with no path to compare is not read, so an unreachable one costs nothing.
-        if not wants:
+        if not wants and host not in carried:
             doc = {"user": "no one", "stat": {}}
         else:
             try:
@@ -254,6 +292,7 @@ def run_applied(
                 print(f"{host}:\n  unread   every path: {exc.message}")
                 statuses.add("unread")
                 continue
+        take_texts(host, doc, texts)
         lines, seen = report_host(host, wants, skips, doc)
         # A host whose files write nothing is not a gap. A run where no host had a path is:
         # it verified nothing.

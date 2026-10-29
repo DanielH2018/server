@@ -1132,6 +1132,7 @@
  "scripts/deploy_tools/tests/test_runbook_gates_metallb_upgrade.py": 0.0,
  "scripts/deploy_tools/tests/test_runbook_gates_pinned_rotation.py": 0.05,
  "scripts/deploy_tools/tests/test_setup_gates_packaged_guard.py": 0.0,
+ "scripts/deploy_tools/tests/test_setup_reach_hosts.py": 1.11,
  "scripts/deploy_tools/tests/test_setup_routing.py": 0.0,
  "scripts/deploy_tools/tests/test_shared_role_callers.py": 0.05,
  "scripts/deploy_tools/tests/test_shared_role_reach.py": 0.5,

@@ -328,13 +328,13 @@ def _manual_plane_tags(obj: dict) -> frozenset[str]:
     return frozenset(w for w in words if w is not None)
 
 
-def _agent_hosts(obj: dict) -> tuple[str, ...]:
+def _agent_hosts(obj: dict, key: str = "agent_hosts") -> tuple[str, ...]:
     """The `agent_hosts` key of a `manual_plane` line, or () when it is missing or torn.
 
     A torn key reads as no known host, which `agent_join_cmds` prints as a placeholder
-    rather than as no agent command at all.
+    rather than as no agent command at all. `key` reads the `hosts` key the same way.
     """
-    hosts = obj.get("agent_hosts")
+    hosts = obj.get(key)
     if not isinstance(hosts, list):
         return ()
     words = [_token(h) for h in hosts]
@@ -366,7 +366,13 @@ def manual_plane_entries(
         host = _token(obj.get("host"))
         entries.append(
             ManualPlaneEntry(
-                entry.origin, playbook, role, entry.at, host, _agent_hosts(obj)
+                entry.origin,
+                playbook,
+                role,
+                entry.at,
+                host,
+                _agent_hosts(obj),
+                _agent_hosts(obj, "hosts"),
             )
         )
         tags[role] = _manual_plane_tags(obj)
@@ -392,6 +398,7 @@ def put_manual_plane(
         "tags",
         "host",
         "agent_hosts",
+        "hosts",
     )
     lines, placed = [], False
     for line in (owed or "").splitlines():
@@ -420,6 +427,7 @@ def _manual_plane_line(entry: ManualPlaneEntry, tags: frozenset[str], extra) -> 
         tags=sorted(tags),
         **({"host": entry.host} if entry.host else {}),
         **({"agent_hosts": list(entry.agent_hosts)} if entry.agent_hosts else {}),
+        **({"hosts": list(entry.hosts)} if entry.hosts else {}),
     )
 
 
