@@ -93,7 +93,7 @@ import time
 from pathlib import Path
 
 from reconcile_lib import activate, libvirt, lines, textfile, udev, ufw, users
-from reconcile_lib.common import ERR, ROOT, run, say, systemctl, under_root
+from reconcile_lib.common import ERR, ROOT, run, log, systemctl, under_root
 
 LOCK = ROOT / "var/lib/dpkg/lock-frontend"
 MANIFEST = ROOT / "usr/lib/homelab/manifest.json"
@@ -298,12 +298,12 @@ def not_found_homelab_units() -> set[str]:
 def stop(unit: str) -> bool:
     result = systemctl("stop", unit)
     if result.returncode not in (0, NOT_LOADED):
-        say(f"stop {unit} failed: {result.stderr.strip()}", ERR)
+        log(f"stop {unit} failed: {result.stderr.strip()}", ERR)
         return False
     systemctl(
         "reset-failed", unit
     )  # a unit that is not failed makes this fail harmlessly
-    say(f"stopped {unit}")
+    log(f"stopped {unit}")
     return True
 
 
@@ -325,10 +325,10 @@ def retire_path(path: Path) -> bool:
     """
     owner = owned(path)
     if owner is None:
-        say(f"dpkg -S {path} failed; not removing it", ERR)
+        log(f"dpkg -S {path} failed; not removing it", ERR)
         return False
     if owner:
-        say(f"{path} is owned by a package; leaving it")
+        log(f"{path} is owned by a package; leaving it")
         return True
     target = under_root(path)
     if not os.path.lexists(target):
@@ -339,9 +339,9 @@ def retire_path(path: Path) -> bool:
         else:
             target.unlink()
     except OSError as exc:
-        say(f"cannot remove {path}: {exc}", ERR)
+        log(f"cannot remove {path}: {exc}", ERR)
         return False
-    say(f"removed {path}")
+    log(f"removed {path}")
     return True
 
 
@@ -381,7 +381,7 @@ def retire_cron(name: str, user: str) -> bool:
     if shutil.which("crontab") is None:
         # No cron package means no crontab holding the entry. Only an absent binary counts:
         # one that is present but will not run fails below, and the entry is retried.
-        say(f"crontab is not installed; no {name} to retire")
+        log(f"crontab is not installed; no {name} to retire")
         return True
     listing = run("crontab", "-l", "-u", user)
     if listing.returncode != 0:
@@ -399,9 +399,9 @@ def retire_cron(name: str, user: str) -> bool:
         else:
             kept.append(line)
     if run("crontab", "-u", user, "-", stdin="".join(kept)).returncode != 0:
-        say(f"cannot rewrite {user}'s crontab without {name}", ERR)
+        log(f"cannot rewrite {user}'s crontab without {name}", ERR)
         return False
-    say(f"removed cron {name} from {user}'s crontab")
+    log(f"removed cron {name} from {user}'s crontab")
     return True
 
 
@@ -410,10 +410,10 @@ def retire_unit(unit: str) -> bool:
     if os.path.lexists(under_root(path)):
         owner = owned(path)
         if owner is not False:
-            say(f"{path} is owned by a package, or dpkg cannot say; leaving it")
+            log(f"{path} is owned by a package, or dpkg cannot say; leaving it")
             return owner is True
         if systemctl("disable", unit).returncode != 0:
-            say(f"disable {unit} failed", ERR)
+            log(f"disable {unit} failed", ERR)
             return False
         if not stop(unit) or not retire_path(path):
             return False
@@ -447,7 +447,7 @@ def read_pending() -> set[str]:
     except (OSError, ValueError):
         queue = None
     if not isinstance(queue, list):
-        say(f"{PENDING} is unreadable; reading it as empty", ERR)
+        log(f"{PENDING} is unreadable; reading it as empty", ERR)
         return set()
     return {unit for unit in queue if isinstance(unit, str)}
 
@@ -459,7 +459,7 @@ def update_pending(add: set[str], remove: set[str]) -> bool:
             PENDING_LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600
         )
     except OSError as exc:
-        say(f"cannot open {PENDING_LOCK}: {exc}", ERR)
+        log(f"cannot open {PENDING_LOCK}: {exc}", ERR)
         return False
     try:
         deadline = time.monotonic() + LOCK_SECONDS
@@ -469,7 +469,7 @@ def update_pending(add: set[str], remove: set[str]) -> bool:
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
-                    say(f"{PENDING_LOCK} stayed locked for {LOCK_SECONDS}s", ERR)
+                    log(f"{PENDING_LOCK} stayed locked for {LOCK_SECONDS}s", ERR)
                     return False
                 time.sleep(0.05)
         queue = read_pending()
@@ -481,7 +481,7 @@ def update_pending(add: set[str], remove: set[str]) -> bool:
             os.replace(tmp, PENDING)
         return True
     except OSError as exc:
-        say(f"cannot rewrite {PENDING}: {exc}", ERR)
+        log(f"cannot rewrite {PENDING}: {exc}", ERR)
         return False
     finally:
         os.close(fd)
@@ -507,7 +507,7 @@ def read_secrets_manifest() -> tuple[list[str], list[dict]] | None:
     except (OSError, ValueError, KeyError, TypeError):
         valid = False
     if not valid:
-        say(f"{SECRETS_JSON} is unusable", ERR)
+        log(f"{SECRETS_JSON} is unusable", ERR)
         return None
     return credentials, outputs
 
@@ -546,7 +546,7 @@ def bring_up(
     """
     missing = missing_outputs(unit, outputs)
     if missing:
-        say(f"{verb} {unit} skipped: {', '.join(missing)} does not exist yet")
+        log(f"{verb} {unit} skipped: {', '.join(missing)} does not exist yet")
         update_pending({unit}, set())
         return False
     systemctl(
@@ -554,10 +554,10 @@ def bring_up(
     )  # clears the start limit; harmless on a unit that is not failed
     started[unit] = int(time.time())
     if systemctl(verb, unit).returncode != 0:
-        say(f"{verb} {unit} failed", ERR)
+        log(f"{verb} {unit} failed", ERR)
         update_pending({unit}, set())
         return False
-    say(f"{verb} {unit}")
+    log(f"{verb} {unit}")
     return update_pending(set(), {unit}) if unit in queued else True
 
 
@@ -593,7 +593,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
                 0o755
             )  # whatever the umask; homelab-secrets corrects an older one
     except OSError as exc:
-        say(f"cannot create {RUN_DIR}: {exc}", ERR)
+        log(f"cannot create {RUN_DIR}: {exc}", ERR)
 
     # Step 1: stop what the manifest dropped, and every homelab unit whose file has gone.
     dropped = {u for u in set(prev_units) - set(units) if is_homelab(u)}
@@ -621,13 +621,13 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             or not is_active(SECRETS_UNIT)
         )
         if stale and systemctl("restart", SECRETS_UNIT).returncode != 0:
-            say(
+            log(
                 f"restart {SECRETS_UNIT} failed; carrying on with the outputs that exist",
                 ERR,
             )
             secrets_ran = ok = False
         elif stale:
-            say(f"restart {SECRETS_UNIT}")
+            log(f"restart {SECRETS_UNIT}")
         secrets_state = digest if secrets_ran else prev.get("secrets_inputs_sha256")
 
     # Step 1c: the users and lines arms, so a unit that runs as a new user starts, and step 3b
@@ -650,7 +650,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     queued = read_pending()
     idle = {unit for unit in queued - changed if left_alone(unit, units, links, manual)}
     if idle:
-        say(f"dropping {', '.join(sorted(idle))} from the queue: nothing to restart")
+        log(f"dropping {', '.join(sorted(idle))} from the queue: nothing to restart")
         ok = update_pending(set(), idle) and ok
     restart_set = sorted(changed | (queued - idle))
 
@@ -709,7 +709,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         if shadow and key not in prev_retired and not waiting:
             if shadow.name not in units:
                 drift["legacy"] += 1
-                say(f"keeping {shadow}: the package ships no unit of that name")
+                log(f"keeping {shadow}: the package ships no unit of that name")
             elif (result := hand_off(shadow)) is None:
                 ok = False
             else:
@@ -721,18 +721,18 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         # A running service is never stopped to retire it: the entry stays and counts as drift.
         if key not in prev_retired and not waiting and running_service(entry):
             drift["legacy"] += 1
-            say(f"keeping {key}: the service is running, so it retires once it is not")
+            log(f"keeping {key}: the service is running, so it retires once it is not")
         elif key in prev_retired or (not waiting and retire(entry)):
             retired.append(key)
         else:
             if waiting:
-                say(f"keeping {key}: the secrets do not all exist yet")
+                log(f"keeping {key}: the secrets do not all exist yet")
             ok = False
 
     # Step 4b: one daemon-reload after every shadow removal, then each packaged unit whose
     # fragment changed, in the order step 3 uses.
     if removed and systemctl("daemon-reload").returncode != 0:
-        say("daemon-reload failed after removing a shadowing copy", ERR)
+        log("daemon-reload failed after removing a shadowing copy", ERR)
         ok = False
     for unit in sorted(handed):
         if not left_alone(unit, units, links, manual):
@@ -740,7 +740,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest["reconcilers"]:
-        say(
+        log(
             f"the manifest lists reconciler {name!r}, which this version does not have",
             ERR,
         )
@@ -855,7 +855,7 @@ def main() -> int:
     state = {k: prev[k] for k in kept if k in prev}
     broken = [name for name, (status, _) in installed.items() if status != "ii "]
     if broken:
-        say(f"{', '.join(broken)} is not installed as 'ii '; acting on nothing", ERR)
+        log(f"{', '.join(broken)} is not installed as 'ii '; acting on nothing", ERR)
         ok = False
     else:
         try:
@@ -863,7 +863,7 @@ def main() -> int:
                 raise ManifestError(f"{MANIFEST} does not exist")
             manifest = parse_manifest(text)
         except ManifestError as exc:
-            say(f"{exc}; acting on nothing", ERR)
+            log(f"{exc}; acting on nothing", ERR)
             ok = False
         else:
             ok, state = act(manifest, prev)

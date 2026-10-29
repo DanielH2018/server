@@ -44,6 +44,10 @@ from pathlib import Path
 
 import k3s_gates
 
+# The reconcile component installs reconcile_lib beside this script, and every host package
+# ships that component (hosts/components/reconcile/component.yml).
+from reconcile_lib.common import ERR, WARNING, log
+
 # HOMELAB_ROOT prefixes every host path. Only the tests set it.
 ROOT = Path(os.environ.get("HOMELAB_ROOT", "/"))
 MANIFEST = "usr/lib/homelab/manifest.json"
@@ -54,6 +58,10 @@ TMP = ".homelab_k3s_restart.tmp"
 RESTART_TIMEOUT_S = 300
 POLL_S = 5
 STEP_TIMEOUT_S = 60
+
+# Every line goes to stdout, so the unit's SyslogLevel=notice keeps an unleveled line through
+# journald's MaxLevelStore. A failure line passes ERR, so `journalctl -p err` finds it (#6478).
+TAG = "homelab-k3s-restart"
 
 # Overridden by the tests, so a run needs neither a real sleep nor the real clock.
 sleep = time.sleep
@@ -67,11 +75,6 @@ def utcnow() -> datetime:
 
 class Stop(Exception):
     """The run cannot continue: it writes `pending 1` and exits 1."""
-
-
-def say(message: str) -> None:
-    # stdout, so the unit's SyslogLevel=notice keeps the line through journald's MaxLevelStore.
-    print(f"homelab-k3s-restart: {message}", flush=True)
 
 
 def path(*parts: str) -> Path:
@@ -125,7 +128,11 @@ def config_hash(unit: str) -> str:
 def write_metrics(host: str, pending: int, failed: int) -> None:
     directory = path(TEXTFILE_DIR)
     if not directory.is_dir():
-        say(f"/{TEXTFILE_DIR} is missing; writing no metrics")
+        log(
+            f"/{TEXTFILE_DIR} is missing; writing no metrics",
+            tag=TAG,
+            stream=sys.stdout,
+        )
         return
     try:
         success = int(state("last_success").read_text().strip())
@@ -144,7 +151,7 @@ def write_metrics(host: str, pending: int, failed: int) -> None:
         tmp.chmod(0o644)
         os.replace(tmp, directory / PROM)
     except OSError as exc:
-        say(f"cannot write {PROM}: {exc}")
+        log(f"cannot write {PROM}: {exc}", ERR, tag=TAG, stream=sys.stdout)
 
 
 def record_success() -> None:
@@ -213,7 +220,7 @@ def restart_and_wait(unit: str, host: str, api: k3s_gates.Api, digest: str) -> b
     before = main_pid(unit)
     t0 = clock()
     write_atomic(state("attempt.sha256"), digest + "\n")
-    say(f"restarting {unit} for config hash {digest[:12]}")
+    log(f"restarting {unit} for config hash {digest[:12]}", tag=TAG, stream=sys.stdout)
     systemctl("--no-block", "restart", unit)
     while clock() < t0 + RESTART_TIMEOUT_S:
         sleep(POLL_S)
@@ -245,20 +252,32 @@ def run(args: argparse.Namespace) -> int:
     if applied is None:
         write_atomic(state("applied.sha256"), digest + "\n")
         record_success()
-        say(f"first run: recorded config hash {digest[:12]}; restarting nothing")
+        log(
+            f"first run: recorded config hash {digest[:12]}; restarting nothing",
+            tag=TAG,
+            stream=sys.stdout,
+        )
         write_metrics(host, 0, 0)
         return 0
     fail_attempt()
     failed = read_hash("failed.sha256")
     if digest == applied:
         if failed:
-            say(
-                "config matches the applied hash; failed.sha256 stands, so failed stays 1"
+            log(
+                "config matches the applied hash; failed.sha256 stands, so failed stays 1",
+                WARNING,
+                tag=TAG,
+                stream=sys.stdout,
             )
         write_metrics(host, 0, 1 if failed else 0)
         return 0
     if digest == failed:
-        say(f"config hash {digest[:12]} already failed once: not retrying")
+        log(
+            f"config hash {digest[:12]} already failed once: not retrying",
+            WARNING,
+            tag=TAG,
+            stream=sys.stdout,
+        )
         write_metrics(host, 1, 1)
         return 0
     _lock = None  # the descriptor stays open to the end of the run
@@ -285,7 +304,7 @@ def run(args: argparse.Namespace) -> int:
         if k3s_gates.wait_for_pass(checks, notes, once=True, poll=0, max_wait=None):
             raise ValueError("a gate refused")
     except ValueError as exc:
-        say(f"refused, restarting nothing: {exc}")
+        log(f"refused, restarting nothing: {exc}", WARNING, tag=TAG, stream=sys.stdout)
         write_metrics(host, 1, 1 if failed else 0)
         return 0
     restart_api = cluster_client_factory(
@@ -295,12 +314,19 @@ def run(args: argparse.Namespace) -> int:
         write_atomic(state("applied.sha256"), digest + "\n")
         state("attempt.sha256").unlink(missing_ok=True)
         record_success()
-        say(f"restarted {args.unit} and the node is Ready: recorded {digest[:12]}")
+        log(
+            f"restarted {args.unit} and the node is Ready: recorded {digest[:12]}",
+            tag=TAG,
+            stream=sys.stdout,
+        )
         write_metrics(host, 0, 0)
         return 0
     fail_attempt()
-    say(
-        f"{args.unit} was not active, Ready and past its heartbeat in {RESTART_TIMEOUT_S}s"
+    log(
+        f"{args.unit} was not active, Ready and past its heartbeat in {RESTART_TIMEOUT_S}s",
+        ERR,
+        tag=TAG,
+        stream=sys.stdout,
     )
     write_metrics(host, 1, 1)
     return 1
@@ -313,7 +339,12 @@ def stop_post(args: argparse.Namespace) -> int:
         and state("attempt.sha256").exists()
     ):
         fail_attempt()
-        say("the run ended without success after a restart: recording failed")
+        log(
+            "the run ended without success after a restart: recording failed",
+            ERR,
+            tag=TAG,
+            stream=sys.stdout,
+        )
         write_metrics(args.host, 1, 1)
         return 0
     return 0
@@ -347,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return run(args)
     except Stop as exc:
-        say(f"stopped: {exc}")
+        log(f"stopped: {exc}", ERR, tag=TAG, stream=sys.stdout)
         write_metrics(args.host, 1, 1 if read_hash("failed.sha256") else 0)
         return 1
 

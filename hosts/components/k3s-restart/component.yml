@@ -31,7 +31,8 @@
 # must also list `secrets-unit` and declare `k3s_readonly_token` under
 # `credentials:`, because the unit loads that credential through `LoadCredential=`. It also lists
 # `k3s-gates`, which ships `/usr/lib/homelab/k3s_gates.py`: the unit imports that script from its
-# own directory.
+# own directory. It imports `reconcile_lib.common.log` from there as well, which the `reconcile`
+# component ships in every host package.
 #
 # ENFORCED: hosts/lib/tests/test_k3s_restart.py, test_k3s_restart_component.py and
 # test_k3s_restart_window.py; the `k3s-gates` pairing by test_k3s_gates_component.py.
