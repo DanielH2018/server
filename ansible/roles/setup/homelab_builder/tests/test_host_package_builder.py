@@ -313,6 +313,22 @@ def test_the_walk_stops_at_the_last_built_commit_and_at_the_bound(lab):
     assert first not in github.asked, "the walk passed the last built commit"
 
 
+def test_a_no_green_walk_logs_the_bound_beside_the_unbuilt_count(lab, capsys):
+    # One pending commit over the last build once logged "in the 1 newest", which read as a
+    # walk bound of 1 (#6511).
+    origin, _, _, github = lab
+    first = origin.commit("a")
+    github.runs[first] = GREEN
+    builder(lab).main()
+    github.runs[origin.commit("b")] = PENDING
+    capsys.readouterr()
+    assert builder(lab).main() == 0
+    assert (
+        f"graded 1 of the 1 commits since the last build {first[:12]}, walk bound 10"
+        in capsys.readouterr().out
+    )
+
+
 @pytest.mark.parametrize(
     "overrides", [{"CI_CONTEXTS": ""}, {"CI_ANCESTOR_WALK_MAX": "0"}]
 )

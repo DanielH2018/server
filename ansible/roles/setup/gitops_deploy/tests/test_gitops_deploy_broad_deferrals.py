@@ -25,6 +25,7 @@ from gitops_ledger import (
 )
 from _broad_k8s_range import (
     alerted,
+    APPLY_GITOPS_DEPLOY,
     APPLYABLE_ROLE,
     DECLARES_SONARR,
     DEPLOY_PLANE,
@@ -316,3 +317,45 @@ def test_a_deferred_receipt_never_names_a_service_the_ledger_does_not_yet_hold(
     assert uncounted == []
     (receipt,) = parse_receipts(state.read("receipts"))
     assert receipt.deferred == {"ansible/deploy.yml": frozenset({"radarr", "sonarr"})}
+
+
+def test_a_role_the_tick_applies_still_owes_the_hosts_its_run_did_not_reach(
+    gitops_deploy, tick, settings, state
+):
+    """A change reaching a host beyond the tick's own is owed there, past the tick's apply.
+
+    `hypervisor` routes onto the tick's host, which runs only its teardown half, so the
+    daniel-server install was owed with nothing durable naming it (#6510, #6411). The line is
+    written at the ff-merge, before the apply, so it must survive the clear that follows.
+    """
+    config = mixed(settings, tick, APPLYABLE_ROLE)
+    tick.reach = {"gitops_deploy": ("daniel-pi", "daniel-server")}
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    assert APPLY_GITOPS_DEPLOY in tick.playbooks
+    (entry,) = state.manual_plane_pending()
+    assert (entry.role, entry.playbook) == (
+        "gitops_deploy",
+        "ansible/initial_setup.yml",
+    )
+    assert entry.hosts == ("daniel-pi", "daniel-server")
+
+
+def test_a_role_whose_change_reaches_only_the_tick_host_owes_nothing(
+    gitops_deploy, tick, settings, state
+):
+    """The rejecting half: the same apply with no other host reached writes no line."""
+    config = mixed(settings, tick, APPLYABLE_ROLE)
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    assert APPLY_GITOPS_DEPLOY in tick.playbooks
+    assert state.manual_plane_pending() == []
+
+
+def test_a_failed_reach_derivation_records_nothing_and_still_applies(
+    gitops_deploy, tick, settings, state
+):
+    """The tick has already fast-forwarded, so a failed derivation must not stop the apply."""
+    config = mixed(settings, tick, APPLYABLE_ROLE)
+    tick.reach_error = RuntimeError("setup_reach_hosts.py exited 1")
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    assert APPLY_GITOPS_DEPLOY in tick.playbooks
+    assert state.manual_plane_pending() == []
