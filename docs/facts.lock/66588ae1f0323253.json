@@ -1,5 +1,5 @@
 {
-  "checksum": "19ad12af2239c4595e6191e7a46e8f0dfa6787490651ebec8894e628836916e9",
+  "checksum": "8b1330ae1e32f8b7cbc6e915b342035d5025781ef760e706de5b713d4e98e8b1",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/registry/CLAUDE.md#Notable",
   "row": {
@@ -22,6 +22,6 @@
       "scripts/renderer/renderer_lib/images.py:ghcr_text": "2d355f1d1aa99f59d01f5bf5c6ab179e1efa8f7d41400ae0b043aeb259ff760d"
     },
     "python": "3.14",
-    "verified_sha": "b08bdf1bf"
+    "verified_sha": "8de0fd887"
   }
 }

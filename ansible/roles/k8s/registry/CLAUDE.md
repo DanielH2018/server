@@ -131,8 +131,10 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   - It has no resume sidecar. The cut transfer that sidecar repairs is ghcr.io's signed blob
     URL expiring.
   - Its TTL is `registry_k8s_dockerhub_mirror_ttl` (2160h), not zero, so no GC collects it and
-    it renders `replicas: 1`. distribution counts the TTL from the fetch, so an image fetched
-    more than one TTL ago and not pulled since needs the WAN again.
+    it renders `replicas: 1`. distribution schedules the expiry only on a fetch from Docker
+    Hub, and a pull served from the store never moves it. Every cached image is therefore
+    deleted one TTL after its first fetch, however often nodes pulled it since, so a digest pin
+    unchanged for longer than the TTL needs the WAN again.
     `ansible/roles/k8s/registry/templates/dockerhub-mirror.yaml.j2:DECIDED: a long TTL` has
     the trade-off.
   - Nothing proves it serves pulls the way node-exporter's `ghcr-mirror-pull` sidecar proves

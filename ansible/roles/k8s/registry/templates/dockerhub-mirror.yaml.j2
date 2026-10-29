@@ -71,9 +71,12 @@ spec:
             # DECIDED: a long TTL, not the ghcr-mirror's zero. A zero TTL never expires anything,
             # so the store then needs the weekly offline prune the ghcr-mirror has
             # (registry-gc.sh, ghcr-mirror-prune.sh, its keep set and warm pass), and that
-            # machinery reads ghcr.io refs only. The TTL counts from the fetch, so an image
-            # fetched more than one TTL ago and not pulled since is a gap again; the default 168h
-            # would make that gap a week. A zero TTL with a GC for this store is #6536.
+            # machinery reads ghcr.io refs only. The cost: distribution schedules the expiry only
+            # when it fetches from Docker Hub, and a pull served from the store never moves it.
+            # So every cached image is deleted one TTL after its first fetch, however often nodes
+            # pulled it since, and stays gone until some node misses it locally with the WAN up.
+            # A digest pin unchanged for longer than the TTL is therefore a gap again. The default
+            # 168h would make that a week. A zero TTL with a GC for this store is #6536.
             - name: REGISTRY_PROXY_TTL
               value: "{{ registry_k8s_dockerhub_mirror_ttl }}"
           volumeMounts:

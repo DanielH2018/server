@@ -52,8 +52,9 @@ registry_k8s_ghcr_resume_port: 5004
 registry_k8s_dockerhub_mirror_claim: registry-dockerhub-mirror
 registry_k8s_dockerhub_mirror_size: 40Gi
 # How long the proxy keeps a blob or manifest after it fetched it from Docker Hub. distribution
-# counts from the fetch, not from the last pull, so a cached image older than this is deleted and
-# the next pull refetches it. dockerhub-mirror.yaml.j2's DECIDED: marker has why it is not zero.
+# counts from the fetch, and a pull served from the store never moves it, so a cached image is
+# deleted this long after its first fetch however often nodes pulled it since. The next pull that
+# misses the store refetches it. dockerhub-mirror.yaml.j2's DECIDED: marker has why it is not zero.
 registry_k8s_dockerhub_mirror_ttl: 2160h
 registry_k8s_dockerhub_mirror_debug_port: 5006
 
