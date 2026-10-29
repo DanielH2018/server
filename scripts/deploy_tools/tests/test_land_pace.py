@@ -125,7 +125,9 @@ def test_a_head_green_after_ci_spent_the_budget_merges_into_a_backlog(landing, c
 def test_the_cap_rises_by_one_for_each_quarter_hour_held(landing, capsys):
     # Two unfinished runs never drain: a cap of 1 holds, the raised cap of 2 holds, and the
     # cap of 3 reached after half an hour held admits the merge.
-    ln, calls = _landing(landing, 3, [BACKLOG], merge_poll=pace.RAISE_CAP_EVERY_S)
+    ln, calls = _landing(
+        landing, 3, [BACKLOG], merge_poll=pace.RAISE_CAP_EVERY_S, pace_master_runs=1
+    )
     merge.await_merge(ln)
     assert _merges(calls) == 1
     out = capsys.readouterr().out
@@ -139,12 +141,21 @@ def test_the_cap_reads_from_the_environment(monkeypatch):
     monkeypatch.setenv(options.PACE_ENV, "0")
     assert options.parse_args(["--pr", "1"], "").pace_master_runs == 0
     monkeypatch.delenv(options.PACE_ENV)
-    assert options.parse_args(["--pr", "1"], "").pace_master_runs == 1
+    assert (
+        options.parse_args(["--pr", "1"], "").pace_master_runs
+        == options.PACE_MASTER_RUNS
+    )
 
 
-def test_by_default_one_unfinished_master_run_holds_the_merge(landing, capsys):
-    ln, calls = _landing(landing, 2, [[_run("in_progress", 600)], []])
+def test_by_default_two_unfinished_master_runs_hold_the_merge_and_one_does_not(
+    landing, capsys
+):
+    # The cap of 1 did not raise the share of push runs that skip the sweep (#6309).
+    ln, calls = _landing(landing, 2, [BACKLOG, [_run("in_progress", 600)]])
     merge.await_merge(ln)
     assert _merges(calls) == 1
+    names = [c[0] for c in calls]
+    assert names.count("gh:master-runs") == 2
     out = capsys.readouterr().out
-    assert out.count("pacing the merge: 1 master CI run(s) unfinished") == 1
+    assert out.count("pacing the merge:") == 1
+    assert "pacing the merge: 2 master CI run(s) unfinished" in out
