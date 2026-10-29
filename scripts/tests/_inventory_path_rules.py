@@ -15,6 +15,8 @@ from collections.abc import Mapping
 from functools import cache
 from pathlib import Path
 
+from _row_table import parse
+
 from lib.repo_paths import REPO
 
 # The `lib.repo_paths` names a test module reads the tree through, each with the segments it
@@ -143,7 +145,7 @@ def _module_names(
         except OSError, UnicodeDecodeError:
             text = ""
     try:
-        tree = ast.parse(text)
+        tree = parse(text)
     except SyntaxError:
         tree = ast.Module(body=[], type_ignores=[])
     names = _local_anchors(tree, path, sources, seen | {path})
@@ -332,7 +334,7 @@ def inline_inventory_paths(
     (`"ansible/inventory/group_vars/all.yml"`) is not a chain and not a hit: the deploy
     classifiers' tests hand those to the code under test as inputs.
     """
-    tree = ast.parse(source)
+    tree = parse(source)
     names = _local_anchors(tree, module, sources or {})
     joins = [
         node

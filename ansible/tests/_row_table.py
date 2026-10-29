@@ -30,6 +30,7 @@ What a row buys over a file:
 Run: uv run pytest ansible/tests/repo/test_row_table.py
 """
 
+import ast
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -77,6 +78,19 @@ def verdict(
     if problems:
         problems.append(f"  why the property holds: {reason}")
     return problems
+
+
+# One tree per source text for the whole process. Every row of a census reads the same modules,
+# and parsing was 5.15s of the 9.23s one row took over 1620 of them (#6437), so the rows of
+# `scripts/tests/test_census_rows_test_*.py` share the parse rather than each paying it again.
+# Every tree of that census held is about 420 MiB per process (measured 2026-10-29, 1624
+# modules); under `--dist loadscope` each worker that runs a census file holds its own share.
+# Unbounded on purpose: every row sweeps the census in the same order, so an LRU smaller than
+# the census never hits. A caller only reads the tree; one that edited it would edit every row's.
+@cache
+def parse(source: str) -> ast.Module:
+    """The AST of `source`, parsed once per process however many rows ask for it."""
+    return ast.parse(source)
 
 
 # ── The textual census row ────────────────────────────────────────────────────────────
