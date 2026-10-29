@@ -55,6 +55,7 @@ EXEMPT = {
     "claude-memory-sync.timer": "copies the memory store to daniel-server; never touches k3s",
     "claude-fanout-server-lander.timer": "lands a merged PR over ssh; reads no cluster state",
     "claude-triage-poll.timer": "polls monitors and starts a session only on an alert episode",
+    "claude-pipeline-timeline.timer": "joins GitHub, journals and review records; no cluster",
     "homelab-builder.timer": "builds and signs packages; a build during a restart only waits",
     "Sync peer Claude artifacts": "an ssh pull from daniel-server; reads no cluster state",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.

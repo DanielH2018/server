@@ -210,3 +210,44 @@ def test_a_failed_issue_read_keeps_the_waits_and_drops_the_queue(tmp_path):
     assert "issue queue not read: gh: HTTP 502" in text
     assert _count(body, "needs-input") == 1
     assert "findings_issues" not in body
+
+
+def _stamps(tmp_path):
+    return json.loads((tmp_path / "state" / operator_waits.STAMPS_FILE).read_text())
+
+
+def test_a_pr_first_seen_held_is_stamped_with_the_pass_time(tmp_path):
+    _gauge(tmp_path, [_record(5001, outcome="needs-input")], [_pr(5001)])
+    assert _stamps(tmp_path) == [{"pr": 5001, "reason": "needs-input", "since": NOW}]
+
+
+def test_a_wait_closes_when_the_pr_is_released_or_changes_reason():
+    open_ = [{"pr": 7, "reason": "operator-step", "since": 100}]
+    assert operator_waits.restamp(open_, {7: "operator-step"}, 900) == open_
+    assert operator_waits.restamp(open_, {}, 900) == [{**open_[0], "until": 900}]
+    assert operator_waits.restamp(open_, {7: "needs-input"}, 900) == [
+        {**open_[0], "until": 900},
+        {"pr": 7, "reason": "needs-input", "since": 900},
+    ]
+
+
+def test_a_closed_wait_is_kept_for_sixty_days_and_a_torn_stamp_is_dropped():
+    old = {"pr": 1, "reason": "x", "since": 0, "until": 10}
+    fresh = {"pr": 2, "reason": "x", "since": 0, "until": 10 + 86400}
+    now = 10 + operator_waits.STAMP_KEEP_S + 1
+    assert operator_waits.restamp([old, fresh, {"pr": "x"}, {}], {}, now) == [fresh]
+
+
+def test_an_unreadable_daniel_server_leaves_the_stamps_as_they_were(tmp_path):
+    stamps = tmp_path / "state" / operator_waits.STAMPS_FILE
+    stamps.parent.mkdir()
+    stamps.write_text('[{"pr": 5001, "reason": "needs-input", "since": 1}]')
+    _gauge(
+        tmp_path,
+        [],
+        [],
+        ssh=subprocess.CompletedProcess([], 255, "", "ssh: connect refused"),
+    )
+    assert operator_waits.read_stamps(stamps) == [
+        {"pr": 5001, "reason": "needs-input", "since": 1}
+    ]

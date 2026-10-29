@@ -1,6 +1,7 @@
 """The joins and gaps `pipeline_timeline.py` derives from each store's own line or record shape."""
 
 import json
+import subprocess
 
 from pipeline_timeline import (
     ci_by_branch,
@@ -10,8 +11,10 @@ from pipeline_timeline import (
     load_reviews,
     parse_holds,
     parse_landings,
+    pull_reviews,
     rates,
     reverts,
+    waited_hours,
 )
 
 GAPS_EMPTY = dict.fromkeys(
@@ -228,3 +231,50 @@ def test_the_summary_prints_the_change_failure_and_first_time_green_rates():
     assert lines[0] == "first-time green: 2 of 3 judged (67%)"
     assert lines[1] == "reverted: 1 of 4 (25.0%), #5378 by #5390"
     assert lines[2] == "CI queue min (slowest job, final head): median 4.0, p90 6.0"
+
+
+def test_waited_hours_sums_each_reason_and_ends_an_open_wait_at_the_merge():
+    stamps = [
+        {"pr": 7, "reason": "operator-step", "since": 0, "until": 3600},
+        {"pr": 7, "reason": "operator-step", "since": 7200, "until": 10800},
+        {"pr": 7, "reason": "needs-input", "since": 14400},
+        {"pr": 7, "reason": "findings-remain", "since": 20000, "until": 30000},
+    ]
+    assert waited_hours(stamps, merged=18000) == {
+        "operator-step": 2.0,
+        "needs-input": 1.0,
+    }
+    assert waited_hours(stamps[:1], merged=None) == {"operator-step": 1.0}
+    assert waited_hours(stamps[2:3], merged=None) == {}
+
+
+def test_join_puts_each_prs_waits_on_its_own_row():
+    prs = [
+        {"number": 7, "title": "a", "createdAt": None, "mergedAt": "1970-01-01T05:00:00Z"},
+        {"number": 8, "title": "b", "createdAt": None, "mergedAt": "1970-01-01T05:00:00Z"},
+    ]  # fmt: skip
+    waits = [{"pr": 7, "reason": "operator-step", "since": 3600, "until": 10800}]
+    seven, eight = join(prs, [], {}, {}, {}, waits=waits)
+    assert seven["waited_h"] == {"operator-step": 2.0}
+    assert eight["waited_h"] == {}
+
+
+def test_pull_reviews_reads_the_host_into_a_local_directory(tmp_path, monkeypatch):
+    seen = []
+
+    def fake_run(cmd, **_):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 23, "", "rsync: connection refused\n")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    dest = tmp_path / "reviews-daniel-server"
+
+    why = pull_reviews("daniel-server", dest)
+
+    assert why == "exit 23: rsync: connection refused"
+    assert dest.is_dir()
+    assert seen[0][0] == "rsync"
+    assert seen[0][-2:] == ["daniel-server:.local/state/fanout-review/", f"{dest}/"]
+    assert not any(
+        a.startswith("--delete") or a == "--remove-source-files" for a in seen[0]
+    )

@@ -23,11 +23,12 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 - **Crons (2):**
   - `Sync peer Claude artifacts` — `*/5 * * * *`
   - `Claude Code telemetry health` — `*/10 * * * *`
-- **Timers (7):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+- **Timers (8):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
   `claude-clone-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-dotfiles-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-fanout-server-lander.timer` (`OnBootSec=5min`, `OnUnitActiveSec=10min`),
   `claude-memory-sync.timer` (`OnBootSec=5min`, `OnUnitActiveSec=15min`),
+  `claude-pipeline-timeline.timer` (`OnBootSec=15min`, `OnUnitActiveSec=1440min`),
   `claude-rc-restart.timer` (`OnCalendar=weekly`), `claude-triage-poll.timer`
   (`OnBootSec=5min`, `OnUnitActiveSec=2min`)
 <!-- /generated_from -->
@@ -306,6 +307,43 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
 
 `KillMode=process` in the unit is load-bearing. The detached landing leaves a user-manager
 service's cgroup only, so a system unit's default kill would end it when the oneshot exits.
+
+Each pass also stamps every PR held for a counted reason into
+`~/.local/state/fanout-server-lander/operator-waits.json`: `{"pr", "reason", "since"}` on the
+first pass that sees the hold, and `until` on the first pass that does not
+(`operator_waits.restamp`, #5682). `pipeline_timeline.py` joins the stamps into `waited_h`. The
+gauge above counts the waits that are open now; the stamps say which PR's wait ended when. A
+stamp has the pass's 10-minute resolution, and a closed one is kept 60 days.
+
+## Autonomous-role contract (`claude-pipeline-timeline`, a daily snapshot of the PR timeline)
+
+Issue #5661. `scripts/dev/pipeline_timeline.py` joins each merged PR's stamps into one row.
+Two inputs are in daniel-box's journal, which keeps about ten days (`SystemMaxUse=1G`), so a day
+nobody ran the joiner was lost. This timer runs it daily as `ubuntu`.
+
+- **Scope:** every 1440 minutes, `pipeline_timeline.py --days 3 --pull-reviews daniel-server`
+  reads GitHub, the landing ledger and the lander's journal, and appends its rows to
+  `~/.local/state/pipeline-timeline/<UTC date>.jsonl`. It first copies daniel-server's review
+  records with a read-only `rsync` into `~/.local/state/pipeline-timeline/reviews-daniel-server/`
+  (one ssh connection, inside the `ufw limit ssh` budget). It writes nothing else, and changes
+  no repository, cluster or GitHub state.
+- **Mode:** `claude_code_pipeline_timeline_enabled`, true only in daniel-box's host_vars. False
+  stops the timer, removes the three units and the heartbeat file, and keeps the snapshots.
+  `--days` is `claude_code_pipeline_timeline_days`; a window of N days survives N-1 missed runs,
+  because a later snapshot's rows supersede an earlier one's for the same PR.
+- **Abort valves:** the unit's `TimeoutStartSec=30min`. A pull that fails warns and joins the
+  copy the last pull left, so a server down for maintenance costs no snapshot. A failed `gh`
+  read fails the unit and pages.
+- **Evidence:** `journalctl -u claude-pipeline-timeline` holds the summary; a failure pages
+  Discord through `claude-pipeline-timeline-alert`, and `claude-pipeline-timeline.prom` pages a
+  timer that stopped (`ClaudePipelineTimelineNotReporting`, a 174900-second deadline).
+- **Next-run review:** after a week, check that the snapshot files hold one run a day, and that
+  rows for daniel-server PRs carry `phases_min`. An empty `phases_min` means the pull failed
+  on the first run and no copy exists yet.
+
+Applying it: `initial_setup.yml --tags claude_code`, on daniel-box. The GitOps deployer applies
+the role's template and defaults changes itself. A change to `tasks/` alone is skipped by it, so
+a PR that edits only `tasks/pipeline_timeline.yml` is applied by hand.
 
 ## The takeover check
 

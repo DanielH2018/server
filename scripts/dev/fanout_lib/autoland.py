@@ -433,7 +433,7 @@ def run(
             started += 1
             hand_off(b, primary, state, log_dir, number, label, out)
     if gauge is not None and not dry_run:
-        write_waits(b, candidates, prs, gauge, out)
+        write_waits(b, candidates, prs, gauge, out, state / operator_waits.STAMPS_FILE)
     return 0
 
 
@@ -443,9 +443,24 @@ def write_waits(
     prs: dict[int, dict],
     gauge: Path,
     out: Callable[[str], None],
+    stamps: Path | None = None,
 ) -> None:
-    """Write the gauge of what waits on a person, from this pass's reads and two local ones."""
+    """Write the gauge of what waits on a person, from this pass's reads and two local ones.
+
+    With `stamps`, each PR held for a counted reason is also stamped there (#5682).
+    """
     box = {n: r for n, r in newest_per_pr(b.local_records()).items() if n in prs}
+    if stamps is not None:
+        held = {
+            n: reason
+            for host, recs in (("box", box), ("server", server))
+            for n, r in recs.items()
+            if (reason := operator_waits.counted_reason(host, problems(r, prs[n])))
+        }
+        try:
+            operator_waits.record_stamps(stamps, held, b.clock())
+        except OSError as exc:
+            out(f"operator wait stamps not written: {tail(str(exc))}")
     starts = operator_waits.waits(
         [(problems(r, prs[n]), r) for n, r in server.items()],
         [(problems(r, prs[n]), r) for n, r in box.items()],

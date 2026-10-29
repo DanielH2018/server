@@ -1,0 +1,9 @@
+[Unit]
+Description=Snapshot the per-PR pipeline timeline every {{ claude_code_pipeline_timeline_interval }}
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec={{ claude_code_pipeline_timeline_interval }}
+
+[Install]
+WantedBy=timers.target
