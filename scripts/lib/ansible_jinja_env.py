@@ -210,6 +210,8 @@ def register_ansible_filters(env: Environment) -> Environment:
 
     # The first ansible-core import creates its local temp directory (#5904).
     with ansible_local_temp():
+        # It imports ansible.errors at module top, so it loads inside the temp guard.
+        import claude_agents
         from ansible.plugins.filter.core import (
             b64encode,
             combine,
@@ -242,6 +244,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["to_json"] = to_json_stub
     env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
+    env.filters["claude_agent_profiles"] = claude_agents.FilterModule().filters()[
+        "claude_agent_profiles"
+    ]
     env.filters["flux_components"] = flux_components.FilterModule().filters()[
         "flux_components"
     ]

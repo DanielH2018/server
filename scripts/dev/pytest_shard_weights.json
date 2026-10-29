@@ -1243,6 +1243,7 @@
  "scripts/diagnostics/tests/test_probe_alerts_limit.py": 0.0,
  "scripts/diagnostics/tests/test_probe_alerts_parsing.py": 0.0,
  "scripts/diagnostics/tests/test_probe_applied.py": 1.78,
+ "scripts/diagnostics/tests/test_probe_applied_facts.py": 0.58,
  "scripts/diagnostics/tests/test_probe_applied_rootq.py": 0.7,
  "scripts/diagnostics/tests/test_probe_arr_redaction.py": 0.0,
  "scripts/diagnostics/tests/test_probe_b2_ledger.py": 0.0,
