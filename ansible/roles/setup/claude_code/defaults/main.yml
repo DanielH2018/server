@@ -564,6 +564,14 @@ claude_code_fanout_server_lander_author: DanielH2018
 # removes the unit, the rule and the webhook file, and a stopped batch then pages nothing.
 claude_code_fanout_alert_enabled: true
 
+# ── The session stop alert ──────────────────────────────────────────────────────────────
+# claude-stop-alert@<cause>.service pages Discord when a Claude Code session ends on an API
+# error (#6021). The session's StopFailure hook starts it, and
+# templates/50-claude-stop-alert.rules.j2 lets the operator and each agent user start it for a
+# cause in [a-z0-9_]+ and nothing else. False removes the unit, the rule and the webhook file,
+# and a session that ends on an error then pages nothing.
+claude_code_stop_alert_enabled: true
+
 # ── The two Claude crons on the artifacts node (H2.7) ───────────────────────────────────
 # `Sync peer Claude artifacts` (templates/sync-artifacts.sh.j2) and `Claude Code telemetry
 # health` (templates/telemetry-health.sh.j2) run only on this node, from tasks/node_crons.yml.

@@ -556,6 +556,11 @@
   tags: [claude_code]
   ansible.builtin.import_tasks: fanout_alert.yml
 
+# ── The session stop alert ──────────────────────────────────────────────────────────────
+- name: Install the session stop alert, or take it back
+  tags: [claude_code]
+  ansible.builtin.import_tasks: stop_alert.yml
+
 # ── The server-batch lander ─────────────────────────────────────────────────────────────
 - name: Install the server-batch lander timer, or take it back
   tags: [claude_code]
