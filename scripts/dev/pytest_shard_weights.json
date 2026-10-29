@@ -903,6 +903,7 @@
  "hosts/lib/tests/test_bootstrap_host_steps.py": 0.6,
  "hosts/lib/tests/test_box_initial_setup_part1.py": 1.73,
  "hosts/lib/tests/test_builder_component.py": 0.24,
+ "hosts/lib/tests/test_claude_code_component.py": 2.76,
  "hosts/lib/tests/test_component_retired_stamp_fragments.py": 0.09,
  "hosts/lib/tests/test_crowdsec_probe_component.py": 0.5,
  "hosts/lib/tests/test_docs_refresh_component.py": 0.15,
