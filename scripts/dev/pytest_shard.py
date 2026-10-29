@@ -404,7 +404,7 @@ def refresh_drifted_weights(
     The unattended repair for a weight that has drifted but not far enough for the gate's
     ratio arms. Only an entry `drifted` judges out of band is rewritten, so re-measuring a
     slice usually leaves the table byte-identical. A drifted entry is measured a second time,
-    and it is rewritten with that measurement only when the two runs agree. A recorded path no longer in the census is
+    and it is rewritten with the lower of the two only when the two runs agree. A recorded path no longer in the census is
     dropped, as `record_missing_weights` drops it.
 
     Args:
@@ -427,7 +427,7 @@ def refresh_drifted_weights(
     # One serial run is not enough to rewrite a row: a single outlier measured 0.0s for a 16s
     # module and 62s for a 1s one, and CI then failed the bot's own branch on it (#6286). The
     # drifted files run once more, and a row moves only when the second run drifts too and
-    # agrees with the first within DRIFT_RATIO.
+    # agrees with the first within DRIFT_RATIO. Load only adds time, so it keeps the lower run.
     confirmed = measure(candidates) if candidates else {}
     moved = sorted(
         f
@@ -435,7 +435,7 @@ def refresh_drifted_weights(
         if drifted(kept[f], confirmed.get(f, 0.0))
         and not drifted(measured.get(f, 0.0), confirmed.get(f, 0.0))
     )
-    kept |= {f: confirmed.get(f, 0.0) for f in moved}
+    kept |= {f: min(measured[f], confirmed[f]) for f in moved}
     _write_weights(kept, path, pins)
     return moved
 

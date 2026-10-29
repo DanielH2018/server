@@ -342,6 +342,21 @@ def test_a_refresh_keeps_a_row_whose_two_runs_drift_but_disagree(tmp_path):
     assert json.loads(table.read_text()) == {module: 16.0}
 
 
+def test_a_refresh_writes_the_lower_of_two_agreeing_runs(tmp_path):
+    """#6587: two loaded runs can agree with each other and still both overshoot."""
+    module = FILES[0]
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps({module: 0.8}))
+    measure, _ = _runs({module: 20.0}, {module: 23.39})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    assert moved == [module]
+    assert json.loads(table.read_text()) == {module: 20.0}
+
+
 @pytest.mark.parametrize(
     ("second", "expected"),
     [
