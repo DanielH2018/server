@@ -322,6 +322,27 @@ def test_an_open_pi_gate_closes_with_master_idle_once_the_pi_stops_firing(opened
     assert (saved["gate"], saved["deferred"]) == (None, [])
 
 
+def test_a_pi_gate_opened_before_its_last_fire_re_picks_with_master_idle(lab):
+    """#6533: the Pi was the canary at 22:40 with a 22:50 fire due, and never reported.
+
+    No commit reaches master after the publish, so only the every-run check can move the gate.
+    """
+    origin, state, _, _ = lab
+    edit(origin, "daniel-pi", "pi 1")
+    edit(origin, "daniel-server", "server 1")
+    published = edit(origin, "daniel-box", "box 1")
+    evening = datetime(2026, 10, 28, 22, 40, tzinfo=UTC).timestamp()
+    run(lab, Prom(), at=evening)
+    saved = json.loads((state / "state.json").read_text())
+    assert saved["gate"] == {"host": "daniel-pi", "sha": published}
+    sign(state)
+    run(lab, Prom(), at=evening + 11 * 60)
+    assert debs(state) == ["homelab-daniel-server"]
+    saved = json.loads((state / "state.json").read_text())
+    assert saved["gate"] == {"host": "daniel-server", "sha": published}
+    assert saved["deferred"] == ["hosts/daniel-box"]
+
+
 def test_the_fire_table_is_every_host_drop_in_s_schedule():
     """CALENDAR_FIRES restates each drop-in, which the builder cannot read, fire for fire."""
     dropins = sorted(REPO.glob("hosts/*/units/homelab-updater.timer.conf"))
