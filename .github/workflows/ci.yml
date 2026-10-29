@@ -70,9 +70,20 @@ concurrency:
   # `total_count: 0` jobs — evicted while queued, never started.
   #
   # Grouping by SHA means a master run is never queued behind another and so can never be
-  # evicted. The cost is concurrent master sweeps rather than serialised ones, which is why
-  # this is safe here specifically: runner minutes are free on a public repo, and the queue
-  # measurement that prompted this found job start lag at 1-4s with nothing waiting on a slot.
+  # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
+  # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
+  # jobs at once, and a full sweep is 18 of them. The queue measurement that prompted this
+  # grouping found job start lag at 1-4s with nothing waiting on a slot. That no longer holds.
+  # Measured 2026-10-25 over 95 minutes (#6306), the pool was full 17% of the time, and a
+  # `ci.yml` job waited 76s for a runner at the median, 293s at p90 and 572s at worst. A
+  # concurrent master sweep therefore delays queued PR runs by minutes.
+  #
+  # The grouping stays anyway. A run that waits for a slot still delivers its SHA's verdict,
+  # while an evicted run delivers none, so slot contention costs latency and eviction costs
+  # correctness. The levers on the cost side are the share each master run takes and the size
+  # of the pool, not the group key: #6309 measures whether paced merges let push runs take
+  # the 2-job proven skip instead of all 18 jobs, and #6307 is the operator's call on more
+  # runner capacity.
   #
   # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
   # group nothing else can enter. Without that arm it falls through to `github.sha` and joins the
