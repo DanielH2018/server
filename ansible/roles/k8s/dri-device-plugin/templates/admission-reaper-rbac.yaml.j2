@@ -1,7 +1,8 @@
 {#
-  The dri-admission-reaper CronJob's identity, in the workload namespace where jellyfin and
-  tdarr run, and a Role in each add-on namespace it also reaps (#6460). Every Role binds the
-  one ServiceAccount in the workload namespace, because the CronJob runs there. The job makes
+  The identities of the two reaper CronJobs (templates/admission-reaper-cronjob.yaml.j2):
+  `dri-admission-reaper` in the workload namespace where jellyfin and tdarr run, and
+  `addon-job-reaper` in kube-system, with a Role in each add-on namespace it reaps (#6460). The
+  cronjob template's DECIDED note says why the add-on grant has its own account. Each job makes
   two calls per namespace (files/dri_admission_reaper.py):
 
     list   pods   the Failed pods, by field selector
@@ -43,12 +44,18 @@ subjects:
   - kind: ServiceAccount
     name: dri-admission-reaper
     namespace: {{ k8s_namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: addon-job-reaper
+  namespace: kube-system
 {% for namespace in dri_device_plugin_reaper_job_namespaces %}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: dri-admission-reaper
+  name: addon-job-reaper
   namespace: {{ namespace }}
 rules:
   - apiGroups: [""]
@@ -58,14 +65,14 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: dri-admission-reaper
+  name: addon-job-reaper
   namespace: {{ namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: dri-admission-reaper
+  name: addon-job-reaper
 subjects:
   - kind: ServiceAccount
-    name: dri-admission-reaper
-    namespace: {{ k8s_namespace }}
+    name: addon-job-reaper
+    namespace: kube-system
 {% endfor %}

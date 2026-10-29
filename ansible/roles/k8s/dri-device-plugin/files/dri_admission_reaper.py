@@ -9,8 +9,9 @@ once the plugin is back, but nothing deletes the rejected pod: the kube-controll
 `terminated-pod-gc-threshold` is 12500 pods, so the tombstone stays Failed and dashboards list
 it as Down (#6367, tdarr after the 2026-10-25 reboot).
 
-The `dri-admission-reaper` CronJob runs this in the workload namespace and in each add-on
-namespace. In the workload namespace a pod is deleted only when all three hold:
+The `dri-admission-reaper` CronJob runs this in the workload namespace, and the
+`addon-job-reaper` CronJob runs it in kube-system against each add-on namespace. In the
+workload namespace a pod is deleted only when all three hold:
 
 - its phase is `Failed`;
 - its reason is `UnexpectedAdmissionError` or starts with `OutOf`, so the kubelet refused it
@@ -44,8 +45,9 @@ Usage:
 
     python3 /jobs/dri_admission_reaper.py
 
-`REAPER_NAMESPACE` names the workload namespace. `REAPER_JOB_NAMESPACES` names the add-on
-namespaces, separated by spaces; unset or empty means none. Exit 0 means every matching pod is
+`REAPER_NAMESPACE` names the workload namespace, and `REAPER_JOB_NAMESPACES` names the add-on
+namespaces, separated by spaces. Each CronJob sets one of the two; an unset or empty variable
+means no namespace of that kind. Exit 0 means every matching pod is
 gone, and one stdout line per namespace counts them. Exit 1 means the list or a delete failed. `-h` and `--help` print this
 text and exit 0.
 """
@@ -199,7 +201,9 @@ def main(
     )
     parser.parse_args(argv)
     environ = os.environ if env is None else env
-    rules = {environ["REAPER_NAMESPACE"]: is_tombstone}
+    rules = {}
+    if environ.get("REAPER_NAMESPACE"):
+        rules[environ["REAPER_NAMESPACE"]] = is_tombstone
     for namespace in environ.get("REAPER_JOB_NAMESPACES", "").split():
         rules[namespace] = is_addon_debris
     if kube is None:

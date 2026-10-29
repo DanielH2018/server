@@ -1,23 +1,32 @@
 {% from 'container-resources.yml.j2' import job_container_resources with context %}
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 {#
-  Deletes the Failed pods the kubelet rejected at admission because this role's plugin had not
-  re-registered `devic.es/dri` yet, once their ReplicaSet has replaced them (#6367).
-  files/dri_admission_reaper.py holds the rule and what it leaves alone; this file schedules it.
+  Two CronJobs run files/dri_admission_reaper.py, which holds both rules and what they leave
+  alone; this file schedules them.
 
-  It also deletes the Failed Job pods in the add-on namespaces that
-  `dri_device_plugin_reaper_job_namespaces` lists (#6460), through a Role in each.
+  `dri-admission-reaper`, in the workload namespace, deletes the Failed pods the kubelet
+  rejected at admission because this role's plugin had not re-registered `devic.es/dri` yet,
+  once their ReplicaSet has replaced them (#6367). It runs there rather than beside the
+  DaemonSet in kube-system, because those pods are there and a Role grants only in its own
+  namespace. The namespace baseline fences ingress only, and the job takes no connection, so
+  it needs no `netpol_from` grant.
 
-  It runs in the workload namespace rather than beside the DaemonSet in kube-system, because the
-  pods it was written for are there and a Role grants only in its own namespace. The namespace baseline
-  fences ingress only, and the job takes no connection, so it needs no `netpol_from` grant.
+  `addon-job-reaper`, in kube-system, deletes the Failed Job pods in the add-on namespaces
+  that `dri_device_plugin_reaper_job_namespaces` lists (#6460).
+  # DECIDED: the add-on sweep runs as its own ServiceAccount in kube-system, not as the
+  # workload namespace's reaper. Its grant reaches every pod in kube-system and
+  # longhorn-system, and RBAC cannot narrow a delete by phase or owner. Only a principal that
+  # can already create pods in kube-system can run a pod as this account, so the grant adds no
+  # path from the workload namespace into those two. No baseline selects kube-system, so its
+  # pod carries no netpol label.
 #}
+{% macro reaper(name, namespace, env, labels={}) %}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: dri-admission-reaper
-  namespace: {{ k8s_namespace }}
+  name: {{ name }}
+  namespace: {{ namespace }}
 data:
   dri_admission_reaper.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py') | indent(4, true) }}
@@ -27,8 +36,8 @@ data:
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: dri-admission-reaper
-  namespace: {{ k8s_namespace }}
+  name: {{ name }}
+  namespace: {{ namespace }}
 spec:
   schedule: "{{ dri_device_plugin_reaper_schedule }}"
   timeZone: Etc/UTC
@@ -40,7 +49,7 @@ spec:
   jobTemplate:
     metadata:
       labels:
-        app: dri-admission-reaper
+        app: {{ name }}
     spec:
       activeDeadlineSeconds: {{ dri_device_plugin_reaper_deadline_seconds }}
       # No retry: the next run is one period away.
@@ -49,12 +58,14 @@ spec:
       template:
         metadata:
           labels:
-            app: dri-admission-reaper
-            netpol-baseline: enforced
+            app: {{ name }}
+{% for key, value in labels | dictsort %}
+            {{ key }}: {{ value }}
+{% endfor %}
         spec:
           restartPolicy: Never
           enableServiceLinks: false
-          serviceAccountName: dri-admission-reaper
+          serviceAccountName: {{ name }}
           automountServiceAccountToken: true
           securityContext:
             runAsNonRoot: true
@@ -64,15 +75,15 @@ spec:
               type: RuntimeDefault
           priorityClassName: homelab-best-effort
           containers:
-            - name: dri-admission-reaper
+            - name: {{ name }}
               image: {{ dri_device_plugin_reaper_image }}
               imagePullPolicy: IfNotPresent
               command: ["python3", "/jobs/dri_admission_reaper.py"]
               env:
-                - name: REAPER_NAMESPACE
-                  value: "{{ k8s_namespace }}"
-                - name: REAPER_JOB_NAMESPACES
-                  value: "{{ dri_device_plugin_reaper_job_namespaces | join(' ') }}"
+{% for key, value in env | dictsort %}
+                - name: {{ key }}
+                  value: "{{ value }}"
+{% endfor %}
                 # The API server's CA, which the automounted token volume carries.
                 - name: SSL_CERT_FILE
                   value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
@@ -81,11 +92,14 @@ spec:
                   value: "1"
 {{ job_hardened_security_context(read_only=true) }}
               volumeMounts:
-                - name: dri-admission-reaper-code
+                - name: {{ name }}-code
                   mountPath: /jobs
                   readOnly: true
 {{ job_container_resources(cpu_limit='100m', mem_limit='64Mi', cpu_request='10m', mem_request='32Mi') }}
           volumes:
-            - name: dri-admission-reaper-code
+            - name: {{ name }}-code
               configMap:
-                name: dri-admission-reaper
+                name: {{ name }}
+{% endmacro %}
+{{ reaper('dri-admission-reaper', k8s_namespace, {'REAPER_NAMESPACE': k8s_namespace}, {'netpol-baseline': 'enforced'}) }}
+{{ reaper('addon-job-reaper', 'kube-system', {'REAPER_JOB_NAMESPACES': dri_device_plugin_reaper_job_namespaces | join(' ')}) }}

@@ -144,3 +144,14 @@ def test_a_refused_namespace_fails_the_run_but_the_others_are_still_reaped(capsy
     assert run_with_addons(api) == 1
     assert deleted(api) == ["backup-1"]
     assert "listing Failed pods answered HTTP 403: forbidden" in capsys.readouterr().err
+
+
+def test_the_addon_job_reaper_lists_only_the_addon_namespaces():
+    api = PerNamespaceApi({"kube-system": [pod("helm-install-1", owner="Job")]})
+    env = {"REAPER_JOB_NAMESPACES": "kube-system longhorn-system"}
+    assert dri_admission_reaper.main([], env, api) == 0
+    assert [path.split("/")[4] for method, path, _ in api.calls if method == "GET"] == [
+        "kube-system",
+        "longhorn-system",
+    ]
+    assert deleted(api) == ["helm-install-1"]

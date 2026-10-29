@@ -271,8 +271,11 @@ def test_the_longhorn_reconcile_role_without_the_pvc_list_is_flagged(
     ]
 
 
-def _reaper_calls(monkeypatch) -> list[tuple[str, str]]:
-    """#6367: the dri-admission-reaper CronJob's calls on a run with one tombstone to delete."""
+def _reaper_calls(monkeypatch, env: dict[str, str]) -> list[tuple[str, str]]:
+    """A reaper CronJob's calls on a run that finds one pod to delete per namespace.
+
+    #6367's tombstone is served in homelab, and #6460's failed Job pod everywhere else.
+    """
     monkeypatch.syspath_prepend(str(K8S_ROLES / "dri-device-plugin" / "files"))
     script = importlib.import_module("dri_admission_reaper")
     calls = []
@@ -284,7 +287,6 @@ def _reaper_calls(monkeypatch) -> list[tuple[str, str]]:
         },
         "status": {"phase": "Failed", "reason": "UnexpectedAdmissionError"},
     }
-    # #6460: in an add-on namespace a failed Job pod is deleted too.
     job_pod = {
         "metadata": {
             "name": "helm-install-1",
@@ -303,9 +305,26 @@ def _reaper_calls(monkeypatch) -> list[tuple[str, str]]:
             namespace = path.split("/")[4]
             return 200, {"items": [tombstone if namespace == "homelab" else job_pod]}
 
-    env = {"REAPER_NAMESPACE": "homelab", "REAPER_JOB_NAMESPACES": "kube-system"}
     assert script.main([], env, Recorder()) == 0
     return calls
+
+
+def _cronjob_env(name: str) -> dict[str, str]:
+    """The env the rendered CronJob `name` gives the script."""
+    docs = yaml_fast.safe_load_all(
+        render_role_template("dri-device-plugin", "admission-reaper-cronjob.yaml.j2")
+    )
+    [cronjob] = [
+        d for d in docs if d.get("kind") == "CronJob" and d["metadata"]["name"] == name
+    ]
+    [container] = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"][
+        "containers"
+    ]
+    return {
+        e["name"]: e["value"]
+        for e in container["env"]
+        if e["name"].startswith("REAPER_")
+    }
 
 
 def _reaper_rbac() -> list[dict]:
@@ -319,24 +338,44 @@ def _reaper_rbac() -> list[dict]:
 def test_the_admission_reaper_role_grants_every_call_its_script_makes(
     monkeypatch,
 ) -> None:
-    needs = rest_needs(_reaper_calls(monkeypatch))
+    env = _cronjob_env("dri-admission-reaper")
+    needs = rest_needs(_reaper_calls(monkeypatch, env))
     assert needs == {
         ("homelab", "", "pods", "list", None),
         ("homelab", "", "pods", "delete", "tdarr-1"),
-        ("kube-system", "", "pods", "list", None),
-        ("kube-system", "", "pods", "delete", "helm-install-1"),
     }
     granted = grants(_reaper_rbac(), "homelab", "dri-admission-reaper")
     assert missing(needs, granted) == []
 
 
 def test_the_admission_reaper_role_without_delete_is_flagged(monkeypatch) -> None:
-    needs = rest_needs(_reaper_calls(monkeypatch))
+    needs = rest_needs(_reaper_calls(monkeypatch, _cronjob_env("dri-admission-reaper")))
     docs = _reaper_rbac()
     for doc in docs:
         for rule in doc.get("rules") or []:
             rule["verbs"] = ["list"]
     assert missing(needs, grants(docs, "homelab", "dri-admission-reaper")) == [
         ("homelab", "", "pods", "delete", "tdarr-1"),
-        ("kube-system", "", "pods", "delete", "helm-install-1"),
     ]
+
+
+def test_the_addon_job_reaper_roles_grant_every_call_its_script_makes(
+    monkeypatch,
+) -> None:
+    """#6460: the kube-system CronJob's calls, against its own account's grants."""
+    needs = rest_needs(_reaper_calls(monkeypatch, _cronjob_env("addon-job-reaper")))
+    assert needs == {
+        ("kube-system", "", "pods", "list", None),
+        ("kube-system", "", "pods", "delete", "helm-install-1"),
+        ("longhorn-system", "", "pods", "list", None),
+        ("longhorn-system", "", "pods", "delete", "helm-install-1"),
+    }
+    granted = grants(_reaper_rbac(), "kube-system", "addon-job-reaper")
+    assert missing(needs, granted) == []
+
+
+def test_the_workload_namespace_reaper_holds_no_grant_outside_homelab() -> None:
+    """The add-on grant reaches every pod in two system namespaces, so a pod that runs as
+    the homelab account must not reach it (#6460 review)."""
+    scopes = {g[0] for g in grants(_reaper_rbac(), "homelab", "dri-admission-reaper")}
+    assert scopes == {"homelab"}
