@@ -211,8 +211,9 @@ class Fakes:
         default_factory=lambda: [[]]
     )
     # What the PR head's `ci.yml` runs listing answers on every call, as `merge._ready_run_on`
-    # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped.
-    head_runs: list[dict[str, Any]] = field(
+    # reads it: `{id, status, conclusion}` per run. The default is one draft run that skipped,
+    # and an exception is raised in place of an answer.
+    head_runs: Any = field(
         default_factory=lambda: [
             {"id": 1, "status": "completed", "conclusion": "skipped"}
         ]
@@ -329,6 +330,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return answer
         if args[0] == "api" and "/workflows/ci.yml/runs?head_sha=" in args[1]:
             calls.append(("gh:head-runs", args, kwargs))
+            if isinstance(f.head_runs, Exception):
+                raise f.head_runs
             return f.head_runs
         if args[0] == "api" and "/workflows/ci.yml/runs?branch=" in args[1]:
             answer = runs_seq(*args, **kwargs)

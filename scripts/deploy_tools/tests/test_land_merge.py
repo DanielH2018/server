@@ -14,6 +14,7 @@ behaviour the fakes already record breaks on a rewording and proves nothing extr
 Run: uv run pytest scripts/deploy_tools/tests/test_land_merge.py
 """
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -428,20 +429,27 @@ def test_a_second_draft_skip_on_the_same_head_after_the_toggle_ends_merge_timeou
     assert "already converted it to draft and back" in exc.value.error
 
 
+_DRAFT_RUN = {"id": 1, "status": "completed", "conclusion": "skipped"}
+
+
 @pytest.mark.parametrize(
-    "run",
+    "head_runs",
     [
-        {"id": 2, "status": "queued", "conclusion": None},
-        {"id": 2, "status": "in_progress", "conclusion": None},
-        {"id": 2, "status": "completed", "conclusion": "cancelled"},
+        [_DRAFT_RUN, {"id": 2, "status": "queued", "conclusion": None}],
+        [_DRAFT_RUN, {"id": 2, "status": "in_progress", "conclusion": None}],
+        [_DRAFT_RUN, {"id": 2, "status": "completed", "conclusion": "cancelled"}],
+        subprocess.CalledProcessError(1, "gh", stderr="HTTP 404: Not Found"),
+        {"workflow_runs": []},
+        ["not a run"],
     ],
+    ids=["queued", "in-progress", "cancelled", "gh-fails", "not-a-list", "not-a-run"],
 )
-def test_a_ready_run_on_the_head_stops_the_conversion(landing, run):
+def test_a_ready_run_or_an_unreadable_run_list_stops_the_conversion(landing, head_runs):
     """#6566: the ready run's gate has no check run until its jobs finish, so await_ci reads
-    only the draft run's skipped gate. Converting then cancelled the ready run on 6443 and 6531."""
+    only the draft run's skipped gate, and converting cancelled the ready run on 6443 and 6531.
+    The conversion is what cancels, so a runs read that fails or parses wrong also stops it."""
     skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
     grace = merge.DRAFT_SKIPPED_GRACE_S
-    draft_run = {"id": 1, "status": "completed", "conclusion": "skipped"}
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -449,7 +457,7 @@ def test_a_ready_run_on_the_head_stops_the_conversion(landing, run):
                 "isDraft": {"isDraft": False},
             },
             await_ci=[(75, skipped)],
-            head_runs=[draft_run, run],
+            head_runs=head_runs,
         ),
         merge_timeout=grace * 3,
         merge_poll=grace // 3,
