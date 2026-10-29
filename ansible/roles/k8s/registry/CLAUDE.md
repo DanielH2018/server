@@ -11,8 +11,9 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=registry` with exit 5
-- **Images:** `registry` (`registry_k8s_image`), `gcr.io/go-containerregistry/crane`
-  (`registry_k8s_crane_image`), `alpine` (`registry_k8s_netpol_probe_image`)
+- **Images:** `registry` (`registry_k8s_image`), `python` (`registry_k8s_ghcr_resume_image`),
+  `gcr.io/go-containerregistry/crane` (`registry_k8s_crane_image`), `alpine`
+  (`registry_k8s_netpol_probe_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** `registry-data` (no backup (StorageClass longhorn-nobackup)),
   `registry-ghcr-mirror` (no backup (StorageClass longhorn-nobackup))
@@ -73,12 +74,24 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     cannot read the cluster prunes nothing. Such a skip reports the run down, so a cause that
     persists cannot hide behind a green tile while the claim fills. Each pruned revision is a
     `pruned <repo>@<digest>` line in the Job log and in the `registry-gc` journal.
-  - A cold blob that takes over about 8 minutes to fetch never completes through the
-    mirror. ghcr.io's signed blob URL expires mid-transfer on HTTP/1.1 and HTTP/2 alike,
-    and the proxy never resumes (#5654). The measurement is in the comment above
-    `REGISTRY_PROXY_REMOTEURL` in `templates/ghcr-mirror.yaml.j2`. The cap binds only while
-    GHCR is slow: it served 0.15-0.45 MB/s from 2026-10-17 to 2026-10-19, and 44-98 MB/s on
-    2026-10-24.
+  - **The mirror reaches ghcr.io through a sidecar that resumes a cut blob** (#6401).
+    ghcr.io's signed blob URL expires mid-transfer, on HTTP/1.1 and HTTP/2 alike, after about
+    8 minutes. distribution's proxy refetches from byte 0 and never resumes, and containerd
+    does not fall back on a short body (#5654). While GHCR is slow, a cold blob over about
+    200 MB therefore never completes through distribution alone. GHCR served 0.15-0.45 MB/s
+    from 2026-10-17 to 2026-10-19, and 44-98 MB/s on 2026-10-24. The measurement is in the
+    comment above `REGISTRY_PROXY_REMOTEURL` in `templates/ghcr-mirror.yaml.j2`.
+    - `REGISTRY_PROXY_REMOTEURL` names the `ghcr-resume` container on the pod's loopback,
+      `registry_k8s_ghcr_resume_port`. It runs `files/ghcr_resume_proxy.py` from a ConfigMap
+      named for its content, so a script edit rolls the mirror.
+    - The sidecar relays every request to ghcr.io unchanged, the 401 challenge included, so
+      distribution still fetches its tokens from ghcr.io's realm. It answers a blob GET
+      itself. After a cut it asks ghcr.io for a fresh signed URL, with a fresh anonymous
+      token if the old one expired, and continues with `Range: bytes=<sent>-`.
+    - A resumed answer that is not a 206 starting at that offset aborts the response short,
+      so distribution stores nothing rather than a spliced blob.
+    - `ansible/roles/k8s/registry/tests/test_ghcr_resume_proxy.py` runs it against a fake
+      ghcr.io whose signed URL cuts every transfer.
   - **`registry-gc.sh` warms the store after each weekly GC.** Once the mirror serves again,
     it GETs every linux/amd64 blob of every `ghcr.io` ref it read for the keep set, through
     the mirror. That caches images a node pulled before the mirror existed, and pulls that fell

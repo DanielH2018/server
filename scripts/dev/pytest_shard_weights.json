@@ -175,6 +175,7 @@
  "ansible/roles/k8s/qbittorrent/tests/test_apply_prefs.py": 0.0,
  "ansible/roles/k8s/qbittorrent/tests/test_prefs_check.py": 0.0,
  "ansible/roles/k8s/qbittorrent/tests/test_qbittorrent_job.py": 1.0,
+ "ansible/roles/k8s/registry/tests/test_ghcr_resume_proxy.py": 2.53,
  "ansible/roles/k8s/registry/tests/test_registry_verify.py": 3.19,
  "ansible/roles/k8s/registry/tests/test_registry_verify_seed.py": 4.53,
  "ansible/roles/k8s/sonarr/tests/test_sonarr_air_date_guard.py": 0.0,

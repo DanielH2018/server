@@ -74,10 +74,34 @@ def _mirror() -> dict:
 
 def test_one_container_mirrors_ghcr_with_no_expiry():
     env = _env(_mirror())
-    assert env["REGISTRY_PROXY_REMOTEURL"] == "https://ghcr.io", env
+    # ghcr.io itself is reached through the ghcr-resume sidecar, which the next test pins.
+    port = CTX["registry_k8s_ghcr_resume_port"]
+    assert env["REGISTRY_PROXY_REMOTEURL"] == f"http://127.0.0.1:{port}", env
     # distribution's proxyregistry.go reads only a duration that is not > 0 as "never expire";
     # an unset TTL is the 168h default.
     assert env.get("REGISTRY_PROXY_TTL") in {"0", "0s"}, env
+
+
+def test_the_mirror_reaches_ghcr_through_a_loopback_resume_sidecar():
+    """distribution never resumes a cut blob, so a sidecar in its pod does it for them (#6401).
+
+    The sidecar binds the pod's loopback, so nothing outside the pod reaches an unauthenticated
+    relay to ghcr.io, and it runs the role's own script from a ConfigMap the pod mounts.
+    """
+    pod = _pod(_deployments()["ghcr-mirror"])
+    (resume,) = [c for c in pod["containers"] if c["name"] == "ghcr-resume"]
+    env = _env(resume)
+    assert env["LISTEN_HOST"] == "127.0.0.1", env
+    assert env["LISTEN_PORT"] == str(CTX["registry_k8s_ghcr_resume_port"]), env
+    assert env["UPSTREAM"] == "https://ghcr.io", env
+    assert "ports" not in resume, resume["ports"]
+    (mount,) = resume["volumeMounts"]
+    assert resume["command"][-1] == f"{mount['mountPath']}/ghcr_resume_proxy.py"
+    (volume,) = [v for v in pod["volumes"] if v["name"] == mount["name"]]
+    (configmap,) = [d for d in _docs("ghcr-mirror.yaml.j2") if d["kind"] == "ConfigMap"]
+    assert volume["configMap"]["name"] == configmap["metadata"]["name"]
+    script = (K8S / ROLE / "files" / "ghcr_resume_proxy.py").read_text()
+    assert configmap["data"] == {"ghcr_resume_proxy.py": script}
 
 
 def test_the_mirror_is_its_own_deployment():
@@ -90,7 +114,11 @@ def test_the_mirror_is_its_own_deployment():
     (push,) = _pod(deployments["registry"])["containers"]
     proxied = sorted(k for k in _env(push) if k.startswith("REGISTRY_PROXY_"))
     assert not proxied, f"the push store carries {proxied}; it would refuse every push"
-    (mirror,) = _pod(deployments["ghcr-mirror"])["containers"]
+    (mirror,) = [
+        c
+        for c in _pod(deployments["ghcr-mirror"])["containers"]
+        if "REGISTRY_PROXY_REMOTEURL" in _env(c)
+    ]
     assert mirror == _mirror(), mirror["name"]
 
 
@@ -134,7 +162,9 @@ def test_the_mirror_stores_on_its_own_claim():
     """
     pod = _pod(_deployments()["ghcr-mirror"])
     volumes = {
-        v["name"]: v["persistentVolumeClaim"]["claimName"] for v in pod["volumes"]
+        v["name"]: v["persistentVolumeClaim"]["claimName"]
+        for v in pod["volumes"]
+        if "persistentVolumeClaim" in v
     }
     mirror = {volumes[m["name"]] for m in _mirror().get("volumeMounts", [])}
     assert mirror == {CTX["registry_k8s_ghcr_mirror_claim"]}, mirror
