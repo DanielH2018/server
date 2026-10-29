@@ -2,12 +2,15 @@
 
 Sessions confirmed an applied setup role by hand: `sha256sum` and `stat` on each installed
 file, over ssh when the role lives on the other node, compared with the render by eye (#6326).
-This renders the role's files from the working tree, reads each path on every host the role's
-playbook entry admits in one `host_reader` call per host, and prints one row per path:
+This renders the role's files from the working tree, reads each path on every host a play that
+applies the role admits in one `host_reader` call per host, and prints one row per path.
+`applied_hosts` says which task files each host runs: a role whose server and agent halves
+are separate plays, as k3s's are, is walked half by half (#6475). The rows:
 
 - `ok`: present with the declared mode, owner and group, and the content hash of the render;
 - `ok-meta`: the same, except that the content was not compared, with the reason. A render
-  holding a secret leaves a `STUB`, and rootq refuses to hash a credential file, whose row
+  holding a secret leaves a `STUB`, even through `| default("")`, because every key name in
+  `secrets.yml` renders as `STUB` here. rootq refuses to hash a credential file, whose row
   says `content not compared: credential file`. rootq's `stat` still answers mode and owner
   for a credential file on its allowlist (#6369), so those are compared;
 - `DRIFT`: missing, present where an absent arm removes it, or a declared field or the
@@ -28,7 +31,7 @@ A task file the walk cannot read prints as `UNCHECKED` with the importing file a
 because nothing in it was read: its path does not resolve, or its `when:` or loop reads a
 value only the run sets. An import whose `when:` is false for the host prints as skipped.
 Exit 1 on any `DRIFT`, else 75 when a path was `unread`, a task file or a credential file was
-`UNCHECKED` or nothing was compared, else 0. A 75 for an `UNCHECKED` row says on stderr that
+`UNCHECKED` or no host had a path to compare, else 0. A 75 for an `UNCHECKED` row says on stderr that
 coverage was partial.
 The render is the working tree's, so commit or stash first to check `HEAD`.
 """
@@ -43,13 +46,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from pathlib import Path
 
-from deploy_tools.setup_lib.setup_gates import (
-    HOSTS,
-    GateUnreadable,
-    eval_when_strict,
-    role_end_hosts,
-)
+from deploy_tools.setup_lib.setup_gates import HOSTS
 from diagnostics.probe_lib import core
+from diagnostics.probe_lib.applied_hosts import task_files
+from diagnostics.probe_lib.applied_facts import STUB
 from diagnostics.probe_lib.applied_tasks import Skip, Want, expected
 from diagnostics.probe_lib.host_reader import dry_run_text, read_host
 from lib import yaml_fast
@@ -59,8 +59,8 @@ from lib.repo_paths import ANSIBLE
 from validate.setup_templates import ANSIBLE_RUNTIME_CONTEXT
 
 SETUP = ANSIBLE / "roles" / "setup"
-# The playbooks that apply a setup role, in `setup_routing.PLAYBOOKS`' precedence order.
-PLAYBOOKS = ("initial_setup.yml", "k3s-bringup.yml", "bootstrap.yml")
+# Read for its key names alone, which SOPS leaves in plaintext; no value is decrypted.
+SECRETS = ANSIBLE / "vars" / "secrets.yml"
 
 # rootq's refusals of a credential file, whose hash would be a guessing oracle for it. A
 # refused hash reads ok-meta, `credential file`; a refused stat reads UNCHECKED.
@@ -75,53 +75,26 @@ APPLIED_HELP = (
 )
 
 
-def entry_when(role: str, ansible: Path = ANSIBLE):
-    """The `when:` of the first playbook entry that applies `role`.
+def secret_stubs(secrets: Path = SECRETS) -> dict[str, str]:
+    """Every key name in `secrets`, each set to `STUB`.
 
-    Raises:
-        core.UsageError: no playbook lists the role.
+    The static vars hold no secret, so without these a template's `{{ token | default("") }}`
+    renders an empty value and its hash reads as a real expectation. The live file holds the
+    token, so the row read DRIFT after every correct apply (#6475).
     """
-    for name in PLAYBOOKS:
-        path = ansible / name
-        for play in (
-            yaml_fast.safe_load(path.read_text()) if path.is_file() else []
-        ) or []:
-            for entry in (play or {}).get("roles") or []:
-                if entry == role:
-                    return None
-                if isinstance(entry, dict) and entry.get("role") == role:
-                    return entry.get("when")
-    raise core.UsageError(
-        f"applied: no playbook in {', '.join(PLAYBOOKS)} lists {role}"
-    )
-
-
-def hosts_for(role: str, role_dir: Path) -> list[str]:
-    """The hosts the role's playbook entry admits and its leading `end_role` guard keeps.
-
-    Raises:
-        core.UsageError: the entry's `when:` cannot be read for some host, so `--host` must
-            name the one to check.
-    """
-    when = entry_when(role)
-    admitted = []
-    for host in HOSTS:
-        try:
-            if when is None or eval_when_strict(when, host):
-                admitted.append(host)
-        except GateUnreadable as exc:
-            raise core.UsageError(
-                f"applied: {role}'s gate: {exc}; pass --host"
-            ) from exc
-    ended = role_end_hosts(role_dir, admitted)
-    return [h for h in admitted if h not in ended]
+    data = yaml_fast.safe_load(secrets.read_text()) if secrets.is_file() else {}
+    return {str(k): STUB for k in data or {} if k != "sops"}
 
 
 def context(role_dir: Path, host: str) -> dict:
     return render_context(
         role_dir,
         host=host,
-        overrides={**ANSIBLE_RUNTIME_CONTEXT, "inventory_hostname": host},
+        overrides={
+            **secret_stubs(),
+            **ANSIBLE_RUNTIME_CONTEXT,
+            "inventory_hostname": host,
+        },
     )
 
 
@@ -205,11 +178,14 @@ def report_host(
     return lines, seen
 
 
-def run_applied(ns, read=read_host, setup: Path = SETUP, render_ctx=None) -> int:
+def run_applied(
+    ns, read=read_host, setup: Path = SETUP, render_ctx=None, files_of=task_files
+) -> int:
     """Check the role on each of its hosts, print the rows, and return the exit code.
 
-    `read`, `setup` and `render_ctx` exist for a test: the host read, the directory holding
-    the setup roles, and the context builder (`context` by default).
+    `read`, `setup`, `render_ctx` and `files_of` exist for a test: the host read, the
+    directory holding the setup roles, the context builder (`context` by default) and the
+    reader of each host's task files.
     """
     render_ctx = render_ctx or context
     role_dir = setup / ns.role
@@ -217,17 +193,20 @@ def run_applied(ns, read=read_host, setup: Path = SETUP, render_ctx=None) -> int
         raise core.UsageError(
             f"applied: {role_dir} is not a setup role with tasks/main.yml"
         )
-    hosts = [ns.host] if ns.host else hosts_for(ns.role, role_dir)
     if ns.host and ns.host not in HOSTS:
         raise core.UsageError(f"applied: --host must be one of {', '.join(HOSTS)}")
+    hosts = files_of(ns.role, role_dir, ns.host)
     if not hosts:
         print(
             f"applied: no host runs {ns.role}: its gate or end_role guard admits none"
         )
         return PROBE_UNREADABLE
     statuses: set[str] = set()
-    for host in hosts:
-        wants, skips = expected(role_dir, host, render_ctx(role_dir, host))
+    compared = False
+    for host, files in hosts.items():
+        wants, skips = expected(
+            role_dir, host, render_ctx(role_dir, host), tuple(files)
+        )
         # A path two tasks write takes the hash of the one that has one.
         asks = {w.path: w.sha256 for w in sorted(wants, key=lambda w: bool(w.sha256))}
         request = {"stat": sorted(asks), "rootq": asks}
@@ -242,10 +221,15 @@ def run_applied(ns, read=read_host, setup: Path = SETUP, render_ctx=None) -> int
             statuses.add("unread")
             continue
         lines, seen = report_host(host, wants, skips, doc)
-        statuses |= seen if wants else seen | {"unread"}
+        # A host whose files write nothing, such as the k3s verify play's, is not a gap. A
+        # run where no host had a path is: it verified nothing.
+        compared |= bool(wants)
+        statuses |= seen
         print("\n".join(lines))
     if ns.dry_run:
         return PROBE_OK
+    if not compared:
+        statuses.add("unread")
     if "DRIFT" in statuses:
         return PROBE_FAILED
     if "UNCHECKED" in statuses:

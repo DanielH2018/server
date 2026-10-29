@@ -13,7 +13,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from diagnostics.probe_lib import applied, applied_tasks
+from diagnostics.probe_lib import applied, applied_hosts, applied_tasks
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
 
 TASKS = """\
@@ -237,14 +237,14 @@ def test_a_path_this_user_cannot_stat_is_unreadable_not_ok(tmp_path):
 
 def test_a_role_no_playbook_lists_is_a_usage_error(tmp_path):
     with pytest.raises(SystemExit) as exc:
-        applied.entry_when("no_such_role", tmp_path)
+        applied_hosts.entries("no_such_role", tmp_path)
     assert exc.value.code == 64
 
 
 def test_a_daniel_box_only_role_runs_on_daniel_box_alone():
     """initial_setup.yml gates it on `inventory_hostname == 'daniel-box'`."""
     role = applied.SETUP / "k8s_host_files"
-    assert applied.hosts_for("k8s_host_files", role) == ["daniel-box"]
+    assert applied_hosts.task_files("k8s_host_files", role) == {"daniel-box": ["main"]}
 
 
 def test_a_shared_import_through_role_path_is_walked_with_its_vars(tmp_path):

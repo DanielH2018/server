@@ -206,12 +206,12 @@ def _holds_jinja(value) -> bool:
 def _resolve(raw: dict, undefined_cls=StubUndefined) -> tuple[dict, dict[str, str]]:
     """`raw` expanded against itself, and each key dropped because its expansion raised.
 
-    Whole-dict first, which is the common case and one pass. Two setup defaults need the
-    per-key fallback, each naming a filter `resolve_vars`' light-tier environment does not
+    Whole-dict first, which is the common case and one pass. A setup default needs the
+    per-key fallback when it names a filter `resolve_vars`' light-tier environment does not
     register (its `DECIDED:` marker says why it stays light):
     `gitops_deploy_k8s_autodeploy_denylist` reaches this repo's `k8s_autodeploy_denylist`
-    plugin, and `k3s_host_coredns_tarball` reaches ansible-core's `dirname`. The three Longhorn
-    tier lists call repo plugins too, and `resolve_vars` registers those lazily.
+    plugin. The three Longhorn tier lists and ansible-core's `basename` and `dirname` are
+    heavy-tier filters too, and `resolve_vars` registers those lazily.
 
     A dropped key renders as `STUB` through `StubUndefined` rather than as literal braces,
     which is what a guard asserting on a render needs: braces in the output are the defect

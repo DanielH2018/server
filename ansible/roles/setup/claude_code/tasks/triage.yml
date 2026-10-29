@@ -52,11 +52,18 @@
         # cannot change what the next run executes or how much it may spend.
         - {path: /opt/claude-triage, owner: root, group: root, mode: "0755"}
         - {path: /etc/claude-triage, owner: root, group: root, mode: "0755"}
-        # The inbox, the records and the lock, written by the agent.
+        # The inbox, the records and the lock, written by the agent. Under operator_read the
+        # operator's group gets traverse and no listing, as agent_access.yml opens the memory
+        # store, so `probe.py applied` can stat the inbox below (#6452). This file sits
+        # outside main.yml's agent loop, so it reads the role default, not a profile's. The
+        # directory is not setgid, so a file the agent writes here keeps group claude and
+        # stays unreadable.
         - path: "{{ claude_code_triage_state_dir }}"
           owner: "{{ claude_code_triage_agent_user }}"
-          group: "{{ claude_code_triage_agent_user }}"
-          mode: "0750"
+          group: >-
+            {{ sys_user if claude_code_agent_operator_read
+            else claude_code_triage_agent_user }}
+          mode: "{{ '0710' if claude_code_agent_operator_read else '0750' }}"
         - path: "{{ claude_code_triage_state_dir }}/inbox"
           owner: "{{ claude_code_triage_agent_user }}"
           group: "{{ claude_code_triage_agent_user }}"
