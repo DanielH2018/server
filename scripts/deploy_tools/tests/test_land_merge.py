@@ -428,6 +428,38 @@ def test_a_second_draft_skip_on_the_same_head_after_the_toggle_ends_merge_timeou
     assert "already converted it to draft and back" in exc.value.error
 
 
+@pytest.mark.parametrize(
+    "run",
+    [
+        {"id": 2, "status": "queued", "conclusion": None},
+        {"id": 2, "status": "in_progress", "conclusion": None},
+        {"id": 2, "status": "completed", "conclusion": "cancelled"},
+    ],
+)
+def test_a_ready_run_on_the_head_stops_the_conversion(landing, run):
+    """#6566: the ready run's gate has no check run until its jobs finish, so await_ci reads
+    only the draft run's skipped gate. Converting then cancelled the ready run on 6443 and 6531."""
+    skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
+    grace = merge.DRAFT_SKIPPED_GRACE_S
+    draft_run = {"id": 1, "status": "completed", "conclusion": "skipped"}
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,mergeable,headRefOid": _wait(["OPEN MERGEABLE dead"]),
+                "isDraft": {"isDraft": False},
+            },
+            await_ci=[(75, skipped)],
+            head_runs=[draft_run, run],
+        ),
+        merge_timeout=grace * 3,
+        merge_poll=grace // 3,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
+    assert _ready_toggles(calls) == []
+
+
 def test_a_failed_conversion_ends_merge_timeout_and_names_a_draft_left_behind(landing):
     skipped = f"dead1234: no verdict after 0s — {merge.await_ci.DRAFT_SKIPPED}"
     grace = merge.DRAFT_SKIPPED_GRACE_S
