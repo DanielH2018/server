@@ -53,12 +53,17 @@ def _url(server) -> str:
 
 
 @pytest.fixture
-def closed_url() -> str:
-    """A URL on a local port nothing listens on, so a connect to it is refused."""
+def closed_url():
+    """A URL on a local port nothing listens on, so a connect to it is refused.
+
+    The socket stays bound, without listening, until the test ends. Linux refuses a connect to
+    a bound port that is not listening, and no other socket can bind it meanwhile. A released
+    port can be handed to a stand-in server, in this test or in another xdist worker, and the
+    leg then reads an answer instead of a refusal (#6480).
+    """
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    return f"http://127.0.0.1:{port}/"
+        yield f"http://127.0.0.1:{sock.getsockname()[1]}/"
 
 
 @pytest.fixture

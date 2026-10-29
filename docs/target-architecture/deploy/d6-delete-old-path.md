@@ -829,15 +829,17 @@ below, so D6 adds no annotation query (#5425).
       `ansible/filter_plugins/grafana_dashboards.py` injects it as "Flux deploys", with
       refId `FluxDeployAnno`, beside `observability_deploy_annotation_expr`. D6 neither
       replaces it nor adds a third query beside it.
-    - **One marker per passing promotion, not per apply.** `flux_soak.py:main` prints the
-      line when the verdict holds no failure. A revision that changes no service passes at
-      once, so it also draws a marker. A soak that fails or errors prints none, although
-      Flux has applied the revision. The `flux/soak` commit status, the soak's alert and
-      `promote`'s hold and reset record that failure, but no dashboard marks it. D6 accepts
-      that limit. [#5881](https://github.com/DanielH2018/server/issues/5881) asks the
-      operator whether the soak should also print a `result=failed` line. That line would
-      reverse D5.3b3's success-only choice, so the limit stands until the operator accepts
-      #5881.
+    - **One marker per soaked promotion, not per apply.** `flux_soak.py:main` prints the
+      line with `result=ok` when the verdict holds no failure. A revision that changes no
+      service passes at once, so it also draws a marker. A soak that fails prints the same
+      line with `result=fail`, the failed services in `services=` and `duration_s`. A soak
+      that errors prints it with `result=fail` and `services=flux`. Flux has applied the
+      revision in both cases, so the dashboards mark it, and the annotation's title,
+      `deploy {{result}}`, tells a failure from a pass. #6164 made that change, which
+      reverses D5.3b3's success-only choice and settles
+      [#5881](https://github.com/DanielH2018/server/issues/5881). The `flux/soak` commit
+      status, the soak's alert and `promote`'s hold and reset still record the failure as
+      well.
     - **A landing draws both markers.** `land-wait`'s line names the PR's changed set, and
       the soak's line names the revision. `land-wait`'s line stays, because only it names
       the PR.
@@ -849,12 +851,11 @@ below, so D6 adds no annotation query (#5425).
   label as the fallback. It was planned before D5.3b3, to close the gap above. With the
   soak's line in place, it would add per-Kustomization markers that duplicate the soak's
   marker on every promotion, which is several markers for one landing. The one case it
-  alone would mark is a failed soak. That failure already pages, and it holds and resets
-  `prod`, so D6 accepts the missing marker rather than add a matcher over an upstream log
-  format that D6 never measured. The rejection does not depend on #5881. If the operator
-  accepts #5881, the soak's own stream marks a failure as well, and if the operator
-  refuses it, the limit stays accepted. Replacing the soak's query with it was rejected for the same reason, and
-  because the soak's line names the revision it judged.
+  alone would have marked is a failed soak, and the soak's own `result=fail` line marks
+  that since #6164. That failure also pages, and it holds and resets `prod`, so the query
+  would add a matcher over an upstream log format that D6 never measured and mark nothing
+  new. Replacing the soak's query with it was rejected for the same reason, and because
+  the soak's line names the revision it judged.
 - **Rejected: an emitter in `promote` itself.** `promote` runs on a GitHub-hosted runner,
   so a `logger` call there writes to the runner's syslog, which no Alloy ships (Baseline).
   A POST to Grafana's HTTP API instead would need the standing write credential that the
@@ -1462,11 +1463,10 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
       [#5425](https://github.com/DanielH2018/server/issues/5425) settled that D6 adds no
       kustomize-controller query: neither a third one nor a replacement for the soak's.
       *Grafana's deploy markers after D6* records the reasons.
-    - **What is left.** A failed soak draws no marker, a limit D6 accepts. Whether the soak
-      should mark a failure as well is
-      [#5881](https://github.com/DanielH2018/server/issues/5881), for the operator to rule
-      on outside D6. D6.12
-      rewrites the annotation comment and test docstring to name the soak's query.
+    - **What is left.** Nothing in the marker gap. A failed or erroring soak prints its line
+      with `result=fail` (#6164), which settles
+      [#5881](https://github.com/DanielH2018/server/issues/5881). D6.12 rewrites the
+      annotation comment and test docstring to name the soak's query.
     - **Exit criterion:** none of the six. The marker gap that D2 *Risks* records closed
       with D5.3b3.
 2. **D6.11 — The deletion drill, with break-glass promotion** (old D6.7a and D6.7c, about
