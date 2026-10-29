@@ -150,7 +150,7 @@ reservation's worth of headroom; the placement would put more
 than three batches on one remote host in this run (the ssh budget, which binds only when the
 transport cannot share one connection per host, `transport.control_dir`); or it would leave a host
 holding more RUNNING batches than its cap, counting every earlier run not yet cleaned (the memory
-cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
+cap — a five-minute-old agent still holds its 2 GiB while the headroom read underprices it).
 Placement skips a host that is at that cap, so a batch goes to the next host with memory
 headroom, and the refusal fires only when no host has both (#6421).
 The cap is three on daniel-box and four on daniel-server (`launch_gates.live_batch_cap`, #5667).
@@ -364,7 +364,7 @@ The local leg — the batch placed on the host you run from — runs its `system
 (`transport.local_env`), because an interactive session's shell exports neither and the user
 bus is unreachable without one. No prefix on the command is needed.
 
-**Width is bounded by memory, measured, not by a number here.** Each batch costs one 2.5 GiB
+**Width is bounded by memory, measured, not by a number here.** Each batch costs one 2 GiB
 reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`). Every agent runs
 as a transient user service inside `user-1000.slice`, which carries its own `MemoryHigh`
 (`claude_code_rc_memory_high`: 10G on daniel-box, 17G on daniel-server) nested under the
