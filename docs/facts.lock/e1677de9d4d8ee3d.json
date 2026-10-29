@@ -1,5 +1,5 @@
 {
-  "checksum": "1151ce7cfcc7a10c24396d7d47a56405a29f2e21d45527284e34f177361b2208",
+  "checksum": "d8f209dc5e502ab21e0d1d6ba6c8b3647059a5ed60dd23e272f1cf7529b8c2e7",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/dri-device-plugin/CLAUDE.md#Notable",
   "row": {
@@ -8,6 +8,6 @@
       "ansible/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py:is_tombstone": "2a6e1bf61f62758eb165e4ad9b7d5c20695fd2273439f81fda75d339ad727917"
     },
     "python": "3.14",
-    "verified_sha": "4f7b191e0"
+    "verified_sha": "2f50b3965"
   }
 }

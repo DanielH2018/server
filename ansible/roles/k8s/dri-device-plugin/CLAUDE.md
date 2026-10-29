@@ -55,7 +55,9 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
   backup Jobs, so no `ttlSecondsAfterFinished` ages a run the reboot interrupts. The Job object
   keeps the failure on record and Loki keeps the output; the rule is
   `ansible/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py:is_failed_job_pod`.
-  `homelab` keeps its Job pods, because the health readers read their logs. Each listed
+  `homelab` keeps its Job pods, because the health readers read their logs. The rule also
+  takes the failed pods of the one rendered CronJob in those namespaces, `longhorn-reconcile`;
+  its `failedJobsHistoryLimit` keeps the failed Jobs, and Loki keeps their output. Each listed
   namespace (`dri_device_plugin_reaper_job_namespaces`) gets a Role and a RoleBinding to the
   ServiceAccount in `homelab`. `system-upgrade` is not listed: the SUC controller's
   `SYSTEM_UPGRADE_JOB_TTL_SECONDS_AFTER_FINISH` of 900 ages its Plan Jobs out. The sweep rides
