@@ -465,6 +465,18 @@
       ],
       "autoReplaceStringTemplate": "_image: {{{depName}}}:{{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{/if}}",
       "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Container images in the Pi's Compose services (hosts/components/pi-compose/services/*/compose.yaml.j2, target slice H5, PR H5.11). Each service's `image:` line is the pin the Pi pulls: CI builds those files into the homelab-daniel-pi package, and the Pi's updater installs that package and health-gates the install. Renovate's built-in docker-compose manager does not read these files, because its default pattern ends in `.ya?ml` and these end in `.j2`. The match starts at `image:`, not at a line start, because a matchString carries no multiline flag. No other line in these files carries `image:` followed by whitespace; scripts/tests/test_renovate_pi_compose_pins.py counts the `image:` lines per file and fails if the manager matches more or fewer. The autoReplaceStringTemplate keeps the literal `image: ` prefix for the reason the k8s-images manager above gives: Renovate replaces the whole matched span, so a template without it corrupts the line. The same test renders the template over every live pin and requires the line back byte for byte. The packageRules that group and automerge these pins are the ones whose matchFileNames name this tree, and the pinDigests rule (the last packageRule) covers this tree too, so a version bump carries the new digest.",
+      "managerFilePatterns": [
+        "/^hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2$/"
+      ],
+      "matchStrings": [
+        "image:[ \\t]+(?<depName>[^:\\s\"'@{}]+):(?<currentValue>[^\\s\"'@{}]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+      ],
+      "autoReplaceStringTemplate": "image: {{{depName}}}:{{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{/if}}",
+      "datasourceTemplate": "docker"
     }
   ],
   "packageRules": [
@@ -1152,6 +1164,76 @@
       "automerge": false
     },
     {
+      "description": "One PR per Pi Compose service (H5.11), and no automerge by default. Without this rule the Pi's pins fall into the `container images (non-major)` catch-all, which groups every custom.regex minor and patch bump into one PR and automerges it. A grouped PR that breaks one Pi service holds the whole Pi, and its revert takes back every good bump beside the bad one. `{{depName}}` gives one group per service, because each service runs a different image; docker-proxy's three `image:` lines name one image and land on one branch. `minimumReleaseAgeBehaviour: timestamp-optional` is here for the reason the k8s digest rule gives (#3368): lscr.io and GHCR return no release timestamp, and neither does a digest on a channel tag, so without it docker-proxy, autoheal and wg-easy updates sit in Pending Status Checks indefinitely. Where a timestamp exists, Renovate still enforces the soak. The rules after this one decide which Pi updates automerge. ENFORCED: scripts/tests/test_renovate_pi_compose_pins.py.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "hosts/components/pi-compose/services/*/compose.yaml.j2"
+      ],
+      "groupName": "pi image {{depName}}",
+      "automerge": false,
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    },
+    {
+      "description": "Digest bumps to the Pi's Compose images automerge, as an eligible k8s digest bump does. The operator ruled this on 2026-10-29, answering Open question 1 of docs/target-architecture/host/h5-pi-compose.md. A merged bump changes a compose file in the homelab-daniel-pi package. The Pi's updater installs that package version, and a compose run that fails also fails reconcile, so the updater holds the Pi and `HostReconcileFailed` pages (the slice's *A failed compose run holds the Pi*). That gate is the check this automerge relies on. The keys mirror the k8s digest rule: a 3-day soak where Renovate can age the digest, platformAutomerge false, and rebaseWhen conflicted for the reasons the container-images rule gives. In effect this covers autoheal and docker-proxy, both on a `latest` channel tag. wg-easy and alloy also match it, and the two rules after this one take their automerge away again.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "hosts/components/pi-compose/services/*/compose.yaml.j2"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "pinDigest"
+      ],
+      "automerge": true,
+      "platformAutomerge": false,
+      "minimumReleaseAge": "3 days",
+      "rebaseWhen": "conflicted"
+    },
+    {
+      "description": "The Pi's wg-easy pin (`ghcr.io/wg-easy/wg-easy:14@sha256:...`) never automerges. wg-easy is a remote-access path into the LAN, so a bad image can cut the tunnel the operator would use to fix it. A v15 bump is a migration, not a redeploy: v15 replaces `PASSWORD_HASH` with a setup wizard (the pin-policy note in the service's compose.yaml.j2). A digest within v14 is manual too, because the operator's 2026-10-29 ruling covers wg-easy only in a manual group. No matchUpdateTypes, so every update type lands here, and the per-service automerge rules before this one lose. Scoped by file and not by package name, so the cluster's own wg-easy pin (roles/k8s/wg-easy, v15) keeps its own rules; the file pins one image, so the file is the pin. A matchPackageNames would also enter ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py's census, which reads ownership by package name alone and would charge this rule with the cluster's denied wg-easy role. groupSingleUpdates puts the work order in the PR title as well as the branch. The Monday-only keys are the `manual —` rule's (#4011).",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "hosts/components/pi-compose/services/wg-easy/compose.yaml.j2"
+      ],
+      "groupName": "pi image wg-easy (manual — a person lands it, then connects a peer from outside the LAN; a v15 bump is a migration, not a redeploy)",
+      "groupSingleUpdates": true,
+      "automerge": false,
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
+      "rebaseWhen": "conflicted"
+    },
+    {
+      "description": "Grafana Alloy is pinned twice, and the two pins move together: the Pi's compose pin (hosts/components/pi-compose/services/alloy/compose.yaml.j2) and the cluster's DaemonSet (`loki_homelab_k8s_alloy_image`). Both ship to the same loki-homelab under one label contract, so one PR touches both files. This rule must sit after every rule that sets the cluster pin's groupName (the `k8s image {{depName}}` rule and the denylist rule), or the two pins land in separate PRs. It must also sit before the jellyfin plugin rules: it names a k8s role file and sets automerge, and those rules' position guards require them after every such rule. scripts/tests/test_renovate_pi_compose_pins.py resolves both pins through the rules in order and requires one group. No automerge: loki-homelab is on the auto-deploy denylist, so the group name carries the `k8s_autodeploy: false` marker and groupSingleUpdates puts it in the title (ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py). No matchUpdateTypes, so a digest re-push of either pin lands here too. The Monday-only keys are the `manual —` rule's (#4011).",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "hosts/components/pi-compose/services/alloy/compose.yaml.j2",
+        "ansible/roles/k8s/loki-homelab/defaults/main.yml"
+      ],
+      "matchPackageNames": [
+        "grafana/alloy"
+      ],
+      "groupName": "grafana/alloy (manual — lockstep: the Pi's compose pin + loki-homelab's DaemonSet; k8s_autodeploy: false)",
+      "groupSingleUpdates": true,
+      "automerge": false,
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
+      "rebaseWhen": "conflicted"
+    },
+    {
       "description": "jellyfin-ani-sync (2026-09-01 review). NO automerge, and the position of this rule is load-bearing: it must stay AFTER the two k8s-plane rules near the top of this array. The pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule already sets automerge: true for it and the `ansible/roles/k8s/**` rule only renames the group — later rules win, so an ani-sync bump would otherwise merge itself into the `k8s image jellyfin` group. The SOPS pin escapes the same rule only because its path is under roles/setup/. Two things Renovate cannot compute make this a manual finish: the download URL embeds the JELLYFIN server targetAbi (`10.11.6.-.`) beside the plugin version, and jellyfin_k8s_anisync_md5 has to come from the release's manifest.json. On top of that the role's defaults require raising jellyfin_k8s_image in the same change — the plugin's targetAbi must not exceed the server's, which is why the pin sits a release behind on purpose. Tracked for the signal, finished by the operator; same class as the sops / crowdsec-plugin / k3s rules above.",
       "matchDatasources": [
         "github-releases"
@@ -1279,7 +1361,7 @@
       "rebaseWhen": "conflicted"
     },
     {
-      "description": "Turn `pinDigests` back on for the k8s-images manager's container pins (#3281). The top-level `pinDigests: true` never reached them: Renovate's regex custom manager ships `defaultConfig = { pinDigests: false }` (lib/modules/manager/custom/regex/index.ts), and a manager's default config is merged over the repository's top-level options, so for every `custom.regex` dep `config.pinDigests` was false at lookup. Two consequences, both measured with a local `renovate --platform=local --dry-run=lookup` (44.132.2) on 2026-10-03: a tag-only pin got no `pinDigest` update (grafana/loki:3.7.8, `updates: []`), and a version bump carried no `newDigest` (grafana/alloy v1.19.2 -> v1.20.0), so `autoReplaceStringTemplate`'s `{{#if newDigest}}` arm never fired and the 37 bare pins stayed bare (#3295 and #3300 merged tag-only). A packageRule is applied after the manager default, so setting the option here wins. Scoped to the docker datasource and to the three file patterns the k8s-images manager reads, rather than to every custom.regex dep, because only that manager carries a template that can write a digest onto a pin with none. groupSlug and group.commitMessageTopic are load-bearing: Renovate's built-in `pinDigest` update-type config sets `groupSlug: pin-dependencies` and `group.commitMessageTopic: dependencies`, and with only `pinDigests` set the same dry run put EIGHT services' pinDigest updates on one branch, `renovate/k8s-image-depname-...` (the uncompiled `{{depName}}`, slugified). One PR restarting every service it pins is the rollback hazard the `k8s image {{depName}}` rule exists to prevent, and a `dependencies` title drops the `k8s_autodeploy: false` marker the renovate_agent reads. `{{{groupName}}}` is compiled after the group name itself (lib/workers/repository/updates/branch-name.ts), so both resolve to the per-service group name every other update type already gets, and the branch a version bump lands on does not change. POSITION is load-bearing: this rule must stay LAST. Moved to sit right after the `k8s image {{depName}}` rule, the same full dry run put all twelve updates, version bumps included, back on the one `k8s-image-depname` branch; last, it gave one branch per service. It sets neither automerge nor groupName, so the per-package manual rules before it keep both (the jellyfin plugin position guards count only rules that set one of the two).",
+      "description": "Turn `pinDigests` back on for the k8s-images manager's container pins (#3281). The top-level `pinDigests: true` never reached them: Renovate's regex custom manager ships `defaultConfig = { pinDigests: false }` (lib/modules/manager/custom/regex/index.ts), and a manager's default config is merged over the repository's top-level options, so for every `custom.regex` dep `config.pinDigests` was false at lookup. Two consequences, both measured with a local `renovate --platform=local --dry-run=lookup` (44.132.2) on 2026-10-03: a tag-only pin got no `pinDigest` update (grafana/loki:3.7.8, `updates: []`), and a version bump carried no `newDigest` (grafana/alloy v1.19.2 -> v1.20.0), so `autoReplaceStringTemplate`'s `{{#if newDigest}}` arm never fired and the 37 bare pins stayed bare (#3295 and #3300 merged tag-only). A packageRule is applied after the manager default, so setting the option here wins. Scoped to the docker datasource and to the files the two image managers with a digest-writing template read, rather than to every custom.regex dep: the three file patterns of the k8s-images manager and, since H5.11, the Pi's Compose services. Only those two managers carry a template that can write a digest onto a pin with none. alloy and wg-easy on the Pi pin a tag and a digest, and Docker pulls by the digest, so a version bump without its newDigest would move the tag and change nothing on the Pi. groupSlug and group.commitMessageTopic are load-bearing: Renovate's built-in `pinDigest` update-type config sets `groupSlug: pin-dependencies` and `group.commitMessageTopic: dependencies`, and with only `pinDigests` set the same dry run put EIGHT services' pinDigest updates on one branch, `renovate/k8s-image-depname-...` (the uncompiled `{{depName}}`, slugified). One PR restarting every service it pins is the rollback hazard the `k8s image {{depName}}` rule exists to prevent, and a `dependencies` title drops the `k8s_autodeploy: false` marker the renovate_agent reads. `{{{groupName}}}` is compiled after the group name itself (lib/workers/repository/updates/branch-name.ts), so both resolve to the per-service group name every other update type already gets, and the branch a version bump lands on does not change. POSITION is load-bearing: this rule must stay LAST. Moved to sit right after the `k8s image {{depName}}` rule, the same full dry run put all twelve updates, version bumps included, back on the one `k8s-image-depname` branch; last, it gave one branch per service. It sets neither automerge nor groupName, so the per-package manual rules before it keep both (the jellyfin plugin position guards count only rules that set one of the two).",
       "matchManagers": [
         "custom.regex"
       ],
@@ -1289,7 +1371,8 @@
       "matchFileNames": [
         "ansible/roles/k8s/*/defaults/main.yml",
         "ansible/roles/setup/*/defaults/main.yml",
-        "ansible/inventory/group_vars/all.yml"
+        "ansible/inventory/group_vars/all.yml",
+        "hosts/components/pi-compose/services/*/compose.yaml.j2"
       ],
       "pinDigests": true,
       "groupSlug": "{{{groupName}}}",
