@@ -40,6 +40,7 @@ from typing import ClassVar
 from deploy_ui_lib import deploy_ui_reads as reads
 from deploy_ui_lib import deploy_ui_writes as writes
 from gitops_markers import STATE_DIR
+from host_lib import logfmt
 
 # The locks the in-flight panel reads. The tree lock is held for the snapshot only (ADR-0017),
 # so for nearly all of a deploy the running thing is a `server-deploy-<tag>.lock` holder --
@@ -418,9 +419,12 @@ def request_line(method: str, path: str, status: int, user: str) -> str:
     person used the page. A poll only shows a tab was open. The query string is dropped,
     and `user` is Authelia's `Remote-User`, `-` for a caller that came around it.
     """
+    # `user` is narrowed before logfmt sees it: logfmt quotes a newline but does not escape
+    # it, so a hostile `Remote-User` would still split the journal line and forge a second one.
     who = re.sub(r"[^\w.@-]", "_", user) or "-"
     url = urllib.parse.urlsplit(path).path or "-"
-    return f"request method={method} path={url} status={int(status)} user={who}"
+    fields = {"method": method, "path": url, "status": int(status), "user": who}
+    return f"request {logfmt(fields)}"
 
 
 def serve(config: Config) -> None:

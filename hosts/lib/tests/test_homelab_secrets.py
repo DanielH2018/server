@@ -13,6 +13,7 @@ Run: uv run pytest hosts/lib/tests/test_homelab_secrets.py
 import ast
 import os
 import re
+import sys
 
 import pytest
 from _secrets_host import SCRIPT, Host
@@ -272,6 +273,23 @@ def test_a_dotenv_output_refuses_a_value_with_a_quote_or_line_break(host, bad, c
     err = capsys.readouterr().err
     assert "the value of a holds a quote or a line break" in err
     assert bad.strip() not in err
+
+
+def test_a_failure_reaches_the_journal_at_err_priority(host, tmp_path, monkeypatch):
+    # Every line the script prints is a failure, so `journalctl -p err` must find each (#6202).
+    journal = tmp_path / "journal"
+    journal.touch()
+    st = journal.stat()
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+    host.decrypts_to(a="it's", b="fine")
+    host.output("compose.env", ENV_TEMPLATE, keys=["a", "b"], format="dotenv")
+    with open(journal, "w") as err:
+        monkeypatch.setattr(sys, "stderr", err)
+        assert host.run() == 1
+    lines = journal.read_text().splitlines()
+    assert lines and all(line.startswith("<3>homelab-secrets: ") for line in lines), (
+        lines
+    )
 
 
 def test_a_dotenv_output_renders_a_value_with_no_quote_or_line_break(host):

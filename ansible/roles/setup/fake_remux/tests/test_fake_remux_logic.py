@@ -245,3 +245,22 @@ def test_host_path_leaves_a_non_data_path_alone():
 
 def test_host_path_tolerates_a_trailing_slash_on_the_root():
     assert frl.host_path("/data/media/x.mkv", "/srv/media/") == "/srv/media/media/x.mkv"
+
+
+def test_the_scan_logs_bare_lines_for_journald_to_stamp(tmp_path, capsys, monkeypatch):
+    """Each cron pipes to `logger`, which timestamps every line, so the scan writes none.
+
+    The scan logs through host_lib's `log` (#6202), not a printer of its own. An empty webhook
+    makes the spool flush return before it reads the spool directory.
+    """
+    from fake_remux_lib import fake_remux_scan as scan
+
+    def boom(cfg):
+        raise RuntimeError("boom")
+
+    monkeypatch.delenv("JOURNAL_STREAM", raising=False)
+    assert scan.main({"STATE_FILE": str(tmp_path / "state.json")}, run=boom) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "fake-remux scan starting",
+        "DOWN fake-remux scan error: boom",
+    ]

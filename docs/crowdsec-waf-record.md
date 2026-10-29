@@ -144,8 +144,12 @@ parser with no error at all, so nothing here can count that loss.
 Nothing in this repo fixes it. `CompleteLines` is not an `acquis.yaml` key, Traefik's
 `bufferingSize` batches entries into a channel and still writes one line per call, and
 `poll_without_inotify` only changes when the reader wakes. The fix is
-`crowdsecurity/crowdsec#4678`, which sets `CompleteLines: true`; on 2026-09-22 it was open and in no
-release. Building a patched image through `k8s/image-builder` was rejected: it would take the WAF
+`crowdsecurity/crowdsec#4678`, which sets `CompleteLines: true`. Upstream merged it on
+2026-10-19, and v1.8.2 is the first release that carries it. The v1.8.2 source release was
+published on 2026-10-26. Upstream publishes the Docker image through a separate, manually
+dispatched workflow (`publish-docker-release.yml`). On 2026-10-28 neither Docker Hub nor GHCR
+carried a v1.8.2 image, so `crowdsec_k8s_image` stays on v1.8.1. For comparison, the v1.8.1
+image was published 100 minutes after its release. Building a patched image through `k8s/image-builder` was rejected: it would take the WAF
 binary out of Renovate's view for a 0.05% loss.
 
 ## The Metabase dashboard was removed (2026-08-22)

@@ -16,6 +16,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -362,6 +363,22 @@ def test_a_missing_fingerprint_pages_once_then_stays_quiet(lab):
     assert "chosen" in os.listdir(lab.staged), (
         "a failed run must keep the set for the next"
     )
+
+
+def test_a_failure_reaches_the_journal_at_err_priority(lab, tmp_path, monkeypatch):
+    # The signer logs through host_lib (#6202), so `journalctl -p err` finds its failures.
+    # Its info lines keep the unit's default priority.
+    journal = tmp_path / "journal"
+    journal.touch()
+    st = journal.stat()
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+    (lab.etc / "archive-key.fpr").unlink()
+    lab.stage("homelab-daniel-pi")
+    with open(journal, "w") as err:
+        monkeypatch.setattr(sys, "stderr", err)
+        assert lab.signer().main() == 1
+    lines = journal.read_text().splitlines()
+    assert lines and all(line.startswith("<3>key: ") for line in lines), lines
 
 
 def test_a_tool_that_will_not_run_pages_once_and_leaves_the_pool_as_it_was(lab):
