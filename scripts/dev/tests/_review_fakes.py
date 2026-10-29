@@ -11,6 +11,7 @@ from fanout_lib.review.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
 
 PR = "https://github.com/DanielH2018/server/pull/4000"
+BRANCH = "worktree-batch-1345"
 # What `secret_bearing_host_paths.py` prints: `dest<TAB>name,name` per line.
 SECRET_LISTING = "/usr/local/bin/a.sh\tone_token,two_token\n"
 ISSUES = [Issue(1345, "Traefik startupProbe has no red-proof", "body one")]
@@ -66,6 +67,11 @@ class FakeRunner:
         # The landing the pipeline runs: each `bash -l` command, the VERDICT line land.sh's
         # log ends on ("" for none), land.sh's exit code, and cc-wait's exit codes in order.
         self.lands = []
+        # What `gh pr list --head` answers for the batch's branch, and each such call.
+        self.branch_prs = [{"url": PR, "number": 4000}]
+        self.listed = []
+        # Every other `gh` call, argv only; `comments` holds the stdin of the same calls.
+        self.gh_calls = []
         # What `gh issue view --json labels` answers for every issue of the batch.
         self.labels = {"labels": []}
         self.verdict = "VERDICT: settled (deployed)"
@@ -93,11 +99,16 @@ class FakeRunner:
             self.git.append(argv[3:])
             if "merge-base" in argv:
                 out = "base0"
+            elif "symbolic-ref" in argv:
+                out = BRANCH
             elif argv[-2:] == ["rev-parse", "HEAD"]:
                 out = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
             else:
                 out = ""
             return subprocess.CompletedProcess(argv, 0, out + "\n", "")
+        if argv[:3] == ["gh", "pr", "list"]:
+            self.listed.append(argv)
+            return subprocess.CompletedProcess(argv, 0, json.dumps(self.branch_prs), "")
         if argv[:3] == ["gh", "issue", "view"]:
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.labels), "")
         if argv[:3] == ["gh", "pr", "view"]:
@@ -121,6 +132,7 @@ class FakeRunner:
             log = self.job_logs.get(argv[4], "")
             return subprocess.CompletedProcess(argv, 0, log, "")
         if argv[0] == "gh":
+            self.gh_calls.append(argv)
             self.comments.append(stdin)
             return subprocess.CompletedProcess(argv, 0, "", "")
         if argv[0] == "bash":

@@ -400,7 +400,10 @@ def test_cli_status_prints_the_final_text_on_one_line_when_a_batch_is_done(
 ):
     run = Manifest("20260101T000003Z", "o", [B])
     save(run, root=tmp_path)
-    tools, _ = fake_tools(answers={"daniel-box": ok(DONE_WITH_MULTILINE_RESULT)})
+    tools, _ = fake_tools(
+        answers={"daniel-box": ok(DONE_WITH_MULTILINE_RESULT)},
+        branch_prs={B.branch: ["https://github.com/o/r/pull/9"]},
+    )
     code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 0
     out = capsys.readouterr().out.splitlines()
