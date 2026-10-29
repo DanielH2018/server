@@ -28,6 +28,8 @@ import json
 import re
 from pathlib import Path, PurePosixPath
 
+import pytest
+
 from _autodeploy import _denylist
 from _helpers import REPO
 from lib.renovate_annotations import effective_managers
@@ -93,8 +95,14 @@ def _read(rel: str) -> str:
 
 
 def _in_file_scope(rel: str, file_names: list[str]) -> bool:
-    """Whether a rule's `matchFileNames` (minimatch globs or `/regex/`) selects `rel`."""
+    """Whether a rule's `matchFileNames` (minimatch globs or `/regex/`) selects `rel`.
+
+    A brace glob, a `!` negation or a flagged `/regex/i` is refused rather than read as
+    matching nothing, which would drop the rule from the census unseen.
+    """
     for entry in file_names:
+        assert not entry.startswith("!") and "{" not in entry, entry
+        assert not re.fullmatch(r"/.*/[a-z]+", entry), entry
         if len(entry) > 1 and entry.startswith("/") and entry.endswith("/"):
             if re.search(entry[1:-1], rel):
                 return True
@@ -457,6 +465,19 @@ def test_a_rule_scoped_to_a_file_outside_the_roles_tree_is_clean() -> None:
 def test_the_same_rule_without_its_file_scope_is_flagged() -> None:
     problems = _wg_easy_problems({})
     assert len(problems) == 1 and "['wg-easy']" in problems[0], problems
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "ansible/roles/k8s/{traefik,authelia}/defaults/main.yml",
+        "!hosts/**",
+        "/^ansible/roles/k8s/traefik/defaults/main\\.yml$/i",
+    ],
+)
+def test_a_file_scope_entry_the_census_cannot_read_is_refused(entry: str) -> None:
+    with pytest.raises(AssertionError):
+        _in_file_scope("ansible/roles/k8s/traefik/defaults/main.yml", [entry])
 
 
 def test_a_file_scope_keeps_only_the_roles_its_globs_select() -> None:
