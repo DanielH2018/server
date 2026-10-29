@@ -485,3 +485,94 @@ def test_an_open_event_with_a_writing_mode_string_keeps_the_line(tree, tmp_path)
         tree, "import sys", f"sys.audit('open', {path}, 'w', 0)"
     )
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "imports, call",
+    [
+        ("import logging", "logging._lock.acquire()"),
+        ("import decimal", "decimal.getcontext().prec = 5"),
+        ("import threading", "threading._counter()"),
+        ("import _socket", "_socket.setdefaulttimeout(5)"),
+    ],
+    ids=[
+        "c-object-rlock-held",
+        "c-object-thread-decimal-context",
+        "c-object-count",
+        "c-modules-socket-timeout",
+    ],
+)
+def test_state_inside_a_c_object_the_runner_loads_keeps_the_line(tree, imports, call):  # noqa: F811
+    """A change inside a C object of a module loaded before the hook or in `c_modules` (#5209).
+
+    An `RLock`, the thread's `decimal` context and an `itertools.count` are static C types
+    the walk does not copy and no `readers` entry reads, and `_socket` keeps its default
+    timeout in C. A held logging lock deadlocks every other thread of the controller, and a
+    narrowed context changes every later `Decimal`.
+    """
+    reason = _reason_for_head_call(tree, imports, call)
+    assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "imports, call",
+    [
+        ("import os", "os.set_inheritable(0, False)"),
+        ("import gc", "gc.set_debug(gc.DEBUG_SAVEALL)"),
+        ("import sys", "sys.set_coroutine_origin_tracking_depth(5)"),
+    ],
+    ids=["unaudited-fd-inheritable", "process-gc-debug", "process-coroutine-tracking"],
+)
+def test_an_unaudited_call_or_unread_process_state_keeps_the_line(tree, imports, call):  # noqa: F811
+    """A call with no audit event to process state the runner neither reads nor counts (#5209).
+
+    A non-inheritable stdin reaches no child the controller spawns, and `DEBUG_SAVEALL`
+    keeps every collected object alive for the rest of the deploy.
+    """
+    reason = _reason_for_head_call(tree, imports, call)
+    assert reason and "every deploy runs" in reason
+
+
+def test_a_reference_the_module_code_writes_to_an_object_it_created_keeps_the_line(
+    tree,  # noqa: F811
+):
+    """A logger's `parent` the head's module code re-points keeps the line (#5209).
+
+    The cross-end `signature` compares only scalars and container lengths, so a replaced
+    object reference reads the same at both ends.
+    """
+    reason = _reason_for_head_module_code(
+        tree,
+        "import logging\n_LOGGER = logging.getLogger('order-only-5209')\n"
+        "_OTHER = logging.getLogger('other-5209')",
+        "_LOGGER.parent = _OTHER",
+    )
+    assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "base_call, call",
+    [
+        (
+            "logging.getLogger('order-only-5209').addHandler(logging.NullHandler())",
+            "logging.getLogger('order-only-5209').handlers[0].setLevel(50)",
+        ),
+        (
+            "logging.getLogger('order-only-5209').addFilter(logging.Filter('a'))",
+            "logging.getLogger('order-only-5209').filters[0].name = 'b'",
+        ),
+    ],
+    ids=["handler-level", "filter-name"],
+)
+def test_a_write_to_a_handler_or_filter_of_a_logger_the_chain_creates_keeps_the_line(
+    tree,  # noqa: F811
+    base_call,
+    call,
+):
+    """A write to the handler or filter of a logger both ends create in the chain (#5209).
+
+    Neither walk copies a logger created while the chain runs, and its `signature` counts
+    its handlers and filters without reading them.
+    """
+    reason = _reason_for_head_call(tree, "import logging", call, base_call=base_call)
+    assert reason and "every deploy runs" in reason

@@ -70,6 +70,11 @@ janitorr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b7
 # images. No flux_cronjob_gates entry copies this CronJob into a gate Job, so no gate timeout
 # bounds it from above.
 janitorr_k8s_health_deadline_seconds: 420
+# How long a finished janitorr-health Job, and so its pod, stays visible. A run the weekly reboot
+# interrupts fails, and without a TTL it reads Failed until two later runs fail (#6367).
+# 30 minutes clears it inside the hour after boot
+# (ansible/tests/k8s/test_reboot_window_cronjobs_age_out.py); the run's output is in Loki past that.
+janitorr_k8s_health_job_ttl_seconds: 1800
 
 janitorr_k8s_health_cpu_limit: "200m"
 janitorr_k8s_health_mem_limit: 128Mi
