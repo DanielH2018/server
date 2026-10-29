@@ -13,7 +13,8 @@
       is a deliberate PR, and the digest keeps the image immutable within v14.x. v15 replaces
       `PASSWORD_HASH` with a setup wizard, which is the only import path
       (`roles/k8s/wg-easy/defaults/main.yml`). A v15 bump here is therefore a manual migration,
-      not a redeploy. H5.11 adds a Renovate manager for this file, in a `manual` group.
+      not a redeploy. Renovate tracks this pin in a `manual` group (H5.11), so neither a v15
+      bump nor a v14 digest automerges.
     - **Ports.** The UDP port is published on every interface, and the web port on the Pi's LAN
       IP only (`server_ip`). The Pi runs no Traefik, so the file emits no Traefik labels. The
       Pi's ufw needs no rule for either port: Docker's nat and FORWARD rules bypass ufw's INPUT

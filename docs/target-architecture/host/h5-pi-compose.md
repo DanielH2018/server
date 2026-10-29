@@ -1,7 +1,8 @@
 # H5 — Pi Compose
 
-Status: IN PROGRESS. H5.1 to H5.10, H5.12 and H5.14 landed; H5.10 removed `pi-canary`, and H5.12
-deleted `ansible/roles/containers/` and amended ADR-0013. H5.11 and H5.13 are left.
+Status: IN PROGRESS. H5.1 to H5.12 and H5.14 landed (H5.11 as #6501, H5.12 as #6441); H5.10
+removed `pi-canary`, H5.11 put the Pi's images under Renovate, and H5.12 deleted
+`ansible/roles/containers/` and amended ADR-0013. H5.13 is left.
 Depends on: H3, H4
 Unblocks: H7
 
@@ -987,6 +988,7 @@ adds one service to the package. The PR body records the output of
 10. **H5.10 Remove `pi-canary`.** This is exit observation 3.
 11. **H5.11 Track the Pi's images.**
     - **Operator-only:** before this PR merges, the operator confirms *Open questions* 1.
+      Confirmed 2026-10-29: Pi digest bumps auto-deploy.
     - Add a custom manager over the `image:` lines in
       `hosts/components/pi-compose/services/*/compose.yaml.j2`.
     - Give the manager an `autoReplaceStringTemplate` that keeps the matched `image: ` prefix
@@ -1538,6 +1540,12 @@ upstream, revert its downstreams before it.
       operator declines, exit observation 2 becomes a hand-written digest bump through the
       same pipeline.
     - Either way, wg-easy's pin sits in a manual group, and the two alloy pins move together.
+    - **Ruled 2026-10-29: yes.** Renovate bumps to the Pi's image digests auto-deploy. They
+      automerge like an eligible k8s image bump, and the Pi's updater health-gates the
+      install. H5.11 builds the rules to match: autoheal's and docker-proxy's digest bumps
+      automerge, wg-easy's pin sits in a manual group, and the two alloy pins share one
+      manual group. The rewritten docstring of
+      `test_no_custom_manager_tracks_the_retired_compose_plane` records the ruling.
 2. **When does C5's dependency rule reach Docker?** C5 said third-party sources such as
    Docker's ship in `homelab-repos`; the 2026-10-24 ruling puts each in the component of the host that uses it. H5 keeps the engine under `docker_install`, so H5 adds
    no `Depends: docker-ce`. Resolution: H7 moves the engine, and Docker's source goes to the `apt-docker` component of `homelab-daniel-pi`.

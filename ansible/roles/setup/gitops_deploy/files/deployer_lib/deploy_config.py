@@ -170,7 +170,7 @@ def load_config(env: Mapping[str, str]) -> Config:
             "K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK", 1
         ),
         k8s_deploy_timeout_s=_int("K8S_DEPLOY_TIMEOUT_S", 1440),
-        k8s_rollback_timeout_s=_int("K8S_ROLLBACK_TIMEOUT_S", 1320),
+        k8s_rollback_timeout_s=_int("K8S_ROLLBACK_TIMEOUT_S", 1620),
         broad_deploy_timeout_s=_int("BROAD_DEPLOY_TIMEOUT_S", 1800),
         errors=tuple(errors),
     )

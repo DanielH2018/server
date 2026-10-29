@@ -16,7 +16,7 @@
 //     the run itself sits behind `flock {{ server_git_tree_lock }}`.
 //   - The deployer is read-only against the remote (never pushes), CI-gated, and
 //     health-gated with rollback, so the worst case of an unwanted tick is the same
-//     worst case as the 30-minute timer firing.
+//     worst case as the 10-minute timer firing.
 //
 // It does NOT test subject.active or subject.local, and returns YES rather than any
 // AUTH_* result. Both are load-bearing: a non-interactive shell (a systemd-run job, a
