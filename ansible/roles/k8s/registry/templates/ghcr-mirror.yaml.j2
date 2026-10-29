@@ -102,8 +102,10 @@ spec:
   while GHCR is slow: on 2026-10-24 a cold 960 MB tdarr layer came through at 49 MB/s in 20s.
   So the remote is the ghcr-resume sidecar below, not ghcr.io (#6401). It relays every request
   to ghcr.io and answers a blob GET itself, asking ghcr.io for a fresh signed URL after each
-  cut and continuing with `Range: bytes=<sent>-`. The signed host answered such a Range with
-  206 on 2026-10-29. registry-gc.sh's weekly warm phase (setup/k8s_host_files) still fetches
+  cut and continuing with `Range: bytes=<sent>-`. Measured from daniel-box on 2026-10-29 at a
+  300 KB/s client rate on the same layer: straight from ghcr.io it was cut at 140 MiB after
+  479s, and through the sidecar it hit that cut, resumed once and completed with the right
+  digest in 728s. registry-gc.sh's weekly warm phase (setup/k8s_host_files) still fetches
   every referenced blob ahead of need, so a cold start during a WAN outage finds it cached.
   A Jinja comment, so that editing it renames no verify Job and rolls nothing.
 #}
@@ -170,7 +172,10 @@ spec:
             initialDelaySeconds: 2
             periodSeconds: 30
             timeoutSeconds: 5
-{{ container_resources(cpu_limit='500m', mem_limit='64Mi', cpu_request='10m', mem_request='24Mi') }}
+          # Four concurrent unthrottled 223 MB fetches through it on daniel-box on 2026-10-29
+          # peaked at 36 MB RSS and spent 2.9 CPU-seconds per GB, about 170 MB/s at this CPU
+          # limit. The memory limit leaves room for the exec probe's second python process.
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='40Mi') }}
       volumes:
         - name: ghcr-mirror-data
           persistentVolumeClaim:
