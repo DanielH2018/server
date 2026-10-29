@@ -211,6 +211,26 @@ def test_a_unit_that_never_reads_active_is_not_a_success(box):
     assert box.run() == 1
 
 
+def test_a_failed_restart_line_carries_err_on_the_journal(box, tmp_path, monkeypatch):
+    # `journalctl -p err` finds a failed attempt, and a progress line keeps the unit's default
+    # notice (#6478). reconcile_lib's own test shows a non-journal stream never sees `<3>`.
+    changed(box)
+    box.active = "activating"
+    journal = tmp_path / "journal"
+    journal.touch()
+    st = journal.stat()
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+    with open(journal, "w") as out:
+        monkeypatch.setattr("sys.stdout", out)
+        assert box.run() == 1
+    lines = journal.read_text().splitlines()
+    assert any(line.startswith("homelab-k3s-restart: restarting ") for line in lines), (
+        lines
+    )
+    assert lines[-1].startswith("<3>homelab-k3s-restart: "), lines
+    assert "was not active" in lines[-1], lines
+
+
 def test_a_failed_hash_is_not_retried(box):
     changed(box)
     box.beats_after_restart = False
