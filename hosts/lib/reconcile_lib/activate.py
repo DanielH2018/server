@@ -25,7 +25,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from reconcile_lib.common import ROOT, run, say, systemctl, under_root
+from reconcile_lib.common import ERR, ROOT, run, say, systemctl, under_root
 
 RUN_DIR = ROOT / "run/homelab"
 VALIDATE_FAILED = RUN_DIR / "validate-failed"
@@ -131,7 +131,10 @@ def perform(
     if verb == "reload" and systemctl("is-active", unit).stdout.strip() not in RUNNING:
         return True
     called[unit] = systemctl(verb, unit).returncode == 0
-    say(f"{verb} {unit}" if called[unit] else f"{verb} {unit} failed")
+    if called[unit]:
+        say(f"{verb} {unit}")
+    else:
+        say(f"{verb} {unit} failed", ERR)
     return called[unit]
 
 
@@ -163,7 +166,7 @@ def activate(
     now = {path: file_hash(path) for path in activations}
     for path, action in sorted(activations.items()):
         if now[path] is None:
-            say(f"{path} is missing; not activating it")
+            say(f"{path} is missing; not activating it", ERR)
             ok = False
         elif now[path] != prev_files.get(path):
             changed.setdefault(action, []).append(path)
@@ -173,7 +176,7 @@ def activate(
         kind, _, unit = action.partition(":")
         problem = validate(kind, unit, paths)
         if problem:
-            say(f"{action}: {problem}; leaving the running service as it is")
+            say(f"{action}: {problem}; leaving the running service as it is", ERR)
             VALIDATE_FAILED.parent.mkdir(parents=True, exist_ok=True)
             VALIDATE_FAILED.touch()
         succeeded = problem is None and perform(kind, unit, policies, called, pending)

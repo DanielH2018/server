@@ -48,7 +48,7 @@ When nothing declares ufw, and no earlier run did, the arm runs no ufw command a
 
 import re
 
-from reconcile_lib.common import run, say
+from reconcile_lib.common import ERR, run, say
 
 PREFIX = "homelab:"
 KEEP_PREFIX = "homelab:keep:"
@@ -108,7 +108,7 @@ def added() -> list[tuple[str, str]] | None:
     """Each added rule as (spec, comment), in ufw's order; None when ufw cannot say."""
     result = run("ufw", "show", "added")
     if result.returncode != 0:
-        say(f"ufw show added failed: {result.stderr.strip()}")
+        say(f"ufw show added failed: {result.stderr.strip()}", ERR)
         return None
     found = (_ADDED.fullmatch(line) for line in result.stdout.splitlines())
     return [(m.group(1), m.group(2) or "") for m in found if m]
@@ -118,7 +118,8 @@ def ufw(*args: str) -> bool:
     result = run("ufw", *args)
     if result.returncode != 0:
         say(
-            f"ufw {' '.join(args)} failed: {result.stderr.strip() or result.stdout.strip()}"
+            f"ufw {' '.join(args)} failed: {result.stderr.strip() or result.stdout.strip()}",
+            ERR,
         )
     return result.returncode == 0
 
@@ -152,7 +153,8 @@ def before_chain_intact() -> bool:
         return True
     say(
         "ufw-before-input lacks the loopback accept, so the loaded rules differ from "
-        "/etc/ufw/before.rules; run `ufw reload` and check `iptables -S ufw-before-input`"
+        "/etc/ufw/before.rules; run `ufw reload` and check `iptables -S ufw-before-input`",
+        ERR,
     )
     return False
 
@@ -209,10 +211,10 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
     present = [c for _, c in current]
     missing = [r["id"] for r in rules if (r["spec"], label(r)) not in current]
     for rule_id in missing:
-        say(f"rule {rule_id} is not present with its label after the add")
+        say(f"rule {rule_id} is not present with its label after the add", ERR)
     problems = crossed(present, rules)
     for problem in problems:
-        say(f"ufw order: {problem}")
+        say(f"ufw order: {problem}", ERR)
     ok = ok and not missing and not problems
     if ok:
         ok = remove_legacy(rules, legacy, current)
@@ -262,7 +264,7 @@ def enable(rules: list[dict], present: list[str]) -> bool:
     """Step 6: enable an inactive ufw once the keep rules that keep ssh reachable are in place."""
     status = run("ufw", "status")
     if status.returncode != 0:
-        say(f"ufw status failed: {status.stderr.strip()}")
+        say(f"ufw status failed: {status.stderr.strip()}", ERR)
         return False
     if not status.stdout.startswith("Status: inactive"):
         return True
@@ -270,7 +272,7 @@ def enable(rules: list[dict], present: list[str]) -> bool:
     absent = [i for i in REQUIRED_KEEP if i not in keep]
     absent += [label(r) for r in rules if r["keep"] and label(r) not in present]
     if absent:
-        say(f"not enabling ufw: keep rules {absent} are not declared and present")
+        say(f"not enabling ufw: keep rules {absent} are not declared and present", ERR)
         return False
     if not ufw("--force", "enable"):
         return False
@@ -278,5 +280,5 @@ def enable(rules: list[dict], present: list[str]) -> bool:
     order = [m.group(1) for m in map(_NUMBERED.match, numbered) if m]
     problems = crossed(order, rules)
     for problem in problems:
-        say(f"ufw order after enable: {problem}")
+        say(f"ufw order after enable: {problem}", ERR)
     return not problems

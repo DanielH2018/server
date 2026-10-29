@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 
 from reconcile_lib.activate import REBOOT_PENDING
-from reconcile_lib.common import ROOT, say
+from reconcile_lib.common import ERR, ROOT, say
 
 TEXTFILE_DIR = ROOT / "var/lib/node-exporter-textfile"
 PROM = "homelab_host_reconcile.prom"
@@ -70,4 +70,4 @@ def write(host: str, state: dict) -> None:
         Path(tmp).chmod(0o644)
         os.replace(tmp, TEXTFILE_DIR / PROM)
     except OSError as exc:
-        say(f"cannot write {PROM}: {exc}")
+        say(f"cannot write {PROM}: {exc}", ERR)
