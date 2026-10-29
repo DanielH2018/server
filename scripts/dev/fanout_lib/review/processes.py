@@ -20,6 +20,7 @@ A process started outside this tree, such as through `systemd-run --user`, is no
 """
 
 import ctypes
+import json
 import os
 import signal
 import subprocess
@@ -36,11 +37,32 @@ def otel_attributes(batch: str, phase: str) -> str:
     Claude Code's telemetry reaches Prometheus with each resource attribute as a label, so
     `fanout_batch` and `fanout_phase` make spend, tokens and tool failures readable per batch
     and phase. Before this, those lived only in the review records, split across both hosts.
-    An attribute the unit's own environment already carries is kept ahead of them.
+    An attribute the unit's own environment or the user's settings already carries is kept
+    ahead of them. The settings value matters because Claude Code applies a settings `env`
+    over the process environment and replaces the whole string (measured 2026-10-29, #5684):
+    the agent user's `process.owner=claude` would otherwise displace the batch labels. The
+    caller therefore passes this same value through the phase's `--settings` as well.
     """
-    ours = f"fanout.batch={batch},fanout.phase={phase}"
-    inherited = os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "")
-    return f"OTEL_RESOURCE_ATTRIBUTES={inherited + ',' if inherited else ''}{ours}"
+    config = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    try:
+        from_settings = json.loads((config / "settings.json").read_text())["env"][
+            "OTEL_RESOURCE_ATTRIBUTES"
+        ]
+    except OSError, ValueError, KeyError, TypeError:
+        from_settings = ""
+    attributes: dict[str, str] = {}
+    for pair in (
+        *str(from_settings).split(","),
+        *os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(","),
+        f"fanout.batch={batch}",
+        f"fanout.phase={phase}",
+    ):
+        key, _, value = pair.partition("=")
+        if key.strip():
+            attributes[key.strip()] = value
+    return "OTEL_RESOURCE_ATTRIBUTES=" + ",".join(
+        f"{k}={v}" for k, v in attributes.items()
+    )
 
 
 def run_process(argv: list[str], stdin: str | None) -> subprocess.CompletedProcess:

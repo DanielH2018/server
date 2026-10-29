@@ -40,7 +40,8 @@ def test_every_phase_of_a_server_batch_on_an_8_core_host_runs_two_workers(
     phases = [phase for _, _, phase in run.claude]
     assert phases[:2] == ["implement", "review"] and len(phases) == 4
     for argv, _, phase in run.claude:
-        assert _env(argv) == {PYTEST_WORKERS_ENV: "2"}, phase
+        # `_claude` adds the OTEL labels to this env too (#5684); the worker pin is the subject.
+        assert _env(argv)[PYTEST_WORKERS_ENV] == "2", phase
 
 
 def test_a_16_core_host_keeps_four_and_another_repos_phase_gets_it_too(

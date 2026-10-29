@@ -58,6 +58,12 @@ directory.
   opaquely, check `gitops_deploy_discord_webhook` is in scope.
 - **It pages a login dead at start, not one that dies mid-run**, which leaves the host
   `active`. `docs/claude-code-rc-caps.md` has why (#4618).
+- **A session that ends on an API error pages through `claude-stop-alert@<cause>.service`**
+  (#6021), which `tasks/stop_alert.yml` installs and `templates/50-claude-stop-alert.rules.j2`
+  lets the operator and each agent user start. The StopFailure hook in the dotfiles repo runs as
+  a user that cannot read the webhook, so it starts the instance, named by the error cause in
+  `[a-z0-9_]+`. `claude_code_stop_alert_enabled: false` removes the unit, the rule and the
+  webhook file. ENFORCED: `ansible/tests/setup/test_claude_stop_alert.py`.
 - **A timer that stops firing pages through a textfile, because `OnFailure=` sees only a failed
   run** (#6165). The clone, dotfiles and memory syncs, the triage poller and the fan-out server
   lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.

@@ -125,8 +125,20 @@ def task_gates_shipping_repo_path(role_dir: Path, repo_path: str) -> list[tuple]
     does not ship the file, so the file owes it nothing; falling back to the role-level
     reach would make every unrelated repo path in a PR (`scripts/dev/pytest_shard_weights.json`,
     a test file) widen every changed setup role to every host it reaches.
+
+    The task's `name:` is left out of the match. A name describes the task and ships
+    nothing: `sops_setup`'s "Seed ansible/.sops.yaml (first-host bootstrap only)" writes
+    the config from inline `content:` on a first host and copies nothing from the checkout,
+    yet a whole-task match read it as shipping `ansible/.sops.yaml` to every host (#6538).
     """
-    return task_chains(role_dir, lambda task, _: repo_path in json.dumps(task)) or []
+    return (
+        task_chains(role_dir, lambda task, _: _ships_repo_path(task, repo_path)) or []
+    )
+
+
+def _ships_repo_path(task: dict, repo_path: str) -> bool:
+    """Whether `repo_path` appears in `task` anywhere but its `name:`."""
+    return repo_path in json.dumps({k: v for k, v in task.items() if k != "name"})
 
 
 def _ships_via_loop(task: dict, basename: str) -> bool:

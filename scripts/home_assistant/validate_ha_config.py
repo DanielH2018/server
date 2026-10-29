@@ -31,6 +31,7 @@ Run directly (`python3 scripts/home_assistant/validate_ha_config.py`) or via the
 Exits non-zero if any error is found.
 """
 
+from collections.abc import Sequence
 import shutil
 import sys
 import tempfile
@@ -478,9 +479,9 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         return errors
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Sequence[str] = ()) -> int:
     """Run `validate()`, print its errors (if any), and exit 1 if it found one."""
-    answer_help(__doc__, argv)
+    answer_help(__doc__, list(argv))
     errors = validate()
     if errors:
         print("Home Assistant config validation FAILED:", file=sys.stderr)
@@ -492,4 +493,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

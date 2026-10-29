@@ -1103,7 +1103,7 @@
  "scripts/deploy_tools/tests/test_narrow_setup_vars_walk.py": 3.52,
  "scripts/deploy_tools/tests/test_order_only.py": 1.75,
  "scripts/deploy_tools/tests/test_promote_ci_contexts.py": 0.0,
- "scripts/deploy_tools/tests/test_promote_decide.py": 1.07,
+ "scripts/deploy_tools/tests/test_promote_decide.py": 1.27,
  "scripts/deploy_tools/tests/test_promote_decide_suspended.py": 0.16,
  "scripts/deploy_tools/tests/test_promote_decide_verification.py": 1.04,
  "scripts/deploy_tools/tests/test_promote_forge_boundary.py": 0.28,
