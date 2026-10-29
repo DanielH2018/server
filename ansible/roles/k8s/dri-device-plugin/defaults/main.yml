@@ -33,6 +33,16 @@ dri_device_plugin_count: 4
 # rejected pod stays Failed beside its replacement (#6367). The CronJob deletes those pods;
 # files/dri_admission_reaper.py has the rule. Every 15 minutes, so a tombstone from the weekly
 # reboot is gone well inside the hour after boot.
+# The add-on namespaces where the job also deletes every Failed pod a Job owns (#6460). They run
+# Jobs this repo does not render: k3s's helm-install Jobs and Longhorn's backup Jobs, which no
+# `ttlSecondsAfterFinished` reaches. system-upgrade is not listed: the SUC controller's
+# SYSTEM_UPGRADE_JOB_TTL_SECONDS_AFTER_FINISH (900) ages its Plan Jobs out on their own.
+# Each namespace gets a Role in templates/admission-reaper-rbac.yaml.j2.
+# DECIDED: the add-on sweep stays in this role rather than a role of its own. It runs the same
+# script on the same schedule, and a second role would add a containers_list entry and an image
+# pin for one more predicate. It runs as its own CronJob and ServiceAccount in kube-system; the
+# cronjob template's DECIDED note says why. Rationale in this role's CLAUDE.md.
+dri_device_plugin_reaper_job_namespaces: [kube-system, longhorn-system]
 dri_device_plugin_reaper_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 dri_device_plugin_reaper_schedule: "*/15 * * * *"
 # One list and a delete or two take seconds; `open_url` retries a refused connect for 60s.

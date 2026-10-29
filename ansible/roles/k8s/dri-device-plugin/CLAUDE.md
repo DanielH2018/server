@@ -50,11 +50,27 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
   grants `list` and `delete` on every pod there: RBAC cannot name pods it has not seen.
   Lowering the GC threshold instead was rejected, because PodGC also deletes the Job pods
   whose logs the health readers read.
+- **The `addon-job-reaper` CronJob deletes every Failed Job pod in `kube-system` and
+  `longhorn-system`** (#6460). It runs the same script from `kube-system`.
+  Those namespaces run Jobs this repo does not render, k3s's helm-install Jobs and Longhorn's
+  backup Jobs, so no `ttlSecondsAfterFinished` ages a run the reboot interrupts. The Job object
+  keeps the failure on record and Loki keeps the output; the rule is
+  `ansible/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py:is_failed_job_pod`.
+  `homelab` keeps its Job pods, because the health readers read their logs. The rule also
+  takes the failed pods of the one rendered CronJob in those namespaces, `longhorn-reconcile`;
+  its `failedJobsHistoryLimit` keeps the failed Jobs, and Loki keeps their output. Each listed
+  namespace (`dri_device_plugin_reaper_job_namespaces`) gets a Role and a RoleBinding to the
+  `addon-job-reaper` ServiceAccount in `kube-system`. That grant reaches every pod in both
+  namespaces, so it has its own account in `kube-system`: a pod in `homelab` cannot run as it,
+  and the `homelab` reaper's account holds no grant outside `homelab`. `system-upgrade` is not listed: the SUC controller's
+  `SYSTEM_UPGRADE_JOB_TTL_SECONDS_AFTER_FINISH` of 900 ages its Plan Jobs out. The sweep stays
+  in this role rather than a role of its own because it runs the same script; a second role
+  would add a `containers_list` entry and an image pin for one more predicate.
 - **A handback to Ansible must defer the reaper's documents first.** The role's Ansible path
   arms its prune with `manifests_prune_namespace: kube-system`, and an armed apply refuses a
-  document in another namespace. The reaper's four objects sit in `homelab`, so a handback
-  lists `admission-reaper-cronjob.yaml` and `admission-reaper-rbac.yaml` in
-  `manifests_deferred_files`, as netpol-baseline does. Flux applies a role's documents in the
+  document in another namespace. The reapers' objects sit in `homelab`, `kube-system`
+  and `longhorn-system`, so a handback lists `admission-reaper-cronjob.yaml` and
+  `admission-reaper-rbac.yaml` in `manifests_deferred_files`, as netpol-baseline does. Flux applies a role's documents in the
   namespaces they name, so the Flux render needs neither.
 
 ## Editing
