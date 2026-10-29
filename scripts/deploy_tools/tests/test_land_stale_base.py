@@ -100,7 +100,7 @@ def test_master_changing_no_path_the_pr_changes_merges_without_an_update(landing
         ),
         pytest.param(
             "MERGEABLE",
-            [f"docs/{i}.md" for i in range(merge.COMPARE_CAP)],
+            [f"docs/{i}.md" for i in range(300)],
             [{"status": "added", "filename": "x.md"}],
             id="capped-compare",
         ),
