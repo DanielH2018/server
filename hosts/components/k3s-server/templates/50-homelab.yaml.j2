@@ -1,0 +1,18 @@
+# Shipped by the homelab-daniel-box package (hosts/components/k3s-server) -- edits here are
+# overwritten. The k3s server's flags, from `k3s_server_config` in the component's defaults.
+#
+# k3s reads every *.yaml in config.yaml.d when no config.yaml exists, and turns each key into
+# `--<key>=<value>`, one flag per list item. 50-homelab.conf runs a bare `k3s server`, so this
+# file is the server's whole configuration. A key whose value is false is left out.
+{% for key, value in k3s_server_config | dictsort if value is not false %}
+{% if value is sameas true %}
+{{ key }}: true
+{% elif value is string or value is number %}
+{{ key }}: {{ value | tojson }}
+{% else %}
+{{ key }}:
+{% for item in value %}
+  - {{ item | tojson }}
+{% endfor %}
+{% endif %}
+{% endfor %}

@@ -329,9 +329,11 @@ The maximal tag reapplies Longhorn, the backup targets, the health crons, CoreDN
 the node config, and makes two gated tasks reachable. Each is gated, so the tag *can* take the
 control plane down rather than always doing so:
 
-- `Install or reconfigure the k3s server` runs the installer, which restarts k3s, when
-  `k3s_server_args` gained an argument or the binary is missing. A moved `k3s_version` does not
-  trigger it, because SUC writes the server's version (H6.3c).
+- `Install the k3s server` runs the installer, which starts k3s, only when
+  `k3s_installed_version` finds no binary. A moved `k3s_version` does not trigger it, because
+  SUC writes the server's version (H6.3c). A changed flag does not trigger it either: the
+  flags are `k3s_server_config` in `hosts/components/k3s-server/component.yml` since H6.4b,
+  and `homelab-k3s-restart` restarts k3s once inside its window when they change.
 - `Rotate the encryption key and re-encrypt Secrets already stored in etcd` runs `k3s
   secrets-encrypt rotate-keys` when the cluster has never reached `reencrypt_finished`, which on
   a converged cluster it has.

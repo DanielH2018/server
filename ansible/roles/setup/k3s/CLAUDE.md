@@ -70,9 +70,9 @@ some carrying a `DECIDED` marker. `files/` holds the Python the crons run, teste
 since H6.1b, so a pin change routes to the Flux-owned `system-upgrade` tag and writes no
 `manual_plane` line for this role. `tasks/server.yml` and `tasks/agent.yml` read the file with
 `include_vars`. `SYSTEM_UPGRADE_DEFAULTS` in `scripts/lib/repo_paths.py` is the Python readers' path.
-The server's install task (since H6.3c) and the agent's (since H6.3d) run only for a missing
-binary or a missing argument. SUC's `k3s-server` and `k3s-agent` Plans are the only writers of
-each node's version.
+The server's install task runs only for a missing binary (since H6.4b), and the agent's for a
+missing binary or a missing argument (since H6.3d). SUC's `k3s-server` and `k3s-agent` Plans
+are the only writers of each node's version.
 
 Backup tiering, restoring a volume, restoring etcd and the two upgrade runbooks each have a
 docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recovery.md`,
@@ -124,6 +124,12 @@ role's `CLAUDE.md`.
   `hosts/components/k3s-server/`, and `homelab-k3s-restart` restarts k3s once per changed hash
   of the ones k3s reads at startup. `ansible/tests/setup/test_k3s_server_component.py` holds
   the component. The package is forward-only: a revert deletes files the flags name.
+- **The server's flags are the same package's since H6.4b.** `k3s_server_config` in
+  `hosts/components/k3s-server/component.yml` renders into
+  `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml`, and the unit drop-in runs a bare `k3s
+  server`. `tasks/server.yml` therefore passes the installer only `server`, on a host with no
+  binary, after it asserts the package installed the flags.
+  `ansible/tests/setup/test_k3s_server_flags_migration.py` held the move to the old flags.
 - **Both drift checks know an object Flux applies, and neither reads its label alone.** The
   prune check skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a
   Kustomization `<n>` exists in `flux-system`. It reads that list once per run, and a failed
