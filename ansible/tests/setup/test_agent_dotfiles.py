@@ -30,14 +30,15 @@ SCRIPT = ROLE / "files" / "claude-dotfiles-sync.sh"
 TASKS = ROLE / "tasks"
 
 # Answers the subcommands the script uses. `managed` lists ~/.claude and ~/.config/gh, whose
-# modes the role sets and the first pass must leave out, and two directories it must keep.
+# modes the role sets and the first pass must leave out, and three directories it must keep,
+# one of them ~/.config, the parent of ~/.config/gh.
 CHEZMOI_STUB = """\
 log="$STUB_CALLS"
 case "$1" in
   source-path) echo "$STUB_SOURCE/home" ;;
   init) echo "init agent=$(grep -c 'agent = true' "$HOME/.config/chezmoi/chezmoi.toml")" >> "$log" ;;
   execute-template) printf '%s' "$STUB_IS_AGENT" ;;
-  managed) printf '%s\\n' "$HOME/.claude" "$HOME/.claude/skills" "$HOME/.config/gh" "$HOME/.config/nvim" ;;
+  managed) printf '%s\\n' "$HOME/.claude" "$HOME/.claude/skills" "$HOME/.config" "$HOME/.config/gh" "$HOME/.config/nvim" ;;
   apply) echo "$*" >> "$log" ;;
   *) echo "unexpected: $*" >> "$log"; exit 2 ;;
 esac
@@ -116,7 +117,9 @@ def test_the_agent_variant_is_applied_in_two_passes_that_spare_the_role_owned_di
     home = agent.home
     assert agent.log() == [
         "init agent=1",
-        f"apply --force --no-tty --include=dirs {home}/.claude/skills {home}/.config/nvim",
+        # Non-recursive, or applying ~/.config reaches ~/.config/gh beneath it.
+        f"apply --force --no-tty --include=dirs --recursive=false {home}/.claude/skills "
+        f"{home}/.config {home}/.config/nvim",
         "apply --force --no-tty --exclude=dirs",
     ]
     assert result.stdout.startswith("applied at ")

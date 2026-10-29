@@ -33,8 +33,10 @@
     - { path: "{{ claude_code_agent_user_home }}/.ssh", mode: "0750" }
     - { path: "{{ claude_code_agent_user_home }}/.config", mode: "0755" }
     - { path: "{{ claude_code_agent_user_home }}/.config/git", mode: "0755" }
-    # The token file lives here.
-    - { path: "{{ claude_code_agent_user_home }}/.config/gh", mode: "0700" }
+    # The token file lives here, 0600. 0710 under operator_read lets group sys_user stat it,
+    # so `probe.py applied` compares its mode and owner; rootq refuses the agent-owned home.
+    - path: "{{ claude_code_agent_user_home }}/.config/gh"
+      mode: "{{ '0710' if claude_code_agent_operator_read else '0700' }}"
     # Claude Code's own directory, which also holds the session's login in a 0600 file. 0710
     # lets group sys_user traverse to the artifacts and memory agent_access.yml opens, without
     # listing the rest.

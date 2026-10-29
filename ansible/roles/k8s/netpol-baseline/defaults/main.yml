@@ -48,9 +48,14 @@ netpol_baseline_node_cidrs: "{{ k3s_cni0_gateways }}"
 # read the list by name and a fifth source is a one-line change.
 #
 # `cloudflare_ips` is the same list traefik's forwardedHeaders.trustedIPs reads, so a Cloudflare
-# range change needs a netpol-baseline deploy as well as traefik's — cloudflare-ip-drift.sh
-# (roles/k8s/traefik) names both when it alarms.
-netpol_baseline_traefik_https_sources: "{{ cloudflare_ips + [lan_subnet, wg_client_subnet, k3s_pod_cidr] }}"
+# range change needs a netpol-baseline deploy as well as traefik's — monitor-bridge's
+# cloudflare_ips_drift check names both when it alarms.
+#
+# Only the IPv4 members are admitted. The cluster is single-stack IPv4, so an IPv6 ipBlock
+# fences nothing, and kube-router logs one "Ignoring IPv6 source IP blocks" warning per IPv6
+# CIDR on every policy sync: 29,400 of daniel-box's 39,444 k3s.log lines on 2026-10-28 (#6495).
+# traefik's trustedIPs still reads the full list. A colon appears only in an IPv6 CIDR.
+netpol_baseline_traefik_https_sources: "{{ (cloudflare_ips | reject('search', ':') | list) + [lan_subnet, wg_client_subnet, k3s_pod_cidr] }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]

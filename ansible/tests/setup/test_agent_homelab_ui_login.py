@@ -9,9 +9,11 @@ left behind after the user is switched off, or aimed at an account that does not
 Run: uv run pytest ansible/tests/setup/test_agent_homelab_ui_login.py
 """
 
+import jinja2
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 
 CLAUDE_CODE = ANSIBLE / "roles" / "setup" / "claude_code"
 TASKS = CLAUDE_CODE / "tasks"
@@ -56,12 +58,17 @@ def test_the_login_file_is_the_agents_alone_and_never_printed() -> None:
     assert task["diff"] is False and task["no_log"] is True
 
 
-def test_the_login_file_sits_in_a_directory_only_the_agent_enters() -> None:
+def test_the_login_file_sits_in_a_directory_only_the_agent_lists() -> None:
+    """The operator's group traverses to stat the 0600 login for `probe.py applied` (#6484)."""
     task = named(
         tasks("agent_homelab_ui.yml"),
         "Create the agent user's homelab-ui config directory",
     )
-    assert task["ansible.builtin.file"]["mode"] == "0700"
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    mode = env.from_string(task["ansible.builtin.file"]["mode"])
+    assert [
+        mode.render(claude_code_agent_operator_read=flag) for flag in (True, False)
+    ] == ["0710", "0700"]
     assert task["ansible.builtin.file"]["owner"] == "{{ claude_code_agent_user }}"
 
 
