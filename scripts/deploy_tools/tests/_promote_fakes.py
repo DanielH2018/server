@@ -221,6 +221,8 @@ class FakeRun:
         hold: DEPLOY_HOLD's value, or None for a missing variable. A `gh variable set`
             writes it.
         hold_fails: make `gh` fail with an error other than "not found".
+        hold_errors: the stderr of each next `gh variable get` that fails, one per read,
+            before reads answer again.
         set_fails: make every `gh variable set` exit 1.
         written: each `(name, value)` a `gh variable set` wrote.
         cosign_fails: make every `cosign verify` exit 1.
@@ -230,6 +232,7 @@ class FakeRun:
 
     hold: str | None = "none"
     hold_fails: bool = False
+    hold_errors: list[str] = field(default_factory=list)
     set_fails: bool = False
     written: list[tuple[str, str]] = field(default_factory=list)
     cosign_fails: bool = False
@@ -244,6 +247,8 @@ class FakeRun:
             self.hold = argv[argv.index("--body") + 1]
             return subprocess.CompletedProcess(argv, 0, "", "")
         if argv[:3] == ["gh", "variable", "get"]:
+            if self.hold_errors:
+                return subprocess.CompletedProcess(argv, 1, "", self.hold_errors.pop(0))
             if self.hold_fails:
                 return subprocess.CompletedProcess(
                     argv, 1, "", "HTTP 401: Bad credentials"

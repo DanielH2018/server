@@ -7,7 +7,7 @@ OnFailure=gitops-deploy-alert.service
 [Service]
 Type=oneshot
 # Kill a wedged run (hung ansible/docker) so it can't hold the unit "active" forever and starve
-# the 30-min timer (OnUnitActiveSec) — without this a hang stalls the whole pipeline until manual
+# the 10-min timer (OnUnitActiveSec) — without this a hang stalls the whole pipeline until manual
 # intervention.
 #
 # Two independent worst cases must fit inside this ceiling — the k8s path and the broad path.
@@ -34,11 +34,12 @@ Type=oneshot
 #     reason rather than this one (a reset would undo the ff-merge under a setup plane it
 #     already applied), but K8S_ROLLBACK_TIMEOUT_S on top would reach 3600s.
 #
-# This deliberately GIVES UP the old invariant ("stay under the 30-min interval so the next tick
+# This deliberately GIVES UP the old invariant ("stay under the timer interval so the next tick
 # always fires on schedule") in exchange for the k8s rollback getting a budget that can actually
-# finish. That is a considered trade, not a bug to tighten back: a normal run finishes in well
-# under a minute, so the 30-min tick is only at risk in the pathological case both k8s timeouts
-# get spent in full — and per docs/gitops-pipeline.md's *The rollback timeout, derived*
+# finish. That is a considered trade, not a bug to tighten back. A normal run finishes in well
+# under a minute. At the 10-min interval a tick is at risk whenever one deploy runs past 600s,
+# which K8S_DEPLOY_TIMEOUT_S (1440s) alone allows, not only when both k8s timeouts are spent in
+# full. Per docs/gitops-pipeline.md's *The rollback timeout, derived*
 # section (verified live against this unit on daniel-box, not inferred from the man page alone),
 # an overrun never produces a second or concurrent run: systemd finds the unit already
 # `activating` and coalesces the timer's start request into the run already in flight, rather
@@ -46,7 +47,7 @@ Type=oneshot
 # deploy — see that CLAUDE.md section for what is and is not verified about the cadence.
 #
 # The lock this unit's ExecStart holds (`{{ server_git_tree_lock }}`, below) is now held for
-# up to this same pathological duration, which EXCEEDS the 30-min timer interval — a concurrent
+# up to this same pathological duration, which EXCEEDS the 10-min timer interval — a concurrent
 # `./scripts/deploy.sh` waits its own `deploy_lib/under_locks.py:LOCK_WAIT` (not this `-w 180`, which
 # governs only this unit), then returns exit 75 (nothing deployed) if the lock stays busy past
 # it — so it normally OUTLASTS this hold and deploys. The weekly secret-rotate cron waits on the same lock, with the

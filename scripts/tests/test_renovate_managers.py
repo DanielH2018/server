@@ -68,15 +68,17 @@ def test_custom_manager_matches_live_targets(mgr: dict, tracked: list[str]) -> N
 def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
     """No customManager may target ansible/roles/containers/**.
 
-    Both cluster hosts are drained (daniel-server's containers_list is empty and Docker is
-    uninstalled; daniel-box is all platform: k8s), so the only composes left are daniel-pi's
-    five — and the Pi has has_gitops: false, no CI deploy path, and is deliberately untracked
-    per operator decision. Every remaining compose is therefore either dead or hand-deployed,
-    and tracking them only manufactures drift: a bump of a compose template for a service
-    that runs in the cluster targets a pin nothing reads.
+    H5.12 deleted that tree. The Pi's Compose services were Ansible roles there until H5, so a
+    manager copied from history would point at it, and a bump PR against it would target a
+    pin nothing reads.
 
-    Asserted rather than merely deleted, because re-adding a compose manager looks entirely
-    reasonable in isolation — this is the context that makes it wrong.
+    The Pi's images ARE tracked, by the manager over
+    hosts/components/pi-compose/services/*/compose.yaml.j2. Until H5 the operator kept them
+    untracked, because the Pi had no deploy path a merged bump could reach. On 2026-10-29 the
+    operator ruled that Pi digest bumps auto-deploy: they automerge like an eligible k8s digest
+    bump, and the Pi's updater health-gates the install (Open question 1 of
+    docs/target-architecture/host/h5-pi-compose.md).
+    scripts/tests/test_renovate_pi_compose_pins.py guards that manager and its rules.
     """
     offenders = []
     for m in _MANAGERS:
@@ -84,8 +86,9 @@ def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
             if "roles/containers" in pattern:
                 offenders.append(f"{pattern}: {m.get('description', '')[:80]}")
     assert not offenders, (
-        "customManager(s) targeting the retired compose plane — those pins are dead or "
-        "Pi-only (untracked by decision):\n" + "\n".join(offenders)
+        "customManager(s) targeting ansible/roles/containers, which H5.12 deleted. The Pi's "
+        "Compose pins live under hosts/components/pi-compose/services/:\n"
+        + "\n".join(offenders)
     )
 
 
