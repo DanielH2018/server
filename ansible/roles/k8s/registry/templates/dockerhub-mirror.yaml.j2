@@ -22,8 +22,9 @@ metadata:
 spec:
   # Recreate: the claim is ReadWriteOnce and the hostPort is node-exclusive.
 {{ spec_shell('Recreate') }}
-  # Rendered, unlike the ghcr-mirror's: no GC scales this one, so the apply is its only writer.
-  replicas: 1
+  # No `replicas:`, for the ghcr-mirror's reason (#6536). registry-gc.sh scales this Deployment
+  # to zero while it prunes the store, and a rendered field would give Flux a claim on it that
+  # restores the pod mid-GC.
   selector:
     matchLabels:
       app: dockerhub-mirror
@@ -68,17 +69,14 @@ spec:
             # the repository path normalised (`library/alpine`), which this host serves as is.
             - name: REGISTRY_PROXY_REMOTEURL
               value: https://registry-1.docker.io
-            # DECIDED: a long TTL, not the ghcr-mirror's zero. A zero TTL never expires anything,
-            # so the store then needs the weekly offline prune the ghcr-mirror has
-            # (registry-gc.sh, ghcr-mirror-prune.sh, its keep set and warm pass), and that
-            # machinery reads ghcr.io refs only. The cost: distribution schedules the expiry only
-            # when it fetches from Docker Hub, and a pull served from the store never moves it.
-            # So every cached image is deleted one TTL after its first fetch, however often nodes
-            # pulled it since, and stays gone until some node misses it locally with the WAN up.
-            # A digest pin unchanged for longer than the TTL is therefore a gap again. The default
-            # 168h would make that a week. A zero TTL with a GC for this store is #6536.
+            # DECIDED: a zero TTL and the weekly GC, not a long TTL (#6536). distribution counts
+            # a TTL from the fetch from Docker Hub, and a pull served from the store never moves
+            # it, so any TTL deletes a cached image one TTL after its first fetch while a pod
+            # still runs it. A zero TTL never expires anything (proxyregistry.go starts no
+            # scheduler), so the store is bounded instead by registry-gc.sh's offline prune of
+            # what no workload names (setup/k8s_host_files, dockerhub-mirror-gc-job.yaml.j2).
             - name: REGISTRY_PROXY_TTL
-              value: "{{ registry_k8s_dockerhub_mirror_ttl }}"
+              value: "0s"
           volumeMounts:
             - name: dockerhub-mirror-data
               mountPath: /var/lib/registry

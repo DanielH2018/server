@@ -1,0 +1,98 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+---
+# The dockerhub-mirror store's copy of the prune script, carried verbatim from files/. Its own
+# ConfigMap, so this manifest applies whole without ghcr-mirror-gc-job.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-gc-dockerhub-mirror-prune
+  namespace: {{ k8s_namespace }}
+data:
+  ghcr-mirror-prune.sh: |
+{{ lookup('file', playbook_dir + '/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh') | indent(4, true) }}
+---
+# Prune and collect the dockerhub-mirror store (#6536), as ghcr-mirror-gc-job.yaml.j2 does the
+# ghcr-mirror's. That template's comments hold for each line here. registry-gc.sh scales only
+# deploy/dockerhub-mirror to zero around this Job.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-gc-dockerhub-mirror
+  namespace: {{ k8s_namespace }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ registry_k8s_gc_deadline_s }}
+  ttlSecondsAfterFinished: {{ registry_k8s_gc_ttl_s }}
+  template:
+    spec:
+      restartPolicy: Never
+      # registry-dockerhub-mirror is RWO and attached where the dockerhub-mirror pod runs.
+      nodeSelector:
+        kubernetes.io/hostname: {{ k8s_registry_node }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      initContainers:
+        - name: prune
+          image: {{ registry_k8s_netpol_probe_image }}
+          command: ["sh", "/prune/ghcr-mirror-prune.sh"]
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: MIRROR_ROOT
+              value: /var/lib/registry
+            - name: KEEP_FILE
+              value: /keep/digests
+            - name: KEEP_NEWEST
+              value: "{{ registry_k8s_dockerhub_mirror_keep_revisions }}"
+            - name: MIRROR_NAME
+              value: dockerhub-mirror
+          volumeMounts:
+            - name: dockerhub-mirror-data
+              mountPath: /var/lib/registry
+            - name: dockerhub-mirror-prune-script
+              mountPath: /prune
+              readOnly: true
+            - name: dockerhub-mirror-keep
+              mountPath: /keep
+              readOnly: true
+            - name: dockerhub-mirror-prune-tmp
+              mountPath: /tmp
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='50m', mem_request='16Mi') }}
+      containers:
+        - name: gc
+          image: {{ registry_k8s_image }}
+          command: ["/bin/registry"]
+          # Plain garbage-collect, WITHOUT --delete-untagged: a digest pull is cached untagged.
+          args:
+            - "garbage-collect"
+            - "/etc/distribution/config.yml"
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"
+          volumeMounts:
+            - name: dockerhub-mirror-data
+              mountPath: /var/lib/registry
+{{ container_resources(cpu_limit='1', mem_limit='512Mi', cpu_request='100m', mem_request='64Mi') }}
+      volumes:
+        - name: dockerhub-mirror-data
+          persistentVolumeClaim:
+            claimName: {{ registry_k8s_dockerhub_mirror_claim }}
+        - name: dockerhub-mirror-prune-script
+          configMap:
+            name: registry-gc-dockerhub-mirror-prune
+        # Optional for the ghcr-mirror's reason: a run with no keep set prunes nothing.
+        - name: dockerhub-mirror-keep
+          configMap:
+            name: registry-gc-dockerhub-mirror-keep
+            optional: true
+        - name: dockerhub-mirror-prune-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi

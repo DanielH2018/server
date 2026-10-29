@@ -249,3 +249,46 @@ tests:
             exp_annotations:
               summary: daniel-box's docker.io mirror pull check has stopped reporting.
               description: "No dockerhub-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-box's textfile collector, so nothing is watching whether the node's docker.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `dockerhub-mirror-pull` container on daniel-box."
+
+  # A run killed during the dockerhub-mirror's phase leaves it at zero; the ghcr-mirror serves.
+  # Only the dockerhub page fires, after the 2h hold.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x180'
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="dockerhub-mirror"}'
+        values: '0x180'
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="ghcr-mirror"}'
+        values: '1x180'
+    alert_rule_test:
+      - alertname: DockerhubMirrorScaledToZero
+        eval_time: 119m
+        exp_alerts: []
+      - alertname: GhcrMirrorScaledToZero
+        eval_time: 121m
+        exp_alerts: []
+      - alertname: DockerhubMirrorScaledToZero
+        eval_time: 121m
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              deployment: dockerhub-mirror
+              service: registry
+              severity: warning
+            exp_annotations:
+              summary: The dockerhub-mirror Deployment has wanted zero replicas for 2 hours.
+              description: "homelab/dockerhub-mirror has been scaled to zero for 2 hours, or Prometheus has no kube-state-metrics scrape job. registry-gc.sh holds it at zero for at most about 25 minutes, so a run probably died before its restore. Until the mirror serves again, containerd pulls docker.io images straight from Docker Hub and a WAN outage leaves no source to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no registry-gc.sh is running, then `kubectl -n homelab scale deploy/dockerhub-mirror --replicas=1`."
+
+  # A GC phase holds the dockerhub-mirror at zero for 25 minutes and restores it: nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x180'
+      - series: 'kube_deployment_spec_replicas{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="dockerhub-mirror"}'
+        values: '1x30 0x25 1x125'
+    alert_rule_test:
+      - alertname: DockerhubMirrorScaledToZero
+        eval_time: 180m
+        exp_alerts: []

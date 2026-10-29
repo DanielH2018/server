@@ -2,7 +2,8 @@
 # Prune the ghcr-mirror store offline — managed by Ansible (k8s/registry role); edits overwritten.
 #
 # The ghcr-mirror container is a pull-through cache with REGISTRY_PROXY_TTL=0s, so nothing
-# expires what it cached, and a registry in proxy mode refuses manifest DELETE (#5541). This
+# expires what it cached, and a registry in proxy mode refuses manifest DELETE (#5541). The
+# dockerhub-mirror's GC Job runs this same script over that mirror's store (#6536). This
 # script edits the store's filesystem directly while registry-gc.sh holds the registry pod at
 # zero replicas. The Job's second container then runs plain `garbage-collect`, which sweeps the
 # blobs no remaining revision references.
@@ -33,7 +34,8 @@
 #
 # Usage: ghcr-mirror-prune.sh (no arguments)
 # Reads MIRROR_ROOT (the store's root directory, default /var/lib/registry), KEEP_FILE (one
-# sha256 digest or `<repo>:<tag>` per line, default /keep/digests) and KEEP_NEWEST (default 3).
+# sha256 digest or `<repo>:<tag>` per line, default /keep/digests), KEEP_NEWEST (default 3) and
+# MIRROR_NAME (the summary line's name for the store, default ghcr-mirror).
 
 set -u
 
@@ -158,4 +160,4 @@ while read -r manifests; do
   done < "${WORK}/all"
 done < "${WORK}/repos"
 
-echo "ghcr-mirror prune: ${PRUNED} revision(s) pruned across ${REPOS} repositories"
+echo "${MIRROR_NAME:-ghcr-mirror} prune: ${PRUNED} revision(s) pruned across ${REPOS} repositories"

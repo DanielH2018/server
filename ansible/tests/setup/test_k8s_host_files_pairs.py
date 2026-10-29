@@ -51,6 +51,8 @@ EXPECTED_PAIRS: frozenset[str] = frozenset(
         "media_volume_host_path",
         "pgid",
         "puid",
+        "registry_k8s_dockerhub_mirror_claim",
+        "registry_k8s_dockerhub_mirror_keep_revisions",
         "registry_k8s_gc_cron_hour",
         "registry_k8s_gc_cron_minute",
         "registry_k8s_gc_cron_weekday",

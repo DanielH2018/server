@@ -1,8 +1,9 @@
 # The registry role's own alerts. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this
 # file verbatim.
 #
-# GhcrMirrorScaledToZero covers the case nothing else sees. registry-gc.sh scales the ghcr-mirror
-# Deployment to zero every Sunday and back when it ends, and the Deployment renders no
+# GhcrMirrorScaledToZero covers the case nothing else sees, and DockerhubMirrorScaledToZero does
+# the same for the dockerhub-mirror. registry-gc.sh scales each mirror's Deployment to zero every
+# Sunday and back when its phase ends, and the Deployment renders no
 # `replicas:`, so a run killed between the two leaves it at 0/0. That passes rollout status,
 # K8sDeploymentZeroAvailable (which wants spec replicas above zero) and the registry deploy's
 # netpol probe, and containerd falls back to ghcr.io until a WAN outage finds the mirror gone.
@@ -34,6 +35,28 @@ groups:
             containerd pulls ghcr.io images straight from GHCR and a WAN outage leaves no source
             to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no
             registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror
+            --replicas=1`.
+      # The same page for the dockerhub-mirror, which registry-gc.sh scales the same way after the
+      # ghcr-mirror's phase (#6536). Its Deployment renders no `replicas:` either.
+      - alert: DockerhubMirrorScaledToZero
+        expr: >-
+          absent(up{job="kube-state-metrics"})
+          or
+          (kube_deployment_spec_replicas{job="kube-state-metrics", namespace="homelab", deployment="dockerhub-mirror"} == 0
+          and on() (up{job="kube-state-metrics"} == 1))
+        for: 2h
+        labels:
+          severity: warning
+          service: registry
+        annotations:
+          summary: The dockerhub-mirror Deployment has wanted zero replicas for 2 hours.
+          description: >-
+            homelab/dockerhub-mirror has been scaled to zero for 2 hours, or Prometheus has no
+            kube-state-metrics scrape job. registry-gc.sh holds it at zero for at most about 25
+            minutes, so a run probably died before its restore. Until the mirror serves again,
+            containerd pulls docker.io images straight from Docker Hub and a WAN outage leaves no
+            source to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no
+            registry-gc.sh is running, then `kubectl -n homelab scale deploy/dockerhub-mirror
             --replicas=1`.
       # node-exporter's ghcr-mirror-pull sidecar GETs nut's manifest through each node's ghcr.io
       # mirror endpoint every 600s (#5542). containerd falls back to ghcr.io past a broken
