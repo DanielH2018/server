@@ -4,7 +4,7 @@ Decides; does not fetch. The one read it needs is transport.HOST_READ_COMMAND â€
 memory lines plus the signing-key line transport appends â€” run by transport.read_host.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 # DECIDED: 2.5 GiB per agent. daniel-box's 24h peak for user-1000.slice was 7.2 GiB
@@ -187,6 +187,7 @@ def place(
     readings: Sequence[HostReading],
     pin: str | None = None,
     reservation: int = RESERVATION_BYTES,
+    slots: Mapping[str, int] | None = None,
 ) -> list[tuple[str, str]]:
     """Assign each batch a host, most headroom first, spending one reservation per placement.
 
@@ -196,6 +197,10 @@ def place(
         pin: when given, place every batch on this host and refuse rather than fall back
             when it runs out of headroom.
         reservation: bytes reserved per placed batch (default RESERVATION_BYTES).
+        slots: how many more batches each host may take before its live-batch cap, keyed by
+            host. A host at zero is skipped, so a batch falls back to the host with the next
+            most headroom instead of being refused for the cap of the one it preferred. A
+            host absent from the mapping is not capped here; None caps none.
 
     Returns:
         One (batch, host) pair per batch, in input order.
@@ -205,11 +210,14 @@ def place(
             left for a batch.
     """
     used = {r.host: 0 for r in readings}
+    placed_on = {r.host: 0 for r in readings}
     placed = []
     for batch in batches:
         candidates = []
         for r in readings:
             if pin and r.host != pin:
+                continue
+            if slots is not None and slots.get(r.host, 1) - placed_on[r.host] <= 0:
                 continue
             room = headroom(r, reservation)
             if room is None:
@@ -224,5 +232,6 @@ def place(
             )
         _, host = max(candidates)
         used[host] += reservation
+        placed_on[host] += 1
         placed.append((batch, host))
     return placed

@@ -151,6 +151,8 @@ than three batches on one remote host in this run (the ssh budget, which binds o
 transport cannot share one connection per host, `transport.control_dir`); or it would leave a host
 holding more RUNNING batches than its cap, counting every earlier run not yet cleaned (the memory
 cap â€” a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
+Placement skips a host that is at that cap, so a batch goes to the next host with memory
+headroom, and the refusal fires only when no host has both (#6421).
 The cap is three on daniel-box and four on daniel-server (`launch_gates.live_batch_cap`, #5667).
 A batch whose agent has finished does not count, whether or not its worktree still stands.
 Each host's headroom read also reads the unit state `place status` reads for that host's
@@ -245,8 +247,8 @@ That line names every batch that is not plain success. The source is
 `cc-wait fanout-headroom [--batches N] [--host HOST] --budget 1740` in the background, and
 re-run it on exit 75. It ends `room` (exit 0) once a `launch` of N batches would place, or
 `no-signing-host` (6) when no host signs verifiably. While it waits, its detail is the
-refusal `launch` would print. An unpinned wait also names each host a `--host` launch would
-place on, because `launch` checks the batch cap only on the host with the most memory. It
+refusal `launch` would print. Placement skips a host at its live-batch cap and places on the
+next host with memory headroom (#6421), so `room` names a host that has both. It
 answers for every run, other sessions' included, which `cc-wait fanout` cannot. The source
 is `scripts/dev/fanout.py headroom`, which calls the same two placement functions `launch`
 does, so `room` is not a promise the issue-body gates pass. Launch within a minute of
@@ -337,7 +339,8 @@ problem, and it is what `read` shows as `signing=unknown`, so run `read` first â
 `signing=` field gives the gate's verdict per host before a launch spends an agent on it.
 
 When every PR has merged: `uv run python scripts/dev/fanout.py place clean <run-id>`. It
-removes each worktree once its branch is merged into `origin/master` and the tree is clean,
+removes each worktree once its branch is merged into `origin/master` (or its tip is an ancestor of
+the head GitHub merged, as after `land.sh` merged master into the branch, #6365) and the tree is clean,
 then deletes that `worktree-fanout-<batch>` branch, and reports a kept tree with its reason. A
 branch that refuses to delete reads `kept`, naming it. `clean` records each removal in the run's manifest, so a
 later pass skips a batch it already removed rather than reading a host for a worktree that is

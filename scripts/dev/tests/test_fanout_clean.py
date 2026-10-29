@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from fanout_lib.clean import clean_one, remote_clean_command
+from fanout_lib.clean import clean_one, landed, remote_clean_command
 from fanout_lib.manifest import (
     Batch,
     Manifest,
@@ -371,3 +371,33 @@ def test_a_dotfiles_clean_fetches_main_and_runs_this_repos_copy_with_repo():
         "worktree-fanout-763 --repo DanielH2018/dotfiles" in cmd
     )
     assert f"{wt}/scripts/dev" not in cmd
+
+
+def _landed(merged_heads: str, compare: str) -> bool:
+    """`landed` with a gh whose `pr list` prints `merged_heads` and whose `api` prints `compare`."""
+
+    def fake_gh(*args, **_kwargs):
+        out = compare if args[0] == "api" else merged_heads
+        return SimpleNamespace(returncode=0, stdout=out)
+
+    return landed(
+        "/repo",
+        "a" * 40,
+        "worktree-fanout-b",
+        merged=lambda *a, **k: False,
+        run_gh=fake_gh,
+    )
+
+
+def test_a_tip_inside_the_merged_pr_head_has_landed():
+    """#6365: `land.sh` merged master into the branch, so the merged head is not the tip."""
+    assert _landed("f" * 40 + "\n", "ahead\n")
+
+
+def test_a_diverged_tip_has_not_landed():
+    """Local commits the merged head lacks are work nothing proves landed."""
+    assert not _landed("f" * 40 + "\n", "diverged\n")
+
+
+def test_a_branch_with_no_merged_pr_has_not_landed():
+    assert not _landed("", "ahead\n")

@@ -44,6 +44,15 @@ def _box_at_its_cap(root):
     save(Manifest("20260101T000010Z", "o", earlier), root=root)
 
 
+def _server_at_its_cap(root):
+    """Four uncleaned batches on daniel-server, whose cap is 4 (#5667)."""
+    earlier = [
+        Batch(f"{n}", "daniel-server", "/w", "b", "u", [n], "t")
+        for n in (81, 82, 83, 84)
+    ]
+    save(Manifest("20260101T000020Z", "o", earlier), root=root)
+
+
 def test_roomy_hosts_with_no_live_batches_is_room(tmp_path):
     reading = headroom_probe.read(_tools(ROOMY, ROOMY), 1, None, tmp_path)
     assert reading["state"] == "room"
@@ -56,13 +65,23 @@ def test_no_memory_headroom_on_either_host_is_full(tmp_path):
     assert reading["detail"].startswith("no headroom for batch 1")
 
 
-def test_the_host_placement_prefers_being_at_its_batch_cap_is_full(tmp_path):
-    """Launch checks the cap only on the host with the most memory, so the wait does too."""
+def test_the_roomiest_host_at_its_batch_cap_falls_back_to_the_next_host(tmp_path):
+    """#6421: the wait ends `room` on the host launch will use, not on one launch then refuses."""
     _box_at_its_cap(tmp_path)
+    reading = headroom_probe.read(_tools(ROOMY, SMALLER), 1, None, tmp_path)
+    assert reading == {
+        "state": "room",
+        "detail": "1 batch(es) would place on daniel-server",
+    }
+
+
+def test_every_host_with_memory_at_its_batch_cap_is_full(tmp_path):
+    _box_at_its_cap(tmp_path)
+    _server_at_its_cap(tmp_path)
     reading = headroom_probe.read(_tools(ROOMY, SMALLER), 1, None, tmp_path)
     assert reading["state"] == "full"
     assert "daniel-box already holds 3 live batch(es)" in reading["detail"]
-    assert "`--host daniel-server` would place" in reading["detail"]
+    assert "daniel-server already holds 4 live batch(es)" in reading["detail"]
 
 
 def test_a_launch_pinned_to_the_host_with_a_free_slot_is_room(tmp_path):
@@ -90,18 +109,21 @@ def test_no_readable_host_is_a_failed_read_not_full(tmp_path):
 @pytest.mark.parametrize(
     ("box", "server", "at_cap", "state", "launch_exit"),
     [
-        (ROOMY, ROOMY, False, "room", 0),
-        (TIGHT, TIGHT, False, "full", 3),
-        (ROOMY, SMALLER, True, "full", 3),
+        (ROOMY, ROOMY, (), "room", 0),
+        (TIGHT, TIGHT, (), "full", 3),
+        (ROOMY, SMALLER, ("box",), "room", 0),
+        (ROOMY, SMALLER, ("box", "server"), "full", 3),
     ],
-    ids=["room", "no-memory", "batch-cap"],
+    ids=["room", "no-memory", "fallback-past-the-cap", "every-host-at-cap"],
 )
 def test_the_wait_agrees_with_what_launch_does(
     tmp_path, box, server, at_cap, state, launch_exit
 ):
     """`room` and a placing launch, `full` and launch's exit 3, on the same hosts and manifests."""
-    if at_cap:
+    if "box" in at_cap:
         _box_at_its_cap(tmp_path)
+    if "server" in at_cap:
+        _server_at_its_cap(tmp_path)
     assert headroom_probe.read(_tools(box, server), 1, None, tmp_path)["state"] == state
     argv = ["launch", "--batch", "1", "--manifest-root", str(tmp_path)]
     assert place_main(argv, _tools(box, server)) == launch_exit
