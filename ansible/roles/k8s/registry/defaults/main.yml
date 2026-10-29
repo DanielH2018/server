@@ -37,6 +37,12 @@ registry_k8s_ghcr_mirror_keep_revisions: 3
 # Pod-local and loopback-bound. Off the baked :5001, which the push store's debug server holds,
 # so the two never collide if they share a pod again.
 registry_k8s_ghcr_mirror_debug_port: 5003
+# The mirror's upstream: files/ghcr_resume_proxy.py, a sidecar in the mirror's pod that relays
+# to ghcr.io and resumes a cut blob with Range (#6401). The proxy's REGISTRY_PROXY_REMOTEURL
+# names it on this pod-local loopback port. The stock python image, the digest monitor-bridge
+# and flux_job_image run, because the script is standard library only.
+registry_k8s_ghcr_resume_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+registry_k8s_ghcr_resume_port: 5004
 
 # The claim the renderer emits for this role, which the registry Kustomization applies (#3387).
 k8s_claims:  # noqa var-naming[no-role-prefix]

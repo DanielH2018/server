@@ -42,10 +42,11 @@
 # A WARM PHASE AFTER THE RESTORE. Once the mirror serves again, the run GETs every linux/amd64
 # blob of every ghcr.io image the cluster names, through the mirror, so the mirror caches what it
 # missed: images a node pulled before the mirror existed, and pulls that fell back to ghcr.io
-# while a GC held the mirror at zero. A cold blob that takes more than about 8 minutes cannot
-# complete through the mirror (#5654). That happens only while GHCR is slow, so a weekly warm
-# fetches those blobs ahead of need, at GHCR's normal speed (49 MB/s cold through the mirror,
-# measured 2026-10-24).
+# while a GC held the mirror at zero. A cold start during a WAN outage finds only what the store
+# already holds, and a cold blob fetched while GHCR is slow takes many minutes even though the
+# mirror's ghcr-resume sidecar now completes it (#5654, #6401). So a weekly warm fetches those
+# blobs ahead of need, at GHCR's normal speed (49 MB/s cold through the mirror, measured
+# 2026-10-24).
 #
 # Usage: registry-gc.sh (no arguments)
 # Runs from the registry-gc root cron on daniel-box, weekly at the time set by

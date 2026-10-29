@@ -1,6 +1,23 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+{% set resume_script = 'ghcr_resume_proxy.py' %}
+{% set resume_data = {resume_script: lookup('file', playbook_dir + '/roles/k8s/registry/files/' + resume_script, rstrip=False)} %}
+{#
+  Named for its content, as the verify Jobs' ConfigMap is, so a script edit renames it, which
+  changes the pod template and rolls the mirror onto the new script.
+#}
+{% set resume_configmap = 'ghcr-resume-' + (resume_data | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ resume_configmap }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in resume_data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
 ---
 # The pull-through mirror of ghcr.io (D5 Open question 2). k3s's registries.yaml names it as the
 # `ghcr.io` mirror, so containerd pulls a flux-owned GHCR image through it and a node keeps a LAN
@@ -74,21 +91,26 @@ spec:
             - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
               value: /var/lib/registry
 {#
-  A blob that takes longer than about 8 to 10 minutes to fetch never completes through this
-  mirror (#5654). ghcr.io redirects each blob to an Azure SAS URL, whose `se` expiry read
+  A blob that takes longer than about 8 to 10 minutes to fetch never completes from ghcr.io in
+  one request (#5654). ghcr.io redirects each blob to a signed URL whose `se` expiry read
   7 minutes after issue, and the transfer is cut at the next 10 MiB boundary after that.
   Measured from daniel-box on 2026-10-18 with curl, on a 223460165-byte flaresolverr layer:
   HTTP/2 was cut at 200 MiB after 608s, HTTP/1.1 at 210 MiB after 572s, and HTTP/2 limited
   to 120 KB/s at 60 MiB after 513s. The cap is time-based and not HTTP/2, so
   `GODEBUG=http2client=0` would not help. distribution's proxy refetches from byte 0 on each
-  request and never resumes, so retries die at the same point. The cap binds only while GHCR
-  is slow. On 2026-10-24 the redirect went to pkg-containers.githubusercontent.com, and a cold
-  960 MB tdarr layer came through this mirror at 49 MB/s in 20s. registry-gc.sh's weekly warm
-  phase (setup/k8s_host_files) fetches every referenced blob ahead of need for that reason. A
-  Jinja comment, so that editing it renames no verify Job and rolls nothing.
+  request and never resumes, so its own retries die at the same point. The cap binds only
+  while GHCR is slow: on 2026-10-24 a cold 960 MB tdarr layer came through at 49 MB/s in 20s.
+  So the remote is the ghcr-resume sidecar below, not ghcr.io (#6401). It relays every request
+  to ghcr.io and answers a blob GET itself, asking ghcr.io for a fresh signed URL after each
+  cut and continuing with `Range: bytes=<sent>-`. Measured from daniel-box on 2026-10-29 at a
+  300 KB/s client rate on the same layer: straight from ghcr.io it was cut at 140 MiB after
+  479s, and through the sidecar it hit that cut, resumed once and completed with the right
+  digest in 728s. registry-gc.sh's weekly warm phase (setup/k8s_host_files) still fetches
+  every referenced blob ahead of need, so a cold start during a WAN outage finds it cached.
+  A Jinja comment, so that editing it renames no verify Job and rolls nothing.
 #}
             - name: REGISTRY_PROXY_REMOTEURL
-              value: https://ghcr.io
+              value: "http://127.0.0.1:{{ registry_k8s_ghcr_resume_port }}"
             # Never expire. The default 168h would drop nut's image a week after its last
             # rebuild, which is the cold pull during a WAN outage this mirror exists for.
             # distribution's proxyregistry.go reads a zero TTL as "never expire". The weekly
@@ -118,10 +140,49 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 30
 {{ container_resources(cpu_limit='500m', mem_limit='256Mi', cpu_request='20m', mem_request='32Mi') }}
+        # The mirror's upstream, on the pod's loopback only: nothing outside the pod reaches it,
+        # so no Service port or NetworkPolicy rule names it. Until it answers, a cold pull fails
+        # at the mirror and containerd falls back to ghcr.io.
+        - name: ghcr-resume
+          image: {{ registry_k8s_ghcr_resume_image }}
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/opt/ghcr-resume/{{ resume_script }}"]
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: LISTEN_HOST
+              value: 127.0.0.1
+            - name: LISTEN_PORT
+              value: "{{ registry_k8s_ghcr_resume_port }}"
+            - name: UPSTREAM
+              value: https://ghcr.io
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: ghcr-resume
+              mountPath: /opt/ghcr-resume
+              readOnly: true
+          # An exec probe, because an httpGet or tcpSocket probe dials the pod IP and this binds
+          # 127.0.0.1. It dials the port only, so ghcr.io being unreachable leaves it ready.
+          readinessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - "import socket; socket.create_connection(('127.0.0.1', {{ registry_k8s_ghcr_resume_port }}), 2).close()"
+            initialDelaySeconds: 2
+            periodSeconds: 30
+            timeoutSeconds: 5
+          # Four concurrent unthrottled 223 MB fetches through it on daniel-box on 2026-10-29
+          # peaked at 36 MB RSS and spent 2.9 CPU-seconds per GB, about 170 MB/s at this CPU
+          # limit. The memory limit leaves room for the exec probe's second python process.
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='40Mi') }}
       volumes:
         - name: ghcr-mirror-data
           persistentVolumeClaim:
             claimName: {{ registry_k8s_ghcr_mirror_claim }}
+        - name: ghcr-resume
+          configMap:
+            name: {{ resume_configmap }}
 ---
 # The mirror is a pull path only, reached by the two host sources networkpolicy.yaml.j2 admits
 # to the push store's pull path: daniel-box's containerd through the loopback hostPort, and
