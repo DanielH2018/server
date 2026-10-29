@@ -76,6 +76,12 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/kuma-check.timer.j2": _KUMA_CHECK,
     f"{_COMMON}/templates/kuma-check-boot.service.j2": _KUMA_CHECK,
     f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
+    # A repo file a setup task copies from the checkout by `src: "{{ playbook_dir }}/../<path>"`.
+    # It sits under no role, so without a row it maps to no role and the tick fast-forwards it
+    # with nothing applied: daniel-server kept the pre-49c90e3be drill script (#6411).
+    # `prune_releases.py` is copied by `release_bin.yml`, so it reaches that file's importers.
+    "scripts/backup/etcd_restore_drill.sh": frozenset({"hypervisor"}),
+    "scripts/deploy_tools/prune_releases.py": frozenset({"k3s"}),
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
     f"{_COMMON}/tasks/stamp_render.yml": _STAMPED,
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(

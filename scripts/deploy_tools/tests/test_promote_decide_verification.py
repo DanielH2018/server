@@ -254,6 +254,25 @@ def test_a_5xx_reading_a_digest_mid_wait_is_retried(world):
     assert (decision.verdict, decision.target) == ("promote", tip), decision.reason
 
 
+def test_a_5xx_reading_the_superseding_digest_mid_wait_is_retried(world):
+    c1, tip = _in_flight(world)
+    # `prod`'s run itself superseded one, so T may not take it over and the wait goes on.
+    world.transport.tags["superseding"] = digest_of(c1)
+
+    def settle(now: float) -> None:
+        if (
+            now == vp.IN_FLIGHT_POLL_S
+        ):  # the next read of `superseding` answers 502 once
+            world.transport.forced["superseding"] = 502
+        else:
+            world.transport.forced.pop("superseding", None)
+        if now >= 90:
+            world.set_last_good(c1)
+
+    decision = promote.decide(_reads(world, Clock(settle)), supersede_on=True)
+    assert (decision.verdict, decision.target) == ("promote", tip), decision.reason
+
+
 # -- the revert rule -------------------------------------------------------------------------
 
 
