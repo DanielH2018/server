@@ -81,6 +81,9 @@ MAX_FAILING = 8
 # seconds of the event, so two minutes is a queue that is stuck, not slow.
 READY_WAIT_S = 120
 READY_POLL_S = 10
+# GitHub reports `UNKNOWN` for a PR's `mergeable` while it computes it, so a read of `UNKNOWN`
+# is repeated once after this pause.
+MERGEABLE_RECHECK_S = 5
 # The conclusions cc-wait's `gh-ci` source fails on (`cc_wait/github.py:FAILED_CONCLUSIONS`),
 # and `error`, which a commit status reports. `cancelled` is deliberately absent: it is no
 # verdict.
@@ -221,6 +224,25 @@ def _ci_run_ids(run: Runner, repo: str, sha: str) -> set[int] | None:
     return {i for i in ids if isinstance(i, int)} if isinstance(ids, list) else None
 
 
+def _mergeable(run: Runner, pr: str, repo: str, sleep: Callable[[float], None]) -> str:
+    """The PR's `mergeable` state (`CONFLICTING`, `MERGEABLE`, ...), "" when unreadable.
+
+    One `UNKNOWN` read is repeated after `MERGEABLE_RECHECK_S`, since GitHub is still computing.
+    """
+    state = ""
+    for attempt in range(2):
+        out = run(["gh", "pr", "view", pr, "-R", repo, "--json", "mergeable"], None)
+        try:
+            state = str(json.loads(out.stdout)["mergeable"]).upper()
+        except ValueError, KeyError, TypeError:
+            return ""
+        if state != "UNKNOWN":
+            break
+        if attempt == 0:
+            sleep(MERGEABLE_RECHECK_S)
+    return state
+
+
 def ready_for_ci(
     run: Runner,
     pr_url: str,
@@ -268,6 +290,15 @@ def ready_for_ci(
         if now is not None and now - before:
             return ""
         sleep(READY_POLL_S)
+    # GitHub starts no `pull_request` run while the PR conflicts with its base (#5629), so a
+    # conflict, not Actions, is why none started. The PR stays ready: GitHub cannot merge it
+    # while it conflicts, and the push that resolves the conflict starts CI with no second
+    # `gh pr ready`.
+    if _mergeable(run, pr, repo, sleep) == "CONFLICTING":
+        return (
+            f"PR #{pr} conflicts with master, so marking it ready started no CI on head "
+            f"{sha[:8]}. Merge or rebase master into the branch and push; the push starts CI"
+        )
     # A ready PR whose only checks are the draft run's skipped ones reads green to GitHub's
     # ruleset and to auto-merge, so the PR goes back to a draft, which GitHub refuses to merge.
     undo = run(["gh", "pr", "ready", pr, "-R", repo, "--undo"], None)
