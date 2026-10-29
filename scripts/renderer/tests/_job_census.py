@@ -15,8 +15,9 @@ Job and its directory:
   and the spec holds no `${...}` placeholder, which Flux would substitute after the digest.
   Each ConfigMap the Job mounts ends its name in `-<configmap_digest8>`, so the spec digest
   covers the script and a script fix renames the Job;
-- `backoff`: `spec.backoffLimit` is set, to 1 for a snapshot Job and 0 for a prepull, soak,
-  precheck or verify Job. A mutation Job states its own value;
+- `backoff`: `spec.backoffLimit` is set, to 1 for a snapshot Job, `prepull.BACKOFF_LIMIT`
+  for a prepull Job, and 0 for a soak, precheck or verify Job. A mutation Job states its own
+  value;
 - `rerun-safe`: a mutation Job's `homelab/rerun-safe` annotation names a test, as
   `<path>::<function>`, that exists in the tree;
 - `delivery`: every container runs `python3 <mount>/<key>.py`, where `<mount>` mounts a
@@ -59,7 +60,13 @@ JOB_KIND = "homelab/job-kind"
 RERUN_SAFE = "homelab/rerun-safe"
 SOAK = "soak"
 # The `backoffLimit` each kind must set. A mutation Job is absent: it states its own value.
-BACKOFF = {"snapshot": 1, "prepull": 0, SOAK: 0, "precheck": 0, "verify": 0}
+BACKOFF = {
+    "snapshot": 1,
+    "prepull": prepull.BACKOFF_LIMIT,
+    SOAK: 0,
+    "precheck": 0,
+    "verify": 0,
+}
 ADMITTED = {
     ordering.SNAPSHOT_SUFFIX: frozenset({"snapshot"}),
     ordering.PREPULL_SUFFIX: frozenset({"prepull"}),

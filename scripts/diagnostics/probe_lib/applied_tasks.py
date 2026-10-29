@@ -20,6 +20,12 @@ also has a default, `item`, an `ansible_*` fact, or a name the vars lack) makes 
 unreadable, whatever test or filter wraps it. A condition of static names only is evaluated,
 and one that reads false drops the task.
 
+A `set_fact` the walk reaches is evaluated when it is unlooped, its gate reads true, it is the
+role's only setter of each name, and its values read static names only (#6359). From there on
+its names are static, with Ansible's native types; `applied_facts` has the rules. An import's
+`vars:` evaluate the same way. A template or `copy` content that reads a run-time name is not
+compared: its `Want` is `unchecked`, and `applied` prints it UNCHECKED (#6378).
+
 A task is SKIPPED, with the reason, when its `when:` cannot be read, its loop is not literal,
 a field still holds Jinja or a `STUB` after the render, or it includes a role. A task FILE the
 walk cannot read is UNCHECKED: an import whose path does not render to a file, or whose `when:`
@@ -36,18 +42,27 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from jinja2 import StrictUndefined, TemplateSyntaxError, meta
+from collections import Counter
+
+from diagnostics.probe_lib.applied_facts import (
+    LATE,
+    SET_FACTS,
+    STUB,
+    content_hash,
+    expr_names,
+    late_names,
+    native,
+    setters,
+)
+from jinja2 import StrictUndefined, TemplateSyntaxError
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env, template_env
-from lib.render_guard import render_or_error
+from lib.ansible_jinja_env import make_ansible_env
 from lib.repo_paths import ANSIBLE
 
-STUB = "STUB"
 _IMPORTS = ("import_tasks", "include_tasks")
 _ROLE_INCLUDES = tuple(
     f"{prefix}{kind}"
@@ -56,25 +71,6 @@ _ROLE_INCLUDES = tuple(
 )
 _MODULES = ("template", "copy", "file", "cron")
 _LOOPS = ("loop", "with_items", "with_list")
-_SET_FACTS = ("set_fact", "ansible.builtin.set_fact", "ansible.legacy.set_fact")
-# Names Ansible fills in only while the play runs. Every `ansible_*` name is one too.
-_RUN_TIME = frozenset({"item", "hostvars", "groups", "group_names", "play_hosts"})
-
-
-def _run_time_names(tasks) -> set[str]:
-    """Every name a `register:` or `set_fact` sets in `tasks`, through blocks."""
-    names: set[str] = set()
-    for task in tasks if isinstance(tasks, list) else []:
-        if not isinstance(task, dict):
-            continue
-        if isinstance(task.get("register"), str):
-            names.add(task["register"])
-        for key in _SET_FACTS:
-            if isinstance(task.get(key), dict):
-                names |= {str(k) for k in task[key]}
-        for key in ("block", "rescue", "always"):
-            names |= _run_time_names(task.get(key))
-    return names
 
 
 @dataclass(frozen=True)
@@ -87,6 +83,7 @@ class Want:
         present: False for an absent arm.
         sha256: the expected content's hash, or None when it is not compared.
         why_no_content: why `sha256` is None, for the report; "" when it is set or moot.
+        unchecked: the content reads a run-time name, so it is UNCHECKED, not ok-meta.
         mode: the declared mode as four octal digits, or None when undeclared.
         owner: the declared owner, or None.
         group: the declared group, or None.
@@ -97,6 +94,7 @@ class Want:
     present: bool = True
     sha256: str | None = None
     why_no_content: str = ""
+    unchecked: bool = False
     mode: str | None = None
     owner: str | None = None
     group: str | None = None
@@ -174,9 +172,12 @@ class _Walk:
         # Names a `set_fact` or `register` sets during the run, in any of the role's task
         # files, so a gate read before the walk reaches the setter still sees them. A shared
         # file outside the role adds its own as the walk passes it.
-        self.run_time: set[str] = set()
+        self.setters: Counter = Counter()
         for path in sorted((role_dir / "tasks").rglob("*.yml")):
-            self.run_time |= _run_time_names(yaml_fast.safe_load(path.read_text()))
+            self.setters.update(setters(yaml_fast.safe_load(path.read_text())))
+        self.run_time = set(self.setters)
+        # The values of the set_facts the walk evaluated, which outlive the import that set them.
+        self.facts: dict = {}
 
     def gate(self, whens: list) -> str | None:
         """None when the task runs on the host, `"no"` when it does not, else the reason.
@@ -190,25 +191,16 @@ class _Walk:
         if not whens:
             return None
         ns = {**self.ctx, "inventory_hostname": self.host}
-        run_time = _RUN_TIME | self.run_time
         unread: set[str] = set()
         for when in whens:
             try:
-                tree = self.gate_env.parse("{{ " + str(when) + " }}")
-                names = meta.find_undeclared_variables(tree)
+                names = expr_names(self.gate_env, "{{ " + str(when) + " }}")
             except TemplateSyntaxError as exc:
                 return f"its when: `{when}` does not parse ({exc.message})"
-            names -= self.gate_env.globals.keys() - {"lookup", "query", "q"}
             # DECIDED: a name that is both a default and a set_fact or register is run-time,
-            # because the run can overwrite the default before the gate reads it (#6356).
-            late = {
-                n
-                for n in names
-                if n in run_time
-                or n.startswith("ansible_")
-                or n not in ns
-                or any(m in str(ns[n]) for m in ("{{", STUB))
-            }
+            # because the run can overwrite the default before the gate reads it (#6356). A
+            # set_fact the walk evaluated is the exception: `learn` has its value (#6359).
+            late = late_names(names, ns, self.run_time)
             if late:
                 unread |= late
                 continue
@@ -247,7 +239,8 @@ class _Walk:
         own = task.get("when")
         here = [*whens, *(own if isinstance(own, list) else [own] if own else [])]
         name = str(task.get("name") or "unnamed task")
-        self.run_time |= _run_time_names([task])
+        self.run_time |= set(setters([task]))
+        self.learn(task, here)
         if any(k in task for k in ("block", "rescue", "always")):
             for key in ("block", "rescue", "always"):
                 for sub in task.get(key) or []:
@@ -276,6 +269,25 @@ class _Walk:
             return
         for item in items:
             self.one(name, *found, item=item)
+
+    def learn(self, task: dict, whens: list) -> None:
+        """Make static each name an evaluable `set_fact` sets; the module docstring has when."""
+        args = next((task[k] for k in SET_FACTS if isinstance(task.get(k), dict)), None)
+        if (
+            args is None
+            or any(k in task for k in _LOOPS)
+            or self.gate(whens) is not None
+        ):
+            return
+        ns = {**self.ctx, "inventory_hostname": self.host}
+        for key, value in args.items():
+            if key == "cacheable" or self.setters[str(key)] != 1:
+                continue
+            ok, out = native(self.gate_env, value, ns, self.run_time)
+            if ok:
+                self.facts[str(key)] = out
+                self.run_time.discard(str(key))
+        self.ctx = {**self.ctx, **self.facts}
 
     def loop_items(self, task: dict) -> list | None:
         """The items a task loops over, `[None]` when it does not loop, None when unknown.
@@ -345,15 +357,18 @@ class _Walk:
         outer = self.ctx
         try:
             for item in items:
-                self.ctx = outer if item is None else {**outer, loop_var: item}
+                self.ctx = {**outer, **self.facts}
+                if item is not None:
+                    self.ctx[loop_var] = item
+                ns = {**self.ctx, "inventory_hostname": self.host}
                 extra = {}
                 for key, value in (task.get("vars") or {}).items():
-                    rendered = self.render(value) if isinstance(value, str) else None
-                    extra[key] = rendered if rendered is not None else value
+                    ok, out = native(self.gate_env, value, ns, self.run_time)
+                    extra[key] = out if ok else value
                 self.ctx = {**self.ctx, **extra}
                 self.tasks(path, whens)
         finally:
-            self.ctx = outer
+            self.ctx = {**outer, **self.facts}
 
     def one(self, name: str, module: str, args: dict, item) -> None:
         state = args.get("state", "present")
@@ -394,51 +409,20 @@ class _Walk:
             else:
                 self.skips.append(Skip(name, f"file state {state!r}"))
             return
-        sha, why = self.content(module, args, item)
+        sha, why = content_hash(self, module, args, item)
+        unchecked = why.startswith(LATE)
         self.wants.append(
             Want(
                 dest,
                 name,
                 sha256=sha,
                 why_no_content=why,
+                unchecked=unchecked,
                 mode=mode,
                 owner=owner,
                 group=group,
             )
         )
-
-    def content(self, module: str, args: dict, item) -> tuple[str | None, str]:
-        """The expected content's sha256, or None and the reason it is not compared."""
-        if module == "copy" and "content" in args:
-            text = self.render(args["content"], item)
-            if text is None:
-                return None, "the render left a STUB or Jinja"
-            return hashlib.sha256(text.encode()).hexdigest(), ""
-        src = self.render(args.get("src"), item)
-        if src is None or src.endswith("/"):
-            return None, "its src does not render to one file"
-        if module == "copy" and args.get("remote_src") in (True, "yes", "true", "True"):
-            return None, "remote_src copies a file already on the host"
-        if module == "copy":
-            source = self.role_dir / "files" / src
-            if not source.is_file():
-                return None, f"files/{src} is not in the role"
-            return hashlib.sha256(source.read_bytes()).hexdigest(), ""
-        if not (self.role_dir / "templates" / src).is_file():
-            return None, f"templates/{src} is not in the role"
-        rendered, err = render_or_error(
-            template_env((self.role_dir / "templates" / src).parent),
-            Path(src).name,
-            dict(self.ctx, item=item) if item is not None else self.ctx,
-        )
-        if rendered is None:
-            return None, f"the template does not render here ({err})"
-        if STUB in rendered:
-            return (
-                None,
-                "the render left a STUB (a secret, or a value only a play resolves)",
-            )
-        return hashlib.sha256(rendered.encode()).hexdigest(), ""
 
 
 def _shown(path: Path, role_dir: Path) -> str:

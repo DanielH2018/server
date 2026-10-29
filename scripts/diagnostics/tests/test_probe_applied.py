@@ -308,9 +308,9 @@ def test_the_real_node_crons_gate_resolves_for_each_host():
         node_crons = [s for s in skips if "node_crons.yml" in s.task]
         assert all("does not apply" in s.reason for s in node_crons), (host, node_crons)
     assert any("node_crons" in s.task for s in walked["daniel-server"][1])
-    # The three task files #6359 tracks read set_fact values; a fourth must not appear unseen.
+    # The three task files #6359 tracked read static set_facts, which the walk evaluates.
     for host, (_, skips) in walked.items():
-        assert sorted(s.task.rsplit("/", 1)[-1] for s in skips if s.unchecked) == ["main.yml: import agent.yml", "stamp_deployed.yml", "stamp_deployed.yml"], host  # fmt: skip
+        assert [s.task for s in skips if s.unchecked] == [], host
 
 
 GATED = """\
@@ -370,8 +370,11 @@ def test_a_type_test_or_filter_does_not_make_a_run_time_name_readable(tmp_path, 
 
 def test_a_set_fact_name_is_not_read_from_a_default_of_the_same_name(tmp_path):
     tasks = (
+        "- name: Read the list\n"
+        "  ansible.builtin.command: cat /etc/x/list\n"
+        "  register: x_out\n"
         "- name: Work out the list\n"
-        "  ansible.builtin.set_fact: {x_list: '{{ [1] }}'}\n"
+        "  ansible.builtin.set_fact: {x_list: '{{ x_out.stdout_lines }}'}\n"
         + GATED.format(when="x_list | length > 0")
     )
     _, skips = applied_tasks.expected(

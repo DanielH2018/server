@@ -362,14 +362,14 @@ def target_problems():
 
 
 def stale_release_problems():
-    """hooklib's stale-release line, bound to this file's `_run`.
+    """hooklib's stale-release line, read from the cron's verdict file.
 
-    A probe of its own rather than the tail of `target_problems`, so a slow journal read past
-    the deadline cannot cost the down-target lines that already finished.
+    A probe of its own rather than the tail of `target_problems`, so a slow read past the
+    deadline cannot cost the down-target lines that already finished.
     """
     if service_lines is None:
         return []
-    return service_lines.stale_release_problems(_run)
+    return service_lines.stale_release_problems()
 
 
 def master_moved_problems(git=None):
