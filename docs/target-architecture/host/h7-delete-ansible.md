@@ -2097,6 +2097,44 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
     - A test asserts that the networks the `ExecStartPre=` creates equal the external
       networks the rendered project names. Its red fixture names a network the
       `ExecStartPre=` omits.
+      **Amended 2026-10-29 (H7.26):** the move landed as the `pi-docker` component of
+      `homelab-daniel-pi`. Read-only calls on the live Pi measured the owners: `dpkg -S` names
+      containerd.io as the owner of `/etc/containerd/config.toml`, a conffile, so its block
+      takes the line arm under the Ansible task's marker. `/etc/docker/daemon.json` and
+      `/usr/local/bin/docker-compose` are unowned. Seven premises did not hold:
+        - *The six networks.* `docker network ls` lists only `proxy`, `lifecycle` and the
+          project's own `homelab_default`. `monitoring`, `media`, `apps`, `codeserver`,
+          `terraria` and `portainer-agent` are already absent, so the operator's decision is
+          whether any comes back, not which to remove.
+        - *Stopping `homelab-compose.service`.* The unit has no `ExecStop=`, so stopping it
+          stops no container, and starting it runs `up -d`, which starts a stopped container
+          without recreating it. The engine script therefore runs `docker compose stop` and
+          `up -d --force-recreate` against the project itself, as the play's `recreate:
+          always` did, so docker-proxy gets the socket's new inode.
+        - *The updater interlock.* *The Docker engine stays held* omits it. The script masks
+          `homelab-updater.timer`, waits out an updater or reconcile run, and unmasks the
+          timer last, only when it masked it, as the play did. A failed run leaves it masked.
+        - *apt's version glob.* The play relied on `ansible.builtin.apt` matching the glob.
+          The script matches each pin's glob against `apt-cache madison`, newest first, and
+          resolves every pin before anything stops.
+        - *Daemon restarts.* A package drop-in under `docker.service.d/` or
+          `containerd.service.d/` puts the daemon in reconcile's restart set, so both daemons
+          carry `policy: manual` beside the `manual:` activations.
+        - *The Compose measurement.* The only Docker host is the live Pi, and a scratch
+          network there is a production write. The measurement is an `image` test that runs
+          in `image-leg.yml` (`hosts/lib/tests/test_pi_compose_network_measurement.py`). It
+          asserts that Compose neither recreates nor labels an existing unlabelled network of
+          the project's name, and prints Compose's output into the job log. Its first run is
+          the PR's first non-draft push.
+        - *The Docker-engine proof.* It runs against stubs in
+          `hosts/lib/tests/test_pi_docker_component.py`, not in the CI container: the package
+          declares no engine `Depends` and no preferences pin, with a red fixture, and the
+          updater installs no engine package and writes `homelab_docker_engine_pending`. The
+          container case is #6590.
+      The LAN ufw rules for ports 9323 and 1338 stay Ansible-era rules until H7.30 lists
+      them. The connecting user's `docker` group membership stays host state for H7.43's
+      runbook, and `host-basics.yml`'s hold stays with `initial_setup`. The role keeps its
+      teardown half for the cluster nodes until H7.48.
 6. **H7.6 `initial_setup`, part 1.** Three subjects, each as three host PRs in canary order:
     - **H7.6a–c** apt and unattended-upgrades;
     - **H7.6d–f** sshd, through `10-homelab.conf` and the `Match` file, with
@@ -2327,6 +2365,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `homelab-updater` and `homelab-<host>`.
         - *Step 6.* `homelab-docker-engine.service` is not in the tree until H7.25 lands. The
           script starts it when the unit exists and prints that it starts nothing otherwise.
+          H7.26 shipped the unit, so step 6 starts it on a fresh Pi.
         - *The k3s Renovate manager.* The `k3s-io/k3s` rule is a package rule, not a manager.
           `renovate.json` gains a small custom manager for the script's `K3S_VERSION` line, and
           the `homelab-tools` manager gains the script as a second file.

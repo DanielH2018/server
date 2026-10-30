@@ -1,6 +1,6 @@
 """Guard: the Pi's dockerd and containerd GOMEMLIMITs sit above the treadmill, below a cap.
 
-Each daemon runs `GOGC=off` under `GOMEMLIMIT` (roles/setup/docker_install, go-runtime.yml),
+Each daemon runs `GOGC=off` under `GOMEMLIMIT` (hosts/components/pi-docker, a drop-in per daemon),
 so the limit is the only GC trigger and the slack between the daemon's live set plus the
 runtime's non-heap classes and the limit is one cycle's allocation. A limit near the live
 set makes the runtime collect continuously, bounded only by the GC CPU limiter. A limit
@@ -29,12 +29,10 @@ Run: uv run pytest ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.p
 import re
 
 import pytest
-from _helpers import SETUP_ROLES, load_yaml
+from _helpers import load_yaml
+from lib.repo_paths import REPO
 
-_ROLE = SETUP_ROLES / "docker_install"
-_DEFAULTS = _ROLE / "defaults" / "main.yml"
-_GO_RUNTIME = _ROLE / "tasks" / "go-runtime.yml"
-_INSTALL = _ROLE / "tasks" / "install.yml"
+_COMPONENT = REPO / "hosts" / "components" / "pi-docker"
 
 # Measured on daniel-pi over the first 4.3 h of the scrapes, both daemons on
 # go1.26.8 under the default GOGC=100. Live peak is next_gc's ceiling halved (28.0 and
@@ -48,8 +46,6 @@ MEASURED = {
 MIN_CYCLE_SECONDS = 120
 MAX_LIMIT_MIB = 128
 
-# The tags and file every reader of the role's CLAUDE.md is pointed at.
-DAEMON_TAGS = frozenset({"docker-go-runtime-dockerd", "docker-go-runtime-containerd"})
 SHIM_OVERRIDE = "[plugins.'io.containerd.shim.v1.manager']"
 
 _UNITS_MIB = {"MiB": 1, "M": 1, "GiB": 1024, "G": 1024}
@@ -101,51 +97,27 @@ def test_headroom_rule_is_flagged_on_a_limit_over_the_footprint_cap():
 @pytest.mark.parametrize("daemon", sorted(MEASURED))
 def test_committed_limit_clears_the_floor_and_the_cap(daemon):
     # One scalar per daemon: a dict would be replaced whole by a host_vars override.
-    limit = load_yaml(_DEFAULTS)[f"docker_install_gomemlimit_{daemon}"]
+    defaults = load_yaml(_COMPONENT / "component.yml")["defaults"]
+    limit = defaults[f"docker_engine_gomemlimit_{daemon}"]
     assert gomemlimit_problem(daemon, limit) is None
 
 
-def test_each_daemon_has_its_own_tag_and_the_shim_override_rides_with_containerds():
-    """The stagger is one daemon per day, so each needs its own tag,
-    and containerd's must also select the config.toml block that stops its shims
-    inheriting the pairing."""
-    imports = [
-        t
-        for t in load_yaml(_INSTALL)
-        if isinstance(t, dict)
-        and t.get("ansible.builtin.import_tasks") == "go-runtime.yml"
-    ]
-    assert len(imports) == 2, "one import per daemon"
-    tags_seen = {tag for t in imports for tag in t["tags"]}
-    assert DAEMON_TAGS <= tags_seen, DAEMON_TAGS - tags_seen
-    shim_block = next(
-        t
-        for t in load_yaml(_INSTALL)
-        if isinstance(t, dict)
-        and SHIM_OVERRIDE
-        in (t.get("ansible.builtin.blockinfile") or {}).get("block", "")
-    )
-    assert "docker-go-runtime-containerd" in shim_block["tags"]
-    assert "GOGC=100" in shim_block["ansible.builtin.blockinfile"]["block"]
-    assert "GOMEMLIMIT=off" in shim_block["ansible.builtin.blockinfile"]["block"]
-
-
-def test_go_runtime_drop_in_pairs_gogc_off_with_the_limit_and_can_be_removed():
-    tasks = [t for t in load_yaml(_GO_RUNTIME) if isinstance(t, dict)]
-    written = next(t for t in tasks if "ansible.builtin.copy" in t)
-    content = written["ansible.builtin.copy"]["content"]
+@pytest.mark.parametrize("daemon", sorted(MEASURED))
+def test_each_daemon_pairs_gogc_off_with_its_own_limit(daemon):
+    """One drop-in per daemon, so a change to one limit marks only that daemon pending."""
+    content = (_COMPONENT / "templates" / f"{daemon}-go-runtime.conf.j2").read_text()
     assert "Environment=GOGC=off" in content
-    assert "Environment=GOMEMLIMIT={{ docker_install_go_runtime_limit }}" in content
-    lookup = next(t for t in tasks if "ansible.builtin.set_fact" in t)[
-        "ansible.builtin.set_fact"
-    ]
-    assert "docker_install_gomemlimit_" in lookup["docker_install_go_runtime_limit"]
-    removed = next(
-        t
-        for t in tasks
-        if (t.get("ansible.builtin.file") or {}).get("state") == "absent"
-    )
     assert (
-        removed["ansible.builtin.file"]["path"]
-        == written["ansible.builtin.copy"]["dest"]
+        f"Environment=GOMEMLIMIT={{{{ docker_engine_gomemlimit_{daemon} }}}}" in content
     )
+
+
+def test_the_shim_override_rides_with_containerds_config():
+    """containerd's shims inherit its GOGC=off unless config.toml hands them the defaults back."""
+    (block,) = (
+        edit["block"]
+        for edit in load_yaml(_COMPONENT / "component.yml")["lines"]
+        if edit["path"] == "/etc/containerd/config.toml"
+    )
+    assert SHIM_OVERRIDE in block
+    assert 'env = ["GOGC=100", "GOMEMLIMIT=off"]' in block

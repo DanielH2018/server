@@ -1,5 +1,5 @@
 ---
-# Dispatcher, the docker_install shape. The role is included unconditionally and has_gitops
+# Dispatcher, the hypervisor shape. The role is included unconditionally and has_gitops
 # picks the half, so a host with has_gitops: false still reaps what an earlier true run
 # installed.
 #

@@ -29,7 +29,9 @@ A file entry marked `inputs_sha256: true` renders after every other file, with
 under `/usr/lib/homelab/compose/`, plus `INPUT_EXTRAS` when the package ships them. Any change to
 the project therefore changes that file's bytes, and reconcile's restart set sees it (H4, *The
 restart contract*). Such a file installs outside the compose directory, so it is not among
-its own inputs.
+its own inputs. Its context also holds `compose_external_networks`, the sorted names of every
+network a service's compose file declares `external: true`, so the unit can create each one the
+project needs and no other (H7.26).
 """
 
 import sys as _sys
@@ -42,6 +44,7 @@ import re
 from collections.abc import Callable, Iterable
 from pathlib import Path, PurePosixPath
 
+from lib import yaml_fast
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_outputs import COMPOSE_ROOT
 from renderer.renderer_lib.host_package import Package
@@ -50,6 +53,7 @@ from renderer.renderer_lib.placeholders import Sentinels
 # The inventory key that lists the project's services (H5, *The service list*).
 LIST_KEY = "compose_services"
 INPUTS_VAR = "compose_inputs_sha256"
+NETWORKS_VAR = "compose_external_networks"
 # Files outside the compose directory that the project's run reads. A package that ships none
 # of them yet hashes without them, and each joins the hash when a later PR ships it.
 INPUT_EXTRAS = (
@@ -214,6 +218,23 @@ def inputs_sha256(package: Package, extras: Iterable[str] = INPUT_EXTRAS) -> str
     return digest.hexdigest()
 
 
+def external_networks(package: Package) -> list[str]:
+    """The sorted names of the networks the service compose files declare `external: true`.
+
+    A network's `name:` wins over its key, as it does for Compose.
+    """
+    names = set()
+    for dst, (content, _mode) in package.files.items():
+        path = PurePosixPath(dst)
+        if not (path.is_relative_to(COMPOSE_ROOT) and path.name == COMPOSE_FILE):
+            continue
+        networks = (yaml_fast.safe_load(content.decode()) or {}).get("networks") or {}
+        for key, spec in networks.items():
+            if isinstance(spec, dict) and spec.get("external") is True:
+                names.add(str(spec.get("name", key)))
+    return sorted(names)
+
+
 def deferred_last(files: list) -> list:
     """`files` with the `inputs_sha256: true` entries moved last, in their listed order."""
     return sorted(
@@ -222,7 +243,7 @@ def deferred_last(files: list) -> list:
 
 
 def inputs_context(package: Package, directory: Path, entry: dict, ctx: dict) -> dict:
-    """`ctx` with `compose_inputs_sha256` when `entry` is marked `inputs_sha256: true`.
+    """`ctx` with the project's hash and external networks when `entry` is marked `inputs_sha256`.
 
     Raises:
         RenderRefused: The marked file installs under the compose directory, so it would be
@@ -234,7 +255,11 @@ def inputs_context(package: Package, directory: Path, entry: dict, ctx: dict) ->
         raise RenderRefused(
             f"{directory}: {entry.get('dst')} reads {INPUTS_VAR} and installs under {COMPOSE_ROOT}"
         )
-    return {**ctx, INPUTS_VAR: inputs_sha256(package)}
+    return {
+        **ctx,
+        INPUTS_VAR: inputs_sha256(package),
+        NETWORKS_VAR: external_networks(package),
+    }
 
 
 def _install(package: Package, directory: Path, dst: str, content: bytes) -> None:

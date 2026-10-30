@@ -41,6 +41,12 @@ Environment=HOMELAB_COMPOSE_WAIT_TIMEOUT={{ wait }}
 Environment=HOMELAB_COMPOSE_INPUTS_SHA256={{ compose_inputs_sha256 }}
 TimeoutStartSec={{ wait + 660 }}
 ExecStartPre=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-compose.conf
+# The project declares each shared network `external: true`, so Compose never recreates one the
+# live Pi already holds, and each line below creates it on a host that lacks it (H7.26). The list
+# is every external network the rendered compose files name (`compose_external_networks`).
+{% for network in compose_external_networks %}
+ExecStartPre=/bin/sh -c 'docker network inspect {{ network }} >/dev/null 2>&1 || docker network create {{ network }}'
+{% endfor %}
 ExecStart=/usr/lib/homelab/compose-run
 
 [Install]

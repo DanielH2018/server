@@ -1,19 +1,13 @@
 ---
-# Dispatcher. The role owns both directions and is included unconditionally; has_docker
-# chooses which half runs, so flipping a host to has_docker: false reaps what Docker left
-# behind instead of skipping the role.
+# The Pi's Docker engine, daemon config, Go-runtime drop-ins, containerd block and networks are
+# package-owned since H7.26: homelab-daniel-pi's pi-docker component ships them, and
+# homelab-compose.service creates the external networks. docs/target-architecture/host/
+# h7-delete-ansible.md, H7.26. What stays is the teardown half, which reaps a retired Docker
+# install on the hosts with has_docker: false until H7.48 turns its absent arms into legacy
+# entries.
 #
-# Static imports, not include_tasks. A dynamic include is itself a task that `--tags`
-# judges first, and these two carry no tags, so `--tags docker-daemon` would skip the include
-# and reach nothing inside it. Tagging the include would not help either -- an include's tags
-# inherit onto every task it loads, so every granular tag would select every task. An
-# import inlines the tasks at parse time, each keeps its own tags, and the `when:` below is
-# applied to each of them.
-
-- name: Install and configure Docker
-  ansible.builtin.import_tasks: install.yml
-  when: has_docker
-
+# A static import, not include_tasks: a dynamic include is itself a task that `--tags` judges
+# first, so `--tags docker-teardown` would skip it and reach nothing inside.
 - name: Remove Docker leftovers from a host that has retired Docker
   ansible.builtin.import_tasks: teardown.yml
   when: not has_docker

@@ -24,8 +24,9 @@ from lib.narrow_git import CannotNarrow
 # Ansible's two tags that do not select a subset. `--tags never` selects exactly the tasks
 # opted out of every ordinary run, and `--tags always` selects the tasks that run whatever is
 # asked for — so neither describes "the work this change needs". `docker_install`'s
-# `tasks/install.yml` carries both `never` and `docker-engine-upgrade`, and printing that pair
-# would tell an operator to run the engine upgrade a config edit never asked for (#2350).
+# `tasks/install.yml` carried both `never` and `docker-engine-upgrade` until H7.26, and printing
+# that pair would have told an operator to run the engine upgrade a config edit never asked for
+# (#2350).
 #
 # The two refuse differently. `never` beside a subject tag refuses the whole file. `always` is
 # DROPPED from the answer instead (#3134), because an `always` task runs under every `--tags`

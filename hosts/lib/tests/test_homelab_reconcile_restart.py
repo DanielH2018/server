@@ -14,6 +14,7 @@ import pytest
 from _reconcile_arms import PROM, TEXTFILE, live_unit
 from _reconcile_host import SECRETS_UNIT, Node
 
+from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
 
 NUT = "nut-monitor.service"
@@ -423,7 +424,10 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_two_credential
         target = node.root / edit["path"].lstrip("/")
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a") as handle:
-            handle.write(edit["line"] + "\n")
+            # A block edit (pi-docker's containerd block) is seeded in its marked form.
+            handle.write(
+                edit["line"] + "\n" if "line" in edit else lines.with_block("", edit)
+            )
 
     result = node.run()
 

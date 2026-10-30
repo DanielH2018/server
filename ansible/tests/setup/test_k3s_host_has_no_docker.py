@@ -61,12 +61,11 @@ def _load(path: Path):
 
 
 def test_docker_install_is_gated_on_has_docker():
-    """The install half must stay gated on has_docker, inside the role.
+    """No Ansible task installs Docker, and the teardown stays gated on `not has_docker`.
 
-    A `when: has_docker` on the initial_setup.yml role entry would stop Docker landing on the
-    k3s node but also skip the role wholesale, so a host flipped to has_docker: false would
-    get no teardown either. tasks/main.yml dispatches on has_docker, so the role is included
-    unconditionally and this asserts the gate there.
+    Since H7.26 the Pi's package installs the engine, so the role keeps only its teardown half.
+    A `when: has_docker` on the initial_setup.yml role entry would skip the role on every host
+    that needs the teardown, so the role is included unconditionally and gates inside.
     """
     plays = _load(ANSIBLE / "initial_setup.yml")
     roles = [r for play in plays for r in play.get("roles", [])]
@@ -90,9 +89,9 @@ def test_docker_install_is_gated_on_has_docker():
         for t in tasks
         if "ansible.builtin.import_tasks" in t or "ansible.builtin.include_tasks" in t
     }
-    assert gates.get("install.yml") == "has_docker", (
-        "install.yml must run only `when: has_docker` — without it a bare "
-        "initial_setup.yml run reinstalls Docker on the k3s node."
+    assert set(gates) == {"teardown.yml"}, (
+        f"docker_install imports {sorted(gates)}; only the Pi's package installs Docker, so a "
+        "second import would reinstall it from Ansible on a host the gate lets through."
     )
     assert gates.get("teardown.yml") == "not has_docker", (
         "teardown.yml must run `when: not has_docker` — it is the only declarative "

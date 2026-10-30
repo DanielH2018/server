@@ -1,0 +1,18 @@
+# Shipped by homelab-daniel-pi (pi-docker). The one path that installs or moves the held Docker
+# engine. An operator starts it from a LAN session, because an upgrade stops every container for
+# the apt run; bootstrap-host.sh starts it once on a fresh Pi. It has no [Install] section and
+# carries `policy: manual`, so reconcile never starts or restarts it.
+[Unit]
+Description=Install, hold or upgrade the Pi's pinned Docker engine
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+# The updater wait (51 min) plus the apt run and the project's recreate.
+TimeoutStartSec=90min
+ExecStart=/usr/lib/homelab/docker-engine apply
+# Runs after a failed start too, so a failed apt run still leaves the engine held.
+ExecStopPost=/usr/lib/homelab/docker-engine hold

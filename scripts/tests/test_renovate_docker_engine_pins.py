@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Guard that the Pi's four Docker engine pins track the apt index they install from.
 
-`docker_install_package_specs` renders each pin into an apt spec
-(`containerd.io=2.3.5-*~ubuntu.24.04~noble`), so the version space that matters is Docker's
+`hosts/components/pi-docker/templates/docker-engine.pins.j2` renders each pin into a glob
+(`containerd.io 2.3.5-*~ubuntu.24.04~noble`), so the version space that matters is Docker's
 own apt index, not the upstream GitHub tags. The managers read the apt index, not
 github-releases, because Docker packages a release days-to-weeks after upstream tags it: a
-bare upstream tag can name a version the noble/arm64 index does not carry, and the
-`docker-engine-upgrade` play would then fail at apt AFTER stopping every Compose project on
-the Pi. No CI job resolves the rendered spec.
+bare upstream tag can name a version the noble/arm64 index does not carry, and
+homelab-docker-engine.service would then refuse the upgrade. No CI job resolves the rendered spec.
 
 The guards here are offline by construction — the operator rejected a CI job that fetches
 Docker's index on every run. They assert the config's own internal agreement instead: the
@@ -22,7 +21,6 @@ import re
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from lib import yaml_fast
 
 from _renovate import (
     _MANAGERS,
@@ -39,7 +37,8 @@ PI_DOCKER_DEB_PACKAGES = frozenset(
     {"docker-ce", "containerd.io", "docker-compose-plugin", "docker-buildx-plugin"}
 )
 
-DOCKER_INSTALL_DEFAULTS = "ansible/roles/setup/docker_install/defaults/main.yml"
+PI_DOCKER_COMPONENT = "hosts/components/pi-docker/component.yml"
+PINS_TEMPLATE = "hosts/components/pi-docker/templates/docker-engine.pins.j2"
 
 _PI_DOCKER_GROUP_PREFIX = "docker engine on the Pi"
 
@@ -68,7 +67,7 @@ def _pi_docker_managers() -> list[dict]:
         m
         for m in _MANAGERS
         if any(
-            "docker_install/defaults" in p.replace("\\", "")
+            "components/pi-docker/component" in p.replace("\\", "")
             for p in m["managerFilePatterns"]
         )
     ]
@@ -78,17 +77,21 @@ def test_managers_name_the_apt_packages_they_pin() -> None:
     """Each manager's depName must be the apt package whose spec its var renders.
 
     The bug guarded is a manager tracking a version space its own consumer cannot install.
-    `docker_install_package_versions` is that consumer: its keys are the apt package names
-    and its values interpolate the pinned vars, so binding depName to the key is what makes
-    the datasource and the spec name the same thing.
+    The pins template is that consumer: each row names an apt package and interpolates the
+    pinned var, so binding depName to the row's package is what makes the datasource and the
+    glob name the same thing.
     """
-    # fact: ansible/roles/setup/docker_install/CLAUDE.md#The engine is held; `--tags docker-engine-upgrade` is how it moves
-    defaults = yaml_fast.safe_load((_REPO / DOCKER_INSTALL_DEFAULTS).read_text())
-    package_versions = defaults["docker_install_package_versions"]
+    rows = (_REPO / PINS_TEMPLATE).read_text().splitlines()
+    package_versions = {
+        row.split()[0]: row.split(maxsplit=1)[1]
+        for row in rows
+        if row and not row.startswith(("#", "{"))
+    }
+    assert {"docker-ce", "containerd.io"} <= set(package_versions), package_versions
 
     managers = _pi_docker_managers()
     assert {m["depNameTemplate"] for m in managers} == PI_DOCKER_DEB_PACKAGES, (
-        "the docker_install managers no longer cover exactly the apt packages the Pi holds — "
+        "the pi-docker managers no longer cover exactly the apt packages the Pi holds — "
         f"got {sorted(m['depNameTemplate'] for m in managers)}"
     )
 
@@ -101,7 +104,7 @@ def test_managers_name_the_apt_packages_they_pin() -> None:
         owners = {k for k, v in package_versions.items() if var in v}
         assert mgr["depNameTemplate"] in owners, (
             f"{mgr['depNameTemplate']} is tracked against {var}, but "
-            f"docker_install_package_versions renders that var into {sorted(owners)} — the "
+            f"the pins template renders that var into {sorted(owners)} — the "
             "Renovate depName and the apt spec name different packages."
         )
 
@@ -155,10 +158,10 @@ def test_pins_resolve_to_the_manual_group(dep_name: str) -> None:
     `container images (non-major)` has no matchFileNames and automerges minor and patch. The
     override that keeps these four out of it selects on datasource AND package name, so it
     must follow the datasource — a rule left on github-releases/moby-moby would match
-    nothing and start automerging engine bumps onto a Pi that cannot apply them without the
-    docker-engine-upgrade play.
+    nothing and start automerging engine bumps onto a Pi that cannot apply them without
+    homelab-docker-engine.service.
     """
-    group = _resolve_group_name(dep_name, DOCKER_INSTALL_DEFAULTS, "minor", "deb")
+    group = _resolve_group_name(dep_name, PI_DOCKER_COMPONENT, "minor", "deb")
     assert group is not None and group.startswith(_PI_DOCKER_GROUP_PREFIX), (
         f"{dep_name} resolves to {group!r}"
     )
@@ -182,7 +185,7 @@ def test_group_resolution_catches_the_catch_all() -> None:
     ]
     assert (
         _resolve_group_name(
-            "containerd.io", DOCKER_INSTALL_DEFAULTS, "minor", "deb", fake_rules
+            "containerd.io", PI_DOCKER_COMPONENT, "minor", "deb", fake_rules
         )
         == "container images (non-major)"
     )

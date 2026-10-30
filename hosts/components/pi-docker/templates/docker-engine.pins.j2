@@ -1,0 +1,10 @@
+{%- set suffix = '-*~ubuntu.' ~ docker_engine_ubuntu_version ~ '~' ~ docker_engine_ubuntu_codename -%}
+# Shipped by homelab-daniel-pi. One line per held Docker package: the package, then the shell glob
+# its installed version must match. homelab-docker-engine.service installs the newest version apt
+# offers that matches. The Debian revision is a glob because Docker publishes several revisions of
+# one upstream version (#2357). The keys are exactly docker_engine_packages, the hold list.
+docker-ce 5:{{ docker_engine_version }}{{ suffix }}
+docker-ce-cli 5:{{ docker_engine_version }}{{ suffix }}
+containerd.io {{ docker_engine_containerd_version }}{{ suffix }}
+docker-compose-plugin {{ docker_engine_compose_plugin_version }}{{ suffix }}
+docker-buildx-plugin {{ docker_engine_buildx_plugin_version }}{{ suffix }}

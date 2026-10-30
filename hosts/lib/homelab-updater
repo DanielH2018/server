@@ -133,9 +133,22 @@ write_metrics() {
         fi
         printf 'homelab_host_reconcile_ok{host="%s"} %s\n' "$HOST" "$1"
         printf 'homelab_host_verify_mismatches{host="%s"} %s\n' "$HOST" "$mismatches"
+        engine_pending
     } >"$tmp" && chmod 0644 "$tmp" && mv "$tmp" "$PROM" && return 0
     rm -f "$tmp"
     return 1
+}
+
+# The Pi's held Docker engine (H7.26): 1 while an engine package is missing or off the pins its
+# host package names, which only homelab-docker-engine.service moves. Prints nothing on a host
+# whose package ships no engine pins.
+ENGINE=$ROOT/usr/lib/homelab/docker-engine
+engine_pending() {
+    [ -x "$ENGINE" ] || return 0
+    pending=$(HOMELAB_ROOT=$ROOT "$ENGINE" pending) || return 0
+    case $pending in
+        0 | 1) printf 'homelab_docker_engine_pending{host="%s"} %s\n' "$HOST" "$pending" ;;
+    esac
 }
 
 # A homelab writer never creates the textfile directory, so a host whose exporter is not set

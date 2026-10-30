@@ -1,0 +1,6 @@
+# Shipped by homelab-daniel-pi (pi-docker). GOGC=off makes GOMEMLIMIT the only GC trigger, which
+# cuts the major faults a swapped-out heap costs on each cycle. docs/docker-engine-pins-and-runtime.md
+# has the sizing and the child-process caveat.
+[Service]
+Environment=GOGC=off
+Environment=GOMEMLIMIT={{ docker_engine_gomemlimit_dockerd }}

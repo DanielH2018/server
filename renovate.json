@@ -428,10 +428,11 @@
     },
     {
       "customType": "regex",
-      "description": "Every pinned version in a role's defaults/main.yml that carries a `# renovate:` annotation on the line above it, which is Renovate's documented annotation pattern. The annotation names the dependency: `# renovate: datasource=<ds> depName=<name>`, optionally followed by `versioning=`, `extractVersion=` and `registryUrl=`, IN THAT ORDER, each value free of spaces. The next line must be a `<key>_version:` pin, quoted or not. Adding a pinned artifact is the annotation plus its defaults: no customManager, and the packageRule keyed on depTypeTemplate below makes it a manual PR whose title names `asset_pins.py --refresh <depName>`, the command that rewrites any digest paired with the version. This replaced 13 single-variable managers (#3732); the reasoning each one's description carried now sits in the comment block above its annotation, beside the pin it explains. A pin whose version appears in more than one place, or needs a matchString per occurrence (the jellyfin plugins, vale), keeps its own manager below. scripts/lib/renovate_annotations.py expands each annotation into the per-pin manager the guards in scripts/tests/ read, by running this matchString itself.",
+      "description": "Every pinned version in a role's defaults/main.yml, or in a host component's component.yml (the Pi's Docker engine pins since H7.26), that carries a `# renovate:` annotation on the line above it, which is Renovate's documented annotation pattern. The annotation names the dependency: `# renovate: datasource=<ds> depName=<name>`, optionally followed by `versioning=`, `extractVersion=` and `registryUrl=`, IN THAT ORDER, each value free of spaces. The next line must be a `<key>_version:` pin, quoted or not. Adding a pinned artifact is the annotation plus its defaults: no customManager, and the packageRule keyed on depTypeTemplate below makes it a manual PR whose title names `asset_pins.py --refresh <depName>`, the command that rewrites any digest paired with the version. This replaced 13 single-variable managers (#3732); the reasoning each one's description carried now sits in the comment block above its annotation, beside the pin it explains. A pin whose version appears in more than one place, or needs a matchString per occurrence (the jellyfin plugins, vale), keeps its own manager below. scripts/lib/renovate_annotations.py expands each annotation into the per-pin manager the guards in scripts/tests/ read, by running this matchString itself.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
-        "/^ansible/roles/setup/[^/]+/defaults/main\\.yml$/"
+        "/^ansible/roles/setup/[^/]+/defaults/main\\.yml$/",
+        "/^hosts/components/[^/]+/component\\.yml$/"
       ],
       "matchStrings": [
         "#[ \\t]*renovate:[ \\t]*datasource=(?<datasource>\\S+)[ \\t]+depName=(?<depName>\\S+)(?:[ \\t]+versioning=(?<versioning>\\S+))?(?:[ \\t]+extractVersion=(?<extractVersion>\\S+))?(?:[ \\t]+registryUrl=(?<registryUrl>\\S+))?[ \\t]*\\n[ \\t]*[A-Za-z0-9_]+_version:[ \\t]*\"?(?<currentValue>[^\"\\s]+)\"?"
@@ -915,7 +916,10 @@
       "automerge": false
     },
     {
-      "description": "The Pi's Docker engine (docker-ce, containerd.io, docker-compose-plugin, docker-buildx-plugin) \u2014 one group, NO automerge. Merging moves nothing: docker_install refuses to move an installed engine, and the apply is the docker-engine-upgrade play, which stops every Compose project on the Pi (#1961). The PR is the work order; the operator merges it and runs the play from a LAN session. The selector MOVES WITH the managers: #2341 retargeted them from github-releases onto the `deb` datasource, and a rule left matching the old datasource and depNames would have stopped matching entirely, dropping all four into the `container images (non-major)` catch-all above -- which automerges minor and patch. ENFORCED by scripts/tests/test_renovate_docker_engine_pins.py::test_pins_resolve_to_the_manual_group.",
+      "description": "The Pi's Docker engine (docker-ce, containerd.io, docker-compose-plugin, docker-buildx-plugin) \u2014 one group, NO automerge. Merging moves nothing: the pins ship in homelab-daniel-pi (hosts/components/pi-docker), the package declares no Depends on the engine, and the apply is homelab-docker-engine.service, which stops the Pi's Compose project for the apt run (#1961). The PR is the work order; the operator merges it and starts the unit from a LAN session. The selector MOVES WITH the managers: #2341 retargeted them from github-releases onto the `deb` datasource, and a rule left matching the old datasource and depNames would have stopped matching entirely, dropping all four into the `container images (non-major)` catch-all above -- which automerges minor and patch. ENFORCED by scripts/tests/test_renovate_docker_engine_pins.py::test_pins_resolve_to_the_manual_group.",
+      "matchFileNames": [
+        "hosts/components/pi-docker/component.yml"
+      ],
       "matchDatasources": [
         "deb"
       ],
@@ -925,7 +929,7 @@
         "docker-compose-plugin",
         "docker-buildx-plugin"
       ],
-      "groupName": "docker engine on the Pi (manual \u2014 merge, then run docker-engine-upgrade; it stops every Compose project)",
+      "groupName": "docker engine on the Pi (manual \u2014 merge, then start homelab-docker-engine.service; it stops every container)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
