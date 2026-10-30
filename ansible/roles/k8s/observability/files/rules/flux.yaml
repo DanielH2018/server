@@ -7,10 +7,10 @@
 groups:
   - name: flux
     rules:
-      # SHADOW UNTIL M6's A3 DROPS THE LABEL. Kuma's Cluster Scrape Targets tile already pages
-      # up == 0 for this job, because monitor-bridge's check_cluster_targets selects every up
-      # series without an `origin` label, and the flux job carries none. M1 convention 5 allows
-      # one pager, so this rule routes to the blackhole receiver. It shares its name with the
+      # SHADOW UNTIL THE OPERATOR DROPS THE LABEL, which needs an inhibit
+      # (docs/target-architecture/monitoring/m6-status/a3.md). ScrapeTargetDown in
+      # scrape-targets.yaml already pages up == 0 for this job. M1 convention 5 allows one
+      # pager, so this rule routes to the blackhole receiver. It shares its name with the
       # rule below so that the soak and A3 read one alert for "a controller is down".
       - alert: FluxControllerDown
         expr: up{job="flux"} == 0
@@ -25,14 +25,14 @@ groups:
             {{ $labels.pod }} has failed its scrape for 5 minutes, so {{ $labels.app }} is down
             or unreachable from Prometheus. Read its pod's events and log in the flux-system
             namespace.
-      # The family's zero-series alert, and what no Kuma tile sees. Pod discovery finds no
+      # The family's zero-series alert, and what ScrapeTargetDown cannot see. Pod discovery finds no
       # target for a controller with no pod, so a Deployment at 0 replicas or a pod that never
       # schedules leaves no up series at all. One absent() per controller, because a job-wide
       # absent(up{job="flux"}) waits for all three to vanish. The names mirror the flux role's
       # flux_controllers, and ansible/tests/services/test_flux_rule_literals.py holds them
       # equal. The last arm pages a scrape that works but carries no controller-runtime
       # series, as after an upgrade that renamed them. It is conjoined with up == 1, so this
-      # rule never pages the tile's condition a second time.
+      # rule never pages ScrapeTargetDown's condition a second time.
       - alert: FluxControllerDown
         expr: >-
           absent(up{job="flux", app="source-controller"})
