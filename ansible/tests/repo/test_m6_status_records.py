@@ -8,6 +8,7 @@ records a result edits only its batch's file.
 Run: uv run pytest ansible/tests/repo/test_m6_status_records.py
 """
 
+import itertools
 import re
 import shutil
 
@@ -81,7 +82,13 @@ def test_two_batches_recording_side_by_side_merge_without_conflict(tmp_path):
     shutil.copytree(DOCS / "target-architecture", repo / "target-architecture")
     commit(repo, "base")
     # Adjacent includes are the worst case: their records sit next to each other on the page.
-    first, second = _includes()[:2]
+    # The pair must both be unrecorded, or a branch has no placeholder to replace.
+    includes = _includes()
+    first, second = next(
+        pair
+        for pair in itertools.pairwise(includes)
+        if all("Nothing recorded." in (DOCS / i).read_text() for i in pair)
+    )
     _record_branch(repo, "first", first, "Soak read: first batch.")
     _record_branch(repo, "second", second, "Soak read: second batch.")
     merged = git(repo, "merge-tree", "--write-tree", "first", "second", check=False)
