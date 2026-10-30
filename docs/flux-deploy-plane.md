@@ -122,7 +122,7 @@ M1's Alertmanager. Every rule carries `service="flux"`.
       ([#6654](https://github.com/DanielH2018/server/issues/6654)).
     - The other fires when a controller has had no scrape target for 5 minutes, or has been
       scraped with no `controller_runtime_reconcile_total` series. Pod discovery finds no
-      target for a controller with no pod, so no Kuma tile sees that loss. This rule
+      target for a controller with no pod, so `ScrapeTargetDown` cannot see that loss. This rule
       carries no shadow label.
 - **`FluxNotReady`, warning.** A Kustomization, or the `OCIRepository` `homelab`, has had a
   Ready condition other than `True` for 15 minutes. The rule names `homelab`, so the verify

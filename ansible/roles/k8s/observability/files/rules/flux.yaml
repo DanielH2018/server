@@ -24,14 +24,14 @@ groups:
             {{ $labels.pod }} has failed its scrape for 5 minutes, so {{ $labels.app }} is down
             or unreachable from Prometheus. Read its pod's events and log in the flux-system
             namespace.
-      # The family's zero-series alert, and what no Kuma tile sees. Pod discovery finds no
+      # The family's zero-series alert, and what ScrapeTargetDown cannot see. Pod discovery finds no
       # target for a controller with no pod, so a Deployment at 0 replicas or a pod that never
       # schedules leaves no up series at all. One absent() per controller, because a job-wide
       # absent(up{job="flux"}) waits for all three to vanish. The names mirror the flux role's
       # flux_controllers, and ansible/tests/services/test_flux_rule_literals.py holds them
       # equal. The last arm pages a scrape that works but carries no controller-runtime
       # series, as after an upgrade that renamed them. It is conjoined with up == 1, so this
-      # rule never pages the tile's condition a second time.
+      # rule never pages ScrapeTargetDown's condition a second time.
       - alert: FluxControllerDown
         expr: >-
           absent(up{job="flux", app="source-controller"})
@@ -66,8 +66,8 @@ groups:
       # Without it, a kube-state-metrics upgrade that changes the custom-resource-state format,
       # a ClusterRole that loses list/watch on a Flux kind, or a Flux CRD version the config no
       # longer matches leaves both readiness arms and FluxSuspended with no series, so they stay
-      # quiet. The kube-state-metrics job carries no `origin` label, so Kuma's Cluster Scrape
-      # Targets tile pages its up == 0, and M1 convention 5 conjoins the arm with up == 1. A
+      # quiet. ScrapeTargetDown in scrape-targets.yaml pages the kube-state-metrics job's
+      # up == 0, so M1 convention 5 conjoins the arm with up == 1. A
       # failed kube-state-metrics scrape therefore returns nothing from this arm for that
       # evaluation and restarts its hold, as with M1's AlertmanagerMetricsMissing. The arm
       # names the root Kustomization alone, the one object that exists whenever Flux is
