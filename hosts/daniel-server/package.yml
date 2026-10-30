@@ -16,8 +16,12 @@
 # from the host's root (H6.3d). The windowed restart, `k3s-restart`, stays off this package until
 # H6 *Open questions* 7 and H6.5a decide it, so daniel-server's k3s config changes stay a hand
 # apply through the `k3s_agent` join play.
+#
+# H7.39 adds `claude-code`, the agent user and everything the claude_code role installed here,
+# and `failure-alert`, the page its oneshots name. The role ends on this host. Both need
+# `gitops_deploy_discord_webhook`, and the agent's gh login needs `claude_code_agent_gh_token`.
 description: daniel-server's homelab host package
-components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates]
+components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, failure-alert, claude-code]
 credentials:
   - ups_secondary_daniel_server_push_token
 maintainer_scripts: [preinst, postinst, prerm]

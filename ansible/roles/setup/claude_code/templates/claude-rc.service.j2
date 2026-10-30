@@ -4,7 +4,11 @@ Documentation=https://github.com/anthropics/claude-code
 # The host opens an outbound connection to claude.ai and does nothing useful without it.
 After=network-online.target
 Wants=network-online.target
+{% if claude_code_rc_alert_unit is defined %}
+OnFailure={{ claude_code_rc_alert_unit }}
+{% else %}
 OnFailure=claude-rc-alert.service
+{% endif %}
 
 [Service]
 Type=simple

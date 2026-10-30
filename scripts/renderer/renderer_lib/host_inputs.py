@@ -32,6 +32,11 @@ HOST_INPUTS = (
     "ansible/roles/setup/nut_host/defaults/main.yml",
     "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2",
     "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
+    # daniel-server's claude-code component renders this role's defaults, templates and scripts
+    # in place until H7.40 moves daniel-box (H7.39).
+    "ansible/roles/setup/claude_code/defaults/",
+    "ansible/roles/setup/claude_code/templates/",
+    "ansible/roles/setup/claude_code/files/",
     # The resolver template the Pi's pi-resolver component renders through `role: common` (H7.25),
     # shared with the k3s role until H7.20a moves it.
     "ansible/roles/setup/common/templates/resolv.conf.j2",

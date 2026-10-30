@@ -1,0 +1,27 @@
+# Shipped by homelab-daniel-server. A fan-out batch that stops without finishing starts an
+# instance named by its unit, through polkit (50-claude-fanout-alert.rules). The name keeps its
+# Ansible-era form because the fan-out tooling names it.
+[Unit]
+Description=Page Discord that fan-out batch %i stopped without finishing
+After=homelab-secrets.service
+Wants=homelab-secrets.service
+
+[Service]
+Type=oneshot
+LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook
+Restart=on-failure
+RestartSec=5min
+RestartPreventExitStatus=3
+RuntimeDirectory=fanout-alert/%i
+RuntimeDirectoryPreserve=restart
+ExecStartPre=/bin/sh -c 'test -s %t/fanout-alert/%i/failed-at || date --utc "+%%Y-%%m-%%d %%H:%%M UTC" > %t/fanout-alert/%i/failed-at'
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors \
+  -H "Content-Type: application/json" \
+  --variable 'failed_at@%t/fanout-alert/%i/failed-at' \
+  --variable 'instance=%i' \
+  --variable 'host=%H' \
+  --variable 'webhook@%d/discord_webhook' \
+  --expand-data '{"content":"{{instance:json}}: a fan-out batch on {{host:json}} stopped without finishing, and no session may be watching it. Read the batch with `fanout.py place status <run-id>`, or its log with `journalctl --user -u <unit>` as the account that launched it. Failed at {{failed_at:trim:json}}."}' \
+  --expand-url '{{webhook:trim}}'
+SyslogLevel=notice
+ExecStartPost=/bin/echo fanout failure alert delivered for %i
