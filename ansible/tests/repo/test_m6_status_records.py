@@ -71,9 +71,8 @@ def test_every_include_resolves_and_every_record_file_is_included_once():
 def _record_branch(repo, branch: str, path: str, record: str) -> None:
     git(repo, "checkout", "-q", "-b", branch, "master")
     target = repo / path
-    commit(
-        repo, branch, **{path: target.read_text().replace("Nothing recorded.", record)}
-    )
+    # Append rather than replace "Nothing recorded.", so a pair that already holds records works.
+    commit(repo, branch, **{path: f"{target.read_text()}\n{record}\n"})
 
 
 def test_two_batches_recording_side_by_side_merge_without_conflict(tmp_path):
