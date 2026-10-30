@@ -406,7 +406,9 @@ UNLANDED="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py unlande
 UNLANDED_RC=$?
 if [ "$UNLANDED_RC" -ne 0 ]; then
   # 2 is a PR waiting on CI: benign, it clears itself, and the docs are only a run behind.
-  # 1 (origin unreadable) and 3 (a branch with no PR) both need a human, so they report down.
+  # 1 (origin unreadable), 3 (a branch with no PR) and 4 (a PR with a failed check, whose
+  # landing has stopped) all need a human, so they report down. 4 read as 2 until #6588, and a
+  # red PR blocked regeneration for five hours while this monitor read up.
   # 1 is also the code a WAN outage produces, so it goes through reachout_down -- a branch with
   # no PR (3) is local state and stays a flat down.
   if [ "$UNLANDED_RC" -eq 2 ]; then

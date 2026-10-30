@@ -18,6 +18,8 @@ an entry in `ansible/tests/repo/monkeypatch_allowlist.txt`, which its header per
 `origin/master` does not track. Shrink `ha.py`, then take the seam and drop the entry.
 """
 
+import pytest
+
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import ha
 from diagnostics.probe_lib import metrics
@@ -122,3 +124,28 @@ def test_format_loki_redacts_the_torznab_apikey():
     out = metrics.format_loki(data)
     assert APIKEY not in out
     assert "Torznab" in out
+
+
+# The same Prowlarr download URL, logged by Radarr's grab path, names its key in other cases and
+# lengths than the Torznab line above.
+@pytest.mark.parametrize("param", ["apiKey", "token", "passkey", "api_key"])
+def test_query_param_credential_in_a_log_line_is_flagged(param):
+    line = f"Grab failed: http://prowlarr:9696/7/download?{param}=not-hex-1&link=TGluaw"
+    out = core.redact_log_secrets(line)
+    assert "not-hex-1" not in out
+    assert f"{param}=<redacted>&link=TGluaw" in out
+
+
+def test_raw_json_log_body_is_clean_past_the_key():
+    # `loki-query --json` filters the raw body: the redaction must stop at the string's end.
+    body = '["1", "GET /download?apikey=abc123"], ["2", "next line"]'
+    assert core.redact_log_secrets(body) == (
+        '["1", "GET /download?apikey=<redacted>"], ["2", "next line"]'
+    )
+
+
+def test_json_escaped_ampersand_apikey_is_flagged():
+    body = '"GET /api?t=search\\u0026apikey=abc123\\u0026limit=1"'
+    out = core.redact_log_secrets(body)
+    assert "abc123" not in out
+    assert "\\u0026limit=1" in out

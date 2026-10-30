@@ -105,6 +105,7 @@ def test_the_broad_refusal_is_returned_by_name_from_deploy_tags():
             "UNLANDED_ORIGIN_UNREADABLE",
             "UNLANDED_PR_OPEN",
             "UNLANDED_NO_PR",
+            "UNLANDED_PR_RED",
         ),
         ("CI_GREEN", "CI_RED", "CI_DISARMED", "CI_PENDING"),
         ("LAND_SETTLED", "LAND_FAILED", "LAND_BAD_ARGS", "LAND_GAVE_UP"),
