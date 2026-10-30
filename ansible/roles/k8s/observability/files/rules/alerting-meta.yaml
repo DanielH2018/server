@@ -67,13 +67,11 @@ groups:
       # AlertmanagerNotificationsFailing evaluating to nothing.
       #
       # A FAILED SCRAPE IS NOT THIS RULE'S TO PAGE. The job is configured and up{job="alertmanager"}
-      # reads 0. Until M6's batch A3, Kuma's Cluster Scrape Targets tile pages that condition,
-      # because monitor-bridge's check_cluster_targets selects every up series without an
-      # `origin` label. From A3 on, A3's scrape-target rule pages it, and that rule must cover
-      # job alertmanager with service="observability" and no exemption: this rule's second arm
+      # reads 0. ScrapeTargetDown pages that condition since M6's batch A3, and its rule for job
+      # alertmanager carries service="observability" and no exemption: this rule's second arm
       # requires up == 1, so an exemption would leave the failed scrape with no pager.
-      # The second arm is conjoined with up == 1 so that this rule does not page the tile's
-      # condition a second time.
+      # The second arm is conjoined with up == 1 so that this rule does not page
+      # ScrapeTargetDown's condition a second time.
       - alert: AlertmanagerMetricsMissing
         expr: >-
           absent(up{job="alertmanager"})

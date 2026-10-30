@@ -8,16 +8,16 @@ and reads each route the walk ends on. Each label set carries one expected outco
 - `muted` (`PAGING`): every route the set reaches carries the `weekly-reboot` mute. The
   k8s-workloads sets stand for those alerts once they drop `shadow`. M4's
   `IngressProbesMissing` pages from the start, and its two `IngressProbeFailed*` sets since
-  its PR 5.
+  its PR 5. M4's `BlackboxExporterDown` and every rule of M6's batch A3 (the scrape-target and
+  log-pipeline rules) since A3's Cutover-b.
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
-  it pages nobody. M4's `BlackboxExporterDown` moves to `PAGING` in M6's batch A3. M3's two `DiskHealth*` sets move in its PR 5,
+  it pages nobody. M3's two `DiskHealth*` sets move in its PR 5,
   and the two `TextfileCollectorError` sets in M6's batch A1. H3's host-plane rules page from
   the start: each `HostReconcileFailed`, and each `HostUpdateStale` once
   `observability_expected_hosts` lists a host and `host-checks.yaml` carries its rule (H3.9c).
   Each node's `WiredLinkDown` warning pages Discord from the start too (#5124).
-  M5's four log rules and four ruler-watching alerts page from its PR 4b. Its
-  `LokiHomelabDown` stays `blackhole` until M6's batch A3 deletes it.
+  M5's four log rules and four ruler-watching alerts page from its PR 4b.
   M6's `HealthGateDrill` (`DRILL`) is critical and carries `drill="true"`, so it must reach
   the blackhole ahead of both critical routes.
 
@@ -216,6 +216,11 @@ PAGING = {
         ingress_set("IngressProbeFailedCritical"),
         ["discord", "email"],
     ),
+    # The exporter pager since M6's batch A3 Cutover-b: critical, so both channels.
+    "blackbox-exporter-down": (
+        ingress_set("BlackboxExporterDown"),
+        ["discord", "email"],
+    ),
     "deploy-hold-active": (deploy_pipeline_set("DeployHoldActive"), ["discord"]),
     "promotion-stalled": (deploy_pipeline_set("PromotionStalled"), ["discord"]),
     "prod-moved-outside-promote": (
@@ -241,16 +246,22 @@ PAGING = {
         )
         for name, labels in loki_sets(shadow=False).items()
     },
+    # Batch A3's scrape-target and log-pipeline rules, all `warning`, since its Cutover-b.
+    **{
+        name: (
+            labels,
+            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
+        )
+        for path in (SCRAPE_RULES, LOG_PIPELINE_RULES)
+        for name, labels in literal_sets(path, shadow=False).items()
+    },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
 SHADOW = {
-    "blackbox-exporter-down": ingress_set("BlackboxExporterDown"),
     **host_sets(shadow=True),
     **loki_sets(shadow=True),
     **container_sets(),
-    **literal_sets(SCRAPE_RULES, shadow=True),
-    **literal_sets(LOG_PIPELINE_RULES, shadow=True),
     **literal_sets(BRIDGE_RULES, shadow=True),
     **literal_sets(HOSTS_RULES, shadow=True),
 }
@@ -413,7 +424,8 @@ def test_loki_sets_name_every_m5_rule():
         "LokiRulerNotEvaluating",
         "LokiRulerNotificationsFailing",
     }
-    assert set(loki_sets(shadow=True)) >= {"LokiHomelabDown", "WorkloadLogErrors"}
+    assert set(loki_sets(shadow=True)) >= {"WorkloadLogErrors"}
+    assert "LokiHomelabDown" not in loki_sets(shadow=True) | loki_sets(shadow=False)
 
 
 def test_container_sets_name_every_a2_rule_and_all_are_shadow():
@@ -428,16 +440,19 @@ def test_container_sets_name_every_a2_rule_and_all_are_shadow():
     assert all(labels["shadow"] == "true" for labels in sets.values())
 
 
-def test_every_a3_rule_is_shadow_except_the_cutover_guard():
-    """Non-vacuity for `literal_sets`: batch A3's scrape and log-pipeline rules all route to the
-    blackhole until Cutover-b, and `CheckWithoutPager` is the one that pages."""
+def test_every_a3_rule_pages_and_so_does_the_cutover_guard():
+    """Non-vacuity for `literal_sets`: batch A3's scrape and log-pipeline rules all page since
+    Cutover-b, so none routes to the blackhole, and `CheckWithoutPager` still pages."""
     for path in (SCRAPE_RULES, LOG_PIPELINE_RULES):
-        assert literal_sets(path, shadow=False) == {}
-        assert literal_sets(path, shadow=True)
+        assert literal_sets(path, shadow=True) == {}
+        assert literal_sets(path, shadow=False)
     assert set(literal_sets(CUTOVER_RULES, shadow=False)) == {
         "CheckWithoutPager/uptime-kuma"
     }
-    assert "ScrapeTargetDown/observability" in SHADOW
+    assert "ScrapeTargetDown/observability" in PAGING
+    assert "ScrapeTargetFlapping/observability" in PAGING
+    assert "LogShipperDroppingEntries/loki-homelab" in PAGING
+    assert "ScrapeTargetDown/observability" not in SHADOW
 
 
 def test_every_a1_rule_is_shadow_and_names_each_host_check():

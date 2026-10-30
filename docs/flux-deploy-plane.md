@@ -201,8 +201,8 @@ gate (D2 Open question 12).
   from `prometheus.yml`, or monitor-bridge is scraped without one of the five gauges. A read
   that fails exports no series for what it feeds, never a 0, and so does a deleted variable
   or an empty token. monitor-bridge logs one `deploy-pipeline:` line each cycle naming the
-  read that failed. A failed scrape of the job pages through Kuma's `Cluster Scrape Targets`
-  tile until M6's batch A3, so this rule leaves that case alone.
+  read that failed. A failed scrape of the job pages as `ScrapeTargetDown` since M6's batch A3,
+  so this rule leaves that case alone.
 
 `ansible/roles/k8s/observability/tests/rules/deploy-pipeline.test.yaml` fires each alert and
 keeps each one silent in the case D2's plan names.

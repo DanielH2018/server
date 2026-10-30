@@ -3,8 +3,8 @@
 # carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, batch A3.
 #
-# SHADOW UNTIL M6's BATCH A3 CUTS OVER. The tile pages today, and M1 convention 5 allows one
-# pager, so every rule here routes to the blackhole receiver until Cutover-b drops `shadow`.
+# These rules page since M6's batch A3 Cutover-b. Kuma's tile went in Cutover-a1 and the bridge's
+# shipper_dropped check in Cutover-a2, so each check has one pager.
 #
 # The check had four arms and two boot graces. Each arm is a rule below. The graces read
 # `node_boot_time_seconds` of daniel-box, the node the bridge's own uptime came from:
@@ -14,7 +14,7 @@
 #   shorten its range, so it holds for the settle window PLUS the 1h range, after which the
 #   reboot's own drops have left the range. A real drop in that 80 minutes pages when the hold
 #   ends, where the bridge paged at once. DECIDED: the later page is the price of expressing
-#   the grace in PromQL, and the 7-day soak shows whether it matters.
+#   the grace in PromQL, and the 168h soak found no episode where it mattered.
 # - SHIPPER_BACKLOG_GRACE_S (21600s). After a reboot Alloy ships a backlog for hours and Loki
 #   discards the late part as `too_far_behind` (#2783). That one reason is held for 6h, and
 #   every other reason pages through it.
@@ -22,17 +22,18 @@
 # The bridge compares the larger of the client and server totals against one threshold, and
 # names the top server reason. A rule cannot take a max of two metrics' totals into one alert
 # without losing the reason, so the two sides are separate rules, and the server side counts
-# per reason. A reboot morning with two reasons each under 3000 and a sum over it pages the
-# tile and not the rule; the soak reads that episode if it happens.
+# per reason. A reboot morning with two reasons each under 3000 and a sum over it paged the
+# tile and does not page the rule; the 168h soak found no such morning.
 #
-# ansible/tests/services/test_scrape_target_rule_jobs.py pins every number below to the
-# bridge's env.yaml.j2.
+# The bridge's check and its env keys are deleted, so the numbers below are the record of what
+# it carried. ansible/tests/services/test_scrape_target_rule_jobs.py pins each of them as a
+# literal.
 groups:
   - name: log-pipeline
     rules:
       # Client side: entries Alloy (cluster) or Alloy on the Pi gave up on, over every drop
-      # reason. 3000 is SHIPPER_DROPPED_MAX: ordinary churn tops out near 1020 an hour and the
-      # smallest genuine burst measured was 6261 an hour.
+      # reason. Ordinary churn tops out near 1020 an hour and the smallest genuine burst measured
+      # was 6261 an hour. The `DECIDED:` marker in test_scrape_target_rule_jobs.py has why 3000.
       - alert: LogShipperDroppingEntries
         expr: >-
           sum(increase(loki_write_dropped_entries_total[1h])) > 3000
@@ -41,7 +42,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: The log shippers dropped over 3000 entries in the last hour.
           description: >-
@@ -49,7 +49,7 @@ groups:
             Loki. Read loki_write_dropped_entries_total by reason and instance, then the Alloy
             pod's log. A burst right after a shipper restart is a re-tail and not loss.
       # Server side: entries the homelab Loki discarded, which a shipper never attributes to
-      # itself. A `too_far_behind` count is held for SHIPPER_BACKLOG_GRACE_S after a reboot.
+      # itself. A `too_far_behind` count is held for 6h (the bridge's SHIPPER_BACKLOG_GRACE_S) after a reboot.
       - alert: LokiDiscardingEntries
         expr: >-
           (
@@ -64,7 +64,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: The homelab Loki discarded over 3000 entries in the last hour.
           description: >-
@@ -87,7 +86,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: The telemetry Loki discarded over 3000 entries in the last hour.
           description: >-
@@ -107,7 +105,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: The OTel collector failed to export telemetry.
           description: >-
@@ -122,7 +119,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Tempo's blocklist poll failed.
           description: >-
@@ -138,7 +134,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: Prometheus has lost the log shipper's dropped-entries counter.
           description: >-

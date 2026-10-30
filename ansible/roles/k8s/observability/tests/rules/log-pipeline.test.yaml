@@ -24,7 +24,6 @@ tests:
               job: alloy
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: Prometheus has lost the log shipper's dropped-entries counter.
               description: >-
@@ -47,7 +46,6 @@ tests:
           - exp_labels:
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: The log shippers dropped over 3000 entries in the last hour.
               description: >-
@@ -99,7 +97,6 @@ tests:
               reason: rate_limited
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: The homelab Loki discarded over 3000 entries in the last hour.
               description: >-
@@ -123,7 +120,6 @@ tests:
               reason: line_too_long
               severity: warning
               service: observability
-              shadow: "true"
             exp_annotations:
               summary: The telemetry Loki discarded over 3000 entries in the last hour.
               description: >-
@@ -149,7 +145,6 @@ tests:
               reason: rate_limited
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: The homelab Loki discarded over 3000 entries in the last hour.
               description: >-
@@ -174,7 +169,6 @@ tests:
               reason: too_far_behind
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: The homelab Loki discarded over 3000 entries in the last hour.
               description: >-
@@ -198,7 +192,6 @@ tests:
           - exp_labels:
               severity: warning
               service: observability
-              shadow: "true"
             exp_annotations:
               summary: The OTel collector failed to export telemetry.
               description: >-
@@ -219,7 +212,6 @@ tests:
           - exp_labels:
               severity: warning
               service: observability
-              shadow: "true"
             exp_annotations:
               summary: Tempo's blocklist poll failed.
               description: >-

@@ -47,12 +47,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="k3s CPU Throttling"}[2h])
             or
-              absent_over_time(monitor_status{monitor_name="Scrape Targets"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Cluster Scrape Targets"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Log Shipper Dropped Entries"}[2h])
-            or
               absent_over_time(monitor_status{monitor_name="Docs Refresh"}[26h10m])
             or
               absent_over_time(monitor_status{monitor_name="Secret Rotation"}[50h10m])

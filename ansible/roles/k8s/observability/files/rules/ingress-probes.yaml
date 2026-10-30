@@ -39,9 +39,8 @@ groups:
             failure there is in Traefik or Authelia. Read probe_http_status_code for this instance,
             then the Traefik and Authelia logs.
       # This family's zero-series alert. A job dropped from prometheus.yml leaves both rules
-      # above evaluating to nothing. Kuma's Cluster Scrape Targets tile fails on a member at 0,
-      # and a removed job leaves no member, so no Kuma check watches this and it pages without
-      # a shadow label.
+      # above evaluating to nothing. ScrapeTargetDown fires on a member at 0, and a removed job
+      # leaves no member, so only this rule watches it and it never carried a shadow label.
       - alert: IngressProbesMissing
         expr: absent(up{job="blackbox-ingress"})
         for: 10m
@@ -54,18 +53,18 @@ groups:
             No up{job="blackbox-ingress"} series exists, so the blackbox-ingress job is gone
             from prometheus.yml or renders no target. No ingress probe can fire until the
             series is back.
-      # SHADOW UNTIL M6's BATCH A3. Every target at 0 at once means the exporter itself is down
-      # or unreachable, not one ingress. The job's up series carry no `origin` label, so Kuma's
-      # Cluster Scrape Targets tile already pages this, and M1 convention 5 allows one pager.
-      # A3 drops the shadow in the commit that cuts that tile over. A single target at 0 is a
-      # failed scrape, which the tile pages alone.
+      # The exporter pager since M6's batch A3 Cutover-b. Every target at 0 at once means the
+      # exporter itself is down or unreachable, not one ingress. The job's up series carry no
+      # `origin` label, so Kuma's Cluster Scrape Targets tile paged this until Cutover-a1 deleted
+      # it. A single target at 0 is a failed scrape, which ScrapeTargetDown pages alone, and an
+      # Alertmanager inhibit holds that page back while this one fires. Restores the 5-minute
+      # critical page for a dead exporter that M4's PR 5 deferred to A3.
       - alert: BlackboxExporterDown
         expr: max(up{job="blackbox-ingress"}) == 0
         for: 5m
         labels:
           severity: critical
           service: blackbox-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape blackbox_exporter for any ingress probe.
           description: >-

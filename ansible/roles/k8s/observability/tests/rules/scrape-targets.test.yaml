@@ -19,7 +19,6 @@ tests:
           - exp_labels:
               severity: warning
               service: observability
-              shadow: "true"
             exp_annotations:
               summary: Prometheus sees too few scrape targets.
               description: >-
@@ -62,7 +61,6 @@ tests:
           - exp_labels:
               severity: warning
               service: observability
-              shadow: "true"
             exp_annotations:
               summary: Prometheus sees too few scrape targets.
               description: >-
@@ -86,7 +84,6 @@ tests:
           - exp_labels:
               severity: warning
               service: observability
-              shadow: "true"
             exp_annotations:
               summary: Prometheus sees too few scrape targets.
               description: >-
@@ -114,7 +111,6 @@ tests:
               instance: alertmanager.observability.svc:9093
               severity: warning
               service: observability
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape the alertmanager target alertmanager.observability.svc:9093.
               description: >-
@@ -123,7 +119,7 @@ tests:
                 series have gone stale. Read the exporter pod's events and log, or the host's
                 unit for a static target.
 
-  # The homelab Loki's failed scrape, which LokiHomelabDown covers until Cutover-b deletes it.
+  # The homelab Loki's failed scrape. LokiHomelabDown went in Cutover-b, so this rule is its pager.
   - interval: 1m
     input_series:
       - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
@@ -140,7 +136,6 @@ tests:
               instance: loki-homelab.homelab.svc:3100
               severity: warning
               service: loki-homelab
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape the loki-homelab target loki-homelab.homelab.svc:3100.
               description: >-
@@ -167,7 +162,6 @@ tests:
               instance: autofix-bridge.homelab.svc:9183
               severity: warning
               service: autofix-bridge
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape the autofix-bridge target autofix-bridge.homelab.svc:9183.
               description: >-
@@ -194,7 +188,6 @@ tests:
               page_tier: critical
               severity: warning
               service: blackbox-exporter
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape the blackbox-ingress target blackbox-exporter.homelab.svc:9115.
               description: >-
@@ -218,7 +211,6 @@ tests:
               instance: new:9100
               severity: warning
               service: unmapped
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape the brand-new-exporter target new:9100.
               description: >-
@@ -257,7 +249,6 @@ tests:
               instance: daniel-pi:12345
               severity: warning
               service: alloy
-              shadow: "true"
             exp_annotations:
               summary: Prometheus's scrapes of the alloy-pi target daniel-pi:12345 keep failing.
               description: >-
@@ -313,7 +304,6 @@ tests:
               instance: flux:8080
               severity: warning
               service: flux
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape the flux target flux:8080.
               description: >-

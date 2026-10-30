@@ -9,27 +9,11 @@
 groups:
   - name: loki-homelab
     rules:
-      # SHADOW UNTIL M6's A3 DELETES IT. Kuma's Cluster Scrape Targets tile already pages
-      # up == 0 for this job, because monitor-bridge's check_cluster_targets selects every up
-      # series without an `origin` label, and loki-homelab's carries none. M1 convention 5
-      # allows one pager, so this routes to the blackhole receiver. A3's Cutover-b deletes
-      # the rule, because A3's scrape-target rule pages the same series.
-      - alert: LokiHomelabDown
-        expr: up{job="loki-homelab"} == 0
-        for: 5m
-        labels:
-          severity: warning
-          service: loki-homelab
-          shadow: "true"
-        annotations:
-          summary: Prometheus cannot scrape the homelab Loki.
-          description: >-
-            {{ $labels.instance }} has failed its scrape for 5 minutes, so the homelab Loki is
-            down or unreachable from Prometheus. Read the loki-homelab pod's events and log in
-            the homelab namespace.
       # This family's zero-series alert. A renamed or dropped loki-homelab scrape job would
-      # leave every other rule here evaluating to nothing. No Kuma tile reads a missing scrape
-      # job, so it pages without a shadow label.
+      # leave every other rule here evaluating to nothing. A failed scrape of the job pages as
+      # ScrapeTargetDown (service loki-homelab, 10m), which replaced LokiHomelabDown in M6's batch
+      # A3 Cutover-b. Nothing reads a missing scrape job but this rule, so it never carried a
+      # shadow label.
       - alert: LokiHomelabMetricsMissing
         expr: absent(up{job="loki-homelab"})
         for: 10m
@@ -62,7 +46,7 @@ groups:
             10-minute windows, so its log rules are not being checked. Each evaluation is a
             Loki query: read the loki-homelab pod's log for the query error.
       # The `up == 1` conjunct leaves a Loki outage to
-      # LokiHomelabDown. The last-evaluation gauge reads 0 from a Loki start until the
+      # ScrapeTargetDown. The last-evaluation gauge reads 0 from a Loki start until the
       # group's first evaluation, which waits for the group's offset inside its 5m interval:
       # 291s after the pod started on 2026-10-13, and at most one interval plus startup. The
       # 10m hold, two intervals, outlasts that gap.
