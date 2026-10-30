@@ -471,10 +471,54 @@ _LOG_SECRET_RE = re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}")
 
 # Sonarr and Radarr log a failed Torznab call with its full URL, which carries Prowlarr's API key
 # as `apikey=<32 hex>` (#6276). The Alloy stage strips it from new records; `loki-query` prints
-# the older ones through here.
-_APIKEY_RE = re.compile(r"(apikey=)[0-9a-fA-F]{32}")
+# the older ones through here. It needs no separator before `apikey`, because `loki-query --json`
+# filters the raw body, where a JSON encoder may write the `&` as `\u0026`.
+_APIKEY_RE = re.compile(r"(apikey=)[^&#;\s\"'\\]+", re.IGNORECASE)
 
 REDACTED = "<redacted>"
+
+# Matched as lowercase substrings against a credential-bearing name: an *arr field or key name,
+# or a URL query parameter's name once `_` and `-` are stripped from it.
+SECRET_NAME_PARTS = (
+    "apikey",
+    "password",
+    "passkey",
+    "webhook",
+    "token",
+    "secret",
+    "credential",
+    "cookie",
+    "auth",
+)
+
+# Query parameter names that carry a credential but contain none of SECRET_NAME_PARTS. Indexer
+# and tracker URLs use them (`key=`, `rsskey=`, `torrent_pass=`). Matched whole, not as
+# substrings, so `sortKey=date` in an *arr API URL still prints.
+_SECRET_QUERY_NAMES = frozenset({"key", "rsskey", "pass", "torrentpass"})
+
+# A URL query parameter inside any text: `?apikey=…`, `&token=…`. The value stops at a quote or
+# a backslash so a match inside a raw JSON body never runs past the end of its string.
+_QUERY_PARAM_RE = re.compile(r"([?&;])([^=&#?;\s\"'\\]+)=([^&#;\s\"'\\]*)")
+
+
+def query_param_is_secret(name):
+    """True when a URL query parameter's name reads as credential-bearing."""
+    low = str(name).lower().replace("_", "").replace("-", "")
+    return low in _SECRET_QUERY_NAMES or any(part in low for part in SECRET_NAME_PARTS)
+
+
+def redact_query_params(text):
+    """Return `text` with the value of each credential-named URL query parameter replaced.
+
+    Only the value goes, so the URL around it (host, path, the other parameters) still prints.
+    """
+
+    def _sub(m):
+        if m.group(3) and query_param_is_secret(m.group(2)):
+            return f"{m.group(1)}{m.group(2)}={REDACTED}"
+        return m.group(0)
+
+    return _QUERY_PARAM_RE.sub(_sub, text)
 
 
 def redact_log_secrets(text):
@@ -484,7 +528,8 @@ def redact_log_secrets(text):
     text rather than a parsed body, because `/api/error_log` is a plain-text log, not JSON.
     """
     text = _LOG_SECRET_RE.sub(rf"\g<1>{REDACTED}", text)
-    return _APIKEY_RE.sub(rf"\g<1>{REDACTED}", text)
+    text = _APIKEY_RE.sub(rf"\g<1>{REDACTED}", text)
+    return redact_query_params(text)
 
 
 def _rows_from_loki(data: dict) -> list[tuple[int, str]]:
