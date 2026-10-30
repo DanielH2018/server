@@ -697,7 +697,7 @@ tests:
 
   # daniel-pi's engine pins moved, and no run applied them. The pending series reads 0 for 2h,
   # then 1 with missed scrapes in it, as the Pi's weekly reboot leaves. The rule is quiet
-  # at 6h and at 27h50m, 25h50m into the 1, which is the longest a pin legitimately waits. It
+  # at 6h and at 27h50m, 25h50m into the 1, inside the 25h51m a pin can legitimately wait. It
   # fires at 28h05m, past 26h, and the gaps do not delay it.
   - interval: 5m
     input_series:

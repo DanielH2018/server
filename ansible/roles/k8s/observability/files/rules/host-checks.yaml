@@ -1363,7 +1363,9 @@ groups:
       # 26h is the longest a pin legitimately waits, from the Pi's schedule. The updater first
       # writes 1 as late as 01:05, the slot after the window, so the pin waits 23h25m for the
       # next 00:30. The unit's TimeoutStartSec is 90 minutes, and the updater's next slot (5
-      # minutes) and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 25h50m in all.
+      # minutes), its 60s delay and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 25h51m
+      # in all. scripts/renderer/tests/test_renderer_host_update_limits.py derives it from the
+      # unit files and fails a window shorter than it.
       #
       # It reads the range, never a `for:`. A failed scrape or the Pi's weekly reboot marks the
       # series stale, and a stale evaluation resets a `for:` to zero, so the page would slip a
