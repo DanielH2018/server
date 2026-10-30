@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-10-30 06:17 UTC
-generated_sha: bae292fa8e
+generated_at: 2026-10-30 18:17 UTC
+generated_sha: 4690d8c994
 ---
 
 !!! warning "Generated file — do not edit"
@@ -100,7 +100,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `pihole_password` | 2026-07-23 | 2027-07-03 | 246 |
 | `prometheus_ha_token` | 2025-11-06 | 2026-10-26 | -4 |
 | `prometheus_kuma_api_key` | 2025-09-18 | 2026-08-21 | -70 |
-| `prowlarr_api_key` | 2026-10-25 | 2027-10-05 | 340 |
+| `prowlarr_api_key` | 2026-10-30 | 2027-10-10 | 345 |
 | `qbittorrent_password` | 2025-09-20 | 2026-08-28 | -63 |
 | `r2_access_key_id` | 2026-04-28 | 2027-04-18 | 170 |
 | `r2_secret_access_key` | 2026-04-11 | 2027-04-10 | 162 |

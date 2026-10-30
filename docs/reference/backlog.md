@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-30 06:17 UTC
-generated_sha: bae292fa8e
+generated_at: 2026-10-30 18:17 UTC
+generated_sha: 4690d8c994
 ---
 
 !!! warning "Generated file — do not edit"
@@ -29,7 +29,15 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6433](https://github.com/DanielH2018/server/issues/6433) | medium | gap | cicd | order_only's signature names a bound method by its function only, so re-binding it to another object reads the same | 2026-10-28 | 0 | - | ✓ |
 | [#6522](https://github.com/DanielH2018/server/issues/6522) | medium | gap | cicd | Issue's verify-by (DRIFT on daniel-server) is not delivered by this PR | 2026-10-29 | 0 | - | ✓ |
 | [#6577](https://github.com/DanielH2018/server/issues/6577) | medium | gap | backup-observability | Raise the registry-gc healthchecks.io console grace to two hours | 2026-10-29 | 0 | - | ✓ |
-| [#6590](https://github.com/DanielH2018/server/issues/6590) | medium | gap | cicd | Prove in the CI container that the updater cannot move the Pi's held Docker engine | 2026-10-29 | 0 | worktree-d5-orchestrator-wave10 | ✓ |
+| [#6620](https://github.com/DanielH2018/server/issues/6620) | medium | gap | backup-observability | M6 A3: explain or close the scrape batch's shadow-soak gaps before its Cutover-a | 2026-10-30 | 0 | worktree-d5-orchestrator-wave12 | ✓ |
+| [#6621](https://github.com/DanielH2018/server/issues/6621) | medium | gap | backup-observability | M6 A1: explain or close the hosts batch's shadow-soak gaps before its Cutover-a | 2026-10-30 | 0 | worktree-d5-orchestrator-wave12 | ✓ |
+| [#6622](https://github.com/DanielH2018/server/issues/6622) | medium | gap | backup-observability | M6 A2: explain or close the containers batch's shadow-soak gaps before its Cutover-a | 2026-10-30 | 0 | worktree-d5-orchestrator-wave12 | ✓ |
+| [#6623](https://github.com/DanielH2018/server/issues/6623) | medium | gap | backup-observability | M6 A4: explain or close the edge batch's shadow-soak gaps before its Cutover-a | 2026-10-30 | 0 | worktree-d5-orchestrator-wave12 | ✓ |
+| [#6624](https://github.com/DanielH2018/server/issues/6624) | medium | gap | backup-observability | M6 A5: explain or close the storage batch's shadow-soak gaps before its Cutover-a | 2026-10-30 | 0 | worktree-d5-orchestrator-wave12 | ✓ |
+| [#6625](https://github.com/DanielH2018/server/issues/6625) | medium | gap | backup-observability | M6 B8: explain or close the probes batch's shadow-soak gaps before its Cutover-a | 2026-10-30 | 0 | worktree-d5-orchestrator-wave12 | ✓ |
+| [#6628](https://github.com/DanielH2018/server/issues/6628) | medium | gap | backup-observability | M6 A2: re-run the containers soak at 168h and soak the tuned ContainerCPUThrottled before Cutover-a | 2026-10-30 | 0 | - | ✓ |
+| [#6635](https://github.com/DanielH2018/server/issues/6635) | medium | improvement | cicd | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live | 2026-10-30 | 0 | - | ✓ |
+| [#6642](https://github.com/DanielH2018/server/issues/6642) | medium | gap | backup-observability | ScrapeTargetFlapping double-pages after a long outage when one scrape fails after recovery | 2026-10-30 | 0 | - | - |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
@@ -57,16 +65,12 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6434](https://github.com/DanielH2018/server/issues/6434) | low | improvement | cicd | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply | 2026-10-28 | 0 | - | - |
 | [#6435](https://github.com/DanielH2018/server/issues/6435) | low | gap | docs | Rename the cross_plane_order.py comments left in ansible/deploy.yml and janitorr's verify template | 2026-10-28 | 0 | - | - |
 | [#6436](https://github.com/DanielH2018/server/issues/6436) | low | gap | docs | PR template header still says the GitOps deployer applies image pins and the deploy plane | 2026-10-28 | 0 | - | - |
-| [#6500](https://github.com/DanielH2018/server/issues/6500) | low | improvement | docs | Three deployed-role comments still name the deleted k3s_server_args | 2026-10-29 | 0 | - | ✓ |
 | [#6521](https://github.com/DanielH2018/server/issues/6521) | low | improvement | cicd | Choose a merge-batching design now that pacing at one master run did not cut full sweeps | 2026-10-29 | 0 | - | ✓ |
 | [#6572](https://github.com/DanielH2018/server/issues/6572) | low | improvement | cicd | Re-measure master-merge CI supersessions after narrowing land.sh's pre-merge branch update | 2026-10-29 | 0 | - | ✓ |
-| [#6585](https://github.com/DanielH2018/server/issues/6585) | low | improvement | cicd | H7.26: move the Pi's docker_install into its host package | 2026-10-29 | 0 | worktree-d5-orchestrator-wave10 | ✓ |
-| [#6586](https://github.com/DanielH2018/server/issues/6586) | low | improvement | cicd | H7.39: move the agent users and daniel-server's claude_code into its host package | 2026-10-29 | 0 | worktree-d5-orchestrator-wave10 | ✓ |
-| [#6591](https://github.com/DanielH2018/server/issues/6591) | low | gap | security | daniel-server's agent authorized peer key is unmanaged after H7.39 | 2026-10-29 | 0 | - | ✓ |
-| [#6603](https://github.com/DanielH2018/server/issues/6603) | low | gap | security | probe.py arr misses credential query params inside percent-encoded nested URLs | 2026-10-30 | 0 | - | - |
-| [#6605](https://github.com/DanielH2018/server/issues/6605) | low | gap | - | Reconcile keeps an /etc copy of a packaged 50-homelab.conf drop-in as unit drift | 2026-10-30 | 0 | - | ✓ |
-| [#6611](https://github.com/DanielH2018/server/issues/6611) | low | gap | cicd | Engine case's pending series reads 1 whatever docker-ce's version, because the other pinned packages are absent | 2026-10-30 | 0 | - | ✓ |
-| [#6613](https://github.com/DanielH2018/server/issues/6613) | low | gap | backup-observability | HostUpdateStale can page daniel-pi during a long engine run that succeeds | 2026-10-30 | 0 | - | ✓ |
+| [#6626](https://github.com/DanielH2018/server/issues/6626) | low | gap | backup-observability | No rule pages a scrape target that flaps without holding down for 10 minutes after A3's Cutover-a | 2026-10-30 | 0 | worktree-d5-orchestrator-wave12 | ✓ |
+| [#6636](https://github.com/DanielH2018/server/issues/6636) | low | improvement | docs | Comments in bootstrap.yml, k3s and system-upgrade still describe the emptied sops_setup role | 2026-10-30 | 0 | - | ✓ |
+| [#6641](https://github.com/DanielH2018/server/issues/6641) | low | gap | backup-observability | Red rollout-gap guard in the scrape-target flap test passes on a hard-down case | 2026-10-30 | 0 | - | - |
+| [#6643](https://github.com/DanielH2018/server/issues/6643) | low | improvement | security | Retire daniel-server's user-home age key once no Ansible apply runs there | 2026-10-30 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
