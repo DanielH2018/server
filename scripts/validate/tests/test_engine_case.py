@@ -360,3 +360,19 @@ def test_an_engine_on_the_pin_is_not_held_off_it():
     expect_held(HELD_A, HELD_A, OK_LINE + PENDING_1, PIN)
     with pytest.raises(CaseFailed):
         expect_held(OFFERED_B, OFFERED_B, OK_LINE + PENDING_1, PIN)
+
+
+@pytest.mark.parametrize(
+    ("out", "want"),
+    [
+        ("ii 5:1.0", "5:1.0"),
+        ("hi 5:1.0", "5:1.0"),
+        ("rc 5:1.0", ""),
+        ("", ""),
+        ("un ", ""),
+    ],
+    ids=["unheld", "held", "removed", "unknown", "not-installed"],
+)
+def test_a_held_engine_reads_as_installed(out, want):
+    # The first CI run failed here: `apt-mark hold` turns `ii ` into `hi `.
+    assert _function("installed_version")(out) == want

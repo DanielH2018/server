@@ -218,10 +218,21 @@ def expect_held(held: str, installed: str, prom: str, pin: str | None = None) ->
     expect(PENDING in prom.splitlines(), f"the prom lacks {PENDING!r}:\n{prom}")
 
 
+def installed_version(abbrev_and_version: str) -> str:
+    """The version in `${db:Status-Abbrev}${Version}` output, or "" when not installed.
+
+    Status-Abbrev is three characters: want, status, error. A held package reads `hi `, an
+    unheld one `ii `, and both are installed.
+    """
+    out = abbrev_and_version
+    return out[3:] if out[1:2] == "i" and out[:1] in "ih" else ""
+
+
 def _engine(c: Container) -> str:
-    """docker-ce's version as dpkg holds it `ii `, or ""."""
-    out = c.sh(f"dpkg-query -W -f '${{db:Status-Abbrev}}${{Version}}' {ENGINE}").stdout
-    return out[3:] if out.startswith("ii ") else ""
+    """docker-ce's installed version, held or not, or ""."""
+    return installed_version(
+        c.sh(f"dpkg-query -W -f '${{db:Status-Abbrev}}${{Version}}' {ENGINE}").stdout
+    )
 
 
 def expect_on_hold(c: Container) -> None:
