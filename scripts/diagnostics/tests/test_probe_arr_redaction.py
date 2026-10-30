@@ -168,3 +168,77 @@ def test_non_json_body_is_passed_through():
     text, rc = arr.format_arr_response("<html>404</html>\n")
     assert rc == 1
     assert text.strip() == "<html>404</html>"
+
+
+# --- a credential inside a value: a Prowlarr download URL (#6582) -----------------------
+
+
+# Shaped like a Radarr `GET /api/v3/history/movie` page: a `grabbed` record's downloadUrl is
+# a Prowlarr proxy URL carrying Prowlarr's API key, under a key no name rule matches.
+PROWLARR_KEY = "not-a-real-key"
+GRAB_URL = (
+    f"http://prowlarr:9696/7/download?apikey={PROWLARR_KEY}&link=TGluaw&file=Movie"
+)
+
+
+def _history(download_url):
+    return {
+        "page": 1,
+        "pageSize": 10,
+        "records": [
+            {
+                "id": 41,
+                "movieId": 12,
+                "eventType": "grabbed",
+                "sourceTitle": "Movie.2024.1080p",
+                "data": {
+                    "indexer": "Some Indexer (Prowlarr)",
+                    "downloadUrl": download_url,
+                },
+            }
+        ],
+    }
+
+
+def _download_url(payload):
+    return payload["records"][0]["data"]["downloadUrl"]
+
+
+def test_history_download_url_apikey_is_flagged():
+    out = arr.redact_arr_payload(_history(GRAB_URL))
+    assert PROWLARR_KEY not in _download_url(out)
+
+
+def test_history_download_url_is_clean_apart_from_the_key():
+    # Only the parameter's value goes: the indexer path and the other parameters survive.
+    out = arr.redact_arr_payload(_history(GRAB_URL))
+    assert _download_url(out) == (
+        f"http://prowlarr:9696/7/download?apikey={arr.REDACTED}&link=TGluaw&file=Movie"
+    )
+
+
+@pytest.mark.parametrize("param", ["apikey", "apiKey", "token", "passkey"])
+def test_sensitive_query_param_mid_url_is_flagged(param):
+    url = f"https://tracker.test/dl?id=9&{param}=S3CR3T-VALUE&name=x"
+    out = arr.redact_arr_payload(_history(url))
+    assert (
+        _download_url(out)
+        == f"https://tracker.test/dl?id=9&{param}={arr.REDACTED}&name=x"
+    )
+
+
+def test_url_inside_free_text_is_flagged():
+    # "Wherever it appears in a string": a message quoting the URL leaks it as surely.
+    record = {"message": f"Couldn't fetch {GRAB_URL}: 502", "level": "warning"}
+    out = arr.redact_arr_payload(record)
+    assert PROWLARR_KEY not in out["message"]
+    assert out["message"].startswith("Couldn't fetch http://prowlarr:9696/7/download?")
+    assert out["level"] == "warning"
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_printed_history_output_omits_the_prowlarr_key(as_json):
+    text, rc = arr.format_arr_response(json.dumps(_history(GRAB_URL)), as_json=as_json)
+    assert rc == 0
+    assert PROWLARR_KEY not in text
+    assert f"apikey={arr.REDACTED}" in text
