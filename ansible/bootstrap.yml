@@ -1,32 +1,11 @@
 ---
-# Bootstrap a host for SOPS — WITHOUT any encrypted-secret dependency.
+# A stub kept until H7.20a deletes it with the role. H7.24b emptied `sops_setup` to a
+# `meta: end_role`, so this playbook applies nothing. The host packages ship `sops` and `age`
+# (`hosts/components/sops/`), and `hosts/bootstrap-host.sh` creates the host's age key.
 #
-# Problem this solves: `initial_setup.yml` and `deploy.yml` both decrypt
-# ansible/vars/secrets.yml in a `pre_tasks` block that runs BEFORE any role — so on a
-# fresh host (no age key yet) they fail at "Load encrypted secrets" before `sops_setup`
-# ever gets a chance to install SOPS. This playbook runs `sops_setup` on its own, with NO
-# secret-loading pre_task, breaking that chicken-and-egg.
-#
-# `sops_setup` has zero secret dependency: it installs the `age` + `sops` binaries and the
-# pinned collections, generates THIS host's own age key (idempotent — `age-keygen` has a
-# `creates:` guard), and prints the host's PUBLIC key.
-#
-# Per-host-key workflow (each host gets its own key; no private key is copied between hosts):
-#   1. On the new host:  ansible-playbook ansible/bootstrap.yml --limit <host>
-#      (no `uv`/secrets needed — uses only builtin modules; any ansible-core works)
-#      -> note the "Your Public Key is: age1..." line it prints.
-#   2. Add that public key to the `age:` string of ALL THREE creation rules in
-#      `ansible/.sops.yaml` (tracked), then on a host whose key is already listed there,
-#      from ansible/:  sops updatekeys vars/secrets.yml  — and the same for each cluster
-#      file that exists; the `.sops.yaml` header lists them.
-#      Commit the re-encrypted files + ansible/.sops.yaml and push.
-#   3. On the new host: `git pull`, then run `initial_setup.yml` / `deploy.yml` normally —
-#      their secret-load pre_task now decrypts using the host's own key.
-#
-# Shared-key alternative: drop an existing recipient's private key at
-# ~/.config/sops/age/keys.txt BEFORE running this; `age-keygen`'s `creates:` guard then
-# skips generation and this playbook just installs the binaries. (Spreads the master key —
-# the per-host-key flow above is preferred.)
+# Its one use is the rollback in `ansible/roles/setup/sops_setup/CLAUDE.md`: after a revert of
+# H7.24b restores the role's tasks, this playbook re-installs `sops`, because it has no
+# secret-loading pre_task and `initial_setup.yml` cannot run without `sops` on PATH.
 - name: Bootstrap a host for SOPS (no encrypted-secret dependency)
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
   # An escalated task imports from this tree's .venv as root, and the root-owned

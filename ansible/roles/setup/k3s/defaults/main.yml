@@ -490,9 +490,8 @@ k3s_host_coredns_version: "1.14.7"
 # checksum is PINNED IN-REPO rather than fetched from the release's .sha256 sidecar: a
 # sidecar fetched over the same connection as the tarball is authenticated by the same
 # thing the tarball is, so it verifies transport integrity and nothing else. Pinning it
-# here means a changed artifact fails the deploy and shows up as a diff. Same reasoning
-# and same shape as roles/setup/sops_setup — and, as there, a Renovate version bump is a
-# MANUAL FINISH: the hash below is not derivable from the tag, so `automerge: false`.
+# here means a changed artifact fails the deploy and shows up as a diff. A Renovate version
+# bump is a MANUAL FINISH: the hash below is not derivable from the tag, so `automerge: false`.
 k3s_host_coredns_sha256: "9a09356438c6d9591cb80011a2a7a52f87fc3a113f6690e41f243f98b98faac9"
 
 # WHERE THE PREFERENCE LIVES. This is the ordered forward list, and `policy sequential`

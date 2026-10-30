@@ -73,7 +73,7 @@
   # checksum: is the whole security argument. The release's own .sha256 sidecar travels over
   # the same connection as the tarball and is signed by nothing, so fetching it would verify
   # transport integrity twice and authenticity never. The pin lives in defaults/main.yml and
-  # a changed artifact fails here. Same shape as roles/setup/sops_setup.
+  # a changed artifact fails here.
   #
   # A separate get_url because `unarchive` with a URL src takes no checksum at all: it
   # would fetch and extract the tarball with nothing reading the pin. The tarball
