@@ -1,0 +1,19 @@
+# Shipped by the host package's host-maintenance component on a `has_docker` host. Started by
+# homelab-docker-prune.timer.
+#
+# It runs as sys_user, the user whose crontab held the job, and grants itself the `docker` group,
+# because no task adds sys_user to it on a rebuilt host.
+[Unit]
+Description=Prune Docker objects older than a week and ping the docker-prune check
+After=docker.service homelab-secrets.service
+Wants=homelab-secrets.service
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=docker-prune
+User={{ sys_user }}
+SupplementaryGroups=docker
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/lib/homelab/docker-prune
+LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key

@@ -201,14 +201,24 @@ def test_no_ansible_ufw_task_adds_a_rule_a_host_package_declares():
 
 
 @pytest.mark.parametrize("host", HOSTS)
-def test_the_ansible_side_finds_initial_setups_ssh_limit_on_every_host(host):
-    ansible, _ = _tree()
-    assert canonical("limit", proto="tcp", dport="22") in ansible[host]
+def test_exactly_one_side_writes_the_ssh_limit_on_every_host(host):
+    """initial_setup's task on a host its ufw guard does not list, the package on the rest.
+
+    daniel-pi's package carries the rule since H7.30, so the Pi's side is the package's.
+    """
+    ansible, packages = _tree()
+    limit = canonical("limit", proto="tcp", dport="22")
+    on_ansible, on_package = limit in ansible[host], limit in packages[host]
+    assert on_ansible != on_package
+    if host == "daniel-pi":
+        assert on_package
 
 
-def test_the_ansible_side_finds_the_lan_ssh_allow_with_its_subnet_rendered():
-    ansible, _ = _tree()
-    lan = [key for key in ansible["daniel-pi"] if key[1] == "allow" and key[7] == "22"]
+@pytest.mark.parametrize("host", ("daniel-pi", "daniel-server"))
+def test_the_lan_ssh_allow_is_found_with_its_subnet_rendered(host):
+    ansible, packages = _tree()
+    side = packages if host == "daniel-pi" else ansible
+    lan = [key for key in side[host] if key[1] == "allow" and key[7] == "22"]
     assert lan and all("{{" not in key[4] for key in lan)
 
 

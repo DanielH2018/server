@@ -31,7 +31,6 @@ from test_aide_check import LOGGER_STUB, _textfile
 ROLE = ROLES / "setup" / "initial_setup"
 SCRIPT = ROLE / "files" / "host-maintenance.sh"
 CHECK_LIB = ROLE / "files" / "homelab-check-lib.sh"
-REAL_CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
 # The guard on the absent arm: the series existed in this window, so a never-written file is quiet.
@@ -64,11 +63,7 @@ def _run(tmp_path, job: str, rc: int):
 
     Returns (exit code, the check's textfile series).
     """
-    body = SCRIPT.read_text()
-    assert REAL_CHECK_LIB in body, "this harness repoints the check library"
-    script = write_exec(
-        tmp_path / "host-maintenance.sh", body.replace(REAL_CHECK_LIB, str(CHECK_LIB))
-    )
+    script = write_exec(tmp_path / "host-maintenance.sh", SCRIPT.read_text())
     textfile = tmp_path / "textfile"
     textfile.mkdir()
     stubs = fake_bin(
@@ -82,6 +77,7 @@ def _run(tmp_path, job: str, rc: int):
         [str(script), job],
         env={
             **os.environ,
+            "HOMELAB_LIB_DIR": str(CHECK_LIB.parent),
             "TEXTFILE_DIR": str(textfile),
             "LOGGER_OUT": str(tmp_path / "logged"),
             "PURGE_RC": str(rc),

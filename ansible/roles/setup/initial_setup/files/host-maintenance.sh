@@ -25,9 +25,10 @@ case "$JOB" in
   *) echo "usage: host-maintenance.sh apt-autoremove|dpkg-purge|firmware-update" >&2; exit 64 ;;
 esac
 
+# The packaged units set HOMELAB_LIB_DIR to /usr/lib/homelab; the Ansible crons leave it unset.
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t "$JOB" "homelab-check-lib.sh missing — run initial_setup on this host"
+source "${HOMELAB_LIB_DIR:-/usr/local/lib}/homelab-check-lib.sh" || {
+  logger -t "$JOB" "homelab-check-lib.sh missing — run initial_setup or install the host package"
   exit 1
 }
 

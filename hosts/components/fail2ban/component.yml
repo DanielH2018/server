@@ -1,0 +1,19 @@
+# fail2ban's jails (H7.7a, docs/target-architecture/host/h7-delete-ansible.md). initial_setup
+# installed the package, wrote /etc/fail2ban/jail.d/homelab.conf and started the service. The jail
+# file is the role's own template, rendered in place through `role: initial_setup` until the last
+# host PR moves it, so the hosts that still apply the role cannot fork it.
+#
+# The path stays the one Ansible wrote. No package owns it (`dpkg -S` on the Pi, 2026-10-30), so
+# the first install takes the file over. A changed jail file restarts fail2ban only after
+# `fail2ban-client -t` accepts it (reconcile's activation step), so a jail fail2ban rejects leaves
+# the running daemon alone and holds the host.
+#
+# The jails ban through `banaction = ufw`, so the ufw arm's rules and fail2ban's own inserts share
+# one ruleset. fail2ban's rules carry no `homelab:` label, so the arm never deletes one.
+#
+# The Debian package enables fail2ban.service on install, so the component ships no enable link.
+role: initial_setup
+depends:
+  - fail2ban
+files:
+  - {src: "role:fail2ban_homelab.conf.j2", dst: /etc/fail2ban/jail.d/homelab.conf, activate: "try-restart:fail2ban.service"}

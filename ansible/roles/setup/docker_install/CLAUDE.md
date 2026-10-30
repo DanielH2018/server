@@ -26,10 +26,11 @@ incident, the pin derivations and the Go runtime measurements.
   project names, through an `ExecStartPre=` the renderer derives from the compose files
   (`hosts/components/pi-compose/units/homelab-compose.service.j2`).
 - The Docker apt source and key, in `hosts/components/apt-docker/` since H7.24a.
+- The LAN's ufw rules for the dockerd and containerd metrics listeners, declared in
+  `hosts/daniel-pi/package.yml` since H7.30. Reconcile's ufw arm relabelled the Ansible-era rules
+  in place.
 
 ## What stayed behind
-- The LAN's ufw rules for the dockerd and containerd metrics listeners stay Ansible-era rules
-  until H7.30 declares the Pi's ufw rules.
 - No task adds the connecting user to the `docker` group. The one Pi heartbeat that runs
   `docker`, `homelab-pi-recovery.service`, grants the group itself with
   `SupplementaryGroups=docker`.

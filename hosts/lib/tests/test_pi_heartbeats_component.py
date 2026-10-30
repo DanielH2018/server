@@ -186,4 +186,4 @@ def test_the_package_ships_the_secrets_unit_and_names_both_credentials_it_loads(
     package,
 ):
     assert "homelab-secrets.service" in package.units()
-    assert sorted(package.credentials) == sorted(CREDENTIALS.values())
+    assert set(CREDENTIALS.values()) <= set(package.credentials)

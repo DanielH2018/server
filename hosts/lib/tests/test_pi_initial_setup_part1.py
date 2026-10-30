@@ -210,10 +210,12 @@ def test_journald_and_limits_ship_as_drop_ins(package):
     assert "* hard core 0\n" in _text(package, "/etc/security/limits.d/50-homelab.conf")
 
 
-def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
-    package, tmp_path
-):
-    """The line arm edits conffiles a real host has, so the node seeds each with Ansible's lines."""
+def seeded_pi(package: host_mode.Package, tmp_path: Path) -> Node:
+    """A node holding the Pi's real manifest and the host state the live Pi has under it.
+
+    The line arm edits conffiles a real host has, so each is seeded with Ansible's lines. The
+    caller seeds `state["ufw"]`, the one arm whose live state differs per test.
+    """
     node = Node(tmp_path)
     node.manifest = json.loads(package.files["/usr/lib/homelab/manifest.json"][0])
     # The package ships `secrets-unit` (H4.5): reconcile needs its secrets.json and credentials.
@@ -236,6 +238,9 @@ def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
         "ssh.service",
         "systemd-journald.service",
         "auditd.service",
+        "fail2ban.service",
+        "postfix.service",
+        "sysstat.service",
         "apt-daily.timer",
         "apt-daily-upgrade.timer",
     ):
@@ -257,12 +262,18 @@ def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
         "node_exporter": 999
     }  # the account the live Pi already holds
     node.state["installed"]["homelab-daniel-pi"] = ["ii ", V1]
+    return node
+
+
+def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
+    package, tmp_path
+):
+    node = seeded_pi(package, tmp_path)
     node.state["ufw"] = {"active": True, "rules": [["limit 22/tcp", ""]], "fail": []}
 
     result = node.run()
 
     assert result.returncode == 0, result.stderr
-    assert node.calls("ufw") == []
     # The sysctl edits share one file, so its changed hash reloads sysctl once.
     assert len(node.calls("sysctl")) == 1
     assert node.applied()["result"]["ok"] is True

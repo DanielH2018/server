@@ -1,0 +1,11 @@
+# Shipped by the host package's host-maintenance component with its enable link. Sunday 02:15, the
+# cron's slot.
+[Unit]
+Description=Run dpkg-purge weekly on Sunday at 02:15
+
+[Timer]
+OnCalendar=Sun *-*-* 02:15:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

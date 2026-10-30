@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# The daily Docker prune. Shipped by the host package's host-maintenance component on a
+# `has_docker` host and started by homelab-docker-prune.timer.
+#
+# Usage: docker-prune
+# Takes no arguments. It removes unused images, containers, networks and build cache created
+# more than a week ago, then pings this host's `{{ inventory_hostname }}-docker-prune`
+# Healthchecks.io check. A failed prune pings nothing, so the check's deadline pages. The week
+# keeps the previous pinned image local after a bad bump, so a rollback needs no registry pull.
+# `until` filters on CreatedAt, so an upstream image built more than a week ago goes as soon as
+# nothing uses it. Running it by hand prunes for real.
+set -u
+
+docker system prune -a -f --filter "until=168h" || exit 1
+
+key=""
+if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then
+  key="$(<"$CREDENTIALS_DIRECTORY/healthchecks_ping_key")"
+fi
+if [[ -n "$key" ]]; then
+  curl -fs -m 10 --retry 3 "https://hc-ping.com/$key/{{ inventory_hostname }}-docker-prune" >/dev/null 2>&1
+fi
+exit 0

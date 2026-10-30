@@ -58,8 +58,22 @@ initial_setup_worktree_holders_group: worktree-holders
 #           hosts/components/host-tuning
 #   loki_route_witness: daniel-box's witness is the loki-route-witness component since H7.36;
 #           daniel-server keeps the Ansible-era timer until its package moves it.
+#   fail2ban  the fail2ban group (H7.7a): fail2ban, rkhunter, AIDE, postfix and accounting:
+#           hosts/components/fail2ban, integrity-scans, postfix and accounting
+#   maintenance  the weekly reboot, the firmware update, apt autoremove, dpkg purge and the
+#           Docker image prune (H7.7d): hosts/components/host-maintenance, and pi-docker's prune
+#   ufw     the default policies, the SSH rules and the enable (H7.7g): hosts/components/ssh-firewall
+#           and each host package's own `ufw:` rules
 initial_setup_packaged_hosts:
   apt: [daniel-pi, daniel-server, daniel-box]
   sshd: [daniel-pi, daniel-server, daniel-box]
   sysctl: [daniel-pi, daniel-server, daniel-box]
   loki_route_witness: [daniel-box]
+  fail2ban: [daniel-pi]
+  maintenance: [daniel-pi]
+  ufw: [daniel-pi]
+
+# Where the rkhunter and AIDE scripts source kuma-push-lib.sh and homelab-check-lib.sh from.
+# crons.yml installs both under /usr/local/lib; the integrity-scans host component sets
+# /usr/lib/homelab, where the kuma-push and check-lib components ship them.
+initial_setup_host_lib_dir: /usr/local/lib

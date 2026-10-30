@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Weekly AIDE file-integrity check — managed by Ansible (initial_setup role); edits overwritten.
+# Weekly AIDE file-integrity check — rendered by the initial_setup role, or by the integrity-scans
+# host component on a host whose package owns it; edits overwritten.
 #
 # Usage: aide-check.sh [-h|--help]
-# Takes no arguments. Cron job "Weekly AIDE file integrity check" runs it as root on every host,
-# Monday 03:00. It runs `aide --check` against /var/lib/aide/aide.db at idle CPU and IO priority,
-# writes the report to the journal under the `aide` tag, writes the verdict to the node_exporter
-# textfile as check `aide-check`, and pushes it to this host's "AIDE Integrity (<host>)" Kuma
-# monitor using the token in /etc/homelab/aide-kuma-push.env. Running it by hand is safe, but it
-# takes as long as the cron run and it pushes.
+# Takes no arguments. Cron job "Weekly AIDE file integrity check", or homelab-aide-check.timer on
+# a packaged host, runs it as root, Monday 03:00. It runs `aide --check` against
+# /var/lib/aide/aide.db at idle CPU and IO priority, writes the report to the journal under the
+# `aide` tag, writes the verdict to the node_exporter textfile as check `aide-check`, and pushes it
+# to this host's "AIDE Integrity (<host>)" Kuma monitor using the token in
+# /etc/homelab/aide-kuma-push.env or the unit's credential. Running it by hand is safe, but it
+# takes as long as the scheduled run and it pushes.
 #
 # WHY A SCRIPT (#4594). The cron used to pipe `aide --check` straight into `logger -t aide`. The
 # pipeline's exit status was logger's, and nothing read the tag, so every host exited
@@ -29,13 +31,13 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t aide-check "kuma-push-lib.sh missing — run initial_setup on this host"
+source {{ initial_setup_host_lib_dir }}/kuma-push-lib.sh || {
+  logger -t aide-check "kuma-push-lib.sh missing — run initial_setup or install the host package"
   exit 1
 }
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t aide-check "homelab-check-lib.sh missing — run initial_setup on this host"
+source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
+  logger -t aide-check "homelab-check-lib.sh missing — run initial_setup or install the host package"
   exit 1
 }
 
@@ -59,8 +61,14 @@ REPORT_MAX_LINES=2000
 # Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
 # local account.
 AIDE_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r /etc/homelab/aide-kuma-push.env ]] && . /etc/homelab/aide-kuma-push.env
+# A packaged unit passes the token as the credential `aide_push_token`; an Ansible-run host
+# sources the env file instead.
+if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/aide_push_token" ]]; then
+  AIDE_PUSH_TOKEN="$(<"$CREDENTIALS_DIRECTORY/aide_push_token")"
+else
+  # shellcheck source=/dev/null
+  [[ -r /etc/homelab/aide-kuma-push.env ]] && . /etc/homelab/aide-kuma-push.env
+fi
 
 # Logs the verdict, then pushes it. The `|| logger` inside kuma_push only fires when the curl
 # fails, so a successfully-pushed DOWN would otherwise leave no durable record and

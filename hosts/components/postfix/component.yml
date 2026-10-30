@@ -1,0 +1,20 @@
+# Postfix as a send-only local mailer (H7.7a, docs/target-architecture/host/h7-delete-ansible.md,
+# *In-place edits*). initial_setup edited three lines of /etc/postfix/main.cf with lineinfile. The
+# file belongs to no package: postfix's maintainer scripts generate it, so it takes the line arm.
+# Each regexp is the lineinfile task's, so the first reconcile adopts the line Ansible wrote.
+#
+# - `inet_interfaces = loopback-only` removes the 0.0.0.0:25 listener. Postfix delivers only local
+#   system mail (cron, AIDE and rkhunter to root), and `mynetworks` already refuses relaying.
+# - `smtpd_banner` hides the OS, and `disable_vrfy_command` stops address probing.
+#
+# `inet_interfaces` rebinds sockets, which a reload does not do, so the three lines share one
+# `try-restart`. Activation is keyed by path, and a restart also covers the two reloadable lines.
+#
+# The component declares no Depends on postfix, because the Ansible tasks never installed it
+# either, and a Depends would run postfix's debconf mail-type question on a rebuilt host. A host
+# that lacks /etc/postfix fails the line arm, which holds it, so a host lists this component only
+# while it runs postfix.
+lines:
+  - {path: /etc/postfix/main.cf, line: "inet_interfaces = loopback-only", regexp: '^inet_interfaces\s*=', activate: "try-restart:postfix.service"}
+  - {path: /etc/postfix/main.cf, line: "smtpd_banner = $myhostname ESMTP", regexp: '^smtpd_banner\s*=', activate: "try-restart:postfix.service"}
+  - {path: /etc/postfix/main.cf, line: "disable_vrfy_command = yes", regexp: '^disable_vrfy_command\s*=', activate: "try-restart:postfix.service"}

@@ -1,0 +1,10 @@
+# Shipped by the host package's host-maintenance component. Started by homelab-apt-autoremove.timer.
+[Unit]
+Description=Remove orphaned packages and write the apt-autoremove textfile verdict
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=apt-autoremove
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin HOMELAB_LIB_DIR=/usr/lib/homelab DEBIAN_FRONTEND=noninteractive
+ExecStart=/usr/lib/homelab/host-maintenance apt-autoremove

@@ -13,6 +13,11 @@ auditd, so a stub unit stands in. The node exporter unit listens on the Pi's LAN
 the container lacks, so a drop-in swaps its `ExecStart=` for `sleep`; the unit's tmpfiles
 `ExecStartPre=` still runs. The Pi already holds the `node_exporter` user, which the users arm
 adopts by uid.
+
+H7.30 adds two. The Pi's package declares ufw rules, so reconcile's ufw arm runs: the seed installs
+the real ufw and enables it, as the live Pi's firewall is, in the privileged container's own
+network namespace. It edits /etc/postfix/main.cf and restarts postfix, which the container lacks,
+so a stub unit and an empty main.cf stand in.
 """
 
 UFW_SYSCTL = "/etc/ufw/sysctl.conf"
@@ -24,7 +29,13 @@ EXPORTER_DROPIN = "[Service]\\nExecStart=\\nExecStart=/bin/sleep infinity\\n"
 
 
 def seed_pi_host(c) -> None:
-    """Seed the Pi's host state in container `c`: ufw, sshd, auditd, the exporter and two mounts."""
+    """Seed in container `c` the host state the live Pi has and the container lacks."""
+    # Before the sysctl seed below, so dpkg installs ufw's own conffile rather than meeting a
+    # file it does not know and stopping at its conffile prompt.
+    c.ok(
+        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ufw"
+        " && ufw --force enable"
+    )
     c.ok(
         f"mkdir -p /etc/ufw && [ -e {UFW_SYSCTL} ] || printf '{UFW_STOCK}' > {UFW_SYSCTL}"
     )
@@ -39,4 +50,6 @@ def seed_pi_host(c) -> None:
     c.ok(
         f"printf '{EXPORTER_DROPIN}' > /etc/systemd/system/node_exporter.service.d/10-test.conf"
     )
+    c.ok(f"printf '{AUDITD_STUB}' > /etc/systemd/system/postfix.service")
+    c.ok("mkdir -p /etc/postfix && touch /etc/postfix/main.cf")
     c.ok("systemctl daemon-reload")

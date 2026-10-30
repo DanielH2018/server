@@ -1,0 +1,11 @@
+# Shipped by the host package's integrity-scans component with its enable link. Wednesday 02:00,
+# the cron's slot, staggered off the Monday AIDE check, which runs for over an hour on the Pi.
+[Unit]
+Description=Run the weekly rkhunter scan on Wednesday at 02:00
+
+[Timer]
+OnCalendar=Wed *-*-* 02:00:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
