@@ -230,6 +230,47 @@ tests:
             exp_annotations:
               summary: "daniel-box reports no fleet cgroup metrics."
               description: "daniel-box is scraped but publishes no claude_cgroup_* series for fleet, so that cgroup is not being checked. Read /var/lib/node-exporter- textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host."
+  # ClaudeCgroupNotReporting on a crash-looping claude-rc.service: its cgroup, and so its
+  # series, is back every other minute. No 10m run is ever unbroken, and the alert still fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="fleet", kind="full", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="claude-rc", kind="full", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale'
+    alert_rule_test:
+      - alertname: ClaudeCgroupNotReporting
+        eval_time: 20m
+        exp_alerts:
+          - exp_labels:
+              cgroup: claude-rc
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: "daniel-box reports no claude-rc cgroup metrics."
+              description: "daniel-box is scraped but publishes no claude_cgroup_* series for claude-rc, so that cgroup is not being checked. Read /var/lib/node-exporter- textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host."
+  # ClaudeCgroupNotReporting stays quiet through one 3-minute gap, a unit restart.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="fleet", kind="full", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x30'
+      - series: 'claude_cgroup_memory_pressure_stalled_usec_total{cgroup="claude-rc", kind="full", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x9 stale stale stale 1x17'
+    alert_rule_test:
+      - alertname: ClaudeCgroupNotReporting
+        eval_time: 15m
+        exp_alerts: []
+      - alertname: ClaudeCgroupNotReporting
+        eval_time: 20m
+        exp_alerts: []
   # HostTemperatureHot. Each limit source in order, held for 1h before the alert fires:
   # - box k10temp/Tctl declares nothing but is rated 100, so its limit is 90 and 91 fires.
   # - box's thermal zone at 80 sits under the flat 85 fallback. box's NVMe at 99 is excluded.

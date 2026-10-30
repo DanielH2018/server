@@ -194,20 +194,24 @@ groups:
             is the 2026-09-05 shape (#1243) while it is still only a stall.
       # Arm 3: an expected cgroup is missing for its host, per (origin, cgroup) as in
       # CLAUDE_CGROUP_EXPECTED (#4870). ansible/tests/services/test_host_check_rule_literals.py
-      # holds the pairs equal to that env key.
+      # holds the pairs equal to that env key. `max_over_time(...[5m:1m])` holds the arm true
+      # through a crash-looping unit's brief reappearances, which reset a bare `for:` while the
+      # bridge's two sampled cycles still page (#6621). A gap under 5m stays quiet.
       - alert: ClaudeCgroupNotReporting
         expr: |
-          label_replace(
-            up{job="node", origin="daniel-box"} == 1
-          unless on (origin, instance)
-            claude_cgroup_memory_pressure_stalled_usec_total{origin="daniel-box", kind="full", cgroup="claude-rc"},
-            "cgroup", "claude-rc", "", "")
-          or
-          label_replace(
-            up{job="node", origin="daniel-box"} == 1
-          unless on (origin, instance)
-            claude_cgroup_memory_pressure_stalled_usec_total{origin="daniel-box", kind="full", cgroup="fleet"},
-            "cgroup", "fleet", "", "")
+          max_over_time((
+            label_replace(
+              up{job="node", origin="daniel-box"} == 1
+            unless on (origin, instance)
+              claude_cgroup_memory_pressure_stalled_usec_total{origin="daniel-box", kind="full", cgroup="claude-rc"},
+              "cgroup", "claude-rc", "", "")
+            or
+            label_replace(
+              up{job="node", origin="daniel-box"} == 1
+            unless on (origin, instance)
+              claude_cgroup_memory_pressure_stalled_usec_total{origin="daniel-box", kind="full", cgroup="fleet"},
+              "cgroup", "fleet", "", "")
+          )[5m:1m])
         for: 10m
         labels:
           severity: warning
@@ -221,11 +225,13 @@ groups:
             textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host.
       - alert: ClaudeCgroupNotReporting
         expr: |
-          label_replace(
-            up{job="node", origin="daniel-server"} == 1
-          unless on (origin, instance)
-            claude_cgroup_memory_pressure_stalled_usec_total{origin="daniel-server", kind="full", cgroup="fleet"},
-            "cgroup", "fleet", "", "")
+          max_over_time((
+            label_replace(
+              up{job="node", origin="daniel-server"} == 1
+            unless on (origin, instance)
+              claude_cgroup_memory_pressure_stalled_usec_total{origin="daniel-server", kind="full", cgroup="fleet"},
+              "cgroup", "fleet", "", "")
+          )[5m:1m])
         for: 10m
         labels:
           severity: warning
