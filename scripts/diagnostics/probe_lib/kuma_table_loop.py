@@ -8,6 +8,10 @@ The loop's entity line names its tile `{{ <row>.<field> | to_json }}`. A line-by
 sees one templated name there, which is no monitor at all, so `TableLoop` reads the rows the
 loop iterates and hands back one name per row.
 
+The loop may end in `if <row>.<field> not in ('a', 'b')`, which drops the rows named there:
+M6's batch A3 deletes three tiles that way before it deletes their rows (Cutover-a1), and
+`TableLoop` skips them too, so `kuma-drift` does not name a deleted tile missing.
+
 The ingress tiles' loop over `containers_list` was the second such loop until M4's PR 4
 (#5625) moved those probes to blackbox-exporter.
 """
@@ -31,6 +35,7 @@ _LOOP_RE = re.compile(
     r"{%-?\s*for\s+(\w+)\s+in\s+lookup\('file',\s*playbook_dir\s*~\s*'([^']+)'\)"
     r"\s*\|\s*py_table\('(\w+)'\)"
 )
+_EXCLUDE_RE = re.compile(r"\bif\s+(\w+)\.(\w+)\s+not\s+in\s+\(([^)]*)\)")
 _ENDFOR_RE = re.compile(r"{%-?\s*endfor\b")
 _ROW_NAME_RE = re.compile(r'"name":\s*\{\{\s*(\w+)\.(\w+)\b')
 
@@ -52,6 +57,12 @@ class TableLoop:
         if start := _LOOP_RE.search(line):
             source = (self.root / start.group(2).lstrip("/")).read_text()
             self.var, self.rows = start.group(1), py_table(source, start.group(3))
+            if skip := _EXCLUDE_RE.search(line):
+                if skip.group(1) == self.var:
+                    dropped = set(re.findall(r"""['"]([^'"]+)['"]""", skip.group(3)))
+                    self.rows = [
+                        r for r in self.rows if r[skip.group(2)] not in dropped
+                    ]
         elif _ENDFOR_RE.search(line):
             self.var, self.rows = None, []
 
