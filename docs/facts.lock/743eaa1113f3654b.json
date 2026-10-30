@@ -1,5 +1,5 @@
 {
-  "checksum": "a598b1fb9b148f7f0cef4573c7ac8f5c22b641032218a7d328c7956de70477f7",
+  "checksum": "9b9a853312585a2d049f93c0d578472a4d3c345d196deda49fca6d0b48653bf5",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Alert plane",
   "row": {
@@ -12,6 +12,7 @@
       "ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted": "38dd2c6b5053f1a6b54ff76b6a01e4996f6573a520223734a9b429fa2b49a639",
       "ansible/tests/services/test_blackbox_ingress_targets.py": "59f2afa32a9ef2b017253f431f7cfd19f3c0f495f99f57de38eb5000a2192d69",
       "ansible/tests/services/test_host_plane_rule_literals.py": "1dae79ebb97dfd357a5761d93902bd78e6e3c51d5f83e2a2e4673f8941077c72",
+      "ansible/tests/services/test_scrape_target_flap_rule.py": "43e97faef0f9d62de0a1bfa483c78eeccc96df0713501dddbaec616393f4b938",
       "ansible/tests/services/test_scrape_target_rule_jobs.py": "f6bdfb94920365ebc6be80b7869ef864e27ce88defb54076f12f6fd09b9f3a90",
       "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86",
       "docs/target-architecture/monitoring/m1-alertmanager.md": "8ce5bbad833af2f17f1389dc2f42dc8f0e352dab2c320e646ffb8f319c2e7a98",
@@ -20,6 +21,6 @@
       "scripts/validate/notification_renders.py:render_problems": "878ac2e910af92c705c09a01fde99e85b523f269ca4bc8811b024882ab5229b6"
     },
     "python": "3.14",
-    "verified_sha": "6b335e78d"
+    "verified_sha": "b1c450cf7"
   }
 }

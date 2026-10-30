@@ -170,7 +170,11 @@ moves. `homelab-reconcile-metrics.service` rewrites the reconcile file at boot, 
 `files/rules/scrape-targets.yaml` gives each rule a literal `service`, because a static scrape
 job has no other source for it. The last rule catches a job that none of the others names, with
 `service="unmapped"`. `ansible/tests/services/test_scrape_target_rule_jobs.py` fails until every
-rendered job is in exactly one named rule. These rules and `files/rules/log-pipeline.yaml` carry
+rendered job is in exactly one named rule. Each rule has a `ScrapeTargetFlapping` twin with
+the same job matcher and `service`. It pages a target that failed more than 30% of its scrapes
+over 30 minutes yet answered in the last 10, the flapping case the per-series 10-minute hold
+never fires on (#6626). `ansible/tests/services/test_scrape_target_flap_rule.py` holds the two
+sets equal. These rules and `files/rules/log-pipeline.yaml` carry
 `shadow` until M6's batch A3 cuts Kuma's scrape and log-shipper tiles over.
 `files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
 while its rule is still shadow, and the last M6 Phase A cutover deletes it.

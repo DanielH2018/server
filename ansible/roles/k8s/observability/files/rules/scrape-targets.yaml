@@ -350,6 +350,312 @@ groups:
             minutes, so its exporter is down or unreachable from Prometheus and its series have
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
+      # The flap arm (#6626). ScrapeTargetDown holds one series at `up == 0` for 10 minutes, so
+      # a target that fails for 1 to 4 minutes at a time never fires it. This arm reads the last
+      # 30 minutes instead: more than 30% of them failed, and the target answered at least once in
+      # the last 10, so a target held down hands over to ScrapeTargetDown rather than paging
+      # twice. One rolling-pod gap shorter than 9 minutes keeps the average at 0.7 or above, so it
+      # pages neither rule. Each rule's job matcher and `service` mirror one ScrapeTargetDown
+      # rule's, so ansible/tests/services/test_scrape_target_flap_rule.py holds the two sets equal.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[30m]) < 0.7 and max_over_time(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job=~"loki-homelab|alloy"}[30m]) < 0.7 and max_over_time(up{job=~"loki-homelab|alloy"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="alloy-pi"}[30m]) < 0.7 and max_over_time(up{job="alloy-pi"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: alloy
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job=~"node-pi|dockerd-pi|containerd-pi"}[30m]) < 0.7 and max_over_time(up{job=~"node-pi|dockerd-pi|containerd-pi"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="node"}[30m]) < 0.7 and max_over_time(up{job="node"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: node-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="gpu"}[30m]) < 0.7 and max_over_time(up{job="gpu"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: gpu-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job=~"deploy-pipeline|monitor-bridge"}[30m]) < 0.7 and max_over_time(up{job=~"deploy-pipeline|monitor-bridge"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: monitor-bridge
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="autofix-bridge"}[30m]) < 0.7 and max_over_time(up{job="autofix-bridge"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: autofix-bridge
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="flux"}[30m]) < 0.7 and max_over_time(up{job="flux"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: flux
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"}[30m]) < 0.7 and max_over_time(up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: crowdsec
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="traefik-k8s"}[30m]) < 0.7 and max_over_time(up{job="traefik-k8s"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: traefik
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="speedtest"}[30m]) < 0.7 and max_over_time(up{job="speedtest"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: speedtest
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="pihole"}[30m]) < 0.7 and max_over_time(up{job="pihole"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: pihole
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="uptime-kuma"}[30m]) < 0.7 and max_over_time(up{job="uptime-kuma"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: uptime-kuma
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="home-assistant"}[30m]) < 0.7 and max_over_time(up{job="home-assistant"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: home-assistant
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="nut"}[30m]) < 0.7 and max_over_time(up{job="nut"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: nut-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job=~"valheim-stats|terraria-stats"}[30m]) < 0.7 and max_over_time(up{job=~"valheim-stats|terraria-stats"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: game-stats
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="longhorn"}[30m]) < 0.7 and max_over_time(up{job="longhorn"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: longhorn
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="coredns-host"}[30m]) < 0.7 and max_over_time(up{job="coredns-host"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: coredns
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job="exportarr"}[30m]) < 0.7 and max_over_time(up{job="exportarr"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: exportarr
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"}[30m]) < 0.7 and max_over_time(up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: k3s
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) < 0.7 and max_over_time(up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: blackbox-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
+      - alert: ScrapeTargetFlapping
+        expr: avg_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) < 0.7 and max_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[10m]) == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: unmapped
+          shadow: "true"
+        annotations:
+          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          description: >-
+            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
+            over 30 minutes while answering in between, so it flaps rather than staying down.
+            Read the host's load and memory, then the exporter pod's restarts and log.
       # The bridge's two fail-closed floors, ported: CLUSTER_TARGETS_MIN visible series outside
       # daniel-server and TARGETS_MIN on it. A Prometheus that answers while its `up` vector has
       # emptied makes every rule above evaluate to nothing, which this rule reads as a fault.
