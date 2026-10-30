@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""The container case for the Pi's held Docker engine (#6590).
+
+H7's *Verification* names the proof: a dummy `docker-ce` at version A is installed and held, the
+real homelab-daniel-pi pins docker-ce to version B, and after a homelab-updater run docker-ce is
+still at A and `homelab_docker_engine_pending` reads 1. The package declares no engine Depends,
+so the updater never asks apt to move the engine, and the hold is apt's to keep.
+
+`scripts/validate/host_package_cases.py` runs it after its other cases. The case:
+
+  * builds docker-ce at A and B with `dpkg-deb` (`engine_debs`), B matching the real package's
+    docker-ce pin and A not;
+  * installs A and holds it, installs the real Pi package by hand, serves B beside the packages
+    the updater installs, runs the updater, and asserts the engine and the pending series
+    (`expect_held`);
+  * serves a red fixture, the real Pi package with `Depends: docker-ce (= B)`
+    (`depends_variant`), installs it with apt as the updater does, and records what apt did
+    with the hold (`red_outcome`): it refused the install, or it moved the engine.
+"""
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from renderer.renderer_lib import host as host_mode
+from validate.validate_lib import secrets_case
+from validate.validate_lib.host_container import PROM, CaseFailed, Container, expect
+from validate.validate_lib.host_fixtures import HOST, build, deb_version, publish
+
+ENGINE = "docker-ce"
+PINS = "/usr/lib/homelab/docker-engine.pins"
+UPDATER_UNIT = "homelab-updater.service"
+PENDING = f'homelab_docker_engine_pending{{host="{HOST}"}} 1'
+# The upstream version A carries, below any pin the real package can hold.
+HELD_UPSTREAM = "0.0.1"
+REFUSED = "refused"
+MOVED = "moved"
+NAME = "hold the Docker engine through an updater run"
+
+
+def engine_pin(package: host_mode.Package) -> str:
+    """The glob `package`'s pins file holds for docker-ce."""
+    rows = (row.split() for row in package.files[PINS][0].decode().splitlines())
+    (pin,) = [row[1] for row in rows if len(row) == 2 and row[0] == ENGINE]
+    return pin
+
+
+def engine_debs(out: Path, pin: str | None = None) -> list[Path]:
+    """Build dummy docker-ce debs at A and B under `out`.
+
+    Args:
+        out: A directory that does not exist yet.
+        pin: The docker-ce glob B must match; None reads it from the real Pi package.
+
+    Returns:
+        [A, B]. B is the pin with its revision glob set to 1; A is HELD_UPSTREAM in the same
+        epoch and suffix, which sorts below B and matches no pin.
+    """
+    pin = pin or engine_pin(host_mode.render_host(HOST))
+    epoch, rest = pin.split(":", 1)
+    suffix = rest.split("-*", 1)[1]
+    held = f"{epoch}:{HELD_UPSTREAM}-1{suffix}"
+    offered = pin.replace("*", "1")
+    out.mkdir(parents=True)
+    debs = []
+    for version in (held, offered):
+        root = out / f"root-{version}"
+        (root / "DEBIAN").mkdir(parents=True)
+        (root / "DEBIAN" / "control").write_text(
+            f"Package: {ENGINE}\nVersion: {version}\nArchitecture: all\n"
+            "Maintainer: homelab <t@example.invalid>\n"
+            "Description: Fixture stand-in for the held Docker engine\n"
+        )
+        # dpkg-deb refuses a control directory a restrictive umask left group-writable.
+        for path in [root, *root.rglob("*")]:
+            path.chmod(0o755 if path.is_dir() else 0o644)
+        deb = out / f"{ENGINE}_{version.split(':', 1)[1]}_all.deb"
+        subprocess.run(
+            ["dpkg-deb", "--root-owner-group", "--build", str(root), str(deb)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            timeout=60,
+        )
+        debs.append(deb)
+    return debs
+
+
+def depends_variant(
+    out: Path, version: str, sops_dir: Path = host_mode.HOST_SOPS
+) -> Path:
+    """Render the real Pi package with one more Depends, `docker-ce (= version)`; return it.
+
+    `sops_dir` holds the ciphertext the package carries.
+    """
+    package = host_mode.render_host(HOST, sops_dir=sops_dir)
+    package.depends.append(f"{ENGINE} (= {version})")
+    host_mode.write_packages([package], out)
+    return out / package.directory
+
+
+def red_outcome(held: str, after: str, apt_ok: bool) -> str:
+    """Name what apt did with the hold when a Depends asked for another engine version.
+
+    Args:
+        held: The version docker-ce was held at.
+        after: docker-ce's installed version after the install, or "" when not installed.
+        apt_ok: Whether apt exited 0.
+
+    Returns:
+        MOVED when docker-ce left the held version, REFUSED when apt failed and left it.
+
+    Raises:
+        CaseFailed: apt succeeded with docker-ce still held, so the Depends never reached
+            apt's resolution of the hold.
+    """
+    if after != held:
+        return MOVED
+    if not apt_ok:
+        return REFUSED
+    raise CaseFailed(f"apt installed the red fixture with {ENGINE} still at {held}")
+
+
+def expect_held(held: str, installed: str, prom: str) -> None:
+    """Assert docker-ce is still at `held` and the prom reads the engine pending.
+
+    Args:
+        held: The version docker-ce was held at.
+        installed: What `dpkg-query -W docker-ce` read after the updater run.
+        prom: homelab_host.prom's text.
+
+    Raises:
+        CaseFailed: docker-ce moved or is gone, or the prom has no pending series reading 1.
+    """
+    expect(installed == held, f"{ENGINE} is at {installed or 'nothing'}, not {held}")
+    expect(PENDING in prom.splitlines(), f"the prom lacks {PENDING!r}:\n{prom}")
+
+
+def _engine(c: Container) -> str:
+    """docker-ce's version as dpkg holds it `ii `, or ""."""
+    out = c.sh(f"dpkg-query -W -f '${{db:Status-Abbrev}}${{Version}}' {ENGINE}").stdout
+    return out[3:] if out.startswith("ii ") else ""
+
+
+def _body(cases, c: Container) -> str:
+    """Run the green half and the red fixture; return the red fixture's outcome."""
+    build_root = cases.work / "build" / "engine"
+    held_deb, offered_deb = engine_debs(build_root / "debs")
+    for deb in (held_deb, offered_deb):
+        shutil.copy(deb, cases.work / "debs" / deb.name)
+    c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y /srv/debs/{held_deb.name}")
+    c.ok(f"apt-mark hold {ENGINE}")
+    held = _engine(c)
+    expect(bool(held), f"{ENGINE} did not install from {held_deb.name}")
+    secrets_case.seal_pi(cases, c)
+    labels = ("updater-head", "pi-head", *cases.tools)
+    debs = " ".join(f"/srv/debs/{cases.debs[label].name}" for label in labels)
+    c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
+    # Joins the reconcile the postinst queued, so the updater's own cannot merge into it.
+    c.ok("systemctl start homelab-reconcile.service")
+    served = [cases.debs[label] for label in labels]
+    publish(cases.work / "repo", [*served, offered_deb])
+    c.sh(f"systemctl start {UPDATER_UNIT}")
+    status = c.ok(f"systemctl show -P ExecMainStatus {UPDATER_UNIT}").strip()
+    expect(status == "0", f"the updater exited {status}")
+    expect_held(held, _engine(c), c.read(PROM))
+
+    version = f"{cases.versions['updater-head']}.8"
+    red = build(
+        depends_variant(build_root / "red", deb_version(offered_deb)),
+        version,
+        build_root / "red-deb",
+    )
+    red_deb = cases.work / "debs" / f"engine-red-{red.name}"
+    shutil.copy(red, red_deb)
+    publish(cases.work / "repo", [*served, offered_deb, red_deb])
+    apt = c.sh(
+        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y"
+        f" --no-install-recommends homelab-{HOST}"
+    )
+    return red_outcome(held, _engine(c), apt.returncode == 0)
+
+
+def run(cases) -> None:
+    """Boot a container, run the case, and record the verdict on `cases`."""
+    c = cases.boot("engine")
+    if c is None:
+        return
+    try:
+        outcome = _body(cases, c)
+    except (CaseFailed, subprocess.SubprocessError) as exc:
+        cases.failed.append(NAME)
+        print(f"[FAIL] {c.name}: {NAME}: {exc}", file=sys.stderr)
+        journal = c.sh(
+            f"journalctl -u {UPDATER_UNIT} -u homelab-reconcile.service -n 60"
+            " --no-pager -o short-monotonic"
+        ).stdout
+        print(f"::group::journal after {NAME}\n{journal}::endgroup::", file=sys.stderr)
+    else:
+        print(
+            f"[PASS] {c.name}: {NAME}: {ENGINE} stayed held and the engine reads pending;"
+            f" the red fixture's Depends on the offered version was {outcome}",
+            file=sys.stderr,
+        )
+    finally:
+        c.remove()

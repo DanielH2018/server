@@ -33,6 +33,9 @@ installs a package that owns a conffile, then the `conffile` fixture, whose line
 that conffile, and upgrades the owner twice under `--force-confold`: once with its conffile
 unchanged and once changed. Each upgrade records whether dpkg kept the local file or held the
 package back, and the line must survive to the next reconcile (#6088; `validate_lib/conffile_case.py`).
+Another holds a dummy docker-ce below the real Pi package's pin, runs the updater, and asserts the
+engine stays held and reads pending, then records what apt does with the hold when a red fixture
+of the Pi package Depends on the pinned version (#6590; `validate_lib/engine_case.py`).
 Another installs the three apt-source components over seeded copies of the files the roles
 wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). The last cases run
 `hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
@@ -89,7 +92,7 @@ from validate.validate_lib.host_container import (
     release_fetched,
     success_timestamp,
 )
-from validate.validate_lib import bootstrap_case, bootstrap_repo_case
+from validate.validate_lib import bootstrap_case, bootstrap_repo_case, engine_case
 from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
@@ -330,8 +333,7 @@ class Cases:
             kept = c.active("homelab-fixture-kept.service")
             expect(kept == "active", f"the kept unit is {kept}")
             expect(
-                "tree" in c.installed(),
-                "tree, a Depends of the head fixture, is not ii",
+                "tree" in c.installed(), "tree, the head fixture's Depends, is not ii"
             )
 
         def unit_change() -> None:
@@ -571,6 +573,7 @@ def main(argv: list[str] | None = None) -> int:
         run()
     secrets_case.run(cases)
     conffile_case.run(cases)
+    engine_case.run(cases)
     shadow_case.run(cases)
     repos_case.run(cases)
     bootstrap_case.run(cases)
