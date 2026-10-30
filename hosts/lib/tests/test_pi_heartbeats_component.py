@@ -103,8 +103,7 @@ def _runs_docker(script: str) -> bool:
 
 
 def test_each_service_that_runs_docker_grants_the_docker_group(package):
-    # H7.26 deleted docker_install's docker-group task, the only thing that added sys_user to
-    # `docker`, so the unit carries the grant (#6599).
+    # No task adds sys_user to `docker`, so each unit that needs the group grants it.
     runs_docker = []
     for name in package.units():
         if not name.startswith("homelab-pi-") or not name.endswith(".service"):
