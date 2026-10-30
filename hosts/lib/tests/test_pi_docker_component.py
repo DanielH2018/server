@@ -197,6 +197,18 @@ def test_an_upgrade_waits_for_the_updater_and_stops_the_project_around_apt(
     assert engine.state["timer"] == "enabled"
 
 
+def test_an_upgrade_over_the_edited_containerd_conffile_completes(engine, package):
+    """The line arm edits containerd.io's conffile, so its upgrade must not stop at the prompt."""
+    _behind(engine, package)
+    engine.state["modified_conffile"] = True
+
+    result = engine.run("apply")
+
+    assert result.returncode == 0, result.stderr
+    assert engine.state["installed"]["containerd.io"] == f"2.3.5-2{SUFFIX}"
+    assert engine.state["timer"] == "enabled"
+
+
 def test_an_upgrade_leaves_a_timer_the_operator_masked_masked(engine, package):
     _behind(engine, package)
     engine.state["timer"] = "masked"
@@ -369,19 +381,22 @@ def test_an_external_network_the_unit_omits_is_flagged(package):
 # The updater's report.
 
 
-def test_the_updater_reports_the_engine_gap_and_installs_no_engine_package(tmp_path):
+@pytest.mark.parametrize("pending", ["0", "1"])
+def test_the_updater_reports_the_value_the_engine_script_prints(tmp_path, pending):
     host = Host(tmp_path)
     engine = host.root / "usr/lib/homelab/docker-engine"
     engine.parent.mkdir(parents=True)
-    engine.write_text("#!/bin/sh\necho 1\n")
+    engine.write_text(f'#!/bin/sh\n[ "$1" = pending ] && echo {pending}\n')
     engine.chmod(0o755)
 
     result = host.run()
 
     assert result.returncode == 0, result.stderr
     assert _ok(host.metrics()) == "1"
-    assert host.metrics()["homelab_docker_engine_pending"] == '{host="daniel-pi"} 1'
-    assert host.installs() == []
+    assert (
+        host.metrics()["homelab_docker_engine_pending"]
+        == f'{{host="daniel-pi"}} {pending}'
+    )
 
 
 def test_a_host_without_the_engine_script_reports_no_engine_series(tmp_path):

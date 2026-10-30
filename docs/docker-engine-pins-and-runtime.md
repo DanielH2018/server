@@ -35,7 +35,7 @@ can never move it. A merged pin PR changes only `/usr/lib/homelab/docker-engine.
 updater then writes `homelab_docker_engine_pending{host="daniel-pi"} 1` beside its own series in
 `homelab_host.prom` until the operator starts the unit. ENFORCED by
 `hosts/lib/tests/test_pi_docker_component.py::test_the_package_cannot_move_the_engine_is_clean`
-and `hosts/lib/tests/test_pi_docker_component.py::test_the_updater_reports_the_engine_gap_and_installs_no_engine_package`.
+and `hosts/lib/tests/test_pi_docker_component.py::test_the_updater_reports_the_value_the_engine_script_prints`.
 
 ## The incident behind the hold
 

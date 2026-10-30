@@ -30,8 +30,9 @@ incident, the pin derivations and the Go runtime measurements.
 ## What stayed behind
 - The LAN's ufw rules for the dockerd and containerd metrics listeners stay Ansible-era rules
   until H7.30 declares the Pi's ufw rules.
-- The connecting user's `docker` group membership is host state the live Pi holds. The Pi
-  rebuild runbook (H7.43) adds it on a rebuilt Pi.
+- The connecting user's `docker` group membership is host state the live Pi holds. The Pi's
+  heartbeat services run as that user and need it, and nothing grants it on a rebuilt Pi yet
+  (#6599).
 - `initial_setup`'s `host-basics.yml` still holds the engine packages before its dist-upgrade.
 
 ## Teardown (`tasks/teardown.yml`, `has_docker: false`)

@@ -9,6 +9,8 @@ Each stub command runs `python3 _docker_engine_stub.py <command> <args>`, record
     timer: homelab-updater.timer's `is-enabled` answer, "enabled" or "masked".
     active: unit -> how many more `is-active` polls answer active.
     install_exit: what `apt-get install` exits; any other value than 0 installs nothing.
+    modified_conffile: a conffile on the host differs from the packaged copy, so an install
+        without `--force-confold` stops at dpkg's prompt, which fails with no terminal.
 """
 
 import json
@@ -40,7 +42,10 @@ def apt_get(state: dict, args: list[str]) -> int:
         return 0
     if state["install_exit"]:
         return state["install_exit"]
-    for spec in (a for a in args if "=" in a):
+    if state.get("modified_conffile") and "Dpkg::Options::=--force-confold" not in args:
+        print("dpkg: error: end of file on stdin at conffile prompt", file=sys.stderr)
+        return 100
+    for spec in (a for a in args if "=" in a and "::" not in a):
         package, _, version = spec.partition("=")
         state["installed"][package] = version
     return 0

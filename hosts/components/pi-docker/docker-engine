@@ -78,10 +78,15 @@ hold() {
     done
 }
 
+# The line arm edits containerd.io's conffile, so an upgrade that ships a changed packaged copy
+# reaches dpkg's conffile prompt. With no terminal dpkg would fail there, leaving every container
+# stopped. confold keeps the local file, and the next reconcile re-adds the block if it went.
 install_pinned() {
     wanted=$(specs) || return 1
     # shellcheck disable=SC2086 # one spec per word
-    apt-get install -y --no-install-recommends --allow-change-held-packages $wanted
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        --allow-change-held-packages \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold $wanted
 }
 
 # The interlock the updater needs: it and reconcile both write the `homelab` project.

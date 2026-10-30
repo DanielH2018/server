@@ -11,6 +11,8 @@ After=network-online.target
 Type=oneshot
 # This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
 SyslogLevel=notice
+# The recreate starts one container at a time on the 456 MB board, as homelab-compose.service does.
+Environment=COMPOSE_PARALLEL_LIMIT=1
 # The updater wait (51 min) plus the apt run and the project's recreate.
 TimeoutStartSec=90min
 ExecStart=/usr/lib/homelab/docker-engine apply
