@@ -1,6 +1,10 @@
 # The k3s server's same-path files (H6.4a, docs/target-architecture/host/h6-k3s-suc.md,
 # *Flags move from the unit to a package drop-in*). Ansible's tasks/server.yml wrote each one
-# until H6.4a deleted its task, so dpkg takes over the path on the first install.
+# until H6.4a deleted its task, so dpkg takes over the path on the first install. Since H6.4b
+# the component also carries the server's flags: `k3s_server_config` below, rendered into
+# config.yaml.d, and the `ExecStart` lines of 50-homelab.conf. Reverting H6.4b alone is safe:
+# dpkg removes the config drop-in and the `ExecStart` lines, and the installer's unit still
+# carries every flag.
 #
 # The package ships the files and applies nothing. Each file k3s reads at startup carries
 # `activate: manual:k3s.service`, which puts it in the hash homelab-k3s-restart takes
@@ -19,11 +23,86 @@ defaults:
   # The log file k3s writes (setup/k3s's `k3s_log_file`, which the agent still reads). A test
   # holds the two equal until H7 deletes the role.
   k3s_log_file: /var/log/k3s.log
-  # The two paths k3s_server_args names, shipped at the literal paths below (a `dst:` is not
-  # rendered). setup/k3s keeps its twins until H6.4b deletes
-  # k3s_server_args, and the shipped-paths test holds each copy equal to its twin.
+  # The two paths `kube-apiserver-arg` names below, shipped at the literal paths under `files:`
+  # (a `dst:` is not rendered). The shipped-paths test holds each flag value to a shipped file.
   k3s_audit_policy_path: /var/lib/rancher/k3s/server/audit.yaml
   k3s_authentication_config_path: /var/lib/rancher/k3s/server/authentication-config.yaml
+  # Audit log rotation, and it is not optional. An unrotated audit log grows without bound on
+  # the disk `disk-health.sh` watches. A Metadata-level policy on a cluster this chatty writes a
+  # steady stream of entries, so the apiserver's own rotation keeps the control-plane disk from
+  # filling. 5 x 100 MiB bounds the log at about 500 MiB. Only the flags below read these.
+  k3s_audit_log_maxage: 30       # days a rotated file is kept
+  k3s_audit_log_maxbackup: 5     # rotated files kept
+  k3s_audit_log_maxsize: 100     # MiB before rotating
+  # The audit flags, armed by `k3s_audit_log_enabled` in group_vars/all.yml. loki-homelab reads
+  # the same switch and `k3s_audit_log_path` to tail the file, so neither moves here.
+  k3s_server_audit_args:
+    - "audit-policy-file={{ k3s_audit_policy_path }}"
+    - "audit-log-path={{ k3s_audit_log_path }}"
+    - "audit-log-maxage={{ k3s_audit_log_maxage }}"
+    - "audit-log-maxbackup={{ k3s_audit_log_maxbackup }}"
+    - "audit-log-maxsize={{ k3s_audit_log_maxsize }}"
+  # The k3s server's flags (H6.4b). templates/50-homelab.yaml.j2 renders this mapping as
+  # /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and 50-homelab.conf runs a bare
+  # `k3s server`, so this mapping is the server's whole configuration. A key is a flag name
+  # without `--`, and a list is a repeated flag. A key whose value is `false` is left out of the
+  # file. A change here changes the restart hash, so the next window restarts k3s once.
+  #
+  #   cluster-init       embedded etcd from day one. Not a one-way door (k3s converts
+  #                      SQLite->etcd on restart with this flag), but it saves a control-plane
+  #                      restart if a third node is ever added.
+  #   disable            traefik: the bundled Traefik cannot carry the real config (the CrowdSec
+  #                      Yaegi plugin, Authelia forwardauth, the raw-TCP Terraria entrypoint,
+  #                      Cloudflare trustedIPs). servicelb: klipper-lb fights MetalLB for
+  #                      LoadBalancer Services. local-storage: the bundled local-path
+  #                      provisioner ships a SECOND default StorageClass next to longhorn. With
+  #                      two defaults an unclassed PVC's placement depends on the k8s version,
+  #                      and local-path data is node-local and has no backup. A kubectl patch
+  #                      that un-defaults it does not stick, because k3s reapplies its bundled
+  #                      manifests on every restart, so the addon is disabled outright.
+  #   node-ip,           pin the node's identity to the host's canonical address instead of
+  #   advertise-address  letting k3s autodetect it. A multi-homed host with equal-metric default
+  #                      routes lets k3s pick a removable NIC (daniel-box's USB adapter). When
+  #                      that NIC vanishes the node IP stops existing: kubelet fails "validate
+  #                      nodeIP: node IP ... not found in the host's network interfaces", and
+  #                      the kubernetes Service endpoint still points at the dead address, so
+  #                      every pod gets "no route to host" dialling 10.43.0.1 and Longhorn
+  #                      cannot provision a single volume.
+  #
+  #                      CHANGING THIS ON A LIVE CLUSTER IS NOT A RESTART. etcd stores the
+  #                      member's peer URL, and k3s validates its own membership against it on
+  #                      startup: "this server is not a member of the etcd cluster. Found
+  #                      [...=https://<old>:2380], expect: ...=https://<new>:2380". It then
+  #                      retries forever without signalling ready, so the restart hangs
+  #                      indefinitely (the unit is Type=notify with TimeoutStartSec=0). Repair
+  #                      with `k3s server --cluster-reset`, or wipe and re-run k3s-bringup.yml.
+  #   kubelet-arg        the two unsafe sysctls wg-easy needs; setup/k3s's defaults say why.
+  #   secrets-encryption the apiserver encrypts Secrets on write. setup/k3s keeps
+  #                      `k3s_secrets_encryption` for server.yml's status and rotate-keys tasks
+  #                      until H7, and a test holds the two equal. setup/k3s's defaults explain
+  #                      why arming the flag is only half the job.
+  #   etcd-expose-metrics  gated on the single switch in group_vars/all.yml, which the
+  #                      Prometheus etcd scrape job also reads.
+  #   kube-apiserver-arg the audit flags above, then the authentication config. That file
+  #                      configures the JWT authenticator, which is mutually exclusive with the
+  #                      --oidc-* flags: passing both makes the API server refuse to start.
+  #
+  # ENFORCED: ansible/tests/setup/test_k3s_server_flags_migration.py holds the rendered flags
+  # equal to the ones `k3s_server_args` passed before this file existed.
+  k3s_server_config:
+    cluster-init: true
+    disable:
+      - traefik
+      - servicelb
+      - local-storage
+    write-kubeconfig-mode: "0640"
+    node-ip: "{{ server_ip }}"
+    advertise-address: "{{ server_ip }}"
+    kubelet-arg:
+      - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
+    secrets-encryption: true
+    etcd-expose-metrics: "{{ k3s_etcd_expose_metrics }}"
+    kube-apiserver-arg: "{{ (k3s_server_audit_args if k3s_audit_log_enabled else []) + ['authentication-config=' ~ k3s_authentication_config_path] }}"
   # The read-only ServiceAccount the audit policy exempts. cluster-base holds the twins
   # `cluster_base_readonly_sa_*`; a test holds the three members of each triple equal.
   k3s_server_readonly_sa_name: homelab-readonly
@@ -47,6 +126,8 @@ defaults:
   k3s_oidc_groups_prefix: "oidc:"
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/50-homelab.conf, activate: "manual:k3s.service"}
+  # The server's flags. The only file in config.yaml.d, and nothing ships config.yaml.
+  - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0600", activate: "manual:k3s.service"}
   - {src: templates/audit-policy.yaml.j2, dst: /var/lib/rancher/k3s/server/audit.yaml, mode: "0600", activate: "manual:k3s.service"}
   - {src: templates/authentication-config.yaml.j2, dst: /var/lib/rancher/k3s/server/authentication-config.yaml, mode: "0600", activate: "manual:k3s.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s.service"}

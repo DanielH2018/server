@@ -42,20 +42,13 @@
     checksum: "sha256:{{ k3s_install_script_sha256 }}"
   become: true
 
-# The audit log directory, audit policy, authentication config, registries.yaml and the logging
-# drop-in are the homelab-daniel-box package's since H6.4a (hosts/components/k3s-server), so no
-# task here writes them. The installer below names the audit policy and the authentication config
-# in its flags, and k3s refuses to start without them, so a host with no k3s yet needs the package's
-# files first. The package's CoreDNS marker is the exception: it belongs after the read in
-# coredns.yml. Both orders on a bare host are an attended procedure, which H6.4a does not change.
-
-- name: Read the installed k3s systemd unit
-  tags: [k3s_server]
-  ansible.builtin.slurp:
-    src: /etc/systemd/system/k3s.service
-  register: k3s_unit
-  become: true
-  failed_when: false
+# The audit log directory, audit policy, authentication config, registries.yaml, the unit drop-in
+# and the server's flags are the homelab-daniel-box package's (hosts/components/k3s-server): the
+# files since H6.4a, the flags since H6.4b. No task here writes them. The package's 50-homelab.conf
+# runs a bare `k3s server`, which reads its flags from config.yaml.d, so the installer below passes
+# only `server` and a host with no k3s yet needs the package installed first. The package's
+# CoreDNS marker is the exception: it belongs after the read in coredns.yml. Both orders on a bare
+# host are an attended procedure until H7 replaces this path.
 
 - name: Read the installed k3s binary
   tags: [k3s_server]
@@ -70,31 +63,40 @@
   failed_when: false
   check_mode: false
 
-- name: Install or reconfigure the k3s server
+- name: Read the packaged k3s server flags
   tags: [k3s_server]
-  # Guarded on the unit's arguments and on the binary's absence, not on the version: SUC's
-  # k3s-server Plan is the only writer of the server's version (H6.3c). A missing binary runs
-  # the full install. A missing argument re-runs the installer with INSTALL_K3S_SKIP_DOWNLOAD,
-  # which rewrites the unit and never the binary, so a flag change still reaches daniel-box
-  # until H6.4b moves the flags into a package.
-  #
-  # Quotes are stripped from the unit before matching because the installer single-quotes
-  # each argument. This detects arguments that are missing, which covers adding or changing
-  # a flag; it does not detect one that was *removed* from k3s_server_args, so a removal
-  # needs the installer re-run by hand. Deliberate: a stricter set comparison that
-  # misjudged the unit's quoting would restart k3s on every play.
+  ansible.builtin.stat:
+    path: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml
+  register: k3s_server_config_file
+  become: true
+  when: (k3s_installed_version.rc | default(1)) != 0
+
+- name: Fail if the host package has not installed the k3s server flags
+  tags: [k3s_server]
+  # The installer passes a bare `server`, so k3s started without this file would come up with
+  # the bundled Traefik, servicelb and local-path, an autodetected node IP, no secrets
+  # encryption and no audit log. Gated like the install below, so a converged host never reads it.
+  ansible.builtin.assert:
+    that: k3s_server_config_file.stat.exists
+    fail_msg: >-
+      /etc/rancher/k3s/config.yaml.d/50-homelab.yaml is missing on {{ inventory_hostname }}.
+      Install the homelab-{{ inventory_hostname }} package first: it ships the k3s server's
+      flags and every file they name (hosts/components/k3s-server).
+  when: (k3s_installed_version.rc | default(1)) != 0
+
+- name: Install the k3s server
+  tags: [k3s_server]
+  # Runs only when the binary is missing. SUC's k3s-server Plan is the only writer of the
+  # server's version (H6.3c), and the package is the only writer of its flags (H6.4b), so an
+  # installed host has nothing left for the installer to do. `server` alone: the package's
+  # 50-homelab.conf replaces the ExecStart the installer writes.
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-install.sh
   environment:
-    INSTALL_K3S_EXEC: "{{ k3s_server_args }}"
+    INSTALL_K3S_EXEC: server
     INSTALL_K3S_VERSION: "{{ k3s_version }}"
-    INSTALL_K3S_SKIP_DOWNLOAD: "{{ 'true' if (k3s_installed_version.rc | default(1)) == 0 else 'false' }}"
   become: true
-  when: >-
-    (k3s_server_args.split() | reject('equalto', 'server')
-     | difference(k3s_unit.content | default('') | b64decode | replace("'", "") | split())
-     | length > 0)
-    or ((k3s_installed_version.rc | default(1)) != 0)
+  when: (k3s_installed_version.rc | default(1)) != 0
   changed_when: true
   register: k3s_server_install
 
@@ -163,9 +165,9 @@
   ansible.builtin.assert:
     that: "'Encryption Status: Enabled' in k3s_secrets_encrypt_status.stdout"
     fail_msg: >-
-      --secrets-encryption is in k3s_server_args but the apiserver reports
-      {{ k3s_secrets_encrypt_status.stdout_lines[0] | default('no status') }}. The installer
-      may not have rewritten the unit — check ExecStart in /etc/systemd/system/k3s.service.
+      secrets-encryption is armed in k3s_server_config but the apiserver reports
+      {{ k3s_secrets_encrypt_status.stdout_lines[0] | default('no status') }}. Check that
+      /etc/rancher/k3s/config.yaml.d/50-homelab.yaml carries it and that k3s restarted since.
   when: k3s_secrets_encryption | bool
 
 - name: Rotate the encryption key and re-encrypt Secrets already stored in etcd
@@ -282,5 +284,5 @@
       - "'svclb' not in k3s_kube_system_pods.stdout"
       - "'local-path-provisioner' not in k3s_kube_system_pods.stdout"
     fail_msg: >-
-      k3s started with a bundled component the --disable flags in k3s_server_args should
-      have kept off — check /etc/systemd/system/k3s.service.
+      k3s started with a bundled component the `disable` list in k3s_server_config should
+      have kept off — check /etc/rancher/k3s/config.yaml.d/50-homelab.yaml.

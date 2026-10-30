@@ -13,63 +13,10 @@
 # reason for a crash loop is lost. Read this file, not `journalctl -u k3s`.
 k3s_log_file: /var/log/k3s.log
 
-# Flags for the k3s server install:
-#   --cluster-init       embedded etcd from day one. Not a one-way door (k3s converts
-#                        SQLite->etcd on restart with this flag) but it saves a
-#                        control-plane restart if a third node is ever added.
-#   --disable=traefik    the bundled Traefik cannot carry the existing config: CrowdSec
-#                        Yaegi plugin, Authelia forwardauth, the raw-TCP Terraria
-#                        entrypoint, Cloudflare trustedIPs.
-#   --disable=servicelb  k3s's klipper-lb fights MetalLB for LoadBalancer Services.
-#   --disable=local-storage
-#                        the bundled local-path provisioner shipped a SECOND default
-#                        StorageClass next to longhorn (two defaults make an unclassed PVC's
-#                        placement a k8s-version-dependent coin flip, and local-path data is
-#                        node-local + unbackuped). Un-defaulting it with kubectl patch does
-#                        not stick — k3s reapplies its bundled manifests on every restart —
-#                        so the addon is disabled outright.
-#   --node-ip,           pin the node's identity to the host's canonical address instead of
-#   --advertise-address  letting k3s autodetect it. A multi-homed host with equal-metric
-#                        default routes lets k3s pick a removable NIC (daniel-box's USB
-#                        adapter). When that NIC vanishes the node IP stops existing: kubelet
-#                        fails "validate nodeIP: node IP ... not found in the host's network
-#                        interfaces", and the kubernetes Service endpoint still points at the
-#                        dead address, so every pod gets "no route to host" dialling
-#                        10.43.0.1 and Longhorn cannot provision a single volume. A
-#                        control-plane node must not bind its identity to a removable NIC.
-#
-#                        CHANGING THIS ON A LIVE CLUSTER IS NOT A RESTART. etcd stores the
-#                        member's peer URL, and k3s validates its own membership against it
-#                        on startup: "this server is not a member of the etcd cluster.
-#                        Found [...=https://<old>:2380], expect: ...=https://<new>:2380".
-#                        It then retries forever without signalling ready, so `systemctl
-#                        restart k3s` — and any play that triggers one — hangs indefinitely
-#                        (the unit is Type=notify with TimeoutStartSec=0). Repair with
-#                        `k3s server --cluster-reset`, or wipe and re-run k3s-bringup.yml.
-k3s_server_args: >-
-  server --cluster-init --disable=traefik --disable=servicelb --disable=local-storage
-  --write-kubeconfig-mode 0640
-  --node-ip {{ server_ip }} --advertise-address {{ server_ip }}
-  --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
-  {% if k3s_secrets_encryption %}--secrets-encryption{% endif %}
-  {% if k3s_etcd_expose_metrics %}--etcd-expose-metrics{% endif %}
-  {% if k3s_audit_log_enabled %}
-  --kube-apiserver-arg=audit-policy-file={{ k3s_audit_policy_path }}
-  --kube-apiserver-arg=audit-log-path={{ k3s_audit_log_path }}
-  --kube-apiserver-arg=audit-log-maxage={{ k3s_audit_log_maxage }}
-  --kube-apiserver-arg=audit-log-maxbackup={{ k3s_audit_log_maxbackup }}
-  --kube-apiserver-arg=audit-log-maxsize={{ k3s_audit_log_maxsize }}
-  {% endif %}
-  --kube-apiserver-arg=authentication-config={{ k3s_authentication_config_path }}
-
-# ── why none of the arguments above is quoted ───────────────────────────────────────────
-# The install task's `when:` compares `k3s_server_args.split()` against the installed unit
-# with single quotes STRIPPED, because the installer single-quotes every argument it writes.
-# A quoted value here — `--kube-apiserver-arg='audit-log-path=…'` — therefore never matches
-# its own installed form, so the comparison reports a missing argument on every play and
-# reinstalls k3s each time, restarting the control plane. None of these values contains a
-# space, so none of them needs quoting. Keep it that way.
-# `ansible/tests/setup/test_k3s_control_plane_hardening.py` fails if a quote reappears.
+# The k3s server's flags are `k3s_server_config` in hosts/components/k3s-server/component.yml
+# since H6.4b, with the reason for each flag, the peer-URL trap among them. The package renders
+# them into /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and homelab-k3s-restart restarts k3s
+# once inside its window when they change. tasks/server.yml passes the installer a bare `server`.
 
 # ── secrets encryption at rest (G1) ─────────────────────────────────────────────────────
 # Off is k3s's default, which leaves every Secret stored in etcd as plaintext — and
@@ -85,9 +32,10 @@ k3s_server_args: >-
 # stolen disk, not against root on daniel-box. The snapshot is the copy that leaves the
 # house, which is the exposure that matters here.
 #
-# ROLLBACK: set false, then re-run the installer BY HAND. The install task detects an
-# argument that was added, never one that was removed — the same caveat the allow-listed
-# sysctls carry above.
+# The flag itself is `secrets-encryption` in `k3s_server_config`
+# (hosts/components/k3s-server/component.yml, H6.4b). This key stays for server.yml's status and
+# rotate-keys tasks until H7, and ansible/tests/setup/test_k3s_control_plane_hardening.py holds
+# the two equal. ROLLBACK: set both false in one PR; the next restart window applies it.
 k3s_secrets_encryption: true
 
 # ── the API server trusts Authelia as an OIDC provider ─────────────────────────────────
@@ -107,13 +55,11 @@ k3s_secrets_encryption: true
 # THE TWO ARE MUTUALLY EXCLUSIVE: "This flag is mutually exclusive
 # with the --oidc-* flags if the file configures the JWT Token authenticator"
 # (kube-apiserver flag reference). Passing both makes the API server refuse to start, which
-# on this Type=notify unit is the indefinite hang described above, not an error.
+# on this Type=notify unit is an indefinite hang (the node-ip note in the component), not an error.
 #
-# ADDING THESE RESTARTS THE CONTROL PLANE. The install task above re-runs get.k3s.io when
-# k3s_server_args gains an argument, and the installer rewrites the unit and restarts k3s.
-# That is a routine event on this host, but it is not a no-op, and
-# `k3s-bringup.yml` is in `_BROAD_MANUAL_PREFIXES` (deploy_changes.py) precisely so nothing
-# automated ever applies it.
+# CHANGING THE FLAG OR THE FILE RESTARTS THE CONTROL PLANE. Both are daniel-box's package's
+# (hosts/components/k3s-server), and homelab-k3s-restart restarts k3s once inside its window
+# when either changes. That is a routine event on this host, but it is not a no-op.
 #
 # A WRONG ISSUER VALUE DOES NOT LOCK YOU OUT, and the failure mode is worth stating exactly
 # because it is easy to over-fear. An unreachable or misspelled issuer leaves the API server
@@ -125,25 +71,17 @@ k3s_secrets_encryption: true
 # than the flags would be. The API server VALIDATES this file at startup and refuses to
 # start when it fails validation, so a schema error wedges the node: the k3s unit is
 # Type=notify with TimeoutStartSec=0, so `systemctl restart k3s` hangs indefinitely rather
-# than failing — the same hang the --node-ip comment above describes. The validation is
+# than failing — the same hang the component's node-ip note describes. The validation is
 # stricter than it looks; `prefix` alone has two rules the flag path did not have (see the
 # template). `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` renders and shape-checks
 # the component's template for that reason. Read `/var/log/k3s.log` (not `journalctl -u k3s`, which keeps none of
 # k3s's own lines — see k3s_log_file) before walking away.
 #
-# ROLLBACK IS BY HAND. The install task's guard detects an argument that was ADDED and never one
-# that was REMOVED, so deleting the one flag below adds nothing, the guard reads false and the
-# unit keeps it. Re-run /usr/local/bin/k3s-install.sh with the new INSTALL_K3S_EXEC. Do NOT
-# hand-edit the unit to "help" this along.
 
 # The `k3s_oidc_*` keys (both Authelia issuers, the client id, the two claims and the groups
 # prefix) moved to hosts/components/k3s-server/component.yml in H6.4a, with the template that
-# was their only reader. The long account of the 421 trap and the recovery is there too.
-#
-# Where the authentication config is written, read by the apiserver ONCE at startup. The package
-# ships it at this path (H6.4a), and `k3s_server_args` still names it until H6.4b deletes both.
-# ansible/tests/setup/test_k3s_server_component.py holds this copy equal to the component's.
-k3s_authentication_config_path: /var/lib/rancher/k3s/server/authentication-config.yaml
+# was their only reader. The long account of the 421 trap and the recovery is there too. The
+# file's path, `k3s_authentication_config_path`, moved there in H6.4b with the flag naming it.
 
 # ── apiserver audit logging (G2/G3) ─────────────────────────────────────────────────────
 # k3s writes no audit log by default, so there is no record of API writes at all. This
@@ -151,30 +89,14 @@ k3s_authentication_config_path: /var/lib/rancher/k3s/server/authentication-confi
 # several of those containers mount Longhorn PVCs — the controls that make that acceptable
 # are all preventive, with nothing underneath them to answer "which session did this".
 #
-# ORDER IS LOAD-BEARING. The apiserver reads the policy file at STARTUP and refuses to come
-# up if it is missing, so the log directory and the policy must both exist before the
-# installer rewrites the unit and restarts k3s. server.yml creates them immediately before
-# the install task for exactly that reason; moving them after it wedges the control plane on
-# the one node that also serves LAN DNS.
-#
-# ROLLBACK: same as secrets encryption — set false and re-run the installer by hand.
+# The apiserver reads the policy file at STARTUP and refuses to come up if it is missing. The
+# policy, its log directory, the audit flags and their rotation keys are all daniel-box's
+# package's (hosts/components/k3s-server) since H6.4b, so one install brings them together.
 #
 # k3s_audit_log_enabled, k3s_audit_log_dir and k3s_audit_log_path live in
 # inventory/group_vars/all.yml, NOT here: loki-homelab's promtail config reads them to tail
 # the file, and a role default is invisible to another role's templates. Same reason
 # k3s_metallb_ingress_vip sits there.
-
-# The policy the apiserver reads at startup. The package ships it at this path (H6.4a), and
-# `k3s_server_args` still names it until H6.4b deletes both; the component holds a twin.
-k3s_audit_policy_path: /var/lib/rancher/k3s/server/audit.yaml
-
-# Rotation, and it is not optional. An unrotated audit log grows without bound on the disk
-# `disk-health.sh` watches at k3s_disk_max_pct — a Metadata-level policy on a cluster this
-# chatty produces a steady stream of entries, so the apiserver's own rotation is what keeps
-# the control-plane disk from filling. 5 x 100 MiB bounds the log at ~500 MiB.
-k3s_audit_log_maxage: 30       # days a rotated file is kept
-k3s_audit_log_maxbackup: 5     # rotated files kept
-k3s_audit_log_maxsize: 100     # MiB before rotating
 
 # ── why two unsafe sysctls are allow-listed ─────────────────────────────────────────────
 # net.ipv4.ip_forward (wg-easy): the wg-easy SERVER routes
@@ -201,8 +123,7 @@ k3s_audit_log_maxsize: 100     # MiB before rotating
 # one component (roles/k8s/dri-device-plugin) and qbittorrent — which handles arbitrary torrent
 # payloads — is the worst place to add a second.
 #
-# REMOVING THIS NEEDS A MANUAL INSTALLER RE-RUN. The install task above detects an argument
-# that was ADDED but not one that was removed; see its comment.
+# The flag is `kubelet-arg` in `k3s_server_config` (hosts/components/k3s-server/component.yml).
 
 # Whether joined agent nodes participate in Longhorn replica scheduling, so daniel-server holds
 # the second replica of every volume. The join window keeps it off: agent_verify patches
@@ -451,7 +372,7 @@ k3s_release_staleness_grace_minutes: 60
 # declared state drift.
 #
 # DELIBERATELY A CRON, NOT A SERVER FLAG. `--etcd-s3` and friends can be set on the k3s server,
-# but changing k3s_server_args re-runs the install script and restarts the control plane — on a
+# but changing `k3s_server_config` restarts the control plane at the next window — on a
 # cluster with MetalLB ETP-Local VIP pinning, with Pi-hole
 # serving LAN DNS from it. `k3s etcd-snapshot save --s3 ...` takes the identical flag surface as
 # a one-shot against the running server (verified against `k3s etcd-snapshot save --help`,
