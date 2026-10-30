@@ -47,7 +47,7 @@ def check_kubelet_plugin_readonly(cfg: Config, src: Sources) -> tuple[bool, str]
     fault on daniel-box behind a green tile — the exact mistake HOST_ORIGINS_MIN was added to
     stop for check_disk/check_mem. An absent series is genuinely healthy here (no CSI global
     mount is read-only), unlike the Longhorn/PVC arms above: node-exporter being entirely down
-    is check_targets_down's/check_disk's job, not this one's.
+    is ScrapeTargetDown's/check_disk's job, not this one's.
     """
     sel = bridge.net.host_metric_sel(cfg, 'mountpoint=~"/var/lib/kubelet/plugins/.*"')
     vec = src.prom_vector("node_filesystem_readonly%s == 1" % sel)

@@ -93,11 +93,6 @@ CHECKS: tuple[PushCheck, ...] = (
         description="cAdvisor via monitor-bridge: a container pinned at its CPU limit for 3 cycles (~15m). Raise the limit in its role or accept it; short bursts never page.",
     ),
     PushCheck(
-        name="targets", fn=cluster.check_targets_down, token="monitor_bridge_targets_push_token",
-        kuma_id="monitor-bridge-targets", display="Scrape Targets", status_group="Observability", gate="prometheus",
-        description="monitor-bridge reads `up == 0` on daniel-server's scrape jobs every 5 min. DOWN names the dead job. An exporter that is up but missing a collector is not caught here; that is Root Disk's and Memory's census floor.",
-    ),
-    PushCheck(
         name="traefik5xx", fn=cluster.check_traefik_5xx, token="monitor_bridge_traefik_push_token",
         kuma_id="monitor-bridge-traefik", display="Traefik 5xx", status_group="Observability", gate="prometheus",
         description="monitor-bridge: a backend's 5xx share over 5 min per Traefik service, behind a TRAEFIK_MIN_RPS volume floor. DOWN names the erroring service. Loki `{container=\"traefik\"}` has the status codes; the backend's own log has the cause.",
@@ -216,12 +211,6 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="k3s-speedtest", display="k3s Speedtest", status_group="Services", gate="startup_grace",
         description="monitor-bridge reads the newest speedtest-tracker result every 5 min; the app itself runs about every 6 h. DOWN means the last run is older than 8 h, did not complete, or downloaded under 100 Mbps; an unreachable API is tolerated for 2 cycles. Open the speedtest UI and check its scheduler and last result.",
     ),
-    # The token's SOPS name predates the Alloy cutover; renaming a secret is a rotation.
-    PushCheck(
-        name="shipper_dropped", fn=logs.check_shipper_dropped, token="monitor_bridge_promtail_dropped_push_token",
-        kuma_id="monitor-bridge-promtail-dropped", display="Log Shipper Dropped Entries", status_group="Observability", gate="prometheus",
-        description="Alloy dropped entries client-side or Loki discarded them server-side, over 3000 in an hour, or the OTel collector failed to export telemetry at all in the last 15 min, or Tempo's blocklist poll failed in the last 15 min (stored traces unsearchable; the message names the fix). `too_far_behind` after a shipper restart is a re-tail, not loss; anything else is throughput or limits.",
-    ),
     # #1869: kuma-push-lib.sh logs a lost push and returns 0, so a lost DOWN surfaced only at the
     # tile's deadline, a day late for the daily producers. Reads that log line out of Loki and
     # pages only when a sibling cron's push landed in the same window, or when Kuma itself
@@ -261,9 +250,6 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="monitor-bridge-b2-storage", display="B2 Free Tier Headroom", status_group="Backups & Storage", gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering",
         description="monitor-bridge reads B2's bucket usage against the free tier, gated behind B2 Reachable so a cap incident pages once. DOWN: storage past the threshold. A drain is nearly free; a prune pays per deleted backup, so read longhorn-backup-tiering before deleting.",
     ),
-    # cluster_targets and pvc_fullness sat behind a second gate until #2825 folded it into
-    # `prometheus`. Each keeps its own fail-closed floor for "Prometheus answers but
-    # kube-state-metrics or the kubelet stats are not scraped", which no gate can see.
     # The Kubernetes arms of the old k8s_workloads row now live in the k8s-workloads rules. This
     # row keeps only the log-pattern arm, which reads Loki; M6's batch A7 ports it to loki-homelab.
     # `startup_grace` rather than a gate: the row reads no Prometheus, and the arm fails open on a
@@ -272,11 +258,6 @@ CHECKS: tuple[PushCheck, ...] = (
         name="workload_log_errors", fn=logs.check_workload_log_errors, token="monitor_bridge_k8s_workloads_push_token",
         kuma_id="monitor-bridge-k8s-workloads", display="Workload Log Errors", status_group="Cluster Health", gate="startup_grace",
         description="Loki via monitor-bridge: a container logged more than LOG_ERROR_MAX (20) lines matching panic, fatal, traceback or out of memory in the last hour. The message names the container. The Kubernetes arms of the old k3s Workload Health tile are the k8s-workloads alert rules.",
-    ),
-    PushCheck(
-        name="cluster_targets", fn=cluster.check_cluster_targets, token="monitor_bridge_cluster_targets_push_token",
-        kuma_id="monitor-bridge-cluster-targets", display="Cluster Scrape Targets", status_group="Observability", gate="prometheus",
-        description="monitor-bridge reads `up` for every non-daniel-server scrape job via the cluster Prometheus, held 3 cycles so a rolling pod's scrape gap does not page. DOWN names the target that stayed down 15 min, or reports UNKNOWN when the `up` vector emptied.",
     ),
     # Gated because its absent-metric branch pages when the longhorn job dies, so a Prometheus
     # outage would page it a second time.

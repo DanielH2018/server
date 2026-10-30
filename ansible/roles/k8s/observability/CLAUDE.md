@@ -271,10 +271,10 @@ The stack can run for days fully green — every pod Ready, zero export failures
 heartbeat — while carrying no real signal. **Run `claude -p` on the quiet host before
 investigating its collector**, and read the logs before the metrics, not from counters alone.
 The four behaviours behind it are on the docs page.
-`telemetry-health.sh` checks OTLP reachability, and monitor-bridge's `with_export_failures`
+`telemetry-health.sh` checks OTLP reachability, and the `OtelCollectorExportFailing` rule
 arms export failures — neither can detect "nobody is using it". The heartbeat is a daniel-box
-cron that `roles/setup/claude_code` installs (H2.7), not this role. `with_tempo_poll_errors` pages
-when Tempo's blocklist poll fails: stored traces go unsearchable behind a Ready pod.
+cron that `roles/setup/claude_code` installs (H2.7), not this role. `TempoBlocklistPollFailing`
+pages when Tempo's blocklist poll fails: stored traces go unsearchable behind a Ready pod.
 
 ## Content logging is on
 

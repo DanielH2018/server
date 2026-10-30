@@ -115,7 +115,6 @@
  "ansible/roles/k8s/monitor-bridge/tests/test_check_claude_cgroups.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_cli.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_cloudflare_ips.py": 0.0,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_cluster_targets.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_etcd_db_size.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_etcd_drill.py": 0.04,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_gate_dependents.py": 0.0,

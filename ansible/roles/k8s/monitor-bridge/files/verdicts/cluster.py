@@ -11,38 +11,6 @@ query that matches no pod reads as a clean result unless a coverage floor says o
 from collections.abc import Collection, Mapping
 
 
-def targets_verdict(
-    vec: list[tuple[dict, float]], min_targets: float
-) -> tuple[bool, str]:
-    """Pure: (ok, msg) from an `up` vector, failing closed when too few targets are visible.
-
-    THE HOLE THIS CLOSES, opened by B5. Before the repoint an empty `up` could only mean the
-    Prometheus being queried was down, and the PROM_DEPENDENT gate suppressed this check before it
-    ran. Pointed at the cluster copy those two facts come apart: the gate probes the CLUSTER, which
-    is up and answering, while `up{origin="daniel-server"}` goes empty the moment daniel-server's
-    Prometheus stops remote-writing. `len(down) == 0` is then trivially true and this reports
-    "all 0 targets up" — green, and blind to an entire estate having vanished.
-
-    Fail-closed shape: count first, and treat "fewer series than could possibly be right" as
-    UNKNOWN rather than healthy.
-
-    This is NOT a sentinel for restarts/oom/cpu, though it claimed to be until 2026-08-27. It
-    watches `up`, and `up` was entirely healthy from the Phase G retarget to 2026-08-24 while an
-    origin-pinned selector emptied all three cAdvisor checks — the one occurrence this coverage
-    argument was supposed to cover, missed. Those three carry their own floor now; see
-    `cadvisor_coverage_shortfall`.
-    """
-    if len(vec) < min_targets:
-        return False, (
-            "only %d scrape targets visible, below the floor of %d — the metrics estate is "
-            "missing, so target health is UNKNOWN, not OK" % (len(vec), min_targets)
-        )
-    down = sorted({m.get("job") or m.get("instance") or "?" for m, v in vec if v == 0})
-    if down:
-        return False, "%d target(s) down: %s" % (len(down), ", ".join(down))
-    return True, "all %d targets up" % len(vec)
-
-
 def cadvisor_coverage_shortfall(
     pod_count: float, min_pods: float, what: str
 ) -> str | None:

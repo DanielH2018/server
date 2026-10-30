@@ -7,7 +7,6 @@
 | k3s Container Restarts | `restarts` | `prometheus` |  | Cluster Health |  |
 | k3s Container OOM | `oom` | `prometheus` |  | Cluster Health |  |
 | k3s CPU Throttling | `cpu` | `prometheus` |  | Cluster Health |  |
-| Scrape Targets | `targets` | `prometheus` |  | Observability |  |
 | Traefik 5xx | `traefik5xx` | `prometheus` |  | Observability |  |
 | Traefik Latency | `traefik_latency` | `prometheus` |  | Observability |  |
 | Traefik 404 Flood | `traefik_404` | `prometheus` |  | Observability |  |
@@ -27,7 +26,6 @@
 | Pi Pressure | `pi_pressure` | `prometheus` |  | Raspberry Pi |  |
 | Home Assistant Automations | `ha_heartbeat` | none |  | Services |  |
 | k3s Speedtest | `speedtest` | `startup_grace` |  | Services |  |
-| Log Shipper Dropped Entries | `shipper_dropped` | `prometheus` |  | Observability |  |
 | Swallowed Push Verdicts | `swallowed_verdicts` | `startup_grace` |  | Observability |  |
 | Discord Delivery | `discord` | `wan_reachable` | yes | Observability |  |
 | R2 Free Tier Headroom | `r2_usage` | `wan_reachable` | yes | Backups & Storage | `longhorn-backup-tiering` |
@@ -35,7 +33,6 @@
 | Healthchecks.io Console Drift | `healthchecks_drift` | `wan_reachable` |  | Automation & Drift |  |
 | B2 Free Tier Headroom | `b2_storage` | `b2_reachable` | yes | Backups & Storage | `longhorn-backup-tiering` |
 | Workload Log Errors | `workload_log_errors` | `startup_grace` |  | Cluster Health |  |
-| Cluster Scrape Targets | `cluster_targets` | `prometheus` |  | Observability |  |
 | Longhorn Volume Redundancy | `longhorn_volumes` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
 | k3s PVC Fullness | `pvc_fullness` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
 | Longhorn Snapshot Headroom | `snapshot_headroom` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |

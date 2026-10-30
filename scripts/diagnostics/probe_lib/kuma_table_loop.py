@@ -8,9 +8,10 @@ The loop's entity line names its tile `{{ <row>.<field> | to_json }}`. A line-by
 sees one templated name there, which is no monitor at all, so `TableLoop` reads the rows the
 loop iterates and hands back one name per row.
 
-The loop may end in `if <row>.<field> not in ('a', 'b')`, which drops the rows named there:
-M6's batch A3 deletes three tiles that way before it deletes their rows (Cutover-a1), and
-`TableLoop` skips them too, so `kuma-drift` does not name a deleted tile missing.
+The loop may end in `if <row>.<field> not in ('a', 'b')`, which drops the rows named there.
+M6 deletes a flux-owned bridge row's tile that way before it deletes the row (m6-retire-kuma.md,
+"The cutover order"), and `TableLoop` skips the same rows, so `kuma-drift` does not name a
+deleted tile missing.
 
 The ingress tiles' loop over `containers_list` was the second such loop until M4's PR 4
 (#5625) moved those probes to blackbox-exporter.

@@ -96,13 +96,6 @@ def test_a_gates_value_validates_against_its_own_dependent_sets():
     )  # the module table still does
 
 
-def test_cluster_targets_is_prom_dependent():
-    # It reads the one Prometheus, so the `prometheus` gate watches its source. Its own floor
-    # stays the arm for "Prometheus answers but the targets went away", which the gate cannot
-    # see — the reason it is gated and not merely floored.
-    assert "cluster_targets" in gates.PROM_DEPENDENT
-
-
 # ── The COMPLETENESS axis: a Prometheus reader missing from every gate set ──────────────────
 # The guards above assert `<SET> <= names` — every member is a real check. That direction
 # cannot see a check that reads Prometheus and is in NO set: it co-fires with the
@@ -129,7 +122,7 @@ def prom_readers(checks) -> set[str]:
 def test_prom_readers_are_derivable_from_the_registry():
     """Non-vacuity: an empty derivation makes the completeness guard below pass on nothing."""
     readers = prom_readers(registry.build_checks())
-    assert {"disk", "targets", "traefik_latency"} <= readers, (
+    assert {"disk", "restarts", "traefik_latency"} <= readers, (
         f"prom readers derived from the registry look wrong: {sorted(readers)} — "
         "the source-scan or the registry shape changed, and the guard below is now inert"
     )

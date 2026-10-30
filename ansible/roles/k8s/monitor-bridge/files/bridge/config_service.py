@@ -93,7 +93,7 @@ def service_config(
         # while the only 421 outside them was one 5-minute window on uptime-kuma at 0.0083 rps.
         # 0.02 sits 2.4x above that blip and 5x below the slowest wedge.
         TRAEFIK_421_RPS=_num("TRAEFIK_421_RPS"),
-        # 3 cycles = 15 min at INTERVAL=300, the value CLUSTER_TARGETS_CONSECUTIVE and its
+        # 3 cycles = 15 min at INTERVAL=300, the value LONGHORN_CONSECUTIVE and its
         # siblings carry. A one-shot handshake mismatch lives in a [5m] rate for at most two
         # evaluations, so it cannot reach the third; every wedge measured lasted hours.
         TRAEFIK_421_CONSECUTIVE=_int("TRAEFIK_421_CONSECUTIVE"),

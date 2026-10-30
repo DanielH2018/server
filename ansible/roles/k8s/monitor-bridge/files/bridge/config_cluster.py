@@ -25,9 +25,6 @@ class ClusterConfig:
     RESTART_WINDOW: str
     RESTART_MAX: float
     PROM_ORIGIN: str
-    TARGETS_MIN: int
-    CLUSTER_TARGETS_MIN: int
-    CLUSTER_TARGETS_CONSECUTIVE: int
     CADVISOR_PODS_MIN: int
     CADVISOR_CONSECUTIVE: int
     LONGHORN_CONSECUTIVE: int
@@ -63,10 +60,10 @@ def cluster_config(
         # exist on BOTH sides — measured 2026-08-07: container_start_time_seconds (99
         # cluster-native / 53 here), container_memory_failcnt and the container_cpu_cfs_* pair,
         # plus `up` (5 / 11). So the moment PROMETHEUS_URL points at the cluster, restarts / oom
-        # / cpu / janitorr / targets silently widen from "daniel-server's containers" to "every
+        # / cpu / janitorr silently widen from "daniel-server's containers" to "every
         # container in the homelab", and would start naming k8s pods as offenders. The remaining
         # PROM_DEPENDENT checks that DON'T read traefik_* are pinned
-        # (cert/restarts/oom/cpu/targets/ups/shipper_dropped). Disk and memory are the two
+        # (cert/restarts/oom/cpu/ups). Disk and memory are the two
         # exceptions: they are HOST checks, and pinning them to one origin would leave the other
         # host's root disk and memory unwatched — so they group `by (origin)` and report the
         # worst, covering both. Since E2 the cluster edge also emits traefik_* (traefik-k8s
@@ -92,35 +89,6 @@ def cluster_config(
         # every check reading it decodes as healthy. The default therefore pins, and a third
         # estate whose series carry no `origin` sets PROM_ORIGIN="" explicitly.
         PROM_ORIGIN=_env("PROM_ORIGIN", 'origin="daniel-server"'),
-        # Floor below which the `up` vector is treated as missing rather than clean — see
-        # targets_verdict.
-        # CORRECTED 2026-08-24: this said "exactly two origin="daniel-server" jobs: node,
-        # cadvisor". It is ONE — `node`. Only the node job is relabelled with `origin`
-        # (observability/templates/prometheus.yaml.j2:202, the `node` job); the cadvisor job never
-        # was, which is the whole mechanism behind the blind restarts/oom/cpu checks fixed the
-        # same day. A reviewer checking that finding against this comment would have cleared it,
-        # so the stale half is corrected here rather than left to be re-derived.
-        # The deployed TARGETS_MIN is 1 (config/env.yaml.j2), which matches that single job and
-        # still fails closed: targets_verdict tests `len(vec) < min_targets`, so an empty vector
-        # is 0 < 1 and reports UNKNOWN. A floor of 1 cannot detect a PARTIAL shortfall, but with
-        # one expected series there is no partial case to detect.
-        TARGETS_MIN=_int("TARGETS_MIN"),
-        # Same floor idea for the cluster's own scrape targets (see check_cluster_targets).
-        # Since the otel-collector became a DaemonSet (Phase F drain, 2026-08-13) its two jobs
-        # are per-POD — one target per node each — so the set is seven: prometheus, 2x
-        # otel-collector, 2x otel-collector-internal, kube-state-metrics, kubernetes-cadvisor.
-        # 3 still tolerates a deliberate removal without ever mistaking an empty vector for a
-        # clean one.
-        CLUSTER_TARGETS_MIN=_int("CLUSTER_TARGETS_MIN"),
-        # Consecutive down cycles before check_cluster_targets pages, the same hysteresis its
-        # siblings LONGHORN_CONSECUTIVE / PVC_CLAIMS_CONSECUTIVE / SNAPSHOT_CAP_CONSECUTIVE
-        # already carry, and for the same reason. `up` goes to 0 for a single scrape every time
-        # a workload rolls, so an ungated check turns every ordinary rollout into a DOWN episode:
-        # 66 of them in the 30 days to 2026-09-11, the highest count in the estate, nearly all
-        # one cycle long and naming one target. 3 cycles = 15 min at INTERVAL=300, which is far
-        # longer than any rollout's scrape gap and far shorter than an exporter that has actually
-        # died. A target genuinely down still pages, one extra cycle later.
-        CLUSTER_TARGETS_CONSECUTIVE=_int("CLUSTER_TARGETS_CONSECUTIVE"),
         # Coverage floor for the three cAdvisor checks (restarts/oom/cpu), which filter a
         # per-pod vector down to offenders and so cannot tell "quiet" from "gone". Reasoning and
         # the measurements behind the value: cadvisor_coverage_shortfall in verdicts/cluster.py.

@@ -125,9 +125,9 @@ def run_once(
     # now suppresses its dependents estate-wide — daniel-box's node exporter dying holds
     # daniel-server's disk and memory verdicts too. Accepted over per-origin suppression: the
     # dependents report the worst origin in one verdict, so splitting suppression by origin would
-    # mean splitting the checks by origin first. Scrape Targets still names the dead job, so the
-    # outage is reported; what is lost is a second host's verdict while one host's exporter is
-    # down. check_targets_down keeps its origin_sel() pin — TARGETS_MIN is sized to it.
+    # mean splitting the checks by origin first. ScrapeTargetDown still names the dead job, so
+    # the outage is reported; what is lost is a second host's verdict while one host's exporter
+    # is down.
     suppressed = set()
     if prom_ok and gate_lib.check_enabled("prometheus", only, skip):
         try:

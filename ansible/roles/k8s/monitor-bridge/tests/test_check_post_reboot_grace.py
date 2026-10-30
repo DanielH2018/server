@@ -1,14 +1,14 @@
-"""The two arms that stop the weekly reboot holding a tile red for hours.
+"""The arm that stops the weekly reboot holding a tile red for hours.
 
-After the Sunday 07:30 restart, `shipper_dropped` and `swallowed_verdicts` stay red long after
-every other tile recovers. Both read a window that still contains the reboot, and both are keyed here on the NODE's uptime rather than this pod's age — a deploy
-restarts the bridge without rebooting anything, and each arm suppresses a fault only a reboot
-produces.
+After the Sunday 07:30 restart, `swallowed_verdicts` stays red long after every other tile
+recovers. It reads a window that still contains the reboot, and it is keyed here on the NODE's
+uptime rather than this pod's age: a deploy restarts the bridge without rebooting anything, and
+the arm suppresses a fault only a reboot produces.
 
 Each behaviour gets an accept/reject pair: what the arm holds, and what it must still report
 while holding it. The second half is the one that matters. An arm that suppressed the whole
-check would be six hours of weekly blindness on partial log loss, and it would read green the
-whole time.
+check would be hours of weekly blindness on lost verdicts, and it would read green the whole
+time.
 """
 
 import dataclasses
@@ -16,7 +16,6 @@ import dataclasses
 import bridge.common
 import checks.logs
 from _fake_sources import FakeSources
-from verdicts.logs import TOO_FAR_BEHIND, shipper_dropped
 
 
 def test_host_uptime_reads_the_first_field(tmp_path):
@@ -31,166 +30,6 @@ def test_an_unreadable_uptime_reads_as_no_grace(tmp_path):
     bad = tmp_path / "bad"
     bad.write_text("not a number\n")
     assert bridge.common.host_uptime_s(str(bad)) is None
-
-
-# --- shipper_dropped: the `too_far_behind` backlog reason ---------------------------------
-
-
-def test_a_post_reboot_backlog_discard_is_held():
-    ok, msg = shipper_dropped(
-        client_count=0.0,
-        server_reasons=[(TOO_FAR_BEHIND, 161573.0)],
-        window="1h",
-        threshold=3000.0,
-        backlog_grace_active=True,
-    )
-    assert ok
-    assert TOO_FAR_BEHIND in msg
-    assert "still catching up" in msg
-
-
-def test_the_same_discard_pages_outside_the_grace():
-    ok, msg = shipper_dropped(
-        client_count=0.0,
-        server_reasons=[(TOO_FAR_BEHIND, 161573.0)],
-        window="1h",
-        threshold=3000.0,
-    )
-    assert not ok
-    assert TOO_FAR_BEHIND in msg
-
-
-def test_another_server_reason_still_pages_inside_the_grace():
-    # The reject half that decides whether this arm is worth having: rate_limited is a throughput
-    # fault a reboot does not cause, so it must survive the window that holds the backlog.
-    ok, msg = shipper_dropped(
-        client_count=0.0,
-        server_reasons=[(TOO_FAR_BEHIND, 161573.0), ("rate_limited", 9000.0)],
-        window="1h",
-        threshold=3000.0,
-        backlog_grace_active=True,
-    )
-    assert not ok
-    assert "rate_limited" in msg
-
-
-def test_the_client_side_counter_still_pages_inside_the_grace():
-    ok, _ = shipper_dropped(
-        client_count=9000.0,
-        server_reasons=[(TOO_FAR_BEHIND, 161573.0)],
-        window="1h",
-        threshold=3000.0,
-        backlog_grace_active=True,
-    )
-    assert not ok
-
-
-def test_the_grace_says_nothing_when_there_is_nothing_to_hold():
-    _, msg = shipper_dropped(
-        client_count=0.0,
-        server_reasons=[],
-        window="1h",
-        threshold=3000.0,
-        backlog_grace_active=True,
-    )
-    assert TOO_FAR_BEHIND not in msg
-
-
-def _grace_seen(cfg, uptime):
-    """Whether `check_shipper_dropped` armed the backlog grace at a stated node uptime.
-
-    Read off the verdict rather than by patching it: a 5000-entry `too_far_behind` burst is over
-    `SHIPPER_DROPPED_MAX` (3000), so the check is `up` only while the grace drops that reason.
-    Every boundary goes in as an argument — the check takes `uptime_s` and `src` for the same
-    reason `with_pi_ports` takes `tcp_open`.
-    """
-    src = FakeSources(
-        prom_scalar=lambda q: 0.0,
-        prom_vector=lambda q: [({"reason": TOO_FAR_BEHIND}, 5000.0)],
-    )
-    return checks.logs.check_shipper_dropped(cfg, src, uptime_s=lambda: uptime)
-
-
-def test_check_shipper_dropped_arms_the_grace_from_the_node_uptime(cfg):
-    ok, msg = _grace_seen(cfg, cfg.BOOT_SETTLE_S + 600.0)
-    assert ok
-    assert "still catching up" in msg
-
-
-def test_check_shipper_dropped_pages_once_the_grace_has_passed(cfg):
-    ok, _ = _grace_seen(cfg, cfg.SHIPPER_BACKLOG_GRACE_S + 1.0)
-    assert not ok
-
-
-def test_an_unreadable_clock_does_not_arm_the_backlog_grace(cfg):
-    ok, _ = _grace_seen(cfg, None)
-    assert not ok
-
-
-# --- shipper_dropped: never read back past the reboot -------------------------------------
-
-
-def _shipper_ranges(cfg, uptime, client=0.0):
-    """The verdict `check_shipper_dropped` gives at a stated node uptime, and every query it ran.
-
-    `client` is what the client-side counter answers. The export-failure arm is disabled, so
-    every recorded query is one of the two shipper arms.
-    """
-    queries = []
-
-    def _scalar(query):
-        queries.append(query)
-        return client
-
-    def _vector(query):
-        queries.append(query)
-        return []
-
-    ok, msg = checks.logs.check_shipper_dropped(
-        dataclasses.replace(
-            cfg, OTELCOL_SEND_FAILED_METRICS="", TEMPO_POLL_ERRORS_METRIC=""
-        ),
-        FakeSources(prom_scalar=_scalar, prom_vector=_vector),
-        uptime_s=lambda: uptime,
-    )
-    return ok, msg, queries
-
-
-def test_inside_the_settle_window_the_shipper_arms_are_skipped(cfg):
-    # 2026-10-04: daniel-pi's Alloy dropped 179,396 entries while Loki was down for the reboot.
-    ok, msg, queries = _shipper_ranges(cfg, uptime=300.0, client=179396.0)
-    assert ok
-    assert "inside BOOT_SETTLE_S" in msg
-    assert queries == [], "nothing should be queried when no window is left to read"
-
-
-def test_just_after_the_settle_window_both_shipper_arms_read_only_since_it(cfg):
-    _, _, queries = _shipper_ranges(cfg, uptime=cfg.BOOT_SETTLE_S + 900)
-    assert len(queries) == 2
-    assert all(q.endswith("[900s]))") for q in queries), queries
-
-
-def test_the_configured_shipper_window_returns_once_the_reboot_is_out_of_range(cfg):
-    _, _, queries = _shipper_ranges(cfg, uptime=cfg.BOOT_SETTLE_S + 2 * 3600)
-    assert all(q.endswith("[%s]))" % cfg.SHIPPER_DROPPED_WINDOW) for q in queries), (
-        queries
-    )
-
-
-def test_an_unreadable_clock_leaves_the_configured_shipper_window(cfg):
-    _, _, queries = _shipper_ranges(cfg, uptime=None)
-    assert all(q.endswith("[%s]))" % cfg.SHIPPER_DROPPED_WINDOW) for q in queries), (
-        queries
-    )
-
-
-def test_a_shortened_shipper_window_still_pages_on_a_drop_after_the_reboot(cfg):
-    # The reject half: shortening the lookback must not make the arm inert.
-    ok, msg, _ = _shipper_ranges(
-        cfg, uptime=cfg.BOOT_SETTLE_S + 900, client=cfg.SHIPPER_DROPPED_MAX + 1
-    )
-    assert not ok
-    assert "in 900s" in msg
 
 
 # --- swallowed_verdicts: never read back past the reboot ----------------------------------

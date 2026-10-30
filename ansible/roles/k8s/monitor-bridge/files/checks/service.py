@@ -45,7 +45,7 @@ def check_n8n(
     src.state.n8n_streaks and is advanced by n8n_update_streaks each cycle; n8n_verdict
     turns it into the page decision. Empty N8N_API_KEY -> disabled (stays up) so it never
     false-pages before the operator sets the key. An unreachable/erroring API raises -> the loop
-    renders it down with the error, like check_targets_down (a dead API surfaces, not silent-green).
+    renders it down with the error (a dead API surfaces, not silent-green).
     """
     if not cfg.N8N_API_KEY:
         return True, "n8n monitoring disabled (no API key)"

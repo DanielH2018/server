@@ -57,19 +57,8 @@ class IoConfig:
     LOG_ERROR_WINDOW: str
     LOG_ERROR_MAX: float
     LOG_ERROR_IGNORE: str
-    SHIPPER_DROPPED_METRICS: str
-    SHIPPER_DROPPED_SERVER_METRIC: str
-    SHIPPER_DROPPED_WINDOW: str
-    SHIPPER_DROPPED_MAX: float
-    OTELCOL_SEND_FAILED_METRICS: str
-    OTELCOL_SEND_FAILED_WINDOW: str
-    OTELCOL_SEND_FAILED_MAX: float
-    TEMPO_POLL_ERRORS_METRIC: str
-    TEMPO_POLL_ERRORS_WINDOW: str
-    TEMPO_POLL_ERRORS_MAX: float
     SWALLOWED_VERDICTS_WINDOW_S: int
     BOOT_SETTLE_S: int
-    SHIPPER_BACKLOG_GRACE_S: int
     DISCORD_WEBHOOK_URL: str = field(repr=False)
     DISCORD_CROWDSEC_WEBHOOK_URL: str = field(repr=False)
     DISCORD_GITOPS_WEBHOOK_URL: str = field(repr=False)
@@ -276,108 +265,6 @@ def io_config(
         # Keep this list short and say WHY in the inventory — a growing ignore list is the arm
         # decaying.
         LOG_ERROR_IGNORE=_env("LOG_ERROR_IGNORE"),
-        # Log-shipper dropped-entries watchdog. Prometheus scrapes both shippers' own metrics —
-        # the cluster's Alloy DaemonSet (job=alloy) and daniel-pi's Alloy container
-        # (job=alloy-pi), both on 12345 — and both expose loki_write_dropped_entries_total. The
-        # name is still matched by __name__ regex so a second shipper with a different counter
-        # can join without a code change; a selector naming only one estate's counter reads the
-        # other as "0 dropped" forever, the fail-open shape of a selector on a label nothing
-        # emits (the Pi ran Promtail with its own counter name until 2026-09-02). Loki Log
-        # Ingestion only catches TOTAL silence; this surfaces PARTIAL loss — entries a shipper
-        # gave up on. NO reason filter (was reason="ingester_error" only): every reason is a real
-        # drop, and Loki's own configured limits reject under DIFFERENT reasons the
-        # ingester_error-only selector missed entirely — rate_limited (per_stream_rate_limit /
-        # ingestion_rate_mb), stream_limited (max_global_streams_per_user), and line_too_long —
-        # so a stream explosion or a chatty container hitting the rate cap dropped logs while
-        # this stayed green (2026-07-15 review M2). increase() over a window handles counter
-        # resets; alert only ABOVE a threshold so a transient Loki restart's handful of drops
-        # doesn't page. Prom-dependent (suppressed under the Prometheus gate). No series (counter
-        # never incremented) reads as 0 -> up; a dead shipper scrape is Scrape Targets' page, not
-        # this one.
-        #
-        # Known one-off: a shipper's first start re-tails every current file from offset 0 and
-        # Loki rejects the already-ingested history as "too far behind", which the shipper counts
-        # under reason="ingester_error". Measured at the 2026-09-02 Alloy cutover: 193,348 on
-        # daniel-box, nothing lost. That is a page per shipper cutover, not a threshold problem.
-        #
-        # A metric-name regex rather than a ready-made `{__name__=~...}` selector, because
-        # test_check_loki.py treats every `{...}` string field on Config as a LogQL stream
-        # selector and checks its labels against the Loki vocabulary — which `__name__` is not.
-        SHIPPER_DROPPED_METRICS=_env(
-            "SHIPPER_DROPPED_METRICS",
-            "loki_write_dropped_entries_total",
-        ),
-        # The SERVER side of the same pipe (2026-09-03, #993): the shipper counter above only
-        # sees what a shipper itself gave up on. Loki's distributor discards entries the shipper
-        # never attributes to itself — 161,573 samples (39.4 MB) discarded server-side in a 24h
-        # window where the shipper counted 1,027, all under a DIFFERENT reason (ingester_error vs
-        # too_far_behind) — so the client-side counter alone understated real loss by ~150x and
-        # would have missed a burst the client never logged at all. Scraped from Loki itself
-        # (job=loki-homelab) by the same Prometheus every other PROM_DEPENDENT check reads,
-        # broken down `by (reason)` in the query so a fired check can name which reason:
-        # `too_far_behind` (entries arriving outside Loki's accept window — a clock/backfill
-        # problem) versus rate_limited/stream_limited/line_too_long (throughput/limit problems).
-        # Shares SHIPPER_DROPPED_WINDOW/_MAX with the client-side arm — both sides count dropped
-        # log lines at comparable magnitude, and shipper_dropped() reports whichever side is
-        # larger.
-        SHIPPER_DROPPED_SERVER_METRIC=_env(
-            "SHIPPER_DROPPED_SERVER_METRIC",
-        ),
-        SHIPPER_DROPPED_WINDOW=_env("SHIPPER_DROPPED_WINDOW"),
-        # DECIDED: 3000, from the gap between churn and bursts rather than from the streak the
-        # issue proposed. Measured 2026-09-11 over the 14 days Prometheus retains, at 1h
-        # resolution: the client-side counter is non-zero in 26 of ~336 hours, 13 of those clear
-        # 1000, and the ONLY samples between 1000 and 6261 are the two that held this monitor red
-        # for 51 minutes on 2026-09-03 at 1020. Every other real loss starts at 6261 and runs to
-        # 90,724 client-side and 216,545 server-side. So churn tops out at ~1020 and the smallest
-        # genuine burst is 6261 — 3000 sits 2.9x above the first and 2.1x below the second, which
-        # is a derived midpoint rather than a number fitted to the episode. A 2-3 cycle streak
-        # was rejected on its own evidence: that episode ran 11 cycles, so a streak would have
-        # removed 3 of them and left the tile red for 40 minutes.
-        SHIPPER_DROPPED_MAX=_num("SHIPPER_DROPPED_MAX"),
-        # The THIRD side of the same pipe, folded in from the observability role's
-        # telemetry-health.sh host cron on 2026-10-01 (#3094): the OTel collector's own
-        # export-failure counters. A failed export leaves no trace in Loki or Tempo by
-        # definition, and the collector's receiver counters keep climbing, so a stack dropping
-        # 100% of Claude Code's telemetry looks identical from every other angle to one working
-        # perfectly.
-        #
-        # A `__name__` regex, not a bare name, for the reason SHIPPER_DROPPED_METRICS gives: the
-        # family is one counter per signal — `otelcol_exporter_send_failed_log_records`,
-        # `_metric_points` and `_spans` — and naming one would read the other two as "0 failed
-        # forever". Measured on daniel-box's Prometheus 2026-10-01: the family has NO live series,
-        # because the collector emits a send-failed counter only once it has failed. Its `sent`
-        # twins DO exist and pin the naming — `otelcol_exporter_sent_log_records`,
-        # `otelcol_exporter_sent_metric_points`, `otelcol_exporter_sent_spans`, none of them
-        # `_total`-suffixed. An absent family makes the query return no series, which
-        # `bridge.net.prom_scalar` reads as None and the verdict counts as 0, so the arm stays
-        # clean until the first real failure.
-        OTELCOL_SEND_FAILED_METRICS=_env(
-            "OTELCOL_SEND_FAILED_METRICS",
-        ),
-        # Its own window and threshold rather than SHIPPER_DROPPED_WINDOW/_MAX: those two are
-        # sized for log-line churn that tops out near 1020/h, and an export failure is not churn
-        # at any rate. 15m and 0 are the values the host cron used since it was written, carried
-        # over unchanged so the fold does not also change what pages.
-        OTELCOL_SEND_FAILED_WINDOW=_env("OTELCOL_SEND_FAILED_WINDOW"),
-        OTELCOL_SEND_FAILED_MAX=_num("OTELCOL_SEND_FAILED_MAX"),
-        # The fourth arm, on the far side of the collector (#4681): telemetry that reached Tempo
-        # but that Tempo cannot serve. A failed blocklist poll keeps the previous blocklist,
-        # which is empty after a pod restart, so one block with an empty meta.json left every
-        # backend block unsearchable and retention deleting nothing for a week (#4626).
-        #
-        # A bare name, not a regex: Tempo has exported this one counter under this name since
-        # 2.x, and it is live (114 on 2026-10-12, before the fix). It counts a failed block-meta
-        # read and a failed tenant-index write, but NOT a failed listing of the tenant's blocks,
-        # which only logs. Measured 2026-10-12 against the #4626 incident: increase over 15m read
-        # 4.3 during it, and the series did not exist before it, which the verdict counts as 0.
-        TEMPO_POLL_ERRORS_METRIC=_env("TEMPO_POLL_ERRORS_METRIC"),
-        # 15m and 0. Tempo polls every 5m and the counter rises by 2 per failed poll
-        # (blocklist_poll_tolerate_consecutive_errors: 1 retries once), so 15m holds at least two
-        # polls and `increase()` sees the second failure. Any failure is real: the counter had no
-        # series before #4626 at all.
-        TEMPO_POLL_ERRORS_WINDOW=_env("TEMPO_POLL_ERRORS_WINDOW"),
-        TEMPO_POLL_ERRORS_MAX=_num("TEMPO_POLL_ERRORS_MAX"),
         # How far back check_swallowed_verdicts reads the host crons' push-outcome lines. Long
         # enough that a lost DOWN verdict stays paged past a cycle or two of Loki ingest lag,
         # and past the next run of a */30 producer that may land; short enough that the fetch
@@ -385,11 +272,11 @@ def io_config(
         # any window, so the window does not need to reach their period — the page fires
         # within a cycle and the tile's own deadline reports the same verdict a day later.
         SWALLOWED_VERDICTS_WINDOW_S=_int("SWALLOWED_VERDICTS_WINDOW_S"),
-        # The two post-reboot arms (#2783). The weekly Sunday 07:30 reboot held these two
-        # tiles red for hours AFTER every other tile recovered — shipper_dropped for 4.4h and
-        # swallowed_verdicts for 2.9h on 2026-09-27 — because each reads a window that still
-        # contained the reboot. Both are keyed on the NODE's uptime (bridge.common.host_uptime_s),
-        # never on this pod's age: a deploy restarts the pod without rebooting anything.
+        # The post-reboot window (#2783). The weekly Sunday 07:30 reboot held swallowed_verdicts
+        # red for 2.9h on 2026-09-27 after every other tile recovered, because it reads a window
+        # that still contained the reboot. It is keyed on the NODE's uptime
+        # (bridge.common.host_uptime_s), never on this pod's age: a deploy restarts the pod
+        # without rebooting anything.
         #
         # BOOT_SETTLE_S is how long the reboot itself takes to stop producing push failures.
         # uptime-kuma's Service has no endpoint at all for ~16 minutes of the reboot (the
@@ -398,22 +285,8 @@ def io_config(
         # a daily producer's lost verdict is the newest line for its tag until tomorrow.
         # check_swallowed_verdicts skips entirely inside this window and then reads only back to
         # the end of it, so the reboot's own failures are never in range and the tile clears at
-        # recovery instead of 2.9h later. check_shipper_dropped bounds both shipper queries the
-        # same way (#3490): daniel-pi's Alloy drops what Loki refuses while Loki is down for the
-        # restart, and a 1h lookback held that loss in range 24 minutes past the Kuma
-        # maintenance window on 2026-10-04.
+        # recovery instead of 2.9h later.
         BOOT_SETTLE_S=_int("BOOT_SETTLE_S"),
-        # SHIPPER_BACKLOG_GRACE_S covers a different fault with the same trigger: Alloy ships
-        # its post-reboot backlog for hours, and Loki discards what arrives outside its accept
-        # window as `reason=too_far_behind`. Those entries are genuinely lost and nothing an
-        # operator does recovers them. Measured on 2026-09-27 the tile was red 4.4h against a 1h
-        # rolling window, so the discards continued ~3.4h past boot; 6h is ~1.75x that.
-        #
-        # It suppresses ONLY the `too_far_behind` reason, never the whole check: rate_limited,
-        # stream_limited, line_too_long and the client-side counter all stay live inside the
-        # window, so a real throughput fault during a reboot morning still pages. Dropping the
-        # whole verdict for 6h weekly would be six hours of blindness on partial log loss.
-        SHIPPER_BACKLOG_GRACE_S=_int("SHIPPER_BACKLOG_GRACE_S"),
         # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
         # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
         # green-in-UI while Discord goes silent — the one link in the alert chain no other

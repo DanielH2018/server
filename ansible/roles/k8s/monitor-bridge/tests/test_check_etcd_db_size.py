@@ -73,7 +73,7 @@ def test_an_absent_series_is_up_and_points_at_scrape_targets(cfg):
 
     The PVC arm pages on an empty vector because 27 of 43 claims survive a dead kubelet job, so
     silence there hides a partial gap. One series carried by two jobs has no partial case: empty
-    means the apiserver is not scraped at all, which `targets` and `cluster_targets` page on.
+    means the apiserver is not scraped at all, which `ScrapeTargetDown` pages on.
     """
     ok, msg = _at(cfg, None)
     assert ok
