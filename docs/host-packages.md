@@ -350,9 +350,12 @@ The first two carry `severity="critical"`. The third carries `severity="warning"
   left it masked, then start the unit from a LAN session or wait for the next window.
 
 Each limit exceeds the longest gap between two of the host's updater fires plus the updater's
-`TimeoutStartSec`, so one failed fetch never pages.
+`TimeoutStartSec`, so one failed fetch never pages. A host that ships
+`homelab-docker-engine.timer` also covers the engine run's mask. The run can hold
+`homelab-updater.timer` masked for its whole `TimeoutStartSec`, so on daniel-pi the last success
+can come from the 22:50 fire and the next from the 02:05 fire (#6613).
 `scripts/renderer/tests/test_renderer_host_update_limits.py` fails a limit the host's rendered
-schedule outgrows. The map lists daniel-pi (job `node-pi`, 11400 seconds), added by H3.9c.
+schedule outgrows. The map lists daniel-pi (job `node-pi`, 15000 seconds), added by H3.9c.
 
 ## Clearing a host's hold
 
