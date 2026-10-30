@@ -1260,8 +1260,8 @@ reach A6-7a, fail the bijection test and lose its only pager.
     - **The soak read**, [#6625](https://github.com/DanielH2018/server/issues/6625). B8's
       shadow PR merged as `50f2b2c410` at 2026-10-23T19:28Z. Prometheus first scraped the
       `blackbox-extra` job at 19:39:56Z, so the window starts there. The read used M1
-      convention 6's two queries over `[161h:1m]`, with M2's 8-minute margin (*Which soak
-      minutes count as explained* in M2). Each tile was mapped to its shadow rule by the
+      convention 6's two queries over `[168h:1m]` ending at 2026-10-30T19:39:56Z, with M2's
+      8-minute margin (*Which soak minutes count as explained* in M2). Each tile was mapped to its shadow rule by the
       target's `service` label. Loki maps to M5's `LokiHomelabDown`, and Pi Pressure maps to
       `PiPortDead` plus A1's Prometheus half of the row: `PiLoadHigh`, `PiMemoryLow`,
       `PiDiskFull`, `PiFilesystemReadOnly` and `PiMetricsMissing` in `hosts.yaml`.
@@ -1275,14 +1275,18 @@ reach A6-7a, fail the bijection test and lose its only pager.
           (`node_boot_time_seconds`), so load5 fell to 0.17 per core and `PiLoadHigh`
           cleared. The tile held the bridge's last DOWN push until the next 300s cycle, which
           the margin absorbs.
-        - Query 2 found two episodes. On 2026-10-25 from 14:25 to 14:28, the four `.local.`
+        - Query 2 found three episodes. On 2026-10-23 from 19:42 to 19:58, the Email-to-RSS
+          probe failed over IPv6 (`probe_ip_protocol` 6) while Kuma read up. `efd7fda5a0`
+          set `preferred_ip_protocol: ip4` and committed at 19:52:54, and the probe read 4
+          and up from 19:59. That episode was a fault in the probe, fixed in the window.
+        - On 2026-10-25 from 14:25 to 14:28, the four `.local.`
           probes behind Traefik (livesync, scrutiny, homelab-mcp, the edge all-clear) and
           all 26 `blackbox-ingress` targets timed out at 9.5s. M4's live
           `IngressProbeFailed` and `IngressProbeFailedCritical` fired for 19 of those
           targets, and A4's read records Traefik 5xx in the same window. Kuma's tiles declare
           no `timeout` and retry twice, so Kuma tolerated the stall. The stall was a real edge
           fault, not a rule defect.
-        - The second episode is `PiLoadHigh` on 2026-10-26 at 03:33 and 03:34, outside the
+        - The third episode is `PiLoadHigh` on 2026-10-26 at 03:33 and 03:34, outside the
           margin. Load5 crossed 1.5 per core between 03:31 and 03:34 and fell back. The
           bridge's first DOWN cycle came at 03:41, so its 300s samples missed the crossing.
           The rule has no `for:`, which matches the bridge's single-sample page.
