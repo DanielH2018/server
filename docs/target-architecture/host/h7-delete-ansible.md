@@ -2146,7 +2146,8 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       `portainer-agent`) comes back, so the package creates only `proxy` and `lifecycle`.
       The LAN ufw rules for ports 9323 and 1338 stay Ansible-era rules until H7.30 lists
       them. The connecting user's `docker` group membership stays host state, which the
-      packaged heartbeats need on a rebuilt Pi (#6599), and `host-basics.yml`'s hold stays with `initial_setup`. The role keeps its
+      packaged heartbeats need on a rebuilt Pi (#6599; `homelab-pi-recovery.service` grants it
+      with `SupplementaryGroups=docker` since 2026-10-30), and `host-basics.yml`'s hold stays with `initial_setup`. The role keeps its
       teardown half for the cluster nodes until H7.48.
 6. **H7.6 `initial_setup`, part 1.** Three subjects, each as three host PRs in canary order:
     - **H7.6a–c** apt and unattended-upgrades;
