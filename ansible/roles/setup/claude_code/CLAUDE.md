@@ -44,8 +44,13 @@ this role applies to daniel-box alone until H7.40 moves it too.
   component's `users:` entry, which the arm then expires. A test holds the two together.
 - **The Remote Control host ships without an enable link** while `claude_code_rc_enabled` is
   false, and reconcile never restarts it (`policy: manual`).
+- **The peer login follows `claude_agent_ssh_login_enabled`.** The package cannot read
+  daniel-box's agent key, so the component's `claude_agent_peer_public_key` default carries its
+  public half. `claude-agent-setup` installs exactly that one line as the agent's authorized_keys,
+  so a rotation replaces the old key. Once the toggle is false, the setup script removes the file
+  and the agent leaves `ssh-users`. A blank key leaves the file Ansible wrote.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
-  H7.38, and the agent's authorized peer key, which the role read over ssh from daniel-box.
+  H7.38.
   ENFORCED: `hosts/lib/tests/test_claude_code_component.py`.
 
 ## At a glance

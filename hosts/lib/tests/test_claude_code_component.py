@@ -14,6 +14,7 @@ import subprocess
 import pytest
 import yaml
 
+from lib.estate import Inventory
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
@@ -173,6 +174,84 @@ def test_a_when_that_is_not_a_boolean_is_refused(tmp_path):
     ]
     with pytest.raises(RenderRefused, match="not a boolean"):
         render_with(tmp_path, {"role": "claude_code", "files": files})
+
+
+BG_RESUME = (
+    f"{UNITS}/homelab-claude-bg-resume.service",
+    "/usr/local/lib/claude-bg-resume/bg_session_resume.py",
+)
+
+
+def render_daniel_server_with(tmp_path, **overrides):
+    """daniel-server rendered with `overrides` laid over its host_vars."""
+    host_vars = tmp_path / "host_vars"
+    shutil.copytree(REPO / "ansible" / "inventory" / "host_vars", host_vars)
+    path = host_vars / "daniel-server.yml"
+    path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), **overrides}))
+    return host_mode.render_host(
+        "daniel-server", inventory=Inventory(host_vars=host_vars)
+    )
+
+
+def test_the_background_resume_ships_while_its_toggle_is_on(package, manifest):
+    assert all(path in package.files for path in BG_RESUME)
+    assert manifest["units"]["homelab-claude-bg-resume.service"] == {"policy": "manual"}
+    assert "homelab-claude-bg-resume.service" in manifest["enable_links"]
+
+
+def test_the_background_resume_toggle_off_drops_its_unit_script_policy_and_link(
+    tmp_path,
+):
+    off = render_daniel_server_with(tmp_path, claude_code_bg_resume_enabled=False)
+    off_manifest = json.loads(off.files["/usr/lib/homelab/manifest.json"][0])
+    assert not any(path in off.files for path in BG_RESUME)
+    assert "homelab-claude-bg-resume.service" not in off_manifest["units"]
+    assert "homelab-claude-bg-resume.service" not in off_manifest["enable_links"]
+
+
+AUTHORIZED_KEYS = "/usr/lib/homelab/claude-agent/authorized_keys"
+SETUP = "/usr/lib/homelab/claude-agent-setup"
+REMOVAL = 'rm -f "$home/.ssh/authorized_keys"'
+INSTALL = 'install -o root -g root -m 0644 "$templates/authorized_keys"'
+OLD_KEY = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLD peers"
+)
+NEW_KEY = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEW peers"
+)
+
+
+def test_the_peer_login_off_ships_no_key_and_the_setup_removes_the_old_one(tmp_path):
+    package = render_daniel_server_with(
+        tmp_path,
+        claude_agent_ssh_login_enabled=False,
+        claude_agent_peer_public_key=OLD_KEY,
+    )
+    assert AUTHORIZED_KEYS not in package.files
+    setup = text(package, SETUP)
+    assert REMOVAL in setup
+    assert INSTALL not in setup
+    # `usermod -G` sets the whole list, so leaving ssh-users out drops the membership.
+    assert "ssh-users" not in setup
+
+
+def test_a_rotated_peer_key_replaces_the_old_one_in_authorized_keys(tmp_path):
+    package = render_daniel_server_with(
+        tmp_path,
+        claude_agent_ssh_login_enabled=True,
+        claude_agent_peer_public_key=NEW_KEY,
+    )
+    assert package.files[AUTHORIZED_KEYS][0].decode() == f"restrict {NEW_KEY}\n"
+    setup = text(package, SETUP)
+    assert INSTALL in setup
+    assert REMOVAL not in setup
+    assert "ssh-users" in setup
+
+
+def test_a_blank_peer_key_ships_no_file_and_leaves_the_one_ansible_wrote(tmp_path):
+    package = render_daniel_server_with(tmp_path, claude_agent_ssh_login_enabled=True)
+    assert AUTHORIZED_KEYS not in package.files
+    assert REMOVAL not in text(package, SETUP)
 
 
 def test_the_agent_toggle_and_the_users_entry_agree():

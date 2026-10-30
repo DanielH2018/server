@@ -22,7 +22,8 @@ as are the three sources outside the component a file entry may name: a `lib` en
 (`hosts/lib/<name>`, a script several packages ship), a `key` entry (`hosts/keys/<name>.gpg`, a
 public keyring hosts trust) and a `shared` entry (one of the `SHARED_FILES`, a file an Ansible role
 still installs). A file or output entry may carry `when: <expression>`, evaluated like an enable
-link's, and ships only when it is true; an inventory toggle that turned a subject off keeps doing so.
+link's, and ships only when it is true; an inventory toggle that turned a subject off keeps doing so. A `units:`
+entry may carry `when:` too, so a unit the toggle drops takes its restart policy with it.
 
 A package or component may also carry `units`, `enable` and `legacy` (host_manifest.py), a
 file entry's `activate:` field and a `ufw:` map (host_arms.py). A host package installs
@@ -334,7 +335,6 @@ def _render_unit(
     the `SHARED_FILES` under the repo root that holds `lib`'s parent.
     """
     files = spec.get("files") or []
-    add_policies(package, directory, spec.get("units") or {})
     add_credentials(package, directory, spec.get("credentials") or [], withheld)
     enable = spec.get("enable") or {}
     legacy = spec.get("legacy") or []
@@ -342,7 +342,8 @@ def _render_unit(
     arms = {key: spec[key] for key in ARM_KEYS if spec.get(key)}
     role, defaults = role_sources(spec, directory)
     compose = spec.get("compose")
-    if not (files or legacy or enable or outputs or arms or compose):
+    units = spec.get("units") or {}
+    if not (files or legacy or enable or outputs or arms or compose or units):
         return
     ctx, reasons = host_context(host, defaults, inventory, withheld)
     env = confined_env(directory)
@@ -367,6 +368,7 @@ def _render_unit(
             raise RenderRefused(f"{directory}: when {when!r} is not an expression")
         return _evaluate(env, when, spec_ctx, reasons, directory)
 
+    add_policies(package, directory, units, ships)
     add_arms(
         package,
         directory,

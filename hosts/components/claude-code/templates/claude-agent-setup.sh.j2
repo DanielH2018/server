@@ -45,6 +45,19 @@ dir 2750 "$home"
 dir 0755 "$home/.local"
 dir 0755 "$home/.local/bin"
 dir 0750 "$home/.ssh"
+{% if claude_agent_ssh_login_enabled %}
+# The key host's agent logs in with exactly the packaged key. authorized_keys is root-owned in a
+# .ssh the agent owns (agent_ssh_login.yml's DECIDED). A blank key ships no file, and the old one stays.
+if [ -e "$templates/authorized_keys" ]; then
+  if [ "$(wc -l < "$templates/authorized_keys")" -ne 1 ] || ! grep -Eq '^restrict ssh-ed25519 ' "$templates/authorized_keys"; then
+    echo "claude-agent-setup: $templates/authorized_keys is not one restricted ssh-ed25519 line" >&2
+    exit 1
+  fi
+  install -o root -g root -m 0644 "$templates/authorized_keys" "$home/.ssh/authorized_keys"
+fi
+{% else %}
+rm -f "$home/.ssh/authorized_keys"
+{% endif %}
 dir 0755 "$home/.config"
 dir 0755 "$home/.config/git"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/gh"

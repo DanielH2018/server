@@ -82,6 +82,24 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
     assert parsed["legacy"] == package.legacy
 
 
+@pytest.mark.parametrize("on", [True, False])
+def test_a_units_entry_records_its_policy_only_while_its_when_holds(hosts, on):
+    component = {
+        "defaults": {"beat_on": on},
+        "files": [
+            {"src": "u", "dst": f"{UNITS}/homelab-beat.service", "when": "beat_on"}
+        ],
+        "units": {
+            "homelab-beat.service": {"policy": "manual", "when": "beat_on"},
+        },
+    }
+    root = hosts({"components": ["beat"]}, {"beat": component}, {"u": ""})
+
+    units = _manifest(host_mode.render_host("daniel-pi", root))["units"]
+
+    assert units.get("homelab-beat.service") == ({"policy": "manual"} if on else None)
+
+
 def test_the_real_updater_s_units_join_a_host_manifest(tmp_path):
     hosts = tmp_path / "hosts"
     (hosts / "packages").mkdir(parents=True)

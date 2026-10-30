@@ -28,10 +28,15 @@
 # so a toggle set false in daniel-server's host_vars still takes its subject back. The `users:`
 # entry takes no `when:`: to switch the agent off, delete it, and the users arm expires the user.
 #
+# The agent's peer login: daniel-box's agent logs in here as `claude` with a key the role used
+# to read over ssh from daniel-box. The package cannot read that key, so the host carries its
+# public half as `claude_agent_peer_public_key` (in `defaults:` below). claude-agent-setup
+# installs exactly that one line as authorized_keys, so a rotation replaces the old key. Once
+# `claude_agent_ssh_login_enabled` is false, the setup script removes the file and drops the agent
+# from ssh-users. While the key is blank, the file Ansible wrote stays untouched.
+#
 # Not moved, because nothing re-applies it on daniel-server:
-#   - the operator's own Claude Code install, which the dotfiles repo owns since H7.38;
-#   - the agent's authorized peer key, which the role read over ssh from daniel-box. The file
-#     Ansible wrote stays, and a rotation of daniel-box's key no longer reaches it.
+#   - the operator's own Claude Code install, which the dotfiles repo owns since H7.38.
 role: claude_code
 defaults:
   # The packaged unit names the role templates read (see the header).
@@ -42,6 +47,9 @@ defaults:
   # What the role computes in tasks: the agents switched on, and the group initial_setup names.
   claude_code_agents_present: [claude]
   claude_code_worktree_holders_group: worktree-holders
+  # The public half of the key daniel-box's agent logs in with: one `ssh-ed25519 ...` line.
+  # A rotation of that key edits this value. Blank leaves the authorized_keys Ansible wrote.
+  claude_agent_peer_public_key: ""
 depends:
   - acl
 users:
@@ -64,6 +72,7 @@ files:
   - {src: "role:agent-gitconfig.j2", dst: /usr/lib/homelab/claude-agent/gitconfig, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: "role:agent-user-claude-md.j2", dst: /usr/lib/homelab/claude-agent/CLAUDE.md, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: "role:agent-chezmoi-seed.toml.j2", dst: /usr/lib/homelab/claude-agent/chezmoi-seed.toml, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: templates/agent-authorized-keys.j2, dst: /usr/lib/homelab/claude-agent/authorized_keys, activate: "try-restart:homelab-claude-agent.service", when: "claude_agent_ssh_login_enabled and (claude_agent_peer_public_key | trim) != ''"}
   - {src: units/homelab-claude-agent.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent.service, when: "claude_code_agent_user_enabled"}
   # The Remote Control host.
   - {src: "role:claude-rc.service.j2", dst: /usr/lib/systemd/system/homelab-claude-rc.service}
@@ -110,7 +119,7 @@ units:
   # A restart drops every session the host runs, so a changed unit waits for the operator.
   homelab-claude-rc.service: {policy: manual}
   # Its job is the next boot; a restart would respawn sessions the operator stopped.
-  homelab-claude-bg-resume.service: {policy: manual}
+  homelab-claude-bg-resume.service: {policy: manual, when: claude_code_bg_resume_enabled}
 enable:
   homelab-claude-agent.service: {target: multi-user.target, when: claude_code_agent_user_enabled}
   homelab-claude-rc.service: {target: multi-user.target, when: claude_code_rc_enabled}
