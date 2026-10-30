@@ -326,3 +326,37 @@ SIMULATION = (
 )
 def test_the_control_reads_the_version_apt_plans_for_docker_ce(simulation, want):
     assert _function("planned_version")(simulation, ENGINE) == want
+
+
+# Attributing the refusal to the hold, and a pending 1 that is not a moved engine.
+HELD_A = "5:0.0.1-1~ubuntu.24.04~noble"
+OFFERED_B = "5:29.8.1-1~ubuntu.24.04~noble"
+PIN = "5:29.8.*-*~ubuntu.24.04~noble"
+REFUSAL = (
+    f" homelab-daniel-pi : Depends: docker-ce (= {OFFERED_B}) but {HELD_A} is to be installed\n"
+    "E: Unable to correct problems, you have held broken packages.\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("said", "want"),
+    [
+        (REFUSAL, True),
+        ("E: Unable to correct problems, you have held broken packages.\n", False),
+        (REFUSAL.replace(OFFERED_B, "5:1.0"), False),
+        (REFUSAL.replace(HELD_A, "5:9.9"), False),
+    ],
+    ids=["names-both", "generic-held-broken", "other-offered", "other-held"],
+)
+def test_a_refusal_counts_only_when_it_names_the_engine_against_the_held_version(
+    said, want
+):
+    names = _function("refusal_names_the_hold")
+    assert names(said, HELD_A, OFFERED_B) is want
+
+
+def test_an_engine_on_the_pin_is_not_held_off_it():
+    expect_held = _function(EXPECT_HELD)
+    expect_held(HELD_A, HELD_A, OK_LINE + PENDING_1, PIN)
+    with pytest.raises(CaseFailed):
+        expect_held(OFFERED_B, OFFERED_B, OK_LINE + PENDING_1, PIN)

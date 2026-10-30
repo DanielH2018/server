@@ -15,11 +15,27 @@ so the updater never asks apt to move the engine, and the hold is apt's to keep.
     beside a newer build of that package, runs the updater, which installs that build with
     apt, and asserts the engine and the pending series (`expect_held`);
   * serves a red fixture, the real Pi package with `Depends: docker-ce (= B)`
-    (`depends_variant`). With docker-ce unheld, apt's simulation must plan B
-    (`planned_version`): the control that makes the hold the only thing left to decide. Held
-    again, the install runs as the updater runs it, and the case records what apt did with
-    the hold (`red_outcome`): it refused the install, or it moved the engine. The job log's
-    `[PASS]` line carries the outcome and apt's last line for each release leg.
+    (`depends_variant`), and installs it twice, differing only in the hold. WITH the hold
+    (`apt-mark showhold` lists docker-ce), apt's simulation does not plan B
+    (`planned_version`), the install is refused with docker-ce at A (`red_outcome` is
+    `refused`), and apt's text names `docker-ce (= B)` against A (`refusal_names_the_hold`),
+    which "held broken packages" alone would not. WITHOUT the hold, the same install moves
+    docker-ce from A to B (`red_outcome` is `moved`), onto the pin, and the next updater run
+    reads `homelab_docker_engine_pending` 0. So the hold is the only thing that kept the
+    engine at A, and the pending series follows the version. The job log's `[PASS]` line
+    carries both outcomes for each release leg.
+
+Measured. The container half runs only in the `host_packages` job: it needs
+`docker run --privileged --cgroupns=host` with systemd as PID 1, which `dockrun` refuses, and
+daniel-box has no Docker. What ran locally, on 2026-10-30 with apt 2.8.3 as a non-root
+simulation (`apt-get install -s` over a throwaway status file, the same dummy debs from
+`engine_debs`, a stand-in `homelab-daniel-pi` with `Depends: docker-ce (= B)`):
+
+  * docker-ce held at A (`Status: hold ok installed`): rc 100, `homelab-daniel-pi : Depends:
+    docker-ce (= 5:29.8.1-1~ubuntu.24.04~noble) but 5:0.0.1-1~ubuntu.24.04~noble is to be
+    installed` and `E: Unable to correct problems, you have held broken packages.`
+  * the same status without the hold: rc 0, `Inst docker-ce [5:0.0.1-1~ubuntu.24.04~noble]
+    (5:29.8.1-1~ubuntu.24.04~noble ...)`.
 """
 
 import sys as _sys
@@ -30,6 +46,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import shutil
 import subprocess
 import sys
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 from renderer.renderer_lib import host as host_mode
@@ -41,14 +58,12 @@ ENGINE = "docker-ce"
 PINS = "/usr/lib/homelab/docker-engine.pins"
 UPDATER_UNIT = "homelab-updater.service"
 PENDING = f'homelab_docker_engine_pending{{host="{HOST}"}} 1'
+CLEARED = PENDING[:-1] + "0"
 # The upstream version A carries, below any pin the real package can hold.
 HELD_UPSTREAM = "0.0.1"
 HOMELAB_APT = (
     "-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=-"
 )
-# What apt prints when it cannot resolve an install. The unheld control is what ties a
-# refusal to the hold; this only rejects a failure that is no resolution at all.
-RESOLUTION = ("held", "unmet dependencies", "unable to satisfy dependencies")
 REFUSED = "refused"
 MOVED = "moved"
 NAME = "hold the Docker engine through an updater run"
@@ -170,18 +185,36 @@ def red_outcome(held: str, after: str, apt_ok: bool) -> str:
     raise CaseFailed(f"apt installed the red fixture with {ENGINE} still at {held}")
 
 
-def expect_held(held: str, installed: str, prom: str) -> None:
+def refusal_names_the_hold(said: str, held: str, offered: str) -> bool:
+    """Whether apt's text says the engine is stuck at `held` while a Depends asks for `offered`.
+
+    apt prints "held broken packages" for any unresolvable Depends, so that line alone is no
+    proof of the hold. The line that is: `homelab-daniel-pi : Depends: docker-ce (= <offered>)
+    but <held> is to be installed`. It names docker-ce, the version asked for and the version
+    the hold keeps. `said` is apt's stdout and stderr.
+    """
+    return f"{ENGINE} (= {offered})" in said and held in said
+
+
+def expect_held(held: str, installed: str, prom: str, pin: str | None = None) -> None:
     """Assert docker-ce is still at `held` and the prom reads the engine pending.
 
     Args:
         held: The version docker-ce was held at.
         installed: What `dpkg-query -W docker-ce` read after the updater run.
         prom: homelab_host.prom's text.
+        pin: The docker-ce glob the Pi package pins. When given, `installed` must sit outside
+            it, so pending 1 reads "held off its pin" and not "moved onto it".
 
     Raises:
-        CaseFailed: docker-ce moved or is gone, or the prom has no pending series reading 1.
+        CaseFailed: docker-ce moved, is gone or sits on the pin, or the prom has no pending
+            series reading 1.
     """
     expect(installed == held, f"{ENGINE} is at {installed or 'nothing'}, not {held}")
+    expect(
+        pin is None or not fnmatchcase(installed, pin),
+        f"{ENGINE} at {installed} matches the pin {pin}, so it is not held off it",
+    )
     expect(PENDING in prom.splitlines(), f"the prom lacks {PENDING!r}:\n{prom}")
 
 
@@ -191,8 +224,14 @@ def _engine(c: Container) -> str:
     return out[3:] if out.startswith("ii ") else ""
 
 
+def expect_on_hold(c: Container) -> None:
+    """Assert `apt-mark showhold` lists docker-ce."""
+    held = c.ok("apt-mark showhold").split()
+    expect(ENGINE in held, f"apt-mark showhold lists {held}, not {ENGINE}")
+
+
 def _body(cases, c: Container) -> str:
-    """Run the green half and the red fixture; return the red fixture's outcome."""
+    """Run the green half and both halves of the red fixture; return what apt did."""
     build_root = cases.work / "build" / "engine"
     held_deb, offered_deb = engine_debs(build_root / "debs")
     companions = companion_debs(build_root / "companions")
@@ -206,6 +245,8 @@ def _body(cases, c: Container) -> str:
     c.ok(f"apt-mark hold {ENGINE} {names}")
     held = _engine(c)
     expect(bool(held), f"{ENGINE} did not install from {held_deb.name}")
+    expect_on_hold(c)
+    pin = engine_pin(host_mode.render_host(HOST))
     secrets_case.seal_pi(cases, c)
     labels = ("updater-head", "pi-head", *cases.tools)
     debs = " ".join(f"/srv/debs/{cases.debs[label].name}" for label in labels)
@@ -220,7 +261,7 @@ def _body(cases, c: Container) -> str:
     status = c.ok(f"systemctl show -P ExecMainStatus {UPDATER_UNIT}").strip()
     expect(status == "0", f"the updater exited {status}")
     cases.expect_installed(c, "updater-head", "pi-dropin")
-    expect_held(held, _engine(c), c.read(PROM))
+    expect_held(held, _engine(c), c.read(PROM), pin)
 
     # The ciphertext seal_pi wrote, so the red build differs from pi-dropin only by its Depends.
     sealed = cases.work / "build" / f"pi-sealed-{c.name}" / "sops"
@@ -232,30 +273,54 @@ def _body(cases, c: Container) -> str:
     # The homelab source alone, so a failed mirror fetch fails the case rather than reading
     # as a refusal.
     c.ok(f"apt-get update {HOMELAB_APT}")
-    # The control: unheld, apt plans docker-ce at B, so B is the indexed candidate and only
-    # the hold stands between the red Depends and a moved engine.
     offered = deb_version(offered_deb)
-    c.ok(f"apt-mark unhold {ENGINE}")
-    try:
-        plan = c.sh(f"apt-get install -s --no-install-recommends homelab-{HOST}")
-    finally:
-        c.ok(f"apt-mark hold {ENGINE}")
-    planned = planned_version(plan.stdout, ENGINE)
-    expect(
-        plan.returncode == 0 and planned == offered,
-        f"unheld, apt plans {ENGINE} at {planned or 'nothing'}, not {offered}:\n"
-        f"{plan.stdout}{plan.stderr}",
-    )
-    apt = c.sh(
+    install = (
         "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends"
         f" homelab-{HOST}"
     )
+
+    # With the hold: the plan leaves docker-ce at A, and the install is refused in terms that
+    # name the engine, so the hold is what stopped it and not some other Depends.
+    expect_on_hold(c)
+    plan = c.sh(f"apt-get install -s --no-install-recommends homelab-{HOST}")
+    planned = planned_version(plan.stdout, ENGINE)
+    expect(
+        plan.returncode != 0 and planned != offered,
+        f"held, apt plans {ENGINE} at {planned or 'nothing'}, rc {plan.returncode}:\n"
+        f"{plan.stdout}{plan.stderr}",
+    )
+    apt = c.sh(install)
     said = apt.stdout + apt.stderr
-    if apt.returncode and not any(word in said.lower() for word in RESOLUTION):
-        raise CaseFailed(f"the red install failed on no dependency:\n{said}")
-    outcome = red_outcome(held, _engine(c), apt.returncode == 0)
-    last = said.strip().splitlines()[-1:] or ["nothing"]
-    return f"{outcome}; apt said: {last[0]}"
+    with_hold = red_outcome(held, _engine(c), apt.returncode == 0)
+    expect(with_hold == REFUSED, f"with the hold, the engine {with_hold}:\n{said}")
+    expect(
+        refusal_names_the_hold(said, held, offered),
+        f"apt's refusal does not name {ENGINE} (= {offered}) against {held}:\n{said}",
+    )
+    expect_on_hold(c)
+
+    # Without the hold, the same install moves the engine onto the pin. This is the red half:
+    # it fails the case if B is not the indexed candidate, and it shows pending following the
+    # version, so the green half's `pending 1` is not a constant.
+    c.ok(f"apt-mark unhold {ENGINE}")
+    free = c.sh(install)
+    freed = _engine(c)
+    without_hold = red_outcome(held, freed, free.returncode == 0)
+    expect(
+        without_hold == MOVED and freed == offered,
+        f"without the hold, the engine {without_hold} at {freed or 'nothing'}, not"
+        f" {offered}:\n{free.stdout}{free.stderr}",
+    )
+    expect(fnmatchcase(freed, pin), f"{ENGINE} at {freed} is off the pin {pin}")
+    c.ok("systemctl start homelab-reconcile.service")
+    c.sh(f"systemctl start {UPDATER_UNIT}")
+    prom = c.read(PROM)
+    expect(CLEARED in prom.splitlines(), f"pending does not read 0 at {freed}:\n{prom}")
+    cause = [line.strip() for line in said.splitlines() if f"Depends: {ENGINE}" in line]
+    return (
+        f"with the hold {with_hold} ({cause[0] if cause else said.strip()[-120:]});"
+        f" without it {without_hold} ({held} -> {freed})"
+    )
 
 
 def run(cases) -> None:
@@ -276,7 +341,7 @@ def run(cases) -> None:
     else:
         print(
             f"[PASS] {c.name}: {NAME}: {ENGINE} stayed held and the engine reads pending;"
-            f" the red fixture's Depends on the offered version was {outcome}",
+            f" the red fixture's Depends on the offered version: {outcome}",
             file=sys.stderr,
         )
     finally:
