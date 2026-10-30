@@ -773,6 +773,7 @@
  "ansible/tests/setup/test_claude_timer_rule_literals.py": 0.89,
  "ansible/tests/setup/test_claude_triage.py": 0.2,
  "ansible/tests/setup/test_collections_path_fallback.py": 0.0,
+ "ansible/tests/setup/test_collections_tag_reaches_a_task.py": 0.42,
  "ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py": 0.01,
  "ansible/tests/setup/test_coredns_metrics_binds_wildcard.py": 0.0,
  "ansible/tests/setup/test_coredns_metrics_port_agrees.py": 0.0,
