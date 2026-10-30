@@ -80,7 +80,7 @@ tests:
               verify: "true"
             exp_annotations: *annotations
 
-  # A failed kube-state-metrics scrape pages through the Cluster Scrape Targets tile, not here.
+  # A failed kube-state-metrics scrape pages through ScrapeTargetDown, not here.
   - interval: 1m
     input_series:
       - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
@@ -161,7 +161,7 @@ tests:
               verify: "true"
             exp_annotations: *jellyfin_annotations
 
-  # A failed kube-state-metrics scrape pages through the Cluster Scrape Targets tile, not here.
+  # A failed kube-state-metrics scrape pages through ScrapeTargetDown, not here.
   - interval: 1m
     input_series:
       - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
@@ -242,7 +242,7 @@ tests:
               verify: "true"
             exp_annotations: *pihole_annotations
 
-  # A failed kube-state-metrics scrape pages through the Cluster Scrape Targets tile, not here.
+  # A failed kube-state-metrics scrape pages through ScrapeTargetDown, not here.
   - interval: 1m
     input_series:
       - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'

@@ -73,9 +73,9 @@ groups:
       # The family's zero-series alert (M1 convention 2). The first arm pages a missing scrape
       # job, which no Kuma tile can see. The second pages a scrape that works but lacks any one
       # gauge: a failed GitHub or GHCR read, an empty token, or a deleted variable each export no
-      # series for what they feed, never a 0. It is conjoined with up == 1, because the job
-      # carries no `origin` label and Kuma's Cluster Scrape Targets tile already pages a failed
-      # scrape (M1 convention 5) until M6's batch A3. The 15m hold rides over two failed cycles.
+      # series for what they feed, never a 0. It is conjoined with up == 1, because
+      # ScrapeTargetDown already pages a failed scrape of the job (M1 convention 5) since M6's
+      # batch A3. The 15m hold rides over two failed cycles.
       - alert: DeployPipelineExporterAbsent
         expr: >-
           absent(up{job="deploy-pipeline"})

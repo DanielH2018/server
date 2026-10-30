@@ -103,7 +103,7 @@ tests:
         exp_alerts: []
 
   # The exporter is unreachable: every target's scrape fails from minute 5.
-  # BlackboxExporterDown fires in shadow after its 5m hold. The probes' own series go stale,
+  # BlackboxExporterDown fires after its 5m hold. The probes' own series go stale,
   # so no per-target alert fires.
   - interval: 1m
     input_series:
@@ -121,7 +121,6 @@ tests:
           - exp_labels:
               severity: critical
               service: blackbox-exporter
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape blackbox_exporter for any ingress probe.
               description: >-
@@ -134,7 +133,7 @@ tests:
         exp_alerts: []
 
   # One target's scrape fails while the other's works. That is a single failed scrape, which
-  # Kuma's Cluster Scrape Targets tile pages, so BlackboxExporterDown stays quiet.
+  # ScrapeTargetDown pages, so BlackboxExporterDown stays quiet.
   - interval: 1m
     input_series:
       - series: 'up{job="blackbox-ingress", instance="https://homepage.local.example.com", service="homepage", module="http_sso_302", page_tier="warning"}'

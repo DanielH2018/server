@@ -27,44 +27,24 @@ tests:
                 prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
                 metrics can fire until the series is back.
 
-  # A failed scrape. LokiHomelabDown fires in shadow after its 5m hold, and the job still
-  # exists, so LokiHomelabMetricsMissing stays quiet.
+  # A failed scrape. The job still exists, so LokiHomelabMetricsMissing stays quiet.
+  # ScrapeTargetDown pages the failed scrape (scrape-targets.test.yaml), and LokiHomelabDown,
+  # which paged it from here, went in M6's batch A3 Cutover-b.
   - interval: 1m
     input_series:
       - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
         values: '1x5 0x15'
     alert_rule_test:
-      - eval_time: 9m
-        alertname: LokiHomelabDown
-        exp_alerts: []
-      - eval_time: 12m
-        alertname: LokiHomelabDown
-        exp_alerts:
-          - exp_labels:
-              job: loki-homelab
-              instance: loki-homelab.homelab.svc:3100
-              severity: warning
-              service: loki-homelab
-              shadow: "true"
-            exp_annotations:
-              summary: Prometheus cannot scrape the homelab Loki.
-              description: >-
-                loki-homelab.homelab.svc:3100 has failed its scrape for 5 minutes, so the
-                homelab Loki is down or unreachable from Prometheus. Read the loki-homelab
-                pod's events and log in the homelab namespace.
       - eval_time: 20m
         alertname: LokiHomelabMetricsMissing
         exp_alerts: []
 
-  # Healthy: the scrape works, so neither alert fires.
+  # Healthy: the scrape works, so the zero-series alert stays quiet.
   - interval: 1m
     input_series:
       - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
         values: '1x30'
     alert_rule_test:
-      - eval_time: 30m
-        alertname: LokiHomelabDown
-        exp_alerts: []
       - eval_time: 30m
         alertname: LokiHomelabMetricsMissing
         exp_alerts: []
@@ -185,7 +165,7 @@ tests:
                 the ruler, and compare `probe.py metric loki_prometheus_rule_group_rules` with the
                 rule_group this alert selects.
 
-  # Loki is down, so the ruler's series are gone. That is LokiHomelabDown's condition, and the
+  # Loki is down, so the ruler's series are gone. That is ScrapeTargetDown's condition, and the
   # `up == 1` conjunct keeps LokiRulerNotEvaluating from paging it a second time.
   - interval: 1m
     input_series:

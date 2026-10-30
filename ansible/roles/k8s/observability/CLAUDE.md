@@ -115,7 +115,7 @@ every other ConfigMap and CronJob family. The ClusterRole's ConfigMap `list` gra
 narrowed by name, and no collector exports ConfigMap `data`.
 
 Prometheus sends alerts to the role's Alertmanager and scrapes it as job `alertmanager`, which
-carries no `origin` label, so Kuma's Cluster Scrape Targets tile pages a failed scrape.
+carries no `origin` label, and `ScrapeTargetDown` pages a failed scrape.
 Its config, credentials included, is the `alertmanager-config` Secret, and every Go template
 expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file in
 `files/rules/` with a promtool test in `tests/rules/`, and ships only once
@@ -174,8 +174,10 @@ rendered job is in exactly one named rule. Each rule has a `ScrapeTargetFlapping
 the same job matcher and `service`. It pages a target that failed more than 30% of its scrapes
 over 30 minutes, went down at least twice, and answered in the last 10. That is the flapping case the per-series 10-minute hold
 never fires on (#6626). `ansible/tests/services/test_scrape_target_flap_rule.py` holds the two
-sets equal. These rules and `files/rules/log-pipeline.yaml` carry
-`shadow` until M6's batch A3 cuts Kuma's scrape and log-shipper tiles over.
+sets equal. These rules and `files/rules/log-pipeline.yaml` page since M6's batch A3
+Cutover-b, which replaced Kuma's scrape and log-shipper tiles. `BlackboxExporterDown` holds back
+`ScrapeTargetDown` for job `blackbox-ingress` through an Alertmanager inhibit, so a dead exporter
+pages once (`ansible/tests/services/test_alertmanager_blackbox_inhibit.py`).
 `files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
 while its rule is still shadow, and the last M6 Phase A cutover deletes it.
 

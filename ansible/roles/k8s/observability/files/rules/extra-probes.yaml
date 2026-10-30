@@ -7,7 +7,7 @@
 # row page the same failures today. M1 convention 5 allows one pager, so every rule below
 # except the zero-series rule carries shadow="true" and routes to the blackhole receiver.
 # The 14 tiles are the 12 that become a probe here, the Pi ping that becomes `PiHostDown`, and
-# Loki's /ready, which M5's LokiHomelabDown covers. B8's Cutover-a deletes the tiles and the
+# Loki's /ready, which ScrapeTargetDown covers for job loki-homelab. B8's Cutover-a deletes the tiles and the
 # `pi_pressure` row, and Cutover-b drops `shadow`.
 #
 # The per-target rules carry no literal `service`. Each series takes it from the scrape target

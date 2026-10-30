@@ -2,11 +2,12 @@
 # Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, "A3 and the handoffs it closes".
 #
-# SHADOW UNTIL M6's BATCH A3 CUTS OVER. Kuma's Scrape Targets and Cluster Scrape Targets tiles
-# page `up == 0` today. monitor-bridge's check_targets_down reads `up{origin="daniel-server"}`
-# and check_cluster_targets reads the complement, so between them they read every series
-# below with no job exempt. M1 convention 5 allows one pager, so every rule here routes to the
-# blackhole receiver until Cutover-b drops `shadow`.
+# These rules page since M6's batch A3 Cutover-b. Kuma's Scrape Targets and Cluster Scrape Targets
+# tiles went in Cutover-a1, and monitor-bridge's two checks behind them in Cutover-a2:
+# check_targets_down read `up{origin="daniel-server"}` and check_cluster_targets read the
+# complement, so between them they read every series below with no job exempt, and neither may
+# this rule. `for: 10m` replaces the bridge's CLUSTER_TARGETS_CONSECUTIVE streak of three
+# 300-second cycles.
 #
 # One `ScrapeTargetDown` rule per owning role. A rule's `service` is a literal, because
 # scripts/validate/alert_conventions.py takes `service` from a literal, a workload-service
@@ -31,7 +32,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -45,7 +45,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -59,7 +58,6 @@ groups:
         labels:
           severity: warning
           service: alloy
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -73,7 +71,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -87,7 +84,6 @@ groups:
         labels:
           severity: warning
           service: node-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -101,7 +97,6 @@ groups:
         labels:
           severity: warning
           service: gpu-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -115,7 +110,6 @@ groups:
         labels:
           severity: warning
           service: monitor-bridge
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -132,7 +126,6 @@ groups:
         labels:
           severity: warning
           service: autofix-bridge
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -146,7 +139,6 @@ groups:
         labels:
           severity: warning
           service: flux
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -160,7 +152,6 @@ groups:
         labels:
           severity: warning
           service: crowdsec
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -174,7 +165,6 @@ groups:
         labels:
           severity: warning
           service: traefik
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -188,7 +178,6 @@ groups:
         labels:
           severity: warning
           service: speedtest
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -202,7 +191,6 @@ groups:
         labels:
           severity: warning
           service: pihole
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -216,7 +204,6 @@ groups:
         labels:
           severity: warning
           service: uptime-kuma
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -230,7 +217,6 @@ groups:
         labels:
           severity: warning
           service: home-assistant
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -244,7 +230,6 @@ groups:
         labels:
           severity: warning
           service: nut-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -258,7 +243,6 @@ groups:
         labels:
           severity: warning
           service: game-stats
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -272,7 +256,6 @@ groups:
         labels:
           severity: warning
           service: longhorn
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -286,7 +269,6 @@ groups:
         labels:
           severity: warning
           service: coredns
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -300,7 +282,6 @@ groups:
         labels:
           severity: warning
           service: exportarr
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -314,7 +295,6 @@ groups:
         labels:
           severity: warning
           service: k3s
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -328,7 +308,6 @@ groups:
         labels:
           severity: warning
           service: blackbox-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -342,7 +321,6 @@ groups:
         labels:
           severity: warning
           service: unmapped
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
           description: >-
@@ -364,7 +342,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -378,7 +355,6 @@ groups:
         labels:
           severity: warning
           service: loki-homelab
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -392,7 +368,6 @@ groups:
         labels:
           severity: warning
           service: alloy
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -406,7 +381,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -420,7 +394,6 @@ groups:
         labels:
           severity: warning
           service: node-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -434,7 +407,6 @@ groups:
         labels:
           severity: warning
           service: gpu-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -448,7 +420,6 @@ groups:
         labels:
           severity: warning
           service: monitor-bridge
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -462,7 +433,6 @@ groups:
         labels:
           severity: warning
           service: autofix-bridge
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -476,7 +446,6 @@ groups:
         labels:
           severity: warning
           service: flux
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -490,7 +459,6 @@ groups:
         labels:
           severity: warning
           service: crowdsec
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -504,7 +472,6 @@ groups:
         labels:
           severity: warning
           service: traefik
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -518,7 +485,6 @@ groups:
         labels:
           severity: warning
           service: speedtest
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -532,7 +498,6 @@ groups:
         labels:
           severity: warning
           service: pihole
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -546,7 +511,6 @@ groups:
         labels:
           severity: warning
           service: uptime-kuma
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -560,7 +524,6 @@ groups:
         labels:
           severity: warning
           service: home-assistant
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -574,7 +537,6 @@ groups:
         labels:
           severity: warning
           service: nut-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -588,7 +550,6 @@ groups:
         labels:
           severity: warning
           service: game-stats
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -602,7 +563,6 @@ groups:
         labels:
           severity: warning
           service: longhorn
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -616,7 +576,6 @@ groups:
         labels:
           severity: warning
           service: coredns
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -630,7 +589,6 @@ groups:
         labels:
           severity: warning
           service: exportarr
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -644,7 +602,6 @@ groups:
         labels:
           severity: warning
           service: k3s
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -658,7 +615,6 @@ groups:
         labels:
           severity: warning
           service: blackbox-exporter
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -672,7 +628,6 @@ groups:
         labels:
           severity: warning
           service: unmapped
-          shadow: "true"
         annotations:
           summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
           description: >-
@@ -694,7 +649,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Prometheus sees too few scrape targets.
           description: >-

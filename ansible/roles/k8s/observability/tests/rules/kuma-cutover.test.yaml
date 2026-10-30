@@ -26,18 +26,6 @@ tests:
             exp_annotations:
               summary: Kuma's k3s CPU Throttling tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the k3s CPU Throttling tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Scrape Targets, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Scrape Targets tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Scrape Targets tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Cluster Scrape Targets, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Cluster Scrape Targets tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Cluster Scrape Targets tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Log Shipper Dropped Entries, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Log Shipper Dropped Entries tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Log Shipper Dropped Entries tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Docs Refresh, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Docs Refresh tile is gone and no alert rule pages in its place.
@@ -397,12 +385,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
@@ -592,12 +574,6 @@ tests:
       - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
         values: '1x10 _x130'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x140'
@@ -798,12 +774,6 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
         values: '1x160'
-      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
-        values: '1x160'
       - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
@@ -995,12 +965,6 @@ tests:
       - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x5 _x1700'
@@ -1202,12 +1166,6 @@ tests:
       - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x3100'
@@ -1431,12 +1389,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
@@ -1646,12 +1598,6 @@ tests:
       - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x300'
@@ -1875,12 +1821,6 @@ tests:
       - series: 'monitor_status{monitor_name="k3s Container OOM", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="k3s CPU Throttling", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Scrape Targets", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Cluster Scrape Targets", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Log Shipper Dropped Entries", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
         values: '1x760'
