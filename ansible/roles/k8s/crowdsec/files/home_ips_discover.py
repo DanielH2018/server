@@ -229,6 +229,21 @@ def write(kube: Kube, namespace: str, name: str, data: Mapping[str, str]) -> Non
         )
 
 
+def api_base(env: Mapping[str, str]) -> str:
+    """The API server's URL, by the Service address the kubelet injects when it can.
+
+    The kubelet sets `KUBERNETES_SERVICE_HOST` even under `enableServiceLinks: false`. Using
+    it keeps the patch, the job's one hard failure, off DNS, so a run that lands while
+    CoreDNS's single replica is replaced no longer fails on `[Errno -3] Try again`.
+    """
+    host = env.get("KUBERNETES_SERVICE_HOST", "")
+    if not host:
+        return API
+    if ":" in host:
+        host = f"[{host}]"
+    return f"https://{host}:{env.get('KUBERNETES_SERVICE_PORT', '443')}"
+
+
 def main(
     argv: list[str] | None = None,
     env: Mapping[str, str] | None = None,
@@ -245,7 +260,7 @@ def main(
     parser.parse_args(argv)
     environ = os.environ if env is None else env
     if kube is None:
-        kube = Kube(API, Path(TOKEN_FILE).read_text().strip())
+        kube = Kube(api_base(environ), Path(TOKEN_FILE).read_text().strip())
     data = plan(
         lookup_ipv4(opener, environ.get("WAN_PROBE_URLS", "").split()),
         lookup_ipv6(read_if_inet6),
