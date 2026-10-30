@@ -2139,7 +2139,8 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `hosts/lib/tests/test_pi_docker_component.py`, not in the CI container: the package
           declares no engine `Depends` and no preferences pin, with a red fixture, and the
           updater installs no engine package and writes `homelab_docker_engine_pending`. The
-          container case is #6590.
+          container case is `scripts/validate/validate_lib/engine_case.py` (#6590), which the
+          `host_packages` job runs.
       **Operator rulings, 2026-10-30.** Open question 8 is resolved as windowed: the PR ships
       `homelab-docker-engine.timer`, which starts the unit at 00:30 UTC. None of the six
       absent networks (`monitoring`, `media`, `apps`, `codeserver`, `terraria`,
@@ -2840,7 +2841,8 @@ progress.
 - *Docker engine.* In the CI container, a dummy `docker-ce` at version A is installed and
   held, and the package carries pins for version B. After an updater run, `docker-ce` is
   still at A, and `homelab_docker_engine_pending` reads 1. The red fixture adds `Depends:
-  docker-ce (= B)`, and the test sees the version move and fails.
+  docker-ce (= B)`, and the case records what apt does with the hold: it refuses the
+  install, or it moves the version.
 - *Bootstrap.* In a container, a hostname mismatch is refused. A second run on a matching
   host changes nothing, and does not rerun the installer. `INSTALL_K3S_EXEC=agent` yields
   only `k3s-agent.service`, and a stubbed installer that creates `k3s.service` for an agent
