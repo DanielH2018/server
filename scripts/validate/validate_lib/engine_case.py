@@ -10,9 +10,9 @@ so the updater never asks apt to move the engine, and the hold is apt's to keep.
 
   * builds docker-ce at A and B with `dpkg-deb` (`engine_debs`), B matching the real package's
     docker-ce pin and A not;
-  * installs A and holds it, installs the real Pi package by hand, serves B beside the packages
-    the updater installs, runs the updater, and asserts the engine and the pending series
-    (`expect_held`);
+  * installs A and holds it, installs the real Pi package by hand, serves B beside a newer
+    build of that package, runs the updater, which installs that build with apt, and asserts
+    the engine and the pending series (`expect_held`);
   * serves a red fixture, the real Pi package with `Depends: docker-ce (= B)`
     (`depends_variant`), installs it with apt as the updater does, and records what apt did
     with the hold (`red_outcome`): it refused the install, or it moved the engine.
@@ -163,11 +163,14 @@ def _body(cases, c: Container) -> str:
     c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
     # Joins the reconcile the postinst queued, so the updater's own cannot merge into it.
     c.ok("systemctl start homelab-reconcile.service")
-    served = [cases.debs[label] for label in labels]
+    # A newer Pi build makes the updater run apt-get install with B on offer; the common
+    # path would install nothing and never put the hold in front of apt.
+    served = [cases.debs[label] for label in (*labels, "pi-dropin")]
     publish(cases.work / "repo", [*served, offered_deb])
     c.sh(f"systemctl start {UPDATER_UNIT}")
     status = c.ok(f"systemctl show -P ExecMainStatus {UPDATER_UNIT}").strip()
     expect(status == "0", f"the updater exited {status}")
+    cases.expect_installed(c, "updater-head", "pi-dropin")
     expect_held(held, _engine(c), c.read(PROM))
 
     version = f"{cases.versions['updater-head']}.8"
