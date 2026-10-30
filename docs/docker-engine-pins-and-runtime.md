@@ -127,10 +127,11 @@ recreated.
 
 **Applying a change is by hand, one daemon per day**, so the day-after reading is attributable.
 Both daemons carry `policy: manual`, so the package installs the drop-in and restarts nothing. From
-a LAN session, run `sudo systemctl restart containerd.service` one day and `sudo systemctl restart
-docker.service` the next. A dockerd restart leaves docker-proxy on a stale socket inode, so follow
-it with `docker compose -f /usr/lib/homelab/compose/compose.yaml up -d --force-recreate
-docker-proxy`. Judge each the next day by `rate(node_vmstat_pswpin{job="node-pi"}[1d])` against the
+a LAN session, run `sudo /usr/lib/homelab/docker-engine restart containerd` one day and `sudo
+/usr/lib/homelab/docker-engine restart docker` the next. Each restarts one daemon under the same
+updater interlock the upgrade takes. A dockerd restart gives docker-proxy a stale socket inode, so
+the `docker` form also recreates the project with `--force-recreate`. The same command applies a
+`daemon.json` or containerd block change. Judge each the next day by `rate(node_vmstat_pswpin{job="node-pi"}[1d])` against the
 136–181/s of 2026-09-03 → 09-17, and by the daemon's own `go_gc_duration_seconds_count` rate.
 `docker_install`'s `tasks/teardown.yml` removes the Ansible-era drop-in directories when a host
 retires Docker.

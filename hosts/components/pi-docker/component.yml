@@ -17,8 +17,9 @@
 # Activation. daemon.json, the containerd block and both Go-runtime drop-ins declare
 # `manual:<daemon>`, and both daemons carry `policy: manual`. A change to one marks the daemon
 # pending and restarts nothing, because a dockerd restart leaves docker-proxy on a stale socket
-# inode. The operator applies it with `systemctl restart` from a LAN session, then restarts
-# homelab-compose.service through reconcile, or runs the engine unit's upgrade.
+# inode. The operator applies it from a LAN session with
+# `sudo /usr/lib/homelab/docker-engine restart docker` (or `containerd`), which restarts the one
+# daemon under the updater interlock and recreates the project after a dockerd restart.
 defaults:
   # The Ubuntu release in the apt version suffix, `-*~ubuntu.24.04~noble`. The renderer has no
   # facts, so these restate the Pi's measured release, as the Renovate annotations do.

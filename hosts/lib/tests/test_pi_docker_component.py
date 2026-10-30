@@ -237,8 +237,46 @@ def test_a_failed_apt_run_leaves_the_timer_masked_and_the_stop_post_holds(
 
     assert engine.run("apply").returncode == 1
     assert engine.state["timer"] == "masked"
-    assert engine.run("hold").returncode == 0
+    # Run what the rendered unit runs after a failed start, so the test reads the unit's line.
+    stop_post = re.search(
+        r"^ExecStopPost=/usr/lib/homelab/docker-engine (\S+)$",
+        _text(package, ENGINE_UNIT),
+        re.MULTILINE,
+    )
+    assert stop_post, "the engine unit runs no docker-engine verb after a failed start"
+    assert engine.run(stop_post[1]).returncode == 0
     assert sorted(engine.state["held"]) == sorted(_pins(package))
+
+
+def test_a_dockerd_restart_recreates_the_project_under_the_interlock(engine, package):
+    _at_pins(engine, package)
+    engine.state["active"] = {"homelab-reconcile.service": 1}
+
+    result = engine.run("restart", "docker")
+
+    assert result.returncode == 0, result.stderr
+    mask = engine.index("systemctl", "mask")
+    restart = engine.index("systemctl", "restart", "docker.service")
+    recreate = engine.index("docker", "compose", "-f", str(engine.project), "up")
+    assert -1 < mask < restart < recreate, engine.calls()
+    assert "--force-recreate" in engine.calls()[recreate]
+    assert engine.state["active"]["homelab-reconcile.service"] == 0
+    assert engine.state["timer"] == "enabled"
+
+
+def test_a_containerd_restart_leaves_the_containers_alone(engine, package):
+    _at_pins(engine, package)
+
+    assert engine.run("restart", "containerd").returncode == 0
+    assert engine.index("systemctl", "restart", "containerd.service") > -1
+    assert engine.index("docker", "compose") == -1
+
+
+def test_a_restart_of_another_unit_is_refused(engine, package):
+    _at_pins(engine, package)
+
+    assert engine.run("restart", "ssh").returncode == 64
+    assert engine.index("systemctl") == -1
 
 
 @pytest.mark.parametrize(("off_pin", "expected"), [(False, "0"), (True, "1")])
@@ -399,8 +437,14 @@ def test_the_updater_reports_the_value_the_engine_script_prints(tmp_path, pendin
     )
 
 
-def test_a_host_without_the_engine_script_reports_no_engine_series(tmp_path):
+def test_an_engine_answer_that_is_not_zero_or_one_writes_no_series(tmp_path):
+    """A pins file the script cannot read must not reach the textfile as a malformed sample."""
     host = Host(tmp_path)
+    engine = host.root / "usr/lib/homelab/docker-engine"
+    engine.parent.mkdir(parents=True)
+    engine.write_text("#!/bin/sh\necho 'docker-engine: pins missing'\n")
+    engine.chmod(0o755)
 
     assert host.run().returncode == 0
     assert "homelab_docker_engine_pending" not in host.metrics()
+    assert _ok(host.metrics()) == "1"

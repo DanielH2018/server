@@ -2101,7 +2101,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       `homelab-daniel-pi`. Read-only calls on the live Pi measured the owners: `dpkg -S` names
       containerd.io as the owner of `/etc/containerd/config.toml`, a conffile, so its block
       takes the line arm under the Ansible task's marker. `/etc/docker/daemon.json` and
-      `/usr/local/bin/docker-compose` are unowned. Seven premises did not hold:
+      `/usr/local/bin/docker-compose` are unowned. Eight premises did not hold:
         - *The six networks.* `docker network ls` lists only `proxy`, `lifecycle` and the
           project's own `homelab_default`. `monitoring`, `media`, `apps`, `codeserver`,
           `terraria` and `portainer-agent` are already absent, so the operator's decision is
@@ -2120,12 +2120,20 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
         - *Daemon restarts.* A package drop-in under `docker.service.d/` or
           `containerd.service.d/` puts the daemon in reconcile's restart set, so both daemons
           carry `policy: manual` beside the `manual:` activations.
+        - *The unit's restart mode.* *The Docker engine stays held* says a `daemon.json`,
+          `config.toml` or Go drop-in change goes live through the unit's restart mode. A
+          oneshot unit takes no argument, and the change concerns one daemon at a time. The
+          mode is therefore the script verb `docker-engine restart docker|containerd`, which
+          an operator runs from a LAN session. It takes the upgrade's updater interlock, and
+          the `docker` form recreates the project with `--force-recreate`.
         - *The Compose measurement.* The only Docker host is the live Pi, and a scratch
           network there is a production write. The measurement is an `image` test that runs
           in `image-leg.yml` (`hosts/lib/tests/test_pi_compose_network_measurement.py`). It
           asserts that Compose neither recreates nor labels an existing unlabelled network of
-          the project's name, and prints Compose's output into the job log. Its first run is
-          the PR's first non-draft push.
+          the project's name. It fails when Compose stops before the network step, and it
+          writes which answer Compose gave, adopt or refuse, to the image leg's job summary.
+          No outcome is recorded here: the first run is the PR's first non-draft push, after
+          this amendment was written.
         - *The Docker-engine proof.* It runs against stubs in
           `hosts/lib/tests/test_pi_docker_component.py`, not in the CI container: the package
           declares no engine `Depends` and no preferences pin, with a red fixture, and the

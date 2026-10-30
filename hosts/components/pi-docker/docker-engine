@@ -6,6 +6,9 @@
 #   docker-engine apply     homelab-docker-engine.service's ExecStart
 #   docker-engine hold      hold every installed engine package; the unit's ExecStopPost
 #   docker-engine pending   print 1 when an engine package is missing or off its pin, else 0
+#   docker-engine restart docker|containerd
+#                           apply a daemon config change: restart one daemon under the same
+#                           updater interlock, and recreate the project after a dockerd restart
 #
 # `apply` takes one of three paths:
 #   - no docker-ce, as on a fresh host: install the pinned versions and hold them;
@@ -110,6 +113,31 @@ quiet_updater() {
     done
 }
 
+release_updater() {
+    [ "$masked_here" = 1 ] || return 0
+    systemctl unmask homelab-updater.timer && systemctl start homelab-updater.timer
+}
+
+# A daemon.json, config.toml or Go drop-in change goes live here, one daemon at a time. A
+# dockerd restart gives /var/run/docker.sock a new inode, which a container bind-mounting the
+# file never sees, so the project is recreated after it (#1961).
+restart() {
+    case $1 in
+        docker | containerd) ;;
+        *)
+            echo "usage: docker-engine restart docker|containerd" >&2
+            exit 64
+            ;;
+    esac
+    quiet_updater || return 1
+    systemctl restart "$1.service" || return 1
+    if [ "$1" = docker ] && [ -f "$project" ]; then
+        docker compose -f "$project" up -d --force-recreate || return 1
+    fi
+    release_updater || return 1
+    say "restarted $1.service"
+}
+
 upgrade() {
     quiet_updater || return 1
     apt-get update || return 1
@@ -124,9 +152,7 @@ upgrade() {
     if [ -f "$project" ]; then
         docker compose -f "$project" up -d --force-recreate || return 1
     fi
-    if [ "$masked_here" = 1 ]; then
-        systemctl unmask homelab-updater.timer && systemctl start homelab-updater.timer || return 1
-    fi
+    release_updater || return 1
     say "the engine is at its pins and held"
 }
 
@@ -155,8 +181,9 @@ case "$*" in
     apply) apply || exit 1 ;;
     hold) hold || exit 1 ;;
     pending) if at_pins; then echo 0; else echo 1; fi ;;
+    "restart "*) restart "$2" || exit 1 ;;
     *)
-        echo "usage: docker-engine apply|hold|pending" >&2
+        echo "usage: docker-engine apply|hold|pending|restart docker|containerd" >&2
         exit 64
         ;;
 esac
