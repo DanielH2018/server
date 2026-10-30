@@ -19,8 +19,8 @@ THE FAMILIES ARE STILL DISJOINT VOCABULARIES OVER THE SAME SMALL INTEGERS, outsi
 2 means "a tag matched no service" to deploy.sh and "the branch is on origin with no PR" to
 publish_pr.py; 3 means "the change is broad" to deploy.sh and "the tree lock was held" to the
 tick. The prefixes are what let a reader tell which contract a value belongs to, so they are
-not decoration: `publish_pr.py` in particular defines two groups of its own that both reuse 0
-to 3 with different meanings, and they are `PUBLISH_*` and `UNLANDED_*` here for that reason.
+not decoration: `publish_pr.py` in particular defines two groups of its own that both start
+at 0 with different meanings, and they are `PUBLISH_*` and `UNLANDED_*` here for that reason.
 
 `CONTRACTS` AT THE BOTTOM IS THE ONE RENDERABLE COPY. `lib/exit_messages.py` prints a failing
 code's name and meaning from it, `docs/reference/scripts.md` renders its Exit-codes column from
@@ -148,6 +148,7 @@ UNLANDED_NOTHING = OK
 UNLANDED_ORIGIN_UNREADABLE = FAILED
 UNLANDED_PR_OPEN = 2
 UNLANDED_NO_PR = 3
+UNLANDED_PR_RED = 4
 
 # -- scripts/deploy_tools/narrow_setup.py -----------------------------------------------
 # Which `--tags` value a setup-role range needs. 0 prints the tags; 1 is a refusal, after which
@@ -501,11 +502,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "PUBLISH_PUSHED_NO_PR",
             "`publish`: pushed but no PR was opened. `unlanded`: a PR is open.",
         ),
-        _c(
-            UNLANDED_NO_PR,
-            "UNLANDED_NO_PR",
-            "`unlanded`: the branch is on origin with no PR.",
-        ),
+        _c(UNLANDED_NO_PR, "UNLANDED_NO_PR", "`unlanded`: a branch with no PR."),
+        _c(UNLANDED_PR_RED, "UNLANDED_PR_RED", "`unlanded`: its PR failed a check."),
     ),
     "scripts/deploy_tools/narrow_setup.py": (
         _c(

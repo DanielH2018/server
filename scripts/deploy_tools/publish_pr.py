@@ -55,6 +55,10 @@ passes cleanly in exactly that state. Merged branches are deleted on this repo
      whose checks are already green is merged here, the backstop for a landing that died or never started (see ``merge_if_stalled``)
   3  a branch is on origin with NO open PR -- the state a create failure leaves behind, and
      the one a human has to clear
+  4  a branch is on origin and its PR is open with a FAILED check. Its landing has stopped
+     at ``pr-ci-red`` and nothing retries it, so the PR blocks every later run until a human
+     fixes or closes it. PR #6544 sat red for five hours reading as 2, which the crons
+     report up (#6588)
 
 Run: uv run pytest scripts/deploy_tools/tests/test_publish_pr.py
 """
@@ -84,9 +88,16 @@ from lib.exit_codes import (
     UNLANDED_NOTHING,
     UNLANDED_ORIGIN_UNREADABLE,
     UNLANDED_PR_OPEN,
+    UNLANDED_PR_RED,
 )
 from lib import gh as gh_mod
 from lib import git as git_mod
+from lib.repo_paths import HOST_LIB_FILES
+
+# The gate job's check-run name and its `needs`, which the red-PR read below needs to excuse a
+# gate that failed only because its run was cancelled.
+sys.path.insert(0, str(HOST_LIB_FILES))
+from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
 
 # Same bound the shell's `tr '\n' ' ' | tail -c 400` applied: enough to carry the ruleset's
 # rejection line, short enough for a Kuma message.
@@ -120,6 +131,11 @@ PR_URL = re.compile(r"/pull/(\d+)\s*$")
 
 # A check that finished without blocking a merge. A StatusContext reports `state` instead.
 PASSING = frozenset({"SUCCESS", "NEUTRAL", "SKIPPED"})
+
+# A check that finished and says the head is bad. CANCELLED and STALE are deliberately absent:
+# they mean "no verdict for this SHA", the rule `hosts/lib/ci_verdict.py` applies to master.
+# ERROR is a StatusContext's failed `state`; the rest are CheckRun conclusions.
+FAILING = frozenset({"FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE"})
 
 # The shell's convention for "the command was killed on a timeout". `lib.gh.gh` bounds every
 # call at 60s where the inline shell these crons carried had no bound at all, so this is a
@@ -316,19 +332,11 @@ def publish(
     )
 
 
-def merge_if_stalled(number: str, tools: PublishTools) -> str:
-    """Merge an open PR whose checks are green, at the head those checks ran on.
+def pr_view(number: str, tools: PublishTools) -> dict:
+    """The PR's head, review decision and check rollup, or ``{}`` when the lookup failed.
 
-    The backstop for a landing that died or never started. ``publish`` starts one per PR, so in
-    the normal case this finds checks still running and does nothing. A PR whose checks are
-    green but whose landing is gone would otherwise stay open, and every later run of
-    its cron would skip on it. The merge is the same REST call ``land_lib/merge.py`` makes,
-    pinned with ``sha`` so GitHub refuses it if the head moved after the checks were read.
-
-    Returns:
-      ``""`` when the PR is not stalled: checks pending or failing, changes requested, or a
-      lookup that failed. Otherwise a clause for the caller's message saying the PR was merged
-      or why the merge was refused.
+    An empty answer reads as "checks pending" to both readers below, which is the safe side:
+    no merge, and no red report on the strength of an answer GitHub never gave.
     """
     proc = run_gh(
         tools,
@@ -339,11 +347,59 @@ def merge_if_stalled(number: str, tools: PublishTools) -> str:
         "headRefOid,reviewDecision,statusCheckRollup",
     )
     if proc.returncode != 0:
-        return ""
+        return {}
     try:
         view = json.loads(proc.stdout or "{}")
     except json.JSONDecodeError:
-        return ""
+        return {}
+    return view if isinstance(view, dict) else {}
+
+
+def failed_checks(view: dict) -> list[str]:
+    """The names of the checks in ``view`` that concluded red, in rollup order.
+
+    The gate job is ``if: always()``, so a cancelled run still runs it and it concludes
+    ``FAILURE`` on a head no job failed on (#5931). ``hosts/lib/ci_verdict.py`` excuses that
+    gate once the check-suites API confirms the suite was cancelled. The rollup carries no
+    suite, so this excuses a failed gate whenever a need was cancelled and no need failed. A
+    need past its ``timeout-minutes`` also reads cancelled and is excused with it: that errs
+    toward "no verdict", the same side CANCELLED itself takes.
+    """
+    checks = view.get("statusCheckRollup") or []
+
+    def red(c: dict) -> bool:
+        return (c.get("conclusion") or c.get("state") or "") in FAILING
+
+    needs = [c for c in checks if c.get("name") in CI_GATE_NEEDS_JOBS]
+    cancelled_run = any(c.get("conclusion") == "CANCELLED" for c in needs) and not any(
+        red(c) for c in needs
+    )
+    return [
+        str(c.get("name") or c.get("context") or "?")
+        for c in checks
+        if red(c) and not (cancelled_run and c.get("name") == CI_GATE_NAME)
+    ]
+
+
+def merge_if_stalled(number: str, view: dict, tools: PublishTools) -> str:
+    """Merge an open PR whose checks are green, at the head those checks ran on.
+
+    The backstop for a landing that died or never started. ``publish`` starts one per PR, so in
+    the normal case this finds checks still running and does nothing. A PR whose checks are
+    green but whose landing is gone would otherwise stay open, and every later run of
+    its cron would skip on it. The merge is the same REST call ``land_lib/merge.py`` makes,
+    pinned with ``sha`` so GitHub refuses it if the head moved after the checks were read.
+
+    Args:
+      number: the PR number.
+      view: the PR as ``pr_view`` read it.
+      tools: the process boundaries.
+
+    Returns:
+      ``""`` when the PR is not stalled: checks pending or failing, changes requested, or a
+      lookup that failed. Otherwise a clause for the caller's message saying the PR was merged
+      or why the merge was refused.
+    """
     checks = view.get("statusCheckRollup") or []
     # An empty rollup is pending, never green: CI has not registered its checks yet.
     green = bool(checks) and all(
@@ -447,9 +503,19 @@ def unlanded(prefix: str, tools: PublishTools) -> PublishOutcome:
             branch,
         )
     if number:
+        view = pr_view(number, tools)
+        red = failed_checks(view)
+        if red:
+            return PublishOutcome(
+                UNLANDED_PR_RED,
+                f"PR #{number} from a previous run is open with failed checks "
+                f"({', '.join(red)}) on {branch}; its landing has stopped and every later "
+                f"run skips until it is fixed or closed",
+                branch,
+            )
         # Still UNLANDED_PR_OPEN after a merge: this run's tree predates the merge, so it skips
         # and the next run starts from a master that holds the merged commit.
-        merged = merge_if_stalled(number, tools)
+        merged = merge_if_stalled(number, view, tools)
         return PublishOutcome(
             UNLANDED_PR_OPEN,
             f"PR #{number} from a previous run is still open ({branch})"
