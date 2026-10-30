@@ -94,14 +94,14 @@ def test_a_green_pr_with_no_landing_is_merged_at_its_head():
     "view",
     [
         _view("", "SUCCESS", ""),
-        _view("", "SUCCESS", "FAILURE"),
+        _view("", "SUCCESS", "CANCELLED"),
         _view(""),
         _view("CHANGES_REQUESTED", "SUCCESS"),
         cp(1, err="HTTP 502"),
     ],
     ids=[
         "check-pending",
-        "check-failed",
+        "check-cancelled-is-no-verdict",
         "no-checks-yet",
         "changes-requested",
         "view-failed",
@@ -121,6 +121,42 @@ def test_a_pr_that_is_not_stalled_is_left_to_its_landing(view):
         out.message
         == "PR #41 from a previous run is still open (docs-refresh/2026-09-03-0600)"
     )
+    assert not any(c[:2] == ("gh", "api") for c in rec.calls)
+
+
+@pytest.mark.parametrize(
+    "red",
+    [
+        '{"name": "pytest", "conclusion": "FAILURE"}',
+        '{"name": "pytest", "conclusion": "TIMED_OUT"}',
+        '{"context": "pytest", "state": "ERROR"}',
+    ],
+    ids=["check-run-failed", "check-run-timed-out", "status-context-error"],
+)
+def test_an_open_pr_with_a_failed_check_is_the_red_code(red):
+    """#6588: a red PR read as 2, which the crons report up, while it blocked every run.
+
+    Another check still running does not soften it: one failure already stops the landing.
+    """
+    rollup = f'[{{"name": "lint", "conclusion": "SUCCESS"}}, {{"name": "gate", "conclusion": ""}}, {red}]'
+    rec = Recorder(
+        {
+            "git ls-remote": cp(0, out=_HEAD),
+            "gh pr list": cp(0, out=_OPEN_PR),
+            "gh pr view": cp(
+                0,
+                out=f'{{"headRefOid": "abc1234def", "reviewDecision": "", "statusCheckRollup": {rollup}}}',
+            ),
+        }
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.UNLANDED_PR_RED
+    assert out.message == (
+        "PR #41 from a previous run is open with failed checks (pytest) on "
+        "docs-refresh/2026-09-03-0600; its landing has stopped and every later run skips "
+        "until it is fixed or closed"
+    )
+    assert out.branch == "docs-refresh/2026-09-03-0600"
     assert not any(c[:2] == ("gh", "api") for c in rec.calls)
 
 
