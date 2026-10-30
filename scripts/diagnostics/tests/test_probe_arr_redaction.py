@@ -242,3 +242,20 @@ def test_printed_history_output_omits_the_prowlarr_key(as_json):
     assert rc == 0
     assert PROWLARR_KEY not in text
     assert f"apikey={arr.REDACTED}" in text
+
+
+@pytest.mark.parametrize("param", ["api_key", "key", "rsskey", "torrent_pass"])
+def test_tracker_style_query_param_is_flagged(param):
+    # Indexer and tracker URLs name the credential in ways the field-name list never sees.
+    url = f"https://tracker.test/dl?id=9&{param}=S3CR3T-VALUE&name=x"
+    out = arr.redact_arr_payload(_history(url))
+    assert (
+        _download_url(out)
+        == f"https://tracker.test/dl?id=9&{param}={arr.REDACTED}&name=x"
+    )
+
+
+def test_sort_key_query_param_is_clean():
+    # `key` is matched as a whole name, so an *arr paging parameter ending in it still prints.
+    url = "http://radarr:7878/api/v3/history?sortKey=date&page=1"
+    assert _download_url(arr.redact_arr_payload(_history(url))) == url
