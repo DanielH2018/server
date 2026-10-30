@@ -18,7 +18,7 @@ k3s_version: v1.37.1+k3s1  # noqa var-naming[no-role-prefix]
 # The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
 # can differ from the tag's and moves with no signal, and the script runs as root on both
 # nodes. Renovate bumps k3s_version through the annotation above; the sha256 is a MANUAL
-# finish on that PR (same class as sops_setup's binary):
+# finish on that PR:
 #   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"  # noqa var-naming[no-role-prefix]
 k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b  # noqa var-naming[no-role-prefix]
