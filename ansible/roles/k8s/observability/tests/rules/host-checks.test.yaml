@@ -695,6 +695,99 @@ tests:
                 timer run does.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
+  # daniel-pi's engine pins moved, and no run applied them. The pending series reads 0 for 2h,
+  # then 1 with missed scrapes in it, as the Pi's weekly reboot leaves. The rule is quiet
+  # at 6h and at 27h50m, 25h50m into the 1, inside the 25h51m a pin can legitimately wait. It
+  # fires at 28h05m, past 26h, and the gaps do not delay it.
+  - interval: 5m
+    input_series:
+      - series: 'homelab_docker_engine_pending{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x23 1x99 _x2 1x100 _ 1x120'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x350'
+    alert_rule_test:
+      - eval_time: 6h
+        alertname: DockerEnginePinUnapplied
+        exp_alerts: []
+      - eval_time: 27h50m
+        alertname: DockerEnginePinUnapplied
+        exp_alerts: []
+      - eval_time: 28h5m
+        alertname: DockerEnginePinUnapplied
+        exp_alerts:
+          - exp_labels:
+              host: daniel-pi
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi's Docker engine has sat off its pins for more than 26 hours.
+              description: >-
+                homelab_docker_engine_pending on daniel-pi has read 1 for 26 hours, so the
+                nightly 00:30 UTC homelab-docker-engine.timer run has not applied the engine
+                pins. Read `systemctl status homelab-docker-engine.timer homelab-updater.timer`
+                and `journalctl -u homelab-docker-engine` on daniel-pi, and
+                docs/host-packages.md, "Host-plane pages". A failed run leaves
+                homelab-updater.timer masked, so unmask and start it once the cause is fixed.
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
+
+  # The issue's two cases on a series that starts at 1, as a fresh textfile does: 1 for 6h is
+  # quiet, because no sample precedes the 26h window, and 1 for 26h fires.
+  - interval: 5m
+    input_series:
+      - series: 'homelab_docker_engine_pending{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x320'
+    alert_rule_test:
+      - eval_time: 6h
+        alertname: DockerEnginePinUnapplied
+        exp_alerts: []
+      - eval_time: 26h
+        alertname: DockerEnginePinUnapplied
+        exp_alerts:
+          - exp_labels:
+              host: daniel-pi
+              instance: daniel-pi
+              job: node-pi
+              origin: daniel-pi
+              severity: warning
+              service: daniel-pi
+            exp_annotations:
+              summary: daniel-pi's Docker engine has sat off its pins for more than 26 hours.
+              description: >-
+                homelab_docker_engine_pending on daniel-pi has read 1 for 26 hours, so the
+                nightly 00:30 UTC homelab-docker-engine.timer run has not applied the engine
+                pins. Read `systemctl status homelab-docker-engine.timer homelab-updater.timer`
+                and `journalctl -u homelab-docker-engine` on daniel-pi, and
+                docs/host-packages.md, "Host-plane pages". A failed run leaves
+                homelab-updater.timer masked, so unmask and start it once the cause is fixed.
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
+
+  # The run applied the pins: the series falls back to 0 after 25h of 1, and the rule stays
+  # quiet.
+  - interval: 5m
+    input_series:
+      - series: 'homelab_docker_engine_pending{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x300 0x40'
+    alert_rule_test:
+      - eval_time: 27h
+        alertname: DockerEnginePinUnapplied
+        exp_alerts: []
+
+  # A dead exporter keeps the rule quiet over a 27h-old 1, leaving the page to
+  # ScrapeTargetDown.
+  - interval: 5m
+    input_series:
+      - series: 'homelab_docker_engine_pending{host="daniel-pi", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x340'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x340'
+    alert_rule_test:
+      - eval_time: 27h
+        alertname: DockerEnginePinUnapplied
+        exp_alerts: []
+
   # daniel-pi reconciles, and the two k3s nodes hold. Each node's rule fires with its own
   # `service`, and daniel-pi's stays quiet.
   - interval: 1m

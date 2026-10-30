@@ -36,7 +36,12 @@ Its script, `/usr/lib/homelab/docker-engine`, takes one of three paths:
 
 **A failed run leaves `homelab-updater.timer` masked**, so the Pi installs no package until the
 operator runs `sudo systemctl unmask homelab-updater.timer` and
-`sudo systemctl start homelab-updater.timer`. A failed nightly run does the same. The unit's `ExecStopPost=` re-holds every installed engine package whatever the outcome.
+`sudo systemctl start homelab-updater.timer`. A failed nightly run does the same. Two rules page
+it. `HostUpdateStale` fires once the masked timer leaves daniel-pi with no successful update
+for 3 hours 10 minutes. `DockerEnginePinUnapplied` fires once
+`homelab_docker_engine_pending{host="daniel-pi"}` has read 1 for 26 hours, which also covers a
+paused engine timer and a run that failed before it masked anything (#6607).
+`docs/host-packages.md`, *Host-plane pages*, is the runbook for both. The unit's `ExecStopPost=` re-holds every installed engine package whatever the outcome.
 
 The package declares no `Depends` on the engine and ships no apt preferences pin, so the updater
 can never move it. A merged pin PR changes only `/usr/lib/homelab/docker-engine.pins`, and the
