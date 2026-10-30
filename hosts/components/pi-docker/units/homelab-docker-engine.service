@@ -1,7 +1,9 @@
 # Shipped by homelab-daniel-pi (pi-docker). The one path that installs or moves the held Docker
-# engine. An operator starts it from a LAN session, because an upgrade stops every container for
-# the apt run; bootstrap-host.sh starts it once on a fresh Pi. It has no [Install] section and
-# carries `policy: manual`, so reconcile never starts or restarts it.
+# engine. An upgrade stops every container for the apt run, so it starts only two ways: an operator
+# starts it from a LAN session, or homelab-docker-engine.timer starts it in the Pi's quiet window.
+# bootstrap-host.sh starts it once on a fresh Pi. It is a no-op while every engine package sits at
+# its pin, which is why a timer can start it nightly. It has no [Install] section and carries
+# `policy: manual`, so reconcile never starts or restarts it.
 [Unit]
 Description=Install, hold or upgrade the Pi's pinned Docker engine
 Wants=network-online.target

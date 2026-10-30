@@ -9,11 +9,19 @@ measurements that sized the Go runtime limits, and the uninstall the teardown ar
 ## How the engine moves
 
 `homelab-docker-engine.service` is the one path that installs or moves the engine packages. An
-operator starts it from a LAN session, because an upgrade stops every container for the apt run:
+upgrade stops every container for the apt run, so the unit starts two ways. An operator starts it
+from a LAN session:
 
 ```bash
 sudo systemctl start homelab-docker-engine.service
 ```
+
+Or `homelab-docker-engine.timer` starts it at 00:30 UTC every night (operator ruling 2026-10-30,
+H7 Open question 8). That slot follows the Pi's midnight cluster and precedes the updater's 01:05
+resume, man-db and the 04:00 to 05:59 gap, which pi-peer-backup and the apt timers hold. The unit
+does nothing while every package sits at its pin, so the timer acts only on the night after a pin
+moved. `sudo systemctl mask --now homelab-docker-engine.timer` pauses it, and `unmask` then `start`
+resumes it.
 
 Its script, `/usr/lib/homelab/docker-engine`, takes one of three paths:
 
@@ -26,9 +34,9 @@ Its script, `/usr/lib/homelab/docker-engine`, takes one of three paths:
   daemon and recreates every container with `--force-recreate`. It unmasks the timer last, and
   only when it masked it.
 
-**A failed run leaves the timer masked**, so the Pi installs no package until the operator runs
-`sudo systemctl unmask homelab-updater.timer` and `sudo systemctl start homelab-updater.timer`. The
-unit's `ExecStopPost=` re-holds every installed engine package whatever the outcome.
+**A failed run leaves `homelab-updater.timer` masked**, so the Pi installs no package until the
+operator runs `sudo systemctl unmask homelab-updater.timer` and
+`sudo systemctl start homelab-updater.timer`. A failed nightly run does the same. The unit's `ExecStopPost=` re-holds every installed engine package whatever the outcome.
 
 The package declares no `Depends` on the engine and ships no apt preferences pin, so the updater
 can never move it. A merged pin PR changes only `/usr/lib/homelab/docker-engine.pins`, and the

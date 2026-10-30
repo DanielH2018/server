@@ -13,9 +13,11 @@ import json
 import re
 import shlex
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
+from _k3s_schedule import calendar_fires, clock_text
 from _updater_host import Host
 from _updater_host import reconcile_ok as _ok
 
@@ -40,6 +42,14 @@ STUBBED = (
 PINS = "/usr/lib/homelab/docker-engine.pins"
 COMPOSE_UNIT = "/usr/lib/systemd/system/homelab-compose.service"
 ENGINE_UNIT = "/usr/lib/systemd/system/homelab-docker-engine.service"
+ENGINE_TIMER = "/usr/lib/systemd/system/homelab-docker-engine.timer"
+UPDATER_DROPIN = "/usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf"
+# The Pi's quiet window, in UTC (the Pi's clock). It opens after the midnight cluster (23:55 to
+# 00:10) and closes before the updater resumes at 01:05 and man-db starts at 01:00. The 04:00 to
+# 05:59 gap is out: pi-peer-backup pulls at 04:00 or 05:00 UTC and the apt timers run at 04:20
+# and 05:20. The DECIDED comment in units/homelab-docker-engine.timer has the full reasoning.
+QUIET_WINDOW = (15 * 60, 59 * 60 + 59)
+_DAY = date(2026, 11, 3)
 CONTAINERD_CONFIG = "/etc/containerd/config.toml"
 SUFFIX = "~ubuntu.24.04~noble"
 # What `grep -v '^#' /etc/containerd/config.toml` printed on daniel-pi on 2026-10-29, with the
@@ -448,3 +458,91 @@ def test_an_engine_answer_that_is_not_zero_or_one_writes_no_series(tmp_path):
     assert host.run().returncode == 0
     assert "homelab_docker_engine_pending" not in host.metrics()
     assert _ok(host.metrics()) == "1"
+
+
+# The windowed timer (operator ruling 2026-10-30, H7 Open question 8).
+
+
+def _on_calendar(text: str) -> str:
+    values = re.findall(r"^OnCalendar=(\S.*)$", text, re.MULTILINE)
+    assert values, "no OnCalendar= value"
+    return values[-1]
+
+
+def timer_problems(timer: str, updater_dropin: str) -> list[str]:
+    """What is wrong with the engine timer's slot, given the Pi's updater schedule."""
+    first, last = QUIET_WINDOW
+    found = [
+        f"the engine timer fires {clock_text(fire)}, outside the quiet window"
+        for fire in calendar_fires(_on_calendar(timer), _DAY)
+        if not first <= fire <= last
+    ]
+    found += [
+        f"the updater fires {clock_text(fire)}, inside the quiet window"
+        for fire in calendar_fires(_on_calendar(updater_dropin), _DAY)
+        if first <= fire <= last
+    ]
+    return found
+
+
+def test_the_engine_timer_is_shipped_enabled_and_fires_in_the_quiet_window_is_clean(
+    package,
+):
+    timer = _text(package, ENGINE_TIMER)
+
+    assert "homelab-docker-engine.timer" in package.enable_links()
+    assert timer_problems(timer, _text(package, UPDATER_DROPIN)) == []
+    assert calendar_fires(_on_calendar(timer), _DAY) == [30 * 60]
+    # It starts the manual unit, and the unit keeps its policy, so reconcile still never does.
+    assert "Unit=" not in timer
+    assert package.policies.get("homelab-docker-engine.service") == "manual"
+
+
+def test_an_engine_timer_in_the_apt_window_is_flagged(package):
+    timer = _text(package, ENGINE_TIMER).replace("00:30:00", "05:20:00")
+
+    assert timer_problems(timer, _text(package, UPDATER_DROPIN)) == [
+        "the engine timer fires 05:20:00, outside the quiet window"
+    ]
+
+
+def test_an_updater_that_fires_in_the_quiet_window_is_flagged(package):
+    updater = "OnCalendar=\nOnCalendar=*-*-* 00,01..03:05/15:00\n"
+
+    problems = timer_problems(_text(package, ENGINE_TIMER), updater)
+
+    assert problems and all("the updater fires" in p for p in problems)
+
+
+# What a nightly run may do. Anything here that a run at the pins performs is a change the timer
+# would make on every night, not only after a pin moved.
+_ACTING_SYSTEMCTL = {"mask", "unmask", "start", "stop", "restart"}
+
+
+def nightly_actions(calls: list[list[str]]) -> list[list[str]]:
+    return [
+        call
+        for call in calls
+        if call[0] in {"apt-get", "docker"}
+        or (call[0] == "systemctl" and call[1] in _ACTING_SYSTEMCTL)
+    ]
+
+
+def test_the_nightly_run_with_the_engine_at_its_pins_acts_on_nothing_is_clean(
+    engine, package
+):
+    _at_pins(engine, package)
+
+    result = engine.run("apply")
+
+    assert result.returncode == 0, result.stderr
+    assert nightly_actions(engine.calls()) == []
+    assert sorted(engine.state["held"]) == sorted(_pins(package))
+    assert engine.state["timer"] == "enabled"
+
+
+def test_the_nightly_run_with_a_pin_moved_acts_is_flagged(engine, package):
+    _behind(engine, package)
+
+    assert engine.run("apply").returncode == 0
+    assert nightly_actions(engine.calls())

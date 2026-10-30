@@ -11,8 +11,11 @@
 # no `depends:` on docker-ce, containerd.io or the plugins, and ships no apt preferences pin for
 # them, because a pin above priority 1000 forces a version change on the next apt run. The
 # packages stay held, and homelab-docker-engine.service is the one path that installs or moves
-# them: an operator starts it from a LAN session, and reconcile never does (`policy: manual`, no
-# enable link). hosts/lib/tests/test_pi_docker_component.py holds both rules.
+# them. Reconcile never starts it (`policy: manual`, no enable link on the service). An operator
+# starts it from a LAN session, or homelab-docker-engine.timer starts it at 00:30 UTC, the Pi's
+# quiet window (operator ruling 2026-10-30). The unit does nothing while every package sits at its
+# pin, so the timer acts only after a pin moved. hosts/lib/tests/test_pi_docker_component.py holds
+# these rules.
 #
 # Activation. daemon.json, the containerd block and both Go-runtime drop-ins declare
 # `manual:<daemon>`, and both daemons carry `policy: manual`. A change to one marks the daemon
@@ -60,9 +63,12 @@ files:
   - {src: templates/docker-engine.pins.j2, dst: /usr/lib/homelab/docker-engine.pins}
   - {src: docker-engine, dst: /usr/lib/homelab/docker-engine, mode: "0755"}
   - {src: units/homelab-docker-engine.service, dst: /usr/lib/systemd/system/homelab-docker-engine.service}
+  - {src: units/homelab-docker-engine.timer, dst: /usr/lib/systemd/system/homelab-docker-engine.timer}
   - {src: templates/daemon.json.j2, dst: /etc/docker/daemon.json, activate: "manual:docker.service"}
   - {src: templates/dockerd-go-runtime.conf.j2, dst: /usr/lib/systemd/system/docker.service.d/50-homelab.conf, activate: "manual:docker.service"}
   - {src: templates/containerd-go-runtime.conf.j2, dst: /usr/lib/systemd/system/containerd.service.d/50-homelab.conf, activate: "manual:containerd.service"}
+enable:
+  homelab-docker-engine.timer: timers.target
 lines:
   # containerd's metrics listener, scraped as `containerd-pi`, and the shim environment that
   # undoes the daemon's GOGC=off for every shim and runc it spawns. containerd appends this `env`

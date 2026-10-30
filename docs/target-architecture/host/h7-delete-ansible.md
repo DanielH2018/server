@@ -1851,8 +1851,9 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
    (**operator-only**).
 6. **H7.26** stays alone, because it waits on H5's late PRs and the held engine (#1961) is
    its own risk. It carries the Compose measurement, the Compose-networks and Docker-engine
-   proofs, and the six networks the operator removes or keeps. The operator rules on
-   Open question 8, a windowed engine upgrade, in its review (**operator-only**).
+   proofs, and the six networks the operator removes or keeps. The operator ruled on
+   2026-10-30: none of the six networks comes back, and Open question 8 is resolved as a
+   windowed engine upgrade (`homelab-docker-engine.timer`, 00:30 UTC).
 7. **H7.27 to H7.29.** One host's apt, sshd and sysctl subjects land in one PR. Part 1 and
    part 2 stay apart, because sshd and ufw are the two subjects that can lock a host out.
    Each host's live check then proves one of them before the other lands, and a revert drops
@@ -2139,6 +2140,10 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           declares no engine `Depends` and no preferences pin, with a red fixture, and the
           updater installs no engine package and writes `homelab_docker_engine_pending`. The
           container case is #6590.
+      **Operator rulings, 2026-10-30.** Open question 8 is resolved as windowed: the PR ships
+      `homelab-docker-engine.timer`, which starts the unit at 00:30 UTC. None of the six
+      absent networks (`monitoring`, `media`, `apps`, `codeserver`, `terraria`,
+      `portainer-agent`) comes back, so the package creates only `proxy` and `lifecycle`.
       The LAN ufw rules for ports 9323 and 1338 stay Ansible-era rules until H7.30 lists
       them. The connecting user's `docker` group membership stays host state, which the
       packaged heartbeats need on a rebuilt Pi (#6599), and `host-basics.yml`'s hold stays with `initial_setup`. The role keeps its
@@ -3388,6 +3393,14 @@ progress.
    operator moves the engine. Resolution: the operator decides in H7.5's review
    (**operator-only**). A windowed timer could later start the same unit, because the unit
    already stops and recreates the project.
+   **Resolved (operator, 2026-10-30): windowed.** `homelab-docker-engine.timer` starts the same
+   unit at 00:30 UTC (`OnCalendar=*-*-* 00:30:00`, no randomised delay, not persistent), and an
+   operator can still start the unit by hand. The slot follows the Pi's midnight cluster
+   (23:55 to 00:10) and precedes the updater's resume at 01:05, man-db at 01:00 and the
+   rotated-log sweep at 01:40. The updater is silent from 23:00 to 00:59 and from 04:00 to
+   05:59, but pi-peer-backup pulls at 04:00 or 05:00 UTC and the apt timers run at 04:20 and
+   05:20, so only the first gap is usable. The unit is a no-op while every package sits at its
+   pin, so the timer acts only after a pin moved.
 9. **Diverts and H3's maintainer-script whitelist.** H3 leaves the divert lifecycle to H7
    and admits no `dpkg-divert` line. Resolution: H7 ships no divert, so H3's `preinst` rule
    and whitelist stay as they are. If H7.3 or H7.5 finds an owned path that is not a
