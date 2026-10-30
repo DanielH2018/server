@@ -135,7 +135,15 @@ checks each gate suppresses.
   The exempt count is named in the green message, because an exempt service is not measured and a
   bare "ok" would overstate coverage. **bazarr and prowlarr are deliberately NOT exempt**: an
   *arr indexer search genuinely takes 5-30s and a user genuinely waits for it, which is the
-  user-visible slowness this check exists to catch.
+  user-visible slowness this check exists to catch. **jellyfin is not exempt either**
+  ([#6649](https://github.com/DanielH2018/server/issues/6649)). In M6 A4's 168h soak to
+  2026-10-30T18:32Z, every jellyfin-public DOWN episode was a burst of 23 to 45 MKV font
+  fetches (`/Videos/<id>/<id>/Attachments/<n>`) at playback start. Each was a bounded 10 KB to
+  8 MB response that took 5 to 8 seconds, and the player waits for them before it renders
+  subtitles. Jellyfin's `/socket` WebSockets are streams, with a median duration of 1204
+  seconds, but at most 3 of them finished in any 300-second window, and none pushed the ratio
+  past `TRAEFIK_SLOW_PCT`. To exempt the WebSockets alone, route `/socket` through its own
+  IngressRoute, which gives it a service label the prefix list can match.
   `TRAEFIK_SLOW_MIN_REQUESTS` (3) requires an absolute count of slow requests behind the ratio.
   `TRAEFIK_MIN_RPS` admits a service with 0.05 x 300 = 15 requests in the `[5m]` window, so ONE
   request past the bucket is 6.7%, already over `TRAEFIK_SLOW_PCT`, and the ratio alone pages on a

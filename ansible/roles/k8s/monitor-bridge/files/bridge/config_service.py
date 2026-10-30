@@ -142,6 +142,15 @@ def service_config(
         # *arr indexer search genuinely takes 5-30s and the user genuinely waits for it, so it is
         # exactly the user-visible slowness this check's docstring exists to catch. Excluding
         # them would hide the signal rather than the artifact.
+        #
+        # DECIDED: jellyfin is not exempt either (#6649). Its slow requests in the 168h soak to
+        # 2026-10-30T18:32Z behind every DOWN episode were MKV font fetches
+        # (`/Videos/<id>/<id>/Attachments/<n>`, 10 KB-8 MB, 5-8s each) at playback start,
+        # 23-45 per episode: bounded responses the user waits on before subtitles render.
+        # Its `/socket` WebSockets are streams (median 1204s), but at most 3 finished in any
+        # 300s window and none moved the ratio past TRAEFIK_SLOW_PCT. Exempting the service
+        # would blind the check to the attachment stall; a separate IngressRoute for `/socket`
+        # is the way to exempt the WebSockets alone.
         TRAEFIK_STREAM_SERVICES=tuple(
             s.strip()
             for s in _env(
