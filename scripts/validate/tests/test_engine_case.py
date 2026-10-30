@@ -230,3 +230,64 @@ def test_case_inputs_names_the_engine_case():
         if step.get("id") == "render"
     ]
     assert SOURCE in render["env"]["CASE_INPUTS"].split()
+
+
+# How the case drives the container.
+
+
+def _docstrings(node: ast.AST) -> set[int]:
+    """The ids of the docstring constants under `node`, which say nothing about what runs."""
+    found = set()
+    for each in ast.walk(node):
+        body = getattr(each, "body", None)
+        if (
+            isinstance(body, list)
+            and body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+        ):
+            found.add(id(body[0].value))
+    return found
+
+
+def _strings(source: str) -> list[str]:
+    """Each string constant in `source` but its docstrings, an f-string's parts joined."""
+    tree = ast.parse(source)
+    skip = _docstrings(tree)
+    found = []
+    for node in ast.walk(tree):
+        if id(node) in skip:
+            continue
+        if isinstance(node, ast.JoinedStr):
+            found.append(
+                "".join(
+                    part.value
+                    for part in node.values
+                    if isinstance(part, ast.Constant) and isinstance(part.value, str)
+                )
+            )
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            found.append(node.value)
+    return found
+
+
+# The commands the case runs: hold the engine, run the real updater, read the engine's version.
+_COMMANDS = ("apt-mark hold", "homelab-updater", "dpkg-query")
+
+
+def _runs_the_real_tools(source: str) -> bool:
+    strings = _strings(source)
+    return all(any(word in text for text in strings) for word in _COMMANDS)
+
+
+def test_the_case_holds_the_engine_runs_the_updater_and_reads_dpkg():
+    _module()
+    source = (fx.REPO / SOURCE).read_text()
+    assert _runs_the_real_tools(source)
+    # Red proofs: a case that unholds, skips the updater, or never reads dpkg does not count.
+    for word, mutant in (
+        ("apt-mark hold", "apt-mark unhold"),
+        ("homelab-updater", "true"),
+        ("dpkg-query", "true"),
+    ):
+        assert not _runs_the_real_tools(source.replace(word, mutant)), word
