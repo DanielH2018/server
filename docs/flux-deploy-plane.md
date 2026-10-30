@@ -115,10 +115,11 @@ The `flux` rule group, `ansible/roles/k8s/observability/files/rules/flux.yaml`, 
 M1's Alertmanager. Every rule carries `service="flux"`.
 
 - **`FluxControllerDown`, critical.** Two rules share the name.
-    - One fires when a controller's scrape has failed for 5 minutes. It carries
-      `shadow="true"`, because `ScrapeTargetDown{job="flux"}` already pages that
-      condition. Dropping the label needs an inhibit and is the operator's call
-      (`docs/target-architecture/monitoring/m6-status/a3.md`).
+    - One fires when a controller's scrape has failed for 5 minutes.
+      `ScrapeTargetDown{job="flux"}` reads the same failed scrape as a warning after 10
+      minutes. An Alertmanager inhibit with `equal: [job, instance]` holds that warning
+      while this rule fires, so one outage pages once
+      ([#6654](https://github.com/DanielH2018/server/issues/6654)).
     - The other fires when a controller has had no scrape target for 5 minutes, or has been
       scraped with no `controller_runtime_reconcile_total` series. Pod discovery finds no
       target for a controller with no pod, so `ScrapeTargetDown` cannot see that loss. This rule

@@ -7,18 +7,17 @@
 groups:
   - name: flux
     rules:
-      # SHADOW UNTIL THE OPERATOR DROPS THE LABEL, which needs an inhibit
-      # (docs/target-architecture/monitoring/m6-status/a3.md). ScrapeTargetDown in
-      # scrape-targets.yaml already pages up == 0 for this job. M1 convention 5 allows one
-      # pager, so this rule routes to the blackhole receiver. It shares its name with the
-      # rule below so that the soak and A3 read one alert for "a controller is down".
+      # ScrapeTargetDown{job="flux"} reads the same up == 0 as a warning after 10 minutes. This
+      # rule pages it as critical after 5, and an Alertmanager inhibit with `equal: [job,
+      # instance]` holds the warning back while this fires, so one outage pages once (#6654).
+      # It shares its name with the rule below so that the soak reads one alert for "a
+      # controller is down".
       - alert: FluxControllerDown
         expr: up{job="flux"} == 0
         for: 5m
         labels:
           severity: critical
           service: flux
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape the Flux controller {{ $labels.app }}.
           description: >-

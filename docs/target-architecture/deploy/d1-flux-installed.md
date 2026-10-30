@@ -839,7 +839,9 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
           second `up == 0` pager.
         - The `up == 0` arm therefore lands with `shadow="true"`. The `absent()` arm is
           conjoined with `up == 1`.
-        - A3's cutover commit drops the shadow.
+        - The shadow outlived A3's Cutover-b. A follow-up dropped it together with an
+          inhibit that holds `ScrapeTargetDown{job="flux"}` while this arm fires
+          ([#6654](https://github.com/DanielH2018/server/issues/6654)).
     - `FluxNotReady`, `warning`: a Kustomization, or the OCIRepository `homelab`, has had a
       Ready condition other than `True` for 15 minutes. The rule names `homelab`, so the
       drill's `verify-drill`, which is meant to read Ready=False, never fires it. It also

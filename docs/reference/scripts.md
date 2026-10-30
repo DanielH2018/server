@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-30 06:17 UTC
-generated_sha: bae292fa8e
+generated_at: 2026-10-30 18:17 UTC
+generated_sha: 4690d8c994
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: bae292fa8e
 
 # Scripts
 
-471 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+472 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -111,7 +111,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-364 script(s) — imported by another script — not an entry point.
+365 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -193,6 +193,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/renderer/renderer_lib/digest8.py` | renderer | 8-hex-digit digests of a Job's spec and a ConfigMap's content, shared by snapshot and soak. | imported by _job_census.py, cronjob_gate.py, prepull.py, snapshot.py, soak.py | — | — |
 | `scripts/lib/doc_freshness.py` | lib | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` | — |
 | `scripts/lib/docs_provenance.py` | lib | The provenance banner every generated documentation page opens with. | imported by backlog.py, catalog_render.py, crons.py, decisions.py, fragments_deploy.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py, state.py | `test_docs_provenance.py` | — |
+| `scripts/validate/validate_lib/engine_case.py` | validate | The container case for the Pi's held Docker engine (#6590). | imported by host_package_cases.py | `test_engine_case.py` | — |
 | `scripts/renderer/renderer_lib/environment.py` | renderer | The strict Jinja environment the renderer renders templates and task expressions in. | imported by cluster.py, cronjob_gate.py, host.py, host_sources.py, images.py, placeholders.py, prepull.py, prune_label.py, restart.py, secret_checks.py, snapshot.py, standalone_map.py, task_inputs.py | — | — |
 | `scripts/lib/estate.py` | lib | The inventory as the docs generators read it: hosts, each host's vars, and its entries. | imported by catalog_backup.py, context.py, fragment_readers.py, fragments_hosts.py, fragments_storage.py, gen_doc_fragments.py, gen_role_glance.py, host.py, host_fixtures.py, host_sources.py, hosts.py, k8s_roles.py, networking.py, render_context.py, service_catalog.py | `test_estate.py` | — |
 | `scripts/deploy_tools/runbook_gates_lib/etcd_restore.py` | deploy_tools | Run the stop conditions of `docs/k3s-etcd-restore.md` in order, exit code naming the first failure. | no `__main__` guard; imported by test_runbook_gates_etcd_restore.py | `test_runbook_gates_etcd_restore.py` | — |
@@ -254,11 +255,11 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land_lib/health_verdict.py` | deploy_tools | Step 7: the health verdict, and the two halves a healthy deploy can still leave open. | imported by pipeline.py | `test_land_health_verdict.py` | — |
 | `scripts/dev/fanout_lib/review/held_hooks.py` | dev | The project hooks and settings a review pipeline holds from start, outside the worktree. | imported by review.py | — | — |
 | `scripts/dev/findings_lib/history_cli.py` | dev | The two history subcommands: `history` searches past findings, `show` prints one. | imported by findings.py | — | — |
-| `scripts/renderer/renderer_lib/host.py` | renderer | Host and package modes: one host's package, or one shared package, rendered from the git tree. | imported by homelab_render.py, host_fixtures.py, secrets_case.py, setup_census.py, unit_templates.py | — | — |
+| `scripts/renderer/renderer_lib/host.py` | renderer | Host and package modes: one host's package, or one shared package, rendered from the git tree. | imported by engine_case.py, homelab_render.py, host_fixtures.py, secrets_case.py, setup_census.py, unit_templates.py | — | — |
 | `scripts/renderer/renderer_lib/host_arms.py` | renderer | The `activate:` field of a file entry and the `ufw:` key, which feed the reconcile manifest. | imported by host.py, host_manifest.py | `test_renderer_host_arms.py` | — |
 | `scripts/renderer/renderer_lib/host_compose.py` | renderer | The Pi's Compose project in host mode: the include renderer and the inputs hash (H5.2a1). | imported by host.py | — | — |
-| `scripts/validate/validate_lib/host_container.py` | validate | A booted test container for the host_packages container cases, driven with `docker exec`. | imported by bootstrap_case.py, bootstrap_repo_case.py, conffile_case.py, host_package_cases.py, repos_case.py, secrets_case.py, shadow_case.py | — | — |
-| `scripts/validate/validate_lib/host_fixtures.py` | validate | The packages and the repository the host_packages container cases serve. | imported by bootstrap_repo_case.py, conffile_case.py, host_container.py, host_package_cases.py, repos_case.py, secrets_case.py, shadow_case.py | — | — |
+| `scripts/validate/validate_lib/host_container.py` | validate | A booted test container for the host_packages container cases, driven with `docker exec`. | imported by bootstrap_case.py, bootstrap_repo_case.py, conffile_case.py, engine_case.py, host_package_cases.py, repos_case.py, secrets_case.py, shadow_case.py | — | — |
+| `scripts/validate/validate_lib/host_fixtures.py` | validate | The packages and the repository the host_packages container cases serve. | imported by bootstrap_repo_case.py, conffile_case.py, engine_case.py, host_container.py, host_package_cases.py, repos_case.py, secrets_case.py, shadow_case.py | — | — |
 | `scripts/renderer/renderer_lib/host_inputs.py` | renderer | `HOST_INPUTS`: every repo path a host render reads (H3, *Steps*, H3.9a item 1). | imported by classify.py | `test_renderer_host_inputs.py` | — |
 | `scripts/renderer/renderer_lib/host_manifest.py` | renderer | The manifest `homelab-reconcile` reads, and the three spec keys that feed it. | imported by host.py, host_outputs.py, host_package.py | `test_renderer_host_manifest.py` | — |
 | `scripts/renderer/renderer_lib/host_outputs.py` | renderer | Secret-bearing files in host mode: declared outputs, compose files and credentials. | imported by host.py, host_compose.py | — | — |
@@ -419,7 +420,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/secrets_mgmt/secrets_lib/secret_classify.py` | secrets_mgmt | Which rotation tier a secret's NAME puts it in. | imported by secret_registry.py | `test_secret_classify.py` | — |
 | `scripts/deploy_tools/narrow_lib/secret_keys.py` | deploy_tools | Which deploy tags a `secrets.yml` change reaches: the consumers of each key it moved. | imported by broad.py, narrow_setup.py, secret_setup_readers.py | `test_narrow_secret_keys.py` | — |
 | `scripts/secrets_mgmt/secrets_lib/secret_registry.py` | secrets_mgmt | Pure logic over the rotation registry: seeding, reconciliation, due dates and drift. | imported by secret_rotation.py, secrets.py | `test_secret_registry.py` | — |
-| `scripts/validate/validate_lib/secrets_case.py` | validate | The container case for a package that carries `secrets-unit` (H4.1c). | imported by host_package_cases.py | `test_secrets_case.py` | — |
+| `scripts/validate/validate_lib/secrets_case.py` | validate | The container case for a package that carries `secrets-unit` (H4.1c). | imported by engine_case.py, host_package_cases.py | `test_secrets_case.py` | — |
 | `scripts/backup/longhorn_reap_lib/selection.py` | backup | The two operator-selected Backup CR sets: a migrated volume's old chain, and retired seeds. | imported by backups.py | — | — |
 | `scripts/lib/service_tiers.py` | lib | The sets derived from containers_list ``tier``, for readers outside Ansible. | imported by catalog_backup.py, fragments_storage.py, gen_doc_fragments.py, shed_set.py | — | — |
 | `scripts/deploy_tools/setup_lib/setup_census_items.py` | deploy_tools | The items the setup roles still own, derived from the tree (H7.2f). | imported by setup_census.py | — | — |
