@@ -1278,9 +1278,10 @@ reach A6-7a, fail the bijection test and lose its only pager.
         - Query 2 found two episodes. On 2026-10-25 from 14:25 to 14:28, the four `.local.`
           probes behind Traefik (livesync, scrutiny, homelab-mcp, the edge all-clear) and
           all 26 `blackbox-ingress` targets timed out at 9.5s. M4's live
-          `IngressProbeFailed` and `IngressProbeFailedCritical` fired for 19 of those targets, and A4's read records Traefik
-          5xx in the same window. Kuma's tiles declare no `timeout` and retry twice, so Kuma
-          rode the stall out. That stall was a real edge fault, not a rule defect.
+          `IngressProbeFailed` and `IngressProbeFailedCritical` fired for 19 of those
+          targets, and A4's read records Traefik 5xx in the same window. Kuma's tiles declare
+          no `timeout` and retry twice, so Kuma tolerated the stall. The stall was a real edge
+          fault, not a rule defect.
         - The second episode is `PiLoadHigh` on 2026-10-26 at 03:33 and 03:34, outside the
           margin. Load5 crossed 1.5 per core between 03:31 and 03:34 and fell back. The
           bridge's first DOWN cycle came at 03:41, so its 300s samples missed the crossing.
