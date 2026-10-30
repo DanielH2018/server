@@ -102,26 +102,6 @@ tests:
             exp_annotations:
               summary: Kuma's Renovate Agent — Alive tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Renovate Agent — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: TLS Cert Expiry, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's TLS Cert Expiry tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the TLS Cert Expiry tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Traefik 5xx, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Traefik 5xx tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Traefik 5xx tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Traefik Latency, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Traefik Latency tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Traefik Latency tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Traefik 404 Flood, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Traefik 404 Flood tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Traefik 404 Flood tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Traefik 421, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Traefik 421 tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Traefik 421 tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: k3s Longhorn Backup, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's k3s Longhorn Backup tile is gone and no alert rule pages in its place.
@@ -423,16 +403,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
@@ -612,16 +582,6 @@ tests:
       - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
         values: '1x140'
@@ -812,16 +772,6 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x160'
-      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
-        values: '1x160'
       - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
@@ -1004,16 +954,6 @@ tests:
         values: '1x5 _x1700'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x5 _x1700'
-      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
-        values: '1x1700'
       - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
@@ -1204,16 +1144,6 @@ tests:
       - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
         values: '1x3100'
@@ -1427,16 +1357,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Off-box etcd Snapshot", monitor_type="push"}'
@@ -1636,16 +1556,6 @@ tests:
       - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
         values: '1x300'
@@ -1859,16 +1769,6 @@ tests:
       - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="TLS Cert Expiry", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Traefik 5xx", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Traefik Latency", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Traefik 404 Flood", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Traefik 421", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="k3s Longhorn Backup", monitor_type="push"}'
         values: '1x760'

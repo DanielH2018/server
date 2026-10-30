@@ -1,15 +1,16 @@
 # The Traefik edge, read from the `traefik-k8s` scrape job: the certificates it serves and the
 # request counters monitor-bridge's cert, traefik5xx, traefik_latency, traefik_404 and
-# traefik_421 rows read today. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this
-# file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch A4.
+# traefik_421 rows read until M6's batch A4 deleted them. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m6-retire-kuma.md, batch A4.
 #
-# SHADOW UNTIL M6's BATCH A4 CUTOVER-B. Each rule runs beside the Kuma tile of the bridge row it
-# ports, so each carries `shadow: "true"` and pages nobody. Cutover-b drops the label.
+# These rules page since A4's Cutover-b. They ran with `shadow: "true"` beside the Kuma tiles
+# until then.
 #
 # The scrape job sets no `service`, and Traefik's own `service` label names a backend, so every
 # rule sets `service: traefik` as a literal. A rule that groups by Traefik's backend copies it to
 # `backend` first with label_replace, because the literal replaces the series label of the same
-# name. Each threshold mirrors a monitor-bridge env value or default, and
+# name. Each threshold carries the value of the monitor-bridge env key the deleted row read, and
 # ansible/tests/services/test_edge_rule_literals.py pins it (M1 convention 1).
 #
 # The volume floor (TRAEFIK_MIN_RPS, 0.05) is an `and` clause in each ratio rule: a single error
@@ -25,7 +26,6 @@ groups:
         labels:
           severity: critical
           service: traefik
-          shadow: "true"
         annotations:
           summary: The certificate {{ $labels.cn }} expires within 14 days.
           description: >-
@@ -49,7 +49,6 @@ groups:
         labels:
           severity: warning
           service: traefik
-          shadow: "true"
         annotations:
           summary: Traefik backend {{ $labels.backend }} answers over 5% of requests with a 5xx.
           description: >-
@@ -95,7 +94,6 @@ groups:
         labels:
           severity: warning
           service: traefik
-          shadow: "true"
         annotations:
           summary: Over 5% of Traefik backend {{ $labels.backend }}'s requests take longer than 5s.
           description: >-
@@ -116,7 +114,6 @@ groups:
         labels:
           severity: warning
           service: traefik
-          shadow: "true"
         annotations:
           summary: Traefik emits no 5.0s latency bucket for {{ $labels.backend }}.
           description: >-
@@ -137,7 +134,6 @@ groups:
         labels:
           severity: warning
           service: traefik
-          shadow: "true"
         annotations:
           summary: Over 90% of the requests Traefik receives get a 404.
           description: >-
@@ -154,7 +150,6 @@ groups:
         labels:
           severity: warning
           service: traefik
-          shadow: "true"
         annotations:
           summary: Traefik router {{ $labels.router }} keeps answering 421.
           description: >-
@@ -182,7 +177,6 @@ groups:
         labels:
           severity: warning
           service: traefik
-          shadow: "true"
         annotations:
           summary: Prometheus has lost Traefik's scrape job or its edge series.
           description: >-
