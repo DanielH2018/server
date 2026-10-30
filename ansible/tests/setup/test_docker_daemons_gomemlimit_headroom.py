@@ -31,8 +31,15 @@ import re
 import pytest
 from _helpers import load_yaml
 from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
 
 _COMPONENT = REPO / "hosts" / "components" / "pi-docker"
+
+
+@pytest.fixture(scope="module")
+def pi_package() -> host_mode.Package:
+    return host_mode.render_host("daniel-pi")
+
 
 # Measured on daniel-pi over the first 4.3 h of the scrapes, both daemons on
 # go1.26.8 under the default GOGC=100. Live peak is next_gc's ceiling halved (28.0 and
@@ -103,13 +110,16 @@ def test_committed_limit_clears_the_floor_and_the_cap(daemon):
 
 
 @pytest.mark.parametrize("daemon", sorted(MEASURED))
-def test_each_daemon_pairs_gogc_off_with_its_own_limit(daemon):
+def test_each_daemon_pairs_gogc_off_with_its_own_limit(daemon, pi_package):
     """One drop-in per daemon, so a change to one limit marks only that daemon pending."""
-    content = (_COMPONENT / "templates" / f"{daemon}-go-runtime.conf.j2").read_text()
+    unit = {"dockerd": "docker", "containerd": "containerd"}[daemon]
+    dropin = f"/usr/lib/systemd/system/{unit}.service.d/50-homelab.conf"
+    limit = load_yaml(_COMPONENT / "component.yml")["defaults"][
+        f"docker_engine_gomemlimit_{daemon}"
+    ]
+    content = pi_package.files[dropin][0].decode()
     assert "Environment=GOGC=off" in content
-    assert (
-        f"Environment=GOMEMLIMIT={{{{ docker_engine_gomemlimit_{daemon} }}}}" in content
-    )
+    assert f"Environment=GOMEMLIMIT={limit}" in content
 
 
 def test_the_shim_override_rides_with_containerds_config():
