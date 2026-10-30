@@ -94,19 +94,9 @@ def resolve_arr_ip(app, cluster=DEFAULT_CLUSTER):
 ARR_SENSITIVE_PRIVACY = frozenset({"apiKey", "password", "userName"})
 
 # Matched as lowercase substrings against a field's `name`, or against a plain dict key.
-ARR_SENSITIVE_NAME_PARTS = (
-    "apikey",
-    "password",
-    "passkey",
-    "webhook",
-    "token",
-    "secret",
-    "credential",
-    "cookie",
-    "auth",
-)
+ARR_SENSITIVE_NAME_PARTS = core.SECRET_NAME_PARTS
 
-REDACTED = "<redacted>"
+REDACTED = core.REDACTED
 
 
 def _name_is_sensitive(name):
@@ -115,15 +105,24 @@ def _name_is_sensitive(name):
     return any(part in low for part in ARR_SENSITIVE_NAME_PARTS)
 
 
+# A credential can also sit inside a value. A Prowlarr proxy download URL in a history record's
+# `data.downloadUrl` carries Prowlarr's API key under a dict key no name rule matches (#6582),
+# and a log message can quote the same URL, so the walk below passes every string through
+# `core.redact_query_params` rather than only the URL-shaped keys.
+
+
 def redact_arr_payload(obj):
     """Return `obj` with credential-bearing values replaced by `<redacted>`.
 
     Walks the whole decoded response rather than a path allow-list. The paths notification,
     downloadclient, indexer and importlist are the ones known to carry credentials, and a
-    name or privacy match on any other path costs nothing.
+    name or privacy match on any other path costs nothing. Every string value is also
+    scanned for credential-named URL query parameters (`core.redact_query_params`).
     """
     if isinstance(obj, list):
         return [redact_arr_payload(item) for item in obj]
+    if isinstance(obj, str):
+        return core.redact_query_params(obj)
     if not isinstance(obj, dict):
         return obj
     # An *arr `fields[]` entry: {"name": "webHookUrl", "value": …, "privacy": "normal"}.
