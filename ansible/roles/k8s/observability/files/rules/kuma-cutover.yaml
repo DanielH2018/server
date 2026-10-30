@@ -33,7 +33,8 @@
 # exceeds Prometheus's 30d retention. A Kuma restart drops the series until the next monthly
 # push, and after 30d no earlier sample remains to keep the term quiet, so it would page falsely.
 # Their window is B4's own, so B4's five [2h] terms bound it; ansible/tests/setup/
-# test_b4_rule_literals.py fails while a drill rule is shadow and none of those five remains.
+# test_b4_rule_literals.py fails while a drill rule is shadow and none of those five remains,
+# and when a drill tile is deleted while all five tiles still render.
 groups:
   - name: kuma-cutover
     rules:

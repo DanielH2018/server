@@ -152,8 +152,7 @@ def test_arming_is_wired_in_both_directions() -> None:
 def test_the_disarmed_marker_follows_the_arm_flag_both_ways() -> None:
     """RenovateAgentNotReporting goes quiet on the marker, so the marker must track the flag.
 
-    Disarming writes the series the rule's `unless` reads and drops the last verdict, which
-    HostCheckOverdue would otherwise read uninhibited; arming removes the marker.
+    Disarming writes the series the rule's `unless` reads; arming removes it.
     """
     rules = ANSIBLE / "roles/k8s/observability/files/rules/other-setup-checks.yaml"
     [group] = yaml_fast.safe_load(rules.read_text())["groups"]
@@ -179,7 +178,6 @@ def test_the_disarmed_marker_follows_the_arm_flag_both_ways() -> None:
     assert by_path[("renovate-agent-disarmed.prom", "absent")][0] == (
         "renovate_agent_enabled"
     )
-    assert by_path[("renovate-agent.prom", "absent")][0] == "not renovate_agent_enabled"
 
 
 def test_the_role_kicks_no_run_on_config_change() -> None:

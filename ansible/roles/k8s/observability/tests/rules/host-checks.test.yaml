@@ -1432,6 +1432,23 @@ tests:
                 Read /var/lib/node-exporter-textfile/new-producer.prom on the host, then the
                 journal of the cron or timer that writes it.
 
+  # The same overdue check with its producer disarmed on purpose: the marker keeps the rule quiet,
+  # because the producer's own pair goes quiet on it too and leaves no inhibit source.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="new-producer", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x15'
+      - series: 'homelab_check_deadline_seconds{check="new-producer", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '600x15'
+      - series: 'homelab_check_disarmed{check="new-producer", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x15'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 13m
+        alertname: HostCheckOverdue
+        exp_alerts: []
+
   # daniel-pi's collector fails from minute 3. Its own TextfileCollectorError fires after 10m.
   - interval: 1m
     input_series:

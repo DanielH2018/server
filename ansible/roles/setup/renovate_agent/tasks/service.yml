@@ -98,9 +98,10 @@
     daemon_reload: true
   become: true
 
-# RenovateAgentNotReporting is plain YAML and cannot read renovate_agent_enabled, so a disarmed
-# agent says so through this marker and the rule stays quiet while it is 1. Removing the marker on
-# arming is the way back; a missing marker leaves the rule paging, which is the safe direction.
+# RenovateAgentNotReporting and HostCheckOverdue are plain YAML and cannot read
+# renovate_agent_enabled, so a disarmed agent says so through this marker and both stay quiet on
+# its check while it is 1, a verdict left by a run started by hand included. Removing the marker on
+# arming is the way back; a missing marker leaves both rules paging, which is the safe direction.
 # ENFORCED: ansible/tests/setup/test_renovate_agent_unit.py.
 - name: Mark the agent disarmed for its NotReporting rule
   tags: [renovate-agent-service]
@@ -123,16 +124,6 @@
     state: absent
   become: true
   when: renovate_agent_enabled
-
-# A disarmed agent's last verdict must go too: HostCheckOverdue reads its deadline series, and
-# the inhibit that mutes it needs a firing NotReporting, which the marker now silences.
-- name: Remove the agent's last verdict textfile when disarmed
-  tags: [renovate-agent-service]
-  ansible.builtin.file:
-    path: /var/lib/node-exporter-textfile/renovate-agent.prom
-    state: absent
-  become: true
-  when: not renovate_agent_enabled
 
 # Render provenance for manifest-prune-check.sh's stale-script arm — see the gitops_deploy role
 # for the reasoning.
