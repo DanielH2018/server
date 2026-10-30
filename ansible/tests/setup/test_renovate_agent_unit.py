@@ -152,9 +152,16 @@ def test_arming_is_wired_in_both_directions() -> None:
 def test_the_disarmed_marker_follows_the_arm_flag_both_ways() -> None:
     """RenovateAgentNotReporting goes quiet on the marker, so the marker must track the flag.
 
-    Disarming writes it and drops the last verdict, which HostCheckOverdue would otherwise read
-    uninhibited; arming removes it.
+    Disarming writes the series the rule's `unless` reads and drops the last verdict, which
+    HostCheckOverdue would otherwise read uninhibited; arming removes the marker.
     """
+    rules = ANSIBLE / "roles/k8s/observability/files/rules/other-setup-checks.yaml"
+    [group] = yaml_fast.safe_load(rules.read_text())["groups"]
+    [rule] = [r for r in group["rules"] if r["alert"] == "RenovateAgentNotReporting"]
+    [(metric, check)] = re.findall(
+        r'unless on \(origin\) \((\w+)\{check="([^"]+)",origin="daniel-box"\} == 1\)',
+        rule["expr"],
+    )
     tasks = yaml_fast.safe_load(TASKS.read_text())
     textfile = "/var/lib/node-exporter-textfile/"
     by_path = {}
@@ -168,21 +175,11 @@ def test_the_disarmed_marker_follows_the_arm_flag_both_ways() -> None:
             )
     when, content = by_path[("renovate-agent-disarmed.prom", "present")]
     assert when == "not renovate_agent_enabled"
-    assert 'homelab_check_disarmed{check="renovate-agent"} 1' in content
+    assert re.search(rf'^{metric}\{{check="{check}"\}} 1$', content, re.M)
     assert by_path[("renovate-agent-disarmed.prom", "absent")][0] == (
         "renovate_agent_enabled"
     )
     assert by_path[("renovate-agent.prom", "absent")][0] == "not renovate_agent_enabled"
-
-
-def test_the_not_reporting_rule_reads_the_marker_the_role_writes() -> None:
-    rules = ANSIBLE / "roles/k8s/observability/files/rules/other-setup-checks.yaml"
-    [group] = yaml_fast.safe_load(rules.read_text())["groups"]
-    [rule] = [r for r in group["rules"] if r["alert"] == "RenovateAgentNotReporting"]
-    assert (
-        'unless on (origin) (homelab_check_disarmed{check="renovate-agent",'
-        'origin="daniel-box"} == 1)'
-    ) in rule["expr"]
 
 
 def test_the_role_kicks_no_run_on_config_change() -> None:
