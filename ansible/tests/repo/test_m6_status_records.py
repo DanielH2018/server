@@ -8,7 +8,6 @@ records a result edits only its batch's file.
 Run: uv run pytest ansible/tests/repo/test_m6_status_records.py
 """
 
-import itertools
 import re
 import shutil
 
@@ -72,9 +71,8 @@ def test_every_include_resolves_and_every_record_file_is_included_once():
 def _record_branch(repo, branch: str, path: str, record: str) -> None:
     git(repo, "checkout", "-q", "-b", branch, "master")
     target = repo / path
-    commit(
-        repo, branch, **{path: target.read_text().replace("Nothing recorded.", record)}
-    )
+    # Append rather than replace "Nothing recorded.", so a pair that already holds records works.
+    commit(repo, branch, **{path: f"{target.read_text()}\n{record}\n"})
 
 
 def test_two_batches_recording_side_by_side_merge_without_conflict(tmp_path):
@@ -82,13 +80,7 @@ def test_two_batches_recording_side_by_side_merge_without_conflict(tmp_path):
     shutil.copytree(DOCS / "target-architecture", repo / "target-architecture")
     commit(repo, "base")
     # Adjacent includes are the worst case: their records sit next to each other on the page.
-    # The pair must both be unrecorded, or a branch has no placeholder to replace.
-    includes = _includes()
-    first, second = next(
-        pair
-        for pair in itertools.pairwise(includes)
-        if all("Nothing recorded." in (DOCS / i).read_text() for i in pair)
-    )
+    first, second = _includes()[:2]
     _record_branch(repo, "first", first, "Soak read: first batch.")
     _record_branch(repo, "second", second, "Soak read: second batch.")
     merged = git(repo, "merge-tree", "--write-tree", "first", "second", check=False)
