@@ -160,23 +160,28 @@ def test_a_promtool_case_keeps_the_flap_arm_quiet_on_one_rollout_gap():
     cases = yaml_fast.safe_load(TESTS.read_text())["tests"]
 
     def quiet_after_gap(case: dict) -> bool:
-        runs = up_series_runs(case)
-        if not runs or any(len(r) > 1 for r in runs) or not any(runs):
+        # A hard-down case has one zero run too, but one that never ends, and a check inside
+        # an outage is quiet by construction. The run must recover and the check follow it.
+        ups = [
+            expand(s["values"])
+            for s in case.get("input_series") or []
+            if re.match(r"^up(\{|$)", s["series"])
+        ]
+        if len(ups) != 1 or len(zero_runs(ups[0])) != 1:
             return False
-        first_zero = min(
-            expand(s["values"]).index(0)
-            for s in case["input_series"]
-            if re.match(r"^up(\{|$)", s["series"]) and 0 in expand(s["values"])
-        )
-        gap_start = first_zero * seconds(case["interval"])
+        samples = ups[0]
+        end = samples.index(0) + zero_runs(samples)[0]
+        if end >= len(samples) or samples[end] != 1:
+            return False
         return any(
-            not t.get("exp_alerts") and seconds(t["eval_time"]) > gap_start
+            not t.get("exp_alerts")
+            and seconds(t["eval_time"]) > end * seconds(case["interval"])
             for t in flap_checks(case, names)
         )
 
     assert any(quiet_after_gap(c) for c in cases), (
-        f"no case in {TESTS.name} feeds an up series with exactly one zero run and expects "
-        f"{sorted(names)} quiet after the gap starts"
+        f"no case in {TESTS.name} feeds an up series with exactly one zero run that recovers "
+        f"and expects {sorted(names)} quiet after the recovery"
     )
 
 
@@ -213,4 +218,42 @@ def test_a_promtool_case_keeps_the_flap_arm_quiet_after_a_gap_as_long_as_the_hol
     assert any(quiet_in_recovery_tail(c) for c in cases), (
         f"no case in {TESTS.name} feeds one zero run of at least ScrapeTargetDown's hold "
         f"that recovers, and expects {sorted(names)} quiet 10 minutes after it recovers"
+    )
+
+
+def test_a_promtool_case_keeps_the_flap_arm_quiet_on_a_missed_scrape_after_an_outage():
+    """A zero run of at least ScrapeTargetDown's hold, then a shorter run after it recovers,
+    with the flap arm quiet after the second run ends (#6642). The outage and the miss are two
+    resets, so only the arm that reads the outage's all-failed window holds the page back."""
+    names = {r["alert"] for r in flap_rules()}
+    assert names, f"no alerting rule in {RULES.name} reads a range of up"
+    hold = min(
+        seconds(r["for"]) for r in rules() if r.get("alert") == "ScrapeTargetDown"
+    )
+    cases = yaml_fast.safe_load(TESTS.read_text())["tests"]
+
+    def quiet_after_outage_and_miss(case: dict) -> bool:
+        step = seconds(case["interval"])
+        ups = [
+            expand(s["values"])
+            for s in case.get("input_series") or []
+            if re.match(r"^up(\{|$)", s["series"])
+        ]
+        if len(ups) != 1:
+            return False
+        runs = zero_runs(ups[0])
+        if len(runs) != 2 or runs[0] * step < hold or runs[1] * step >= hold:
+            return False
+        samples = ups[0]
+        second_end = len(samples) - samples[::-1].index(0)
+        if second_end >= len(samples):
+            return False
+        return any(
+            not t.get("exp_alerts") and seconds(t["eval_time"]) > second_end * step
+            for t in flap_checks(case, names)
+        )
+
+    assert any(quiet_after_outage_and_miss(c) for c in cases), (
+        f"no case in {TESTS.name} feeds an outage of at least ScrapeTargetDown's hold, then "
+        f"one shorter miss after recovery, and expects {sorted(names)} quiet after the miss"
     )

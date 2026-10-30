@@ -319,3 +319,38 @@ tests:
       - eval_time: 70m
         alertname: ScrapeTargetFlapping
         exp_alerts: []
+
+  # The same outage, then one missed scrape 2 minutes after recovery (#6642). The outage and the
+  # miss are two 1-to-0 transitions and the average stays under 0.7, but the outage's 10-minute
+  # all-failed window keeps the flap arm quiet, so ScrapeTargetDown's page stays the only one.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flux", instance="flux:8080"}'
+        values: '1x30 0x14 1 0 1x40'
+    alert_rule_test:
+      - eval_time: 58m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+
+  # The boundary: exactly 10 failed scrapes, one short of ScrapeTargetDown's hold, then a blip.
+  # The subquery arm already counts the run as an outage, so neither rule pages it.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flux", instance="flux:8080"}'
+        values: '1x30 0x9 1 0 1x40'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: ScrapeTargetDown
+        exp_alerts: []
+      - eval_time: 55m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []

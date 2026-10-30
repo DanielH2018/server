@@ -331,13 +331,17 @@ groups:
       # The flap arm (#6626). ScrapeTargetDown holds one series at `up == 0` for 10 minutes, so
       # a target that fails for 1 to 4 minutes at a time never fires it. This arm reads the last
       # 30 minutes instead: more than 30% of them failed, the target went from up to down at
-      # least twice, and it answered at least once in the last 10. The `resets` count keeps one
-      # gap of any length quiet, including the 20 minutes after a long outage recovers, while its
-      # failed scrapes still drag the average down. The `max_over_time` arm hands a target held
-      # down over to ScrapeTargetDown rather than paging twice. Each rule's job matcher and `service` mirror one ScrapeTargetDown
-      # rule's, so ansible/tests/services/test_scrape_target_flap_rule.py holds the two sets equal.
+      # least twice, and no 10-minute window of the last 30 failed every scrape. The `resets`
+      # count keeps one short gap quiet through the 20 minutes its failed scrapes drag the
+      # average down. The subquery arm keeps an outage long enough for ScrapeTargetDown quiet
+      # for 30 minutes after it, so one missed scrape soon after recovery cannot supply the
+      # second reset and page the outage twice (#6642). A run of exactly 10 failed scrapes
+      # trips the subquery arm one evaluation before ScrapeTargetDown's hold ends, so such a
+      # gap followed by a blip pages neither rule; one gap and one blip is not flapping.
+      # Each rule's job matcher and `service` mirror one ScrapeTargetDown rule's, so
+      # ansible/tests/services/test_scrape_target_flap_rule.py holds the two sets equal.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[30m]) < 0.7 and resets(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[30m]) >= 2 and max_over_time(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[10m]) == 1
+        expr: avg_over_time(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[30m]) < 0.7 and resets(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -350,7 +354,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"loki-homelab|alloy"}[30m]) < 0.7 and resets(up{job=~"loki-homelab|alloy"}[30m]) >= 2 and max_over_time(up{job=~"loki-homelab|alloy"}[10m]) == 1
+        expr: avg_over_time(up{job=~"loki-homelab|alloy"}[30m]) < 0.7 and resets(up{job=~"loki-homelab|alloy"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"loki-homelab|alloy"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -363,7 +367,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="alloy-pi"}[30m]) < 0.7 and resets(up{job="alloy-pi"}[30m]) >= 2 and max_over_time(up{job="alloy-pi"}[10m]) == 1
+        expr: avg_over_time(up{job="alloy-pi"}[30m]) < 0.7 and resets(up{job="alloy-pi"}[30m]) >= 2 and min_over_time(max_over_time(up{job="alloy-pi"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -376,7 +380,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"node-pi|dockerd-pi|containerd-pi"}[30m]) < 0.7 and resets(up{job=~"node-pi|dockerd-pi|containerd-pi"}[30m]) >= 2 and max_over_time(up{job=~"node-pi|dockerd-pi|containerd-pi"}[10m]) == 1
+        expr: avg_over_time(up{job=~"node-pi|dockerd-pi|containerd-pi"}[30m]) < 0.7 and resets(up{job=~"node-pi|dockerd-pi|containerd-pi"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"node-pi|dockerd-pi|containerd-pi"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -389,7 +393,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="node"}[30m]) < 0.7 and resets(up{job="node"}[30m]) >= 2 and max_over_time(up{job="node"}[10m]) == 1
+        expr: avg_over_time(up{job="node"}[30m]) < 0.7 and resets(up{job="node"}[30m]) >= 2 and min_over_time(max_over_time(up{job="node"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -402,7 +406,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="gpu"}[30m]) < 0.7 and resets(up{job="gpu"}[30m]) >= 2 and max_over_time(up{job="gpu"}[10m]) == 1
+        expr: avg_over_time(up{job="gpu"}[30m]) < 0.7 and resets(up{job="gpu"}[30m]) >= 2 and min_over_time(max_over_time(up{job="gpu"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -415,7 +419,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"deploy-pipeline|monitor-bridge"}[30m]) < 0.7 and resets(up{job=~"deploy-pipeline|monitor-bridge"}[30m]) >= 2 and max_over_time(up{job=~"deploy-pipeline|monitor-bridge"}[10m]) == 1
+        expr: avg_over_time(up{job=~"deploy-pipeline|monitor-bridge"}[30m]) < 0.7 and resets(up{job=~"deploy-pipeline|monitor-bridge"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"deploy-pipeline|monitor-bridge"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -428,7 +432,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="autofix-bridge"}[30m]) < 0.7 and resets(up{job="autofix-bridge"}[30m]) >= 2 and max_over_time(up{job="autofix-bridge"}[10m]) == 1
+        expr: avg_over_time(up{job="autofix-bridge"}[30m]) < 0.7 and resets(up{job="autofix-bridge"}[30m]) >= 2 and min_over_time(max_over_time(up{job="autofix-bridge"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -441,7 +445,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="flux"}[30m]) < 0.7 and resets(up{job="flux"}[30m]) >= 2 and max_over_time(up{job="flux"}[10m]) == 1
+        expr: avg_over_time(up{job="flux"}[30m]) < 0.7 and resets(up{job="flux"}[30m]) >= 2 and min_over_time(max_over_time(up{job="flux"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -454,7 +458,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"}[30m]) < 0.7 and resets(up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"}[30m]) >= 2 and max_over_time(up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"}[10m]) == 1
+        expr: avg_over_time(up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"}[30m]) < 0.7 and resets(up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -467,7 +471,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="traefik-k8s"}[30m]) < 0.7 and resets(up{job="traefik-k8s"}[30m]) >= 2 and max_over_time(up{job="traefik-k8s"}[10m]) == 1
+        expr: avg_over_time(up{job="traefik-k8s"}[30m]) < 0.7 and resets(up{job="traefik-k8s"}[30m]) >= 2 and min_over_time(max_over_time(up{job="traefik-k8s"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -480,7 +484,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="speedtest"}[30m]) < 0.7 and resets(up{job="speedtest"}[30m]) >= 2 and max_over_time(up{job="speedtest"}[10m]) == 1
+        expr: avg_over_time(up{job="speedtest"}[30m]) < 0.7 and resets(up{job="speedtest"}[30m]) >= 2 and min_over_time(max_over_time(up{job="speedtest"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -493,7 +497,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="pihole"}[30m]) < 0.7 and resets(up{job="pihole"}[30m]) >= 2 and max_over_time(up{job="pihole"}[10m]) == 1
+        expr: avg_over_time(up{job="pihole"}[30m]) < 0.7 and resets(up{job="pihole"}[30m]) >= 2 and min_over_time(max_over_time(up{job="pihole"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -506,7 +510,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="uptime-kuma"}[30m]) < 0.7 and resets(up{job="uptime-kuma"}[30m]) >= 2 and max_over_time(up{job="uptime-kuma"}[10m]) == 1
+        expr: avg_over_time(up{job="uptime-kuma"}[30m]) < 0.7 and resets(up{job="uptime-kuma"}[30m]) >= 2 and min_over_time(max_over_time(up{job="uptime-kuma"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -519,7 +523,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="home-assistant"}[30m]) < 0.7 and resets(up{job="home-assistant"}[30m]) >= 2 and max_over_time(up{job="home-assistant"}[10m]) == 1
+        expr: avg_over_time(up{job="home-assistant"}[30m]) < 0.7 and resets(up{job="home-assistant"}[30m]) >= 2 and min_over_time(max_over_time(up{job="home-assistant"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -532,7 +536,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="nut"}[30m]) < 0.7 and resets(up{job="nut"}[30m]) >= 2 and max_over_time(up{job="nut"}[10m]) == 1
+        expr: avg_over_time(up{job="nut"}[30m]) < 0.7 and resets(up{job="nut"}[30m]) >= 2 and min_over_time(max_over_time(up{job="nut"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -545,7 +549,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"valheim-stats|terraria-stats"}[30m]) < 0.7 and resets(up{job=~"valheim-stats|terraria-stats"}[30m]) >= 2 and max_over_time(up{job=~"valheim-stats|terraria-stats"}[10m]) == 1
+        expr: avg_over_time(up{job=~"valheim-stats|terraria-stats"}[30m]) < 0.7 and resets(up{job=~"valheim-stats|terraria-stats"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"valheim-stats|terraria-stats"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -558,7 +562,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="longhorn"}[30m]) < 0.7 and resets(up{job="longhorn"}[30m]) >= 2 and max_over_time(up{job="longhorn"}[10m]) == 1
+        expr: avg_over_time(up{job="longhorn"}[30m]) < 0.7 and resets(up{job="longhorn"}[30m]) >= 2 and min_over_time(max_over_time(up{job="longhorn"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -571,7 +575,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="coredns-host"}[30m]) < 0.7 and resets(up{job="coredns-host"}[30m]) >= 2 and max_over_time(up{job="coredns-host"}[10m]) == 1
+        expr: avg_over_time(up{job="coredns-host"}[30m]) < 0.7 and resets(up{job="coredns-host"}[30m]) >= 2 and min_over_time(max_over_time(up{job="coredns-host"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -584,7 +588,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="exportarr"}[30m]) < 0.7 and resets(up{job="exportarr"}[30m]) >= 2 and max_over_time(up{job="exportarr"}[10m]) == 1
+        expr: avg_over_time(up{job="exportarr"}[30m]) < 0.7 and resets(up{job="exportarr"}[30m]) >= 2 and min_over_time(max_over_time(up{job="exportarr"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -597,7 +601,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"}[30m]) < 0.7 and resets(up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"}[30m]) >= 2 and max_over_time(up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"}[10m]) == 1
+        expr: avg_over_time(up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"}[30m]) < 0.7 and resets(up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -610,7 +614,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) < 0.7 and resets(up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) >= 2 and max_over_time(up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[10m]) == 1
+        expr: avg_over_time(up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) < 0.7 and resets(up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) >= 2 and min_over_time(max_over_time(up{job=~"blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
@@ -623,7 +627,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) < 0.7 and resets(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) >= 2 and max_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[10m]) == 1
+        expr: avg_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) < 0.7 and resets(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) >= 2 and min_over_time(max_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[10m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning
