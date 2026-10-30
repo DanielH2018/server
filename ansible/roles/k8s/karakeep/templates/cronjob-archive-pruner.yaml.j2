@@ -28,6 +28,7 @@ spec:
   jobTemplate:
     spec:
       activeDeadlineSeconds: {{ karakeep_k8s_pruner_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ karakeep_k8s_pruner_job_ttl_seconds }}
       # No retry. A failed run leaves the library as it was, and tomorrow's run picks up the
       # same work.
       backoffLimit: 0

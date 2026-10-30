@@ -43,6 +43,7 @@ spec:
         app: longhorn-reconcile
     spec:
       activeDeadlineSeconds: {{ longhorn_reconcile_k8s_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ longhorn_reconcile_k8s_job_ttl_seconds }}
       # No retry: the next run is an hour away and reads the same state.
       backoffLimit: 0
       template:
