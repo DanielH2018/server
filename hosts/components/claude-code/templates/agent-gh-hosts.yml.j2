@@ -1,0 +1,11 @@
+# Shipped by homelab-daniel-server; homelab-secrets renders it from the host's SOPS file.
+# {{ claude_code_agent_github_login }}'s classic token, scope public_repo only. gh reads the
+# user's token from `users:`, and the copy at host level is the shape gh writes itself for the
+# active account.
+github.com:
+    users:
+        {{ claude_code_agent_github_login }}:
+            oauth_token: "{{ claude_code_agent_gh_token }}"
+    oauth_token: "{{ claude_code_agent_gh_token }}"
+    user: {{ claude_code_agent_github_login }}
+    git_protocol: https

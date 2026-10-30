@@ -259,3 +259,47 @@ def test_sort_key_query_param_is_clean():
     # `key` is matched as a whole name, so an *arr paging parameter ending in it still prints.
     url = "http://radarr:7878/api/v3/history?sortKey=date&page=1"
     assert _download_url(arr.redact_arr_payload(_history(url))) == url
+
+
+# --- a credential inside a percent-encoded nested URL (#6603) ----------------------------
+
+
+NESTED_KEY = "NESTED-KEY"
+OUTER = "http://prowlarr:9696/7/download?link=https%3A%2F%2Findexer.test%2Fdl"
+
+
+def _nested(query):
+    # A URL carried as another URL's `link=` value, percent-encoded the way a client sends it.
+    return f"{OUTER}{query}"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        f"%3Fid%3D1%26apikey%3D{NESTED_KEY}",
+        f"%3fid%3d1%26apikey%3d{NESTED_KEY}",
+        f"%3Fapikey%3D{NESTED_KEY}%26id%3D1",
+        f"%3fapikey%3d{NESTED_KEY}",
+    ],
+)
+def test_encoded_nested_apikey_is_flagged(query):
+    # `%3F`/`%26` separate and `%3D` assigns, in either hex case.
+    out = arr.redact_arr_payload(_history(_nested(query)))
+    assert NESTED_KEY not in _download_url(out)
+
+
+def test_encoded_nested_url_is_clean_apart_from_the_key():
+    # Only the nested parameter's value goes: the outer URL and the nested id and file survive.
+    url = _nested(f"%3Fid%3D1%26apikey%3D{NESTED_KEY}%26file%3DMovie")
+    out = arr.redact_arr_payload(_history(url))
+    assert _download_url(out) == _nested(
+        f"%3Fid%3D1%26apikey%3D{arr.REDACTED}%26file%3DMovie"
+    )
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_printed_output_omits_an_encoded_nested_key(as_json):
+    body = json.dumps(_history(_nested(f"%3Fid%3D1%26apikey%3D{NESTED_KEY}")))
+    text, rc = arr.format_arr_response(body, as_json=as_json)
+    assert rc == 0
+    assert NESTED_KEY not in text

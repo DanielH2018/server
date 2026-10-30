@@ -12,6 +12,18 @@
 # so ansible_env.HOME is /root even in a become: false task. See chezmoi_setup for the
 # failure this caused.
 
+# DECIDED: the role ends on daniel-server here, not with a `when:` on its initial_setup.yml entry.
+# daniel-server's Claude subjects are package-owned since H7.39 (hosts/components/claude-code): the
+# agent user, the Remote Control units, the syncs, the caps, the alerts and the root inspector
+# ship in homelab-daniel-server. An initial_setup.yml edit is in the deployer's
+# _BROAD_MANUAL_PREFIXES and parks every session's landing, so the exclusion lives in the role.
+# setup_gates.role_end_guard reads this task, which keeps the two-writer census, land_reach and
+# the glance block honest about where the role runs. H7.40 moves daniel-box and empties the role.
+- name: End the role on daniel-server, whose Claude subjects the homelab-daniel-server package owns
+  tags: [claude_code]
+  ansible.builtin.meta: end_role
+  when: inventory_hostname == 'daniel-server'
+
 - name: Ensure the installer directory exists
   tags: [claude_code]
   ansible.builtin.file:

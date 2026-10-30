@@ -1843,6 +1843,20 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       `command -v sops` on each host. It also carries the age-key decision in
       `docs/break-glass.md`. The removal of daniel-server's user-home age key waits for the
       operator's confirmation that nothing reads it (**operator-only**).
+    - **Amended 2026-10-30, as H7.24b was built.** Nothing had moved the callers to the
+      packaged `sops`, so H7.24b does it. A host component, `hosts/components/sops/`, ships
+      `/usr/bin/sops` as an exec of `/usr/lib/homelab/bin/sops` and depends on `age`. All
+      three host packages list it, and `homelab-tools` itself stays off `PATH`. After the
+      landing, `command -v sops` reads `/usr/bin/sops` on each host, not the
+      `/usr/lib/homelab/bin` path.
+    - The collections install moves to `initial_setup` under the same `collections` tag
+      instead of being deleted. The deployer applies a `requirements.yml` bump as
+      `initial_setup.yml --tags collections`, and a tag that matches no task exits 0 having
+      changed nothing. It goes when the deployer's timer retires.
+    - The setup census's named members `/usr/local/bin/sops` and `Download and install SOPS
+      binary` retire with the task. A host-package test,
+      `scripts/renderer/tests/test_sops_on_path.py`, holds the legacy entry instead, and the
+      census's `get_url` member is the agent user's Node download.
 5. **H7.25.** Both steps move `optimize_pi`, and H7.4 empties the role that H7.3 starts.
    zram's keys and the Pi's other sysctl keys share one line arm on `/etc/sysctl.conf`. It
    carries H7.3's owner measurement and its divert contingency, H7.4's textfile-directory
@@ -1887,6 +1901,20 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
     both host PRs. Old H7.12c's text decides which of H7.39 and H7.40 carries them, and that
     PR's body quotes the sentence it followed. Restarting a host's `claude-rc.service` drops the phone's sessions, so H7.39 and
     H7.40 each land in a window the operator picks (**operator-only**).
+    - **What H7.39 carries, and what it leaves to H7.40.** `hosts/components/claude-code/`
+      renders the role's templates in place through `role: claude_code`, as H4 did for
+      `nut_host`, and H7.40 moves them. The window-test exemptions name daniel-box's timers,
+      which keep their Ansible-era names until H7.40, so H7.40 renames the four entries. It
+      also changes the `claude-land@` callers, because only daniel-box runs the lander. Old
+      H7.12c's sentence decides both: "The PR renames those four entries to the `homelab-*`
+      names, each with its exclusion unchanged, so the test still exempts them once H7.18a
+      points it at the packages."
+    - **The agent's groups.** The users arm declares no group membership, so
+      `homelab-claude-agent.service` sets the agent's groups on every run.
+    - **The old slice drop-ins stay.** Reconcile treats a legacy path under
+      `/etc/systemd/system/` as a shadow copy and keeps it, so the Ansible-era
+      `claude-*caps.conf` drop-ins are removed by hand. The packaged drop-ins sort after
+      them, so the packaged values govern until then.
 16. **H7.40** stays alone as the second canary host. It carries the artifacts directories'
     `tmpfiles.d` lines and empties `claude_code`.
 17. **H7.41 splits in two, ruled on 2026-10-24.** Wherever another row or entry names H7.41
@@ -2139,7 +2167,8 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `hosts/lib/tests/test_pi_docker_component.py`, not in the CI container: the package
           declares no engine `Depends` and no preferences pin, with a red fixture, and the
           updater installs no engine package and writes `homelab_docker_engine_pending`. The
-          container case is #6590.
+          container case is `scripts/validate/validate_lib/engine_case.py` (#6590), which the
+          `host_packages` job runs.
       **Operator rulings, 2026-10-30.** Open question 8 is resolved as windowed: the PR ships
       `homelab-docker-engine.timer`, which starts the unit at 00:30 UTC. None of the six
       absent networks (`monitoring`, `media`, `apps`, `codeserver`, `terraria`,
@@ -2840,7 +2869,8 @@ progress.
 - *Docker engine.* In the CI container, a dummy `docker-ce` at version A is installed and
   held, and the package carries pins for version B. After an updater run, `docker-ce` is
   still at A, and `homelab_docker_engine_pending` reads 1. The red fixture adds `Depends:
-  docker-ce (= B)`, and the test sees the version move and fails.
+  docker-ce (= B)`, and the case records what apt does with the hold: it refuses the
+  install, or it moves the version.
 - *Bootstrap.* In a container, a hostname mismatch is refused. A second run on a matching
   host changes nothing, and does not rerun the installer. `INSTALL_K3S_EXEC=agent` yields
   only `k3s-agent.service`, and a stubbed installer that creates `k3s.service` for an agent

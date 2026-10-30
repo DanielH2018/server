@@ -44,7 +44,7 @@
 # homelab-docker-engine.service, the one path that installs or moves the held engine, daemon.json,
 # the two Go-runtime drop-ins and containerd's config block. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token
@@ -68,3 +68,5 @@ legacy:
   - {path: /etc/homelab/interim}
   # The Pi-only Kuma push helper that the packaged heartbeats superseded.
   - {path: /usr/local/lib/pi-kuma-push-lib.sh}
+  # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
+  - {path: /usr/local/bin/sops}

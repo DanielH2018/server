@@ -26,6 +26,11 @@ pi_peer_backup_k8s_size: 128Mi
 # the volume skipped. test_pi_peer_backup_schedule_clears_the_longhorn_slots.py holds the slot
 # clear under both offsets.
 pi_peer_backup_k8s_schedule: "0 23 * * *"
+# How long a finished backup Job, and its pod, stays visible: two schedule periods, so a failed
+# run clears instead of reading Failed until two more runs fail. It must exceed one period,
+# because `probe.py health` judges the newest Job (test_rendered_properties.py, row
+# cronjob-finished-jobs-age-out). The alerts read the CronJob's last successful time instead.
+pi_peer_backup_k8s_job_ttl_seconds: 172800
 
 # The ConfigMap the script writes its verdict to as annotations, which kube-state-metrics exports
 # (M6 batch B7). The shadow rule PiPeerBackupNotReporting holds the CronJob's last successful run

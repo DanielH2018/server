@@ -16,11 +16,14 @@ component's are. A component directory under `hosts/components/` holds a `compon
       - {key: homelab-archive-keyring, dst: /usr/share/keyrings/homelab-archive-keyring.gpg}
 
 A `src` ending `.j2` renders through the renderer's strict environment, and a `src` of
-`role:<name>` loads from the component's role templates. Any other `src` is copied byte for byte,
+`role:<name>` loads from the component's role templates, and `role-file:<name>` copies the role's
+`files/<name>`. Any other `src` is copied byte for byte,
 as are the three sources outside the component a file entry may name: a `lib` entry
 (`hosts/lib/<name>`, a script several packages ship), a `key` entry (`hosts/keys/<name>.gpg`, a
 public keyring hosts trust) and a `shared` entry (one of the `SHARED_FILES`, a file an Ansible role
-still installs).
+still installs). A file or output entry may carry `when: <expression>`, evaluated like an enable
+link's, and ships only when it is true; an inventory toggle that turned a subject off keeps doing so. A `units:`
+entry may carry `when:` too, so a unit the toggle drops takes its restart policy with it.
 
 A package or component may also carry `units`, `enable` and `legacy` (host_manifest.py), a
 file entry's `activate:` field and a `ufw:` map (host_arms.py). A host package installs
@@ -332,7 +335,6 @@ def _render_unit(
     the `SHARED_FILES` under the repo root that holds `lib`'s parent.
     """
     files = spec.get("files") or []
-    add_policies(package, directory, spec.get("units") or {})
     add_credentials(package, directory, spec.get("credentials") or [], withheld)
     enable = spec.get("enable") or {}
     legacy = spec.get("legacy") or []
@@ -340,7 +342,8 @@ def _render_unit(
     arms = {key: spec[key] for key in ARM_KEYS if spec.get(key)}
     role, defaults = role_sources(spec, directory)
     compose = spec.get("compose")
-    if not (files or legacy or enable or outputs or arms or compose):
+    units = spec.get("units") or {}
+    if not (files or legacy or enable or outputs or arms or compose or units):
         return
     ctx, reasons = host_context(host, defaults, inventory, withheld)
     env = confined_env(directory)
@@ -350,6 +353,22 @@ def _render_unit(
         enable,
         lambda expression: _evaluate(env, expression, ctx, reasons, directory),
     )
+    spec_ctx = ctx
+
+    def ships(entry: object) -> bool:
+        """Whether a file or output entry's optional `when:` holds in the host's context.
+
+        Raises:
+            RenderRefused: `when:` is not a string, or its value is not a boolean.
+        """
+        when = entry.get("when") if isinstance(entry, dict) else None
+        if when is None:
+            return True
+        if not isinstance(when, str):
+            raise RenderRefused(f"{directory}: when {when!r} is not an expression")
+        return _evaluate(env, when, spec_ctx, reasons, directory)
+
+    add_policies(package, directory, units, ships)
     add_arms(
         package,
         directory,
@@ -395,11 +414,15 @@ def _render_unit(
     if not isinstance(outputs, list):
         raise RenderRefused(f"{directory}: outputs {outputs!r} is not a list")
     for entry in outputs:
-        add_output(package, directory, entry, withheld, secret_text)
+        if ships(entry):
+            entry = {k: v for k, v in entry.items() if k != "when"}
+            add_output(package, directory, entry, withheld, secret_text)
     if referenced is not None:
         host_compose.check_env_output(package, directory, referenced)
     keys = lib.parent / "keys"
     for entry in host_compose.deferred_last(files):
+        if not ships(entry):
+            continue
         sources = {"src", "lib", "key", "shared"} & set(entry)
         if "dst" not in entry or not sources:
             raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")

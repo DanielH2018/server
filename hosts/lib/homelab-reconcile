@@ -349,9 +349,10 @@ def shadow_path(entry: dict, units: dict) -> Path | None:
     """The /etc/systemd/system path a legacy entry names, when it can shadow a packaged unit.
 
     A `{path:}` entry under that directory can, except a `<unit>.d/` directory and a drop-in
-    in one whose name is not the packaged drop-in's: no packaged unit has either name, so
-    `retire_path` removes them as unowned files (#6592). A `{unit:}` entry can when the
-    package ships that unit, because an Ansible-era copy of it shadows the packaged one.
+    in one whose name is not the packaged drop-in's: neither shadows a packaged file, so
+    `retire_path` removes them as unowned files (#6592). A `<unit>.d/50-homelab.conf` shadows
+    the packaged drop-in of the same name (#6605). A `{unit:}` entry can when the package
+    ships that unit, because an Ansible-era copy of it shadows the packaged one.
     """
     if entry.get("unit") in units:
         return ETC_UNIT_DIR / entry["unit"]
@@ -376,20 +377,36 @@ def unit_dir_file(entry: dict) -> bool:
     return ETC_UNIT_DIR in path.parents and os.path.lexists(under_root(path))
 
 
+def shadowed(path: Path) -> tuple[str, Path | None]:
+    """The unit a shadow path configures, and the packaged file it shadows.
+
+    A unit file shadows the packaged unit of its name and a `<unit>.d/50-homelab.conf` the
+    packaged drop-in of that unit. A wants link shadows no file: it names its unit only.
+    """
+    if path.parent == ETC_UNIT_DIR:
+        return path.name, UNIT_DIR / path.name
+    if path.name == DROPIN and path.parent.parent == ETC_UNIT_DIR:
+        unit = path.parent.name.removesuffix(".d")
+        return unit, UNIT_DIR / f"{unit}.d" / DROPIN
+    return path.name, None
+
+
 def hand_off(path: Path) -> tuple[bool, bool] | None:
-    """Remove the /etc copy of a unit the package ships.
+    """Remove the /etc copy of a unit, or of a unit's drop-in, that the package ships.
 
     Returns:
         None when the removal failed, else whether a file was removed and whether its bytes
-        differ from the packaged unit's (a wants link has none, so it never differs).
+        differ from the packaged file's (a wants link has none, so it never differs, and a
+        drop-in the package does not ship always differs).
     """
     target = under_root(path)
     present = os.path.lexists(target)
+    packaged = shadowed(path)[1]
     try:
         differs = (
             present
-            and path.parent == ETC_UNIT_DIR
-            and target.read_bytes() != under_root(UNIT_DIR / path.name).read_bytes()
+            and packaged is not None
+            and target.read_bytes() != under_root(packaged).read_bytes()
         )
     except OSError:
         differs = True
@@ -722,20 +739,22 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         if key not in prev_retired and digest and waiting is None:
             waiting = not (secrets and secrets_ready(credentials, outputs))
         shadow = shadow_path(entry, units)
-        # An Ansible-era copy under /etc shadows the packaged unit of the same name: remove it
-        # (one daemon-reload and the restarts follow the loop). With no packaged unit of that
-        # name, the file is the only copy, so it stays and counts as drift.
+        # An Ansible-era copy under /etc shadows the packaged unit of the same name, or that
+        # unit's packaged drop-in: remove it (one daemon-reload and the restarts follow the
+        # loop). With no packaged unit of that name, the file is the only copy, so it stays
+        # and counts as drift.
         if shadow and key not in prev_retired and not waiting:
-            if shadow.name not in units:
+            unit = shadowed(shadow)[0]
+            if unit not in units:
                 drift["legacy"] += 1
-                log(f"keeping {shadow}: the package ships no unit of that name")
+                log(f"keeping {shadow}: the package ships no unit {unit}")
             elif (result := hand_off(shadow)) is None:
                 ok = False
             else:
                 retired.append(key)
                 removed |= result[0]
                 if result[1]:
-                    handed.add(shadow.name)
+                    handed.add(unit)
             continue
         # A running service is never stopped to retire it: the entry stays and counts as drift.
         if key not in prev_retired and not waiting and running_service(entry):

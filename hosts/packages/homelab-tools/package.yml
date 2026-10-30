@@ -9,7 +9,8 @@
 # Each architecture block carries its own annotation, version and digest, because the Renovate
 # manager in renovate.json moves one version and one digest per match. The two blocks of a tool
 # pin one version, which the renderer enforces. Renovate bumps these pins apart from the
-# sops_setup and chezmoi_setup defaults, which install the same tools on a fresh host.
+# chezmoi_setup defaults, which install the same chezmoi on a fresh host. The sops component
+# puts this package's sops on PATH as /usr/bin/sops.
 #
 # DECIDED: chezmoi is pinned as its .tar.gz. Upstream publishes a bare binary for amd64 only,
 # and `member` names the file the builder installs from inside the archive.

@@ -178,3 +178,44 @@ def test_the_emptied_slice_drop_in_directory_is_removed_after_its_drop_in(node):
     assert result.returncode == 0, result.stderr
     assert not (node.root / ETC / "user-1000.slice.d").exists()
     assert node.applied()["drift"]["legacy"] == 0
+
+
+@pytest.mark.parametrize(
+    ("etc_text", "restarts"),
+    [("[Service]\nOld=1\n", [["restart", UNIT]]), ("[Service]\nNew=1\n", [])],
+    ids=["differs", "same-bytes"],
+)
+def test_an_etc_copy_of_a_packaged_drop_in_is_handed_off_to_its_unit(
+    node, etc_text, restarts
+):
+    node.unit(UNIT, "[Service]\n", active="active", enabled="enabled", linked=True)
+    node.write_dropin(UNIT, "[Service]\nNew=1\n")
+    assert node.run().returncode == 0
+    dropin = f"{ETC}/{UNIT}.d/50-homelab.conf"
+    shadow(node, dropin, etc_text)
+    node.manifest["legacy"].append({"path": f"/{dropin}"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not (node.root / dropin).exists()
+    assert len(reloads(node)) == 1
+    assert node.actions() == restarts
+    assert node.applied()["drift"]["legacy"] == 0
+    assert node.applied()["retired"] == [json.dumps({"path": f"/{dropin}"})]
+
+
+def test_a_homelab_drop_in_for_a_unit_the_package_does_not_ship_is_left_and_reported(
+    node,
+):
+    dropin = f"{ETC}/{UNIT}.d/50-homelab.conf"
+    shadow(node, dropin)
+    node.manifest["legacy"].append({"path": f"/{dropin}"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert (node.root / dropin).exists()
+    assert node.actions() == []
+    assert node.applied()["drift"]["legacy"] == 1
+    assert f"the package ships no unit {UNIT}" in result.stderr + result.stdout
