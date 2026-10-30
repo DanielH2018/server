@@ -348,13 +348,24 @@ def retire_path(path: Path) -> bool:
 def shadow_path(entry: dict, units: dict) -> Path | None:
     """The /etc/systemd/system path a legacy entry names, when it can shadow a packaged unit.
 
-    A `{path:}` entry under that directory always can. A `{unit:}` entry can when the package
-    ships that unit, because an Ansible-era copy of it shadows the packaged one.
+    A `{path:}` entry under that directory can, except a drop-in under `<unit>.d/` whose name
+    is not the packaged drop-in's: no packaged file has its name, so `retire_path` removes it
+    as an unowned file (#6592). A `{unit:}` entry can when the package ships that unit,
+    because an Ansible-era copy of it shadows the packaged one.
     """
     if entry.get("unit") in units:
         return ETC_UNIT_DIR / entry["unit"]
     path = Path(entry.get("path", ""))
-    return path if ETC_UNIT_DIR in path.parents and ".." not in path.parts else None
+    if ETC_UNIT_DIR not in path.parents or ".." in path.parts:
+        return None
+    dropin_dir = path.parent
+    if (
+        dropin_dir.parent == ETC_UNIT_DIR
+        and dropin_dir.suffix == ".d"
+        and path.name != DROPIN
+    ):
+        return None
+    return path
 
 
 def hand_off(path: Path) -> tuple[bool, bool] | None:
