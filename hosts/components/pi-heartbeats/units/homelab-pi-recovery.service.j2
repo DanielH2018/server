@@ -10,6 +10,11 @@ Type=oneshot
 # This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
 SyslogLevel=notice
 User={{ sys_user }}
+# The script's `docker ps`/`inspect`/`start` read the real socket, which the docker group
+# owns. The unit grants the group itself: nothing else in the tree adds sys_user to it since
+# H7.26 deleted docker_install's docker-group task (#6599). docker-ce's postinst creates the
+# group when pi-docker installs the engine.
+SupplementaryGroups=docker
 ExecStart=/usr/lib/homelab/pi-recovery-health
 LoadCredential=pi_recovery_push_token:/run/credstore/pi_recovery_push_token
 LogsDirectory=pi-health

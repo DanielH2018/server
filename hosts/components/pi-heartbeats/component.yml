@@ -1,6 +1,7 @@
 # The Pi's three heartbeats (H3.8b, docs/target-architecture/host/h3-pi-pilot.md). Until H3.8b
 # the optimize_pi role installed them as three crons. Each script runs as a oneshot service on a
-# timer, as sys_user, which reaches `docker` and the journal through its supplementary groups.
+# timer, as sys_user. The recovery unit grants that user the `docker` group itself, with
+# `SupplementaryGroups=docker`, because no task adds sys_user to it on a rebuilt Pi (#6599).
 # The two push tokens arrive through `LoadCredential=` from /run/credstore/, which
 # homelab-secrets.service fills from the Pi's SOPS file (H4.5). The interim files optimize_pi
 # stages under /etc/homelab/interim/ stay on disk, read by nothing, until H4.6 retires them.
