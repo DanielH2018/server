@@ -887,7 +887,7 @@ checks each gate suppresses.
   the server node's `apiserver_` families, so one series is left, and `max` keeps
   `prom_scalar`'s `result[0]` well defined if a second copy returns. Selecting on `job` would tie
   the check to a scrape-job name rather than to the metric. **2 GiB is etcd's OWN default** and is what is in
-  force: `k3s_server_args` carries no `--etcd-arg=quota-backend-bytes`, so adding one there moves
+  force: `k3s_server_config` carries no `etcd-arg` `quota-backend-bytes`, so adding one there moves
   `ETCD_DB_QUOTA_BYTES` with it or the check measures against a quota the cluster does not have.
   **No grace**, for the reason CSI Read-only Mounts has none: a DB near its quota does not shrink
   on its own. An absent series reads as healthy and points at Scrape Targets. PVC Fullness fails

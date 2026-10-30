@@ -23,8 +23,11 @@ Run: uv run pytest ansible/tests/setup/test_k3s_node_ip_pinned.py
 import re
 
 
-from _helpers import imported_task_files, imported_tasks, load_defaults, load_yaml
-from lib.repo_paths import K3S_ROLE, SYSTEM_UPGRADE_DEFAULTS
+from _helpers import imported_task_files, imported_tasks, load_yaml
+from lib import yaml_fast
+from lib.repo_paths import K3S_ROLE, REPO, SYSTEM_UPGRADE_DEFAULTS
+
+COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
 
 
 def _task_text() -> str:
@@ -45,23 +48,22 @@ def _install_task() -> dict:
 
 def test_node_ip_is_pinned_to_the_hosts_canonical_address():
     """Autodetection is what picked the removable NIC."""
-    args = load_defaults(K3S_ROLE)["k3s_server_args"]
-    for flag in ("--node-ip", "--advertise-address"):
-        assert f"{flag} {{{{ server_ip }}}}" in args, (
-            f"k3s_server_args must pass `{flag} {{{{ server_ip }}}}`. Without it k3s "
+    config = yaml_fast.safe_load(COMPONENT.read_text())["defaults"]["k3s_server_config"]
+    for flag in ("node-ip", "advertise-address"):
+        assert config.get(flag) == "{{ server_ip }}", (
+            f"k3s_server_config must set `{flag}: {{{{ server_ip }}}}`. Without it k3s "
             "autodetects an address, and on a multi-homed host it can pick a NIC that "
             "later goes away, taking pod-to-apiserver traffic with it."
         )
 
 
 def test_k3s_version_is_pinned():
-    """A reconfigure re-runs the installer; unpinned, that upgrades the control plane."""
+    """A fresh-host install runs the installer; unpinned, it installs whatever is latest."""
     version = load_yaml(SYSTEM_UPGRADE_DEFAULTS).get("k3s_version", "")
     assert re.fullmatch(r"v\d+\.\d+\.\d+\+k3s\d+", str(version)), (
-        f"k3s_version must be an explicit version, got {version!r}. The install task "
-        "re-runs get.k3s.io whenever k3s_server_args changes, and get.k3s.io installs "
-        "latest stable unless INSTALL_K3S_VERSION is set — so an unpinned value turns "
-        "editing a flag into a silent control-plane upgrade."
+        f"k3s_version must be an explicit version, got {version!r}. The installer installs "
+        "latest stable unless INSTALL_K3S_VERSION is set, and SUC's Plans upgrade to the "
+        "same pin, so an unpinned value gives a fresh host a version no Plan expects."
     )
 
 
@@ -70,13 +72,12 @@ def test_installer_is_not_guarded_on_the_binary_existing():
     task = _install_task()
     creates = task.get("args", {}).get("creates")
     assert creates is None, (
-        f"The k3s install task must not carry `creates: {creates}`. Guarding on the "
-        "binary means a change to k3s_server_args never reaches an installed host — the "
-        "play reports ok while the systemd unit keeps its original ExecStart."
+        f"The k3s install task must not carry `creates: {creates}`. The `when:` on the "
+        "binary read is the guard, and `creates:` would hide it from the version-guard test."
     )
     assert "when" in task, (
-        "The install task needs a `when:` comparing the desired arguments against the "
-        "installed unit, or it reinstalls k3s on every run."
+        "The install task needs a `when:` on the missing binary, or it reinstalls k3s on "
+        "every run."
     )
 
 

@@ -182,10 +182,11 @@ def cluster_config(
         # LONGHORN_CONSECUTIVE above.
         SNAPSHOT_CAP_CONSECUTIVE=_int("SNAPSHOT_CAP_CONSECUTIVE"),
         # etcd's backend quota, and how full check_etcd_db_size lets the DB get before it
-        # pages. 2 GiB is etcd's OWN default and it is what is in force: `k3s_server_args`
-        # (setup/k3s defaults) carries no `--etcd-arg=quota-backend-bytes`. Add one there and
-        # this number moves with it, or the check measures against a quota the cluster does not
-        # have. Deployed value in monitor-bridge's config/env.yaml.j2.
+        # pages. 2 GiB is etcd's OWN default and it is what is in force: `k3s_server_config`
+        # (hosts/components/k3s-server/component.yml) carries no `etcd-arg` key setting
+        # `quota-backend-bytes`. Add one there and this number moves with it, or the check
+        # measures against a quota the cluster does not have. Deployed value in
+        # monitor-bridge's config/env.yaml.j2.
         ETCD_DB_QUOTA_BYTES=_int("ETCD_DB_QUOTA_BYTES"),
         # 80%, in the PVC_MAX_PCT percent form rather than SNAPSHOT_CAP_WARN_RATIO's ratio.
         # The DB read 2.6% of the quota on 2026-09-25, so a breach is pathological growth rather

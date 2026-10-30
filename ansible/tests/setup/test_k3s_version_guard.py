@@ -5,15 +5,19 @@ SUC's `k3s-server` Plan has been the only writer of daniel-box's version since H
 `k3s-agent` Plan the only writer of daniel-server's since H6.3d. So neither install task may
 mention `k3s_version` in its `when:`: a pin bump would make Ansible reinstall the binary SUC is
 replacing, and the two writers would fight over it. Each task still runs for a missing binary
-(a fresh host), and re-runs the installer with `INSTALL_K3S_SKIP_DOWNLOAD` when only an
-argument is missing, which rewrites the unit and never the binary.
+(a fresh host). The agent's also re-runs the installer with `INSTALL_K3S_SKIP_DOWNLOAD` when
+only an argument is missing, which rewrites the unit and never the binary. The server's runs
+for a missing binary alone: its flags are daniel-box's package's since H6.4b.
 
 Each test here encodes a way the guard regresses while everything still reads green:
 
-  * The version clause returns, or the skip-download flag goes. Either makes a second writer
-    of the version.
+  * The version clause returns, or the agent's skip-download flag goes. Either makes a second
+    writer of the version.
 
-  * The args clause goes. A changed flag would then never reach the unit.
+  * The agent's args clause goes. A changed agent flag would then never reach the unit.
+
+  * The server's args clause returns. The installer would then rewrite the unit's flags
+    behind the package's back, a second writer of the server's flags.
 
   * The binary read loses `check_mode: false`. A `command` task is skipped under `--check`,
     which leaves its register undefined — and it is the guard consuming it two tasks later
@@ -36,7 +40,7 @@ K3S_TASKS = K3S_ROLE / "tasks"
 
 # (task file, install-task name, the register its binary read must fill)
 INSTALLS = [
-    ("server.yml", "Install or reconfigure the k3s server", "k3s_installed_version"),
+    ("server.yml", "Install the k3s server", "k3s_installed_version"),
     (
         "agent.yml",
         "Install or reconfigure the k3s agent",
@@ -61,31 +65,37 @@ def _version_reads(filename: str) -> list[dict]:
     ]
 
 
-def test_install_condition_still_consults_the_args() -> None:
-    """Dropping the version clause must not drop the args check.
+def test_the_agent_install_condition_still_consults_its_args() -> None:
+    """Dropping the version clause must not drop the agent's args check (until H6.5b).
 
     A condition that watched only the binary would stop reacting to a changed flag, which
     is the regression the args guard exists to prevent.
     """
-    for filename, name, _ in INSTALLS:
-        when = str(_named(filename, name).get("when", ""))
-        expected = "k3s_server_args" if filename == "server.yml" else "k3s_agent_args"
-        assert expected in when, (
-            f"{filename}: the install task's `when:` no longer mentions {expected}."
-        )
+    _, name, _ = INSTALLS[1]
+    assert "k3s_agent_args" in str(_named("agent.yml", name).get("when", ""))
+
+
+def test_the_server_install_passes_no_flags() -> None:
+    """The package owns the server's flags, so the installer gets a bare `server`."""
+    _, name, register = INSTALLS[0]
+    task = _named("server.yml", name)
+    assert task["environment"]["INSTALL_K3S_EXEC"] == "server"
+    assert str(task["when"]) == f"({register}.rc | default(1)) != 0"
 
 
 @pytest.mark.parametrize("filename,name,register", INSTALLS)
 def test_install_leaves_the_version_to_suc(filename, name, register) -> None:
-    """The version clause is gone, and an args-only re-run never downloads a binary."""
-    task = _named(filename, name)
-    when = str(task.get("when", ""))
+    """The version clause is gone, and a missing binary still runs the install."""
+    when = str(_named(filename, name).get("when", ""))
     assert "k3s_version" not in when, (
         f"{filename}: SUC owns the version; the guard must not"
     )
     assert register in when, f"{filename}: a missing binary must still run the install"
-    env = task.get("environment", {})
-    assert "INSTALL_K3S_SKIP_DOWNLOAD" in env
+
+
+def test_an_agent_args_only_rerun_never_downloads_a_binary() -> None:
+    _, name, register = INSTALLS[1]
+    env = _named("agent.yml", name).get("environment", {})
     assert f"{register}.rc" in str(env["INSTALL_K3S_SKIP_DOWNLOAD"])
 
 

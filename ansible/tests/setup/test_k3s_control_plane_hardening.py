@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Guards the three control-plane hardening controls.
 
-Each test here encodes a way one of them fails while every surface still reads green:
+Each test here encodes a way one of them fails while every surface still reads green. The
+flags are `k3s_server_config` in `hosts/components/k3s-server/component.yml` since H6.4b, so
+the tests read the config drop-in daniel-box's package ships, which is what k3s reads.
 
-  * A QUOTED apiserver argument. The install task's `when:` compares
-    `k3s_server_args.split()` against the installed unit with single quotes stripped,
-    because the installer single-quotes each argument it writes. A quoted value never
-    matches its own installed form, so the comparison reports a missing argument on every
-    play and reinstalls k3s each time — restarting the control plane, which also serves LAN
-    DNS, on every deploy. Nothing else would flag that; the play just looks noisy.
+  * Two sources for one switch. `k3s_secrets_encryption` stays in setup/k3s for server.yml's
+    status and rotate-keys tasks until H7, and the flag itself is in the component. A flag
+    turned off with the role key left on makes those tasks assert against a cluster that no
+    longer encrypts.
 
   * The audit policy written AFTER the installer. The apiserver reads the policy at startup
     and refuses to start without it, and the installer restarts k3s itself. Get the order
@@ -27,60 +27,43 @@ Run: uv run pytest ansible/tests/setup/test_k3s_control_plane_hardening.py
 
 import functools
 
-import jinja2
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ALL_VARS
 from _helpers import load_yaml, load_defaults
 from _k8s_render import render_role_template, rendered_k8s_text
 from _setup_render import role_context
-from lib.repo_paths import K3S_ROLE
+from lib.repo_paths import K3S_ROLE, REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.bundle import homelab_namespace_files
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
 
 AUDIT_POLICY = "/var/lib/rancher/k3s/server/audit.yaml"
+SERVER_CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
+COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
 
 
 def _all_vars() -> dict:
     return load_yaml(ALL_VARS)
 
 
-def _env() -> jinja2.Environment:
-    """Ansible's Templar whitespace flags, matching scripts/lib/render_guard.py:make_env.
-
-    Not cosmetic. With trim_blocks=True a `{%- if %}` also eats the newline BEFORE the tag,
-    collapsing the next line into the previous one — which is how a Namespace template that
-    renders correctly under plain Jinja produces `name: observability  # comment` under a
-    real deploy. Rendering with different flags than production tests a file nobody ships.
-    """
-    return make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+@functools.cache
+def _package():
+    return host_mode.render_host("daniel-box")
 
 
-def _rendered_server_args(**overrides) -> str:
-    """k3s_server_args with its Jinja resolved, as the installer would receive it.
+def _server_config() -> dict:
+    """The server's flags as daniel-box's package ships them in config.yaml.d (H6.4b)."""
+    return yaml_fast.safe_load(_package().files[SERVER_CONFIG][0].decode())
 
-    The context merges group_vars OVER role defaults, in that precedence, because the audit
-    variables deliberately live in group_vars — setup/k3s and loki-homelab both read them.
-    Building it from role defaults alone raises on the first undefined instead.
-    """
-    defaults = load_defaults(K3S_ROLE)
-    context = {
-        "server_ip": "10.0.0.215",
-        **{k: v for k, v in defaults.items() if k != "k3s_server_args"},
-        **_all_vars(),
-        **overrides,
-    }
-    # Two passes: the argument string interpolates k3s_audit_log_path, which is itself a
-    # template referencing k3s_audit_log_dir. Only the variables this argument string reads
-    # are resolved — group_vars is full of values using Ansible-only filters (`bool`,
-    # `sops_decrypt`) that plain Jinja cannot compile, and none of them appears here.
-    env = _env()
-    for key in ("k3s_audit_log_path", "k3s_audit_log_dir"):
-        value = context.get(key)
-        if isinstance(value, str) and "{{" in value:
-            context[key] = env.from_string(value).render(**context)
-    return env.from_string(defaults["k3s_server_args"]).render(**context)
+
+def _apiserver_arg_names() -> set[str]:
+    return {arg.split("=", 1)[0] for arg in _server_config()["kube-apiserver-arg"]}
+
+
+def secrets_encryption_drift(component: dict, role: dict) -> bool:
+    """True when the component's flag and setup/k3s's switch disagree."""
+    flag = component["k3s_server_config"].get("secrets-encryption", False)
+    return flag is not role["k3s_secrets_encryption"]
 
 
 def _server_tasks() -> list[dict]:
@@ -102,28 +85,29 @@ def _audit_policy() -> dict:
     installer runs" ordering test left with the task. `test_k3s_server_component.py` holds that
     every file a flag names is a file the package ships.
     """
-    package = host_mode.render_host("daniel-box")
-    return yaml_fast.safe_load(package.files[AUDIT_POLICY][0].decode())
+    return yaml_fast.safe_load(_package().files[AUDIT_POLICY][0].decode())
 
 
 # ── G1: secrets encryption ──────────────────────────────────────────────────────────────
 
 
 def test_secrets_encryption_is_armed():
-    assert "--secrets-encryption" in _rendered_server_args(), (
-        "k3s_server_args must pass --secrets-encryption. Without it every Secret is stored "
+    assert _server_config().get("secrets-encryption") is True, (
+        "k3s_server_config must set secrets-encryption. Without it every Secret is stored "
         "in etcd as plaintext, and etcd-snapshot-offbox.sh ships a daily copy of that to R2."
     )
 
 
-def test_secrets_encryption_has_a_rollback_lever():
-    assert (
-        _rendered_server_args(k3s_secrets_encryption=False).find("--secrets-encryption")
-        == -1
-    ), (
-        "k3s_secrets_encryption=false must drop the flag from k3s_server_args. Without a "
-        "lever the only way back is hand-editing the systemd unit."
+def test_secrets_encryption_equals_the_role_switch():
+    """server.yml's status and rotate-keys tasks read the role key; k3s reads the flag."""
+    component = yaml_fast.safe_load(COMPONENT.read_text())["defaults"]
+    role = load_defaults(K3S_ROLE)
+    assert not secrets_encryption_drift(component, role), (
+        "secrets-encryption in k3s_server_config must equal setup/k3s's "
+        "k3s_secrets_encryption. Change both in one PR."
     )
+    flipped = {"k3s_server_config": {"secrets-encryption": False}}
+    assert secrets_encryption_drift(flipped, role), "the drift check cannot go red"
 
 
 def test_existing_secrets_are_reencrypted():
@@ -151,38 +135,23 @@ def test_existing_secrets_are_reencrypted():
 
 
 def test_audit_flags_are_armed():
-    args = _rendered_server_args()
+    args = _apiserver_arg_names()
     for flag in ("audit-policy-file", "audit-log-path"):
-        assert f"--kube-apiserver-arg={flag}=" in args, (
-            f"k3s_server_args must pass --kube-apiserver-arg={flag}=… . The apiserver keeps "
+        assert flag in args, (
+            f"k3s_server_config must pass kube-apiserver-arg {flag}=… . The apiserver keeps "
             "no audit log at all without both."
         )
 
 
 def test_audit_log_rotation_is_configured():
     """An unrotated audit log fills the disk disk-health.sh watches."""
-    args = _rendered_server_args()
+    args = _apiserver_arg_names()
     for flag in ("audit-log-maxage", "audit-log-maxbackup", "audit-log-maxsize"):
-        assert f"--kube-apiserver-arg={flag}=" in args, (
-            f"k3s_server_args must pass --kube-apiserver-arg={flag}=… . The apiserver does "
+        assert flag in args, (
+            f"k3s_server_config must pass kube-apiserver-arg {flag}=… . The apiserver does "
             "not rotate its audit log by default, so a Metadata-level policy on a cluster "
             "this chatty grows without bound on the control-plane disk."
         )
-
-
-def test_no_apiserver_argument_is_quoted():
-    """A quoted argument reinstalls k3s on every play — see the module docstring."""
-    args = _rendered_server_args()
-    offenders = [
-        tok
-        for tok in args.split()
-        if tok.startswith("--") and ("'" in tok or '"' in tok)
-    ]
-    assert not offenders, (
-        f"Quoted arguments in k3s_server_args: {offenders}. The install task strips quotes "
-        "from the installed unit before comparing, so a quoted value never matches itself — "
-        "k3s is reinstalled and the control plane restarted on every single play."
-    )
 
 
 def test_audit_policy_is_a_valid_policy_document():

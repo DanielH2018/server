@@ -22,14 +22,13 @@ for why each value is what it is.
 """
 
 import functools
-import re
 
 import jinja2
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE, load_defaults
-from lib.repo_paths import ALL_VARS, K3S_ROLE, REPO
+from lib.repo_paths import ALL_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 from _k8s_render import rendered_docs
 
@@ -60,45 +59,13 @@ MUTUALLY_EXCLUSIVE_FLAGS = frozenset(
 )
 
 
-def _all_vars() -> dict:
-    return yaml_fast.safe_load(ALL_VARS.read_text())
-
-
 def _env() -> jinja2.Environment:
     return make_ansible_env(undefined_cls=jinja2.StrictUndefined)
 
 
-def _context() -> dict:
-    """The role's own variables merged with group_vars, for the server-args render.
-
-    `k3s_server_args` is a defaults VALUE rather than a template file, so it is rendered here
-    rather than through the harness. `_setup_render.role_context` resolves each key the way
-    Ansible does, which is what used to be done by hand for the two `domain`-derived paths.
-    """
-    defaults = load_defaults(K3S_ROLE)
-    context = {
-        "server_ip": "10.0.0.215",
-        **{k: v for k, v in defaults.items() if k != "k3s_server_args"},
-        **_all_vars(),
-    }
-    env = _env()
-    for key in ("k3s_audit_log_path", "k3s_audit_log_dir"):
-        value = context.get(key)
-        if isinstance(value, str) and "{{" in value:
-            context[key] = env.from_string(value).render(**context)
-    return context
-
-
-def _rendered_server_args(context: dict | None = None) -> str:
-    """`k3s_server_args` as the installer receives it."""
-    context = context or _context()
-    return (
-        _env().from_string(load_defaults(K3S_ROLE)["k3s_server_args"]).render(**context)
-    )
-
-
 COMPONENT = REPO / "hosts" / "components" / "k3s-server"
 AUTH_CONFIG = "/var/lib/rancher/k3s/server/authentication-config.yaml"
+SERVER_CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 
 
 def _component_defaults() -> dict:
@@ -118,9 +85,16 @@ def _rendered_auth_config() -> dict:
     return yaml_fast.safe_load(_shipped_auth_config())
 
 
-def _apiserver_args(args: str) -> dict[str, str]:
-    """The `--kube-apiserver-arg=` values in an argument string, as name -> value."""
-    return dict(re.findall(r"--kube-apiserver-arg=([a-z0-9-]+)=(\S+)", args))
+@functools.cache
+def _shipped_apiserver_args() -> dict[str, str]:
+    """The `kube-apiserver-arg` entries in the server's packaged flags, as name -> value.
+
+    Since H6.4b the flags are `k3s_server_config`, which daniel-box's package renders into
+    config.yaml.d, so the file the package ships is what k3s reads.
+    """
+    package = host_mode.render_host("daniel-box")
+    config = yaml_fast.safe_load(package.files[SERVER_CONFIG][0].decode())
+    return dict(arg.split("=", 1) for arg in config["kube-apiserver-arg"])
 
 
 def _issuer_hosts(config: dict) -> set[str]:
@@ -158,11 +132,9 @@ def test_the_apiserver_is_pointed_at_the_authentication_config_file():
     missing authentication config, and the k3s unit is Type=notify with TimeoutStartSec=0, so
     the restart hangs indefinitely rather than failing the play.
     """
-    args = _apiserver_args(_rendered_server_args())
-    assert (
-        args.get("authentication-config")
-        == load_defaults(K3S_ROLE)["k3s_authentication_config_path"]
-    )
+    args = _shipped_apiserver_args()
+    assert args.get("authentication-config") == AUTH_CONFIG
+    assert _component_defaults()["k3s_authentication_config_path"] == AUTH_CONFIG
 
 
 def test_the_oidc_flags_are_gone_now_that_a_config_file_configures_jwt():
@@ -173,7 +145,7 @@ def test_the_oidc_flags_are_gone_now_that_a_config_file_configures_jwt():
     refuse to start, which on this unit is the indefinite hang above. A re-added flag reads as
     a harmless belt-and-braces edit, which is exactly why this is a test.
     """
-    present = set(_apiserver_args(_rendered_server_args()))
+    present = set(_shipped_apiserver_args())
     assert present & MUTUALLY_EXCLUSIVE_FLAGS == set()
 
 

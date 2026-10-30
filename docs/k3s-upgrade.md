@@ -71,7 +71,7 @@ also means a deployer marker exists and could not be read, which is not a hold.
 ## Read the release notes for what this cluster actually runs
 
 k3s release notes lead with warnings about bundled components. Three of them are disabled here
-(`--disable=traefik --disable=servicelb --disable=local-storage`, `k3s_server_args`), so a warning
+(the `disable` list in `k3s_server_config`, `hosts/components/k3s-server/component.yml`), so a warning
 about the bundled Traefik chart, klipper-lb or local-path does not apply. Traefik is a repo-owned
 role, and its chart version has nothing to do with the k3s pin.
 

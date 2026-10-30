@@ -410,22 +410,24 @@ If your own working machine is what's gone, the lab itself needs nothing done to
 
 ### Scenario: `systemctl restart k3s` never returns after an API-server flag change
 
-`k3s_server_args` (`ansible/roles/setup/k3s/defaults/main.yml`) reconfigures the API server
-through `--kube-apiserver-arg=...`, and the k3s install task re-runs the installer whenever
-that string gains an argument. An argument the API server does not recognise makes it refuse
-to start, and the k3s unit is `Type=notify` with `TimeoutStartSec=0` — so the restart **hangs
-indefinitely** instead of failing, which is the same symptom the `--node-ip` note in that file
-describes for a different cause.
+`k3s_server_config` (`hosts/components/k3s-server/component.yml`) holds the server's flags,
+`kube-apiserver-arg` among them. daniel-box's host package renders it into
+`/etc/rancher/k3s/config.yaml.d/50-homelab.yaml`, and `homelab-k3s-restart` restarts k3s once
+inside its window when it changes. An argument the API server does not recognise makes it
+refuse to start, and the k3s unit is `Type=notify` with `TimeoutStartSec=0` — so the restart
+**hangs indefinitely** instead of failing, which is the same symptom the `node-ip` note in the
+component describes for a different cause. The restart unit cannot recover it, because its
+gates read the API that daniel-box alone serves.
 
 1. Read `tail -n 200 /var/log/k3s.log` on daniel-box. A rejected flag names itself. (Not
    `journalctl -u k3s`: k3s's own lines are priority info, which the journald cap drops;
-   the k3s role sends them to that file instead.)
-2. Fix `ExecStart` in `/etc/systemd/system/k3s.service` directly, `systemctl daemon-reload`,
-   and restart. The unit file is the live configuration; the repo is not.
-3. Then fix the repo, because the install task detects an argument that was **added**, never
-   one that was **removed**. Deleting a line from `k3s_server_args` does not un-configure an
-   installed host — re-run `/usr/local/bin/k3s-install.sh` by hand with the corrected
-   `INSTALL_K3S_EXEC`.
+   the package's unit drop-in sends them to that file instead.)
+2. **Operator-only:** revert the PR on master. Once the builder publishes the reverted
+   package, install it with `sudo apt-get install homelab-daniel-box=<previous version>`, then
+   run `sudo systemctl daemon-reload` and `sudo systemctl restart k3s`. `dpkg` puts the previous
+   `50-homelab.yaml` back, or removes it when the previous version shipped none.
+3. Verify as `docs/k3s-upgrade.md`'s *Verify the change, not just the workload* says, then
+   `sudo rm /var/lib/homelab-k3s-restart/failed.sha256`, which the failed restart left behind.
 
 A **wrong-but-valid** value is a different and much smaller problem. The `oidc-*` flags in
 particular initialise asynchronously, so a misspelled or unreachable issuer leaves the API

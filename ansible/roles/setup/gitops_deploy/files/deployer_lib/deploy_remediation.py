@@ -272,12 +272,14 @@ _K3S_NARROWER_TAGS = (
 # variable or a status string `roles/setup/k3s/tasks/server.yml` reads, pinned by
 # `test_every_gate_the_warning_names_is_read_by_the_role` so the warning cannot outlive the
 # task it describes.
-_K3S_CONTROL_PLANE_GATES = ("k3s_server_args", "reencrypt_finished")
+# The installer's gate is the binary read since H6.4b moved the server's flags into
+# daniel-box's host package: it runs only on a host with no k3s binary.
+_K3S_CONTROL_PLANE_GATES = ("k3s_installed_version", "reencrypt_finished")
 
 _K3S_GATED_TASKS = (
     "two gated control-plane tasks: the "
-    f"k3s installer, which restarts k3s when `{_K3S_CONTROL_PLANE_GATES[0]}` gained an "
-    "argument; and `k3s secrets-encrypt rotate-keys`, which re-encrypts every Secret in etcd "
+    f"k3s installer, which starts k3s only when `{_K3S_CONTROL_PLANE_GATES[0]}` finds no "
+    "binary; and `k3s secrets-encrypt rotate-keys`, which re-encrypts every Secret in etcd "
     "unless the cluster already reached "
     f"`{_K3S_CONTROL_PLANE_GATES[1]}`"
 )

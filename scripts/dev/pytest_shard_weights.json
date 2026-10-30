@@ -961,7 +961,7 @@
  "hosts/lib/tests/test_reconcile_hold_way_out.py": 2.15,
  "hosts/lib/tests/test_reconcile_libvirt_arm.py": 4.13,
  "hosts/lib/tests/test_reconcile_lines_arm.py": 3.34,
- "hosts/lib/tests/test_reconcile_shadow_handoff.py": 1.85,
+ "hosts/lib/tests/test_reconcile_shadow_handoff.py": 3.73,
  "hosts/lib/tests/test_reconcile_size_census.py": 0.06,
  "hosts/lib/tests/test_reconcile_ufw_arm.py": 9.34,
  "hosts/lib/tests/test_reconcile_users_arm.py": 3.11,

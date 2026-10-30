@@ -1,8 +1,9 @@
 """Pins the etcd-metrics port and its only consumer to ONE variable.
 
 Two roles have to agree for etcd metrics to be readable, and they are applied by different
-playbooks: `setup/k3s` puts `--etcd-expose-metrics` in the server args (k3s-bringup.yml, a
-broad-plane run), and `observability` gates its `etcd` scrape job (deploy.yml). Either half
+paths: daniel-box's host package sets `etcd-expose-metrics` in `k3s_server_config`
+(hosts/components/k3s-server, since H6.4b), and `observability` gates its `etcd` scrape
+job (deploy.yml). Either half
 alone is a silent fault rather than a loud one:
 
   * flag without job  — the port binds 0.0.0.0 for nobody. A control-plane port is open, and
@@ -29,6 +30,7 @@ is a legitimate operator choice; what must not happen is the two halves divergin
 import re
 
 from _helpers import REPO
+from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, K3S_DEFAULTS
 from _k8s_render import render_role_template
 
@@ -36,6 +38,7 @@ _REPO = REPO
 
 _SWITCH = "k3s_etcd_expose_metrics"
 _JOB = "- job_name: etcd"
+_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
 
 
 def _prometheus_config(switch: bool) -> str:
@@ -55,7 +58,7 @@ def test_the_switch_is_defined_once_in_group_vars():
         f"{_SWITCH} must be defined in group_vars/all.yml — two roles read it"
     )
 
-    for role_defaults in (K3S_DEFAULTS,):
+    for role_defaults in (K3S_DEFAULTS, _COMPONENT):
         assert not re.search(rf"^{_SWITCH}:", role_defaults.read_text(), re.M), (
             f"{_SWITCH} must NOT be redefined in {role_defaults.relative_to(_REPO)}; "
             "a role-local default shadows the shared one and lets the halves drift"
@@ -63,16 +66,12 @@ def test_the_switch_is_defined_once_in_group_vars():
 
 
 def test_the_k3s_flag_is_gated_on_the_switch():
-    """--etcd-expose-metrics appears only inside a conditional on the switch."""
-    text = K3S_DEFAULTS.read_text()
-    flag_lines = [ln for ln in text.splitlines() if "--etcd-expose-metrics" in ln]
-
-    assert flag_lines, "setup/k3s must offer --etcd-expose-metrics in k3s_server_args"
-    for line in flag_lines:
-        assert _SWITCH in line, (
-            "--etcd-expose-metrics must be gated on "
-            f"{_SWITCH}, got an ungated: {line.strip()}"
-        )
+    """`etcd-expose-metrics` takes its value from the switch and nothing else."""
+    defaults = yaml_fast.safe_load(_COMPONENT.read_text())["defaults"]
+    flag = defaults["k3s_server_config"].get("etcd-expose-metrics")
+    assert flag == f"{{{{ {_SWITCH} }}}}", (
+        f"k3s_server_config's etcd-expose-metrics must be `{{{{ {_SWITCH} }}}}`, got {flag!r}"
+    )
 
 
 def test_the_scrape_job_is_gated_on_the_same_switch():
