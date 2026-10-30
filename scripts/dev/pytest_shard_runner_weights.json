@@ -712,7 +712,6 @@
  "ansible/tests/setup/test_setup_cross_role_files.py": 0.2,
  "ansible/tests/setup/test_setup_cross_role_reads.py": 2.82,
  "ansible/tests/setup/test_setup_handlers_resolve.py": 0.13,
- "ansible/tests/setup/test_sops_key_only_on_local_hosts.py": 0.01,
  "ansible/tests/setup/test_ufw_enable_skips_an_active_firewall.py": 0.02,
  "ansible/tests/setup/test_ufw_sysctl_keeps_log_martians.py": 0.01,
  "ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py": 0.01,

@@ -1843,6 +1843,20 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       `command -v sops` on each host. It also carries the age-key decision in
       `docs/break-glass.md`. The removal of daniel-server's user-home age key waits for the
       operator's confirmation that nothing reads it (**operator-only**).
+    - **Amended 2026-10-30, as H7.24b was built.** Nothing had moved the callers to the
+      packaged `sops`, so H7.24b does it. A host component, `hosts/components/sops/`, ships
+      `/usr/bin/sops` as an exec of `/usr/lib/homelab/bin/sops` and depends on `age`. All
+      three host packages list it, and `homelab-tools` itself stays off `PATH`. After the
+      landing, `command -v sops` reads `/usr/bin/sops` on each host, not the
+      `/usr/lib/homelab/bin` path.
+    - The collections install moves to `initial_setup` under the same `collections` tag
+      instead of being deleted. The deployer applies a `requirements.yml` bump as
+      `initial_setup.yml --tags collections`, and a tag that matches no task exits 0 having
+      changed nothing. It goes when the deployer's timer retires.
+    - The setup census's named members `/usr/local/bin/sops` and `Download and install SOPS
+      binary` retire with the task. A host-package test,
+      `scripts/renderer/tests/test_sops_on_path.py`, holds the legacy entry instead, and the
+      census's `get_url` member is the agent user's Node download.
 5. **H7.25.** Both steps move `optimize_pi`, and H7.4 empties the role that H7.3 starts.
    zram's keys and the Pi's other sysctl keys share one line arm on `/etc/sysctl.conf`. It
    carries H7.3's owner measurement and its divert contingency, H7.4's textfile-directory

@@ -245,3 +245,31 @@ class Container:
             self.read(LAST_SUCCESS),
             str(self.exists(HOLD)),
         )
+
+
+TOOLS_BIN = "/usr/lib/homelab/bin"
+# Whether each homelab-tools binary is on PATH. homelab-tools keeps every one off it, and the
+# host packages' sops component puts sops back as an exec of the packaged binary.
+TOOLS_ON_PATH = {"sops": True, "chezmoi": False, "nfpm": False}
+
+
+def expect_tools_run(c: Container) -> None:
+    """Each packaged tool runs, and `sops` alone resolves on PATH, to the packaged binary.
+
+    Raises:
+        CaseFailed: A tool does not run, `sops` on PATH prints another version, or another
+            tool is on PATH.
+    """
+    for tool, on_path in TOOLS_ON_PATH.items():
+        packaged = c.ok(f"{TOOLS_BIN}/{tool} --version")
+        found = c.sh(f"{tool} --version")
+        if on_path:
+            expect(
+                found.stdout.split()[:2] == packaged.split()[:2],
+                f"{tool} on PATH is not {TOOLS_BIN}/{tool}",
+            )
+        else:
+            expect(
+                found.returncode != 0,
+                f"{tool} is on PATH; it installs at {TOOLS_BIN} only",
+            )

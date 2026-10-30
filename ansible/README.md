@@ -130,36 +130,31 @@ touching SOPS:
 ## 5. Onboard the host to SOPS
 
 This **gates §8**: `initial_setup.yml` (and `deploy.yml`) decrypt `ansible/vars/secrets.yml` in
-a `pre_tasks` block that runs *before any role*, so on a fresh host they fail before
-`sops_setup` could install SOPS. `bootstrap.yml` breaks that chicken-and-egg — it runs
-`sops_setup` on its own (no secret dependency): installs the `age`/`sops` binaries and the
-pinned collections (incl. `community.sops`), generates this host's age key, and prints its
-public key.
+a `pre_tasks` block that runs *before any role*. The host therefore needs `sops`, the pinned
+collections and an age key first, and no playbook provides any of the three.
 
-```bash
-uv run ansible-playbook ansible/bootstrap.yml --limit <host>   # prints "Your Public Key is: age1…"
-```
+- `sops` comes from the host package. `hosts/bootstrap-host.sh` installs it, and the package's
+  `sops` component puts `/usr/bin/sops` on `PATH` and depends on `age`.
+- The collections, `community.sops` among them, install by hand once. After that,
+  `initial_setup.yml --tags collections` keeps them at the pin:
 
-> Bare `ansible-playbook` also works here (bootstrap uses only builtin modules; any ansible-core
-> will do) — but `uv run` keeps a single path now that §3 installed uv.
+  ```bash
+  uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
+  ```
 
-> **Run this ON the new host**, not remotely from another one. `bootstrap.yml`'s `hosts:`
-> pattern falls back to `lookup('pipe', 'hostname')` — the *controller's* hostname — when
-> `-e target=<host>` isn't passed. Running it from daniel-server against a fresh host with
-> only `--limit <host>` (no `-e target=`) resolves the play to daniel-server itself; `--limit`
-> then intersects to nothing and it silently does nothing. SSH into the new host first (§1–3
-> already have you there), then run the command locally.
+- Ansible decrypts with the operator's `~/.config/sops/age/keys.txt`, so only a host that runs
+  Ansible needs one. `docs/break-glass.md` (*The age keys*) records which hosts hold one. To
+  create it, run `age-keygen -o ~/.config/sops/age/keys.txt` as the operator on the new host,
+  after `mkdir -p -m 0700 ~/.config/sops/age`, and note the public key it prints.
 
 Then:
 
 1. Add the printed `age1…` public key to `ansible/.sops.yaml` (tracked) under `age:`.
-2. On a host that can already decrypt (daniel-server): `sops updatekeys ansible/vars/secrets.yml`,
+2. On a host that can already decrypt (daniel-box): `sops updatekeys ansible/vars/secrets.yml`,
    then commit + push the re-encrypted `secrets.yml` + `.sops.yaml`.
 3. Back on the new host: `git pull`.
 
-**First host ever** (no other host can decrypt yet): `sops_setup` seeds `ansible/.sops.yaml`
-from this host's own key, so steps 2–3 don't apply. Multi-recipient is OR — any listed key
-decrypts the whole file. See the `ansible/bootstrap.yml` header for the full flow.
+Multi-recipient is OR — any listed key decrypts the whole file.
 
 ## 6. Storage (server, as needed)
 

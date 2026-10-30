@@ -116,7 +116,7 @@ the per-volume map and each exclusion's rationale:
 ## Procedure (fresh host, total loss)
 
 1. **Base OS + SOPS onboarding** — as in `ansible/README.md` first-host bring-up: install
-   uv, run `ansible/bootstrap.yml` on the new host, add its age pubkey to
+   uv, install the host package and create the operator's age key (README §5), add its pubkey to
    `ansible/.sops.yaml`, `sops updatekeys` from a host that can decrypt (or use the
    off-box recovery key if no host survives), commit, pull.
 2. **Cluster bring-up and Flux**: follow [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in

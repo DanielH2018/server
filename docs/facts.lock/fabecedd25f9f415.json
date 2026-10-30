@@ -1,12 +1,13 @@
 {
-  "checksum": "4ff25c1edaad2821fe140622c61000db126f916424871e0e19442ba4aedf96d4",
+  "checksum": "d21c9d98828e3ea2ff0af323f2dcbec0e1c32cb7a893ed5b9285c8e9e34a9455",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Where it runs",
   "row": {
     "atoms": {
-      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439"
+      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439",
+      "ansible/requirements.yml": "722b1779a1e9555820f0a81ea085bdbfb59c566e90ed5a881c348d5f2602d522"
     },
     "python": "3.14",
-    "verified_sha": "55862020d"
+    "verified_sha": "99dc92f68"
   }
 }

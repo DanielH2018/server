@@ -28,7 +28,7 @@ SETUP_ROLES = ANSIBLE / "roles" / "setup"
 
 # The DISPATCH shape: a task that pulls in a whole file on a bare has_* flag. Matching every
 # bare `when: has_*` instead would be too loose -- a plain task gated on a capability flag is
-# not a dispatcher and has no teardown half to write (sops_setup gates one task on
+# not a dispatcher and has no teardown half to write (initial_setup gates one task on
 # `has_repo_checkout` for a collections install). Read from the parsed YAML rather than by
 # regex, so the include and its
 # `when` are known to belong to the same task.
@@ -87,9 +87,9 @@ def test_the_known_dispatchers_are_still_found():
 
 
 def test_a_plain_gated_task_is_not_a_dispatcher():
-    """The rejecting half. sops_setup gates one task on has_repo_checkout and includes no file,
-    so it must not be asked for a teardown branch."""
-    assert ("sops_setup", "has_repo_checkout") not in _dispatcher_roles()
+    """The rejecting half. initial_setup gates its collections install on has_repo_checkout and
+    includes no file on it, so it must not be asked for a teardown branch."""
+    assert ("initial_setup", "has_repo_checkout") not in _dispatcher_roles()
 
 
 @pytest.mark.parametrize("role,flag", _dispatcher_roles())

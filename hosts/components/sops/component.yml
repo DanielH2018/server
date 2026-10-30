@@ -1,0 +1,17 @@
+# The `sops` on PATH (H7.24b, docs/target-architecture/host/h7-delete-ansible.md, item 4).
+# homelab-tools installs the pinned binary at /usr/lib/homelab/bin/sops, off PATH, so this
+# component ships /usr/bin/sops, a one-line exec of that path, for every caller that runs a bare
+# `sops`. A Renovate bump of the homelab-tools pin therefore reaches every caller.
+#
+# DECIDED: a wrapper in a host component, not a symlink in homelab-tools. A shared package
+# installs nothing on PATH (scripts/renderer/renderer_lib/host_tools.py), and a component file
+# needs no renderer change. /usr/local/bin precedes /usr/bin on PATH, so each host package lists
+# the sops_setup role's /usr/local/bin/sops as a legacy entry beside this component.
+#
+# age is a Depends because bootstrap-host.sh's step 3 runs age-keygen, as sops_setup's apt task
+# installed it.
+depends:
+  - homelab-tools
+  - age
+files:
+  - {src: sops, dst: /usr/bin/sops, mode: "0755"}

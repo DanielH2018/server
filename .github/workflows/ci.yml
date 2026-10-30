@@ -603,24 +603,22 @@ jobs:
       - name: Install Ansible collections
         run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
       # `cluster_vars.py write`'s tests (target slice D3) run the real sops against a throwaway
-      # age key, and they fail rather than skip without it. The step reads the hosts' pin,
-      # `sops_setup_version` and `sops_setup_binary_amd64_sha256`, out of the sops_setup
-      # defaults, as the sops_manifest_type_proof job does, so a sops bump has no CI copy to
-      # move. Renovate moves the version there; until `asset_pins.py --refresh getsops/sops`
-      # moves the digest, this step fails and names that command. age comes from apt, as the
-      # hosts install it.
+      # age key, and they fail rather than skip without it. The step reads the hosts' pin, the
+      # amd64 `version` and `sha256` of `sops` in homelab-tools' package.yml, as the
+      # sops_manifest_type_proof job does, so a sops bump has no CI copy to move. Renovate moves
+      # the version and the digest together there. age comes from apt, as the hosts install it.
       - name: Install sops and age for the cluster_vars tests
         run: |
           set -euo pipefail
-          defaults=ansible/roles/setup/sops_setup/defaults/main.yml
-          sops_version=$(awk -F'"' '/^sops_setup_version:/ {print $2}' "$defaults")
-          sops_sha256=$(awk '/^sops_setup_binary_amd64_sha256:/ {print $2}' "$defaults")
+          tools=hosts/packages/homelab-tools/package.yml
+          sops_version=$(awk '/^  sops:/ {s=1} s && /version:/ {print $2; exit}' "$tools")
+          sops_sha256=$(awk '/^  sops:/ {s=1} s && /sha256:/ {print $2; exit}' "$tools")
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
           mkdir -p "$RUNNER_TEMP/bin"
           curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/sops" \
             "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
           echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict || {
-            echo "::error::sops $sops_version does not match sops_setup_binary_amd64_sha256. Run: uv run python scripts/validate/asset_pins.py --refresh getsops/sops"
+            echo "::error::sops $sops_version does not match its sha256 in hosts/packages/homelab-tools/package.yml"
             exit 1
           }
           chmod +x "$RUNNER_TEMP/bin/sops"
@@ -937,7 +935,7 @@ jobs:
               ansible/roles/k8s/flux/defaults/main.yml \
               ansible/roles/k8s/flux/files/gotk-components.yaml \
               ansible/roles/k8s/registry/defaults/main.yml \
-              ansible/roles/setup/sops_setup/defaults/main.yml \
+              hosts/packages/homelab-tools/package.yml \
               scripts/secrets_mgmt/cluster_vars.py \
               scripts/secrets_mgmt/cluster_vars_check.py \
               scripts/secrets_mgmt/tests/_cluster_vars_fixture.py \
@@ -959,7 +957,7 @@ jobs:
           # renovate: datasource=github-releases depName=fluxcd/flux2
           version: v2.9.6
 
-      # sops comes from the hosts' pin itself, read out of the sops_setup defaults, so this job
+      # sops comes from the hosts' pin itself, read out of homelab-tools' package.yml, so this job
       # holds no copy that could drift. age comes from apt, as the hosts install it.
       - name: Install sops, age and kind
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -969,9 +967,9 @@ jobs:
           KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
         run: |
           set -euo pipefail
-          defaults=ansible/roles/setup/sops_setup/defaults/main.yml
-          sops_version=$(awk -F'"' '/^sops_setup_version:/ {print $2}' "$defaults")
-          sops_sha256=$(awk '/^sops_setup_binary_amd64_sha256:/ {print $2}' "$defaults")
+          tools=hosts/packages/homelab-tools/package.yml
+          sops_version=$(awk '/^  sops:/ {s=1} s && /version:/ {print $2; exit}' "$tools")
+          sops_sha256=$(awk '/^  sops:/ {s=1} s && /sha256:/ {print $2; exit}' "$tools")
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
           mkdir -p "$RUNNER_TEMP/bin"
           curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/sops" \

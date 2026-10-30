@@ -88,6 +88,7 @@ from validate.validate_lib.host_container import (
     CaseFailed,
     Container,
     expect,
+    expect_tools_run,
     list_problems,
     release_fetched,
     success_timestamp,
@@ -116,8 +117,6 @@ from validate.validate_lib.host_fixtures import (
     updater_variant,
 )
 
-TOOLS_BIN = "/usr/lib/homelab/bin"
-TOOLS = ("sops", "chezmoi", "nfpm")
 LOCK_HELD = "/run/test-lock.held"
 PKGCACHE = "/var/cache/apt/pkgcache.bin"
 RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
@@ -484,7 +483,7 @@ class Cases:
             state = c.active(timer)
             expect(state == "active", f"{timer} is {state} after the install")
             if self.tools:
-                self.expect_tools_run(c)
+                expect_tools_run(c)
             self.serving("updater-head", "pi-head", "pi-dropin", *self.tools)
             status = c.run_updater()
             expect(status == 0, f"the updater exited {status}")
@@ -501,12 +500,6 @@ class Cases:
             )
         finally:
             c.remove()
-
-    def expect_tools_run(self, c: Container) -> None:
-        for tool in TOOLS:
-            c.ok(f"{TOOLS_BIN}/{tool} --version")
-            on_path = c.sh(f"command -v {tool}").returncode
-            expect(on_path != 0, f"{tool} is on PATH; it installs at {TOOLS_BIN} only")
 
     def disarm(self) -> None:
         """Install the real Pi package by hand, then upgrade to one whose recovery timer is disarmed.

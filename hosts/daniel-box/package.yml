@@ -45,6 +45,7 @@ components:
   - sshd
   - host-tuning
   - k3s-server
+  - sops
 units:
   k3s.service: {policy: windowed}
 credentials:
@@ -61,3 +62,6 @@ depends:
 files:
   # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).
   - {src: tmpfiles.d/homelab-k3s-restart.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-restart.conf}
+legacy:
+  # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
+  - {path: /usr/local/bin/sops}

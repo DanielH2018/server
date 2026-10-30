@@ -70,9 +70,9 @@ jobs:
       - name: Install sops, age and kind
         run: |
           set -euo pipefail
-          defaults=ansible/roles/setup/sops_setup/defaults/main.yml
-          sops_version=$(awk -F'"' '/^sops_setup_version:/ {print $2}' "$defaults")
-          sops_sha256=$(awk '/^sops_setup_binary_amd64_sha256:/ {print $2}' "$defaults")
+          tools=hosts/packages/homelab-tools/package.yml
+          sops_version=$(awk '/^  sops:/ {s=1} s && /version:/ {print $2; exit}' "$tools")
+          sops_sha256=$(awk '/^  sops:/ {s=1} s && /sha256:/ {print $2; exit}' "$tools")
           kind_version=$(awk '/KIND_VERSION:/ {print $2; exit}' .github/workflows/ci.yml)
           kind_sha256=$(awk '/KIND_SHA256:/ {print $2; exit}' .github/workflows/ci.yml)
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ] && [ -n "$kind_version" ] && [ -n "$kind_sha256" ]
