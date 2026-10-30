@@ -118,6 +118,43 @@ tests:
             exp_annotations:
               summary: Pod homelab/pinned-abc is pinned at its CPU limit.
               description: "pinned-abc had 50% of its CFS periods throttled over 15 minutes, for 15 minutes running. Raise the limit in its role or accept it; short bursts never reach this alert."
+  # ContainerCPUThrottled, bursty: the kustomize-controller shape the A2 soak missed. bursty
+  # loses 20s of CPU in one step every 5 minutes, so its 15m window holds three steps (0.071
+  # cores) for four minutes in five and two (0.048 cores, under the floor) for the fifth. That
+  # one-minute dip reset a bare `for: 15m` every five minutes, while the bridge's 300s samples
+  # mostly missed it. calm keeps the rhythm with 10s steps, never over the floor, and stays
+  # silent.
+  - interval: 1m
+    input_series:
+      - series: 'container_cpu_cfs_periods_total{namespace="flux-system", pod="bursty-abc", container="manager"}'
+        values: '0+100x50'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="flux-system", pod="bursty-abc", container="manager"}'
+        values: '0+50x50'
+      - series: 'container_cpu_cfs_throttled_seconds_total{namespace="flux-system", pod="bursty-abc", container="manager"}'
+        values: '0x4 20x4 40x4 60x4 80x4 100x4 120x4 140x4 160x4 180x4 200'
+      - series: 'homelab:pod_service:info{namespace="flux-system", pod="bursty-abc", service="flux"}'
+        values: '1x50'
+      - series: 'container_cpu_cfs_periods_total{namespace="flux-system", pod="calm-abc", container="manager"}'
+        values: '0+100x50'
+      - series: 'container_cpu_cfs_throttled_periods_total{namespace="flux-system", pod="calm-abc", container="manager"}'
+        values: '0+50x50'
+      - series: 'container_cpu_cfs_throttled_seconds_total{namespace="flux-system", pod="calm-abc", container="manager"}'
+        values: '0x4 10x4 20x4 30x4 40x4 50x4 60x4 70x4 80x4 90x4 100'
+      - series: 'homelab:pod_service:info{namespace="flux-system", pod="calm-abc", service="flux"}'
+        values: '1x50'
+    alert_rule_test:
+      - alertname: ContainerCPUThrottled
+        eval_time: 45m
+        exp_alerts:
+          - exp_labels:
+              namespace: flux-system
+              pod: bursty-abc
+              service: flux
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: Pod flux-system/bursty-abc is pinned at its CPU limit.
+              description: "bursty-abc had 50% of its CFS periods throttled over 15 minutes, for 15 minutes running. Raise the limit in its role or accept it; short bursts never reach this alert."
   # CAdvisorCoverageShortfall, zero-series case: no cAdvisor series at all. All three arms fire,
   # each with its `arm` label, because `or vector(0)` turns an empty count into 0 < 20.
   - interval: 1m
