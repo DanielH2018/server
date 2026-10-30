@@ -2,158 +2,7 @@
 
 Status: IN PROGRESS
 
-PR B-1, `probe.py health` reads the alert plane: [#5339](https://github.com/DanielH2018/server/pull/5339).
-It merged on 2026-10-16 at `ba681c934`, after C7's amendment for Open question 4 and the slice
-index's M6 split landed in #5323. On master the gate passed homepage (Ansible-owned, referenced to
-`applied_at`), speedtest (`owner: flux`, referenced to its Kustomization's revision) and
-netpol-baseline (no route, so the probe half is skipped), each with 0 gated alerts.
-
-PR B-1d, the drill rule: [#5406](https://github.com/DanielH2018/server/pull/5406). It merged on
-2026-10-17 at `c9943f04e` and settled with `observability`. `probe.py health littlelink` then
-exited 1 and named `HealthGateDrill{severity=critical} firing since 2026-10-17T14:11:13Z`. In the
-15 minutes after the rule went live, Alertmanager sent no Discord or email notification, and its
-webhook rate matched the two hours before. PR B-1e, the drill's removal:
-[#5411](https://github.com/DanielH2018/server/pull/5411). It merged at `f8e28584f` and settled with
-`observability`, and `probe.py health littlelink` exited 0 again. littlelink's `applied_at` read
-`2026-10-16T23:03:57Z` at all three reads, so the drill holds. D5's flux PR for littlelink no
-longer waits on M6 (Open question 12).
-
-C7's content-digest reference: [#5369](https://github.com/DanielH2018/server/pull/5369). It amends
-C1, C6 and C7, and the operator accepted the amendment on 2026-10-17. It merged at `2226b7b61` and
-settled with `observability`. Every flux tag's `gotk_resource_info` carries `content_digest`, and
-peanut's reference stayed at `2026-10-17T14:00:54Z` while three later commits landed.
-
-A5's soak read, [#6624](https://github.com/DanielH2018/server/issues/6624): A5's shadow PR is
-`7d360df099`. Prometheus first evaluated the `storage` group at 2026-10-23T18:48:47Z, so the soak
-window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
-(*Which soak minutes count as explained* in M2). It mapped each tile to the `storage.yaml` rules
-that port its bridge row, with `LonghornVolumesMissing` counted for both Longhorn tiles. Over
-`[168h:1m]`, read at 2026-10-30T18:58Z, query 1 returned 5 minutes for k3s PVC Fullness and
-none for the other four tiles, and query 2 returned none for any tile. The 5 minutes are one single-cycle bridge episode on
-2026-10-30 at 11:33. At that sample daniel-box's kubelet scrape read `up=1` but carried none of
-its 28 claims' volume stats, so the claim count fell from 43 to 15 and valheim-server reported no
-free bytes. The bridge pages its free-space floor on one sample, and Kuma held DOWN until the next
-push at 11:38. `PVCFreeFloorUnmonitored` (`for: 5m`) and `PVCCoverageShortfall` (`for: 15m`) saw
-their conditions hold for 1 minute each, so the episode is one the rules drop by design. The
-2026-10-25 DOWN runs from 14:17 to 14:21 and from 14:27 to 14:31 are covered, because
-`PVCFreeFloorUnmonitored` fired from 14:20 to 14:28 while daniel-box's kubelet target was down.
-`LonghornVolumeDegraded` went pending on many claims during the 2026-10-25 reboot and on
-2026-10-28 at 00:54 and 01:29, for at most 4 minutes each. It never fired, and the bridge
-recorded no `longhorn_volumes` DOWN. No minute is unexplained, so no rule changes and Cutover-a
-is not blocked by the soak.
-
-PR C-0, the ADR (Proposed, awaiting the operator): [#6091](https://github.com/DanielH2018/server/pull/6091).
-
-A3's soak read, [#6620](https://github.com/DanielH2018/server/issues/6620), recorded in
-[#6645](https://github.com/DanielH2018/server/pull/6645): every minute is explained, with no rule
-change. The read found one shape the tile pages and no A3 rule did: a scrape target that flaps
-without holding `up == 0` for 10 minutes. [#6626](https://github.com/DanielH2018/server/issues/6626)
-closed it with `ScrapeTargetFlapping` ([#6640](https://github.com/DanielH2018/server/pull/6640)),
-which unblocked the cutover, described after the read. The shadow rules loaded at
-2026-10-23T18:23:32Z, which is the first sample of `prometheus_rule_group_rules` for the `scrape-targets` and `log-pipeline` groups.
-The read ran M1 convention 6's two queries per tile over `[168h:1m] @ 1793384612`, which ends at
-2026-10-30T18:23:32Z. Each tile's alerts are the ones the shadow PR `dae51d452` wrote for it.
-`ScrapeTargetDown` is split by `origin`, the same selector monitor-bridge's two checks use, and
-`ScrapeTargetsMissing` counts for both scrape tiles.
-
-- **Scrape Targets.** Query 1 returned 0 minutes and query 2 returned 0.
-- **Cluster Scrape Targets.** Query 1 returned 20 minutes and query 2 returned 12.
-    - 6 query-1 minutes are the tile's trailing edge. A tile reads DOWN until the bridge's next
-      push, and the bridge pushes every 300 s (`INTERVAL`). The last firing samples are at
-      2026-10-25 14:32, 2026-10-26 04:35 and 2026-10-29 13:04, and the tile read DOWN at most
-      4 minutes longer each time (14:34–36, 04:37 and 13:06–07).
-    - 14 query-1 minutes (2026-10-26 03:58–04:07 and 04:28–31) are daniel-pi failing before its
-      unplanned reboot at 04:32:54. load1 reached 20.8 and MemAvailable fell to 99 MB. Its four
-      exporters failed scrapes for 1 to 4 minutes at a time from 03:31. `check_cluster_targets`
-      keeps one down streak for the whole check, so three 300 s cycles that each caught one of
-      the Pi's exporters down paged the tile. No single series held `up == 0` for
-      `ScrapeTargetDown`'s 10 minutes until alloy-pi's run from 04:21. Kuma's `Pi Pressure`
-      tile read DOWN from 03:43 to 03:47 and from 03:53 to 04:37, and `Daniel Pi Recovery` from
-      03:59 to 04:36, so the host fault had a live pager throughout. Their shadow successors,
-      `PiLoadHigh` (03:37 to 04:33) and `PiRecoveryFailed` (03:58 to 04:35), fired too. A target
-      that flaps on a healthy host would have no pager after Cutover-a, which is why Cutover-a
-      waited on [#6626](https://github.com/DanielH2018/server/issues/6626), closed by
-      [#6640](https://github.com/DanielH2018/server/pull/6640).
-    - 5 query-2 minutes are the rule's leading edge (2026-10-25 14:26, 2026-10-30 12:36–39). The
-      rule's `for: 10m` pages before the bridge's three-cycle streak
-      (`CLUSTER_TARGETS_CONSECUTIVE`).
-    - 7 query-2 minutes are a monitor-bridge restart clearing the tile while prowlarr's
-      exportarr sidecar still read `up == 0` (2026-10-25 22:49–51 and 2026-10-30 12:52–55). The
-      new bridge pods started at 22:47:21 and 12:50:31. A restart resets the in-memory streak,
-      so the first cycle pushes `up`. The rule kept firing until prowlarr's new pod replaced
-      the target, at 22:49:28 and 12:52:38.
-- **Log Shipper Dropped Entries.** Query 1 returned 6 minutes and query 2 returned 0. The
-  episode is the Pi's Alloy backlog after its reboot. Over two hours the Pi's Alloy dropped
-  35,938 entries as `ingester_error`, and Loki discarded 56,494 as `too_far_behind`.
-    - 3 minutes (2026-10-26 04:38–40) are the leading edge. Both rules went pending at 04:35:39
-      and fired after their `for: 5m`, at 04:40:39 and 04:41:39. The bridge pushed DOWN on its
-      first breaching cycle, and the tile read it at 04:37:09.
-    - 3 minutes (05:36–38) are the trailing edge. The last firing sample is 05:34:39, and the
-      tile read up at 05:38:09, inside one `INTERVAL`.
-
-The `Cluster Scrape Targets` tile has no samples at 2026-10-25 07:39–47 (the weekly reboot),
-2026-10-25 13:14–16 and 18:08–10, 2026-10-28 00:44–53 and 01:27–30, and 2026-10-29 21:32–38.
-Query 2 counts a shadow alert that fires while the tile has no sample, and it counted none in
-those gaps. `Watchdog` has a sample in every minute of four of the gaps, so Prometheus was
-evaluating rules there. It has 2 samples in the reboot gap's 8 minutes and none at 2026-10-28
-00:44–53, so neither side was read for most of those two gaps.
-
-A3's cutover is three stacked PRs that merge in this order, not the plan's single Cutover-a.
-uptime-kuma and monitor-bridge are both `owner: flux`, so no deploy orders a tile deletion
-before a row deletion, and the batch uses the owner-independent fallback of *When D5 flips a
-role M6 edits*:
-
-1. Cutover-a1, [#6651](https://github.com/DanielH2018/server/pull/6651): an exclusion in the
-   `CHECKS` loop of `static-monitors.yaml.j2` deletes the three tiles. Every rule stays shadow.
-   Its live read is `probe.py metric 'monitor_status{monitor_name=~"Scrape Targets|Cluster Scrape Targets|Log Shipper Dropped Entries"}'`,
-   which must return no series.
-2. Cutover-a2, [#6652](https://github.com/DanielH2018/server/pull/6652): the three bridge rows,
-   their check bodies and their env keys go, and the push tokens enter `PENDING_RETIREMENT`. It
-   merges only after the read above passes.
-3. Cutover-b, [#6653](https://github.com/DanielH2018/server/pull/6653): the A3 rules drop `shadow`, `BlackboxExporterDown` goes live with its
-   inhibit on `ScrapeTargetDown{job="blackbox-ingress"}`, `LokiHomelabDown` is deleted, and the
-   `kuma-cutover` group loses A3's three terms.
-
-The two-hour no-pager bound counts from the moment the `uptime-kuma` Kustomization reports
-Cutover-a1's merge commit, because Kuma stops paging the three checks then and every A3 rule is
-still shadow. It ends when the `observability` Kustomization reports Cutover-b's merge commit.
-Cutover-a2's apply falls inside it. `CheckWithoutPager` pages critical two hours after the last
-`monitor_status` sample of any of the three tiles. If the bound is exceeded, revert Cutover-a2
-first when it has merged, so the bridge pushes again, and then Cutover-a1, so the tiles return.
-Reverting Cutover-a1 alone after Cutover-a2 restores tiles that no push reaches, and they go
-DOWN. Both reverts work only while the A3 token PR has not retired the keys, a week after
-Cutover-b.
-
-Cutover-b leaves `FluxControllerDown`'s `up == 0` arm in `flux.yaml` shadow. The D1 design says
-A3's cutover commit drops that label, and this plan's *A3 and the handoffs it closes* does not
-list it. With the tile gone, `ScrapeTargetDown{job="flux"}` pages a dead controller after 10
-minutes, so nothing is unpaged. Dropping the label needs an inhibit like task 6's, and that is
-the operator's call.
-
-A4's soak read, [#6623](https://github.com/DanielH2018/server/issues/6623): A4's shadow PR is
-`e79316c0bf`. Prometheus first evaluated the `edge` group at 2026-10-23T18:32:32Z, so the soak
-window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
-(*Which soak minutes count as explained* in M2). It mapped each tile to the `edge.yaml` rules
-that port its bridge row. `EdgeMetricsMissing` counts for every tile except Traefik 421. Over
-`[168h:1m]`, read on 2026-10-30 at 18:42Z, query 1 returned 20 minutes for Traefik Latency and
-none for the other four tiles. Query 2 returned none for any tile. The 20 minutes are four
-single-cycle bridge episodes: sonarr on 2026-10-27 at 00:27, and jellyfin on 2026-10-29 at
-21:52 and on 2026-10-30 at 00:59 and 14:54. The bridge's `traefik_latency` row has no streak, so
-it pages on one bad sample, and `TraefikBackendSlow` held `for: 5m`. M2's duration query, with
-the per-backend condition as the arm, counted 2, 4, 4 and 5 bad minutes. The first three are
-below the rule's `for:`, so they are explained. The fourth is a miss: the condition held from
-14:45 to 14:48, failed for 3 minutes, then held from 14:52 to 14:54, and each dip reset the
-hold. [#6629](https://github.com/DanielH2018/server/pull/6629) tunes the rule to fire when its condition held in at least 5 of the last 10
-minutes, without a `for:`, and adds rule tests for both shapes, built from jellyfin's counters.
-Replayed over the same `[168h:1m]`, the tuned rule reads true for jellyfin from 14:52 to 14:56
-and nowhere else, which the 8-minute margin matches to Kuma's 14:55 to 14:59 DOWN minutes. That
-count is a projection. Prometheus does not re-evaluate stored `ALERTS` under a changed rule, so
-a re-run of query 1 over the same window still returns 20. Jellyfin's bursts, which may be
-streams, are filed as [#6649](https://github.com/DanielH2018/server/issues/6649). The Traefik
-5xx episode on 2026-10-25 from 14:22 to 14:26 is covered, because `TraefikBackend5xx` fired
-from 14:23 to 14:25. Kuma held every A4 tile at status 3 (maintenance) from 07:30 to 08:16 that
-day, which neither query counts. A4's Cutover-a waits until the tuned rule is live in the
-`prometheus-rules` ConfigMap.
+Each batch's results are in *Status by batch*, below the introduction.
 
 Depends on: M2, M3, M4, M5
 
@@ -181,6 +30,77 @@ No other slice owns them. M2's Open question 6 names M6 as the fallback owner of
 A7). M5 Open question 4 passes `swallowed_verdicts` and its token to M6, which deletes them in
 C-7. This plan therefore runs in three phases (A drains the producers, B switches the readers,
 C deletes Kuma). *Open questions* proposes splitting it in the slice index.
+
+## Status by batch
+
+Each batch, and each Phase B or Phase C PR, records its soak reads, cutovers and other
+results in its own file under `docs/target-architecture/monitoring/m6-status/`. This
+section transcludes the files in batch order. *Recording a batch's results*, under
+*Steps, as PRs*, says what goes in a file.
+
+--8<-- "target-architecture/monitoring/m6-status/a1.md"
+
+--8<-- "target-architecture/monitoring/m6-status/a2.md"
+
+--8<-- "target-architecture/monitoring/m6-status/a3.md"
+
+--8<-- "target-architecture/monitoring/m6-status/a4.md"
+
+--8<-- "target-architecture/monitoring/m6-status/a5.md"
+
+--8<-- "target-architecture/monitoring/m6-status/a6.md"
+
+--8<-- "target-architecture/monitoring/m6-status/a7.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b0.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b1.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b2.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b3.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b4.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b5.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b6a.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b6b.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b7.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b8.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b9.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-b-1.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-b-2.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-b-4.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-b-5.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-b-6.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-b-7.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-c-0.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-c-1.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-c-2.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-c-3.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-c-4.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-c-5.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-c-6.md"
+
+--8<-- "target-architecture/monitoring/m6-status/pr-c-7.md"
 
 ## Goal and exit criterion
 
@@ -745,7 +665,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 |---|---|---|---|---|---|
 | A1 hosts | `disk`, `memory`, `host_temp`, `ups`, and the Prometheus half of `pi_pressure` | M2 | monitor-bridge (`land.sh`) | `EXPORTER_DEPENDENT` becomes an inhibit rule whose source is A3's `ScrapeTargetDown`, not a new rule. For each job the map keys (`node`: disk, memory, host_temp; `node-pi`: host_temp, pi_pressure), `ScrapeTargetDown{job="<job>"}` inhibits those alerts with `equal: [job, instance]`, so a dead exporter holds only its own host's alerts where the map held them estate-wide. `origin` is not used: most cluster series lack it, and a label missing on both sides compares equal. The inhibit lands in the later of A1's Cutover-b and A3's Cutover-b (*A3 and the handoffs it closes*, task 6). Each target arm that fires on missing data (an `absent()` or not-reporting arm) has a `for:` of at least `ScrapeTargetDown`'s 10m, or it fires before its source. Threshold arms need no floor, because a dead exporter leaves them no data. Streaks such as `HWMON_TEMP_CONSECUTIVE` become `for:`. The `pi_pressure` row cuts over in B8, not here. | 4 |
 | A2 containers | `restarts`, `oom`, `cpu` | M2 | monitor-bridge | Joins `homelab:pod_service:info`. `CADVISOR_PODS_MIN` becomes a census alert with a zero-series case. | 3 |
-| A3 scrape | `targets`, `cluster_targets`, `shipper_dropped` | M2 | monitor-bridge | `CLUSTER_TARGETS_CONSECUTIVE` becomes `for: 10m`. Closes M1's, M4's and M5's handoffs: see *A3 and the handoffs it closes*. Cutover-a was gated on the flapping-target ruling in [#6626](https://github.com/DanielH2018/server/issues/6626), closed by [#6640](https://github.com/DanielH2018/server/pull/6640) (the soak read in the status block). | 3 |
+| A3 scrape | `targets`, `cluster_targets`, `shipper_dropped` | M2 | monitor-bridge | `CLUSTER_TARGETS_CONSECUTIVE` becomes `for: 10m`. Closes M1's, M4's and M5's handoffs: see *A3 and the handoffs it closes*. Cutover-a was gated on the flapping-target ruling in [#6626](https://github.com/DanielH2018/server/issues/6626), closed by [#6640](https://github.com/DanielH2018/server/pull/6640) (the soak read in *A3 scrape*, under *Status by batch*). | 3 |
 | A4 edge | `cert`, `traefik5xx`, `traefik_latency`, `traefik_404`, `traefik_421` | M2 | monitor-bridge | The volume floors (`TRAEFIK_MIN_RPS`) become `and` clauses. | 5 |
 | A5 storage | `longhorn_volumes`, `pvc_fullness`, `snapshot_headroom`, `kubelet_plugin_readonly`, `etcd_db_size` | M2 | monitor-bridge | All critical. Longhorn's one-hot `state` label is selected explicitly. | 5 |
 | A6 bridge exporter | the 15 other-source checks and `swallowed_verdicts`, plus the `b2_reachable` and `wan_reachable` gates | Exporter | monitor-bridge | See *The bridge as an exporter*. The `prometheus` gate retires with its token, because the Watchdog covers a dead Prometheus. `swallowed_verdicts` is exported until C-7 deletes it. | 19 |
@@ -1387,40 +1307,7 @@ reach A6-7a, fail the bijection test and lose its only pager.
     - No probe of Kuma's own route: it sits behind Authelia `one_factor`, so it would read a
       302 whether or not Kuma is up (class 2). `KumaDown` watches Kuma instead.
     - Token: none of the 14 is a push monitor. The 1 token in the table is `pi_pressure`'s.
-    - **The soak read**, [#6625](https://github.com/DanielH2018/server/issues/6625). B8's
-      shadow PR merged as `50f2b2c410` at 2026-10-23T19:28Z. Prometheus first scraped the
-      `blackbox-extra` job at 19:39:56Z, so the window starts there. The read used M1
-      convention 6's two queries over `[168h:1m]` ending at 2026-10-30T19:39:56Z, with M2's
-      8-minute margin (*Which soak minutes count as explained* in M2). Each tile was mapped to its shadow rule by the
-      target's `service` label. Loki maps to M5's `LokiHomelabDown`, and Pi Pressure maps to
-      `PiPortDead` plus A1's Prometheus half of the row: `PiLoadHigh`, `PiMemoryLow`,
-      `PiDiskFull`, `PiFilesystemReadOnly` and `PiMetricsMissing` in `hosts.yaml`.
-      `PiUndervoltage` belongs to `check_host_temp`, so it is not part of the mapping.
-        - Query 1 returned no minutes for 14 of the 15 tiles. SLZB-06M Coordinator read DOWN
-          for 38 minutes, and `ExtraProbeFailed` covered every one.
-        - Pi Pressure read DOWN for 50 minutes, all on 2026-10-26 from 03:43 to 04:37. Every
-          bridge cycle in that span blamed load5, and the port arm read "2 pi port(s)
-          listening", so `PiPortDead` alone covers none of them. With A1's rules counted, 3
-          minutes remain, 04:35 to 04:37. The Pi rebooted at 04:32:54
-          (`node_boot_time_seconds`), so load5 fell to 0.17 per core and `PiLoadHigh`
-          cleared. The tile held the bridge's last DOWN push until the next 300s cycle, which
-          the margin absorbs.
-        - Query 2 found three episodes. On 2026-10-23 from 19:42 to 19:58, the Email-to-RSS
-          probe failed over IPv6 (`probe_ip_protocol` 6) while Kuma read up. `efd7fda5a0`
-          set `preferred_ip_protocol: ip4` and committed at 19:52:54, and the probe read 4
-          and up from 19:59. That episode was a fault in the probe, fixed in the window.
-        - On 2026-10-25 from 14:25 to 14:28, the four `.local.`
-          probes behind Traefik (livesync, scrutiny, homelab-mcp, the edge all-clear) and
-          all 26 `blackbox-ingress` targets timed out at 9.5s. M4's live
-          `IngressProbeFailed` and `IngressProbeFailedCritical` fired for 19 of those
-          targets, and A4's read records Traefik 5xx in the same window. Kuma's tiles declare
-          no `timeout` and retry twice, so Kuma tolerated the stall. The stall was a real edge
-          fault, not a rule defect.
-        - The third episode is `PiLoadHigh` on 2026-10-26 at 03:33 and 03:34, outside the
-          margin. Load5 crossed 1.5 per core between 03:31 and 03:34 and fell back. The
-          bridge's first DOWN cycle came at 03:41, so its 300s samples missed the crossing.
-          The rule has no `for:`, which matches the bridge's single-sample page.
-      No minute is unexplained, so no rule changes, and the soak does not block Cutover-a.
+    - **The soak read** is recorded in *B8 probes*, under *Status by batch*.
 
 ### Phase B — switch the readers
 
@@ -1953,6 +1840,17 @@ Phase A is about 75 PRs, and A0 lands before any Kuma-side PR. Each shadow PR ad
 tiles' terms to the `kuma-cutover` group, and each shadow-dropping PR removes them. A PR
 that removes the last term deletes the group, and a PR that adds a term to a missing group
 re-creates it, with its test, in about 40 lines (*No-pager windows*).
+
+**Recording a batch's results.** A soak read, a cutover stack, a no-pager bound or any other
+result goes in the batch's own file under `m6-status/`: `a1.md` to `b9.md` for the Phase A
+batches, and `pr-b-1.md` to `pr-c-7.md` for the Phase B and Phase C PRs. Replace the file's
+"Nothing recorded." line and keep its heading. Do not edit *Status by batch* or the
+introduction to record a result. The section already transcludes every file, so a PR that
+writes only its own file merges beside another batch's PR without a conflict. The issue
+that asks for a soak read names the file, and so does the PR that records it. A new batch
+or PR, such as a split one, adds its file and its `--8<--` line in table order in the same
+PR. `ansible/tests/repo/test_m6_status_records.py` fails when a batch in the table has no
+transcluded file, or when the includes leave table order.
 
 **Every token PR, and C-5, is one commit with four parts.** The operator removes the keys
 from `ansible/vars/secrets.yml` with `sops` (**operator-only**). In the same commit the agent

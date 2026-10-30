@@ -101,6 +101,9 @@ exclude_docs: |
   # would otherwise build every one as an orphan page of one table. Excluding a file from
   # the build does not hide it from the snippets extension, which reads base_path from disk.
   assets/generated/fragments/
+  # M6's per-batch status records, hand-written and spliced into m6-retire-kuma.md the same
+  # way. One file per batch so parallel PRs do not conflict over one status block (#6656).
+  target-architecture/monitoring/m6-status/
 
 # Built and served on purpose, but deliberately absent from the nav. `archive/` is the
 # historical record of executed work — other docs and CLAUDE.md link INTO it, so excluding it
