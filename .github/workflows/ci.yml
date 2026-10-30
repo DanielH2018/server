@@ -263,7 +263,7 @@ jobs:
         run: |
           set -euo pipefail
           curl --retry 5 --retry-all-errors --retry-delay 5 -fsSL -o /tmp/vale.tar.gz \
-            https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_Linux_64-bit.tar.gz
+            https://github.com/vale-cli/vale/releases/download/v3.25.1/vale_3.25.1_Linux_64-bit.tar.gz
           tar xzf /tmp/vale.tar.gz -C /usr/local/bin vale
           vale --version
           scripts/validate/vale.sh
