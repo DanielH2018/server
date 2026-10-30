@@ -154,7 +154,7 @@ tests:
       - series: 'traefik_service_request_duration_seconds_bucket{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-few-app-80@kubernetescrd", le="5.0"}'
         values: '0+3.6x30'
     alert_rule_test:
-      - eval_time: 5m
+      - eval_time: 4m
         alertname: TraefikBackendSlow
         exp_alerts: []
       - eval_time: 12m
@@ -168,11 +168,63 @@ tests:
             exp_annotations:
               summary: Over 5% of Traefik backend homelab-slow-app-80@kubernetescrd's requests take longer than 5s.
               description: >-
-                50% of the requests to homelab-slow-app-80@kubernetescrd in the last 5 minutes
-                finished after the 5.0s histogram bucket. The backend is slow, not the edge.
-                Its own log and its resource use are the next reads.
+                In 10 of the last 10 minutes, over 5% of the requests to
+                homelab-slow-app-80@kubernetescrd in the trailing 5 minutes finished after the
+                5.0s histogram bucket. The backend is slow, not the edge. Its own log and its
+                resource use are the next reads.
       - eval_time: 12m
         alertname: TraefikLatencyBucketMissing
+        exp_alerts: []
+
+  # A burst that dips for three minutes still pages: the A4 soak's jellyfin counters from
+  # 2026-10-30 14:31, rebased to 0. The condition holds 4 minutes, fails 3, then holds 3, so a
+  # `for: 5m` hold never fires, and the 5-of-10 count fires at the second run's third minute.
+  - interval: 1m
+    input_series:
+      - series: 'traefik_service_request_duration_seconds_count{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-bursty-app-80@kubernetescrd"}'
+        values: '0 0 0 0 0 1 1 1 1 1 2 2 2 86 209 221 237 417 437 437 577 589 639 694 723 744 770 777 799 823 845 869 891 910 929'
+      - series: 'traefik_service_request_duration_seconds_bucket{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-bursty-app-80@kubernetescrd", le="5.0"}'
+        values: '0 0 0 0 0 1 1 1 1 1 2 2 2 86 190 202 218 397 417 417 542 554 604 659 688 709 735 742 764 788 810 834 856 874 893'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: TraefikBackendSlow
+        exp_alerts: []
+      - eval_time: 23m
+        alertname: TraefikBackendSlow
+        exp_alerts:
+          - exp_labels:
+              backend: homelab-bursty-app-80@kubernetescrd
+              severity: warning
+              service: traefik
+              shadow: "true"
+            exp_annotations:
+              summary: Over 5% of Traefik backend homelab-bursty-app-80@kubernetescrd's requests take longer than 5s.
+              description: >-
+                In 7 of the last 10 minutes, over 5% of the requests to
+                homelab-bursty-app-80@kubernetescrd in the trailing 5 minutes finished after the
+                5.0s histogram bucket. The backend is slow, not the edge. Its own log and its
+                resource use are the next reads.
+
+  # A single 4-minute burst stays quiet: the soak's jellyfin counters from 2026-10-30 00:46,
+  # rebased to 0. The bridge paged this one on one sample, and the rule drops it by design.
+  - interval: 1m
+    input_series:
+      - series: 'traefik_service_request_duration_seconds_count{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-bursty-app-80@kubernetescrd"}'
+        values: '0 0 80 138 138 138 138 138 138 139 212 213 285 301 336 347 358 373 387 400 415 434 446 455 472 488 504 519 536 553'
+      - series: 'traefik_service_request_duration_seconds_bucket{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-bursty-app-80@kubernetescrd", le="5.0"}'
+        values: '0 0 80 137 137 137 137 137 137 138 211 212 260 276 311 322 333 348 362 375 390 409 421 430 447 463 479 494 511 528'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: TraefikBackendSlow
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: TraefikBackendSlow
+        exp_alerts: []
+      - eval_time: 18m
+        alertname: TraefikBackendSlow
+        exp_alerts: []
+      - eval_time: 22m
+        alertname: TraefikBackendSlow
         exp_alerts: []
 
   # A backend with a request count and no 5.0s bucket series: TraefikLatencyBucketMissing fires

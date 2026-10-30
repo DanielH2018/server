@@ -97,6 +97,31 @@ those gaps. `Watchdog` has a sample in every minute of four of the gaps, so Prom
 evaluating rules there. It has 2 samples in the reboot gap's 8 minutes and none at 2026-10-28
 00:44–53, so neither side was read for most of those two gaps.
 
+A4's soak read, [#6623](https://github.com/DanielH2018/server/issues/6623): A4's shadow PR is
+`e79316c0bf`. Prometheus first evaluated the `edge` group at 2026-10-23T18:32:32Z, so the soak
+window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
+(*Which soak minutes count as explained* in M2). It mapped each tile to the `edge.yaml` rules
+that port its bridge row. `EdgeMetricsMissing` counts for every tile except Traefik 421. Over
+`[168h:1m]`, read on 2026-10-30 at 18:42Z, query 1 returned 20 minutes for Traefik Latency and
+none for the other four tiles. Query 2 returned none for any tile. The 20 minutes are four
+single-cycle bridge episodes: sonarr on 2026-10-27 at 00:27, and jellyfin on 2026-10-29 at
+21:52 and on 2026-10-30 at 00:59 and 14:54. The bridge's `traefik_latency` row has no streak, so
+it pages on one bad sample, and `TraefikBackendSlow` held `for: 5m`. M2's duration query, with
+the per-backend condition as the arm, counted 2, 4, 4 and 5 bad minutes. The first three are
+below the rule's `for:`, so they are explained. The fourth is a miss: the condition held from
+14:45 to 14:48, failed for 3 minutes, then held from 14:52 to 14:54, and each dip reset the
+hold. [#6629](https://github.com/DanielH2018/server/pull/6629) tunes the rule to fire when its condition held in at least 5 of the last 10
+minutes, without a `for:`, and adds rule tests for both shapes, built from jellyfin's counters.
+Replayed over the same `[168h:1m]`, the tuned rule reads true for jellyfin from 14:52 to 14:56
+and nowhere else, which the 8-minute margin matches to Kuma's 14:55 to 14:59 DOWN minutes. That
+count is a projection. Prometheus does not re-evaluate stored `ALERTS` under a changed rule, so
+a re-run of query 1 over the same window still returns 20. Jellyfin's bursts, which may be
+streams, are filed as [#6649](https://github.com/DanielH2018/server/issues/6649). The Traefik
+5xx episode on 2026-10-25 from 14:22 to 14:26 is covered, because `TraefikBackend5xx` fired
+from 14:23 to 14:25. Kuma held every A4 tile at status 3 (maintenance) from 07:30 to 08:16 that
+day, which neither query counts. A4's Cutover-a waits until the tuned rule is live in the
+`prometheus-rules` ConfigMap.
+
 Depends on: M2, M3, M4, M5
 
 Related issues: [#4563](https://github.com/DanielH2018/server/issues/4563), the health gap over the old ReplicaSet. `health_rollout.py`
