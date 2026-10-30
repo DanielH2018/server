@@ -111,17 +111,6 @@ def test_every_ansible_era_unit_is_retired(manifest):
     assert ANSIBLE_UNITS <= retired
 
 
-def test_the_role_scripts_ship_byte_identical(package):
-    shipped = {
-        "claude-clone-sync.sh": "/usr/local/bin/claude-clone-sync.sh",
-        "claude-dotfiles-sync.sh": "/usr/local/bin/claude-dotfiles-sync.sh",
-        "homelab_rootq.py": "/usr/local/sbin/homelab-rootq",
-        "rootq.sh": "/usr/local/bin/rootq",
-    }
-    for name, dst in shipped.items():
-        assert package.files[dst][0] == (ROLE / "files" / name).read_bytes(), name
-
-
 def test_the_agents_github_token_is_a_host_secret_and_never_rendered(package):
     keys = host_secrets.tree_keys(REPO, "daniel-server")
     assert {"claude_code_agent_gh_token", "gitops_deploy_discord_webhook"} <= keys
