@@ -115,7 +115,7 @@ def test_a_quiet_arm_says_nothing(cfg, streaks):
 
 
 def test_an_empty_vector_defers_while_the_pi_scrape_is_down(cfg, streaks):
-    """check_cluster_targets owns a dead scrape; this arm must not double-page it."""
+    """ScrapeTargetDown owns a dead scrape; this arm must not double-page it."""
     assert checks.host_thermal._undervoltage_arm(cfg, streaks, None, [], False) is None
 
 
@@ -214,7 +214,7 @@ def test_a_clean_cycle_clears_the_throttle_streak(cfg, streaks):
 
 
 def test_an_empty_cooling_vector_defers_while_the_node_scrape_is_down(cfg, streaks):
-    """Both amd64 exporters gone is check_cluster_targets' fault to report, not this arm's."""
+    """Both amd64 exporters gone is ScrapeTargetDown's fault to report, not this arm's."""
     assert checks.host_thermal._thermal_throttle_arm(cfg, streaks, [], False) is None
 
 

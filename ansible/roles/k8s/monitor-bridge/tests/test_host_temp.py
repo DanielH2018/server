@@ -405,7 +405,7 @@ def test_registered_and_prom_suppressed():
 # THE GAP THESE PIN: hwmon_temp_verdict pages only on a WHOLLY empty list, so any non-empty
 # subset would pass. Lose one host's hwmon collector — node-exporter still up, which is its
 # documented normal failure mode — and the surviving hosts answer "all below limit" for the
-# whole estate. check_cluster_targets catches a TOTAL node outage; only the coverage floor
+# whole estate. ScrapeTargetDown catches a TOTAL node outage; only the coverage floor
 # catches the partial one.
 #
 # An env key nothing reads leaves hwmon on the shared floor of 2, which two of three hosts still

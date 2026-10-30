@@ -71,7 +71,7 @@ def _undervoltage_arm(
     None means "nothing to say", which covers three cases:
       - no query configured, so the arm is switched off;
       - the vector is empty AND daniel-pi's own scrape is not affirmatively up. The sensor lives
-        on one host, so an empty vector is that host going quiet, and check_cluster_targets owns
+        on one host, so an empty vector is that host going quiet, and ScrapeTargetDown owns
         a dead scrape. Deferring stops this arm double-paging a fault another monitor already
         reports. An unqueryable gate defers too — never page over a source outage on a guess;
       - no alarm asserted. A clean arm stays SILENT rather than appending a note to the up
@@ -125,7 +125,7 @@ def _thermal_throttle_arm(
     None means no query configured, nothing throttling, or a fully empty vector while the amd64
     node-exporters are not affirmatively up — the same three-case shape _undervoltage_arm has,
     and for the same reasons. The empty-vector gate matters here too: no Processor cooling
-    device anywhere means both nodes stopped publishing, which check_cluster_targets and this
+    device anywhere means both nodes stopped publishing, which ScrapeTargetDown and this
     check's own EXPORTER_DEPENDENT entry already own. An empty vector while `node` IS scraping
     is a real fault — a driver or kernel change took the sensors away — and pages. The PARTIAL
     loss, one node gone, is what THERMAL_THROTTLE_ORIGINS_MIN catches, and that floor is what

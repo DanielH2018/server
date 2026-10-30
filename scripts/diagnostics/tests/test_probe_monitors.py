@@ -487,6 +487,9 @@ def test_the_bridge_tile_loop_expands_to_one_declaration_per_table_row(
 
 
 def test_the_table_loop_skips_rows_its_if_excludes(tmp_path):
+    # A batch whose monitor-bridge row is flux-owned deletes its tile first, with an `if` on
+    # the template's table loop (m6-retire-kuma.md, "The cutover order"). kuma-drift must read
+    # the same exclusion, or it names the deleted tile missing.
     table = tmp_path / "roles/k8s/b/files/t.py"
     table.parent.mkdir(parents=True)
     table.write_text(
@@ -505,27 +508,12 @@ def test_the_table_loop_skips_rows_its_if_excludes(tmp_path):
     assert set(declared) == {"Alpha", "After"}
 
 
-# M6 batch A3's three tiles, deleted by the `if` on the template's table loop (Cutover-a1)
-# while their rows stay in the table until Cutover-a2.
-A3_TILES_DELETED = {
-    "Scrape Targets",
-    "Cluster Scrape Targets",
-    "Log Shipper Dropped Entries",
-}
-
-
 def test_the_real_template_declares_every_bridge_tile_ungated():
     """#3781 moved the bridge tiles into a loop; kuma-drift must still list each one."""
     declared = monitors.parse_declared_monitors(
         Path(monitors.STATIC_MONITORS_PATH).read_text()
     )
-    bridge = {
-        row.display: declared.get(row.display)
-        for row in CHECKS
-        if row.display not in A3_TILES_DELETED
-    }
+    bridge = {row.display: declared.get(row.display) for row in CHECKS}
     assert len(bridge) >= 39 and "Traefik 421" in bridge
     assert all(d is not None and d["gated"] is False for d in bridge.values()), bridge
     assert not [name for name in declared if "{" in name]
-    # kuma-drift must not name a deleted tile missing: the loop's `if` is read, not ignored.
-    assert not A3_TILES_DELETED & set(declared)

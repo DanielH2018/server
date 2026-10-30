@@ -39,7 +39,7 @@ checks each gate suppresses.
   **suppressed**, pushed `up` with a "skipped — Prometheus unreachable" `msg` so its push-monitor
   heartbeat stays alive, and only THIS monitor pages. Without the gate one Prometheus outage fires
   all of them at once. A single scrape target down (Prometheus up, one exporter gone) still
-  surfaces separately on Scrape Targets. `PROM_DEPENDENT` derives from the `gate="prometheus"`
+  surfaces separately as `ScrapeTargetDown`. `PROM_DEPENDENT` derives from the `gate="prometheus"`
   rows, so neither a count nor an enumeration of it is written anywhere else. The role CLAUDE.md
   once carried a hardcoded count of ten while the set held more (#1359), and then an enumeration a
   test pinned, until the column made both redundant (#3788).)
@@ -60,8 +60,8 @@ checks each gate suppresses.
   would be reported as the estate's. This happened once: a one-directional UFW rule left
   daniel-box's node-exporter unreachable for 5.4h (2026-08-23), and both checks pushed OK off
   daniel-server alone while daniel-box's host memory and `/boot` went unwatched.
-  **Why not lean on Scrape Targets:** that keys on `up`, and node-exporter's normal failure is
-  PER-COLLECTOR. A filesystem or meminfo collector can fail with `up == 1`, leaving Scrape Targets
+  **Why not lean on `ScrapeTargetDown`:** that keys on `up`, and node-exporter's normal failure is
+  PER-COLLECTOR. A filesystem or meminfo collector can fail with `up == 1`, leaving `ScrapeTargetDown`
   green while the host silently drops out of these two checks. This is the shape of `check_ups`'s
   partial-absence arm: never monitor the survivor silently.
   `HOST_ORIGINS_CONSECUTIVE` gives it hysteresis, for the reason `UPS_CONSECUTIVE` exists: the
@@ -109,7 +109,6 @@ checks each gate suppresses.
   consecutive breaching cycle (~15 min) pushes `down`, shorter bursts push `up` with a "throttling
   streak n/3" `msg` naming the offender, and a clean cycle resets the streak, so one-cycle blips
   (flaresolverr solving a challenge, homepage hugging the cores floor) never page.)
-- **Scrape Targets** (`up == 0` — names the down job)
 - **Traefik 5xx** (5xx ratio over 5m **per service**, naming each offender, gated by a
   per-service `TRAEFIK_MIN_RPS` volume floor. It is per-service so the alert points at the
   erroring backend and a broken low-traffic service cannot hide diluted in the aggregate)
@@ -277,7 +276,7 @@ checks each gate suppresses.
   through daniel-box's node exporter, the `node` job. It is a row of its own, because
   `gitops_status` reads the deployer's state directory outside the Prometheus gate, and a
   Prometheus-sourced arm there would page on every Prometheus outage. The row is `gate="prometheus"`
-  and sits under `EXPORTER_DEPENDENT["node"]`, so a dead exporter pages once through Scrape Targets
+  and sits under `EXPORTER_DEPENDENT["node"]`, so a dead exporter pages once through `ScrapeTargetDown`
   instead of also as an absent builder series. It goes `down` on either arm. The **fetch arm**:
   `homelab_builder_fetch_timestamp_seconds` is older than `BUILDER_MAX_FETCH_AGE_S` (1800 s,
   `monitor_bridge_builder_max_fetch_age_s`) or absent, which covers a dead builder timer, a missing
@@ -502,7 +501,7 @@ checks each gate suppresses.
     `UNDERVOLTAGE_UP_QUERY` (`up{job="node-pi"}`). The sensor is ONE series from ONE host, so a
     `max() > 0` arm reads green the moment daniel-pi stops answering, and a Pi falling off the
     network is what sustained undervoltage causes. An empty vector therefore defers only while
-    that gate is not affirmatively up (`check_cluster_targets` owns a dead scrape, and an
+    that gate is not affirmatively up (`ScrapeTargetDown` owns a dead scrape, and an
     unqueryable gate defers too), and pages while the Pi IS scraping, because the sensor was
     renamed or the collector went blind.
   - **CPU thermal throttling** (`_thermal_throttle_arm`, `THERMAL_THROTTLE_QUERY` =
@@ -513,7 +512,7 @@ checks each gate suppresses.
     also carries PCIe link-speed and `intel_powerclamp` devices, which throttle for reasons that
     are not heat. The arm has its own source gate, `THERMAL_THROTTLE_UP_QUERY` = `up{job="node"}`
     (`node` rather than `node-pi`, because the Pi publishes none of these series). A fully empty
-    vector therefore means both amd64 exporters went quiet, which `check_cluster_targets` owns, and
+    vector therefore means both amd64 exporters went quiet, which `ScrapeTargetDown` owns, and
     an empty vector while `node` IS scraping pages, since a driver or kernel change taking the
     sensors away would otherwise go unnoticed. `THERMAL_THROTTLE_ORIGINS_MIN` is **2**, not the
     temperature arm's 3, because daniel-pi publishes no Processor cooling device (daniel-box 16
@@ -543,7 +542,7 @@ checks each gate suppresses.
   dropped the HA re-export of the same UPS that #1548 had kept as a `max(A) or max(B)` fallback.
   HA's NUT integration reads the SAME upsd over the `nut` ClusterIP, so the fallback never covered
   an upsd outage, only nut-exporter dying while upsd lived, which Prometheus reports as
-  `up{job="nut"} == 0` and Scrape Targets already pages for. HA's `hass_*` UPS series stay in the
+  `up{job="nut"} == 0` and `ScrapeTargetDown` already pages for. HA's `hass_*` UPS series stay in the
   `Infrastructure/ups-power-battery` Grafana board as a second view.
   `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, the NUT `ups.status{flag="OB"}`,
   one-hot over `flag`, so the exporter forces a 0 when the UPS is not asserting it and the series
@@ -554,7 +553,7 @@ checks each gate suppresses.
   nearing shutdown) OR the UPS's own **replace-battery** verdict (`UPS_REPLACE_QUERY`, the NUT `RB`
   flag, the earliest signal, since it can trip while charge and runtime still read fine).
   One defer path avoids double-paging a source outage another monitor owns: ALL arms absent while
-  the nut scrape is down defers to Scrape Targets' page. That covers a dead upsd as well as a dead
+  the nut scrape is down defers to `ScrapeTargetDown`'s page. That covers a dead upsd as well as a dead
   exporter, because nut-exporter fails the WHOLE `/ups_metrics` scrape when upsd is unreachable,
   which is why its probes are `tcpSocket` (`roles/k8s/nut-exporter/CLAUDE.md`). A **partial**
   absence (one arm gone while the others report) is a specific series rename, so it pages through
@@ -625,7 +624,7 @@ checks each gate suppresses.
   a Pi deploy causes when it recreates a container.
   **This arm adds no reachability coverage. It adds a named port, and that is the whole case for
   it.** Every publisher was already watched (Kuma HTTP-monitors wg-easy, and `alloy` is a
-  Prometheus scrape target, `job=alloy-pi`, that `check_targets_down` covers). What nothing said was
+  Prometheus scrape target, `job=alloy-pi`, that `ScrapeTargetDown` covers). What nothing said was
   *which* port went quiet, and the 2026-08-08 sweep across four monitors for that answer missed
   dozzle entirely. Do not re-justify this arm as filling a monitoring gap.)
 - **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
@@ -761,17 +760,6 @@ checks each gate suppresses.
   marker records held the tile red for 46 and 43 minutes.
   The row is temporary. M6's batch A7 ports the arm to a LogQL rule on `loki-homelab` and deletes
   the row, `check_workload_log_errors` and `with_log_errors`.)
-- **Cluster Scrape Targets** (`up{origin!="daniel-server"}`, the complement of Scrape Targets'
-  `origin="daniel-server"` pin, so every `up` series belongs to exactly one of the two. Same
-  fail-closed floor (`CLUSTER_TARGETS_MIN`, 3): an emptied `up` reads as UNKNOWN rather than as
-  nothing being wrong. `CLUSTER_TARGETS_CONSECUTIVE` (3) is the only hysteresis. A rolling
-  workload drops its own `up` series for a scrape or two, and this check cannot tell that from a
-  dead exporter, so every rollout opened a DOWN episode (66 in 30 days, the highest count in the
-  estate, mostly one cycle naming the target that was rolling). 3 cycles = 15 min at
-  `INTERVAL=300`, the value `LONGHORN_CONSECUTIVE` / `PVC_CLAIMS_CONSECUTIVE` /
-  `SNAPSHOT_CAP_CONSECUTIVE` also carry: far longer than a rollout's scrape gap, far shorter than
-  a dead exporter. The streak delays a page and does not suppress it. The floor arm rides the same
-  streak, because an emptied `up` during a Prometheus roll is the same transient.)
 - **Longhorn Volume Redundancy** (`files/checks/storage.py:check_longhorn_volumes`. Reads the
   one-hot `longhorn_volume_robustness` metric. `k3s_longhorn_replica_count` is 2, so a `degraded`
   volume is down to one copy and a `faulted` one has no healthy replica. The decision is
@@ -865,7 +853,7 @@ checks each gate suppresses.
   `PROM_ORIGIN` resolves to `origin="daniel-server"` in the deployed env, and pinning would hide
   the identical fault on daniel-box behind a green tile. An absent series reads as healthy (no CSI
   global mount is read-only) rather than as blind, because node-exporter being entirely down is
-  `check_targets_down`'s and `check_disk`'s job. The `node-exporter-scrapes-csi-global-mounts` row
+  `ScrapeTargetDown`'s and `check_disk`'s job. The `node-exporter-scrapes-csi-global-mounts` row
   of `ansible/tests/k8s/_config_property_rows.py` guards the exclusion regex directly, since this
   check's empty-is-healthy logic cannot tell a real all-clear from a re-widened exclusion hiding
   the fault again. **In `PROM_DEPENDENT`**: `prom_vector` raises on an unreachable Prometheus,
@@ -890,10 +878,9 @@ checks each gate suppresses.
   force: `k3s_server_config` carries no `etcd-arg` `quota-backend-bytes`, so adding one there moves
   `ETCD_DB_QUOTA_BYTES` with it or the check measures against a quota the cluster does not have.
   **No grace**, for the reason CSI Read-only Mounts has none: a DB near its quota does not shrink
-  on its own. An absent series reads as healthy and points at Scrape Targets. PVC Fullness fails
+  on its own. An absent series reads as healthy and points at `ScrapeTargetDown`. PVC Fullness fails
   closed because 27 of 43 claims survive a dead kubelet job, but one series carried by two jobs
-  has no partial-coverage case, so empty means total scrape loss, which `targets` and
-  `cluster_targets` already page on. **In `PROM_DEPENDENT`**, because it reads Prometheus.)
+  has no partial-coverage case, so empty means total scrape loss, which `ScrapeTargetDown` already pages on. **In `PROM_DEPENDENT`**, because it reads Prometheus.)
 - **etcd Restore Drill** (`files/checks/service.py:check_etcd_restore_drill`. Reads the
   `last-success-list-only` stamp that the weekly etcd restore drill cron on daniel-box writes
   under `ETCD_DRILL_STATE_DIR` (`/etcd-drill-state`, a hostPath), and checks its `epoch=` line
@@ -907,92 +894,6 @@ checks each gate suppresses.
   the Longhorn `Backup` CRs that locate the volume backups, so a restore nobody can prove puts the
   rest of the recovery chain at risk. No gate and no streak: a file read has no upstream to wait
   on, and a stale stamp does not heal by itself. Runbook: `k3s-etcd-restore`.)
-- **Log Shipper Dropped Entries** (three arms, #993. Two log-pipe arms, and `down` fires on
-  whichever counted MORE. **Arm 1, client-side:**
-  `sum(increase({__name__=~"loki_write_dropped_entries_total"}[1h]))` from Prometheus, which
-  scrapes the cluster Alloy DaemonSet (`job=alloy`, port 12345) and daniel-pi's Alloy container
-  (`job=alloy-pi`), across ALL drop reasons (`ingester_error`, `rate_limited`, `stream_limited`,
-  `line_too_long`; review M2). It sees only what a shipper itself gave up on. **Arm 2,
-  server-side:** `sum by (reason) (increase({__name__=~"loki_discarded_samples_total"}[1h]))`
-  read from Loki's own distributor (`job=loki-homelab`): entries Loki rejected that no shipper
-  attributed to itself. The client-side arm alone understated the server-side total by ~150x
-  (2026-09-03: ~161k samples discarded server-side under `reason="too_far_behind"` in 24h, against
-  1,027 client-side, all `job=alloy-pi` under `reason="ingester_error"`).
-  `down` when either arm's total exceeds `SHIPPER_DROPPED_MAX` (3000) over the window. The message
-  names which reason fired when the server-side arm dominates: `too_far_behind` is a
-  clock/backfill problem, and every other reason is throughput or limits. 1000 held a 1020-entry
-  hour red for 51 minutes, and the client counter is non-zero in 26 of ~336 hours with NOTHING
-  between 1020 and 6261; the derivation and the rejected streak are at the `DECIDED:` marker in
-  `bridge/config_io.py`. Where the `loki-homelab` silence rules (`LokiHostLogsSilent`, `LokiPodLogsSilent`,
-  `LokiPiLogsSilent`) catch TOTAL silence, this surfaces PARTIAL
-  loss, shipper-side or Loki-side. `increase()` handles counter resets, and no series on either
-  arm gives 0 and `up` (a dead shipper scrape is Scrape Targets' page). **Prom-dependent**, so the
-  Prometheus gate suppresses it. Pure `shipper_dropped()` is unit-tested.
-  `SHIPPER_DROPPED_WINDOW`/`SHIPPER_DROPPED_MAX` tune both arms, and
-  `SHIPPER_DROPPED_METRICS`/`SHIPPER_DROPPED_SERVER_METRIC` pick the counters. Both are queried by
-  `__name__` regex, so a counter rename cannot read as "0 dropped forever."
-  **Reading a `too_far_behind` page.** A shipper's FIRST start re-tails every current file from
-  offset 0, and Loki rejects the already-ingested history as "too far behind" (193,348 at the
-  2026-09-02 cluster Alloy cutover, nothing lost, counted client-side under
-  `reason="ingester_error"`). The client-side counter appears to fold `too_far_behind` into
-  `ingester_error`, since that label only surfaces as `too_far_behind` on the server-side arm.
-  That mapping is INFERRED from the observed labels and not read from Alloy's source. A shipper
-  restart in the window is consistent with a benign re-tail, not confirmation of one, so
-  correlate `time() - process_start_time_seconds{job=~"alloy.*"}` against the alert window before
-  treating a page as data loss. A benign re-tail must still page, because it means "logs land in
-  Loki promptly" briefly broke. Land a shipper change more than an hour before pointing this
-  check at its counters, so the cutover's own re-tail does not page the deploy.
-  **The weekly reboot is the one `too_far_behind` exemption** (#2783). Alloy ships its backlog for
-  hours afterwards and Loki discards the late part, which held this tile red for 4.4h on
-  2026-09-27 against a 1h rolling window, so the discards ran ~3.4h past boot. Inside
-  `SHIPPER_BACKLOG_GRACE_S` (21600 s, ~1.75x that) of the NODE's boot (`bridge/common.py:host_uptime_s`,
-  never this pod's age, because a deploy restarts the bridge without rebooting anything) the
-  `too_far_behind` reason alone is dropped from the server-side total and named in the `up`
-  message. Every other reason and the whole client-side arm stay live, so a throughput fault on a
-  reboot morning still pages. Suppressing the check outright would be six hours of weekly
-  blindness on partial log loss.
-  **The reboot also loses client-side entries, and the lookback bounds that loss instead of a
-  grace** (#3490). While Loki is down for the restart, daniel-pi's Alloy keeps shipping and drops
-  what Loki refuses (179,396 `reason="ingester_error"` entries under `job="alloy-pi"` on
-  2026-10-04, from a node that did not reboot). The Pi pushes through Traefik on daniel-box, the
-  node this pod runs on, so the loss cannot outlast that node's boot. Both shipper queries
-  therefore follow `check_swallowed_verdicts`: inside `BOOT_SETTLE_S` (1200 s) of the node's boot
-  the shipper arms are skipped with an `up` message, and after it the range is the time since the
-  settle window ended, growing back to `SHIPPER_DROPPED_WINDOW`. A drop after the settle window is
-  inside that range and still pages. Raising the maintenance window's recovery allowance to ~70
-  minutes was rejected: a window over 60 minutes covers every minute of the hour, and the status
-  page sync (`20 * * * *`) would have to skip hour 8.
-  **Arm 3, the collector's export failures** (#3094), folded in from the `observability` role's
-  `telemetry-health.sh` host cron: `sum(increase({__name__=~"otelcol_exporter_send_failed_.*"}[15m]))`,
-  `down` above `OTELCOL_SEND_FAILED_MAX` (0). The collector exports Claude Code's logs, metrics and
-  traces to Loki, Prometheus and Tempo. A failed export writes nothing to Loki or Tempo while the
-  collector's receiver counters keep climbing, so a stack dropping 100% of its data reads like a
-  healthy one from every other angle. The arm has its own window and threshold because there is no
-  ordinary rate of giving up. The selector is a `__name__` regex because the family is one counter
-  per signal (`_log_records`, `_metric_points`, `_spans`), and naming one would read the other two
-  as 0 forever. The send-failed family has NO live series until an export fails (measured on
-  daniel-box 2026-10-01), and its `sent` twins (`otelcol_exporter_sent_log_records`,
-  `_sent_metric_points`, `_sent_spans`, none `_total`-suffixed) are live and pin the naming. An
-  absent family returns no series, which `prom_scalar` reads as None and the verdict counts as 0,
-  so the arm is clean until the first failure. Pure `otelcol_export_failures()` is unit-tested, and
-  an empty `OTELCOL_SEND_FAILED_METRICS` disables the arm. The OTLP hostPort probe did NOT fold:
-  that door is a CNI portmap DNAT on the node's 127.0.0.1, so no in-cluster pod can reach it, and
-  `telemetry-health.sh` survives as that one TCP connect. The `DECIDED:` marker at the top of the
-  template carries the rejected alternatives.
-  **Arm 4, Tempo's blocklist poll** (#4681): `sum(increase(tempodb_blocklist_tenant_index_errors_total[15m]))`,
-  `down` above `TEMPO_POLL_ERRORS_MAX` (0). The other arms ask whether telemetry reached a
-  backend; this one asks whether Tempo can serve what arrived. A failed poll does not drop just
-  the bad block: Tempo keeps the previous blocklist, which is empty after a pod restart. In #4626
-  two blocks with zero-byte `meta.json` files (written 2026-10-04) left every stored trace
-  unsearchable and retention deleting nothing for a week. The pod stayed Ready and ingest looked
-  healthy, so no other tile changed. The counter rises by 2 per failed poll (Tempo retries once),
-  so the 15m window holds at least two 5-minute polls. Measured 2026-10-12: the increase read 4.3
-  during the incident and the series did not exist before it, which the verdict counts as 0.
-  The arm runs on both of the check's return paths, including inside `BOOT_SETTLE_S`. It does
-  NOT see a failed listing of the tenant's blocks, which Tempo only logs. An absent
-  `tempodb_blocklist_length` was rejected as a second signal: Tempo also deletes that series
-  when the tenant legitimately holds no blocks. An empty `TEMPO_POLL_ERRORS_METRIC` disables the
-  arm.)
 - **Swallowed Push Verdicts** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged and then
   lost, #1869. The library returns 0 after a failed push by design, so the cron does not fail, and
   the verdict reaches nobody until the tile's heartbeat deadline (a day and an hour later for the
@@ -1076,6 +977,12 @@ Remote Allowlist and CrowdSec AppSec), the `fake_remux` setup role's
 `fake-remux-health.sh` (Fake Remux Scan / Replace), `renovate-notify`'s `ExecStartPost`
 (Renovate Notifier — Alive), and the configarr and janitorr roles' health crons (Configarr
 Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has no successor.
+Scrape Targets, Cluster Scrape Targets and Log Shipper Dropped Entries (M6 batch A3) retired
+into the `scrape-targets` and `log-pipeline` rule groups in observability, and their tiles,
+rows and env keys are gone. The numbers those groups carry are pinned in
+`ansible/tests/services/test_scrape_target_rule_jobs.py`, and the `DECIDED:` marker for the
+3000-entry threshold sits at `LogShipperDroppingEntries` in
+`ansible/roles/k8s/observability/files/rules/log-pipeline.yaml`.
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
 `PROM_DEPENDENT`. Each check's retirement note is in the repository history.
 

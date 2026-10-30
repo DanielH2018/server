@@ -1,7 +1,7 @@
 """Cluster checks for monitor-bridge.
 
-Covers the cAdvisor trio (restarts, OOM, CPU throttle), the Prometheus gates, scrape
-targets, and Traefik 5xx and latency. The Kubernetes workload arms are the k8s-workloads rules.
+Covers the cAdvisor trio (restarts, OOM, CPU throttle), the Prometheus gates, and
+Traefik 5xx and latency. The Kubernetes workload arms are the k8s-workloads rules.
 
 Slice 6 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
 (`bridge.sources.Sources`) and its streak counters as `src.state` (`bridge.streaks.State`), so a
@@ -19,7 +19,6 @@ import bridge.streaks
 from verdicts.cluster import (
     traefik_latency_verdict,
     cadvisor_coverage_shortfall,
-    targets_verdict,
 )
 
 
@@ -198,20 +197,12 @@ def check_prometheus(cfg: Config, src: Sources) -> tuple[bool, str]:
     run_once probes it FIRST each cycle and, when it's down, SUPPRESSES the metric checks (which
     would otherwise all fail at once — one outage, a storm of identical pages) so only this
     monitor alerts. A single scrape target being down (Prometheus up, one exporter gone) still
-    surfaces separately on the Scrape Targets monitor — a distinct condition from this one.
+    surfaces separately as ScrapeTargetDown — a distinct condition from this one.
     """
     val = src.prom_scalar("vector(1)")
     if val is None:
         return False, "Prometheus answered but returned no data for vector(1)"
     return True, "Prometheus reachable"
-
-
-def check_targets_down(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Any Prometheus scrape target reporting up==0 (monitoring going blind)."""
-    return targets_verdict(
-        src.prom_vector("up%s" % bridge.net.origin_sel(cfg)),
-        cfg.TARGETS_MIN,
-    )
 
 
 def check_traefik_5xx(cfg: Config, src: Sources) -> tuple[bool, str]:
@@ -366,39 +357,3 @@ def check_traefik_404_flood(cfg: Config, src: Sources) -> tuple[bool, str]:
         pct,
         total,
     )
-
-
-def check_cluster_targets(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Scrape targets of the CLUSTER's own Prometheus (the other half of Scrape Targets).
-
-    B5 pinned check_targets_down to origin="daniel-server" so it kept meaning exactly what it
-    always meant. The cost of that, unpaid until now, is that the cluster's own five targets were
-    watched by nothing: the Prometheus gate probes only reachability, and the k8s-workloads rules
-    read deployment replicas rather than scrape health. kube-state-metrics failing is covered by
-    K8sStateSeriesMissing, but
-    otel-collector and otel-collector-internal going down was silent — and those two carry the
-    only copy of Claude Code's session/token/cost telemetry.
-
-    `origin!="daniel-server"` is everything the pinned sibling does NOT cover: cluster-native
-    series, whose `origin` label is absent (PromQL treats an absent label as empty, so `!=` on a
-    non-empty value matches them), plus daniel-box's own. The earlier `origin=""` caught only the
-    first, which left `up{job="node",origin="daniel-box"}` matching NEITHER check — daniel-box's
-    node-exporter could die watched by nothing. Complementary selectors, so every `up` series in
-    this Prometheus belongs to exactly one of the two checks. The same floor logic as its sibling,
-    so an emptied `up` reads as UNKNOWN rather than as nothing being wrong.
-    """
-    vec = src.prom_vector('up{origin!="daniel-server"}')
-    ok, msg = targets_verdict(vec, cfg.CLUSTER_TARGETS_MIN)
-    # Hysteresis, because a rolling workload drops its own `up` series for a scrape or two and
-    # this check cannot tell that from an exporter that died. Same shape as check_longhorn_volumes
-    # and its siblings; CLUSTER_TARGETS_CONSECUTIVE carries the measurement that motivated it.
-    if ok:
-        src.state.down_streaks["cluster_targets"] = 0
-        return ok, msg
-    src.state.down_streaks["cluster_targets"], ok, msg = bridge.streaks.down_streak(
-        src.state.down_streaks.get("cluster_targets", 0),
-        cfg.CLUSTER_TARGETS_CONSECUTIVE,
-        msg,
-        "rollout scrape gap",
-    )
-    return ok, msg

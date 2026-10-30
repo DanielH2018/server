@@ -113,14 +113,3 @@ def test_cadvisor_checks_never_pin_the_origin(cfg):
     pinned = replace(cfg, PROM_ORIGIN='origin="sentinel"')
     assert "sentinel" not in bridge.net.cadvisor_sel('container!=""')
     assert "sentinel" in bridge.net.origin_sel(pinned, 'container!=""')
-
-
-def test_up_still_pins_the_origin_where_the_label_exists(cfg):
-    # The other half of the contract: `up` DOES carry origin (the node job is relabelled), and
-    # targets_verdict depends on the pin to scope its floor to one estate. Dropping it there would
-    # make check_targets a duplicate of check_cluster_targets and orphan daniel-server's
-    # node-exporter, which is why the fix deliberately left this call site alone.
-    if cfg.PROM_ORIGIN:
-        assert cfg.PROM_ORIGIN in bridge.net.origin_sel(cfg), (
-            "origin_sel() must still apply the pin when PROM_ORIGIN is set"
-        )

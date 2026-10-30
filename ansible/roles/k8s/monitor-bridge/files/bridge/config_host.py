@@ -274,7 +274,7 @@ def host_config(
         # deliberately a DIFFERENT number. Until 2026-08-29 hwmon_temp_verdict paged only on a
         # fully empty vector, so any non-empty subset passed: lose one host's hwmon collector
         # and the other two answered "all below limit" for the whole estate, forever. A total
-        # node-exporter death is already caught by check_cluster_targets; the gap is the PARTIAL
+        # node-exporter death is already caught by ScrapeTargetDown; the gap is the PARTIAL
         # failure — node-exporter up, one collector blind — which check.py's own
         # HOST_ORIGINS_MIN comment names as node-exporter's normal failure mode.
         #
@@ -310,7 +310,7 @@ def host_config(
         THERMAL_THROTTLE_QUERY=_env("THERMAL_THROTTLE_QUERY"),
         # The empty-vector gate, `node` rather than `node-pi`: no Processor cooling device
         # anywhere means both amd64 node-exporters stopped publishing, which
-        # check_cluster_targets and this check's EXPORTER_DEPENDENT entry already own. An empty
+        # ScrapeTargetDown and this check's EXPORTER_DEPENDENT entry already own. An empty
         # vector while `node` IS scraping pages — a driver or kernel change took the sensors
         # away, and nothing else would notice.
         THERMAL_THROTTLE_UP_QUERY=_env("THERMAL_THROTTLE_UP_QUERY"),

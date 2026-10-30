@@ -37,11 +37,10 @@ def check_etcd_db_size(cfg: Config, src: Sources) -> tuple[bool, str]:
     answering, and silence hides a real gap. Here one series comes from the apiserver job alone,
     so an empty vector means the apiserver is not being scraped at all — and paging a second
     monitor for that one root cause is what the gate sets exist to prevent. The compensating control was checked rather than assumed:
-    `verdicts.cluster.targets_verdict` pages on ANY series with `up == 0`, not on a count floor
-    alone, and `check_cluster_targets` selects `up{origin!="daniel-server"}`, which matches the
-    apiserver target (it carries no `origin` label, and PromQL reads an absent label as empty).
-    A 403 on that scrape — the failure prometheus.yaml.j2's RBAC note warns about — sets
-    `up = 0` there, so it pages on Cluster Scrape Targets rather than going silent.
+    the scrape-targets rules page on ANY series with `up == 0`, and `ScrapeTargetDown` names
+    job `kubernetes-apiserver` in its own rule. A 403 on that scrape — the failure
+    prometheus.yaml.j2's RBAC note warns about — sets `up = 0` there, so it pages as
+    ScrapeTargetDown rather than going silent.
 
     No streak. A DB at 80% of its quota does not self-heal the way a Longhorn replica rebuild
     or a Recreate rollout does, so holding the verdict through consecutive cycles would only

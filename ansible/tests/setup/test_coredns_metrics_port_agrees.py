@@ -10,9 +10,9 @@ playbooks (`k3s-bringup.yml` and `deploy.yml`), so nothing makes them move toget
 one is a one-line change that passes lint, renders valid YAML, and deploys green on its own
 plane while leaving the scrape job pointed at a closed port.
 
-The failure is loud rather than silent — `check_cluster_targets` fails on any member at 0, so
-the **Scrape Targets** monitor goes red — but loud-at-3am is a poor substitute for caught-in-CI,
-and the monitor cannot say WHY the target is down. This test can.
+The failure is loud rather than silent — `ScrapeTargetDown` fires on any member at 0, so
+the alert pages — but loud-at-3am is a poor substitute for caught-in-CI,
+and the alert cannot say WHY the target is down. This test can.
 """
 
 from lib import yaml_fast

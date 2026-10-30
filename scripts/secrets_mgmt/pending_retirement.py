@@ -16,5 +16,11 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # M3's PR 5 deleted the `daniel-box Disk` tile and the script's push. Its PR 6 retires
         # the key a week later and deletes this entry in the same commit.
         "daniel_box_disk_push_token",
+        # M6 batch A3's Cutover-a1 deleted the Scrape Targets, Cluster Scrape Targets and Log
+        # Shipper Dropped Entries tiles, and Cutover-a2 deleted their bridge rows. A3's token PR
+        # retires the keys a week after Cutover-b and deletes these three entries with them.
+        "monitor_bridge_targets_push_token",
+        "monitor_bridge_cluster_targets_push_token",
+        "monitor_bridge_promtail_dropped_push_token",
     }
 )
