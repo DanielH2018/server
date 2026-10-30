@@ -1548,6 +1548,7 @@
  "scripts/validate/tests/test_conffile_case.py": 1.12,
  "scripts/validate/tests/test_cross_plane_extract.py": 0.05,
  "scripts/validate/tests/test_cross_plane_snapshot_revision.py": 0.0,
+ "scripts/validate/tests/test_engine_case.py": 3.04,
  "scripts/validate/tests/test_every_validator_has_a_red_proof.py": 0.0,
  "scripts/validate/tests/test_failure_lines_go_to_stderr.py": 0.43,
  "scripts/validate/tests/test_host_package_cases_red_proofs.py": 0.11,
