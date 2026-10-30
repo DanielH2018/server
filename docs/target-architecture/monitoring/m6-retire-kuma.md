@@ -1257,6 +1257,35 @@ reach A6-7a, fail the bijection test and lose its only pager.
     - No probe of Kuma's own route: it sits behind Authelia `one_factor`, so it would read a
       302 whether or not Kuma is up (class 2). `KumaDown` watches Kuma instead.
     - Token: none of the 14 is a push monitor. The 1 token in the table is `pi_pressure`'s.
+    - **The soak read**, [#6625](https://github.com/DanielH2018/server/issues/6625). B8's
+      shadow PR merged as `50f2b2c410` at 2026-10-23T19:28Z. Prometheus first scraped the
+      `blackbox-extra` job at 19:39:56Z, so the window starts there. The read used M1
+      convention 6's two queries over `[161h:1m]`, with M2's 8-minute margin (*Which soak
+      minutes count as explained* in M2). Each tile was mapped to its shadow rule by the
+      target's `service` label. Loki maps to M5's `LokiHomelabDown`, and Pi Pressure maps to
+      `PiPortDead` plus A1's Prometheus half of the row: `PiLoadHigh`, `PiMemoryLow`,
+      `PiDiskFull`, `PiFilesystemReadOnly` and `PiMetricsMissing` in `hosts.yaml`.
+      `PiUndervoltage` belongs to `check_host_temp`, so it is not part of the mapping.
+        - Query 1 returned no minutes for 14 of the 15 tiles. SLZB-06M Coordinator read DOWN
+          for 38 minutes, and `ExtraProbeFailed` covered every one.
+        - Pi Pressure read DOWN for 50 minutes, all on 2026-10-26 from 03:43 to 04:37. Every
+          bridge cycle in that span blamed load5, and the port arm read "2 pi port(s)
+          listening", so `PiPortDead` alone covers none of them. With A1's rules counted, 3
+          minutes remain, 04:35 to 04:37. The Pi rebooted at 04:32:54
+          (`node_boot_time_seconds`), so load5 fell to 0.17 per core and `PiLoadHigh`
+          cleared. The tile held the bridge's last DOWN push until the next 300s cycle, which
+          the margin absorbs.
+        - Query 2 found two episodes. On 2026-10-25 from 14:25 to 14:28, the four `.local.`
+          probes behind Traefik (livesync, scrutiny, homelab-mcp, the edge all-clear) and
+          all 26 `blackbox-ingress` targets timed out at 9.5s. M4's live
+          `IngressProbeFailed` and `IngressProbeFailedCritical` fired for 19 of those targets, and A4's read records Traefik
+          5xx in the same window. Kuma's tiles declare no `timeout` and retry twice, so Kuma
+          rode the stall out. That stall was a real edge fault, not a rule defect.
+        - The second episode is `PiLoadHigh` on 2026-10-26 at 03:33 and 03:34, outside the
+          margin. Load5 crossed 1.5 per core between 03:31 and 03:34 and fell back. The
+          bridge's first DOWN cycle came at 03:41, so its 300s samples missed the crossing.
+          The rule has no `for:`, which matches the bridge's single-sample page.
+      No minute is unexplained, so no rule changes, and the soak does not block Cutover-a.
 
 ### Phase B — switch the readers
 
