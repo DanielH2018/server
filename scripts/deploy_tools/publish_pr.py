@@ -92,6 +92,12 @@ from lib.exit_codes import (
 )
 from lib import gh as gh_mod
 from lib import git as git_mod
+from lib.repo_paths import HOST_LIB_FILES
+
+# The gate job's check-run name and its `needs`, which the red-PR read below needs to excuse a
+# gate that failed only because its run was cancelled.
+sys.path.insert(0, str(HOST_LIB_FILES))
+from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
 
 # Same bound the shell's `tr '\n' ' ' | tail -c 400` applied: enough to carry the ruleset's
 # rejection line, short enough for a Kuma message.
@@ -350,11 +356,28 @@ def pr_view(number: str, tools: PublishTools) -> dict:
 
 
 def failed_checks(view: dict) -> list[str]:
-    """The names of the checks in ``view`` that concluded red, in rollup order."""
+    """The names of the checks in ``view`` that concluded red, in rollup order.
+
+    The gate job is ``if: always()``, so a cancelled run still runs it and it concludes
+    ``FAILURE`` on a head no job failed on (#5931). ``hosts/lib/ci_verdict.py`` excuses that
+    gate once the check-suites API confirms the suite was cancelled. The rollup carries no
+    suite, so this excuses a failed gate whenever a need was cancelled and no need failed. A
+    need past its ``timeout-minutes`` also reads cancelled and is excused with it: that errs
+    toward "no verdict", the same side CANCELLED itself takes.
+    """
+    checks = view.get("statusCheckRollup") or []
+
+    def red(c: dict) -> bool:
+        return (c.get("conclusion") or c.get("state") or "") in FAILING
+
+    needs = [c for c in checks if c.get("name") in CI_GATE_NEEDS_JOBS]
+    cancelled_run = any(c.get("conclusion") == "CANCELLED" for c in needs) and not any(
+        red(c) for c in needs
+    )
     return [
         str(c.get("name") or c.get("context") or "?")
-        for c in view.get("statusCheckRollup") or []
-        if (c.get("conclusion") or c.get("state") or "") in FAILING
+        for c in checks
+        if red(c) and not (cancelled_run and c.get("name") == CI_GATE_NAME)
     ]
 
 
