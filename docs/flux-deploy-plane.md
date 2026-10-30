@@ -115,12 +115,14 @@ The `flux` rule group, `ansible/roles/k8s/observability/files/rules/flux.yaml`, 
 M1's Alertmanager. Every rule carries `service="flux"`.
 
 - **`FluxControllerDown`, critical.** Two rules share the name.
-    - One fires when a controller's scrape has failed for 5 minutes. It carries
-      `shadow="true"`, because Kuma's `Cluster Scrape Targets` tile already pages that
-      condition. M6's batch A3 drops the label when it retires the tile.
+    - One fires when a controller's scrape has failed for 5 minutes.
+      `ScrapeTargetDown{job="flux"}` reads the same failed scrape as a warning after 10
+      minutes. An Alertmanager inhibit with `equal: [job, instance]` holds that warning
+      while this rule fires, so one outage pages once
+      ([#6654](https://github.com/DanielH2018/server/issues/6654)).
     - The other fires when a controller has had no scrape target for 5 minutes, or has been
       scraped with no `controller_runtime_reconcile_total` series. Pod discovery finds no
-      target for a controller with no pod, so no Kuma tile sees that loss. This rule
+      target for a controller with no pod, so `ScrapeTargetDown` cannot see that loss. This rule
       carries no shadow label.
 - **`FluxNotReady`, warning.** A Kustomization, or the `OCIRepository` `homelab`, has had a
   Ready condition other than `True` for 15 minutes. The rule names `homelab`, so the verify

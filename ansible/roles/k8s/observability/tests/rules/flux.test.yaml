@@ -69,10 +69,10 @@ tests:
         alertname: FluxWorkersSaturated
         exp_alerts: []
 
-  # A failed scrape. source-controller's scrape fails from 6m, so the shadowed rule fires at
+  # A failed scrape. source-controller's scrape fails from 6m, so the up == 0 rule fires at
   # 11m and not at 10m, after 4 minutes down. A failed scrape stale-marks the target's series,
-  # so its reconcile counter goes stale at 6m. The unshadowed rule stays quiet anyway, through
-  # 16m: the target exists, and its up is not 1, so it never pages Kuma's condition twice.
+  # so its reconcile counter goes stale at 6m. The absent() rule stays quiet anyway, through
+  # 16m: the target exists, and its up is not 1, so it never pages the up == 0 arm twice.
   - interval: 1m
     input_series:
       - series: 'up{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs"}'
@@ -101,7 +101,6 @@ tests:
               pod: source-controller-579bc67689-2rrfs
               severity: critical
               service: flux
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape the Flux controller source-controller.
               description: >-
@@ -118,7 +117,6 @@ tests:
               pod: source-controller-579bc67689-2rrfs
               severity: critical
               service: flux
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape the Flux controller source-controller.
               description: >-
@@ -127,7 +125,7 @@ tests:
                 events and log in the flux-system namespace.
 
   # A controller with no pod, and one scraped with no controller-runtime series. Both fire the
-  # unshadowed rule after 5m and not at 4m, one alert each. source-controller is healthy and
+  # absent() rule after 5m and not at 4m, one alert each. source-controller is healthy and
   # fires nothing.
   - interval: 1m
     input_series:
