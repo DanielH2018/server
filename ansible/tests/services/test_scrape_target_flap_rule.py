@@ -178,3 +178,39 @@ def test_a_promtool_case_keeps_the_flap_arm_quiet_on_one_rollout_gap():
         f"no case in {TESTS.name} feeds an up series with exactly one zero run and expects "
         f"{sorted(names)} quiet after the gap starts"
     )
+
+
+def test_a_promtool_case_keeps_the_flap_arm_quiet_after_a_gap_as_long_as_the_hold_recovers():
+    """One zero run that ends, at least ScrapeTargetDown's hold long, with the flap arm quiet
+    10 minutes or more after it ends. That is where a single gap's recovery tail still holds
+    the 30-minute average under 0.7, so a guard that ends at the gap cannot see it."""
+    names = {r["alert"] for r in flap_rules()}
+    assert names, f"no alerting rule in {RULES.name} reads a range of up"
+    hold = min(
+        seconds(r["for"]) for r in rules() if r.get("alert") == "ScrapeTargetDown"
+    )
+    cases = yaml_fast.safe_load(TESTS.read_text())["tests"]
+
+    def quiet_in_recovery_tail(case: dict) -> bool:
+        step = seconds(case["interval"])
+        ups = [
+            expand(s["values"])
+            for s in case.get("input_series") or []
+            if re.match(r"^up(\{|$)", s["series"])
+        ]
+        if len(ups) != 1 or len(zero_runs(ups[0])) != 1:
+            return False
+        samples = ups[0]
+        start = samples.index(0)
+        end = start + zero_runs(samples)[0]
+        if end >= len(samples) or samples[end] != 1 or (end - start) * step < hold:
+            return False
+        return any(
+            not t.get("exp_alerts") and seconds(t["eval_time"]) >= end * step + 600
+            for t in flap_checks(case, names)
+        )
+
+    assert any(quiet_in_recovery_tail(c) for c in cases), (
+        f"no case in {TESTS.name} feeds one zero run of at least ScrapeTargetDown's hold "
+        f"that recovers, and expects {sorted(names)} quiet 10 minutes after it recovers"
+    )

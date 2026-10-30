@@ -262,8 +262,9 @@ tests:
               summary: Prometheus's scrapes of the alloy-pi target daniel-pi:12345 keep failing.
               description: >-
                 daniel-pi:12345 of job alloy-pi failed more than 30% of its scrapes over 30
-                minutes while answering in between, so it flaps rather than staying down. Read
-                the host's load and memory, then the exporter pod's restarts and log.
+                minutes, failing at least twice and answering in between, so it flaps rather
+                than staying down. Read the host's load and memory, then the exporter pod's
+                restarts and log.
 
   # One rollout gap of 5 minutes holds the 30-minute average above 0.7, so the flap arm stays
   # quiet through and after it.
@@ -276,5 +277,55 @@ tests:
         alertname: ScrapeTargetFlapping
         exp_alerts: []
       - eval_time: 50m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+
+  # One 10-minute gap, a long rollout or a node reboot. ScrapeTargetDown never reaches its hold,
+  # and the 30-minute average stays under 0.7 for 20 minutes after the target recovers. The
+  # single 1-to-0 transition keeps the flap arm quiet through that tail.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flux", instance="flux:8080"}'
+        values: '1x30 0x9 1x40'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+      - eval_time: 55m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+
+  # A 15-minute outage pages ScrapeTargetDown once. After recovery the flap arm stays quiet, so
+  # the outage does not page a second time.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flux", instance="flux:8080"}'
+        values: '1x30 0x14 1x40'
+    alert_rule_test:
+      - eval_time: 43m
+        alertname: ScrapeTargetDown
+        exp_alerts:
+          - exp_labels:
+              job: flux
+              instance: flux:8080
+              severity: warning
+              service: flux
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus cannot scrape the flux target flux:8080.
+              description: >-
+                flux:8080 of job flux has failed its scrape for 10 minutes, so its exporter is
+                down or unreachable from Prometheus and its series have gone stale. Read the
+                exporter pod's events and log, or the host's unit for a static target.
+      - eval_time: 50m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: ScrapeTargetFlapping
+        exp_alerts: []
+      - eval_time: 70m
         alertname: ScrapeTargetFlapping
         exp_alerts: []
