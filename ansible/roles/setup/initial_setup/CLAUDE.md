@@ -23,8 +23,9 @@ full, and the journald-cap forensics.
 <!-- /generated_from -->
 
 ## Where it runs
-In `ansible/initial_setup.yml`, after [[config_files]] and before [[sops_setup]] /
-[[docker_install]], on every host — Pi-specific tasks self-guard.
+In `ansible/initial_setup.yml`, after [[config_files]] and before [[docker_install]], on
+every host — Pi-specific tasks self-guard. Its `collections` tag installs the pinned Ansible
+collections from `ansible/requirements.yml`, the tag the deployer applies a bump with.
 
 ## Hardware gates are capability flags, not host names
 A hardware gate names the FACT it reads, not the host that has it —

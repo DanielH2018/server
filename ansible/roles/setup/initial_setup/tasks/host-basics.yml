@@ -364,7 +364,7 @@
   # never runs one. `has_repo_checkout` is the wrong gate: it admits daniel-pi, which
   # holds a checkout but is driven remotely over ssh.
   #
-  # No checksum pin, unlike sops_setup's binary. That one is the root of the secret-decryption
+  # No checksum pin, unlike homelab-tools' sops. That one is the root of the secret-decryption
   # trust chain; this is a prose linter for Markdown, and ci.yml fetches it unverified from the
   # same release. Pinning a per-arch sha256 here would make every Renovate bump a manual finish
   # for no trust gained over what CI already does.
@@ -384,3 +384,18 @@
   when:
     - inventory_hostname in dev_tooling_hosts
     - initial_setup_vale_version not in (initial_setup_vale_installed.stdout | default('')).split()
+
+- name: Install pinned Ansible collections from requirements.yml
+  tags: [collections]
+  # The deployer applies a requirements.yml bump as `initial_setup.yml --tags collections`
+  # (deploy_changes.setup_tags_for). The install goes to the path ansible.cfg loads from, as the
+  # repo owner, so community.sops lands for the user who runs deploys. `command` runs on the
+  # TARGET, but these are the CONTROLLER's collections: a host Ansible drives over ssh never
+  # loads them.
+  become: false
+  ansible.builtin.command: >-
+    ansible-galaxy collection install
+    -r {{ playbook_dir }}/requirements.yml
+    -p {{ playbook_dir }}/collections
+  changed_when: false
+  when: has_repo_checkout

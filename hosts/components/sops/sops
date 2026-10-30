@@ -1,0 +1,3 @@
+#!/bin/sh
+# The PATH entry for the pinned binary homelab-tools installs; see component.yml.
+exec /usr/lib/homelab/bin/sops "$@"

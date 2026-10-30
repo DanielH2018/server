@@ -1,13 +1,12 @@
 {
-  "checksum": "09004b7c46893af29aee6008db3424f671e8941af46be08dd1f465be6bbeac76",
+  "checksum": "6d7287fa8da98298df740a83a19199298f3a9bca61ce9a450ab9d27ceb3d91e6",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/sops_setup/CLAUDE.md#Notable",
   "row": {
     "atoms": {
-      "ansible/.sops.yaml": "aef2d6fbfa6d5dc87c2dc587b0a86c2a59457d3b6a170fc45b9d5c05441fe492",
-      "ansible/bootstrap.yml": "7bc925a3ec3c73e00c9a56a23ae1ebaf83905d08b86cd39569091e1f89b32e42"
+      "ansible/.sops.yaml": "aef2d6fbfa6d5dc87c2dc587b0a86c2a59457d3b6a170fc45b9d5c05441fe492"
     },
     "python": "3.14",
-    "verified_sha": "95652ade5"
+    "verified_sha": "99dc92f68"
   }
 }

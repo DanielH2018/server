@@ -28,6 +28,7 @@ spec:
         app: configarr
     spec:
       activeDeadlineSeconds: {{ configarr_k8s_timeout }}
+      ttlSecondsAfterFinished: {{ configarr_k8s_job_ttl_seconds }}
       # No retry, and this one is load-bearing rather than a preference: with a backoffLimit a
       # failed sync would be retried into an eventual Success, and the health cron reads the Job's
       # outcome. A transient *arr outage would then look like a clean night.

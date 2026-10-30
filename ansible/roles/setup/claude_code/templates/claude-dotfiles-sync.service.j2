@@ -1,6 +1,10 @@
 [Unit]
 Description=Apply the operator's dotfiles to the {{ claude_code_agent_user }} agent user
+{% if claude_code_sync_alert_unit is defined %}
+OnFailure={{ claude_code_sync_alert_unit }}
+{% else %}
 OnFailure={{ claude_code_agent_user }}-dotfiles-sync-alert.service
+{% endif %}
 Wants=network-online.target
 After=network-online.target
 

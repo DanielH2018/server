@@ -205,12 +205,12 @@ def test_an_initial_setup_default_claude_code_never_reads_owes_it_no_host():
     assert "`claude_code`" not in note
 
 
-def test_an_initial_setup_default_claude_code_reads_still_names_its_other_host():
-    """The other half: a key claude_code reads keeps the table's per-file reach."""
+def test_an_initial_setup_default_claude_code_reads_no_longer_name_daniel_server():
+    """The other half: claude_code ends on daniel-server, so the note names no host for it."""
     note = land_reach.remaining_setup_hosts_note(
         _INITIAL_SETUP_DEFAULTS, "daniel-box", pr_range="abf8d0d4a^..acb3513b0"
     )
-    assert "`claude_code` also reaches daniel-server" in note
+    assert "`claude_code`" not in note, note
 
 
 # The pair above reaches the note through the live tree, where the read-a-key half refuses

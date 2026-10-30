@@ -1,0 +1,27 @@
+# Shipped by homelab-daniel-server. The dotfiles' StopFailure hook starts an instance named by
+# the error cause, through polkit (50-claude-stop-alert.rules). The name keeps its Ansible-era
+# form because that hook, in another repository, names it.
+[Unit]
+Description=Page Discord that a Claude Code session ended on an API error (%i)
+After=homelab-secrets.service
+Wants=homelab-secrets.service
+
+[Service]
+Type=oneshot
+LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook
+Restart=on-failure
+RestartSec=5min
+RestartPreventExitStatus=3
+RuntimeDirectory=claude-stop-alert/%i
+RuntimeDirectoryPreserve=restart
+ExecStartPre=/bin/sh -c 'test -s %t/claude-stop-alert/%i/failed-at || date --utc "+%%Y-%%m-%%d %%H:%%M UTC" > %t/claude-stop-alert/%i/failed-at'
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors \
+  -H "Content-Type: application/json" \
+  --variable 'failed_at@%t/claude-stop-alert/%i/failed-at' \
+  --variable 'instance=%i' \
+  --variable 'host=%H' \
+  --variable 'webhook@%d/discord_webhook' \
+  --expand-data '{"content":"{{instance:json}}: a Claude Code session on {{host:json}} ended on an API error and stopped answering. Open the session to read the error, then resume it or start a new one to continue the work. Ended at {{failed_at:trim:json}}."}' \
+  --expand-url '{{webhook:trim}}'
+SyslogLevel=notice
+ExecStartPost=/bin/echo claude-stop failure alert delivered for %i

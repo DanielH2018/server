@@ -1,0 +1,17 @@
+{
+  "checksum": "7c67db438b1090fb900ffce52c644382d2b7f61939e16e626c5fc69bb71d79be",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/sops_setup/CLAUDE.md#Where the work went",
+  "row": {
+    "atoms": {
+      "ansible/.sops.yaml": "aef2d6fbfa6d5dc87c2dc587b0a86c2a59457d3b6a170fc45b9d5c05441fe492",
+      "ansible/README.md": "fac2c4b2da0d1130d0f929abfff14008a96373c769abad4fdd1c8ee2ffca5226",
+      "docs/break-glass.md": "2823d12d9954147d9b7ad124362e31f2b81927d3aa6c036577400846c35a627c",
+      "hosts/bootstrap-host.sh": "784c13a655a11a136b935487b586eb32e252f178e0607d713b503004e838672d",
+      "hosts/components/sops/": "1271c31d88aa73f3d7b239d87d7e08c04e32bb63f921ce661ff317b9a588a933",
+      "hosts/packages/homelab-tools/package.yml": "1857a4286a0bde33262136e630b722071faca45fbf3badb2951cdabafc0b66e3"
+    },
+    "python": "3.14",
+    "verified_sha": "99dc92f68"
+  }
+}

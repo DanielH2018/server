@@ -55,8 +55,8 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_setup_roles
 
 INITIAL_SETUP = "ansible/initial_setup.yml"
-# In precedence order: `sops_setup` is in `bootstrap.yml` for a host that cannot decrypt yet
-# and in `initial_setup.yml` for maintenance, and the tick's apply is the second.
+# In precedence order: a role in both `bootstrap.yml` and `initial_setup.yml` routes to the
+# second, which the tick applies.
 PLAYBOOKS = (INITIAL_SETUP, "ansible/k3s-bringup.yml", "ansible/bootstrap.yml")
 # Role -> the group_vars list naming the hosts its playbook joins as agents. `k3s-bringup.yml`
 # runs the k3s role's `tasks/agent.yml` only from a play matching `-e join_agent=<host>`, so

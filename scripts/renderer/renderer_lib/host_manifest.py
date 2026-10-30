@@ -159,8 +159,16 @@ def add_manifest(package: Package, updater: Package | None) -> None:
     package.files[MANIFEST] = (text.encode(), 0o644)
 
 
-def add_policies(package: Package, directory: Path, units: object) -> None:
+def add_policies(
+    package: Package,
+    directory: Path,
+    units: object,
+    ships: Callable[[object], bool] = lambda entry: True,
+) -> None:
     """Record in `package` each unit's restart policy from a spec's `units:` map.
+
+    An entry is `{policy: <policy>}` and may add `when: <expression>`; `ships` returns whether
+    the entry holds, and a unit whose `when` is false records no policy.
 
     Raises:
         RenderRefused: The map is malformed, or a second spec gives a unit a policy.
@@ -173,13 +181,15 @@ def add_policies(package: Package, directory: Path, units: object) -> None:
             not isinstance(unit, str)
             or not UNIT_NAME.fullmatch(unit)
             or not isinstance(spec, dict)
-            or set(spec) != {"policy"}
+            or not {"policy"} <= set(spec) <= {"policy", "when"}
             or policy not in POLICIES
         ):
             raise RenderRefused(
                 f"{directory}: units entry {unit!r}: {spec!r} is not a unit name mapped "
                 f"to {{policy: {' | '.join(sorted(POLICIES))}}}"
             )
+        if not ships(spec):
+            continue
         if unit in package.policies:
             raise RenderRefused(f"{package.name}: two specs give {unit} a policy")
         package.policies[unit] = policy

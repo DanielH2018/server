@@ -41,6 +41,7 @@ spec:
         app: qbittorrent-prefs-check
     spec:
       activeDeadlineSeconds: {{ qbittorrent_k8s_prefs_check_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ qbittorrent_k8s_prefs_check_job_ttl_seconds }}
       # No retry: a pod retry would log in again, and the next run is a day away anyway.
       backoffLimit: 0
       template:

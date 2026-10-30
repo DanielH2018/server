@@ -34,6 +34,11 @@ longhorn_restore_drill_runner_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83
 # ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py holds it above the timeout plus
 # the probe bound.
 longhorn_restore_drill_deadline_seconds: 3600
+# How long a finished drill's Job, and its pod, stays visible: two schedule periods, the window
+# `probe.py health`'s schedule gate allows the newest firing, so a failed drill clears instead
+# of reading Failed until three more fail (test_rendered_properties.py, row
+# cronjob-finished-jobs-age-out). Older runs' output is in Loki.
+longhorn_restore_drill_job_ttl_seconds: 172800
 # What the kubelet allows between SIGTERM at the deadline and SIGKILL. It covers one 10-second
 # poll and the four `--ignore-not-found` deletes in `cleanup`, each of which waits for its object
 # to go. The script's TERM trap runs `cleanup` through the exit, so a Job killed at the deadline

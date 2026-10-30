@@ -18,6 +18,10 @@
 # service="unmapped" and is never dropped.
 #
 # `for:` IS N x 300s for a bridge streak of N cycles (CPU_CONSECUTIVE=3, CADVISOR_CONSECUTIVE=2).
+# N cycles span only (N-1) x 300s, but the bridge's first breaching cycle lands up to 300s after
+# the condition starts, so N x 300s pages at most one cycle after the bridge would. The bridge
+# also samples once per cycle, so a dip between two cycles never breaks its streak, and
+# ContainerCPUThrottled smooths its condition over 5m to match (its comment says why).
 # The restart and OOM arms had no streak: the bridge paged on one sample, and their 15m and 1h
 # windows already hold them. Every range window is at least four scrape intervals, because the
 # kubernetes-cadvisor job scrapes every 1m (see its comment in prometheus.yaml.j2).
@@ -96,17 +100,26 @@ groups:
       # lost to throttling, over CPU_WINDOW (15m). The cores floor keeps a 0.1-cpu sidecar that
       # bursts over its period slice from paging. A container with no cpu limit gives 0/0 = NaN,
       # which no comparison matches. `for: 15m` is CPU_CONSECUTIVE (3) x 300s.
+      # max_over_time(...[5m:1m]) holds the condition through a dip shorter than one bridge
+      # cycle. A controller that throttles in bursts drops under the floor for a minute in every
+      # few, and each dip reset a bare `for:` while the bridge, sampling every 300s, paged: the
+      # A2 shadow soak missed two Kuma pages for kustomize-controller that way. The smoothing
+      # also holds the alert up to 5m after the condition clears, as the tile held until the
+      # next clean cycle. The alert stays per pod, where the bridge's streak counts any
+      # offender, so a streak that hops from one pod to another pages Kuma alone.
       - alert: ContainerCPUThrottled
         expr: |
           (
               (
-                  (
-                      sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!="", container!="POD"}[15m]))
-                    /
-                      sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!="", container!="POD"}[15m]))
-                  ) > 0.25
-                and
-                  sum by (namespace, pod) (rate(container_cpu_cfs_throttled_seconds_total{container!="", container!="POD"}[15m])) > 0.05
+                max_over_time((
+                    (
+                        sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!="", container!="POD"}[15m]))
+                      /
+                        sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!="", container!="POD"}[15m]))
+                    ) > 0.25
+                  and
+                    sum by (namespace, pod) (rate(container_cpu_cfs_throttled_seconds_total{container!="", container!="POD"}[15m])) > 0.05
+                )[5m:1m])
               )
             * on(namespace, pod) group_left(service)
               homelab:pod_service:info
@@ -114,13 +127,15 @@ groups:
           or
           label_replace(
               (
-                  (
-                      sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!="", container!="POD"}[15m]))
-                    /
-                      sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!="", container!="POD"}[15m]))
-                  ) > 0.25
-                and
-                  sum by (namespace, pod) (rate(container_cpu_cfs_throttled_seconds_total{container!="", container!="POD"}[15m])) > 0.05
+                max_over_time((
+                    (
+                        sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!="", container!="POD"}[15m]))
+                      /
+                        sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!="", container!="POD"}[15m]))
+                    ) > 0.25
+                  and
+                    sum by (namespace, pod) (rate(container_cpu_cfs_throttled_seconds_total{container!="", container!="POD"}[15m])) > 0.05
+                )[5m:1m])
               )
             unless on(namespace, pod)
               homelab:pod_service:info,

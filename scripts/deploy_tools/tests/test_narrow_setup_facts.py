@@ -187,7 +187,6 @@ ROLES_WITHOUT_AN_ENTRY_POINT = frozenset({"common"})
 MEASURED_SETTERS = frozenset(
     {
         "initial_setup:tasks/host-basics.yml",
-        "sops_setup:tasks/main.yml",
     }
 )
 

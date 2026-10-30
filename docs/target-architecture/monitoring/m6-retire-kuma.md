@@ -25,6 +25,59 @@ peanut's reference stayed at `2026-10-17T14:00:54Z` while three later commits la
 
 PR C-0, the ADR (Proposed, awaiting the operator): [#6091](https://github.com/DanielH2018/server/pull/6091).
 
+A3's soak read, [#6620](https://github.com/DanielH2018/server/issues/6620): every minute is
+explained, with no rule change. **A3's Cutover-a still waits on the operator's ruling in
+[#6626](https://github.com/DanielH2018/server/issues/6626).** The read found one shape the tile
+pages and no A3 rule does: a scrape target that flaps without holding `up == 0` for 10 minutes.
+Cutover-a may proceed once #6626 either adds a flap arm to `scrape-targets.yaml` or is closed as
+accepted. The shadow rules loaded at 2026-10-23T18:23:32Z, which is the
+first sample of `prometheus_rule_group_rules` for the `scrape-targets` and `log-pipeline` groups.
+The read ran M1 convention 6's two queries per tile over `[168h:1m] @ 1793384612`, which ends at
+2026-10-30T18:23:32Z. Each tile's alerts are the ones the shadow PR `dae51d452` wrote for it.
+`ScrapeTargetDown` is split by `origin`, the same selector monitor-bridge's two checks use, and
+`ScrapeTargetsMissing` counts for both scrape tiles.
+
+- **Scrape Targets.** Query 1 returned 0 minutes and query 2 returned 0.
+- **Cluster Scrape Targets.** Query 1 returned 20 minutes and query 2 returned 12.
+    - 6 query-1 minutes are the tile's trailing edge. A tile reads DOWN until the bridge's next
+      push, and the bridge pushes every 300 s (`INTERVAL`). The last firing samples are at
+      2026-10-25 14:32, 2026-10-26 04:35 and 2026-10-29 13:04, and the tile read DOWN at most
+      4 minutes longer each time (14:34–36, 04:37 and 13:06–07).
+    - 14 query-1 minutes (2026-10-26 03:58–04:07 and 04:28–31) are daniel-pi failing before its
+      unplanned reboot at 04:32:54. load1 reached 20.8 and MemAvailable fell to 99 MB. Its four
+      exporters failed scrapes for 1 to 4 minutes at a time from 03:31. `check_cluster_targets`
+      keeps one down streak for the whole check, so three 300 s cycles that each caught one of
+      the Pi's exporters down paged the tile. No single series held `up == 0` for
+      `ScrapeTargetDown`'s 10 minutes until alloy-pi's run from 04:21. Kuma's `Pi Pressure`
+      tile read DOWN from 03:43 to 03:47 and from 03:53 to 04:37, and `Daniel Pi Recovery` from
+      03:59 to 04:36, so the host fault had a live pager throughout. Their shadow successors,
+      `PiLoadHigh` (03:37 to 04:33) and `PiRecoveryFailed` (03:58 to 04:35), fired too. A target
+      that flaps on a healthy host would have no pager after Cutover-a, which is why Cutover-a
+      waits on [#6626](https://github.com/DanielH2018/server/issues/6626).
+    - 5 query-2 minutes are the rule's leading edge (2026-10-25 14:26, 2026-10-30 12:36–39). The
+      rule's `for: 10m` pages before the bridge's three-cycle streak
+      (`CLUSTER_TARGETS_CONSECUTIVE`).
+    - 7 query-2 minutes are a monitor-bridge restart clearing the tile while prowlarr's
+      exportarr sidecar still read `up == 0` (2026-10-25 22:49–51 and 2026-10-30 12:52–55). The
+      new bridge pods started at 22:47:21 and 12:50:31. A restart resets the in-memory streak,
+      so the first cycle pushes `up`. The rule kept firing until prowlarr's new pod replaced
+      the target, at 22:49:28 and 12:52:38.
+- **Log Shipper Dropped Entries.** Query 1 returned 6 minutes and query 2 returned 0. The
+  episode is the Pi's Alloy backlog after its reboot. Over two hours the Pi's Alloy dropped
+  35,938 entries as `ingester_error`, and Loki discarded 56,494 as `too_far_behind`.
+    - 3 minutes (2026-10-26 04:38–40) are the leading edge. Both rules went pending at 04:35:39
+      and fired after their `for: 5m`, at 04:40:39 and 04:41:39. The bridge pushed DOWN on its
+      first breaching cycle, and the tile read it at 04:37:09.
+    - 3 minutes (05:36–38) are the trailing edge. The last firing sample is 05:34:39, and the
+      tile read up at 05:38:09, inside one `INTERVAL`.
+
+The `Cluster Scrape Targets` tile has no samples at 2026-10-25 07:39–47 (the weekly reboot),
+2026-10-25 13:14–16 and 18:08–10, 2026-10-28 00:44–53 and 01:27–30, and 2026-10-29 21:32–38.
+Query 2 counts a shadow alert that fires while the tile has no sample, and it counted none in
+those gaps. `Watchdog` has a sample in every minute of four of the gaps, so Prometheus was
+evaluating rules there. It has 2 samples in the reboot gap's 8 minutes and none at 2026-10-28
+00:44–53, so neither side was read for most of those two gaps.
+
 A4's soak read, [#6623](https://github.com/DanielH2018/server/issues/6623): A4's shadow PR is
 `e79316c0bf`. Prometheus first evaluated the `edge` group at 2026-10-23T18:32:32Z, so the soak
 window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
@@ -640,7 +693,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 |---|---|---|---|---|---|
 | A1 hosts | `disk`, `memory`, `host_temp`, `ups`, and the Prometheus half of `pi_pressure` | M2 | monitor-bridge (`land.sh`) | `EXPORTER_DEPENDENT` becomes an inhibit rule whose source is A3's `ScrapeTargetDown`, not a new rule. For each job the map keys (`node`: disk, memory, host_temp; `node-pi`: host_temp, pi_pressure), `ScrapeTargetDown{job="<job>"}` inhibits those alerts with `equal: [job, instance]`, so a dead exporter holds only its own host's alerts where the map held them estate-wide. `origin` is not used: most cluster series lack it, and a label missing on both sides compares equal. The inhibit lands in the later of A1's Cutover-b and A3's Cutover-b (*A3 and the handoffs it closes*, task 6). Each target arm that fires on missing data (an `absent()` or not-reporting arm) has a `for:` of at least `ScrapeTargetDown`'s 10m, or it fires before its source. Threshold arms need no floor, because a dead exporter leaves them no data. Streaks such as `HWMON_TEMP_CONSECUTIVE` become `for:`. The `pi_pressure` row cuts over in B8, not here. | 4 |
 | A2 containers | `restarts`, `oom`, `cpu` | M2 | monitor-bridge | Joins `homelab:pod_service:info`. `CADVISOR_PODS_MIN` becomes a census alert with a zero-series case. | 3 |
-| A3 scrape | `targets`, `cluster_targets`, `shipper_dropped` | M2 | monitor-bridge | `CLUSTER_TARGETS_CONSECUTIVE` becomes `for: 10m`. Closes M1's, M4's and M5's handoffs: see *A3 and the handoffs it closes*. | 3 |
+| A3 scrape | `targets`, `cluster_targets`, `shipper_dropped` | M2 | monitor-bridge | `CLUSTER_TARGETS_CONSECUTIVE` becomes `for: 10m`. Closes M1's, M4's and M5's handoffs: see *A3 and the handoffs it closes*. Cutover-a waits on the operator's ruling on flapping targets in [#6626](https://github.com/DanielH2018/server/issues/6626) (the soak read in the status block). | 3 |
 | A4 edge | `cert`, `traefik5xx`, `traefik_latency`, `traefik_404`, `traefik_421` | M2 | monitor-bridge | The volume floors (`TRAEFIK_MIN_RPS`) become `and` clauses. | 5 |
 | A5 storage | `longhorn_volumes`, `pvc_fullness`, `snapshot_headroom`, `kubelet_plugin_readonly`, `etcd_db_size` | M2 | monitor-bridge | All critical. Longhorn's one-hot `state` label is selected explicitly. | 5 |
 | A6 bridge exporter | the 15 other-source checks and `swallowed_verdicts`, plus the `b2_reachable` and `wan_reachable` gates | Exporter | monitor-bridge | See *The bridge as an exporter*. The `prometheus` gate retires with its token, because the Watchdog covers a dead Prometheus. `swallowed_verdicts` is exported until C-7 deletes it. | 19 |

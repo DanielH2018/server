@@ -500,6 +500,14 @@ _SECRET_QUERY_NAMES = frozenset({"key", "rsskey", "pass", "torrentpass"})
 # a backslash so a match inside a raw JSON body never runs past the end of its string.
 _QUERY_PARAM_RE = re.compile(r"([?&;])([^=&#?;\s\"'\\]+)=([^&#;\s\"'\\]*)")
 
+# The same parameter inside a percent-encoded URL nested in another URL's value:
+# `link=https%3A%2F%2Fhost%2Fdl%3Fid%3D1%26apikey%3DKEY`. `%3F`/`%26`/`%3B` separate and `%3D`
+# assigns, in either hex case; the value stops at the next encoded separator or `%23`.
+_ENCODED_QUERY_PARAM_RE = re.compile(
+    r"(%3F|%26|%3B)([^=&#?;%\s\"'\\]+)(%3D)((?:(?!%26|%3B|%23)[^&#;\s\"'\\])*)",
+    re.IGNORECASE,
+)
+
 
 def query_param_is_secret(name):
     """True when a URL query parameter's name reads as credential-bearing."""
@@ -518,7 +526,13 @@ def redact_query_params(text):
             return f"{m.group(1)}{m.group(2)}={REDACTED}"
         return m.group(0)
 
-    return _QUERY_PARAM_RE.sub(_sub, text)
+    def _encoded_sub(m):
+        if m.group(4) and query_param_is_secret(m.group(2)):
+            return f"{m.group(1)}{m.group(2)}{m.group(3)}{REDACTED}"
+        return m.group(0)
+
+    text = _QUERY_PARAM_RE.sub(_sub, text)
+    return _ENCODED_QUERY_PARAM_RE.sub(_encoded_sub, text)
 
 
 def redact_log_secrets(text):

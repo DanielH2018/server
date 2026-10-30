@@ -37,10 +37,13 @@ SHARED_FILES = {
 # The setup roles whose defaults and templates a component may render with `role:` (H4, *NUT on
 # daniel-server*). The role keeps owning the file until H7.8 moves daniel-box, so a package
 # renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
-# SHARED_FILES, so a component cannot read any other role.
-ROLE_SOURCES = frozenset({"common", "nut_host"})
+# SHARED_FILES, so a component cannot read any other role. `claude_code` joined in H7.39, which
+# moved daniel-server while daniel-box still applies the role (H7.40).
+ROLE_SOURCES = frozenset({"claude_code", "common", "nut_host"})
 # A `src` with this prefix names a template of the component's `role:`, not of the component.
 ROLE_SRC = "role:"
+# A `src` with this prefix names a static file under the role's `files/`, copied as it stands.
+ROLE_FILE_SRC = "role-file:"
 
 
 def role_sources(spec: dict, directory: Path) -> tuple[Path | None, dict]:
@@ -67,16 +70,25 @@ def role_sources(spec: dict, directory: Path) -> tuple[Path | None, dict]:
 def template_source(
     role_dir: Path | None, src: str, directory: Path
 ) -> tuple[Path, str]:
-    """The directory and template name `src` loads from: the component, or its role's templates.
+    """The directory and file name `src` loads from: the component, or its role's templates or files.
 
     Raises:
-        RenderRefused: `src` names a role template and the component lists no `role:`.
+        RenderRefused: `src` names a role file and the component lists no `role:`, or a
+            `role-file:` src names a template.
     """
-    if not src.startswith(ROLE_SRC):
+    prefix = next((p for p in (ROLE_SRC, ROLE_FILE_SRC) if src.startswith(p)), None)
+    if prefix is None:
         return directory, src
     if role_dir is None:
         raise RenderRefused(f"{directory}: src {src!r} names a role, and it lists none")
-    return role_dir / "templates", src[len(ROLE_SRC) :]
+    name = src[len(prefix) :]
+    if prefix == ROLE_FILE_SRC:
+        if name.endswith(".j2"):
+            raise RenderRefused(
+                f"{directory}: src {src!r} is a template; name it role:"
+            )
+        return role_dir / "files", name
+    return role_dir / "templates", name
 
 
 def confined_env(directory: Path) -> jinja2.Environment:

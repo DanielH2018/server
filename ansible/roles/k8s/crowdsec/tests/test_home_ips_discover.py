@@ -202,6 +202,15 @@ def test_a_failed_ipv4_lookup_writes_its_error_and_leaves_the_stored_address():
     assert body["data"]["ipv6_prefix"] == PREFIX
 
 
+def test_the_api_is_reached_by_the_injected_service_address_not_by_dns():
+    env = {"KUBERNETES_SERVICE_HOST": "10.43.0.1", "KUBERNETES_SERVICE_PORT": "443"}
+    assert hid.api_base(env) == "https://10.43.0.1:443"
+    assert (
+        hid.api_base({"KUBERNETES_SERVICE_HOST": "fd00::1"}) == "https://[fd00::1]:443"
+    )
+    assert hid.api_base({}) == hid.API
+
+
 def test_a_refused_patch_exits_1_naming_the_answer(capsys):
     assert _main(_Recorder(status=403), b"98.42.7.9") == 1
     assert "answered HTTP 403: forbidden" in capsys.readouterr().err

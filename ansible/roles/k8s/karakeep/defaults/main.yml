@@ -117,6 +117,11 @@ karakeep_k8s_pruner_connect_budget_seconds: 300
 # The renderer sets the `karakeep-verify` timeout above this, so a hung gate run fails on its
 # own deadline (scripts/renderer/renderer_lib/ordering.py:VERIFY_DEADLINE_MARGIN_S).
 karakeep_k8s_pruner_deadline_seconds: 600
+# How long a finished pruner Job, and its pod, stays visible: two schedule periods, so a failed
+# run clears instead of reading Failed until three more runs fail. It must exceed one period,
+# because `probe.py health` judges the newest Job (test_rendered_properties.py, row
+# cronjob-finished-jobs-age-out). Older runs' output is in Loki.
+karakeep_k8s_pruner_job_ttl_seconds: 172800
 
 # 487M — the bookmark library, archived page snapshots and db.db. On `longhorn` (backed up)
 # because it holds the only copy of the library.

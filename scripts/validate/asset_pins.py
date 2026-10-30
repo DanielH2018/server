@@ -17,7 +17,7 @@ A URL may reference other keys of the same file (`{{ k3s_version }}`); it is ren
 file alone, and one that does not resolve is reported as a failure, never skipped. A digest key
 with no URL beside it (a `get_url` whose URL is inline in `tasks/`) is listed as unpaired so
 the gap is visible; it does not fail the run. The fix is to move the URL into defaults beside
-the digest, templated from the version key — `sops_setup_binary_amd64_url` is the worked
+the digest, templated from the version key — `chezmoi_setup_installer_url` is the worked
 example.
 
 `KNOWN_PINS` names pins the census must find. A scanner that finds its subjects by pattern
@@ -44,7 +44,7 @@ Usage:
     uv run python scripts/validate/asset_pins.py --list        # census only, no network
     uv run python scripts/validate/asset_pins.py --only jellyfin_k8s_anisync,k3s_install_script
     uv run python scripts/validate/asset_pins.py --skip hypervisor_staging_vm_image  # 600 MB
-    uv run python scripts/validate/asset_pins.py --refresh getsops/sops  # rewrite both digests
+    uv run python scripts/validate/asset_pins.py --refresh twpayne/chezmoi  # rewrite its digest
 
 Exit codes: 0 every checked pin matched, or every refreshed pin was rewritten or already
 current; 1 at least one pin failed (the report names each); 64 a `--only` or `--refresh` name
@@ -88,7 +88,7 @@ CHUNK = 1 << 20
 
 # Pins the census must find, by name. A member going missing names what moved. Cover every
 # shape and every plane: a flat `_md5` pair, a flat `_sha256` pair whose URL is templated, a
-# setup-role pin, a list-shaped pin, and one pin per architecture of the same download.
+# setup-role pin and a list-shaped pin.
 KNOWN_PINS = frozenset(
     {
         "jellyfin_k8s_anisync",
@@ -97,8 +97,6 @@ KNOWN_PINS = frozenset(
         "k3s_host_coredns",
         "chezmoi_setup_installer",
         "initial_setup_uv_installer",
-        "sops_setup_binary_amd64",
-        "sops_setup_binary_arm64",
         "code_server_k8s_node",
         "valheim_k8s_mods[Server_devcommands]",
     }

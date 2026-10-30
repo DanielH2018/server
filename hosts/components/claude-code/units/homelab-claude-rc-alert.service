@@ -1,0 +1,32 @@
+# Shipped by homelab-daniel-server. homelab-claude-rc.service names it in OnFailure=.
+[Unit]
+Description=Page Discord that the Claude Code Remote Control host failed
+After=homelab-secrets.service
+Wants=homelab-secrets.service
+
+[Service]
+Type=oneshot
+# The webhook arrives as a credential and appears in no unit text (homelab-alert@.service has
+# why). homelab-secrets writes /run/credstore/<sops key>.
+LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook
+Restart=on-failure
+RestartSec=5min
+RestartPreventExitStatus=3
+RuntimeDirectory=homelab-claude-rc-alert
+RuntimeDirectoryPreserve=restart
+ExecStartPre=/bin/sh -c 'test -s %t/homelab-claude-rc-alert/failed-at || date --utc "+%%Y-%%m-%%d %%H:%%M UTC" > %t/homelab-claude-rc-alert/failed-at'
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors \
+  -H "Content-Type: application/json" \
+  --variable 'failed_at@%t/homelab-claude-rc-alert/failed-at' \
+  --variable 'host=%H' \
+  --variable 'webhook@%d/discord_webhook' \
+  --expand-data '{"content":"homelab-claude-rc failed on {{host:json}}: the phone cannot start a Claude session there. journalctl -u homelab-claude-rc has the run. Failed at {{failed_at:trim:json}}."}' \
+  --expand-url '{{webhook:trim}}'
+SyslogLevel=notice
+ExecStartPost=/bin/echo homelab-claude-rc failure alert delivered
+# A delivered page silences the next 360 minutes. The host's Restart=always fires OnFailure= on
+# every exit of its restart loop, so a host that cannot start would page about every 10 seconds
+# (#4676). The stamp marks a delivery, never an attempt, and the check fails open.
+StateDirectory=homelab-claude-rc-alert
+ExecCondition=/bin/sh -c 'test -z "$$(find %S/homelab-claude-rc-alert/delivered -mmin -360 2>/dev/null)"'
+ExecStartPost=/usr/bin/touch %S/homelab-claude-rc-alert/delivered

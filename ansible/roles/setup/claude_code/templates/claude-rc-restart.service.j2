@@ -12,4 +12,4 @@ SyslogLevel=notice
 #
 # try-restart, not restart: restarting a stopped host would START it, and starting it must
 # stay a deliberate act (claude_code_rc_enabled). try-restart is a no-op while it is down.
-ExecStart=/usr/bin/systemctl try-restart claude-rc.service
+ExecStart=/usr/bin/systemctl try-restart {{ claude_code_rc_unit | default('claude-rc.service') }}

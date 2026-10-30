@@ -262,9 +262,7 @@ def _roles() -> list[Path]:
 # The setup roles this check must find a producer in. A frozenset rather than a count, so a
 # role that stops registering anything — or is renamed — fails by name instead of shrinking
 # the census to nothing and passing.
-ROLES_WITH_A_PRODUCER = frozenset(
-    {"docker_install", "initial_setup", "k3s", "sops_setup"}
-)
+ROLES_WITH_A_PRODUCER = frozenset({"docker_install", "initial_setup", "k3s"})
 
 
 def test_the_census_covers_every_setup_role_that_registers_anything():

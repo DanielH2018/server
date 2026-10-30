@@ -68,7 +68,6 @@ def real_tree() -> dict[str, list[Item]]:
             "initial_setup",
             "claude_code",
             "k3s",
-            "sops_setup",
             "nut_host",
             "k8s_host_files",
         }
@@ -80,7 +79,7 @@ NAMED_MEMBERS = [
     ("cron", "Weekly apt autoremove"),
     ("template", "Install the lander unit"),
     ("template", "Pin the node's LAN address in netplan"),
-    ("get_url", "Download and install SOPS binary"),
+    ("get_url", "Download the agent user's pinned Node"),
     ("systemd_service", "Disable the legacy performance-governor unit (daniel-server)"),
     ("sysctl", "Apply kernel security hardening"),
     ("ufw", "Enable UFW firewall"),
@@ -102,7 +101,6 @@ def test_a_shipped_file_and_a_target_are_both_searchable(real_tree):
     items = [i for items in real_tree.values() for i in items]
     assert any(i.mentions("claude-land@.service.j2") for i in items)
     assert any(i.mentions("k3s/tasks/static-address.yml") for i in items)
-    assert any(i.mentions("/usr/local/bin/sops") for i in items)
     assert any(i.mentions("net.core.bpf_jit_harden") for i in items)
 
 

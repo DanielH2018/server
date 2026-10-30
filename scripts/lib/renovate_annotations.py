@@ -3,8 +3,8 @@
 A pinned version in a role's `defaults/main.yml` is declared to Renovate by one comment above
 its `_version:` line:
 
-    # renovate: datasource=github-releases depName=getsops/sops
-    sops_setup_version: "v3.13.3"
+    # renovate: datasource=github-releases depName=twpayne/chezmoi
+    chezmoi_setup_version: "v2.73.1"
 
 One generic custom manager in renovate.json reads every such pair. It carries the
 `datasource`, `depName`, `versioning`, `extractVersion` and `registryUrl` capture groups, so

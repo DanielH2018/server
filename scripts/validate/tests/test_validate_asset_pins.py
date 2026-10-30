@@ -52,10 +52,9 @@ def test_the_census_finds_every_known_pin():
 
 
 def test_the_census_names_the_annotated_depname_behind_each_pin():
-    """`--refresh getsops/sops` selects both per-arch pins through the annotation."""
+    """`--refresh twpayne/chezmoi` selects the installer pin through the annotation."""
     by_name = {pin.name: pin for pin in discover_pins()[0]}
-    assert by_name["sops_setup_binary_amd64"].dep_names == {"getsops/sops"}
-    assert by_name["sops_setup_binary_arm64"].dep_names == {"getsops/sops"}
+    assert by_name["chezmoi_setup_installer"].dep_names == {"twpayne/chezmoi"}
     assert by_name["k3s_install_script"].dep_names == {"k3s-io/k3s"}
 
 

@@ -116,6 +116,11 @@ qbittorrent_k8s_prefs_check_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7d
 # then a login and a preferences read at 15 s each, plus a cold image pull. The gate Job copies
 # it, and `bundle.flux_files` raises the `qbittorrent-verify` timeout above it.
 qbittorrent_k8s_prefs_check_deadline_seconds: 300
+# How long a finished drift-check Job, and its pod, stays visible: two schedule periods, so a
+# failed run clears instead of reading Failed until two more runs fail. It must exceed one
+# period, because `probe.py health` judges the newest Job (test_rendered_properties.py, row
+# cronjob-finished-jobs-age-out).
+qbittorrent_k8s_prefs_check_job_ttl_seconds: 172800
 
 qbittorrent_k8s_prefs_check_cpu_limit: "200m"
 qbittorrent_k8s_prefs_check_mem_limit: 128Mi

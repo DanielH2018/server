@@ -6,6 +6,9 @@ timer fires, the timer's `RandomizedDelaySec`, and a run that takes the whole
 `TimeoutStartSec` before it writes its timestamp. The schedule is the shared
 `homelab-updater.timer` with the host package's drop-in over it, both as the host renderer
 emits them, so a drop-in that outgrows a limit fails here before the rule pages a healthy host.
+A host that ships `homelab-docker-engine.timer` also needs the engine run's mask: the run can
+hold the updater masked for its whole `TimeoutStartSec`, and no updater fires until it ends
+(#6613).
 
 DockerEnginePinUnapplied's window is sized from the same schedule and the Pi's engine timer, so
 a moved engine window or a longer engine run fails here before that rule pages a pin that is
@@ -39,14 +42,38 @@ UNITS = PurePosixPath("/usr/lib/systemd/system")
 TIMER = UNITS / "homelab-updater.timer"
 SERVICE = UNITS / "homelab-updater.service"
 DROPIN = UNITS / "homelab-updater.timer.d" / "50-homelab.conf"
+ENGINE_TIMER = UNITS / "homelab-docker-engine.timer"
+ENGINE_SERVICE = UNITS / "homelab-docker-engine.service"
 # The Pi's drop-in, as H3 specifies it and the container cases install it. H3.6 ships it in
 # hosts/daniel-pi/; until then this copy is the Pi's schedule.
 PI_DROPIN = REPO / "hosts/lib/tests/container/fixture/units/updater-timer.conf"
 
 
-def limit_needed_s(timer: str, dropins: list[str], service: str) -> int:
-    """The shortest limit a host on this schedule can carry without paging between runs."""
-    return longest_gap_s(timer, dropins) + timeout_start_s(service)
+def limit_needed_s(
+    timer: str,
+    dropins: list[str],
+    service: str,
+    engine: tuple[str, str] | None = None,
+) -> int:
+    """The shortest limit a host on this schedule can carry without paging between runs.
+
+    Args:
+        engine: The host's `homelab-docker-engine` timer and service, when it ships them. The
+            last success is then the updater fire at or before an engine fire, and the next is
+            the first updater fire after the engine run's whole `TimeoutStartSec`.
+    """
+    needed = longest_gap_s(timer, dropins) + timeout_start_s(service)
+    if engine is None:
+        return needed
+    engine_timer, engine_service = engine
+    updater = _daily_fires(timer, dropins)
+    _, delay = timer_settings(timer, dropins)
+    for window in _daily_fires(engine_timer, []):
+        earlier = [f for f in updater if f <= window]
+        last = earlier[-1] if earlier else updater[-1] - DAY_S
+        resumed = _next_fire(updater, window + timeout_start_s(engine_service))
+        needed = max(needed, resumed - last + delay + timeout_start_s(service))
+    return needed
 
 
 def limit_problems(
@@ -69,7 +96,15 @@ def limit_problems(
             if str(DROPIN) in package.files
             else []
         )
-        needed = limit_needed_s(timer, dropins, service)
+        engine = (
+            (
+                package.files[str(ENGINE_TIMER)][0].decode(),
+                package.files[str(ENGINE_SERVICE)][0].decode(),
+            )
+            if str(ENGINE_TIMER) in package.files
+            else None
+        )
+        needed = limit_needed_s(timer, dropins, service, engine)
         if entry["limit_seconds"] < needed:
             problems.append(
                 f"{host}: limit_seconds is {entry['limit_seconds']}, and its rendered "
@@ -85,6 +120,31 @@ def pi_host(hosts, tmp_path):
     (root / "daniel-pi" / "units").mkdir()
     (root / "daniel-pi" / "units" / "updater-timer.conf").write_text(
         PI_DROPIN.read_text()
+    )
+    return lambda host: host_mode.render_host(host, root)
+
+
+@pytest.fixture
+def pi_engine_host(hosts):
+    """A `hosts/` tree whose daniel-pi package ships the updater drop-in and the engine units."""
+    engine = REPO / "hosts" / "components" / "pi-docker" / "units"
+    root = hosts(
+        {
+            "files": [
+                {"src": "units/updater-timer.conf", "dst": str(DROPIN)},
+                {"src": "units/engine.timer", "dst": str(ENGINE_TIMER)},
+                {"src": "units/engine.service", "dst": str(ENGINE_SERVICE)},
+            ]
+        }
+    )
+    units = root / "daniel-pi" / "units"
+    units.mkdir()
+    (units / "updater-timer.conf").write_text(PI_DROPIN.read_text())
+    (units / "engine.timer").write_text(
+        (engine / "homelab-docker-engine.timer").read_text()
+    )
+    (units / "engine.service").write_text(
+        (engine / "homelab-docker-engine.service").read_text()
     )
     return lambda host: host_mode.render_host(host, root)
 
@@ -112,6 +172,13 @@ def test_a_limit_the_pi_schedule_outlasts_is_flagged(pi_host):
 
 def test_a_limit_that_outlasts_the_pi_schedule_is_clean(pi_host):
     assert limit_problems({"daniel-pi": {"limit_seconds": 11400}}, pi_host) == []
+
+
+def test_a_limit_the_engine_mask_outlasts_is_flagged(pi_engine_host):
+    # The 22:50 success, the 00:30 engine run masking the updater for its 90min timeout, then
+    # the 02:05 fire: 11700s, plus 60s of randomized delay and the 3000s timeout.
+    [problem] = limit_problems({"daniel-pi": {"limit_seconds": 14759}}, pi_engine_host)
+    assert problem.endswith("needs at least 14760")
 
 
 @pytest.mark.parametrize(

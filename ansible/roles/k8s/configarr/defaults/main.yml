@@ -37,6 +37,11 @@ flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
 configarr_k8s_schedule: "30 4 * * *"
 
 configarr_k8s_timeout: 300
+# How long a finished configarr Job, and its pod, stays visible: two schedule periods, so a
+# failed run clears instead of reading Failed until two more runs fail. It must exceed one
+# period, because configarr-health judges the newest finished Job (test_rendered_properties.py,
+# row cronjob-finished-jobs-age-out). The gate Job drops it (cronjob_gate.py).
+configarr_k8s_job_ttl_seconds: 172800
 
 # Deliberately kept: `kubectl logs job/<n>` is the only record of what a run did, and the health
 # reader reads it. History limits, not ttlSecondsAfterFinished — a TTL deletes a Succeeded Job on

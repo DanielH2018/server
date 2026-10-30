@@ -33,6 +33,9 @@ installs a package that owns a conffile, then the `conffile` fixture, whose line
 that conffile, and upgrades the owner twice under `--force-confold`: once with its conffile
 unchanged and once changed. Each upgrade records whether dpkg kept the local file or held the
 package back, and the line must survive to the next reconcile (#6088; `validate_lib/conffile_case.py`).
+Another holds a dummy docker-ce below the real Pi package's pin, runs the updater, and asserts the
+engine stays held and reads pending, then records what apt does with the hold when a red fixture
+of the Pi package Depends on the pinned version (#6590; `validate_lib/engine_case.py`).
 Another installs the three apt-source components over seeded copies of the files the roles
 wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). The last cases run
 `hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
@@ -85,11 +88,12 @@ from validate.validate_lib.host_container import (
     CaseFailed,
     Container,
     expect,
+    expect_tools_run,
     list_problems,
     release_fetched,
     success_timestamp,
 )
-from validate.validate_lib import bootstrap_case, bootstrap_repo_case
+from validate.validate_lib import bootstrap_case, bootstrap_repo_case, engine_case
 from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
@@ -113,8 +117,6 @@ from validate.validate_lib.host_fixtures import (
     updater_variant,
 )
 
-TOOLS_BIN = "/usr/lib/homelab/bin"
-TOOLS = ("sops", "chezmoi", "nfpm")
 LOCK_HELD = "/run/test-lock.held"
 PKGCACHE = "/var/cache/apt/pkgcache.bin"
 RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
@@ -330,8 +332,7 @@ class Cases:
             kept = c.active("homelab-fixture-kept.service")
             expect(kept == "active", f"the kept unit is {kept}")
             expect(
-                "tree" in c.installed(),
-                "tree, a Depends of the head fixture, is not ii",
+                "tree" in c.installed(), "tree, the head fixture's Depends, is not ii"
             )
 
         def unit_change() -> None:
@@ -482,7 +483,7 @@ class Cases:
             state = c.active(timer)
             expect(state == "active", f"{timer} is {state} after the install")
             if self.tools:
-                self.expect_tools_run(c)
+                expect_tools_run(c)
             self.serving("updater-head", "pi-head", "pi-dropin", *self.tools)
             status = c.run_updater()
             expect(status == 0, f"the updater exited {status}")
@@ -499,12 +500,6 @@ class Cases:
             )
         finally:
             c.remove()
-
-    def expect_tools_run(self, c: Container) -> None:
-        for tool in TOOLS:
-            c.ok(f"{TOOLS_BIN}/{tool} --version")
-            on_path = c.sh(f"command -v {tool}").returncode
-            expect(on_path != 0, f"{tool} is on PATH; it installs at {TOOLS_BIN} only")
 
     def disarm(self) -> None:
         """Install the real Pi package by hand, then upgrade to one whose recovery timer is disarmed.
@@ -571,6 +566,7 @@ def main(argv: list[str] | None = None) -> int:
         run()
     secrets_case.run(cases)
     conffile_case.run(cases)
+    engine_case.run(cases)
     shadow_case.run(cases)
     repos_case.run(cases)
     bootstrap_case.run(cases)

@@ -1,0 +1,21 @@
+# Shipped by homelab-daniel-server. Enabled at boot, and restarted by reconcile when its script
+# or one of the files it installs changes.
+[Unit]
+Description=Give the {{ claude_code_agent_user }} agent user its groups, home, identity and clone
+OnFailure=homelab-alert@%n.service
+# The first run clones the repo and the dotfiles over HTTPS.
+Wants=network-online.target
+After=network-online.target
+# homelab-secrets renders the agent's gh login under /run, which a boot empties.
+Wants=homelab-secrets.service
+After=homelab-secrets.service
+
+[Service]
+Type=oneshot
+# Active after a clean run, so reconcile's try-restart reruns it when its inputs change.
+RemainAfterExit=yes
+SyslogLevel=notice
+ExecStart=/usr/lib/homelab/claude-agent-setup
+
+[Install]
+WantedBy=multi-user.target

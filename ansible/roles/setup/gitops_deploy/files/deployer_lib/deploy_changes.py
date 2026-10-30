@@ -137,9 +137,9 @@ _BROAD_PLAY_PREFIXES = tuple(
 # divergence — worst case a fix to gitops_deploy.py itself ff-merges and the host keeps running the
 # OLD code forever, with last_run still updating (old code writes it) so no monitor catches it.
 _BROAD_SETUP_PREFIXES = (
-    # Galaxy collections: installed by sops_setup — `initial_setup.yml --tags collections`.
+    # Galaxy collections: installed by initial_setup — `initial_setup.yml --tags collections`.
     "ansible/requirements.yml",
-    # Setup roles (gitops_deploy itself, renovate_notify, sops_setup, …): `--tags <role>`.
+    # Setup roles (gitops_deploy itself, renovate_notify, initial_setup, …): `--tags <role>`.
     "ansible/roles/setup/",
     # The bring-up playbooks — they only run by hand.
     "ansible/initial_setup.yml",
@@ -587,7 +587,7 @@ def setup_tags_for(paths) -> set[str]:
         if any(p.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES):
             continue
         if p == "ansible/requirements.yml":
-            # Installed by sops_setup — see the comment on _BROAD_SETUP_PREFIXES.
+            # Installed by initial_setup — see the comment on _BROAD_SETUP_PREFIXES.
             tags.add("collections")
             continue
         for role in setup_roles_for(p):

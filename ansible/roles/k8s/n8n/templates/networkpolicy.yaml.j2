@@ -1,6 +1,7 @@
 ---
 # THE FIRST NetworkPolicy IN THIS CLUSTER. k3s runs kube-router's netpol controller (it is on
-# unless --disable-network-policy is passed, and k3s_server_args does not pass it; the log line
+# unless the server sets disable-network-policy, and k3s_server_config in
+# hosts/components/k3s-server/component.yml does not set it; the log line
 # "Starting network policy controller" is there from cluster bringup), so this is enforced
 # rather than decorative — but nothing had exercised it before, which is why the deploy verifies
 # both directions instead of trusting that.

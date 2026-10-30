@@ -144,11 +144,11 @@ def test_the_alert_template_reaches_gitops_deploy_through_its_install_half_only(
 
 
 def test_an_alert_template_change_names_only_an_importer_rendering_it_elsewhere():
-    """claude_code imports `alert_unit.yml` for claude-rc with no gate, so daniel-server
-    renders the alert too, and is the one host the note keeps."""
+    """claude_code imports `alert_unit.yml` for claude-rc with no gate. daniel-server ends the
+    role (the component guard), so it takes the alert through its package, and the note
+    names no host for claude_code."""
     note = land_reach.remaining_setup_hosts_note([_ALERT_TEMPLATE], "daniel-box")
-    assert "`claude_code` also reaches daniel-server" in note
-    assert note.count("also reaches") == 1, note
+    assert "`claude_code`" not in note, note
 
 
 def test_a_role_gated_off_the_tick_host_is_left_to_the_plane_note():

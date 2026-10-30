@@ -38,6 +38,15 @@ RECORDED = {
     "secret-rotation": {("render", "secret-rotation")},
     # a2bed5696^:ansible/roles/setup/nut_host/tasks/main.yml
     "nut-secondary": {("render", "nut-host")},
+    # ansible/roles/setup/claude_code/tasks/main.yml, which still runs on daniel-box (H7.40). Its
+    # triage stamp is left out: claude_code_triage_enabled is false on daniel-server.
+    "claude-code": {
+        ("render", "claude-code"),
+        ("deployed", "claude-code-bg-resume"),
+        ("deployed", "claude-code-cgroup-metrics"),
+        ("deployed", "claude-code-clone-sync"),
+        ("deployed", "claude-code-dotfiles-sync"),
+    },
 }
 # A component whose Ansible task still runs on another host; its row comes from that task.
 DERIVED = {"loki-route-witness": (CRONS, "loki_route_witness")}

@@ -30,6 +30,7 @@ from deploy_tools.land_lib.outcome import Outcome
 
 from lib.repo_paths import REPO as REPO_ROOT
 from deploy_tools.land_lib.landing import Classification
+from deploy_tools.setup_lib.setup_role_chains import task_gates_shipping_repo_path
 
 _ROLE = "hypervisor"
 _SHIPPED = "scripts/backup/etcd_restore_drill.sh"
@@ -200,24 +201,33 @@ def test_the_tables_row_puts_hypervisor_in_the_change_set_and_still_names_daniel
 
 # --- A task NAME that mentions a repo path ships nothing (#6538) -------------
 #
-# `sops_setup`'s seed task is named after `ansible/.sops.yaml` and writes it from inline
-# `content:` on a first host. A match over the whole task read the name as the ship site, so a
-# range changing only the SOPS config put `sops_setup` in the unapplied half on every host.
+# The retired sops_setup role named a seed task after `ansible/.sops.yaml` and wrote the file
+# from inline `content:`. A match over the whole task read the name as the ship site, so a range
+# changing only the SOPS config put the role in the unapplied half on every host.
 
 _SOPS_CONFIG = "ansible/.sops.yaml"
-_SOPS_TASKS = "ansible/roles/setup/sops_setup/tasks/main.yml"
 
 
-def test_the_sops_seed_task_still_names_the_config():
-    """Non-vacuity: the cases below pass trivially once no task name carries the path."""
-    assert f"- name: Seed {_SOPS_CONFIG} " in (REPO_ROOT / _SOPS_TASKS).read_text()
+def _role(tmp_path, task: str):
+    tasks = tmp_path / "demo" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(task)
+    return tmp_path / "demo"
 
 
-def test_a_task_name_mentioning_a_repo_path_does_not_ship_it():
-    assert land_reach.setup_repo_file_hosts("sops_setup", _SOPS_CONFIG) == frozenset()
+def test_a_task_name_mentioning_a_repo_path_does_not_ship_it(tmp_path):
+    role = _role(
+        tmp_path,
+        f"- name: Seed {_SOPS_CONFIG} (first host only)\n"
+        "  ansible.builtin.copy:\n    dest: /tmp/x\n    content: x\n",
+    )
+    assert not task_gates_shipping_repo_path(role, _SOPS_CONFIG)
 
 
-def test_a_sops_config_only_range_leaves_sops_setup_unapplied_nowhere():
-    """The verify-by: `_remaining_hosts`' unapplied half carries no `sops_setup`."""
-    _, unapplied = land_reach._remaining_hosts([_SOPS_CONFIG], "daniel-box")
-    assert "sops_setup" not in unapplied, unapplied
+def test_a_task_that_copies_the_repo_path_ships_it(tmp_path):
+    role = _role(
+        tmp_path,
+        "- name: Seed the config\n"
+        f"  ansible.builtin.copy:\n    src: {_SOPS_CONFIG}\n    dest: /tmp/x\n",
+    )
+    assert task_gates_shipping_repo_path(role, _SOPS_CONFIG)
