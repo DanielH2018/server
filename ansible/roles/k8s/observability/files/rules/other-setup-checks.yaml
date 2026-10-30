@@ -24,6 +24,12 @@
 # writes nothing, which is how the Kuma tile reads it too: a missed beat. OnFailure pages the
 # crash at once, and NotReporting is the rule that replaces the tile.
 #
+# A DISARMED AGENT IS SILENT, NOT LATE. With renovate_agent_enabled false the timer is stopped,
+# so the renovate_agent role writes renovate-agent-disarmed.prom (homelab_check_disarmed 1) and
+# removes the agent's last verdict, and RenovateAgentNotReporting stays quiet while the marker
+# reads 1. Re-arming removes the marker, and the absent arm then fires until the next 06:00 run
+# writes a verdict, so re-arm just before a run or expect that one warning.
+#
 # Each deadline is the DEADLINE_S its producer renders, and both literals of a NotReporting rule
 # are pinned to it by ansible/tests/setup/test_b4_rule_literals.py (M1 convention 1). The two
 # 10-minute producers render 2 x period + 300 = 1500, M3's rule. The drills render the cadence
@@ -299,6 +305,7 @@ groups:
             or
               absent_over_time(homelab_check_last_run_timestamp_seconds{check="renovate-agent",origin="daniel-box"}[100800s])
           )
+          unless on (origin) (homelab_check_disarmed{check="renovate-agent",origin="daniel-box"} == 1)
           unless on (origin) (up{job="node"} == 0)
         labels:
           severity: warning

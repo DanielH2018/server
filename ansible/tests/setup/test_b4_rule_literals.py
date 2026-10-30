@@ -185,3 +185,54 @@ def test_a_renovate_deadline_is_the_interval_of_the_tile_it_shadows(
     assert entity(tile, token_var, overrides)["interval"] == rendered_deadline(
         producer, producer
     )
+
+
+CUTOVER = K8S_ROLES / "observability" / "files" / "rules" / "kuma-cutover.yaml"
+DRILL_RULES = (
+    "EtcdRestoreDrillFailed",
+    "EtcdRestoreDrillNotReporting",
+    "EtcdRestoreDrillEgressFenceFailed",
+    "EtcdRestoreDrillEgressFenceNotReporting",
+)
+# B4's tiles whose CheckWithoutPager term fits Prometheus's retention. The drill tiles retire in
+# the same Cutover-1a and their rules leave shadow in the same Cutover-1b, so a term here bounds
+# the drills' no-pager window too.
+DRILL_WINDOW_SIBLINGS = (
+    "UPS Secondary (daniel-box)",
+    "UPS Secondary (daniel-server)",
+    "Fake Remux Scan",
+    "Fake Remux Replace",
+    "MKV Attachment Repair",
+)
+
+
+def drill_window_problems(rules_text: str, cutover_text: str) -> list[str]:
+    """Why a shadow drill rule has no sibling CheckWithoutPager term to bound its window."""
+    [group] = yaml_fast.safe_load(rules_text)["groups"]
+    shadow = [
+        r["alert"]
+        for r in group["rules"]
+        if r["alert"] in DRILL_RULES and r.get("labels", {}).get("shadow") == "true"
+    ]
+    if not shadow:
+        return []
+    terms = set(re.findall(r'monitor_name="([^"]+)"\}\[2h\]', cutover_text))
+    if terms & set(DRILL_WINDOW_SIBLINGS):
+        return []
+    return [f"{', '.join(shadow)} shadow with no B4 sibling term in kuma-cutover"]
+
+
+def test_the_shadow_drill_rules_have_a_sibling_term_bounding_their_window_is_clean():
+    [group] = yaml_fast.safe_load(RULES.read_text())["groups"]
+    assert {r["alert"] for r in group["rules"]} >= set(DRILL_RULES)
+    assert drill_window_problems(RULES.read_text(), CUTOVER.read_text()) == []
+
+
+def test_a_cutover_that_drops_the_siblings_but_leaves_the_drills_shadow_is_flagged():
+    cutover = CUTOVER.read_text()
+    for tile in DRILL_WINDOW_SIBLINGS:
+        assert f'monitor_name="{tile}"}}[2h]' in cutover, f"{tile} has no [2h] term"
+        cutover = cutover.replace(f'monitor_name="{tile}"}}[2h]', "")
+    assert drill_window_problems(RULES.read_text(), cutover) == [
+        f"{', '.join(DRILL_RULES)} shadow with no B4 sibling term in kuma-cutover"
+    ]
