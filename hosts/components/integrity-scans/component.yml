@@ -48,6 +48,9 @@ defaults:
 depends:
   - rkhunter
   - aide
+  # aide only Recommends it, and the updater installs with --no-install-recommends. It ships
+  # /etc/aide/aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
+  - aide-common
 files:
   # A regular file, not a link: rkhunter skips a symlinked .local file.
   - {src: "role:rkhunter.conf.local.j2", dst: /etc/rkhunter.conf.local}

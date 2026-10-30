@@ -1,5 +1,5 @@
 # The weekly maintenance jobs (H7.7d, docs/target-architecture/host/h7-delete-ansible.md). Each was
-# a root or sys_user cron that initial_setup installed; each is a oneshot service on a timer at the
+# a root cron that initial_setup installed; each is a oneshot service on a timer at the
 # cron's slot here.
 #
 # - homelab-apt-autoremove and homelab-dpkg-purge run the role's host-maintenance.sh, copied in
@@ -56,4 +56,6 @@ legacy:
   - {cron: "Weekly apt autoremove", user: root}
   - {cron: "Weekly dpkg purge orphaned configs", user: root}
   - {cron: "Weekly system restart", user: root}
-  - {cron: "Clean unused Docker images", user: "{{ sys_user }}"}
+  # Root's crontab, not sys_user's: the task named `ansible_facts.user_id`, which the escalated fact
+  # gather (ansible/pre_tasks/load_secrets.yml) resolves to root.
+  - {cron: "Clean unused Docker images", user: root}

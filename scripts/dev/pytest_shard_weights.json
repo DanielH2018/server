@@ -958,7 +958,7 @@
  "hosts/lib/tests/test_pi_docker_component.py": 5.2,
  "hosts/lib/tests/test_pi_heartbeats_component.py": 0.23,
  "hosts/lib/tests/test_pi_initial_setup_part1.py": 3.05,
- "hosts/lib/tests/test_pi_initial_setup_part2.py": 6.14,
+ "hosts/lib/tests/test_pi_initial_setup_part2.py": 6.17,
  "hosts/lib/tests/test_pi_tuning_component.py": 0.54,
  "hosts/lib/tests/test_reconcile_activation.py": 5.0,
  "hosts/lib/tests/test_reconcile_component.py": 0.03,

@@ -150,8 +150,10 @@ def test_each_cron_the_pi_stops_writing_is_retired_and_a_timer_runs_at_its_slot(
     for name, cron in crons.items():
         if name in NOT_ON_THE_PI:
             continue
-        # The prune ran in the connecting user's crontab, every other job in root's.
-        user = context["sys_user"] if "ansible_facts" in cron["user"] else cron["user"]
+        # The prune's `ansible_facts.user_id` is root, because initial_setup gathers facts with the
+        # play's become (ansible/pre_tasks/load_secrets.yml); the live Pi's sys_user crontab holds
+        # no Ansible entry (2026-10-30). So every job sat in root's crontab.
+        user = "root" if "ansible_facts" in cron["user"] else cron["user"]
         assert retired.get(name) == user, name
         timer = TIMERS[name]
         assert timer in manifest["enable_links"]
@@ -163,6 +165,14 @@ def test_each_cron_the_pi_stops_writing_is_retired_and_a_timer_runs_at_its_slot(
         day = "" if cron["weekday"] == "*" else f"{DAYS[int(cron['weekday'])]} "
         clock = f"{int(cron['hour']):02d}:{int(cron['minute']):02d}:00"
         assert calendar.removesuffix(" UTC") == f"{day}*-*-* {clock}", name
+
+
+def test_the_scan_packages_install_with_their_config_under_no_install_recommends(
+    package,
+):
+    # The updater installs with --no-install-recommends, and aide only Recommends aide-common,
+    # which ships aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
+    assert {"rkhunter", "aide", "aide-common"} <= set(package.depends)
 
 
 def test_the_scans_read_the_pis_own_tokens_and_the_packaged_libraries(package):
