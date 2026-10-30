@@ -23,6 +23,25 @@ C1, C6 and C7, and the operator accepted the amendment on 2026-10-17. It merged 
 settled with `observability`. Every flux tag's `gotk_resource_info` carries `content_digest`, and
 peanut's reference stayed at `2026-10-17T14:00:54Z` while three later commits landed.
 
+A5's soak read, [#6624](https://github.com/DanielH2018/server/issues/6624): A5's shadow PR is
+`7d360df099`. Prometheus first evaluated the `storage` group at 2026-10-23T18:48:47Z, so the soak
+window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
+(*Which soak minutes count as explained* in M2). It mapped each tile to the `storage.yaml` rules
+that port its bridge row, with `LonghornVolumesMissing` counted for both Longhorn tiles. Over
+`[162h:1m]`, query 1 returned 5 minutes for k3s PVC Fullness and none for the other four tiles,
+and query 2 returned none for any tile. The 5 minutes are one single-cycle bridge episode on
+2026-10-30 at 11:33. At that sample daniel-box's kubelet scrape read `up=1` but carried none of
+its 28 claims' volume stats, so the claim count fell from 43 to 15 and valheim-server reported no
+free bytes. The bridge pages its free-space floor on one sample, and Kuma held DOWN until the next
+push at 11:38. `PVCFreeFloorUnmonitored` (`for: 5m`) and `PVCCoverageShortfall` (`for: 15m`) saw
+their conditions hold for 1 minute each, so the episode is one the rules drop by design. The
+2026-10-25 DOWN runs from 14:17 to 14:21 and from 14:27 to 14:31 are covered, because
+`PVCFreeFloorUnmonitored` fired from 14:20 to 14:28 while daniel-box's kubelet target was down.
+`LonghornVolumeDegraded` went pending on many claims during the 2026-10-25 reboot and on
+2026-10-28 at 00:54 and 01:29, for at most 4 minutes each. It never fired, and the bridge
+recorded no `longhorn_volumes` DOWN. No minute is unexplained, so no rule changes and Cutover-a
+is not blocked by the soak.
+
 PR C-0, the ADR (Proposed, awaiting the operator): [#6091](https://github.com/DanielH2018/server/pull/6091).
 
 Depends on: M2, M3, M4, M5
