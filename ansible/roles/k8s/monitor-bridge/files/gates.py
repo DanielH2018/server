@@ -60,8 +60,7 @@ PROM_DEPENDENT = _members("prometheus")
 # `up{job=...}==0`, so run_once suppresses each dead exporter's dependents (pushes `up` with a skip
 # msg, heartbeat kept alive) and lets Scrape Targets be the single page — the same
 # one-root-cause-one-alert shape as the Prometheus gate, keyed by the Prometheus `job` label.
-# Guarded by a test against the registry. (`cert`/`traefik5xx` read Traefik's own metrics, not
-# these two exporters, so they're not mapped here.)
+# Guarded by a test against the registry.
 # host_temp joined 2026-08-29 with HWMON_TEMP_ORIGINS_MIN. Before the floor it had no per-host
 # arm, so a single node-exporter death left it green and there was nothing to suppress. Now a
 # dead node-exporter drops that host's hwmon series and trips the floor, so without this entry

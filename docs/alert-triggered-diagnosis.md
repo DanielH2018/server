@@ -65,7 +65,7 @@ Each incident went through the gates the design below requires, in this order:
 | A deploy is held | 5 | `gitops_status` reported a held deploy. The hold message already tells the operator to revert the offending PR, and the `hold_sha` gate suppresses the run. |
 | Monitoring or daniel-box was down | 5 | `loki_reachable`, `prometheus` or `gitops_alive` fired. These are the recovery bursts, such as 2026-10-08 21:55, when the k3s API refused connections and the agent's own host had been down. |
 | The alert names its cause or fix | 29 | Every episode past one cycle came from a check whose message names its cause or fix. Examples: `gitops_status` names the playbook and tags to apply, `manifest-prune-check` names the stale file, `release-staleness-check` names the service, and `arr_queue` names the item and why it needs review. This class also holds `otel-sweep-watch`, which counts Claude session API errors rather than a service failure, and `speedtest`, whose cause is the ISP. |
-| Candidate | 11 | An episode past one cycle came from a check whose message does not name the cause: `k8s_workloads`, `ha_heartbeat`, `etcd-restore-drill-vm` or `traefik_404`. |
+| Candidate | 11 | An episode past one cycle came from a check whose message does not name the cause: `k8s_workloads`, `ha_heartbeat`, `etcd-restore-drill-vm`. |
 
 The first four rows are mechanical. The split between the last two depends on judgement about
 which messages name their cause.

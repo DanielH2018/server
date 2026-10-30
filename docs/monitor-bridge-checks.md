@@ -48,10 +48,6 @@ checks each gate suppresses.
   Server-only; the Pi's disk lives in the Pi Pressure check. Root Disk pages without remediating:
   containerd's image GC owns image cleanup since the Docker daemon retired, and no autoprune cron
   replaced the old one.)
-- **TLS Cert Expiry** (`traefik_tls_certs_not_after`, per-series, so the message names each
-  breaching certificate's `cn`. The query aggregates no label away: an earlier `min(...)` left the
-  tile promising a name the message could not carry (#3101). The difference is latent while
-  Traefik's store holds the one wildcard.)
 - **Memory** (host `node_memory_*` pressure only)
 - **Host coverage floor** — not a monitor of its own, but a second arm inside **Root Disk** and
   **Memory** (`_host_origin_shortfall`). Both checks group by `origin`, and node-exporter is a
@@ -109,62 +105,6 @@ checks each gate suppresses.
   consecutive breaching cycle (~15 min) pushes `down`, shorter bursts push `up` with a "throttling
   streak n/3" `msg` naming the offender, and a clean cycle resets the streak, so one-cycle blips
   (flaresolverr solving a challenge, homepage hugging the cores floor) never page.)
-- **Traefik 5xx** (5xx ratio over 5m **per service**, naming each offender, gated by a
-  per-service `TRAEFIK_MIN_RPS` volume floor. It is per-service so the alert points at the
-  erroring backend and a broken low-traffic service cannot hide diluted in the aggregate)
-- **Traefik Latency** (share of requests slower than a histogram BUCKET BOUNDARY, per service,
-  behind the same `TRAEFIK_MIN_RPS` floor: the gap the 5xx check cannot close, since a degraded
-  backend still answers 200. **Not `histogram_quantile`**: Traefik's default buckets are
-  0.1/0.3/1.2/5.0/+Inf, so a quantile landing between 1.2s and 5.0s is interpolated across an
-  empty 3.8s-wide gap, and an earlier 3s threshold sat inside it. Every firing was that arithmetic
-  (homepage@docker read 4.058s on 2026-08-06 where the Traefik access log showed a real p95 of
-  1.576s). Bucket counts are exact, so ">`TRAEFIK_SLOW_PCT` (5%) of requests over
-  `TRAEFIK_SLOW_BUCKET` (5.0s)" IS "p95 over 5.0s" without interpolation. Keep
-  `TRAEFIK_SLOW_BUCKET` on a boundary Traefik actually emits: an `le=` matching no series is
-  reported as a config fault rather than read as 0 requests under the boundary, which would page
-  every service at once.
-  **Two independent guards** came from this being the flappiest monitor in the estate (51 DOWN
-  episodes in 30 days to 2026-09-11). `TRAEFIK_STREAM_SERVICES` (`homelab-headlamp-`,
-  `homelab-home-assistant-`, `homelab-uptime-kuma-`) exempts services whose traffic is LONG-LIVED
-  CONNECTIONS. Traefik's histogram times a request until the response completes, so a websocket,
-  an SSE stream or a Kubernetes watch sits past every bucket edge while healthy, and no
-  `TRAEFIK_SLOW_BUCKET` fixes that because the buckets end at 5.0s. Headlamp ran 94.2% of requests
-  under 0.1s and 3.1% past 5.0s with a whole-service mean of 1.7s, which puts that tail's own mean
-  near 53s. The match is a PREFIX of the service label, which is
-  `homelab-<name>-<hash>@kubernetescrd`, because the hash moves when an IngressRoute is renamed.
-  The exempt count is named in the green message, because an exempt service is not measured and a
-  bare "ok" would overstate coverage. **bazarr and prowlarr are deliberately NOT exempt**: an
-  *arr indexer search genuinely takes 5-30s and a user genuinely waits for it, which is the
-  user-visible slowness this check exists to catch. **jellyfin is not exempt either**
-  ([#6649](https://github.com/DanielH2018/server/issues/6649)). In M6 A4's 168h soak to
-  2026-10-30T18:32Z, every jellyfin-public DOWN episode was a burst of 23 to 45 MKV font
-  fetches (`/Videos/<id>/<id>/Attachments/<n>`) at playback start. Each was a bounded 10 KB to
-  8 MB response that took 5 to 8 seconds, and the player waits for them before it renders
-  subtitles. Jellyfin's `/socket` WebSockets are streams, with a median duration of 1204
-  seconds, but at most 3 of them finished in any 300-second window, and none pushed the ratio
-  past `TRAEFIK_SLOW_PCT`. To exempt the WebSockets alone, route `/socket` through its own
-  IngressRoute, which gives it a service label the prefix list can match.
-  `TRAEFIK_SLOW_MIN_REQUESTS` (3) requires an absolute count of slow requests behind the ratio.
-  `TRAEFIK_MIN_RPS` admits a service with 0.05 x 300 = 15 requests in the `[5m]` window, so ONE
-  request past the bucket is 6.7%, already over `TRAEFIK_SLOW_PCT`, and the ratio alone pages on a
-  single request for every low-traffic route. The count is derived from the window and the floor,
-  not fitted to an observed service.)
-- **Traefik 404 Flood** (404 share of **entrypoint** traffic over 5m, behind the same
-  `TRAEFIK_MIN_RPS` floor: the gap BOTH checks above leave open (#1322). They are per-SERVICE, and
-  an edge that has lost its routers emits no `traefik_service_*` series at all, so their loops
-  iterate an empty vector and report `0 service(s) above floor` while every route 404s. The
-  entrypoint counter is incremented before routing, so it survives that. `TRAEFIK_404_PCT` is 90
-  rather than a low number because a homelab edge serves a steady 404 trickle: 4.0% of 0.83 rps
-  when healthy against 100% of 0.61 rps during the outage (2026-09-06).)
-- **Traefik 421** (per-**router** 421 rate over 5m, #2757: the failure all three checks above
-  miss. `SNICheck` pins the TLS-options name once per connection, so a client that connects while
-  Traefik is still reconciling routes after a restart gets 421 for the life of that connection.
-  The request never reaches a service, and its code is not 404. Three such wedges went unseen in
-  the week to 2026-09-27 (authelia for 14.5h, the Pi's Alloy for 4h15m (#2747) and the apiserver's
-  OIDC fetches for 5h30m (#2749)) at steady-state rates of 0.10-0.18 rps. The only other 421 in
-  that week was one 5-minute window on uptime-kuma at 0.0083 rps. `TRAEFIK_421_RPS` is 0.02, an
-  absolute rate rather than a share, and `TRAEFIK_421_CONSECUTIVE` (3) holds a one-shot mismatch
-  below a page: it stays inside a `[5m]` rate for at most two evaluations.)
 - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure streak**.
   n8n does not save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to bound
   `database.sqlite` and its B2 backup churn), so "consecutive" cannot be read from one snapshot.
@@ -935,7 +875,7 @@ checks each gate suppresses.
   sidecar writes the same line to its container log, as pi-peer-backup does to its pod log. A token mismatch
   reads `Monitor not found or not active.`, and its verdicts are lost for as long as the cron
   and the static monitors carry different tokens. A burst of `http=404` lines from Traefik rejecting every router belongs to
-  Traefik 404 Flood (#1322).
+  `TraefikEntrypoint404Flood` (#1322).
   Gated by `startup_grace`, and it fails open on a Loki error. A fetch that hits the 5000-line cap says so in the message. Two pushers
   bypass the library's shape and are read by a second selector (#1943): the `crowdsec-jobs`
   sidecar of the CrowdSec engine pod and the pi-peer-backup, configarr-health and
@@ -991,6 +931,13 @@ rows and env keys are gone. The numbers those groups carry are pinned in
 `ansible/tests/services/test_scrape_target_rule_jobs.py`, and the `DECIDED:` marker for the
 3000-entry threshold sits at `LogShipperDroppingEntries` in
 `ansible/roles/k8s/observability/files/rules/log-pipeline.yaml`.
+TLS Cert Expiry, Traefik 5xx, Traefik Latency, Traefik 404 Flood and Traefik 421 (M6 batch A4)
+retired into the `edge` rule group in observability, and their tiles, rows and env keys are
+gone. The numbers that group carries are pinned in
+`ansible/tests/services/test_edge_rule_literals.py`. The `DECIDED:` markers for the exempt
+stream services, for bazarr and prowlarr staying measured, and for jellyfin staying measured
+(#6649) sit there too, and the `DECIDED:` marker for the 5-of-10-minute latency count sits at
+`TraefikBackendSlow` in `ansible/roles/k8s/observability/files/rules/edge.yaml`.
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
 `PROM_DEPENDENT`. Each check's retirement note is in the repository history.
 

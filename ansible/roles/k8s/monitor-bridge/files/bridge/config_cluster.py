@@ -62,13 +62,10 @@ def cluster_config(
         # plus `up` (5 / 11). So the moment PROMETHEUS_URL points at the cluster, restarts / oom
         # / cpu / janitorr silently widen from "daniel-server's containers" to "every
         # container in the homelab", and would start naming k8s pods as offenders. The remaining
-        # PROM_DEPENDENT checks that DON'T read traefik_* are pinned
-        # (cert/restarts/oom/cpu/ups). Disk and memory are the two
+        # PROM_DEPENDENT checks are pinned (restarts/oom/cpu/ups). Disk and memory are the two
         # exceptions: they are HOST checks, and pinning them to one origin would leave the other
         # host's root disk and memory unwatched — so they group `by (origin)` and report the
-        # worst, covering both. Since E2 the cluster edge also emits traefik_* (traefik-k8s
-        # job), so the unpinned traefik/cert checks now deliberately read the CLUSTER edge's
-        # metrics.
+        # worst, covering both.
         #
         # `{name!=""}` does NOT already scope this, which is the obvious assumption and a wrong
         # one: the kubelet's cAdvisor emits `name` too, so 99 cluster-native series survive that

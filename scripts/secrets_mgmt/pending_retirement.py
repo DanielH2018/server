@@ -22,5 +22,14 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         "monitor_bridge_targets_push_token",
         "monitor_bridge_cluster_targets_push_token",
         "monitor_bridge_promtail_dropped_push_token",
+        # M6 batch A4's Cutover-a1 deleted the TLS Cert Expiry, Traefik 5xx, Traefik Latency,
+        # Traefik 404 Flood and Traefik 421 tiles, and Cutover-a2 deleted their bridge rows.
+        # A4's token PR retires the keys a week after Cutover-b and deletes these five entries
+        # with them.
+        "monitor_bridge_cert_push_token",
+        "monitor_bridge_traefik_push_token",
+        "monitor_bridge_traefik_latency_push_token",
+        "monitor_bridge_traefik_404_push_token",
+        "monitor_bridge_traefik_421_push_token",
     }
 )

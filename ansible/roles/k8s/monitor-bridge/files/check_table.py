@@ -42,7 +42,6 @@ from checks import (
     cloudflare_ips,
     cluster,
     cluster_etcd,
-    cluster_traefik,
     gitops,
     healthchecks,
     host,
@@ -66,11 +65,6 @@ CHECKS: tuple[PushCheck, ...] = (
         description="node-exporter via monitor-bridge: `/`, `/boot` or `/boot/efi` over DISK_MAX_PCT on a cluster node, or one node's exporter missing from the census. `df -h` on the named host.",
     ),
     PushCheck(
-        name="cert", fn=host.check_cert, token="monitor_bridge_cert_push_token",
-        kuma_id="monitor-bridge-cert", display="TLS Cert Expiry", status_group="Hosts & Power", gate="prometheus", critical=True,
-        description="monitor-bridge reads traefik_tls_certs_not_after from Prometheus every 5 min. DOWN: a certificate Traefik serves expires within CERT_MIN_DAYS; the message names it. Check Traefik's ACME log and `probe.py cert <host>` for the served chain.",
-    ),
-    PushCheck(
         name="memory", fn=host.check_mem, token="monitor_bridge_mem_push_token",
         kuma_id="monitor-bridge-mem", display="Memory", status_group="Hosts & Power", gate="prometheus",
         description="node-exporter via monitor-bridge: host memory pressure on a cluster node, a Claude Code cgroup stalling or OOM-killing, or one node missing from the census. Claude Code running as a uid the host retired is named in the message without paging. The message names host and cgroup.",
@@ -91,32 +85,6 @@ CHECKS: tuple[PushCheck, ...] = (
         name="cpu", fn=cluster.check_cpu_throttle, token="monitor_bridge_cpu_push_token",
         kuma_id="k3s-cpu-throttling", display="k3s CPU Throttling", status_group="Cluster Health", gate="prometheus",
         description="cAdvisor via monitor-bridge: a container pinned at its CPU limit for 3 cycles (~15m). Raise the limit in its role or accept it; short bursts never page.",
-    ),
-    PushCheck(
-        name="traefik5xx", fn=cluster.check_traefik_5xx, token="monitor_bridge_traefik_push_token",
-        kuma_id="monitor-bridge-traefik", display="Traefik 5xx", status_group="Observability", gate="prometheus",
-        description="monitor-bridge: a backend's 5xx share over 5 min per Traefik service, behind a TRAEFIK_MIN_RPS volume floor. DOWN names the erroring service. Loki `{container=\"traefik\"}` has the status codes; the backend's own log has the cause.",
-    ),
-    # Gated since #2778: prom_vector raises on a Prometheus outage, so ungated it co-fired with
-    # the `prometheus` gate, one root cause paging twice.
-    PushCheck(
-        name="traefik_latency", fn=cluster.check_traefik_latency, token="monitor_bridge_traefik_latency_push_token",
-        kuma_id="monitor-bridge-traefik-latency", display="Traefik Latency", status_group="Observability", gate="prometheus",
-        description="monitor-bridge: share of a service's requests slower than the 5.0s histogram bucket, behind TRAEFIK_MIN_RPS and a 3-slow-request floor; long-lived-connection services (headlamp, HA, Kuma) are exempt. DOWN names the slow backend, not the edge.",
-    ),
-    # #1322: a total-404 edge erases the traefik_service_* series the two rows above iterate, so
-    # both read green through a 3.5-hour outage. This reads the entrypoint counter, which survives.
-    PushCheck(
-        name="traefik_404", fn=cluster.check_traefik_404_flood, token="monitor_bridge_traefik_404_push_token",
-        kuma_id="monitor-bridge-traefik-404", display="Traefik 404 Flood", status_group="Observability", gate="prometheus",
-        description="monitor-bridge: 404 share of entrypoint traffic over 5 min above 90%, the shape of an edge that lost its routers (a missing CrowdSec plugin, #1322). DOWN means most requests to the edge are 404; check Traefik's startup log for a router or plugin error.",
-    ),
-    # #2747/#2749: a client wedged on a connection SNICheck pinned wrong gets 421 at the router
-    # and never reaches a service, so none of the three Traefik rows above counts it.
-    PushCheck(
-        name="traefik_421", fn=cluster_traefik.check_traefik_421, token="monitor_bridge_traefik_421_push_token",
-        kuma_id="monitor-bridge-traefik-421", display="Traefik 421", status_group="Observability", gate="prometheus",
-        description="monitor-bridge: a Traefik router serving 421 above 0.02 rps for 3 cycles (15 min). A long-lived client connected while Traefik was still reconciling routes and SNICheck pinned the wrong TLS options on that connection; it gets 421 until it redials. DOWN names the router: restart the client that calls it (a Traefik config change does not help). #2747, #2749.",
     ),
     PushCheck(
         name="n8n", fn=service.check_n8n, token="monitor_bridge_n8n_push_token",

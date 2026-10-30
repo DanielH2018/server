@@ -2,15 +2,10 @@
 | Tile | Check | Gate | Critical | Status page group | Runbook |
 |---|---|---|---|---|---|
 | Root Disk | `disk` | `prometheus` | yes | Hosts & Power |  |
-| TLS Cert Expiry | `cert` | `prometheus` | yes | Hosts & Power |  |
 | Memory | `memory` | `prometheus` |  | Hosts & Power |  |
 | k3s Container Restarts | `restarts` | `prometheus` |  | Cluster Health |  |
 | k3s Container OOM | `oom` | `prometheus` |  | Cluster Health |  |
 | k3s CPU Throttling | `cpu` | `prometheus` |  | Cluster Health |  |
-| Traefik 5xx | `traefik5xx` | `prometheus` |  | Observability |  |
-| Traefik Latency | `traefik_latency` | `prometheus` |  | Observability |  |
-| Traefik 404 Flood | `traefik_404` | `prometheus` |  | Observability |  |
-| Traefik 421 | `traefik_421` | `prometheus` |  | Observability |  |
 | n8n Prod Workflows | `n8n` | `startup_grace` |  | Services |  |
 | Arr Queue Warnings | `arr_queue` | none |  | Media Automation |  |
 | Bazarr Health | `bazarr` | `startup_grace` |  | Media Automation |  |

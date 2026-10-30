@@ -297,11 +297,11 @@ def test_a_rendered_key_missing_from_the_env_is_recorded_rather_than_defaulted()
     """A key the pod environment renders has no Python default since #3659, so its absence is a
     config fault main() reports, never a quiet fall back to a second copy of the value."""
     env = bridge_env()
-    del env["TRAEFIK_421_RPS"]
+    del env["DISK_MAX_PCT"]
     cfg = load_config(env)
-    assert cfg.TRAEFIK_421_RPS == 0
-    assert [p for p in cfg.CONFIG_PROBLEMS if p.startswith("TRAEFIK_421_RPS ")] == [
-        "TRAEFIK_421_RPS is unset; templates/config/env.yaml.j2 renders it, so this env "
+    assert cfg.DISK_MAX_PCT == 0
+    assert [p for p in cfg.CONFIG_PROBLEMS if p.startswith("DISK_MAX_PCT ")] == [
+        "DISK_MAX_PCT is unset; templates/config/env.yaml.j2 renders it, so this env "
         "is not the one the pod gets"
     ]
 

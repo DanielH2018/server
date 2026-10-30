@@ -101,7 +101,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
   that caused it** (#2747, #2749). **The only recovery is to make the client redial**, which
   is why a restart fixes it and a config change does not. It wedged the Pi's Alloy and the
   kube-apiserver's OIDC fetches for hours on 2026-09-27 while fresh curls answered 200.
-  monitor-bridge's `check_traefik_421` pages on a per-router rate that stays up for 15 minutes
+  observability's `TraefikRouter421` pages on a per-router rate that stays up for 10 minutes
   (#2757).
 - **`allowEmptyServices` keeps a router whose backend has no ready endpoints** (#2747,
   #2758), which is what opened that router-less window on a reboot. `static-config.yaml.j2`

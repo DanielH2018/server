@@ -108,7 +108,7 @@ def test_every_bridge_tile_lands_in_the_group_its_row_names():
         row["kuma_id"]: row["status_group"]
         for row in py_table(CHECK_TABLE.read_text(), "CHECKS")
     }
-    assert wanted["monitor-bridge-traefik-421"] == "Observability"
+    assert wanted["monitor-bridge-disk"] == "Hosts & Power"
     assert {i: placed.get(i) for i in wanted} == wanted
 
 

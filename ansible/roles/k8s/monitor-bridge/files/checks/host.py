@@ -1,6 +1,6 @@
 """Host and hardware checks for monitor-bridge.
 
-Covers disk, cert expiry and memory. `checks/host_thermal.py` covers SMART, host temperature
+Covers disk and memory. `checks/host_thermal.py` covers SMART, host temperature
 and the UPS; `checks/host_edge.py` covers Pi pressure with its published ports, and the
 speedtest.
 
@@ -120,33 +120,6 @@ def check_disk(cfg: Config, src: Sources) -> tuple[bool, str]:
     if shortfalls:
         return True, "; ".join(msg for _, msg in shortfalls)
     return True, "all mounts under %.0f%%" % cfg.DISK_MAX_PCT
-
-
-def check_cert(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Checks whether any certificate Traefik serves expires within cfg.CERT_MIN_DAYS.
-
-    Per-series, not `min(...)`: the aggregation discarded the labels, so a DOWN said a
-    certificate was expiring and could not say which (#3101). The series carry `cn`, `sans`
-    and `serial` rather than the `origin` the host checks group by, so the message names the
-    `cn` — and every breaching one, the way check_disk names every full mountpoint.
-    """
-    vec = src.prom_vector("(traefik_tls_certs_not_after - time()) / 86400")
-    if not vec:
-        return False, "cert metric unavailable"
-    breaching = sorted(
-        (days, labels.get("cn") or "unnamed cert")
-        for labels, days in vec
-        if days < cfg.CERT_MIN_DAYS
-    )
-    if breaching:
-        return False, "cert expires within %.0fd: %s" % (
-            cfg.CERT_MIN_DAYS,
-            ", ".join("%s in %.1fd" % (cn, days) for days, cn in breaching),
-        )
-    soonest, cn = min(
-        (days, labels.get("cn") or "unnamed cert") for labels, days in vec
-    )
-    return True, "cert valid %.0fd (soonest: %s)" % (soonest, cn)
 
 
 def check_mem(cfg: Config, src: Sources) -> tuple[bool, str]:

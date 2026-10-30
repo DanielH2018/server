@@ -1,6 +1,6 @@
 """The host-facing half of monitor-bridge's configuration.
 
-Disks, certificates, memory, SMART, board temperatures, the UPS, the Pi and the speedtest —
+Disks, memory, SMART, board temperatures, the UPS, the Pi and the speedtest —
 every threshold read by a check in `checks/host.py`, `checks/host_thermal.py` and
 `checks/host_edge.py`, plus the origin-coverage floors the
 host-metric checks fail closed on.
@@ -17,11 +17,10 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class HostConfig:
-    """Disks, certificates, memory, SMART, temperatures, the UPS, the Pi and the speedtest."""
+    """Disks, memory, SMART, temperatures, the UPS, the Pi and the speedtest."""
 
     DISK_MOUNTPOINTS: tuple[str, ...]
     DISK_MAX_PCT: float
-    CERT_MIN_DAYS: float
     MEM_MAX_PCT: float
     HOST_METRIC_ORIGIN_EXCLUDE: str
     SCRUTINY_URL: str
@@ -165,7 +164,6 @@ def host_config(
             m.strip() for m in _env("DISK_MOUNTPOINTS").split(",") if m.strip()
         ),
         DISK_MAX_PCT=_num("DISK_MAX_PCT"),
-        CERT_MIN_DAYS=_num("CERT_MIN_DAYS"),
         MEM_MAX_PCT=_num("MEM_MAX_PCT"),
         # Origins that check_disk/check_mem must NOT scan, as a regex alternation. See
         # host_metric_sel: daniel-pi runs node-exporter like the other hosts, but

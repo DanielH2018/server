@@ -117,8 +117,6 @@
  "ansible/roles/k8s/monitor-bridge/tests/test_check_streaks.py": 0.04,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py": 0.02,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_table.py": 0.01,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_traefik_404.py": 0.09,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_traefik_421.py": 0.09,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_ups.py": 0.16,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_wan_gate.py": 0.15,
  "ansible/roles/k8s/monitor-bridge/tests/test_config_reads_the_rendered_env.py": 0.04,

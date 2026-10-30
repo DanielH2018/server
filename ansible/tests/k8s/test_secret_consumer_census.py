@@ -87,7 +87,7 @@ def test_the_census_reports_nothing_for_a_name_no_role_references():
 
 def test_the_census_credits_a_role_rendering_the_secret_out_of_another_roles_file():
     """uptime-kuma renders every bridge token from monitor-bridge's check table (#3781)."""
-    assert tree_consumers("monitor_bridge_traefik_421_push_token") == {
+    assert tree_consumers("monitor_bridge_disk_push_token") == {
         "monitor-bridge": "deploy",
         "uptime-kuma": "deploy",
     }
