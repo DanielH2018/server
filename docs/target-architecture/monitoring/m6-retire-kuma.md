@@ -42,12 +42,14 @@ The read ran M1 convention 6's two queries per tile over `[168h:1m] @ 1793384612
     - 14 query-1 minutes (2026-10-26 03:58–04:07 and 04:28–31) are daniel-pi failing before its
       unplanned reboot at 04:32:54. load1 reached 20.8 and MemAvailable fell to 99 MB. Its four
       exporters failed scrapes for 1 to 4 minutes at a time from 03:31. `check_cluster_targets`
-      keeps one down streak for the whole check, so three 300 s cycles that each caught a
-      different target down paged the tile. No single series held `up == 0` for
-      `ScrapeTargetDown`'s 10 minutes until alloy-pi's run from 04:21. `PiLoadHigh` fired from
-      03:37 to 04:33 and `PiRecoveryFailed` from 03:58 to 04:35, so the host fault had a pager
-      throughout. A target that flaps on a healthy host has none after Cutover-a, which
-      [#6626](https://github.com/DanielH2018/server/issues/6626) leaves to the operator.
+      keeps one down streak for the whole check, so three 300 s cycles that each caught one of
+      the Pi's exporters down paged the tile. No single series held `up == 0` for
+      `ScrapeTargetDown`'s 10 minutes until alloy-pi's run from 04:21. Kuma's `Pi Pressure`
+      tile read DOWN from 03:43 to 03:47 and from 03:53 to 04:37, and `Daniel Pi Recovery` from
+      03:59 to 04:36, so the host fault had a live pager throughout. Their shadow successors,
+      `PiLoadHigh` (03:37 to 04:33) and `PiRecoveryFailed` (03:58 to 04:35), fired too. A target
+      that flaps on a healthy host has no pager after Cutover-a. The operator decides that in
+      [#6626](https://github.com/DanielH2018/server/issues/6626).
     - 5 query-2 minutes are the rule's leading edge (2026-10-25 14:26, 2026-10-30 12:36–39). The
       rule's `for: 10m` pages before the bridge's three-cycle streak
       (`CLUSTER_TARGETS_CONSECUTIVE`).
@@ -68,7 +70,9 @@ The read ran M1 convention 6's two queries per tile over `[168h:1m] @ 1793384612
 The `Cluster Scrape Targets` tile has no samples at 2026-10-25 07:39–47 (the weekly reboot),
 2026-10-25 13:14–16 and 18:08–10, 2026-10-28 00:44–53 and 01:27–30, and 2026-10-29 21:32–38.
 Query 2 counts a shadow alert that fires while the tile has no sample, and it counted none in
-those gaps.
+those gaps. `Watchdog` has a sample in every minute of four of the gaps, so Prometheus was
+evaluating rules there. It has 2 samples in the reboot gap's 8 minutes and none at 2026-10-28
+00:44–53, so neither side was read for most of those two gaps.
 
 Depends on: M2, M3, M4, M5
 
