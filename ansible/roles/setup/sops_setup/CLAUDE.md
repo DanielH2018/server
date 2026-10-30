@@ -55,9 +55,14 @@ playbook parks the deployer. Repo-root `CLAUDE.md` has the conventions.
 ## Rollback
 
 A revert of H7.24b restores the tasks and the defaults, and drops the `sops` component and the
-legacy entries from the host packages. The operator then re-applies the role on each host after
-`homelab_host_applied_info` shows the reverted version, ON daniel-box and daniel-server: `cd
-/home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags sops-install`,
-and from a node for the Pi, with `-e target=daniel-pi` (operator-only). Until then, a host that
-took the H7.24b package and then the revert has no `sops` on `PATH`, because reconcile removed
-`/usr/local/bin/sops` and dpkg removed `/usr/bin/sops`.
+legacy entries from the host packages. A host that took the H7.24b package and then the revert
+has no `sops` on `PATH`, because reconcile removed `/usr/local/bin/sops` and dpkg removed
+`/usr/bin/sops`. Every deploy, the deployer's included, fails at the secret-load pre-task until
+the operator re-installs it. `/usr/lib/homelab/bin/sops` stays installed through
+`homelab-tools`, which `secrets-unit` still depends on.
+
+`initial_setup.yml` cannot do the re-install, because its `tags: always` secret pre-task needs
+`sops` first. `bootstrap.yml` has no such pre-task. After `homelab_host_applied_info` shows the
+reverted version, the operator runs ON daniel-box and daniel-server `cd /home/ubuntu/server &&
+uv run ansible-playbook ansible/bootstrap.yml --tags sops-install -K`, and from a node for the
+Pi, with `-e target=daniel-pi` (operator-only).

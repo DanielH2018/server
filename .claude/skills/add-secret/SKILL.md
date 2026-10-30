@@ -122,8 +122,8 @@ A host with no age key of its own fails `initial_setup.yml` and `deploy.yml` at 
 secret-load `pre_task`, which reads as a playbook bug rather than a missing key. No playbook
 creates that key, so the first step is by hand; `ansible/README.md` §5 has the full flow.
 
-1. On the new host, as the operator, create the key with `age-keygen` at the path the step
-   names. It prints the **public** key.
+1. On the new host, as the operator, run `age-keygen -o ~/.config/sops/age/keys.txt` after
+   creating the directory 0700. It prints the **public** key.
 2. Add that public key to `ansible/.sops.yaml` — tracked, and public keys only.
 3. On a host that can already decrypt: `sops updatekeys ansible/vars/secrets.yml`.
 4. Commit and push, then `git pull` on the new host.
