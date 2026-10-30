@@ -8,6 +8,8 @@ Run: uv run pytest hosts/lib/tests/test_claude_code_component.py
 """
 
 import json
+import shutil
+import subprocess
 
 import pytest
 import yaml
@@ -148,3 +150,59 @@ def test_a_role_file_that_names_a_template_is_refused(tmp_path):
     files = [{"src": "role-file:claude-rc.service.j2", "dst": "/usr/lib/homelab/x"}]
     with pytest.raises(RenderRefused, match="is a template; name it role:"):
         render_with(tmp_path, {"role": "claude_code", "files": files})
+
+
+def test_a_file_whose_when_is_false_is_left_out(tmp_path):
+    files = [
+        {"src": "role-file:rootq.sh", "dst": "/usr/lib/homelab/on", "when": "x_on"},
+        {
+            "src": "role-file:rootq.sh",
+            "dst": "/usr/lib/homelab/off",
+            "when": "not x_on",
+        },
+    ]
+    spec = {"role": "claude_code", "defaults": {"x_on": True}, "files": files}
+    package = render_with(tmp_path, spec)
+    assert "/usr/lib/homelab/on" in package.files
+    assert "/usr/lib/homelab/off" not in package.files
+
+
+def test_a_when_that_is_not_a_boolean_is_refused(tmp_path):
+    files = [
+        {"src": "role-file:rootq.sh", "dst": "/usr/lib/homelab/x", "when": "'false'"}
+    ]
+    with pytest.raises(RenderRefused, match="not a boolean"):
+        render_with(tmp_path, {"role": "claude_code", "files": files})
+
+
+def test_the_agent_toggle_and_the_users_entry_agree():
+    # The users arm takes no `when:`. Switching the agent off on daniel-server means deleting
+    # the component's `users:` entry, which the arm then expires.
+    host_vars = REPO / "ansible" / "inventory" / "host_vars" / "daniel-server.yml"
+    enabled = yaml.safe_load(host_vars.read_text())["claude_code_agent_user_enabled"]
+    component = REPO / "hosts" / "components" / "claude-code" / "component.yml"
+    declared = {u["name"] for u in yaml.safe_load(component.read_text())["users"]}
+    assert enabled == ("claude" in declared)
+
+
+VISUDO = shutil.which("visudo") or "/usr/sbin/visudo"
+
+
+def visudo_check(tmp_path, grant: bytes) -> subprocess.CompletedProcess:
+    path = tmp_path / "grant"
+    path.write_bytes(grant)
+    path.chmod(0o440)
+    return subprocess.run([VISUDO, "-cf", str(path)], capture_output=True, text=True)
+
+
+def test_the_packaged_sudoers_grant_parses(package, tmp_path):
+    # Ansible validated the grant with `visudo -cf`; dpkg validates nothing, and a grant sudo
+    # cannot parse breaks sudo on the host.
+    grant = package.files["/etc/sudoers.d/homelab-rootq"][0]
+    result = visudo_check(tmp_path, grant)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_malformed_sudoers_grant_is_flagged(tmp_path):
+    result = visudo_check(tmp_path, b"ubu ntu ALL=(root NOPASSWD: /x\n")
+    assert result.returncode != 0

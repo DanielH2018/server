@@ -37,6 +37,11 @@ this role applies to daniel-box alone until H7.40 moves it too.
   inputs. It sets the agent's groups, home directories, profile, git identity and signing key,
   and it clones the dotfiles and the repo when they are missing. The agent's gh token is a
   declared output of the host's SOPS file.
+- **The role's toggles still decide each subject there.** Every file, output and enable link
+  carries the `when:` of the toggle that gated its task, so setting one false in daniel-server's
+  host_vars drops that subject from the next package version. The agent user is the one
+  exception: the users arm takes no `when:`, so switching the agent off means deleting the
+  component's `users:` entry, which the arm then expires. A test holds the two together.
 - **The Remote Control host ships without an enable link** while `claude_code_rc_enabled` is
   false, and reconcile never restarts it (`policy: manual`).
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since

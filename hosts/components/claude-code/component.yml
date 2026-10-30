@@ -24,6 +24,10 @@
 # claude-guard allowlist name those paths, and daniel-box's role installs the same bytes there
 # until H7.40. dpkg takes each unowned file over at install.
 #
+# Each file, output and enable link carries the `when:` of the role toggle that gated its task,
+# so a toggle set false in daniel-server's host_vars still takes its subject back. The `users:`
+# entry takes no `when:`: to switch the agent off, delete it, and the users arm expires the user.
+#
 # Not moved, because nothing re-applies it on daniel-server:
 #   - the operator's own Claude Code install, which the dotfiles repo owns since H7.38;
 #   - the agent's authorized peer key, which the role read over ssh from daniel-box. The file
@@ -52,68 +56,71 @@ outputs:
     keys: [claude_code_agent_gh_token]
     persist: false
     link: true
+    when: claude_code_agent_user_enabled
 files:
   # The agent user.
-  - {src: templates/claude-agent-setup.sh.j2, dst: /usr/lib/homelab/claude-agent-setup, mode: "0755", activate: "try-restart:homelab-claude-agent.service"}
-  - {src: "role:agent-user-profile.j2", dst: /usr/lib/homelab/claude-agent/profile, activate: "try-restart:homelab-claude-agent.service"}
-  - {src: "role:agent-gitconfig.j2", dst: /usr/lib/homelab/claude-agent/gitconfig, activate: "try-restart:homelab-claude-agent.service"}
-  - {src: "role:agent-user-claude-md.j2", dst: /usr/lib/homelab/claude-agent/CLAUDE.md, activate: "try-restart:homelab-claude-agent.service"}
-  - {src: "role:agent-chezmoi-seed.toml.j2", dst: /usr/lib/homelab/claude-agent/chezmoi-seed.toml, activate: "try-restart:homelab-claude-agent.service"}
-  - {src: units/homelab-claude-agent.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent.service}
+  - {src: templates/claude-agent-setup.sh.j2, dst: /usr/lib/homelab/claude-agent-setup, mode: "0755", activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: "role:agent-user-profile.j2", dst: /usr/lib/homelab/claude-agent/profile, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: "role:agent-gitconfig.j2", dst: /usr/lib/homelab/claude-agent/gitconfig, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: "role:agent-user-claude-md.j2", dst: /usr/lib/homelab/claude-agent/CLAUDE.md, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: "role:agent-chezmoi-seed.toml.j2", dst: /usr/lib/homelab/claude-agent/chezmoi-seed.toml, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: units/homelab-claude-agent.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent.service, when: "claude_code_agent_user_enabled"}
   # The Remote Control host.
   - {src: "role:claude-rc.service.j2", dst: /usr/lib/systemd/system/homelab-claude-rc.service}
   - {src: units/homelab-claude-rc-alert.service, dst: /usr/lib/systemd/system/homelab-claude-rc-alert.service}
   - {src: "role:claude-rc-restart.service.j2", dst: /usr/lib/systemd/system/homelab-claude-rc-restart.service}
   - {src: "role:claude-rc-restart.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-rc-restart.timer}
   # Background sessions come back at boot.
-  - {src: "role-file:bg_session_resume.py", dst: /usr/local/lib/claude-bg-resume/bg_session_resume.py}
-  - {src: "role:claude-bg-resume.service.j2", dst: /usr/lib/systemd/system/homelab-claude-bg-resume.service}
+  - {src: "role-file:bg_session_resume.py", dst: /usr/local/lib/claude-bg-resume/bg_session_resume.py, when: "claude_code_bg_resume_enabled"}
+  - {src: "role:claude-bg-resume.service.j2", dst: /usr/lib/systemd/system/homelab-claude-bg-resume.service, when: "claude_code_bg_resume_enabled"}
   # The cgroup metrics.
   - {src: "role-file:claude-cgroup-metrics.sh", dst: /usr/local/bin/claude-cgroup-metrics.sh, mode: "0755"}
   - {src: "role:claude-cgroup-metrics.service.j2", dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.service}
   - {src: "role:claude-cgroup-metrics.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.timer}
   # The agent's clone and dotfiles syncs. Their textfiles keep the names `claude-clone-sync` and
   # `claude-dotfiles-sync`, which observability's host-checks rules read.
-  - {src: "role-file:claude-clone-sync.sh", dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755"}
-  - {src: "role:claude-clone-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-clone-sync.service}
-  - {src: "role:claude-clone-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-clone-sync.timer}
-  - {src: "role-file:claude-dotfiles-sync.sh", dst: /usr/local/bin/claude-dotfiles-sync.sh, mode: "0755"}
-  - {src: "role:claude-dotfiles-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.service}
-  - {src: "role:claude-dotfiles-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.timer}
+  - {src: "role-file:claude-clone-sync.sh", dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled"}
+  - {src: "role:claude-clone-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-clone-sync.service, when: "claude_code_agent_user_enabled"}
+  - {src: "role:claude-clone-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-clone-sync.timer, when: "claude_code_agent_user_enabled"}
+  - {src: "role-file:claude-dotfiles-sync.sh", dst: /usr/local/bin/claude-dotfiles-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
+  - {src: "role:claude-dotfiles-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.service, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
+  - {src: "role:claude-dotfiles-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.timer, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
   # The caps. systemd merges drop-ins by file name across /etc and /usr/lib, so these sort after
   # the Ansible-era claude-*.conf copies and their values govern while those remain. The login
   # caps cover uid 1000 (the operator) and uid 995 (the agent above).
-  - {src: "role:fleet-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf}
-  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf}
-  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-995.slice.d/homelab-claude-caps.conf}
+  - {src: "role:fleet-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf, when: "claude_code_fleet_caps_enabled"}
+  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled"}
+  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-995.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled and claude_code_agent_user_enabled"}
   # Every user manager on the host reads it, where the role wrote one copy per capped home.
-  - {src: "role:pytest-fanout-cap.conf.j2", dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf}
+  - {src: "role:pytest-fanout-cap.conf.j2", dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf, when: "claude_code_login_caps_enabled"}
   # The stop and fan-out alerts.
-  - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service}
-  - {src: "role:50-claude-stop-alert.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules}
-  - {src: units/fanout-alert@.service, dst: /usr/lib/systemd/system/fanout-alert@.service}
-  - {src: "role:50-claude-fanout-alert.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-fanout-alert.rules}
+  - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service, when: "claude_code_stop_alert_enabled"}
+  - {src: "role:50-claude-stop-alert.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules, when: "claude_code_stop_alert_enabled"}
+  - {src: units/fanout-alert@.service, dst: /usr/lib/systemd/system/fanout-alert@.service, when: "claude_code_fanout_alert_enabled"}
+  - {src: "role:50-claude-fanout-alert.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-fanout-alert.rules, when: "claude_code_fanout_alert_enabled"}
   # The root inspector.
-  - {src: "role-file:homelab_rootq.py", dst: /usr/local/sbin/homelab-rootq, mode: "0755"}
-  - {src: "role-file:rootq.sh", dst: /usr/local/bin/rootq, mode: "0755"}
-  - {src: "role:claude-rootq.sudoers.j2", dst: /etc/sudoers.d/homelab-rootq, mode: "0440"}
-  - {src: "role-file:homelab_rootq_socket.py", dst: /usr/local/libexec/homelab-rootq-socket, mode: "0700"}
-  - {src: "role-file:rootq_socket.py", dst: /usr/local/bin/rootq-socket, mode: "0755"}
-  - {src: "role:homelab-rootq.socket.j2", dst: /usr/lib/systemd/system/homelab-rootq.socket}
-  - {src: "role:homelab-rootq@.service.j2", dst: /usr/lib/systemd/system/homelab-rootq@.service}
+  - {src: "role-file:homelab_rootq.py", dst: /usr/local/sbin/homelab-rootq, mode: "0755", when: "claude_code_rootq_enabled"}
+  - {src: "role-file:rootq.sh", dst: /usr/local/bin/rootq, mode: "0755", when: "claude_code_rootq_enabled"}
+  - {src: "role:claude-rootq.sudoers.j2", dst: /etc/sudoers.d/homelab-rootq, mode: "0440", when: "claude_code_rootq_enabled"}
+  - {src: "role-file:homelab_rootq_socket.py", dst: /usr/local/libexec/homelab-rootq-socket, mode: "0700", when: "claude_code_rootq_socket_armed"}
+  - {src: "role-file:rootq_socket.py", dst: /usr/local/bin/rootq-socket, mode: "0755", when: "claude_code_rootq_socket_armed"}
+  - {src: "role:homelab-rootq.socket.j2", dst: /usr/lib/systemd/system/homelab-rootq.socket, when: "claude_code_rootq_socket_armed"}
+  - {src: "role:homelab-rootq@.service.j2", dst: /usr/lib/systemd/system/homelab-rootq@.service, when: "claude_code_rootq_socket_armed"}
 units:
   # A restart drops every session the host runs, so a changed unit waits for the operator.
   homelab-claude-rc.service: {policy: manual}
   # Its job is the next boot; a restart would respawn sessions the operator stopped.
   homelab-claude-bg-resume.service: {policy: manual}
 enable:
-  homelab-claude-agent.service: multi-user.target
+  homelab-claude-agent.service: {target: multi-user.target, when: claude_code_agent_user_enabled}
   homelab-claude-rc.service: {target: multi-user.target, when: claude_code_rc_enabled}
   homelab-claude-rc-restart.timer: {target: timers.target, when: claude_code_rc_enabled}
   homelab-claude-bg-resume.service: {target: multi-user.target, when: claude_code_bg_resume_enabled}
   homelab-claude-cgroup-metrics.timer: timers.target
-  homelab-claude-clone-sync.timer: timers.target
-  homelab-claude-dotfiles-sync.timer: {target: timers.target, when: claude_code_agent_dotfiles}
+  homelab-claude-clone-sync.timer: {target: timers.target, when: claude_code_agent_user_enabled}
+  homelab-claude-dotfiles-sync.timer:
+    target: timers.target
+    when: claude_code_agent_user_enabled and claude_code_agent_dotfiles
   homelab-rootq.socket: {target: sockets.target, when: claude_code_rootq_socket_armed}
 # What the role installed. Reconcile retires each unit not shipped under its old name (disable,
 # stop, remove), and hands off each /etc copy of a unit shipped under the same name.
