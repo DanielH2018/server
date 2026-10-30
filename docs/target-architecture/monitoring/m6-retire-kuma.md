@@ -28,8 +28,8 @@ A5's soak read, [#6624](https://github.com/DanielH2018/server/issues/6624): A5's
 window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
 (*Which soak minutes count as explained* in M2). It mapped each tile to the `storage.yaml` rules
 that port its bridge row, with `LonghornVolumesMissing` counted for both Longhorn tiles. Over
-`[162h:1m]`, query 1 returned 5 minutes for k3s PVC Fullness and none for the other four tiles,
-and query 2 returned none for any tile. The 5 minutes are one single-cycle bridge episode on
+`[168h:1m]`, read at 2026-10-30T18:58Z, query 1 returned 5 minutes for k3s PVC Fullness and
+none for the other four tiles, and query 2 returned none for any tile. The 5 minutes are one single-cycle bridge episode on
 2026-10-30 at 11:33. At that sample daniel-box's kubelet scrape read `up=1` but carried none of
 its 28 claims' volume stats, so the claim count fell from 43 to 15 and valheim-server reported no
 free bytes. The bridge pages its free-space floor on one sample, and Kuma held DOWN until the next
