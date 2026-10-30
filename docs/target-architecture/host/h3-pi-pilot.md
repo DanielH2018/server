@@ -1648,7 +1648,9 @@ says otherwise.
         - Add six units: `homelab-pi-sd-health`, `homelab-pi-gz-integrity` and
           `homelab-pi-recovery`, each a service and a timer. The three services set
           `User={{ sys_user }}`. That user reaches `docker` through the supplementary group
-          `docker_install` grants, as the cron did.
+          `docker_install` grants, as the cron did. **Amended 2026-10-30 (#6599):** H7.26
+          deleted that grant, so `homelab-pi-recovery.service`, the one heartbeat that runs
+          `docker`, carries `SupplementaryGroups=docker` itself.
         - `LogsDirectory=pi-health` and `StateDirectory=pi-health` keep the paths at
           `70591c307`. The package ships `/etc/logrotate.d/pi-health` at the same path, as a
           plain file, so dpkg takes it over on unpack.

@@ -1353,6 +1353,46 @@ groups:
             refused. Read `journalctl -t weekly-restart` on daniel-pi and docs/host-packages.md,
             "Reboot-pending and activation-pending", then reboot the host.
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/
+      # The Pi's held Docker engine (H7.26, #6607). The updater writes
+      # homelab_docker_engine_pending 1 while an engine package is off its pin, and only
+      # homelab-docker-engine.service, started by its 00:30 UTC timer, moves the engine. A run
+      # that fails leaves homelab-updater.timer masked, and HostUpdateStale pages that half. This
+      # rule pages a pin that no run applied: the engine timer paused, the Pi off at 00:30, or a
+      # run that failed without masking the updater.
+      #
+      # 26h is the longest a pin legitimately waits, from the Pi's schedule. The updater first
+      # writes 1 as late as 01:05, the slot after the window, so the pin waits 23h25m for the
+      # next 00:30. The unit's TimeoutStartSec is 90 minutes, and the updater's next slot (5
+      # minutes), its 60s delay and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 25h51m
+      # in all. scripts/renderer/tests/test_renderer_host_update_limits.py derives it from the
+      # unit files and fails a window shorter than it.
+      #
+      # It reads the range, never a `for:`. A failed scrape or the Pi's weekly reboot marks the
+      # series stale, and a stale evaluation resets a `for:` to zero, so the page would slip a
+      # day. present_over_time over the hour before the window keeps a series younger than 26h,
+      # such as a fresh textfile, from firing on its first samples. The `unless` leaves a dead
+      # exporter to ScrapeTargetDown.
+      - alert: DockerEnginePinUnapplied
+        expr: |
+          (
+              min_over_time(homelab_docker_engine_pending{job="node-pi",origin="daniel-pi"}[26h]) == 1
+            and on (origin)
+              present_over_time(homelab_docker_engine_pending{job="node-pi",origin="daniel-pi"}[1h] offset 26h)
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's Docker engine has sat off its pins for more than 26 hours.
+          description: >-
+            homelab_docker_engine_pending on daniel-pi has read 1 for 26 hours, so the nightly
+            00:30 UTC homelab-docker-engine.timer run has not applied the engine pins. Read
+            `systemctl status homelab-docker-engine.timer homelab-updater.timer` and `journalctl
+            -u homelab-docker-engine` on daniel-pi, and docs/host-packages.md, "Host-plane
+            pages". A failed run leaves homelab-updater.timer masked, so unmask and start it
+            once the cause is fixed.
+          runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       # SHADOW UNTIL #5658's ruling on unattended launches decides whether idle slots page
       # anyone (#5672). No batch ran for 16.4h on the night of 2026-10-13 while 9 filed issues
       # waited, and nothing said so. The server lander writes findings_issues from issue labels
