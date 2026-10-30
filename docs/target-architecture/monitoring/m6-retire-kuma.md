@@ -30,13 +30,16 @@ A4's soak read, [#6623](https://github.com/DanielH2018/server/issues/6623): A4's
 window starts there. The read used M1 convention 6's two queries with M2's 8-minute margin
 (*Which soak minutes count as explained* in M2). It mapped each tile to the `edge.yaml` rules
 that port its bridge row. `EdgeMetricsMissing` counts for every tile except Traefik 421. Over
-`[168h:1m]`, query 1 returned 15 minutes for Traefik Latency and none for the other four tiles,
-and query 2 returned none for any tile. The 15 minutes are three single-cycle bridge episodes:
-sonarr on 2026-10-27 at 00:27, and jellyfin on 2026-10-29 at 21:52 and on 2026-10-30 at 00:59.
-The bridge's `traefik_latency` row has no streak, so it pages on one bad sample.
-`TraefikBackendSlow` holds `for: 5m`, and its stored `ALERTS{alertstate="pending"}` series ran
-for 2, 4 and 4 minutes on those backends without firing. Each episode is therefore one the rule
-drops by design: its condition held for less than the rule's `for:`. The Traefik 5xx episode on
+`[168h:1m]`, read on 2026-10-30 at 18:42Z, query 1 returned 20 minutes for Traefik Latency and
+none for the other four tiles. Query 2 returned none for any tile. The 20 minutes are four
+single-cycle bridge episodes: sonarr on 2026-10-27 at 00:27, and jellyfin on 2026-10-29 at
+21:52 and on 2026-10-30 at 00:59 and 14:54. The bridge's `traefik_latency` row has no streak, so
+it pages on one bad sample. `TraefikBackendSlow` holds `for: 5m`. Its stored
+`ALERTS{alertstate="pending"}` series ran for 2, 4 and 4 minutes on the first three backends
+without firing. The fourth ran for 4 minutes, reset for 3, then ran for 3. Each episode is
+therefore one the rule drops by design, because no contiguous run of its condition reached the
+rule's `for:`. Jellyfin's recurrence is filed as
+[#6649](https://github.com/DanielH2018/server/issues/6649). The Traefik 5xx episode on
 2026-10-25 from 14:22 to 14:26 is covered, because `TraefikBackend5xx` fired from 14:23 to 14:25.
 Kuma held every A4 tile at status 3 (maintenance) from 07:30 to 08:16 that day, which neither
 query counts. No minute is unexplained, so no rule changes and Cutover-a is not blocked by the
