@@ -63,28 +63,35 @@ groups:
       # volume floor. The services in TRAEFIK_STREAM_SERVICES hold connections open, and the
       # histogram times a request to the end of its connection, so the regex excludes them from
       # every selector.
+      # DECIDED: a 5-of-10-minute count, not `for: 5m`. The bridge pages this row on one bad
+      # sample, and a burst that dips for a minute resets a `for:` hold, so the A4 soak's
+      # 2026-10-30 14:45-14:54 jellyfin episode (7 bad minutes of 10) never fired (#6623).
+      # keep_firing_for acts only after firing; [10m] rates smear 4-minute bursts into pages.
       - alert: TraefikBackendSlow
         expr: >-
           label_replace(
-            (
+            count_over_time(
               (
-                sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
-                - sum by (service) (rate(traefik_service_request_duration_seconds_bucket{job="traefik-k8s", le="5.0", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
-              )
-              / sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
-              > 0.05
-            )
-            and
-            (
-              (
-                sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
-                - sum by (service) (rate(traefik_service_request_duration_seconds_bucket{job="traefik-k8s", le="5.0", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
-              ) * 300 >= 3
-            )
-            and
-            (sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m])) >= 0.05),
+                (
+                  (
+                    sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+                    - sum by (service) (rate(traefik_service_request_duration_seconds_bucket{job="traefik-k8s", le="5.0", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+                  )
+                  / sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+                  > 0.05
+                )
+                and
+                (
+                  (
+                    sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+                    - sum by (service) (rate(traefik_service_request_duration_seconds_bucket{job="traefik-k8s", le="5.0", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m]))
+                  ) * 300 >= 3
+                )
+                and
+                (sum by (service) (rate(traefik_service_request_duration_seconds_count{job="traefik-k8s", service!~"homelab-(headlamp|home-assistant|uptime-kuma)-.*"}[5m])) >= 0.05)
+              )[10m:1m]
+            ) >= 5,
             "backend", "$1", "service", "(.+)")
-        for: 5m
         labels:
           severity: warning
           service: traefik
@@ -92,9 +99,10 @@ groups:
         annotations:
           summary: Over 5% of Traefik backend {{ $labels.backend }}'s requests take longer than 5s.
           description: >-
-            {{ $value | humanizePercentage }} of the requests to {{ $labels.backend }} in the
-            last 5 minutes finished after the 5.0s histogram bucket. The backend is slow, not
-            the edge. Its own log and its resource use are the next reads.
+            In {{ $value }} of the last 10 minutes, over 5% of the requests to
+            {{ $labels.backend }} in the trailing 5 minutes finished after the 5.0s histogram
+            bucket. The backend is slow, not the edge. Its own log and its resource use are the
+            next reads.
       # The bridge's "no 5.0s bucket" branch: a backend with traffic and no `le="5.0"` series
       # means Traefik's buckets changed, and the rule above reads that as quiet.
       - alert: TraefikLatencyBucketMissing
