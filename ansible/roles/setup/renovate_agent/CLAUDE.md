@@ -32,6 +32,12 @@ The role installs the scripts, config, prompt and units on every run.
 it back to `false` stops **and** disables the timer. That is the rollback, and
 `ansible/tests/setup/test_renovate_agent_unit.py` pins that both directions stay wired.
 
+**A disarmed agent tells Prometheus so.** The role writes `renovate-agent-disarmed.prom` to
+node_exporter's textfile directory. `RenovateAgentNotReporting` and `HostCheckOverdue` stay
+quiet on the check while the marker reads 1, so a run started by hand while disarmed pages
+nothing a day later. Arming removes the marker.
+The rule then fires until the next run writes a verdict.
+
 It ships `false`. Arming it is a decision with a spend attached and a blast radius — the
 lander deploys what the session picks — not a sign the role is unfinished. The role refuses to
 arm without the session's own GitHub token and Claude credential;
