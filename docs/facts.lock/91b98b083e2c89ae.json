@@ -1,0 +1,15 @@
+{
+  "checksum": "dd11a0a6fdcee212ac0cb70041969ed0fa1cd081371ca85132d84333c5f7b265",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/docker_install/CLAUDE.md#Where the work went",
+  "row": {
+    "atoms": {
+      "docs/docker-engine-pins-and-runtime.md": "c8c8a4425f4c79194324d061592d90bc2545310874955c8e3aa6b75a937c1e0f",
+      "hosts/components/apt-docker/": "1b3b5846cd9b4de0c0589fac7a793e06894739ead34db42b019523caa0cb835b",
+      "hosts/components/pi-compose/units/homelab-compose.service.j2": "6f2c2e8a8235a5aa22774987400f08f0c7b2ec477636ae90e544639df417e997",
+      "hosts/components/pi-docker/": "5df8ebf9a4d8373825407ea70774e3b8d5dd1a83d74dd6501865e3c4a419e5fa"
+    },
+    "python": "3.14",
+    "verified_sha": "d7acbd6ca"
+  }
+}

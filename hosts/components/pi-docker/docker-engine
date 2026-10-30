@@ -1,0 +1,189 @@
+#!/bin/sh
+# Install, hold or upgrade the Pi's Docker engine to the versions docker-engine.pins names (H7.26;
+# docs/target-architecture/host/h7-delete-ansible.md, *The Docker engine stays held*).
+#
+# Usage:
+#   docker-engine apply     homelab-docker-engine.service's ExecStart
+#   docker-engine hold      hold every installed engine package; the unit's ExecStopPost
+#   docker-engine pending   print 1 when an engine package is missing or off its pin, else 0
+#   docker-engine restart docker|containerd
+#                           apply a daemon config change: restart one daemon under the same
+#                           updater interlock, and recreate the project after a dockerd restart
+#
+# `apply` takes one of three paths:
+#   - no docker-ce, as on a fresh host: install the pinned versions and hold them;
+#   - every package at its pin: confirm the hold and exit 0;
+#   - otherwise: mask homelab-updater.timer, wait out a running updater or reconcile, stop the
+#     `homelab` project, install the pinned versions over the hold, re-hold, start the daemon
+#     and recreate every container. The recreate gives docker-proxy the socket's new inode (#1961).
+#     The timer is unmasked last, and only when this run masked it, so a failed run leaves the
+#     Pi installing no package until the operator unmasks it.
+#
+# Exit codes: 0 done; 1 failed, with the reason on stderr; 64 usage.
+#
+# HOMELAB_ROOT prefixes every file path, so a test runs it against a scratch tree.
+set -u
+
+root=${HOMELAB_ROOT:-}
+pins=$root/usr/lib/homelab/docker-engine.pins
+project=$root/usr/lib/homelab/compose/compose.yaml
+# Above homelab-updater.service's TimeoutStartSec (50 min), the longest run the wait can meet.
+wait_limit=${DOCKER_ENGINE_WAIT_LIMIT_S:-3060}
+wait_step=${DOCKER_ENGINE_WAIT_STEP_S:-10}
+
+say() { printf 'docker-engine: %s\n' "$*" >&2; }
+
+packages() { awk 'NF == 2 && $1 !~ /^#/ { print $1 }' "$pins"; }
+installed() { dpkg-query -W -f '${Version}' "$1" 2>/dev/null; }
+
+# True when every pinned package is installed at a version its glob matches.
+at_pins() {
+    awk 'NF == 2 && $1 !~ /^#/' "$pins" | {
+        while read -r package glob; do
+            version=$(installed "$package") || return 1
+            # shellcheck disable=SC2254 # the glob is the pin, matched as a pattern on purpose
+            case $version in
+                $glob) ;;
+                *) return 1 ;;
+            esac
+        done
+    }
+}
+
+# The `package=version` specs apt receives: for each pin, the newest version apt-cache offers
+# that matches its glob. apt-get takes no glob, and madison lists the newest first.
+specs() {
+    awk 'NF == 2 && $1 !~ /^#/' "$pins" | {
+        while read -r package glob; do
+            found=
+            for version in $(apt-cache madison "$package" | awk -F'|' '{ gsub(/ /, "", $2); print $2 }'); do
+                # shellcheck disable=SC2254
+                case $version in
+                    $glob)
+                        found=$version
+                        break
+                        ;;
+                esac
+            done
+            if [ -z "$found" ]; then
+                say "apt offers no $package matching $glob"
+                return 1
+            fi
+            printf '%s=%s\n' "$package" "$found"
+        done
+    }
+}
+
+hold() {
+    for package in $(packages); do
+        [ -n "$(installed "$package")" ] || continue
+        apt-mark hold "$package" >/dev/null || return 1
+    done
+}
+
+# The line arm edits containerd.io's conffile, so an upgrade that ships a changed packaged copy
+# reaches dpkg's conffile prompt. With no terminal dpkg would fail there, leaving every container
+# stopped. confold keeps the local file, and the next reconcile re-adds the block if it went.
+install_pinned() {
+    wanted=$(specs) || return 1
+    # shellcheck disable=SC2086 # one spec per word
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        --allow-change-held-packages \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold $wanted
+}
+
+# The interlock the updater needs: it and reconcile both write the `homelab` project.
+quiet_updater() {
+    if [ "$(systemctl is-enabled homelab-updater.timer 2>/dev/null)" = masked ]; then
+        masked_here=0
+    else
+        systemctl mask --now homelab-updater.timer || return 1
+        masked_here=1
+    fi
+    waited=0
+    for unit in homelab-updater.service homelab-reconcile.service; do
+        while systemctl -q is-active "$unit"; do
+            if [ "$waited" -ge "$wait_limit" ]; then
+                say "$unit is still active after ${wait_limit}s; nothing stopped, timer left masked"
+                return 1
+            fi
+            sleep "$wait_step"
+            waited=$((waited + wait_step))
+        done
+    done
+}
+
+release_updater() {
+    [ "$masked_here" = 1 ] || return 0
+    systemctl unmask homelab-updater.timer && systemctl start homelab-updater.timer
+}
+
+# A daemon.json, config.toml or Go drop-in change goes live here, one daemon at a time. A
+# dockerd restart gives /var/run/docker.sock a new inode, which a container bind-mounting the
+# file never sees, so the project is recreated after it (#1961).
+restart() {
+    case $1 in
+        docker | containerd) ;;
+        *)
+            echo "usage: docker-engine restart docker|containerd" >&2
+            exit 64
+            ;;
+    esac
+    quiet_updater || return 1
+    systemctl restart "$1.service" || return 1
+    if [ "$1" = docker ] && [ -f "$project" ]; then
+        docker compose -f "$project" up -d --force-recreate || return 1
+    fi
+    release_updater || return 1
+    say "restarted $1.service"
+}
+
+upgrade() {
+    quiet_updater || return 1
+    apt-get update || return 1
+    # Resolved before anything stops, so a pin apt cannot serve fails with every container up.
+    specs >/dev/null || return 1
+    if [ -f "$project" ]; then
+        docker compose -f "$project" stop || return 1
+    fi
+    install_pinned || return 1
+    hold || return 1
+    systemctl start docker.socket docker.service || return 1
+    if [ -f "$project" ]; then
+        docker compose -f "$project" up -d --force-recreate || return 1
+    fi
+    release_updater || return 1
+    say "the engine is at its pins and held"
+}
+
+apply() {
+    if [ -z "$(installed docker-ce)" ]; then
+        apt-get update || return 1
+        install_pinned || return 1
+        hold || return 1
+        say "installed the pinned engine and held it"
+        return 0
+    fi
+    if at_pins; then
+        hold || return 1
+        say "the engine is at its pins; nothing stopped, nothing upgraded"
+        return 0
+    fi
+    upgrade
+}
+
+[ -r "$pins" ] || {
+    say "$pins is missing"
+    exit 1
+}
+
+case "$*" in
+    apply) apply || exit 1 ;;
+    hold) hold || exit 1 ;;
+    pending) if at_pins; then echo 0; else echo 1; fi ;;
+    "restart "*) restart "$2" || exit 1 ;;
+    *)
+        echo "usage: docker-engine apply|hold|pending|restart docker|containerd" >&2
+        exit 64
+        ;;
+esac

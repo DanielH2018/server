@@ -29,6 +29,14 @@
 # `compose:` names the directory of per-service trees (host_compose.py), and the services come from
 # `compose_services` in the Pi's host_vars.
 #
+# The networks. Every shared network stays `external: true`, so Compose never recreates one the
+# live Pi holds, which would stop every attached container (H7.26). The unit's `ExecStartPre=`
+# lines create each external network the rendered compose files name, from the renderer's
+# `compose_external_networks`, so a fresh Pi gets them on first start.
+# hosts/lib/tests/test_pi_docker_component.py holds the created set equal to the project's, and
+# hosts/lib/tests/test_pi_compose_network_measurement.py records what Compose does with an
+# unlabelled network of the same name.
+#
 # The `outputs:` entry below is the Compose env file. Since H5.7, autoheal's webhook is the first
 # secret a compose file reads, and since H5.8 alloy's HTTP password is the second. The includes
 # carry `env_file:` and `keys:` lists exactly the secrets the compose files read (operator ruling

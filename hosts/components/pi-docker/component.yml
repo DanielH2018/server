@@ -1,0 +1,93 @@
+# The Pi's Docker engine (H7.26, old step H7.5; docs/target-architecture/host/h7-delete-ansible.md).
+# Only daniel-pi lists it. docs/docker-engine-pins-and-runtime.md has the 2026-09-18 incident, the
+# pin derivations and the Go runtime measurements behind every value here.
+#
+# Owners, measured on the live Pi with `dpkg -S` on 2026-10-29 (the PR body quotes the output):
+# /etc/containerd/config.toml is containerd.io's conffile, so its block takes the line arm.
+# /etc/docker/daemon.json and /usr/local/bin/docker-compose are unowned, so the package ships
+# daemon.json and dpkg takes it over.
+#
+# DECIDED: the engine never moves through the updater (#1961, H7-R1-02). This component declares
+# no `depends:` on docker-ce, containerd.io or the plugins, and ships no apt preferences pin for
+# them, because a pin above priority 1000 forces a version change on the next apt run. The
+# packages stay held, and homelab-docker-engine.service is the one path that installs or moves
+# them. Reconcile never starts it (`policy: manual`, no enable link on the service). An operator
+# starts it from a LAN session, or homelab-docker-engine.timer starts it at 00:30 UTC, the Pi's
+# quiet window (operator ruling 2026-10-30). The unit does nothing while every package sits at its
+# pin, so the timer acts only after a pin moved. hosts/lib/tests/test_pi_docker_component.py holds
+# these rules.
+#
+# Activation. daemon.json, the containerd block and both Go-runtime drop-ins declare
+# `manual:<daemon>`, and both daemons carry `policy: manual`. A change to one marks the daemon
+# pending and restarts nothing, because a dockerd restart leaves docker-proxy on a stale socket
+# inode. The operator applies it from a LAN session with
+# `sudo /usr/lib/homelab/docker-engine restart docker` (or `containerd`), which restarts the one
+# daemon under the updater interlock and recreates the project after a dockerd restart.
+defaults:
+  # The Ubuntu release in the apt version suffix, `-*~ubuntu.24.04~noble`. The renderer has no
+  # facts, so these restate the Pi's measured release, as the Renovate annotations do.
+  docker_engine_ubuntu_version: "24.04"
+  docker_engine_ubuntu_codename: noble
+  # The engine versions homelab-docker-engine.service installs. Four upstream versions, not one:
+  # docker-ce and docker-ce-cli share the Moby version, and the other three packages each carry
+  # their own. Renovate tracks each on the `deb` datasource against download.docker.com's own
+  # noble/arm64 index in ONE manual group, never the upstream GitHub releases: Docker packages a
+  # release days to weeks after upstream tags it, so a bump could name a version apt has no
+  # package for.
+  #
+  # One `# renovate:` annotation per pin, each naming the apt package its pin renders
+  # (scripts/tests/test_renovate_docker_engine_pins.py holds the two together).
+  # - `suite` and `binaryArch` are daniel-pi's own, measured 2026-09-24.
+  # - extractVersion strips apt's epoch and Debian revision. It is deliberately NOT anchored on
+  #   `~ubuntu`: the same index carries bare `<version>-<rev>` rows for containerd.io, and a
+  #   version extractVersion cannot match is dropped from the version space.
+  # - `versioning=semver` overrides the deb datasource's default `deb` versioning.
+  # renovate: datasource=deb depName=docker-ce versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
+  docker_engine_version: "29.8.1"
+  # renovate: datasource=deb depName=containerd.io versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
+  docker_engine_containerd_version: "2.3.5"
+  # renovate: datasource=deb depName=docker-compose-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
+  docker_engine_compose_plugin_version: "5.5.1"
+  # renovate: datasource=deb depName=docker-buildx-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
+  docker_engine_buildx_plugin_version: "0.37.1"
+  # GOMEMLIMIT for each Go daemon, paired with GOGC=off. docs/docker-engine-pins-and-runtime.md
+  # has the measurements; ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py holds
+  # each above its floor.
+  docker_engine_gomemlimit_dockerd: 64MiB
+  docker_engine_gomemlimit_containerd: 64MiB
+units:
+  homelab-docker-engine.service: {policy: manual}
+  docker.service: {policy: manual}
+  containerd.service: {policy: manual}
+files:
+  - {src: templates/docker-engine.pins.j2, dst: /usr/lib/homelab/docker-engine.pins}
+  - {src: docker-engine, dst: /usr/lib/homelab/docker-engine, mode: "0755"}
+  - {src: units/homelab-docker-engine.service, dst: /usr/lib/systemd/system/homelab-docker-engine.service}
+  - {src: units/homelab-docker-engine.timer, dst: /usr/lib/systemd/system/homelab-docker-engine.timer}
+  - {src: templates/daemon.json.j2, dst: /etc/docker/daemon.json, activate: "manual:docker.service"}
+  - {src: templates/dockerd-go-runtime.conf.j2, dst: /usr/lib/systemd/system/docker.service.d/50-homelab.conf, activate: "manual:docker.service"}
+  - {src: templates/containerd-go-runtime.conf.j2, dst: /usr/lib/systemd/system/containerd.service.d/50-homelab.conf, activate: "manual:containerd.service"}
+enable:
+  homelab-docker-engine.timer: timers.target
+lines:
+  # containerd's metrics listener, scraped as `containerd-pi`, and the shim environment that
+  # undoes the daemon's GOGC=off for every shim and runc it spawns. containerd appends this `env`
+  # after the inherited environment, and Go keeps the last value of a duplicate key. The marker
+  # is the Ansible task's, so the first run adopts the block it wrote.
+  - path: /etc/containerd/config.toml
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (roles/setup/docker_install)"
+    block: |
+      [metrics]
+        address = "{{ server_ip }}:1338"
+      [plugins.'io.containerd.shim.v1.manager']
+        env = ["GOGC=100", "GOMEMLIMIT=off"]
+    activate: "manual:containerd.service"
+legacy:
+  # The Ansible-era Go-runtime drop-ins. The package's 50-homelab.conf drop-ins set the same two
+  # variables, so removing these changes no daemon's environment.
+  - {path: /etc/systemd/system/docker.service.d/20-go-runtime.conf}
+  - {path: /etc/systemd/system/docker.service.d}
+  - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
+  - {path: /etc/systemd/system/containerd.service.d}
+  # The linuxserver Compose v1 wrapper that docker_install removed. The live Pi has none.
+  - {path: /usr/local/bin/docker-compose}

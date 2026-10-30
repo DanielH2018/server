@@ -39,8 +39,12 @@
 # and hostname line (pi-resolver), and pi-peer-backup's forced-command wrapper and key
 # (pi-peer-backup-target). The interim heartbeat token files are legacy entries below. No file
 # here needs a credential.
+#
+# Since H7.26 it ships the docker_install role's subjects (pi-docker): the engine pins and
+# homelab-docker-engine.service, the one path that installs or moves the held engine, daemon.json,
+# the two Go-runtime drop-ins and containerd's config block. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token

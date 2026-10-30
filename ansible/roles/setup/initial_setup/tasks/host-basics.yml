@@ -79,8 +79,7 @@
     - initial_setup_swapfile_create is changed
 
 # The Docker engine must not move under running containers -- and it sits here, BEFORE the
-# dist-upgrade, because docker_install runs after this role in initial_setup.yml, so a hold
-# set there would land one full upgrade too late.
+# dist-upgrade, so the dist-upgrade never sees an unheld engine package.
 - name: Check whether the Docker engine is installed (Docker hosts)
   tags: [apt-upgrade]
   # A stat, not package_facts: building the apt cache is the kind of memory spike the Pi
@@ -98,10 +97,10 @@
   # ssh refused connections for ~20 min, and docker-proxy sat unhealthy behind a stale socket
   # bind-mount until a hand redeploy recreated it (#1961). live-restore keeps containers up
   # across a dockerd restart; it does nothing for a shim binary swapped under them. The cost
-  # is that a Docker security fix waits for `--tags docker-engine-upgrade`, which stops the
-  # containers, upgrades, re-holds and recreates them -- see docker_install's CLAUDE.md.
+  # is that a Docker security fix waits for homelab-docker-engine.service, which stops the
+  # containers, upgrades, re-holds and recreates them -- docs/docker-engine-pins-and-runtime.md.
   # Guarded on the binary because dpkg_selections fails on a name dpkg has never seen: a
-  # fresh host passes through here and docker_install holds them the moment it installs them.
+  # fresh host passes through here, and the engine unit holds them the moment it installs them.
   ansible.builtin.dpkg_selections:
     name: "{{ item }}"
     selection: hold

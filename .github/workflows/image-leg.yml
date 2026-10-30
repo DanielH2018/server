@@ -21,6 +21,7 @@ on:
       - ".github/workflows/image-leg.yml"
       - "ansible/roles/k8s/longhorn-restore-drill/**"
       - "ansible/tests/longhorn/**"
+      - "hosts/lib/tests/test_pi_compose_network_measurement.py"
       - "ansible/tests/_shell_render.py"
       - "scripts/lib/proc_testing.py"
       - "pyproject.toml"
@@ -47,7 +48,10 @@ jobs:
 
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
 
-      # `-m image` replaces the `not ui and not image` in addopts. The path is the narrowest one
-      # that collects a marked module; `-n 0` keeps the pull on one process.
+      # `-m image` replaces the `not ui and not image` in addopts. The paths are the narrowest ones
+      # that collect the marked modules; `-n 0` keeps the pull on one process, and `-s` lets the
+      # Compose network measurement (H7.26) print Compose's own output into this log.
       - name: Run the image tests
-        run: uv run python -m pytest --color yes -n 0 -m image ansible/tests/longhorn/
+        run: >-
+          uv run python -m pytest --color yes -n 0 -s -m image ansible/tests/longhorn/
+          hosts/lib/tests/test_pi_compose_network_measurement.py

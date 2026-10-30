@@ -88,10 +88,10 @@
 
 - name: Release the hold on the Docker engine packages before purging them
   tags: [docker-teardown]
-  # The install half holds docker_engine_packages so no upgrade moves them under running
-  # containers. apt with `-y` refuses to change a held package unless told
-  # `--allow-change-held-packages`, so the purge below fails on a host that came through the
-  # install half unless the hold is released first. Guarded on the binary like the stop above:
+  # A Docker host holds docker_engine_packages (homelab-docker-engine.service on the Pi) so
+  # no upgrade moves them under running containers. apt with `-y` refuses to change a held
+  # package unless told `--allow-change-held-packages`, so the purge below fails on a held
+  # host unless the hold is released first. Guarded on the binary like the stop above:
   # dpkg_selections fails on a name dpkg has never seen.
   when: docker_install_dockerd_binary.stat.exists
   ansible.builtin.dpkg_selections:
@@ -118,7 +118,8 @@
 
 - name: Remove the Go runtime drop-ins the install direction wrote
   tags: [docker-teardown]
-  # go-runtime.yml writes /etc/systemd/system/{docker,containerd}.service.d/20-go-runtime.conf;
+  # This role wrote /etc/systemd/system/{docker,containerd}.service.d/20-go-runtime.conf
+  # until H7.26;
   # the purge above takes /etc/docker and the units, not /etc/systemd/system, and a
   # drop-in left for a unit that no longer exists is what this role's both-directions
   # rule exists to reap. The directories are this role's -- daniel-pi had neither before.
