@@ -110,7 +110,7 @@ role M6 edits*:
 2. Cutover-a2, [#6652](https://github.com/DanielH2018/server/pull/6652): the three bridge rows,
    their check bodies and their env keys go, and the push tokens enter `PENDING_RETIREMENT`. It
    merges only after the read above passes.
-3. Cutover-b, PR_B_NUMBER: the A3 rules drop `shadow`, `BlackboxExporterDown` goes live with its
+3. Cutover-b, [#6653](https://github.com/DanielH2018/server/pull/6653): the A3 rules drop `shadow`, `BlackboxExporterDown` goes live with its
    inhibit on `ScrapeTargetDown{job="blackbox-ingress"}`, `LokiHomelabDown` is deleted, and the
    `kuma-cutover` group loses A3's three terms.
 
