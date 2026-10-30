@@ -249,7 +249,9 @@ def test_a_rotated_peer_key_replaces_the_old_one_in_authorized_keys(tmp_path):
 
 
 def test_a_blank_peer_key_ships_no_file_and_leaves_the_one_ansible_wrote(tmp_path):
-    package = render_daniel_server_with(tmp_path, claude_agent_ssh_login_enabled=True)
+    package = render_daniel_server_with(
+        tmp_path, claude_agent_ssh_login_enabled=True, claude_agent_peer_public_key=""
+    )
     assert AUTHORIZED_KEYS not in package.files
     assert REMOVAL not in text(package, SETUP)
 

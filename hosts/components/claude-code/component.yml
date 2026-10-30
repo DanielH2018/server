@@ -49,7 +49,7 @@ defaults:
   claude_code_worktree_holders_group: worktree-holders
   # The public half of the key daniel-box's agent logs in with: one `ssh-ed25519 ...` line.
   # A rotation of that key edits this value. Blank leaves the authorized_keys Ansible wrote.
-  claude_agent_peer_public_key: ""
+  claude_agent_peer_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKVVuTPBnaLKLqpjXXSIozN+t+uzJ2Xq5deus3yau/P claude peers (daniel-box)"
 depends:
   - acl
 users:
