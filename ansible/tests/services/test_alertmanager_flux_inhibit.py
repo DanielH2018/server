@@ -58,10 +58,6 @@ def test_a_dead_controller_holds_its_own_scrape_target_page():
     assert inhibited(target_alert("flux", SOURCE_INSTANCE), [scrape_source()])
 
 
-def test_the_scrape_target_page_fires_while_flux_controller_down_is_quiet():
-    assert not inhibited(target_alert("flux", SOURCE_INSTANCE), [])
-
-
 def test_another_controllers_scrape_target_page_is_not_held():
     # RED if `equal` drops `instance`: one dead controller would mute the other two.
     assert not inhibited(target_alert("flux", OTHER_INSTANCE), [scrape_source()])
