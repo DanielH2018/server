@@ -1,13 +1,9 @@
-# docker_install — Docker Engine + Compose v2 + the Docker networks
+# docker_install — the Pi's package owns Docker; the teardown half stays
 
-Installs Docker CE, the Compose/buildx plugins, the daemon config, and creates the shared
-Docker networks every container role attaches to. **Not a container role** — a host-setup
-role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`. See
-repo-root `CLAUDE.md` and `.claude/rules/docker.md` for conventions.
-
-`docs/docker-engine-pins-and-runtime.md` carries the working-out: the 2026-09-18 upgrade
-incident, the pin derivations, the Go runtime measurements and the uninstall the teardown arm
-answers. This file keeps the rules a session must not break.
+The role keeps only its teardown half, which reaps a retired Docker install on the hosts with
+`has_docker: false`. H7.26 moved the install half into `homelab-daniel-pi`. The role stays until
+H7.20a, because `ansible/initial_setup.yml` names it and an edit to that playbook parks the
+deployer. Repo-root `CLAUDE.md` has the conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -16,96 +12,39 @@ answers. This file keeps the rules a session must not break.
   `templates/*.timer.j2`)
 <!-- /generated_from -->
 
-## Where it runs
-- In `ansible/initial_setup.yml`, after [[sops_setup]] — every host, **unconditionally**.
-  `tasks/main.yml` is a dispatcher: `has_docker: true` runs `install.yml` (everything below),
-  `has_docker: false` runs `teardown.yml`.
-- **Granular tags:** `docker-repo` (the apt prerequisites and the cache refresh; the source and key come from the `apt-docker` component), `docker-engine`
-  (install + hold + v1-wrapper removal), `docker-group`, `docker-daemon` (daemon.json +
-  conditional restart), `docker-networks`, `docker-go-runtime` (both Go runtime drop-ins;
-  `-dockerd` / `-containerd` select one). `docker-engine-upgrade` is `never`-tagged AND gated on
-  `docker_install_engine_upgrade`: it runs only when named and opened with `-e`. `never` alone
-  is not enough — the role tag inherits onto the include and overrides it (#1998).
+## Where the work went
+`hosts/components/pi-docker/` ships every install step, and its `component.yml` header carries
+the rules a session must not break. `docs/docker-engine-pins-and-runtime.md` has the 2026-09-18
+incident, the pin derivations and the Go runtime measurements.
 
-## The engine is held; `--tags docker-engine-upgrade` is how it moves
-`docker_engine_packages` (`group_vars/all.yml`) are held on every
-`has_docker` host, set by `ansible.builtin.dpkg_selections` in two places: [[initial_setup]]'s
-`host-basics.yml` immediately BEFORE its dist-upgrade (this role runs after that one, so a
-hold set only here would land one upgrade too late), and `install.yml` right after the
-install, for the fresh host that had nothing to hold yet. Held, `apt-get upgrade`,
-`dist-upgrade` and unattended-upgrades leave them alone. What the hold prevents is an engine
-swapped under running containers.
+- The engine pins, rendered into `/usr/lib/homelab/docker-engine.pins`, and
+  `homelab-docker-engine.service`, the one path that installs or moves the held engine. An
+  operator starts it from a LAN session: `sudo systemctl start homelab-docker-engine.service`.
+- `daemon.json`, the two Go-runtime drop-ins and containerd's config block, each declared
+  `manual:` so no package install restarts a daemon.
+- The external `proxy` and `lifecycle` networks. `homelab-compose.service` creates each one the
+  project names, through an `ExecStartPre=` the renderer derives from the compose files
+  (`hosts/components/pi-compose/units/homelab-compose.service.j2`).
+- The Docker apt source and key, in `hosts/components/apt-docker/` since H7.24a.
 
-**The deliberate bump** (`tasks/engine-upgrade.yml`):
-```
-uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e docker_install_engine_upgrade=true -e target=daniel-pi
-```
-It masks `homelab-updater.timer` (unless the
-operator already did) and waits until neither `homelab-updater.service` nor
-`homelab-reconcile.service` is active, because the play and reconcile both write the `homelab`
-project. The wait's limit is `docker_install_updater_wait_limit_s`, which exceeds the updater
-unit's `TimeoutStartSec`. The play unholds, and asks apt in check mode whether
-`docker_install_package_specs` would change anything. Nothing pending: re-hold and
-report. Otherwise it stops the `homelab` project, upgrades, re-holds in `always:` so a failed apt run leaves the hold in place, and brings
-`homelab` and then every other project back with `recreate: always` — the recreate docker-proxy
-needs to pick up the new socket inode. Its last task unmasks and starts the timer, unless the timer
-was masked before the play. **A failed play leaves the timer masked**, so the Pi installs no
-package until the operator reruns the play or runs `sudo systemctl unmask homelab-updater.timer`
-and `sudo systemctl start homelab-updater.timer`. The Pi's containers are down for the apt run; use
-a LAN session. ENFORCED by `ansible/tests/setup/test_engine_upgrade_holds_the_updater_timer.py`.
-
-**The four versions are pinned in `defaults/main.yml`, and Renovate carries the signal**
-(#2153), rendered into apt's `name=5:29.8.1-*~ubuntu.24.04~noble` form as
-`docker_install_package_specs`. The manager reads Docker's own noble/arm64 index rather than
-GitHub releases (#2341), and the spec globs the Debian revision rather than naming one
-(#2357); the docs page derives both. ENFORCED by
-`scripts/tests/test_renovate_docker_engine_pins.py::test_managers_name_the_apt_packages_they_pin`.
-
-**Merging a pin PR moves nothing on the Pi.** `install.yml` installs only where there is no
-docker-ce; an installed host just reports the gap, so a Docker security fix waits on an
-operator running the command above.
-
-**Teardown unholds first**, because apt with `-y` refuses to change a held package.
-ENFORCED by `ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py`: the
-hold set is the install set, and the hold precedes the dist-upgrade.
+## What stayed behind
+- The LAN's ufw rules for the dockerd and containerd metrics listeners stay Ansible-era rules
+  until H7.30 declares the Pi's ufw rules.
+- No task adds the connecting user to the `docker` group. The one Pi heartbeat that runs
+  `docker`, `homelab-pi-recovery.service`, grants the group itself with
+  `SupplementaryGroups=docker`.
+- `initial_setup`'s `host-basics.yml` still holds the engine packages before its dist-upgrade.
 
 ## Teardown (`tasks/teardown.yml`, `has_docker: false`)
 Reaps what an imperative Docker uninstall leaves behind: any `docker-compose-*.service` unit
 and the crons in `docker_install_stale_crons`, all `state: absent`, so it is a no-op on a host
-that never had Docker. **Not covered, deliberately:** package purge, `/var/lib/docker` and the
+that never had Docker. It unholds the engine packages before it purges them, because apt with
+`-y` refuses to change a held package. **Not covered, deliberately:** `/var/lib/docker` and the
 rendered `containers/` tree, because those hold data.
 
-## What it does (`tasks/install.yml`)
-`tasks/install.yml` is the list of steps, and two of them carry a rule it does not state.
-
-- **The `loop:` that creates the networks is the list that decides** which shared networks
-  exist, and its comments record what each is for and when a retired one went. Container roles
-  only *attach*, through the `networks.yml.j2` macro, so adding one means editing that loop.
-- **The docker-group task resolves its user under `become: false` on purpose.** Under the
-  play's `become: true`, `ansible_facts.env.USER` is `root`; the user who runs `docker` is the
-  unprivileged connecting user.
-
-`daemon.json` pins `default-address-pools` to `10.200.0.0/16` in /24s and only NEW networks
-draw from it; it also sets json-file log limits and `live-restore: true`, so a change to it
-restarts Docker — see the first bullet under *Notable*.
-
-## Notable
-- **`live-restore` keeps containers running across a dockerd restart, but docker-proxy stops
-  working.** Any `daemon.json` edit restarts dockerd, and the restart gives
-  `/var/run/docker.sock` a new inode. A container that bind-mounts the file keeps the old
-  inode, so docker-proxy stays up and answers 503 until it is recreated, and `autoheal` cannot
-  see the fault. The header comment of
-  `hosts/components/pi-compose/services/docker-proxy/compose.yaml.j2` has the
-  inode check and the recreate command. An engine upgrade also replaces the containerd shim
-  under every running container. So `tasks/engine-upgrade.yml` stops every Compose project
-  before apt runs and recreates each one afterwards; its header comment has the reasoning.
-- **The Docker apt source and its key belong to `homelab-daniel-pi`, not this role.**
-  `hosts/components/apt-docker/` ships `docker.sources` and the ASCII-armored
-  `/etc/apt/keyrings/docker.asc`, and only the Pi's package lists it. A key task here would be
-  a second writer of that path. `scripts/renderer/tests/test_apt_source_components.py` holds the key's
-  sha256.
-- **Each daemon runs `GOGC=off` under a `GOMEMLIMIT`** (`tasks/go-runtime.yml`, sized at
-  `docker_install_gomemlimit_<daemon>`). Apply a change by hand, one daemon per day.
-  `docs/docker-engine-pins-and-runtime.md` has why a child's inherited environment forces the
-  `docker-go-runtime-containerd` tag's shim override. `ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py`
-  refuses a limit with under two minutes of slack.
+## Rollback
+A revert of H7.26 restores the install half, and the operator then re-applies the role from a
+node over ssh after `homelab_host_applied_info` shows the reverted version: `cd
+/home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags docker_install
+-e target=daniel-pi` (operator-only). The engine never moved, so the revert leaves it held at
+the version it runs.

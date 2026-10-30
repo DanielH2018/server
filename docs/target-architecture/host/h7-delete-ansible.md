@@ -1851,8 +1851,9 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
    (**operator-only**).
 6. **H7.26** stays alone, because it waits on H5's late PRs and the held engine (#1961) is
    its own risk. It carries the Compose measurement, the Compose-networks and Docker-engine
-   proofs, and the six networks the operator removes or keeps. The operator rules on
-   Open question 8, a windowed engine upgrade, in its review (**operator-only**).
+   proofs, and the six networks the operator removes or keeps. The operator ruled on
+   2026-10-30: none of the six networks comes back, and Open question 8 is resolved as a
+   windowed engine upgrade (`homelab-docker-engine.timer`, 00:30 UTC).
 7. **H7.27 to H7.29.** One host's apt, sshd and sysctl subjects land in one PR. Part 1 and
    part 2 stay apart, because sshd and ufw are the two subjects that can lock a host out.
    Each host's live check then proves one of them before the other lands, and a revert drops
@@ -2111,6 +2112,57 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
     - A test asserts that the networks the `ExecStartPre=` creates equal the external
       networks the rendered project names. Its red fixture names a network the
       `ExecStartPre=` omits.
+      **Amended 2026-10-29 (H7.26):** the move landed as the `pi-docker` component of
+      `homelab-daniel-pi`. Read-only calls on the live Pi measured the owners: `dpkg -S` names
+      containerd.io as the owner of `/etc/containerd/config.toml`, a conffile, so its block
+      takes the line arm under the Ansible task's marker. `/etc/docker/daemon.json` and
+      `/usr/local/bin/docker-compose` are unowned. Eight premises did not hold:
+        - *The six networks.* `docker network ls` lists only `proxy`, `lifecycle` and the
+          project's own `homelab_default`. `monitoring`, `media`, `apps`, `codeserver`,
+          `terraria` and `portainer-agent` are already absent, so the operator's decision is
+          whether any comes back, not which to remove.
+        - *Stopping `homelab-compose.service`.* The unit has no `ExecStop=`, so stopping it
+          stops no container, and starting it runs `up -d`, which starts a stopped container
+          without recreating it. The engine script therefore runs `docker compose stop` and
+          `up -d --force-recreate` against the project itself, as the play's `recreate:
+          always` did, so docker-proxy gets the socket's new inode.
+        - *The updater interlock.* *The Docker engine stays held* omits it. The script masks
+          `homelab-updater.timer`, waits out an updater or reconcile run, and unmasks the
+          timer last, only when it masked it, as the play did. A failed run leaves it masked.
+        - *apt's version glob.* The play relied on `ansible.builtin.apt` matching the glob.
+          The script matches each pin's glob against `apt-cache madison`, newest first, and
+          resolves every pin before anything stops.
+        - *Daemon restarts.* A package drop-in under `docker.service.d/` or
+          `containerd.service.d/` puts the daemon in reconcile's restart set, so both daemons
+          carry `policy: manual` beside the `manual:` activations.
+        - *The unit's restart mode.* *The Docker engine stays held* says a `daemon.json`,
+          `config.toml` or Go drop-in change goes live through the unit's restart mode. A
+          oneshot unit takes no argument, and the change concerns one daemon at a time. The
+          mode is therefore the script verb `docker-engine restart docker|containerd`, which
+          an operator runs from a LAN session. It takes the upgrade's updater interlock, and
+          the `docker` form recreates the project with `--force-recreate`.
+        - *The Compose measurement.* The only Docker host is the live Pi, and a scratch
+          network there is a production write. The measurement is an `image` test that runs
+          in `image-leg.yml` (`hosts/lib/tests/test_pi_compose_network_measurement.py`). It
+          asserts that Compose neither recreates nor labels an existing unlabelled network of
+          the project's name. It fails when Compose stops before the network step, and it
+          writes which answer Compose gave, adopt or refuse, to the image leg's job summary.
+          No outcome is recorded here: the first run is the PR's first non-draft push, after
+          this amendment was written.
+        - *The Docker-engine proof.* It runs against stubs in
+          `hosts/lib/tests/test_pi_docker_component.py`, not in the CI container: the package
+          declares no engine `Depends` and no preferences pin, with a red fixture, and the
+          updater installs no engine package and writes `homelab_docker_engine_pending`. The
+          container case is #6590.
+      **Operator rulings, 2026-10-30.** Open question 8 is resolved as windowed: the PR ships
+      `homelab-docker-engine.timer`, which starts the unit at 00:30 UTC. None of the six
+      absent networks (`monitoring`, `media`, `apps`, `codeserver`, `terraria`,
+      `portainer-agent`) comes back, so the package creates only `proxy` and `lifecycle`.
+      The LAN ufw rules for ports 9323 and 1338 stay Ansible-era rules until H7.30 lists
+      them. The connecting user's `docker` group membership stays host state, which the
+      packaged heartbeats need on a rebuilt Pi (#6599; `homelab-pi-recovery.service` grants it
+      with `SupplementaryGroups=docker` since 2026-10-30), and `host-basics.yml`'s hold stays with `initial_setup`. The role keeps its
+      teardown half for the cluster nodes until H7.48.
 6. **H7.6 `initial_setup`, part 1.** Three subjects, each as three host PRs in canary order:
     - **H7.6a–c** apt and unattended-upgrades;
     - **H7.6d–f** sshd, through `10-homelab.conf` and the `Match` file, with
@@ -2341,6 +2393,7 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
           `homelab-updater` and `homelab-<host>`.
         - *Step 6.* `homelab-docker-engine.service` is not in the tree until H7.25 lands. The
           script starts it when the unit exists and prints that it starts nothing otherwise.
+          H7.26 shipped the unit, so step 6 starts it on a fresh Pi.
         - *The k3s Renovate manager.* The `k3s-io/k3s` rule is a package rule, not a manager.
           `renovate.json` gains a small custom manager for the script's `K3S_VERSION` line, and
           the `homelab-tools` manager gains the script as a second file.
@@ -3355,6 +3408,14 @@ progress.
    operator moves the engine. Resolution: the operator decides in H7.5's review
    (**operator-only**). A windowed timer could later start the same unit, because the unit
    already stops and recreates the project.
+   **Resolved (operator, 2026-10-30): windowed.** `homelab-docker-engine.timer` starts the same
+   unit at 00:30 UTC (`OnCalendar=*-*-* 00:30:00`, no randomised delay, not persistent), and an
+   operator can still start the unit by hand. The slot follows the Pi's midnight cluster
+   (23:55 to 00:10) and precedes the updater's resume at 01:05, man-db at 01:00 and the
+   rotated-log sweep at 01:40. The updater is silent from 23:00 to 00:59 and from 04:00 to
+   05:59, but pi-peer-backup pulls at 04:00 or 05:00 UTC and the apt timers run at 04:20 and
+   05:20, so only the first gap is usable. The unit is a no-op while every package sits at its
+   pin, so the timer acts only after a pin moved.
 9. **Diverts and H3's maintainer-script whitelist.** H3 leaves the divert lifecycle to H7
    and admits no `dpkg-divert` line. Resolution: H7 ships no divert, so H3's `preinst` rule
    and whitelist stay as they are. If H7.3 or H7.5 finds an owned path that is not a

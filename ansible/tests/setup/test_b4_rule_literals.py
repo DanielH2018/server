@@ -18,7 +18,7 @@ import re
 
 import pytest
 from _helpers import K8S_ROLES
-from _kuma_monitors import entity
+from _kuma_monitors import SENTINEL, entity, monitors_text
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script
 from lib import yaml_fast
@@ -185,3 +185,104 @@ def test_a_renovate_deadline_is_the_interval_of_the_tile_it_shadows(
     assert entity(tile, token_var, overrides)["interval"] == rendered_deadline(
         producer, producer
     )
+
+
+CUTOVER = K8S_ROLES / "observability" / "files" / "rules" / "kuma-cutover.yaml"
+DRILL_RULES = (
+    "EtcdRestoreDrillFailed",
+    "EtcdRestoreDrillNotReporting",
+    "EtcdRestoreDrillEgressFenceFailed",
+    "EtcdRestoreDrillEgressFenceNotReporting",
+)
+# B4's tiles whose CheckWithoutPager term fits Prometheus's retention. The drill tiles may retire
+# only in the same Cutover-1a as at least one of these, and their rules leave shadow no later than
+# these terms leave kuma-cutover, so a term here bounds the drills' no-pager window too.
+DRILL_WINDOW_SIBLINGS = (
+    "UPS Secondary (daniel-box)",
+    "UPS Secondary (daniel-server)",
+    "Fake Remux Scan",
+    "Fake Remux Replace",
+    "MKV Attachment Repair",
+)
+DRILL_TILES = ("etcd Restore Drill (full)", "etcd Restore Drill (egress fence)")
+# Every token gate the drill and sibling tiles carry, so a tile absent from the render is one a
+# PR deleted rather than one no token armed.
+B4_TILE_TOKENS = (
+    "etcd_drill_full_push_token",
+    "etcd_drill_fence_push_token",
+    "ups_secondary_push_token",
+    "ups_secondary_daniel_server_push_token",
+)
+
+
+def rendered_tile_names(monitors: str) -> set[str]:
+    return set(re.findall(r'\{"type": "push", "name": "([^"]+)"', monitors))
+
+
+def drill_window_problems(
+    rules_text: str, cutover_text: str, tiles: set[str]
+) -> list[str]:
+    """Why a shadow drill rule's no-pager window has no sibling term that would page it.
+
+    `tiles` is the set of tile names the static monitors render. While the drill tiles render,
+    Kuma pages the drills, and a sibling term must still exist for their Cutover-1a. Once they
+    are gone, a sibling must be gone with them and keep its term, or no term ever fires.
+    """
+    [group] = yaml_fast.safe_load(rules_text)["groups"]
+    shadow = [
+        r["alert"]
+        for r in group["rules"]
+        if r["alert"] in DRILL_RULES and r.get("labels", {}).get("shadow") == "true"
+    ]
+    if not shadow:
+        return []
+    terms = set(re.findall(r'monitor_name="([^"]+)"\}\[2h\]', cutover_text))
+    guards = terms & set(DRILL_WINDOW_SIBLINGS)
+    if not guards:
+        return [f"{', '.join(shadow)} shadow with no B4 sibling term in kuma-cutover"]
+    if set(DRILL_TILES) <= tiles or guards - tiles:
+        return []
+    return [
+        f"{', '.join(shadow)} shadow, a drill tile deleted, and every sibling tile live"
+    ]
+
+
+@pytest.fixture(scope="module")
+def b4_tiles() -> set[str]:
+    tiles = rendered_tile_names(monitors_text(dict.fromkeys(B4_TILE_TOKENS, SENTINEL)))
+    assert tiles >= set(DRILL_TILES) | set(DRILL_WINDOW_SIBLINGS)
+    return tiles
+
+
+def test_the_shadow_drill_rules_have_a_sibling_term_bounding_their_window_is_clean(
+    b4_tiles,
+):
+    [group] = yaml_fast.safe_load(RULES.read_text())["groups"]
+    assert {r["alert"] for r in group["rules"]} >= set(DRILL_RULES)
+    assert drill_window_problems(RULES.read_text(), CUTOVER.read_text(), b4_tiles) == []
+
+
+def test_a_cutover_that_drops_the_siblings_but_leaves_the_drills_shadow_is_flagged(
+    b4_tiles,
+):
+    cutover = CUTOVER.read_text()
+    for tile in DRILL_WINDOW_SIBLINGS:
+        assert f'monitor_name="{tile}"}}[2h]' in cutover, f"{tile} has no [2h] term"
+        cutover = cutover.replace(f'monitor_name="{tile}"}}[2h]', "")
+    assert drill_window_problems(RULES.read_text(), cutover, b4_tiles) == [
+        f"{', '.join(DRILL_RULES)} shadow with no B4 sibling term in kuma-cutover"
+    ]
+
+
+def test_deleting_the_drill_tiles_alone_while_their_rules_are_shadow_is_flagged(
+    b4_tiles,
+):
+    alone = b4_tiles - set(DRILL_TILES)
+    assert drill_window_problems(RULES.read_text(), CUTOVER.read_text(), alone) == [
+        f"{', '.join(DRILL_RULES)} shadow, a drill tile deleted, and every sibling tile live"
+    ]
+
+
+def test_deleting_the_drill_tiles_with_their_siblings_is_clean(b4_tiles):
+    together = b4_tiles - set(DRILL_TILES) - set(DRILL_WINDOW_SIBLINGS)
+    assert drill_window_problems(RULES.read_text(), CUTOVER.read_text(), together) == []

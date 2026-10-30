@@ -806,12 +806,13 @@ has_gitops: false
 # runs Docker. A host nobody thought about gets the teardown arm rather than a second container
 # runtime. daniel-pi overrides this true.
 has_docker: false
-# The Docker engine packages, listed once because three tasks must agree on the set:
-# docker_install installs them, initial_setup's host-basics HOLDS them before its
-# dist-upgrade, and docker_install's teardown unholds them before its purge. An upgrade of
+# The Docker engine packages, listed once because three readers must agree on the set:
+# homelab-daniel-pi's engine pins (hosts/components/pi-docker) install them, initial_setup's
+# host-basics HOLDS them before its dist-upgrade, and docker_install's teardown unholds them
+# before its purge. An upgrade of
 # docker-ce or containerd.io restarts the daemon and replaces the containerd shim under every
 # running container, so on a has_docker host these move
-# only through `--tags docker-engine-upgrade`, which stops the containers first and recreates
+# only through homelab-docker-engine.service, which stops the containers first and recreates
 # them after. docker-ce-rootless-extras is not here: it arrives as a Recommends of docker-ce,
 # and upgrading it restarts nothing.
 docker_engine_packages:

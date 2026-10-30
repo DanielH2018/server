@@ -759,3 +759,26 @@ tests:
       - eval_time: 29h
         alertname: RenovateAgentNotReporting
         exp_alerts: []
+  # A disarmed agent: the role writes the marker and removes the verdict file, so neither the
+  # absent arm nor a stale file left behind fires while the marker reads 1.
+  - interval: 1h
+    input_series:
+      - series: homelab_check_disarmed{check="renovate-agent", instance="daniel-box", job="node",
+          origin="daniel-box"}
+        values: '1x38'
+    alert_rule_test:
+      - eval_time: 29h
+        alertname: RenovateAgentNotReporting
+        exp_alerts: []
+  - interval: 1h
+    input_series:
+      - series: homelab_check_last_run_timestamp_seconds{check="renovate-agent", instance="daniel-box",
+          job="node", origin="daniel-box"}
+        values: '0x38'
+      - series: homelab_check_disarmed{check="renovate-agent", instance="daniel-box", job="node",
+          origin="daniel-box"}
+        values: '1x38'
+    alert_rule_test:
+      - eval_time: 29h
+        alertname: RenovateAgentNotReporting
+        exp_alerts: []

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-10-28 06:17 UTC
-generated_sha: bc703b29c9
+generated_at: 2026-10-30 06:17 UTC
+generated_sha: bae292fa8e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: bc703b29c9
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-10-28T06:11:49+0000 | 5m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-10-27T11:06:56+0000 | 19h10m | 1d | ok | session completed |
-| renovate-notify | 2026-10-27T13:03:44+0000 | 17h13m | 1d | ok | notified |
-| docs-refresh | 2026-10-27T18:18:00+0000 | 11h59m | unknown | ok | generators: ok |
-| secret-rotate | 2026-10-25T22:41:39+0000 | 2d7h | unknown | ok | last touched by: Rotate the Prowlarr API key |
-| longhorn-restore-drill | 2026-10-28T04:10:59+0000 | 2h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-10-26T10:20:03+0000 | 1d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1792982702.zip) |
+| gitops-deploy | 2026-10-30T06:09:08+0000 | 8m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-10-29T11:37:31+0000 | 18h40m | 1d | ok | session completed |
+| renovate-notify | 2026-10-29T13:02:47+0000 | 17h14m | 1d | ok | notified |
+| docs-refresh | 2026-10-29T18:19:00+0000 | 11h58m | unknown | ok | generators: ok |
+| secret-rotate | 2026-10-29T14:07:49+0000 | 16h9m | unknown | ok | last touched by: Retire the three monitor-bridge push tokens a week after M5's cutover |
+| longhorn-restore-drill | 2026-10-30T04:11:49+0000 | 2h5m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-10-26T10:20:03+0000 | 3d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1792982702.zip) |

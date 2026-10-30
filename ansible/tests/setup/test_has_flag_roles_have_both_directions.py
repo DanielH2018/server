@@ -6,8 +6,9 @@ is install-only: flipping a host to has_docker: false skips the role entirely, a
 declarative reaps what Docker left behind, so `has_docker: false` in host_vars describes an
 intention that no code converges to.
 
-So docker_install dispatches internally on the flag, with an install half and a teardown
-half. This asserts the shape stays that way: a tasks/main.yml that includes one
+So hypervisor and gitops_deploy dispatch internally on their flags, each with an install half
+and a teardown half. docker_install kept only its teardown half when H7.26 moved the install
+into the Pi's package. This asserts the shape stays that way: a tasks/main.yml that includes one
 file `when: <flag>` must also include one `when: not <flag>`. Roles gated in a playbook
 rather than internally are not matched -- the pattern here is specifically the dispatcher.
 
@@ -39,7 +40,6 @@ _NEGATIVE = re.compile(r"^\s*when:\s*not\s+(has_\w+)\s*$", re.M)
 # this guard could go green while checking less than it did.
 KNOWN_DISPATCHERS = frozenset(
     {
-        ("docker_install", "has_docker"),
         ("hypervisor", "has_hypervisor"),
         ("gitops_deploy", "has_gitops"),
     }
@@ -81,7 +81,7 @@ def test_some_dispatcher_roles_exist():
 
 def test_the_known_dispatchers_are_still_found():
     """Non-vacuity by name. `test_some_dispatcher_roles_exist` only proves the set is non-empty,
-    so it would stay green if the matcher dropped one of the two roles this guard exists for."""
+    so it would stay green if the matcher dropped one of the roles this guard exists for."""
     missing = KNOWN_DISPATCHERS - set(_dispatcher_roles())
     assert not missing, f"no longer recognised as dispatchers: {sorted(missing)}"
 

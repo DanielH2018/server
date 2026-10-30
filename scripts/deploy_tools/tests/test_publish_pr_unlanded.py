@@ -7,6 +7,7 @@ import subprocess
 import pytest
 
 import publish_pr
+from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
 from _publish_pr_fakes import TIMEOUT, Recorder, cp
 
 
@@ -94,14 +95,14 @@ def test_a_green_pr_with_no_landing_is_merged_at_its_head():
     "view",
     [
         _view("", "SUCCESS", ""),
-        _view("", "SUCCESS", "FAILURE"),
+        _view("", "SUCCESS", "CANCELLED"),
         _view(""),
         _view("CHANGES_REQUESTED", "SUCCESS"),
         cp(1, err="HTTP 502"),
     ],
     ids=[
         "check-pending",
-        "check-failed",
+        "cancelled-stays-out-of-failing",
         "no-checks-yet",
         "changes-requested",
         "view-failed",
@@ -122,6 +123,93 @@ def test_a_pr_that_is_not_stalled_is_left_to_its_landing(view):
         == "PR #41 from a previous run is still open (docs-refresh/2026-09-03-0600)"
     )
     assert not any(c[:2] == ("gh", "api") for c in rec.calls)
+
+
+@pytest.mark.parametrize(
+    "red",
+    [
+        '{"name": "pytest", "conclusion": "FAILURE"}',
+        '{"name": "pytest", "conclusion": "TIMED_OUT"}',
+        '{"context": "pytest", "state": "ERROR"}',
+    ],
+    ids=["check-run-failed", "check-run-timed-out", "status-context-error"],
+)
+def test_an_open_pr_with_a_failed_check_is_the_red_code(red):
+    """#6588: a red PR read as 2, which the crons report up, while it blocked every run.
+
+    Another check still running does not soften it: one failure already stops the landing.
+    """
+    rollup = f'[{{"name": "lint", "conclusion": "SUCCESS"}}, {{"name": "gate", "conclusion": ""}}, {red}]'
+    rec = Recorder(
+        {
+            "git ls-remote": cp(0, out=_HEAD),
+            "gh pr list": cp(0, out=_OPEN_PR),
+            "gh pr view": cp(
+                0,
+                out=f'{{"headRefOid": "abc1234def", "reviewDecision": "", "statusCheckRollup": {rollup}}}',
+            ),
+        }
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.UNLANDED_PR_RED
+    assert out.message == (
+        "PR #41 from a previous run is open with failed checks (pytest) on "
+        "docs-refresh/2026-09-03-0600; its landing has stopped and every later run skips "
+        "until it is fixed or closed"
+    )
+    assert out.branch == "docs-refresh/2026-09-03-0600"
+    assert not any(c[:2] == ("gh", "api") for c in rec.calls)
+
+
+def _rollup_view(*checks: tuple[str, str]) -> subprocess.CompletedProcess[str]:
+    rollup = ",".join(f'{{"name": "{n}", "conclusion": "{c}"}}' for n, c in checks)
+    return cp(
+        0,
+        out=f'{{"headRefOid": "abc1234def", "reviewDecision": "", '
+        f'"statusCheckRollup": [{rollup}]}}',
+    )
+
+
+_SHARD = sorted(CI_GATE_NEEDS_JOBS)[0]
+
+
+@pytest.mark.parametrize(
+    ("need", "rc"),
+    [
+        ("CANCELLED", publish_pr.UNLANDED_PR_OPEN),
+        ("FAILURE", publish_pr.UNLANDED_PR_RED),
+    ],
+    ids=["cancelled-run-excuses-the-gate", "failed-need-keeps-the-gate-red"],
+)
+def test_a_failed_gate_is_red_only_when_no_cancellation_explains_it(need, rc):
+    """#5931: the gate is `if: always()`, so a cancelled run fails it on a head no job failed."""
+    rec = Recorder(
+        {
+            "git ls-remote": cp(0, out=_HEAD),
+            "gh pr list": cp(0, out=_OPEN_PR),
+            "gh pr view": _rollup_view((_SHARD, need), (CI_GATE_NAME, "FAILURE")),
+        }
+    )
+    out = _unlanded(rec)
+    assert out.rc == rc, out.message
+    assert not any(c[:2] == ("gh", "api") for c in rec.calls)
+
+
+def test_a_cancelled_run_does_not_excuse_a_red_check_outside_the_gate():
+    rec = Recorder(
+        {
+            "git ls-remote": cp(0, out=_HEAD),
+            "gh pr list": cp(0, out=_OPEN_PR),
+            "gh pr view": _rollup_view(
+                (_SHARD, "CANCELLED"),
+                (CI_GATE_NAME, "FAILURE"),
+                ("image-smoke", "FAILURE"),
+            ),
+        }
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.UNLANDED_PR_RED
+    assert "failed checks (image-smoke)" in out.message
 
 
 def test_a_refused_backstop_merge_is_reported():

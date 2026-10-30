@@ -8,6 +8,8 @@ whose unit the package does not ship stays in place and counts as drift.
 Run: uv run pytest hosts/lib/tests/test_reconcile_shadow_handoff.py
 """
 
+import json
+
 import pytest
 from _reconcile_host import Node
 
@@ -130,3 +132,49 @@ def test_the_packages_enable_link_survives_the_handoff_of_the_ansible_era_link(n
     assert node.actions() == [["restart", timer]]
     verbs = {call["argv"][1] for call in node.calls("systemctl")}
     assert not {"disable", "stop", "mask"} & verbs
+
+
+@pytest.mark.parametrize(
+    "slice_dir", ["user.slice.d", "user-1000.slice.d", "user-995.slice.d"]
+)
+def test_an_ansible_era_slice_drop_in_is_removed_as_an_unowned_file(node, slice_dir):
+    # H7.39: a drop-in's file name is never a packaged unit name, so it is no shadow copy.
+    dropin = f"{ETC}/{slice_dir}/claude-memcaps.conf"
+    shadow(node, dropin, "[Slice]\nMemoryMax=8G\n")
+    node.manifest["legacy"].append({"path": f"/{dropin}"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not (node.root / dropin).exists()
+    assert node.applied()["drift"]["legacy"] == 0
+    assert node.applied()["retired"] == [json.dumps({"path": f"/{dropin}"})]
+
+
+def test_removing_a_slice_drop_in_reloads_systemd_once(node):
+    # The drop-in's MemoryMax stays in force on the slice until systemd reloads.
+    for slice_dir in ("user.slice.d", "user-1000.slice.d"):
+        dropin = f"{ETC}/{slice_dir}/claude-memcaps.conf"
+        shadow(node, dropin, "[Slice]\nMemoryMax=8G\n")
+        node.manifest["legacy"].append({"path": f"/{dropin}"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert len(reloads(node)) == 1
+
+
+def test_the_emptied_slice_drop_in_directory_is_removed_after_its_drop_in(node):
+    # A package lists the directory after the files in it, so rmdir finds it empty.
+    dropin = f"{ETC}/user-1000.slice.d/claude-memcaps.conf"
+    shadow(node, dropin, "[Slice]\nMemoryMax=8G\n")
+    node.manifest["legacy"] += [
+        {"path": f"/{dropin}"},
+        {"path": f"/{ETC}/user-1000.slice.d"},
+    ]
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not (node.root / ETC / "user-1000.slice.d").exists()
+    assert node.applied()["drift"]["legacy"] == 0

@@ -1,0 +1,39 @@
+# Shipped by homelab-daniel-pi (pi-docker) with its enable link. It starts homelab-docker-engine.service
+# in the Pi's quiet window, so a pin that moved is applied unattended. The unit is a no-op while
+# every engine package sits at its pin, so on most nights this timer changes nothing. Starting the
+# unit by hand from a LAN session still works and takes the same path.
+#
+# DECIDED: 00:30 UTC (the Pi's clock is UTC), operator ruling 2026-10-30 on H7 Open question 8.
+# The slot is chosen against the Pi's own schedule, each entry in UTC:
+# - homelab-updater.timer (hosts/daniel-pi/units/homelab-updater.timer.conf) fires at :05, :20,
+#   :35 and :50 of 01..03 and 06..22, and skips 23:00 to 00:59 and 04:00 to 05:59. 00:30 sits in the
+#   first gap, 35 minutes before the updater resumes at 01:05, and the unit masks the timer
+#   and waits out a running updater regardless.
+# - The midnight cluster runs 23:55 to 00:10: log2ram's sync, logrotate, dpkg-db-backup and sysstat.
+#   00:30 follows it. The H3 plan's daily-fallback slot for the updater is the same 00:30, for the
+#   same reason (docs/target-architecture/host/h3-pi-pilot.md, *H3.13*).
+# - man-db runs 01:00 to 03:00, and the rotated-log sweep at 01:40. Both come after 00:30.
+# - The other gap, 04:00 to 05:59, is not usable: pi-peer-backup pulls the wg-easy configs from
+#   the Pi at 23:00 America/Chicago, which is 04:00 UTC under CDT and 05:00 UTC under CST, and the
+#   Pi's apt timers run at 04:20 and 05:20 plus up to 10 minutes. The upgrade recreates wg-easy
+#   and takes the dpkg lock, so it must not meet either.
+# The unit's apt run takes minutes. The unit masks the updater timer before it stops anything, so an
+# upgrade that outlasts 01:05 still meets no updater run.
+#
+# Persistent=false, so a Pi that was off at 00:30 does not run the upgrade at an unplanned boot
+# time; the next night's 00:30 applies the pin. The accuracy is pinned to 1s so systemd cannot
+# drift the start toward the 01:00 man-db run.
+#
+# To pause it: `sudo systemctl mask --now homelab-docker-engine.timer`. To resume it: `unmask`,
+# then `start`. hosts/lib/tests/test_pi_docker_component.py holds the slot and the no-op.
+[Unit]
+Description=Apply the Pi's pinned Docker engine in the quiet window
+
+[Timer]
+OnCalendar=*-*-* 00:30:00
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=false
+
+[Install]
+WantedBy=timers.target

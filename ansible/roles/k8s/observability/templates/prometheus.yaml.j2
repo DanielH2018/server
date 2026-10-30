@@ -578,7 +578,7 @@ data:
       # the Pi, 46% of the host's, each GC cycle faulting a swapped-out heap back from zram
       # (#2003); the live heap (`go_memstats_heap_alloc_bytes` floor) is what sizes the
       # GOMEMLIMIT that cuts it. dockerd binds `metrics-addr`, containerd `[metrics]
-      # address` — both in roles/setup/docker_install, with the UFW allows. containerd's
+      # address` — both in hosts/components/pi-docker, with docker_install's UFW allows. containerd's
       # path is /v1/metrics, not /metrics.
       - job_name: dockerd-pi
         scrape_interval: 1m

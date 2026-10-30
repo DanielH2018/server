@@ -316,9 +316,9 @@ names them, and `clear-hold --orphaned` is then the only way to drop them.
 
 ## Host-plane pages
 
-Two Alertmanager rules in observability's `host-checks` group page on a host's updater. Each
-carries `severity="critical"` and the host's name as `service`, and the alert's description
-names what to read first.
+Three Alertmanager rules in observability's `host-checks` group page on a host's updater. Each
+carries the host's name as `service`, and the alert's description names what to read first.
+The first two carry `severity="critical"`. The third carries `severity="warning"`.
 
 - **`HostReconcileFailed`** fires when `homelab_host_reconcile_ok` has read 0 on a host for 15
   minutes. The updater writes 0 on every run while the host holds after a failed reconcile,
@@ -337,7 +337,17 @@ names what to read first.
   repository, a stopped `homelab-apt-repo.service`, a firewall rule, a keyring mismatch and a
   stopped timer all end here. Read `systemctl status homelab-updater.timer` and `journalctl -u
   homelab-updater` on the host. A dead exporter does not fire it: that host's `up` at 0 keeps
-  the rule quiet.
+  the rule quiet. A failed run of daniel-pi's `homelab-docker-engine.service` leaves
+  `homelab-updater.timer` masked, and this rule pages that state.
+- **`DockerEnginePinUnapplied`** fires when daniel-pi's `homelab_docker_engine_pending` has
+  read 1 for 26 hours, so no run of `homelab-docker-engine.service` has applied the engine
+  pins. 26 hours is the longest a pin waits for the 00:30 UTC window, plus the unit's 90-minute
+  timeout and the updater run that rewrites the metric. It covers a paused engine timer, a Pi
+  that was off at 00:30, and a run that failed without masking the updater. Read `systemctl
+  status homelab-docker-engine.timer homelab-updater.timer` and `journalctl -u
+  homelab-docker-engine` on the Pi, and `docs/docker-engine-pins-and-runtime.md`, *How the
+  engine moves*. Once the cause is fixed, unmask and start `homelab-updater.timer` if the run
+  left it masked, then start the unit from a LAN session or wait for the next window.
 
 Each limit exceeds the longest gap between two of the host's updater fires plus the updater's
 `TimeoutStartSec`, so one failed fetch never pages.
@@ -397,9 +407,9 @@ sudo systemctl mask --now homelab-updater.timer
 ```
 
 Reconcile never starts or restarts a masked unit, so no later package undoes the mask.
-The Docker engine-upgrade play (`docker_install`'s `engine-upgrade.yml`) uses the same lever. It
-masks the timer, waits out a running updater, and unmasks the timer as its last task, unless the
-timer was already masked when the play began. A failed play leaves the timer masked.
+The Pi's `homelab-docker-engine.service` uses the same lever when it upgrades the engine. It
+masks the timer, waits out a running updater, and unmasks the timer as its last step, unless the
+timer was already masked when the unit started. A failed run leaves the timer masked.
 `HostUpdateStale` fires for the host once its limit passes, which is expected. To resume:
 
 ```bash

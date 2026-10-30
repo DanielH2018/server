@@ -8,6 +8,8 @@ script reads, the copied push helper, and the Autonomous-role contract, which mo
 Run: uv run pytest hosts/lib/tests/test_pi_heartbeats_component.py
 """
 
+import re
+
 import pytest
 
 from lib.estate import REPO_INVENTORY
@@ -90,6 +92,28 @@ def test_each_service_runs_its_script_as_sys_user(package):
         assert f"ExecStart={LIB}/{script}\n" in unit, service
         assert "LogsDirectory=pi-health\n" in unit, service
         assert package.files[f"{LIB}/{script}"][1] == 0o755
+
+
+def _runs_docker(script: str) -> bool:
+    """Whether a script invokes the docker CLI, ignoring comments."""
+    return any(
+        re.search(r"(^|[\s(\"`$])docker\s", line.split("#", 1)[0])
+        for line in script.splitlines()
+    )
+
+
+def test_each_service_that_runs_docker_grants_the_docker_group(package):
+    # No task adds sys_user to `docker`, so each unit that needs the group grants it.
+    runs_docker = []
+    for name in package.units():
+        if not name.startswith("homelab-pi-") or not name.endswith(".service"):
+            continue
+        unit = _text(package, f"{UNITS}/{name}")
+        script = _text(package, unit.split("ExecStart=", 1)[1].split("\n", 1)[0])
+        if _runs_docker(script):
+            runs_docker.append(name)
+            assert "SupplementaryGroups=docker\n" in unit, name
+    assert "homelab-pi-recovery.service" in runs_docker
 
 
 @pytest.mark.parametrize(("service", "key"), sorted(CREDENTIALS.items()))

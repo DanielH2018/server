@@ -227,7 +227,7 @@ CONVERTED_FILES = frozenset(
         "ansible/roles/k8s/loki-homelab/templates/ingressroute.yaml.j2",
         "ansible/roles/k8s/traefik/templates/static-config.yaml.j2",
         "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
-        "ansible/roles/setup/docker_install/tasks/install.yml",
+        "hosts/components/pi-docker/templates/daemon.json.j2",
         "docs/wireguard-private-homelab-access.md",
         "hosts/bootstrap-host.sh",
     }
