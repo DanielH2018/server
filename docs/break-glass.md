@@ -72,12 +72,12 @@ otherwise; none of the values below are secrets themselves, only names and locat
    not forwarded.
    Source: `docs/wireguard-private-homelab-access.md` ("Server-side networking").
 
-7. **The GitOps bootstrap path.** `ansible/bootstrap.yml` has no secret dependency — it is
-   the way in on a host with no age key yet. It installs the `age`/`sops` binaries and
-   either generates a fresh keypair or, if the recovery private key (item 1) is placed at
-   `~/.config/sops/age/keys.txt` first, skips generation and uses that key directly. After
-   it runs, `initial_setup.yml` and `deploy.yml`'s secret-load pre-tasks work normally.
-   Source: `ansible/bootstrap.yml` (header) and the `add-secret` skill's
+7. **The way in on a host with no age key yet.** No playbook creates the operator's key. The
+   operator runs `age-keygen` by hand, or places the recovery private key (item 1) at
+   `~/.config/sops/age/keys.txt` instead. The host package supplies `sops` and `age`. After
+   that, `initial_setup.yml` and `deploy.yml`'s secret-load pre-tasks work normally, and
+   *The age keys* below says which hosts hold a key.
+   Source: `ansible/README.md` (§5) and the `add-secret` skill's
    *Onboarding a host that cannot decrypt yet* section
    (`.claude/skills/add-secret/SKILL.md`).
 
@@ -229,6 +229,29 @@ otherwise; none of the values below are secrets themselves, only names and locat
       to refresh the host file's copies.
    Source: `docs/target-architecture/host/h4-secrets-unit.md` (H4.4, H4.5) and
    `hosts/bootstrap-host.sh` (step 3).
+
+### The age keys
+
+Each host holds up to two age keys, and they have different readers.
+
+- **The host key, `/etc/homelab/age.key`.** `hosts/bootstrap-host.sh` (step 3) creates it on
+  every host, and `homelab-secrets.service` decrypts the host's own SOPS file with it.
+- **The operator's user-home key, `~/.config/sops/age/keys.txt`.** Ansible's `community.sops`
+  lookups, the operator's `sops` edits, the `add-secret` skill and the secret rotation timer
+  read it. They decrypt `ansible/vars/secrets.yml` and the cluster files.
+
+The decision recorded with H7.24b on 2026-10-30:
+
+- **daniel-box keeps its user-home key.** The deployer, `deploy.sh` and the rotation timer run
+  there as the operator, and every one of them reads it.
+- **daniel-server's user-home key is removed only after the operator confirms that nothing on
+  daniel-server reads it.** H4.2 left it there as a duplicate. Its public key stays a
+  recipient in `ansible/.sops.yaml` until the removal, and the removal deletes it from all
+  three rules (`ansible/roles/setup/sops_setup/CLAUDE.md`, *Notable*). Both steps are
+  **operator-only**.
+- **daniel-pi holds no user-home key**, since 2026-10-03.
+- **No playbook creates a user-home key.** The retired `sops_setup` role did. A new host that
+  runs Ansible gets one by hand, as `ansible/README.md` §5 says.
 
 ## What to do first, by scenario
 
@@ -529,7 +552,7 @@ what each source records — not what "should" have happened.
 | k3s etcd restore (full, onto a replacement host) | **Partly, and ongoing.** The `--list-only` leg runs weekly by cron and has been verified since 2026-08-22. The full restore first passed 2026-09-11 — `offbox-daniel-box-1789094702.zip` restored in a throwaway guest on daniel-server and served 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets — and runs monthly since. Still not drilled: the restore onto a REPLACEMENT HOST, the agent rejoin and the Longhorn reattach. | `docs/k3s-etcd-restore.md`, *The full drill runs monthly in a throwaway guest* |
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
-| GitOps bootstrap (`bootstrap.yml` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/roles/setup/sops_setup/CLAUDE.md`, `ansible/bootstrap.yml` header |
+| SOPS onboarding (`age-keygen` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/README.md` §5; the `sops_setup` role created the key until H7.24b |
 | Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), and the fresh-cluster steps. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass` and `break-glass-red` |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 

@@ -880,7 +880,6 @@
  "ansible/tests/setup/test_setup_cross_role_files.py": 0.1,
  "ansible/tests/setup/test_setup_cross_role_reads.py": 0.72,
  "ansible/tests/setup/test_setup_handlers_resolve.py": 0.04,
- "ansible/tests/setup/test_sops_key_only_on_local_hosts.py": 0.0,
  "ansible/tests/setup/test_ssh_dir_paths_are_absolute.py": 0.06,
  "ansible/tests/setup/test_ssh_rate_limit_lan_exempt.py": 0.0,
  "ansible/tests/setup/test_storage_smoke_can_fail.py": 0.0,

@@ -33,7 +33,7 @@ ORIGIN = "2" * 40
 GITOPS_TEMPLATE = "ansible/roles/setup/gitops_deploy/templates/config.env.j2"
 RENOVATE_TEMPLATE = "ansible/roles/setup/renovate_notify/templates/notify.sh.j2"
 # `ansible/requirements.yml` is the setup-plane path that maps to no role directory at all —
-# `sops_setup` installs the collections, and the tag is `collections`.
+# `initial_setup` installs the collections, and the tag is `collections`.
 REQUIREMENTS = "ansible/requirements.yml"
 # Another role's defaults file a setup role reads one key of, so every edit to it names that
 # role beside the owner (#4303): claude_code here, and deploy_ui for k3s's.

@@ -1,0 +1,14 @@
+{
+  "checksum": "5350c8e19443babd22c179face02eb74db9b0110891792a45d48a8604191fc8b",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/sops_setup/CLAUDE.md#sops_setup — emptied; the host packages own sops",
+  "row": {
+    "atoms": {
+      "ansible/bootstrap.yml": "7bc925a3ec3c73e00c9a56a23ae1ebaf83905d08b86cd39569091e1f89b32e42",
+      "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439",
+      "ansible/roles/setup/sops_setup/tasks/main.yml": "da723906e82000a641c8bd09d1996e83058f2a3d7a8da49620b6d212ac728f33"
+    },
+    "python": "3.14",
+    "verified_sha": "99dc92f68"
+  }
+}

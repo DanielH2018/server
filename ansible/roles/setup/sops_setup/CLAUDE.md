@@ -1,56 +1,40 @@
-# sops_setup — install SOPS/age + generate the host's decrypt key
+# sops_setup — emptied; the host packages own sops
 
-Installs the `sops`/`age` toolchain, the pinned Ansible collections, and generates the
-host's own age keypair so it can decrypt `ansible/vars/secrets.yml`. **Not a container
-role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup.yml`, not
-`deploy.yml`. See repo-root `CLAUDE.md` (§ Secrets Management) for the bigger picture.
+The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` marker in
+`ansible/roles/setup/sops_setup/tasks/main.yml`. H7.24b emptied it. It stays until H7.20a,
+because `ansible/initial_setup.yml` and `ansible/bootstrap.yml` name it and an edit to either
+playbook parks the deployer. Repo-root `CLAUDE.md` has the conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
-- **Applied by:** `bootstrap.yml --tags "sops_setup"`; `initial_setup.yml --tags "sops_setup"`
+- **Applied by:** `bootstrap.yml --tags "sops_setup"`; `initial_setup.yml --tags "sops_setup"`;
+  ends on hosts where `True` (leading `meta: end_role`)
 - **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
   `templates/*.timer.j2`)
 <!-- /generated_from -->
 
-## Where it runs
-- In `ansible/initial_setup.yml`, after [[config_files]] / [[initial_setup]] — every host.
-- **Granular tags:** `sops-install` (age + sops binary), `collections` (pinned galaxy
-  install), `age-key` (key-dir/keygen/pubkey display + the first-host `.sops.yaml` seed —
-  the seed shares the tag because it consumes the registered pubkey).
+## Where the work went
 
-## What it does (`tasks/main.yml`)
-1. **Install** `age` (apt) and the `sops` binary to `/usr/local/bin`, at
-   `defaults/main.yml:sops_setup_version` and arch-mapped amd64/arm64. The `get_url` is
-   **sha256-checksum-pinned** (SOPS is the root of the secret-decryption trust chain — an
-   unverified binary would be a supply-chain hole). Bump the version and both per-arch
-   sha256s **together**: `uv run python scripts/validate/asset_pins.py --refresh
-   getsops/sops` fetches each URL and rewrites both hashes, and the release's
-   `sops-<ver>.checksums.txt` is the same answer upstream; compare the two before merging.
-   The pin lives in `defaults/main.yml` so `asset_pins.py` can see it at all — that checker
-   reads defaults alone, and the URL was inline in `tasks/` until #2313. One url+digest pair
-   per architecture, because a digest conditional on `ansible_facts.architecture` renders as
-   an unresolved template under the checker's `StrictUndefined`.
-2. **Install pinned collections** from `requirements.yml` into `ansible/collections` (the
-   path `ansible.cfg` loads from, matching the prek lint hook) — run as the repo owner
-   (`become: false`) so `community.sops` etc. land for the user who runs deploys.
-3. **Generate the age key** at `~/.config/sops/age/keys.txt` (`creates:`-guarded → idempotent,
-   won't regenerate) and print its public key. Only a host Ansible drives locally
-   (`ansible_connection=local`) gets one: secrets decrypt on the controller, so daniel-pi,
-   driven over ssh, holds no key and is not a recipient.
-4. **Seed `ansible/.sops.yaml`** with that pubkey — **first-host bootstrap only**
-   (skipped when the tracked `.sops.yaml` already exists; see Notable).
-This role does **not** write `SOPS_AGE_KEY_FILE` into `~/.bashrc`. Until #2319 it appended
-the export with `lineinfile`, which landed after the dotfiles' `ble-attach` line and was undone
-by every `chezmoi apply`. The export now belongs to whatever owns the host's `.bashrc`: the
-dotfiles repo's `home/dot_bashrc` on the chezmoi hosts, and `/etc/profile.d/homelab.sh` from the
-`pi-tuning` component of `homelab-daniel-pi` on daniel-pi.
+- `hosts/packages/homelab-tools/package.yml` pins the `sops` binary, at
+  `/usr/lib/homelab/bin/sops`. Renovate moves its version and digest together.
+- `hosts/components/sops/` ships `/usr/bin/sops`, which execs that binary, and makes the
+  package depend on `age`. All three host packages list the component, and each lists the
+  role's `/usr/local/bin/sops` as a legacy entry, because `/usr/local/bin` comes first on
+  `PATH`.
+- `hosts/bootstrap-host.sh` creates the host's own age key, `/etc/homelab/age.key`, which
+  `homelab-secrets` decrypts the host's SOPS file with.
+- The collections install moved to `initial_setup` under the same `collections` tag, so the
+  deployer applies a `requirements.yml` bump as before.
+- The role no longer creates the operator's user-home key or seeds `ansible/.sops.yaml`.
+  `docs/break-glass.md` records which hosts keep a user-home key, and `ansible/README.md` §5
+  has the steps for a new host that runs Ansible.
 
 ## Notable
-- **DR:** host keys at `~/.config/sops/age/keys.txt` are in **no automated backup** (nothing
-  outside a Longhorn volume is backed up at all since Kopia retired 2026-08-13, and Kopia only
-  covered `containers/` before that); they're backed up out-of-band (2026-06-06). Since
-  **2026-06-11** `.sops.yaml` also lists an **off-box recovery recipient** (private half
-  only in the operator's password manager), so the secrets survive losing every host key.
+
+- **DR:** the user-home keys are in **no automated backup**, because nothing outside a
+  Longhorn volume is. They are backed up out-of-band (2026-06-06). Since **2026-06-11**
+  `ansible/.sops.yaml` also lists an **off-box recovery recipient** (private half only in the
+  operator's password manager), so the secrets survive losing every host key.
 - **Three creation rules, four kinds of file.** `ansible/.sops.yaml` holds two cluster rules
   ahead of the generic rule, because SOPS takes the first rule that matches and the generic
   rule also matches every cluster manifest. The cluster file (the `cluster-vars` dotenv under
@@ -62,13 +46,18 @@ dotfiles repo's `home/dot_bashrc` on the chezmoi hosts, and `/etc/profile.d/home
   resolves `.sops.yaml` from the working directory, so from the repo root it finds no
   creation rule. `--config` is a global flag and goes before the subcommand (`sops --config
   ansible/.sops.yaml updatekeys <file>`).
-- **Onboarding an Nth host is NOT this role** — `.sops.yaml` is tracked, so every checkout
-  already has it and step 4 self-skips. Adding a host = run `ansible/bootstrap.yml` on it,
-  append its pubkey to the `age:` string of all three rules, then from `ansible/` run `sops
-  updatekeys` on `secrets.yml`, the cluster file and each cluster manifest that exists,
-  and commit/pull. Removing one deletes its key from all three rules and runs `sops rotate -i
-  --rm-age <key>` on the same files, not `updatekeys`; `.sops.yaml`'s header says why. See
-  `bootstrap.yml` header; [[gitops_deploy]] only consumes secrets after this is in place.
-- **Chicken-and-egg:** `initial_setup.yml`'s `Load encrypted secrets` pre_task needs SOPS to
-  already work, so a brand-new host must run `bootstrap.yml` first (it has no secret
-  dependency) before this role/playbook can succeed.
+- **Onboarding an Nth recipient:** append its public key to the `age:` string of all three
+  rules, then from `ansible/` run `sops updatekeys` on `secrets.yml`, the cluster file and each
+  cluster manifest that exists, and commit. Removing one deletes its key from all three rules
+  and runs `sops rotate -i --rm-age <key>` on the same files, not `updatekeys`; the
+  `.sops.yaml` header says why.
+
+## Rollback
+
+A revert of H7.24b restores the tasks and the defaults, and drops the `sops` component and the
+legacy entries from the host packages. The operator then re-applies the role on each host after
+`homelab_host_applied_info` shows the reverted version, ON daniel-box and daniel-server: `cd
+/home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags sops-install`,
+and from a node for the Pi, with `-e target=daniel-pi` (operator-only). Until then, a host that
+took the H7.24b package and then the revert has no `sops` on `PATH`, because reconcile removed
+`/usr/local/bin/sops` and dpkg removed `/usr/bin/sops`.

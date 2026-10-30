@@ -197,6 +197,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     ]
     assert ours == [
         {"path": "/etc/apt/sources.list.d/github-cli.list"},
+        {"path": "/usr/local/bin/sops"},
         {"cron_file": "ups-secondary-health"},
         {"path": "/usr/local/bin/ups-secondary-health.sh"},
         {"path": "/etc/nut/kuma-push.env"},
