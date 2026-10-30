@@ -856,6 +856,11 @@ PR, Cutover-a, Cutover-b and the token PR. Its six extra tasks:
    These rules stay, unlike `LokiHomelabDown`, because each is `critical` with an `absent()`
    arm, which `ScrapeTargetDown` lacks. A1's inhibit takes `ScrapeTargetDown` as its source
    instead (the A1 row).
+    - **`FluxControllerDown` is the fourth source.** Its `up == 0` arm reads one target per
+      Flux controller, so its inhibit carries `equal: [job, instance]` and holds only the
+      dead controller's `ScrapeTargetDown`. The rule's `absent()` arm carries no `instance`
+      and holds nothing. It lands with the PR that drops that arm's `shadow`, after
+      Cutover-b ([#6654](https://github.com/DanielH2018/server/issues/6654)).
     - **When each inhibit lands.** Alertmanager inhibits before it routes, so a shadow
       source would silence a live target, and nothing would page. Each inhibit therefore
       lands in the later of the PRs that drop `shadow` from its source and from its target:
