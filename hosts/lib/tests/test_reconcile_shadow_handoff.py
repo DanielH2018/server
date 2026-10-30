@@ -162,3 +162,19 @@ def test_removing_a_slice_drop_in_reloads_systemd_once(node):
 
     assert result.returncode == 0, result.stderr
     assert len(reloads(node)) == 1
+
+
+def test_the_emptied_slice_drop_in_directory_is_removed_after_its_drop_in(node):
+    # A package lists the directory after the files in it, so rmdir finds it empty.
+    dropin = f"{ETC}/user-1000.slice.d/claude-memcaps.conf"
+    shadow(node, dropin, "[Slice]\nMemoryMax=8G\n")
+    node.manifest["legacy"] += [
+        {"path": f"/{dropin}"},
+        {"path": f"/{ETC}/user-1000.slice.d"},
+    ]
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not (node.root / ETC / "user-1000.slice.d").exists()
+    assert node.applied()["drift"]["legacy"] == 0
