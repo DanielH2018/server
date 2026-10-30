@@ -188,7 +188,7 @@ def test_uptime_kuma_is_a_consumer_iff_a_tile_exists():
             "CHECKS",
         )
     }
-    assert "monitor_bridge_traefik_421_push_token" in bridge_tokens
+    assert "monitor_bridge_disk_push_token" in bridge_tokens
     reg = load_registry()
     wrong = []
     for name in reg["entries"]:

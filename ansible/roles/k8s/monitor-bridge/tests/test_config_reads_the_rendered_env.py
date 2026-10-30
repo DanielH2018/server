@@ -1,6 +1,6 @@
 """Each threshold has one home: the pod environment renders it, and `bridge/config*.py` only reads it.
 
-Until #3659 `TRAEFIK_421_RPS` defaulted to "0.02" in both the env-secret template and
+Until #3659 `TRAEFIK_421_RPS` (since retired with its check) defaulted to "0.02" in both the env-secret template and
 `bridge/config_service.py`, and 40 of the 133 keys both files named disagreed (`TARGETS_MIN` 1
 against 2, `PROWLARR_INDEXER_MIN_DOWN_MIN` 10080 against 30). The pod read the template while the
 suite read the Python, so a test could pass at a value nothing deployed. A read with no default is
@@ -36,7 +36,7 @@ def test_no_rendered_key_carries_a_second_default_in_python():
     rendered = set(bridge_env())
     reads = _reads()
     # Named members, so a parser rename that empties `_reads()` fails here, not silently.
-    assert ("config_service.py", "TRAEFIK_421_RPS", False) in reads
+    assert ("config_host.py", "DISK_MAX_PCT", False) in reads
     assert ("config_service.py", "HA_BAN_WINDOW", True) in reads
     doubled = sorted(
         (m, k) for m, k, has_default in reads if has_default and k in rendered

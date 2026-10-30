@@ -122,7 +122,7 @@ def prom_readers(checks) -> set[str]:
 def test_prom_readers_are_derivable_from_the_registry():
     """Non-vacuity: an empty derivation makes the completeness guard below pass on nothing."""
     readers = prom_readers(registry.build_checks())
-    assert {"disk", "restarts", "traefik_latency"} <= readers, (
+    assert {"disk", "restarts", "etcd_db_size"} <= readers, (
         f"prom readers derived from the registry look wrong: {sorted(readers)} — "
         "the source-scan or the registry shape changed, and the guard below is now inert"
     )
@@ -144,5 +144,5 @@ def test_every_prometheus_reader_is_gated():
 def test_a_reader_dropped_from_the_gate_sets_is_flagged():
     """The reject half: a Prometheus reader in no gate set must not read as clean."""
     readers = prom_readers(registry.build_checks())
-    without_latency = gates.PROM_DEPENDENT - {"traefik_latency"}
-    assert readers - without_latency == {"traefik_latency"}
+    without_etcd = gates.PROM_DEPENDENT - {"etcd_db_size"}
+    assert readers - without_etcd == {"etcd_db_size"}

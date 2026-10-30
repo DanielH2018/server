@@ -20,7 +20,7 @@ from checks import host
 
 ROWS: tuple[Row, ...] = (
     Row(name="disk", fn=host.check_disk, critical=True, display="Root" " Disk"),
-    Row(name="cert", fn=host.check_cert, runbook=None),
+    Row(name="memory", fn=host.check_mem, runbook=None),
 )
 """
 
@@ -28,7 +28,7 @@ ROWS: tuple[Row, ...] = (
 def test_literal_keywords_are_read_and_code_is_left_out():
     assert py_table(SOURCE, "ROWS") == [
         {"name": "disk", "critical": True, "display": "Root Disk"},
-        {"name": "cert", "runbook": None},
+        {"name": "memory", "runbook": None},
     ]
 
 

@@ -1,8 +1,8 @@
 """The app-facing half of monitor-bridge's configuration.
 
-Traefik, n8n, the *arr stack, the deployer's own state files, the etcd restore drill, the
+n8n, the *arr stack, the deployer's own state files, the etcd restore drill, the
 staging-gate backfill, Home Assistant and the deploy-pipeline exporter — every threshold read by a check in
-`checks/service.py`, plus the Traefik latency and error-rate bounds `checks/cluster.py` reads.
+`checks/service.py`.
 
 Field justifications sit beside the declarations, env var names beside the reads, and the values
 in `templates/config/env.yaml.j2`.
@@ -15,17 +15,8 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class ServiceConfig:
-    """Traefik, n8n, the *arr stack, the deployer state files, the drills and Home Assistant."""
+    """n8n, the *arr stack, the deployer state files, the drills and Home Assistant."""
 
-    TRAEFIK_5XX_PCT: float
-    TRAEFIK_404_PCT: float
-    TRAEFIK_421_RPS: float
-    TRAEFIK_421_CONSECUTIVE: int
-    TRAEFIK_MIN_RPS: float
-    TRAEFIK_SLOW_BUCKET: str
-    TRAEFIK_SLOW_PCT: float
-    TRAEFIK_SLOW_MIN_REQUESTS: float
-    TRAEFIK_STREAM_SERVICES: tuple[str, ...]
     N8N_URL: str
     N8N_API_KEY: str = field(repr=False)
     N8N_FAIL_WINDOW: str
@@ -77,87 +68,6 @@ def service_config(
 ) -> ServiceConfig:
     """The app fields, read through the parsers `load_config` built over its environment."""
     return ServiceConfig(
-        TRAEFIK_5XX_PCT=_num("TRAEFIK_5XX_PCT"),
-        # The 404 SHARE of entrypoint traffic that means the edge has lost its routers.
-        # High, not low, on purpose: a homelab edge serves a steady trickle of ordinary
-        # 404s (favicons, probes, a stale bookmark), measured at 4.0% of 0.83 rps on
-        # 2026-09-06, while the total-404 outage that day was 100% of 0.61 rps. 90 sits in
-        # that gap with a wide margin on both sides.
-        TRAEFIK_404_PCT=_num("TRAEFIK_404_PCT"),
-        # The per-ROUTER 421 rate that means a client is wedged on a connection whose SNICheck
-        # pinned the wrong TLS-options name (#2757; traefik's CLAUDE.md has the mechanism). An
-        # absolute rate, not a share behind TRAEFIK_MIN_RPS: 421 has no legitimate sustained
-        # source here, and the wedged clients are low-rate pollers. Measured over the 7 days to
-        # 2026-09-27, three wedges ran at 0.10-0.18 rps in their steady state (authelia
-        # 2026-09-20 23:10 to 09-21 13:40, then #2747's Loki push and #2749's authelia pair),
-        # while the only 421 outside them was one 5-minute window on uptime-kuma at 0.0083 rps.
-        # 0.02 sits 2.4x above that blip and 5x below the slowest wedge.
-        TRAEFIK_421_RPS=_num("TRAEFIK_421_RPS"),
-        # 3 cycles = 15 min at INTERVAL=300, the value LONGHORN_CONSECUTIVE and its
-        # siblings carry. A one-shot handshake mismatch lives in a [5m] rate for at most two
-        # evaluations, so it cannot reach the third; every wedge measured lasted hours.
-        TRAEFIK_421_CONSECUTIVE=_int("TRAEFIK_421_CONSECUTIVE"),
-        TRAEFIK_MIN_RPS=_num("TRAEFIK_MIN_RPS"),
-        # Slowness is measured at a histogram BUCKET BOUNDARY, not with histogram_quantile.
-        # Traefik's default buckets are 0.1 / 0.3 / 1.2 / 5.0 / +Inf, so between 1.2s and 5.0s
-        # there is nothing to interpolate from and a quantile landing there is invented, not
-        # measured. The old check compared histogram_quantile(0.95, ...) against 3s — a
-        # threshold sitting inside that empty 3.8s-wide gap. Measured on homepage@docker
-        # 2026-08-06 13:15-13:20 UTC: Prometheus reported p95 4.058s while the Traefik access
-        # log for the same window showed a real p95 of 1.576s (114 requests, 24 over 1.2s, max
-        # 3.063s). Every firing was that arithmetic. Across all 42,598 homepage requests that
-        # day only 8 exceeded 3s, never more than 2 in a 5-minute window, so no window's real
-        # p95 came near it.
-        #
-        # The bucket counts themselves are exact, so "more than 5% of requests exceeded 5.0s"
-        # IS "p95 above 5.0s", stated without interpolation. Keep TRAEFIK_SLOW_BUCKET on a
-        # boundary Traefik actually emits — an le= that matches no series selects nothing (see
-        # the unmeasurable branch in the verdict).
-        TRAEFIK_SLOW_BUCKET=_env("TRAEFIK_SLOW_BUCKET", "5.0"),
-        TRAEFIK_SLOW_PCT=_num("TRAEFIK_SLOW_PCT", "5"),
-        # The absolute number of slow requests an alert must rest on, alongside the ratio.
-        # TRAEFIK_MIN_RPS admits a service with MIN_RPS x 300 = 15 requests in the check's [5m]
-        # window, so ONE request past the bucket is 1/15 = 6.7% — already over TRAEFIK_SLOW_PCT.
-        # The ratio alone therefore pages on a single request for every low-traffic route, which
-        # is the small-sample artifact, not a latency signal. Derived, not fitted: the count is
-        # what makes the percentage mean something, so state it as a count.
-        TRAEFIK_SLOW_MIN_REQUESTS=_num("TRAEFIK_SLOW_MIN_REQUESTS"),
-        # Services whose traffic is dominated by LONG-LIVED CONNECTIONS, exempt from the latency
-        # ratio. Matched as a prefix of the Traefik service label, which is
-        # `homelab-<name>-<hash>@kubernetescrd` — the hash moves when an IngressRoute is renamed,
-        # so match `homelab-<name>-` and never the full label.
-        #
-        # Traefik's histogram times a request until the RESPONSE COMPLETES. For a websocket, an
-        # SSE stream or a Kubernetes watch that is the lifetime of the connection, so a healthy
-        # stream lands past every bucket edge by design. No TRAEFIK_SLOW_BUCKET fixes this: the
-        # buckets are 0.1/0.3/1.2/5.0/+Inf and a stream outlives all of them.
-        #
-        # Measured on 2026-09-11, this is what tripped the check live. headlamp: 94.2% of
-        # requests under 0.1s, 3.1% past 5.0s, and a mean of 1.7s over the whole service — which
-        # puts the mean of that 3.1% tail near 53s. That is not a slow response, it is headlamp's
-        # Kubernetes watch streams. home-assistant and uptime-kuma are the other two offenders in
-        # the 30-day history (5 and 4 episodes) and are websocket UIs of the same shape.
-        #
-        # DELIBERATELY NOT HERE: bazarr and prowlarr, the other two names in that history. An
-        # *arr indexer search genuinely takes 5-30s and the user genuinely waits for it, so it is
-        # exactly the user-visible slowness this check's docstring exists to catch. Excluding
-        # them would hide the signal rather than the artifact.
-        #
-        # DECIDED: jellyfin is not exempt either (#6649). Its slow requests in the 168h soak to
-        # 2026-10-30T18:32Z behind every DOWN episode were MKV font fetches
-        # (`/Videos/<id>/<id>/Attachments/<n>`, 10 KB-8 MB, 5-8s each) at playback start,
-        # 23-45 per episode: bounded responses the user waits on before subtitles render.
-        # Its `/socket` WebSockets are streams (median 1204s), but at most 3 finished in any
-        # 300s window and none moved the ratio past TRAEFIK_SLOW_PCT. Exempting the service
-        # would blind the check to the attachment stall; a separate IngressRoute for `/socket`
-        # is the way to exempt the WebSockets alone.
-        TRAEFIK_STREAM_SERVICES=tuple(
-            s.strip()
-            for s in _env(
-                "TRAEFIK_STREAM_SERVICES",
-            ).split(",")
-            if s.strip()
-        ),
         N8N_URL=_env("N8N_URL").rstrip("/"),
         N8N_API_KEY=_env("N8N_API_KEY"),
         # n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way

@@ -100,7 +100,7 @@ NB: `cert <public-host>` shows the CLOUDFLARE EDGE cert, NOT Traefik's origin ce
 resolves the host to Cloudflare, so the TLS handshake terminates there. To inspect the origin
 Let's Encrypt cert, point at the origin IP with the host as SNI:
 `cert <server-ip>:443 --sni <host>` (origin expiry is also independently watched by
-monitor-bridge's TLS Cert Expiry monitor).
+observability's `CertExpiringSoon` rule).
 """
 
 import sys

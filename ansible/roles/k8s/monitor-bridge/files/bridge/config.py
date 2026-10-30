@@ -13,7 +13,7 @@ constant is a process-wide global with a test-shaped hole in it; a parameter is 
 
 THE FIELDS LIVE IN FOUR DOMAIN MODULES, composed here by inheritance so that flat `cfg.X`
 access survives: `config_host` (disks, SMART, temperatures, the UPS, the Pi), `config_service`
-(Traefik, n8n, the *arr stack, the deployer, Home Assistant), `config_cluster` (the second
+(n8n, the *arr stack, the deployer, Home Assistant), `config_cluster` (the second
 Prometheus, the coverage floors, Longhorn, PVCs) and `config_io` (B2, R2, Loki, the webhooks).
 Each declares a frozen dataclass and a builder taking `load_config`'s parsers as arguments, so
 a leaf never imports this facade. What stays HERE is the loop and endpoint fields every domain

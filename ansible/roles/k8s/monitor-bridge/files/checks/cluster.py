@@ -1,7 +1,7 @@
 """Cluster checks for monitor-bridge.
 
-Covers the cAdvisor trio (restarts, OOM, CPU throttle), the Prometheus gates, and
-Traefik 5xx and latency. The Kubernetes workload arms are the k8s-workloads rules.
+Covers the cAdvisor trio (restarts, OOM, CPU throttle) and the Prometheus gates;
+the Kubernetes workload arms are the k8s-workloads rules, and the Traefik edge is observability's `edge.yaml`.
 
 Slice 6 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
 (`bridge.sources.Sources`) and its streak counters as `src.state` (`bridge.streaks.State`), so a
@@ -17,7 +17,6 @@ from bridge.sources import Sources
 import bridge.net
 import bridge.streaks
 from verdicts.cluster import (
-    traefik_latency_verdict,
     cadvisor_coverage_shortfall,
 )
 
@@ -124,7 +123,7 @@ def check_cpu_throttle(cfg: Config, src: Sources) -> tuple[bool, str]:
     Condition 1 alone fires constantly for tiny low-limit utility containers that briefly
     burst over their per-period slice while losing negligible absolute time (e.g. a 0.1-cpu
     sidecar at 90% throttled periods but 0.0001 cores lost) — a perpetual false `down`. The
-    cores floor — the same volume-floor idea as check_traefik_5xx's TRAEFIK_MIN_RPS — gates
+    cores floor — the same volume-floor idea as the edge rules' 0.05 rps floor — gates
     those out, so the monitor pushes `up` and only goes `down` on genuine starvation.
     Containers with no cpu limit give 0/0 -> NaN for condition 1 (NaN comparisons are False)
     and are ignored. Absent cfs metrics used to empty both queries and read green; the floor in
@@ -203,157 +202,3 @@ def check_prometheus(cfg: Config, src: Sources) -> tuple[bool, str]:
     if val is None:
         return False, "Prometheus answered but returned no data for vector(1)"
     return True, "Prometheus reachable"
-
-
-def check_traefik_5xx(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Elevated 5xx ratio per Traefik service, naming each offender.
-
-    Per-service (not aggregate) for two reasons: the alert points at *which* backend is
-    erroring, and a broken low-traffic service can't hide diluted below the threshold by
-    healthy high-traffic ones. The TRAEFIK_MIN_RPS floor is per-service too — same idea
-    as before, a single error on a near-idle route is not a 100%-error-ratio alarm.
-    """
-    total_vec = src.prom_vector(
-        "sum(rate(traefik_service_requests_total[5m])) by (service)"
-    )
-    err_rps = dict(
-        (m.get("service", "?"), v)
-        for m, v in src.prom_vector(
-            'sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) by (service)',
-        )
-    )
-    offenders = []
-    total_rps = 0.0
-    eligible = 0
-    for m, rps in total_vec:
-        total_rps += rps
-        if rps < cfg.TRAEFIK_MIN_RPS:
-            continue
-        eligible += 1
-        svc = m.get("service", "?")
-        pct = 100.0 * err_rps.get(svc, 0.0) / rps
-        if pct > cfg.TRAEFIK_5XX_PCT:
-            offenders.append((svc, pct, rps))
-    offenders.sort(key=lambda spr: -spr[1])
-    if offenders:
-        desc = ", ".join("%s (%.0f%% of %.2f rps)" % o for o in offenders[:5])
-        return False, "%d service(s) over %.0f%% 5xx: %s" % (
-            len(offenders),
-            cfg.TRAEFIK_5XX_PCT,
-            desc,
-        )
-    return True, "5xx ok: %d service(s) above floor, %.2f rps total" % (
-        eligible,
-        total_rps,
-    )
-
-
-def check_traefik_latency(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Share of slow requests per Traefik service, naming each offender.
-
-    The gap check_traefik_5xx cannot close: a slow route still answers 200, so an error-ratio
-    check stays green while a service is unusable. Nothing here watched latency at all before
-    this, so a backend could degrade indefinitely without any monitor noticing.
-
-    Latency rather than the 499s that slow routes produce: a 499 only means the client
-    disconnected first, which is also what happens every time someone closes a tab with
-    in-flight requests. On a polling dashboard that is constant and entirely normal, so a
-    499-based alert would page for ordinary browsing.
-
-    Same shape as check_traefik_5xx deliberately: per-service so the alert names the offender,
-    and behind the same TRAEFIK_MIN_RPS floor so one slow request on a near-idle route is not
-    an alarm. It shares the 5xx check's ratio form too, for the reason in TRAEFIK_SLOW_BUCKET:
-    a share of requests past a real bucket edge is exact where an interpolated quantile is not.
-
-    Both rates come from the histogram's own series (_count, not traefik_service_requests_total)
-    so numerator and denominator are always the same scrape of the same metric family — mixing
-    the two counters lets a ratio drift outside 0-100% between scrapes.
-
-    Two guards stop the ratio firing on things that are not slowness, added 2026-09-11 after 51
-    DOWN episodes in 30 days made this the flappiest monitor in the estate. TRAEFIK_STREAM_SERVICES
-    exempts services whose traffic is long-lived connections, which the histogram times until the
-    connection closes. TRAEFIK_SLOW_MIN_REQUESTS requires an absolute count of slow requests behind
-    the percentage, because at TRAEFIK_MIN_RPS a single request already exceeds TRAEFIK_SLOW_PCT.
-    Each knob carries its own evidence in bridge/config_service.py; they are independent faults and
-    neither fixes the other.
-    """
-    total = dict(
-        (m.get("service", "?"), v)
-        for m, v in src.prom_vector(
-            "sum(rate(traefik_service_request_duration_seconds_count[5m])) by (service)",
-        )
-    )
-    under = dict(
-        (m.get("service", "?"), v)
-        for m, v in src.prom_vector(
-            'sum(rate(traefik_service_request_duration_seconds_bucket{le="%s"}[5m])) '
-            "by (service)" % cfg.TRAEFIK_SLOW_BUCKET,
-        )
-    )
-    return traefik_latency_verdict(
-        total,
-        under,
-        cfg.TRAEFIK_MIN_RPS,
-        cfg.TRAEFIK_SLOW_PCT,
-        cfg.TRAEFIK_SLOW_BUCKET,
-        cfg.TRAEFIK_SLOW_MIN_REQUESTS,
-        cfg.TRAEFIK_STREAM_SERVICES,
-        300.0,  # the [5m] both rates above are taken over
-    )
-
-
-def check_traefik_404_flood(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """The 404 share of ENTRYPOINT traffic: an edge that answers but routes nothing.
-
-    The gap check_traefik_5xx and check_traefik_latency both leave open, and #1322 fell
-    straight through it. On 2026-09-06 a transient crowdsec middleware absence made Traefik
-    reject every router while the reload itself succeeded; every HTTPS route 404'd for 3.5
-    hours and both neighbours logged `0 service(s) above floor` throughout. They are blind
-    twice over: 404 is not `code=~"5.."`, and with zero routers the `traefik_service_*` series
-    vanish, so their per-service loops iterate an empty vector and take the healthy branch.
-
-    ENTRYPOINT, not service or router, is the whole design. Measured for that window:
-    `sum by (code)(rate(traefik_entrypoint_requests_total[10m] offset 3h))` returned
-    `code=404 = 0.61` and nothing else, while `count(traefik_router_requests_total offset 3h)`
-    returned no data at all. The entrypoint counter is incremented before routing, so it
-    survives exactly the failure that erases its per-service siblings.
-
-    A ratio rather than a rate, behind the shared TRAEFIK_MIN_RPS floor, for the same reason
-    the 5xx check uses one: a handful of 404s on a near-idle edge is ordinary browsing, not an
-    outage. The threshold is high rather than low — see TRAEFIK_404_PCT for the two measured
-    populations it separates.
-
-    Two absent-data branches, and neither pages. `total is None` means Traefik is not being
-    scraped at all, which is Scrape Targets' page under the same one-root-cause-one-alert rule
-    gates.py applies everywhere else; this check reads Prometheus in-cluster, so the edge it
-    watches cannot blind it, but a dead exporter still can and must not page twice. A 404 rate
-    with no series is a genuine zero — no 404s were served — so it reads as 0.0 rather than as
-    unknown.
-    """
-    total = src.prom_scalar("sum(rate(traefik_entrypoint_requests_total[5m]))")
-    if total is None:
-        return (
-            True,
-            "404 flood unmeasured: no traefik entrypoint series "
-            "(Scrape Targets owns a blind exporter)",
-        )
-    if total < cfg.TRAEFIK_MIN_RPS:
-        return True, "404 flood ok: %.2f rps total, below the %.2f rps floor" % (
-            total,
-            cfg.TRAEFIK_MIN_RPS,
-        )
-    notfound = (
-        src.prom_scalar('sum(rate(traefik_entrypoint_requests_total{code="404"}[5m]))')
-        or 0.0
-    )
-    pct = 100.0 * notfound / total
-    if pct > cfg.TRAEFIK_404_PCT:
-        return False, (
-            "%.0f%% of %.2f rps entrypoint traffic is 404, over %.0f%% — the edge is "
-            "answering but routing nothing (see #1322)"
-            % (pct, total, cfg.TRAEFIK_404_PCT)
-        )
-    return True, "404 flood ok: %.1f%% of %.2f rps entrypoint traffic is 404" % (
-        pct,
-        total,
-    )

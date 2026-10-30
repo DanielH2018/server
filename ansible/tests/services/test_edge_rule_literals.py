@@ -1,34 +1,60 @@
-"""The edge rules' thresholds equal the monitor-bridge values they port.
+"""The edge rules carry the thresholds monitor-bridge's five edge checks carried.
 
-`files/rules/edge.yaml` is plain YAML, so each threshold is a literal that mirrors an env value
-of the bridge row it shadows (M1 convention 1). A bridge value retuned without the rule would
-leave the shadow soak comparing two different checks.
+`files/rules/edge.yaml` is plain YAML, so each threshold is a literal. Until M6 batch A4's
+Cutover-a2 each one mirrored an env value of the bridge row it shadowed, and this test read the
+rendered env. That cutover deleted the rows and their env keys, so the numbers below are the
+record of what the bridge carried (M1 convention 1), and a rule edit that drifts from them
+fails here.
 
 Run: uv run pytest ansible/tests/services/test_edge_rule_literals.py
 """
 
-import re
-
 from _helpers import K8S_ROLES
-from _k8s_render import render_pod_env
 from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "edge.yaml"
-BRIDGE = K8S_ROLES / "monitor-bridge"
-CONFIG_DEFAULTS = BRIDGE / "files" / "bridge" / "config_service.py"
+
+# What the deleted env keys held (`templates/config/env.yaml.j2`) and the defaults the deleted
+# `bridge/config_service.py` gave `TRAEFIK_SLOW_BUCKET` and `TRAEFIK_SLOW_PCT`.
+CERT_MIN_DAYS = 14
+TRAEFIK_5XX_PCT = 5
+TRAEFIK_404_PCT = 90
+TRAEFIK_421_RPS = "0.02"
+TRAEFIK_421_HELD = "10m"  # TRAEFIK_421_CONSECUTIVE (3) cycles, 5 minutes apart: 2 x 5
+TRAEFIK_MIN_RPS = "0.05"
+TRAEFIK_SLOW_BUCKET = "5.0"
+TRAEFIK_SLOW_PCT = 5
+TRAEFIK_SLOW_MIN_REQUESTS = "3"
 SCRAPE_WINDOW_S = 300  # the [5m] every rate in the rules and in the bridge checks uses
-CYCLE_MINUTES = 5  # the bridge's INTERVAL, which TRAEFIK_421_CONSECUTIVE counts
 
-
-def bridge_env() -> dict[str, str]:
-    """The pod env a deploy renders, which is where the bridge reads its thresholds."""
-    return {k: str(v) for k, v in render_pod_env("monitor-bridge").items()}
-
-
-def bridge_default(name: str) -> str:
-    """The default `bridge/config_service.py` gives `name` when the env does not set it."""
-    [value] = re.findall(rf'"{name}",\s*"([^"]*)"', CONFIG_DEFAULTS.read_text())
-    return value
+# Services whose traffic is dominated by LONG-LIVED CONNECTIONS, exempt from the latency ratio
+# (the deleted `TRAEFIK_STREAM_SERVICES`). Matched as a prefix of the Traefik service label,
+# `homelab-<name>-<hash>@kubernetescrd`, whose hash moves when an IngressRoute is renamed, so
+# the rule matches `homelab-<name>-` and never the full label.
+#
+# Traefik's histogram times a request until the RESPONSE COMPLETES. For a websocket, an SSE
+# stream or a Kubernetes watch that is the lifetime of the connection, so a healthy stream
+# lands past every bucket edge by design. No bucket fixes this: the buckets are
+# 0.1/0.3/1.2/5.0/+Inf and a stream outlives all of them. Measured on 2026-09-11, headlamp had
+# 94.2% of requests under 0.1s and 3.1% past 5.0s, with a mean of 1.7s over the whole service,
+# which puts the mean of that tail near 53s: Kubernetes watch streams. home-assistant and
+# uptime-kuma are the other two offenders in the 30-day history (5 and 4 episodes), and are
+# websocket UIs of the same shape.
+#
+# DELIBERATELY NOT HERE: bazarr and prowlarr, the other two names in that history. An *arr
+# indexer search genuinely takes 5-30s and the user genuinely waits for it, so it is exactly
+# the user-visible slowness the rule exists to catch. Excluding them would hide the signal
+# rather than the artifact.
+#
+# DECIDED: jellyfin is not exempt either (#6649). Its slow requests in the 168h soak to
+# 2026-10-30T18:32Z behind every DOWN episode were MKV font fetches
+# (`/Videos/<id>/<id>/Attachments/<n>`, 10 KB-8 MB, 5-8s each) at playback start, 23-45 per
+# episode: bounded responses the user waits on before subtitles render. Its `/socket`
+# WebSockets are streams (median 1204s), but at most 3 finished in any 300s window and none
+# moved the ratio past TRAEFIK_SLOW_PCT. Exempting the service would blind the rule to the
+# attachment stall; a separate IngressRoute for `/socket` is the way to exempt the WebSockets
+# alone.
+STREAM_SERVICES = "headlamp|home-assistant|uptime-kuma"
 
 
 def rules_by_name(text: str) -> dict[str, dict]:
@@ -37,30 +63,23 @@ def rules_by_name(text: str) -> dict[str, dict]:
     return {rule["alert"]: rule for rule in group["rules"]}
 
 
-def literal_problems(rules: dict[str, dict], env: dict[str, str], slow: dict[str, str]):
-    """Each rule fragment the bridge value says should be present and is not."""
-    stream = "|".join(
-        p.removeprefix("homelab-").removesuffix("-")
-        for p in env["TRAEFIK_STREAM_SERVICES"].split(",")
-    )
+def literal_problems(rules: dict[str, dict]) -> list[str]:
+    """Each rule fragment the recorded bridge value says should be present and is not."""
     expected = {
-        "CertExpiringSoon": [f"< {int(float(env['CERT_MIN_DAYS']))}"],
-        "TraefikBackend5xx": [
-            f"> {float(env['TRAEFIK_5XX_PCT']) / 100:g}",
-            f">= {env['TRAEFIK_MIN_RPS']}",
-        ],
+        "CertExpiringSoon": [f"< {CERT_MIN_DAYS}"],
+        "TraefikBackend5xx": [f"> {TRAEFIK_5XX_PCT / 100:g}", f">= {TRAEFIK_MIN_RPS}"],
         "TraefikBackendSlow": [
-            f'le="{slow["TRAEFIK_SLOW_BUCKET"]}"',
-            f"> {float(slow['TRAEFIK_SLOW_PCT']) / 100:g}",
-            f"* {SCRAPE_WINDOW_S} >= {env['TRAEFIK_SLOW_MIN_REQUESTS']}",
-            f">= {env['TRAEFIK_MIN_RPS']}",
-            f'service!~"homelab-({stream})-.*"',
+            f'le="{TRAEFIK_SLOW_BUCKET}"',
+            f"> {TRAEFIK_SLOW_PCT / 100:g}",
+            f"* {SCRAPE_WINDOW_S} >= {TRAEFIK_SLOW_MIN_REQUESTS}",
+            f">= {TRAEFIK_MIN_RPS}",
+            f'service!~"homelab-({STREAM_SERVICES})-.*"',
         ],
         "TraefikEntrypoint404Flood": [
-            f"> {float(env['TRAEFIK_404_PCT']) / 100:g}",
-            f">= {env['TRAEFIK_MIN_RPS']}",
+            f"> {TRAEFIK_404_PCT / 100:g}",
+            f">= {TRAEFIK_MIN_RPS}",
         ],
-        "TraefikRouter421": [f"> {env['TRAEFIK_421_RPS']}"],
+        "TraefikRouter421": [f"> {TRAEFIK_421_RPS}"],
     }
     problems = [
         f"{alert}: expr lacks `{fragment}`"
@@ -68,27 +87,17 @@ def literal_problems(rules: dict[str, dict], env: dict[str, str], slow: dict[str
         for fragment in fragments
         if fragment not in " ".join(rules[alert]["expr"].split())
     ]
-    held = (int(env["TRAEFIK_421_CONSECUTIVE"]) - 1) * CYCLE_MINUTES
-    if rules["TraefikRouter421"]["for"] != f"{held}m":
-        problems.append(f"TraefikRouter421: for is not {held}m")
+    if rules["TraefikRouter421"]["for"] != TRAEFIK_421_HELD:
+        problems.append(f"TraefikRouter421: for is not {TRAEFIK_421_HELD}")
     return problems
 
 
-def shipped() -> list[str]:
-    slow = {
-        name: bridge_default(name)
-        for name in ("TRAEFIK_SLOW_BUCKET", "TRAEFIK_SLOW_PCT")
-    }
-    return literal_problems(rules_by_name(RULES.read_text()), bridge_env(), slow)
-
-
-def test_edge_rule_literals_equal_the_bridge_values():
-    assert shipped() == []
+def test_edge_rule_literals_equal_the_recorded_bridge_values():
+    assert literal_problems(rules_by_name(RULES.read_text())) == []
 
 
 def test_a_retuned_bridge_value_is_flagged():
     text = RULES.read_text().replace("> 0.9", "> 0.5")
-    slow = {"TRAEFIK_SLOW_BUCKET": "5.0", "TRAEFIK_SLOW_PCT": "5"}
-    assert literal_problems(rules_by_name(text), bridge_env(), slow) == [
+    assert literal_problems(rules_by_name(text)) == [
         "TraefikEntrypoint404Flood: expr lacks `> 0.9`"
     ]
