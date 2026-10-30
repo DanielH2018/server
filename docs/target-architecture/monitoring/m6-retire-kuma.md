@@ -672,11 +672,12 @@ secrets. The arithmetic: 83 at the baseline, less M5's 3, M3's 1 and D5's
   `renovate-agent` units send their Kuma beat with `curl -f` from an `ExecStartPost`, so a beat
   into a deleted tile gets a 404 and fails the unit, and `OnFailure` pages every day until the
   push goes. The textfile `ExecStartPost` runs first, so the verdict survives either way. In one
-  PR the tick applies both setup roles before `land.sh` deploys `uptime-kuma`, so the push stops
-  first. The tile then waits its 28h or 36h interval before going DOWN, and the deploy deletes
-  it well inside that. A Cutover-2 merged before Cutover-1a would leave the tile live with no
-  push, and Kuma would page it once that interval passes. A revert of Cutover-1a for the
-  two-hour bound reverts the pair's push with it.
+  PR, the push and the tile go within one landing of each other, whichever plane applies first.
+  Each unit runs once a day, so a 404 needs that unit's run to fall inside the gap. A push that
+  stops first leaves a live tile that goes DOWN only after its 28h or 36h interval, far longer
+  than the gap. A Cutover-2 merged on its own before Cutover-1a pages through Kuma if
+  Cutover-1a has not deployed within that interval. A revert of Cutover-1a for the two-hour
+  bound reverts the pair's push with it.
 - B4's two etcd drill tiles carry no `CheckWithoutPager` term, and B4's other tiles bound their
   window. B4 therefore deletes the drill tiles only together with the five `[2h]` tiles, and
   drops the drill rules' `shadow` no later than those five terms leave `kuma-cutover`.
