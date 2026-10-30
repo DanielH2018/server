@@ -39,6 +39,11 @@ UPDATER_UNIT = "homelab-updater.service"
 PENDING = f'homelab_docker_engine_pending{{host="{HOST}"}} 1'
 # The upstream version A carries, below any pin the real package can hold.
 HELD_UPSTREAM = "0.0.1"
+HOMELAB_APT = (
+    "-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=-"
+)
+# What apt prints when it cannot resolve an install, against holds or Depends.
+RESOLUTION = ("held", "unmet dependencies", "unable to satisfy dependencies")
 REFUSED = "refused"
 MOVED = "moved"
 NAME = "hold the Docker engine through an updater run"
@@ -173,20 +178,26 @@ def _body(cases, c: Container) -> str:
     cases.expect_installed(c, "updater-head", "pi-dropin")
     expect_held(held, _engine(c), c.read(PROM))
 
-    version = f"{cases.versions['updater-head']}.8"
-    red = build(
-        depends_variant(build_root / "red", deb_version(offered_deb)),
-        version,
-        build_root / "red-deb",
-    )
+    # The ciphertext seal_pi wrote, so the red build differs from pi-dropin only by its Depends.
+    sealed = cases.work / "build" / f"pi-sealed-{c.name}" / "sops"
+    rendered = depends_variant(build_root / "red", deb_version(offered_deb), sealed)
+    red = build(rendered, f"{cases.versions['updater-head']}.8", build_root / "red-deb")
     red_deb = cases.work / "debs" / f"engine-red-{red.name}"
     shutil.copy(red, red_deb)
     publish(cases.work / "repo", [*served, offered_deb, red_deb])
+    # The homelab source alone, so a failed mirror fetch fails the case rather than reading
+    # as a refusal.
+    c.ok(f"apt-get update {HOMELAB_APT}")
     apt = c.sh(
-        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y"
-        f" --no-install-recommends homelab-{HOST}"
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends"
+        f" homelab-{HOST}"
     )
-    return red_outcome(held, _engine(c), apt.returncode == 0)
+    said = apt.stdout + apt.stderr
+    if apt.returncode and not any(word in said.lower() for word in RESOLUTION):
+        raise CaseFailed(f"the red install failed on no dependency:\n{said}")
+    outcome = red_outcome(held, _engine(c), apt.returncode == 0)
+    last = said.strip().splitlines()[-1:] or ["nothing"]
+    return f"{outcome}; apt said: {last[0]}"
 
 
 def run(cases) -> None:
