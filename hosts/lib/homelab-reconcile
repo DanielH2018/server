@@ -368,6 +368,12 @@ def shadow_path(entry: dict, units: dict) -> Path | None:
     return path
 
 
+def unit_dir_file(entry: dict) -> bool:
+    """True for a `{path:}` entry that names a file present under /etc/systemd/system."""
+    path = Path(entry.get("path", ""))
+    return ETC_UNIT_DIR in path.parents and os.path.lexists(under_root(path))
+
+
 def hand_off(path: Path) -> tuple[bool, bool] | None:
     """Remove the /etc copy of a unit the package ships.
 
@@ -733,17 +739,24 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         if key not in prev_retired and not waiting and running_service(entry):
             drift["legacy"] += 1
             log(f"keeping {key}: the service is running, so it retires once it is not")
-        elif key in prev_retired or (not waiting and retire(entry)):
+        elif key in prev_retired:
             retired.append(key)
-        else:
-            if waiting:
-                log(f"keeping {key}: the secrets do not all exist yet")
+        elif waiting:
+            log(f"keeping {key}: the secrets do not all exist yet")
             ok = False
+        else:
+            # A drop-in removed from under /etc/systemd/system stays in force until a reload.
+            unit_file = unit_dir_file(entry)
+            if retire(entry):
+                retired.append(key)
+                removed |= unit_file
+            else:
+                ok = False
 
-    # Step 4b: one daemon-reload after every shadow removal, then each packaged unit whose
-    # fragment changed, in the order step 3 uses.
+    # Step 4b: one daemon-reload after every removal under /etc/systemd/system, then each
+    # packaged unit whose fragment changed, in the order step 3 uses.
     if removed and systemctl("daemon-reload").returncode != 0:
-        log("daemon-reload failed after removing a shadowing copy", ERR)
+        log("daemon-reload failed after removing a file under /etc/systemd/system", ERR)
         ok = False
     for unit in sorted(handed):
         if not left_alone(unit, units, links, manual):

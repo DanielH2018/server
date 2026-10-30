@@ -149,3 +149,16 @@ def test_an_ansible_era_slice_drop_in_is_removed_as_an_unowned_file(node, slice_
     assert not (node.root / dropin).exists()
     assert node.applied()["drift"]["legacy"] == 0
     assert node.applied()["retired"] == [json.dumps({"path": f"/{dropin}"})]
+
+
+def test_removing_a_slice_drop_in_reloads_systemd_once(node):
+    # The drop-in's MemoryMax stays in force on the slice until systemd reloads.
+    for slice_dir in ("user.slice.d", "user-1000.slice.d"):
+        dropin = f"{ETC}/{slice_dir}/claude-memcaps.conf"
+        shadow(node, dropin, "[Slice]\nMemoryMax=8G\n")
+        node.manifest["legacy"].append({"path": f"/{dropin}"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert len(reloads(node)) == 1
