@@ -54,6 +54,7 @@ spec:
         app: longhorn-restore-drill
     spec:
       activeDeadlineSeconds: {{ longhorn_restore_drill_deadline_seconds }}
+      ttlSecondsAfterFinished: {{ longhorn_restore_drill_job_ttl_seconds }}
       # No retry: the script retries a failed volume itself, once, on the next night's slot.
       backoffLimit: 0
       template:

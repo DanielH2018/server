@@ -26,6 +26,11 @@ longhorn_reconcile_k8s_schedule: "17 * * * *"
 # A run that reads two lists and patches a few volumes ends well inside this. It sits below the `longhorn-reconcile-verify`
 # Kustomization's 600 s timeout, so a hung gate run fails on its own message.
 longhorn_reconcile_k8s_deadline_seconds: 300
+# How long a finished run's Job, and its pod, stays visible: two schedule periods, so a failed
+# run clears instead of reading Failed until two more runs fail. It must exceed one period, so
+# the newest Job is always there to read (test_rendered_properties.py, row
+# cronjob-finished-jobs-age-out).
+longhorn_reconcile_k8s_job_ttl_seconds: 7200
 
 # A run missed by more than half an hour is not made up: the next one reads the same state.
 longhorn_reconcile_k8s_starting_deadline_seconds: 1800

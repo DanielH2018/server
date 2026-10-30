@@ -149,8 +149,81 @@ def _restart_policy_offence(role: str, spec: dict) -> str | None:
     return f"restartPolicy is {policy!r}, not 'Never'"
 
 
+def _cronjobs(role: str, tpl: str, doc: dict):
+    if doc.get("kind") == "CronJob":
+        yield doc["metadata"]["name"], doc["spec"]
+
+
+def _period_seconds(schedule: str) -> int | None:
+    """The seconds between firings for `*/n * * * *`, hourly, daily or weekly; else None."""
+    minute, hour, day, month, weekday = schedule.split()
+    if (day, month) != ("*", "*"):
+        return None
+    if hour == "*" and weekday == "*":
+        if minute.startswith("*/"):
+            return int(minute[2:]) * 60
+        return 3600 if minute.isdigit() else None
+    if minute.isdigit() and hour.isdigit():
+        return 86400 if weekday == "*" else 7 * 86400
+    return None
+
+
+def _ttl_offence(role: str, spec: dict) -> str | None:
+    job = spec["jobTemplate"]["spec"]
+    ttl = job.get("ttlSecondsAfterFinished")
+    if ttl is None:
+        return "no ttlSecondsAfterFinished, so a failed run's pod stays Failed indefinitely"
+    period = _period_seconds(spec["schedule"])
+    if period is not None and int(ttl) < period + int(
+        job.get("activeDeadlineSeconds") or 0
+    ):
+        return f"ttlSecondsAfterFinished {ttl} is under one period plus the deadline"
+    return None
+
+
+def _cj(schedule: str, **job) -> dict:
+    return {"schedule": schedule, "jobTemplate": {"spec": job}}
+
+
 PROPERTIES = (
     (
+        Property(
+            name="cronjob-finished-jobs-age-out",
+            reason=(
+                "failedJobsHistoryLimit keeps a failed Job, and its Error pod, until that many "
+                "later runs fail, and a TTL added later never reaches a Job already created, so "
+                "crowdsec-home-ips-29885805 read Error for 2.5 days. Every CronJob sets "
+                "ttlSecondsAfterFinished. It must outlast one period plus the run, because "
+                "`probe.py health` and configarr-health judge the newest Job and would find "
+                "none. The renderer strips the TTL from a Flux gate Job (cronjob_gate.py)."
+            ),
+            select=_cronjobs,
+            offence=_ttl_offence,
+            red=("configarr", _cj("30 4 * * *")),
+            green=("configarr", _cj("30 4 * * *", ttlSecondsAfterFinished=172800)),
+            # An hourly run whose TTL ends before the next run finishes.
+            more_red=(
+                (
+                    "x",
+                    _cj(
+                        "17 * * * *",
+                        ttlSecondsAfterFinished=3600,
+                        activeDeadlineSeconds=300,
+                    ),
+                ),
+            ),
+            more_green=(("x", _cj("*/5 * * * *", ttlSecondsAfterFinished=1800)),),
+            # 14 CronJobs render. The floor is the count.
+            min_matches=14,
+            must_find=frozenset(
+                {
+                    "configarr",
+                    "crowdsec-home-ips",
+                    "longhorn-reconcile",
+                    "pi-peer-backup",
+                }
+            ),
+        ),
         Property(
             name="deployment-revision-history-limit",
             reason=(
