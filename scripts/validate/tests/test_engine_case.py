@@ -291,3 +291,38 @@ def test_the_case_holds_the_engine_runs_the_updater_and_reads_dpkg():
         ("dpkg-query", "true"),
     ):
         assert not _runs_the_real_tools(source.replace(word, mutant)), word
+
+
+# What the reviewed case adds: the companions that make pending discriminate, and the control
+# simulation's reader.
+
+
+def test_every_other_pinned_package_is_built_at_its_pin(tmp_path, pi):
+    # With one missing, `docker-engine pending` reads 1 whatever docker-ce's version.
+    debs = _function("companion_debs")(tmp_path / "companions")
+    built = {_field(deb, "Package"): fx.deb_version(deb) for deb in debs}
+    rows = (row.split() for row in pi.files[PINS][0].decode().splitlines())
+    pinned = {row[0]: row[1] for row in rows if len(row) == 2 and row[0][0] != "#"}
+    assert set(built) == set(pinned) - {ENGINE}
+    assert all(fnmatchcase(built[name], pinned[name]) for name in built), built
+
+
+SIMULATION = (
+    "Inst docker-ce [5:0.0.1-1~ubuntu.24.04~noble]"
+    " (5:29.8.1-1~ubuntu.24.04~noble homelab:homelab [all])\n"
+    "Inst homelab-daniel-pi [1.0] (1.1 homelab:homelab [all])\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("simulation", "want"),
+    [
+        (SIMULATION, "5:29.8.1-1~ubuntu.24.04~noble"),
+        ("Inst docker-ce (2.0 homelab:homelab [all])\n", "2.0"),
+        ("Inst docker-ce-cli [1.0] (2.0 homelab:homelab [all])\n", ""),
+        ("Inst homelab-daniel-pi [1.0] (1.1 homelab:homelab [all])\n", ""),
+    ],
+    ids=["upgrade", "fresh", "other-package", "no-engine"],
+)
+def test_the_control_reads_the_version_apt_plans_for_docker_ce(simulation, want):
+    assert _function("planned_version")(simulation, ENGINE) == want

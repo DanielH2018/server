@@ -9,13 +9,17 @@ so the updater never asks apt to move the engine, and the hold is apt's to keep.
 `scripts/validate/host_package_cases.py` runs it after its other cases. The case:
 
   * builds docker-ce at A and B with `dpkg-deb` (`engine_debs`), B matching the real package's
-    docker-ce pin and A not;
-  * installs A and holds it, installs the real Pi package by hand, serves B beside a newer
-    build of that package, runs the updater, which installs that build with apt, and asserts
-    the engine and the pending series (`expect_held`);
+    docker-ce pin and A not, and every other pinned package at its pin (`companion_debs`), so
+    the pending series reads 1 only while docker-ce is off its pin;
+  * installs A and the others and holds them, installs the real Pi package by hand, serves B
+    beside a newer build of that package, runs the updater, which installs that build with
+    apt, and asserts the engine and the pending series (`expect_held`);
   * serves a red fixture, the real Pi package with `Depends: docker-ce (= B)`
-    (`depends_variant`), installs it with apt as the updater does, and records what apt did
-    with the hold (`red_outcome`): it refused the install, or it moved the engine.
+    (`depends_variant`). With docker-ce unheld, apt's simulation must plan B
+    (`planned_version`): the control that makes the hold the only thing left to decide. Held
+    again, the install runs as the updater runs it, and the case records what apt did with
+    the hold (`red_outcome`): it refused the install, or it moved the engine. The job log's
+    `[PASS]` line carries the outcome and apt's last line for each release leg.
 """
 
 import sys as _sys
@@ -42,18 +46,47 @@ HELD_UPSTREAM = "0.0.1"
 HOMELAB_APT = (
     "-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=-"
 )
-# What apt prints when it cannot resolve an install, against holds or Depends.
+# What apt prints when it cannot resolve an install. The unheld control is what ties a
+# refusal to the hold; this only rejects a failure that is no resolution at all.
 RESOLUTION = ("held", "unmet dependencies", "unable to satisfy dependencies")
 REFUSED = "refused"
 MOVED = "moved"
 NAME = "hold the Docker engine through an updater run"
 
 
+def pins(package: host_mode.Package) -> dict[str, str]:
+    """Each package `package`'s pins file names, with the glob its version must match."""
+    rows = (row.split() for row in package.files[PINS][0].decode().splitlines())
+    return {
+        row[0]: row[1] for row in rows if len(row) == 2 and not row[0].startswith("#")
+    }
+
+
 def engine_pin(package: host_mode.Package) -> str:
     """The glob `package`'s pins file holds for docker-ce."""
-    rows = (row.split() for row in package.files[PINS][0].decode().splitlines())
-    (pin,) = [row[1] for row in rows if len(row) == 2 and row[0] == ENGINE]
-    return pin
+    return pins(package)[ENGINE]
+
+
+def _deb(out: Path, name: str, version: str) -> Path:
+    """Build an empty `name` deb at `version` under `out`; return it."""
+    root = out / f"root-{name}-{version}"
+    (root / "DEBIAN").mkdir(parents=True)
+    (root / "DEBIAN" / "control").write_text(
+        f"Package: {name}\nVersion: {version}\nArchitecture: all\n"
+        "Maintainer: homelab <t@example.invalid>\n"
+        "Description: Fixture stand-in for a held Docker engine package\n"
+    )
+    # dpkg-deb refuses a control directory a restrictive umask left group-writable.
+    for path in [root, *root.rglob("*")]:
+        path.chmod(0o755 if path.is_dir() else 0o644)
+    deb = out / f"{name}_{version.split(':', 1)[-1]}_all.deb"
+    subprocess.run(
+        ["dpkg-deb", "--root-owner-group", "--build", str(root), str(deb)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        timeout=60,
+    )
+    return deb
 
 
 def engine_debs(out: Path, pin: str | None = None) -> list[Path]:
@@ -70,30 +103,36 @@ def engine_debs(out: Path, pin: str | None = None) -> list[Path]:
     pin = pin or engine_pin(host_mode.render_host(HOST))
     epoch, rest = pin.split(":", 1)
     suffix = rest.split("-*", 1)[1]
-    held = f"{epoch}:{HELD_UPSTREAM}-1{suffix}"
-    offered = pin.replace("*", "1")
     out.mkdir(parents=True)
-    debs = []
-    for version in (held, offered):
-        root = out / f"root-{version}"
-        (root / "DEBIAN").mkdir(parents=True)
-        (root / "DEBIAN" / "control").write_text(
-            f"Package: {ENGINE}\nVersion: {version}\nArchitecture: all\n"
-            "Maintainer: homelab <t@example.invalid>\n"
-            "Description: Fixture stand-in for the held Docker engine\n"
-        )
-        # dpkg-deb refuses a control directory a restrictive umask left group-writable.
-        for path in [root, *root.rglob("*")]:
-            path.chmod(0o755 if path.is_dir() else 0o644)
-        deb = out / f"{ENGINE}_{version.split(':', 1)[1]}_all.deb"
-        subprocess.run(
-            ["dpkg-deb", "--root-owner-group", "--build", str(root), str(deb)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            timeout=60,
-        )
-        debs.append(deb)
-    return debs
+    held = f"{epoch}:{HELD_UPSTREAM}-1{suffix}"
+    return [_deb(out, ENGINE, version) for version in (held, pin.replace("*", "1"))]
+
+
+def companion_debs(out: Path, pinned: dict[str, str] | None = None) -> list[Path]:
+    """Build every pinned package but docker-ce at its pin, revision glob set to 1.
+
+    `docker-engine pending` reads 1 while any pinned package is missing, so without these the
+    series reads 1 whatever docker-ce's version. `pinned` defaults to the real Pi package's pins.
+    """
+    pinned = pinned or pins(host_mode.render_host(HOST))
+    out.mkdir(parents=True)
+    return [
+        _deb(out, name, glob.replace("*", "1"))
+        for name, glob in pinned.items()
+        if name != ENGINE
+    ]
+
+
+def planned_version(simulation: str, name: str) -> str:
+    """The version `apt-get install -s` output plans to install for `name`, or ""."""
+    for line in simulation.splitlines():
+        words = line.split()
+        if words[:2] == ["Inst", name]:
+            rest = (
+                words[3:] if len(words) > 2 and words[2].startswith("[") else words[2:]
+            )
+            return rest[0].lstrip("(") if rest else ""
+    return ""
 
 
 def depends_variant(
@@ -156,10 +195,15 @@ def _body(cases, c: Container) -> str:
     """Run the green half and the red fixture; return the red fixture's outcome."""
     build_root = cases.work / "build" / "engine"
     held_deb, offered_deb = engine_debs(build_root / "debs")
-    for deb in (held_deb, offered_deb):
+    companions = companion_debs(build_root / "companions")
+    for deb in (held_deb, offered_deb, *companions):
         shutil.copy(deb, cases.work / "debs" / deb.name)
-    c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y /srv/debs/{held_deb.name}")
-    c.ok(f"apt-mark hold {ENGINE}")
+    # The other pinned packages sit at their pins, so pending reads 1 only while docker-ce
+    # is off its pin.
+    local = " ".join(f"/srv/debs/{deb.name}" for deb in (held_deb, *companions))
+    c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {local}")
+    names = " ".join(deb.name.split("_", 1)[0] for deb in companions)
+    c.ok(f"apt-mark hold {ENGINE} {names}")
     held = _engine(c)
     expect(bool(held), f"{ENGINE} did not install from {held_deb.name}")
     secrets_case.seal_pi(cases, c)
@@ -188,6 +232,20 @@ def _body(cases, c: Container) -> str:
     # The homelab source alone, so a failed mirror fetch fails the case rather than reading
     # as a refusal.
     c.ok(f"apt-get update {HOMELAB_APT}")
+    # The control: unheld, apt plans docker-ce at B, so B is the indexed candidate and only
+    # the hold stands between the red Depends and a moved engine.
+    offered = deb_version(offered_deb)
+    c.ok(f"apt-mark unhold {ENGINE}")
+    try:
+        plan = c.sh(f"apt-get install -s --no-install-recommends homelab-{HOST}")
+    finally:
+        c.ok(f"apt-mark hold {ENGINE}")
+    planned = planned_version(plan.stdout, ENGINE)
+    expect(
+        plan.returncode == 0 and planned == offered,
+        f"unheld, apt plans {ENGINE} at {planned or 'nothing'}, not {offered}:\n"
+        f"{plan.stdout}{plan.stderr}",
+    )
     apt = c.sh(
         "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends"
         f" homelab-{HOST}"
