@@ -71,6 +71,9 @@ artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-fl
 4. **The docs describe the Flux path.**
     - Root `CLAUDE.md`'s *After a PR Merges* and *When to wait* describe landing through
       `promote`.
+    - `.github/pull_request_template.md`'s header comment and its *Blast radius* checkbox
+      say the tick applies only the setup plane, and that `promote` and Flux apply every
+      k8s change, image pins and deploy-plane paths included (#6436).
     - Every `docs/facts.lock` section that D6 edits is re-verified, unless G2 has retired
       the lock.
     - `mkdocs build --strict` passes.
@@ -1535,7 +1538,9 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Rollback:** *Rollback*'s D6.1 bullets, and its bullet on the render-diff gates'
       rename.
     - **Exit criterion:** part of exit 1 (the four modules and three `ChangeSet` fields),
-      exit 2's two pages, and part of exit 4 (the two sentences of root `CLAUDE.md`).
+      exit 2's two pages, and part of exit 4 (the two sentences of root `CLAUDE.md`, and
+      the PR template's header comment and *Blast radius* checkbox, which every PR author
+      reads and which #6432's diff left out).
 4. **D6.13 — The `k8s_autodeploy` key: the deployer's denylist, and the key's wording** (old
    D6.2a and D6.2b, about 670 changed lines, of which D6.2b's 190 are one-line comment
    edits).
