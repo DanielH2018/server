@@ -110,26 +110,6 @@ tests:
             exp_annotations:
               summary: Kuma's Live Object Drift tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Live Object Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Longhorn Volume Redundancy, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Longhorn Volume Redundancy tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Longhorn Volume Redundancy tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: k3s PVC Fullness, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's k3s PVC Fullness tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the k3s PVC Fullness tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Longhorn Snapshot Headroom, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Longhorn Snapshot Headroom tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Longhorn Snapshot Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Kubelet CSI Mount Read-Only, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Kubelet CSI Mount Read-Only tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Kubelet CSI Mount Read-Only tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: etcd DB Size, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's etcd DB Size tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the etcd DB Size tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Root Disk, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Root Disk tile is gone and no alert rule pages in its place.
@@ -395,16 +375,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
@@ -568,16 +538,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
         values: '1x140'
@@ -752,16 +712,6 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x160'
-      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
-        values: '1x160'
       - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
@@ -927,16 +877,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
         values: '1x1700'
@@ -1113,16 +1053,6 @@ tests:
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x5 _x3100'
-      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
-        values: '1x3100'
       - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
@@ -1319,16 +1249,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
@@ -1512,16 +1432,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x5 _x300'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
         values: '1x300'
@@ -1719,16 +1629,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Longhorn Volume Redundancy", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="k3s PVC Fullness", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Longhorn Snapshot Headroom", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Kubelet CSI Mount Read-Only", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="etcd DB Size", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
         values: '1x760'

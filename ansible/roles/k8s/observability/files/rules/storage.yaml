@@ -2,13 +2,20 @@
 # `kubernetes-apiserver` scrape jobs: the Longhorn volumes' redundancy, the claims' fullness, the
 # snapshot space against a declared cap, the CSI mounts and etcd's database size. These are the
 # monitor-bridge rows longhorn_volumes, pvc_fullness, snapshot_headroom, kubelet_plugin_readonly
-# and etcd_db_size. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim.
-# The design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch A5.
+# and etcd_db_size, which M6's batch A5 deleted. Plain YAML, never Jinja: prometheus-rules.yaml.j2
+# carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m6-retire-kuma.md, batch A5.
 #
-# SHADOW UNTIL M6's BATCH A5 CUTOVER-B. Each rule runs beside the Kuma tile of the bridge row it
-# ports, so each carries `shadow: "true"` and pages nobody. Cutover-b drops the label.
+# These rules page since A5's Cutover-b. They ran with `shadow: "true"` beside the Kuma tiles of
+# the rows they port until then. All ten are critical, so Discord and email.
 #
-# THE LITERALS. Each threshold mirrors an env value of the bridge row it ports, and
+# NO INHIBIT. PVCFreeFloorUnmonitored and PVCCoverageShortfall fire beside ScrapeTargetDown when
+# a kubelet target dies, and the rest go quiet on a dead scrape. Neither carries `job` or
+# `instance`, so an inhibit would need no `equal`, and one dead kubelet target would then mute
+# the claim census while a selector break empties the other node's vector. The bridge row kept
+# the same page on purpose, so two criticals for one dead kubelet target is the accepted outcome.
+#
+# THE LITERALS. Each threshold mirrors a value the deleted bridge rows carried, and
 # ansible/tests/services/test_storage_rule_literals.py pins it (M1 convention 1).
 #
 # THE `for:` HOLDS. A bridge streak of N cycles is N x 300s, as in A2. The rows with no streak
@@ -37,7 +44,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: Longhorn volume {{ $labels.pvc }} is {{ $labels.state }}.
           description: >-
@@ -62,7 +68,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: Prometheus has lost Longhorn's scrape job or its volume series.
           description: >-
@@ -81,7 +86,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: The claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is over 85% full.
           description: >-
@@ -98,7 +102,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: The claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less free space than its largest transient.
           description: >-
@@ -112,7 +115,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: The kubelet reports no free bytes for the claim valheim-server.
           description: >-
@@ -121,9 +123,10 @@ groups:
             excluded, or the kubelet stopped reporting it.
       # The `pvc_fullness` census (PVC_MIN_CLAIMS, 32): fewer claims visible than the floor means
       # the kubelet stats are not scraped, and an empty fullness vector reads like "no claim is
-      # full". The count includes excluded claims, as the bridge's does. A dead kubelet job is
-      # PARTIAL blindness (the apiserver job still answers for 27 claims), so this rule does not
-      # wait on `up`. `for: 15m` is PVC_CLAIMS_CONSECUTIVE (3) x 300s.
+      # full". The count includes excluded claims, as the bridge's did. The kubelet job is the
+      # claims' one source since #6331, and each node's target reports its own claims, so a dead
+      # target drops the count below the floor and this rule does not wait on `up`. `for: 15m` is
+      # PVC_CLAIMS_CONSECUTIVE (3) x 300s.
       - alert: PVCCoverageShortfall
         expr: >-
           (count(count by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes)) or vector(0)) < 32
@@ -131,7 +134,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: The kubelet reports fewer than 32 claims.
           description: >-
@@ -157,7 +159,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: Snapshot space of {{ $labels.pvc }} is at 90% of its cap.
           description: >-
@@ -180,7 +181,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: Longhorn reports no snapshot series for the capped claim {{ $labels.pvc }}.
           description: >-
@@ -196,7 +196,6 @@ groups:
         labels:
           severity: critical
           service: longhorn
-          shadow: "true"
         annotations:
           summary: The CSI mount {{ $labels.mountpoint }} is read-only.
           description: >-
@@ -214,7 +213,6 @@ groups:
         labels:
           severity: critical
           service: etcd
-          shadow: "true"
         annotations:
           summary: The etcd database is over 80% of its backend quota.
           description: >-
