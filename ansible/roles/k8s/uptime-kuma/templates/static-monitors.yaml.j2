@@ -212,16 +212,6 @@ stringData:
   rkhunter-daniel-pi.json: |
     {"type": "push", "name": "rkhunter Scan (daniel-pi)", "description": "The weekly Wednesday 02:00 rkhunter-check.sh cron on daniel-pi runs rkhunter --check and pushes when the scan ends, two to three minutes later. DOWN means rkhunter raised a warning, a suspect file or a possible rootkit (the message carries the counts and the first warning), or the scan did not complete (the message carries rkhunter's exit code and first error line), or no run has reported for a week and 2 h. An account change clears when rkhunter-check.sh is run again by hand. UP means the scan completed with nothing to report. Read /var/log/rkhunter.log and journalctl -t rkhunter-check on daniel-pi.", "interval": 612000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ rkhunter_daniel_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-  # DECIDED: this id stays `claude-otel-health` after the k8s/claude-otel role was renamed
-  # `observability` on 2026-10-01 (#2911) — under ON_DELETE=delete a changed id deletes the
-  # monitor and its history and creates a new one. The full reasoning is at the `DECIDED:`
-  # marker on the heartbeat task in roles/k8s/observability/tasks/main.yml.
-  claude-otel-health.json: |
-    {"type": "push", "name": "k3s Telemetry OTLP Door", "description": "A daniel-box cron runs every 10 min and opens a TCP connection to the collector OTLP hostPort on the node loopback. DOWN means Claude Code cannot export at all, even with every pod Ready, because the hostPort DNAT is an iptables rule rather than a socket. Check the otel-collector DaemonSet pod on daniel-box, then the portmap rule. Workload readiness and collector export failures moved to monitor-bridge on 2026-10-01 (k3s Workload Health and Log Shipper Dropped Entries).", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ claude_otel_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # 600s against a */5 cron (#2516): the deadline must exceed the period plus the work, and a run
-  # is an rsync bounded by ConnectTimeout=10 and --timeout=60 plus up to 90s of push retries.
-  artifacts-sync.json: |
-    {"type": "push", "name": "Artifacts Peer Sync", "description": "sync-artifacts.sh on daniel-box rsyncs each peer host's ~/.claude/artifacts into the artifacts browser every 5 min. DOWN means a peer has failed every run for an hour; the message names it and its streak. 10 min of silence means the cron stopped. Run journalctl -t sync-artifacts on daniel-box, then ssh to the named peer.", "interval": 600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ artifacts_sync_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   configarr.json: |
     {"type": "push", "name": "Configarr Sync", "description": "The configarr-health CronJob runs every 10 min and reads the newest finished configarr Job and its logs; the sync itself runs nightly. DOWN means the last sync is older than 26 h, exited non-zero, logged an error-level line, or its pod logs are gone. No push at all means the configarr-health CronJob itself failed: read kubectl -n homelab logs job/<newest configarr-health Job>. Run kubectl -n homelab get jobs and read the newest configarr Job logs.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_configarr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-janitorr.json: |
@@ -358,17 +348,6 @@ stringData:
   # CrowdSec AppSec stays — its feeder moved to daniel-box (k8s/crowdsec's
   # crowdsec-appsec-verify.sh cron), then at H2.4b into the crowdsec pod's crowdsec-jobs
   # sidecar (files/appsec_verify.py). Same token.
-  # 90000s (25h): fed by a DAILY cron (setup/gitops_deploy's github-ruleset-drift.sh), so the interval gives one missed run of
-  # slack. Watches the merge gate the deployer's CI verdict rests on — a required context
-  # removed in the GitHub UI otherwise changes what can reach master with no commit anywhere.
-  github-ruleset-drift.json: |
-    {"type": "push", "name": "GitHub Ruleset Drift", "description": "The daily 06:40 kuma-check-github-ruleset-drift timer on daniel-box compares the repo's live GitHub rulesets with the values declared in roles/setup/gitops_deploy/defaults/main.yml; it reruns every 30 min while red. DOWN names the ruleset id and the property that differs. UNVERIFIED means it could not read GitHub, or read it without the deploy user's gh token, which GitHub requires before it shows a bypass list. Revert the ruleset change unless it was deliberate, otherwise update the defaults; systemctl status kuma-check-github-ruleset-drift on daniel-box.", "interval": 90000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ ruleset_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # 90000s (25h), daily feeder: setup/gitops_deploy's github-interaction-limit.sh. Watches the
-  # setting that keeps the public repo closed to non-collaborators — GitHub grants it for six
-  # months at most and lets it lapse silently, so the cron re-arms it and this tile says whether
-  # the re-arm happened. A missed beat here means the lapse window is open again.
-  github-interaction-limit.json: |
-    {"type": "push", "name": "GitHub Interaction Limit", "description": "The daily 06:50 kuma-check-github-interaction-limit timer on daniel-box re-PUTs the repo collaborators_only interaction limit, which GitHub only offers as a six-month expiring setting; it reruns every 30 min while red. DOWN means gh is not logged in, the PUT failed, or the readback did not match the declared limit. Run gh auth status as the deploy user, then check the limit in repo settings; systemctl status kuma-check-github-interaction-limit on daniel-box.", "interval": 90000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ interaction_limit_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 1800s, NOT the bridge fleet's 600s: this monitor's feeder is k8s/crowdsec's `*/15`
   # cron, not the 300s monitor-bridge loop. A 600s interval expired mid-cycle, so the tile
   # alternated up/down every ~7.5 min (measured 2026-08-21: 24 transitions in 3h, up 2/3

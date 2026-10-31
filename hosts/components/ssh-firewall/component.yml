@@ -5,10 +5,23 @@
 # enables an inactive ufw only once both keep rules are present (`REQUIRED_KEEP` in
 # hosts/lib/reconcile_lib/ufw.py names these two ids).
 #
-# The LAN is exempt from SSH rate-limiting, so `lan-ssh` must sort above `ssh-limit`. The
-# `DECIDED: the LAN is exempt` marker in initial_setup's network.yml has the incident. ufw takes the first matching rule, so an
-# allow below the limit rule does nothing. The arm checks the `before:` relation and fails the run,
-# holding the host, rather than deleting a keep rule to repair it.
+# DECIDED: the LAN is exempt from SSH rate-limiting, and `lan-ssh` must sort ABOVE `ssh-limit`.
+# ufw takes the first matching rule, so an allow below the limit rule does nothing. The arm checks
+# the `before:` relation and fails the run, holding the host, rather than deleting a keep rule to
+# repair it.
+#
+# WHY THE EXEMPTION. `limit` REJECTs a source IP that opens 6 connections in 30 seconds, on a
+# rolling window, so sustained retries hold the block open instead of riding it out. Several Claude
+# sessions reach the hosts over ssh at once. On 2026-08-06 and again on 2026-08-29 that quorum
+# crossed the threshold against daniel-server, every session read the "Connection refused" as sshd
+# being down, and their retry loops fed the same counter, so the block never lifted. Loki showed
+# `[UFW LIMIT BLOCK] ... DPT=22` at the loops' cadence, and 90 seconds of silence let a connection
+# through. The staging gate reaches daniel-stage through an ssh hop to daniel-server, so a
+# self-inflicted block surfaces as NO VERDICT on every commit.
+#
+# WHAT IT COSTS. Little. fail2ban's sshd jail, which bans on auth FAILURES rather than connection
+# count, still covers the LAN. Non-LAN sources keep the limiter, WireGuard peers included, whose
+# source is the wg subnet rather than lan_subnet.
 #
 # Both rules are `keep`: no revert and no floor ever deletes them, so a revert leaves SSH reachable.
 # Removing one is the operator's, at the host's console.
