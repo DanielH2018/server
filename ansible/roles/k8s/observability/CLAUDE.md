@@ -182,13 +182,20 @@ pages once (`ansible/tests/services/test_alertmanager_blackbox_inhibit.py`).
 `FluxControllerDown`'s `up == 0` arm holds back `ScrapeTargetDown` for the same `job` and
 `instance`, so a dead Flux controller pages once, as a critical
 (`ansible/tests/services/test_alertmanager_flux_inhibit.py`).
+`PiHostDown` holds back `PiPortDead`, so a dead Pi pages as the host and not once per published
+port (`ansible/tests/services/test_alertmanager_pi_inhibit.py`). The inhibit has no `equal` list,
+because the two alerts share no `instance`, and the estate has one Pi.
+`files/rules/extra-probes.yaml` holds the rules that replaced Kuma's 14 hand-written probe tiles
+and the Pi's port arm. Its per-target alerts take `service` from the `blackbox-extra` and
+`blackbox-pi-ports` scrape jobs, so their rule labels carry none, and they page since M6's batch B8
+Cutover-b.
 `files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
 while its rule is still shadow, and the last M6 Phase A cutover deletes it.
 
 **`files/rules/hosts.yaml` holds the host rules, one copy per host.** Its disk, memory,
 temperature and UPS rules replace monitor-bridge's `disk`, `memory`, `host_temp` and `ups`
-checks and page since M6's batch A1 Cutover-b. Its Pi pressure rules replace `pi_pressure` and
-carry `shadow` until B8 cuts that row over. A rule's `service` is a literal, so a host gets its
+checks and page since M6's batch A1 Cutover-b. Its Pi pressure rules replace the Prometheus half
+of `pi_pressure` and page since B8's. A rule's `service` is a literal, so a host gets its
 own copy, and a fourth host needs rules added. A1 has no Alertmanager inhibit on
 `ScrapeTargetDown`, by the `DECIDED:` marker in the file's header. A missing-data arm starts from
 `up == 1`, so it fires only while the scrape succeeds and the series is absent. A dead exporter

@@ -12,7 +12,7 @@ and reads each route the walk ends on. Each label set carries one expected outco
   log-pipeline rules) since A3's Cutover-b. Every rule of M6's batch A4 (the edge rules) since
   A4's Cutover-b, every rule of batch A2 (the container-checks rules) since A2's Cutover-b, and
   every rule of batch A5 (the storage rules) since A5's Cutover-b, and every host rule of batch
-  A1 but the Pi pressure arms since A1's Cutover-b.
+  A1 since A1's Cutover-b. B8's probe rules are in `test_alertmanager_routing_b8_probes.py`.
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
   it pages nobody. M3's two `DiskHealth*` sets move in its PR 5,
@@ -281,8 +281,8 @@ PAGING = {
         for name, labels in literal_sets(STORAGE_RULES, shadow=False).items()
     },
     # Batch A1's host rules since its Cutover-b: `HostDiskFull` and the five `UPS*` rules are
-    # critical, so both channels, and the rest are `warning`. The Pi pressure arms stay shadow
-    # until B8, so `literal_sets(..., shadow=False)` leaves them out.
+    # critical, so both channels, and the rest are `warning`. The five Pi pressure arms joined
+    # at B8's Cutover-b, when they dropped `shadow`.
     **{
         name: (
             labels,

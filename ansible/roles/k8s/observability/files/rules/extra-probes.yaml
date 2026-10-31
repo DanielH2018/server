@@ -3,12 +3,35 @@
 # prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8".
 #
-# SHADOW UNTIL B8's CUTOVER-B. Kuma's 14 hand-written tiles and monitor-bridge's `pi_pressure`
-# row page the same failures today. M1 convention 5 allows one pager, so every rule below
-# except the zero-series rule carries shadow="true" and routes to the blackhole receiver.
-# The 14 tiles are the 12 that become a probe here, the Pi ping that becomes `PiHostDown`, and
-# Loki's /ready, which ScrapeTargetDown covers for job loki-homelab. B8's Cutover-a deletes the tiles and the
-# `pi_pressure` row, and Cutover-b drops `shadow`.
+# THESE RULES PAGE since B8's Cutover-b. They ran with shadow="true" beside Kuma's 14 hand-written
+# tiles and monitor-bridge's `pi_pressure` row until then. The 14 tiles are the 12 that became a
+# probe here, the Pi ping that became `PiHostDown`, and Loki's /ready, which ScrapeTargetDown
+# (service loki-homelab) covers. ExtraProbeFailedCritical is critical, so Discord and email; the
+# rest are warnings, so Discord alone.
+#
+# No target probes terraria. Its port tile was deleted on 2026-09-02 (#822): on Terraria 1.4.5.7 a
+# TCP connect that drops kills the server loop (`TcpSocket.IsConnected` throws
+# `ObjectDisposedException` on a stream the peer already closed, unhandled), and the old tile
+# crashed it 8 times in 51 minutes. 1.4.5.6 took the same probe for weeks. A tcp_connect target
+# needs an image past 1.4.5.7 first, and #822 carries the check. wg-easy's WireGuard listener is
+# UDP, which a TCP connect cannot probe.
+#
+# DECIDED: PiPortDead pages on a refused TCP connect and nothing else. Until 2026-09-18 a dead
+# port was attributed to its container's Docker state through glances' /api/4/containers, which
+# took 4.43s and then timed out on the next call, so polling it every cycle would have left the
+# arm failing open. Glances retired (#2004) and nothing the cluster can reach serves that view
+# (docker-proxy publishes no port), so the description names both causes and the operator reads
+# `docker ps` on the Pi. The verdict never depended on the attribution.
+#
+# DECIDED: PiPortDead holds 10m, because a Pi deploy recreates containers and their ports are
+# legitimately closed for a few seconds. A detached container persists until someone recreates it,
+# so it outlasts the hold.
+#
+# DECIDED: PiHostDown inhibits PiPortDead in alertmanager-secret.yaml.j2. The bridge's port arm
+# sat inside a check that EXPORTER_DEPENDENT["node-pi"] suppressed while the Pi's exporter was
+# down, so a dead Pi paged as the host and not once per port. The inhibit has no `equal` list:
+# PiHostDown carries the exporter's `instance` and PiPortDead the port's, and the estate has one
+# Pi. wg-easy's ExtraProbeFailed is not held, as Kuma's WG Easy tile paged beside the ping tile.
 #
 # The per-target rules carry no literal `service`. Each series takes it from the scrape target
 # that `prometheus.yaml.j2` renders per probe, and scripts/validate/alert_rules.py accepts that
@@ -19,13 +42,12 @@ groups:
     rules:
       # `for: 2m` at the job's 60s interval keeps the tiles' three-strikes timing (interval 60,
       # maxretries 2). The critical tier is the edge all-clear, which Kuma tags critical, and the
-      # `service_alerting` tiles (mosquitto, pihole) while their entries are home-critical.
+      # mosquitto and pihole probes while their entries are home-critical.
       - alert: ExtraProbeFailedCritical
         expr: probe_success{job="blackbox-extra", page_tier="critical"} == 0
         for: 2m
         labels:
           severity: critical
-          shadow: "true"
         annotations:
           summary: The probe of {{ $labels.service }} is failing.
           description: >-
@@ -38,7 +60,6 @@ groups:
         for: 2m
         labels:
           severity: warning
-          shadow: "true"
         annotations:
           summary: The probe of {{ $labels.service }} is failing.
           description: >-
@@ -46,15 +67,13 @@ groups:
             for 2 minutes. Read probe_http_status_code for this instance when the module is an
             http one, then the workload's own log.
       # The port arm of monitor-bridge's pi_pressure row, ported. The row held a down streak of
-      # PI_PORTS_CONSECUTIVE (2) cycles of INTERVAL (300s), so 10m is the same tolerance for a
-      # container that a deploy recreates. ansible/tests/services/test_extra_probe_targets.py
-      # pins the number to the bridge's default.
+      # 2 cycles of 300s, so 10m is the same tolerance for a container that a deploy recreates.
+      # ansible/tests/services/test_extra_probe_targets.py pins the number.
       - alert: PiPortDead
         expr: probe_success{job="blackbox-pi-ports"} == 0
         for: 10m
         labels:
           severity: warning
-          shadow: "true"
         annotations:
           summary: The Pi's published port for {{ $labels.service }} is not listening.
           description: >-
@@ -69,7 +88,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape daniel-pi's node_exporter at {{ $labels.instance }}.
           description: >-

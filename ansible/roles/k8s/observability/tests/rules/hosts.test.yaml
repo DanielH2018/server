@@ -2,9 +2,9 @@
 # `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
 # hook runs it on every commit that touches the rules.
 #
-# Cases for the Pi pressure rules (PiLoadHigh, PiMemoryLow, PiDiskFull, PiFilesystemReadOnly and
-# PiMetricsMissing) assert shadow="true", because B8 has not cut that row over. Every other rule
-# pages since A1's Cutover-b, so its cases assert no `shadow`. Each case loads both x86 hosts, so
+# Every rule pages, the Pi pressure rules (PiLoadHigh, PiMemoryLow, PiDiskFull,
+# PiFilesystemReadOnly and PiMetricsMissing) since B8's Cutover-b and the rest since A1's, so no
+# case asserts `shadow`. Each case loads both x86 hosts, so
 # a rule that fires for one host and not the other shows in the same expected list. Annotation text is rendered from the rule's own template, so a case checks which
 # alerts fire and with which labels; the wording lives in the rule file.
 rule_files:
@@ -482,7 +482,6 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi's 5-minute load is 1.60 per core."
               description: "daniel-pi has a 5-minute load average of 1.60 per core, over 1.5. Read `top` on the host for the process behind it."
@@ -504,10 +503,9 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi has 40MiB of memory available."
-              description: "daniel-pi can reclaim under 50 MB of memory (PI_MEM_MIN_MB), and the 456 MB box thrashes when that runs out. Read `free -m` and `docker stats` on the host."
+              description: "daniel-pi can reclaim under 50 MB of memory, and the 456 MB box thrashes when that runs out. Read `free -m` and `docker stats` on the host."
   # PiDiskFull. The SD card's root device is 95% full and fires once, though it is mounted at
   # / and /var/hdd.log. The vfat firmware partition at 40% is silent, and log2ram's tmpfs at
   # 99% is excluded.
@@ -540,10 +538,9 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi's /dev/mmcblk0p2 is 95% full."
-              description: "The filesystem on /dev/mmcblk0p2 of daniel-pi is over 90% full (PI_DISK_MAX_PCT). A filling SD card is the slow Pi death. Read `df -h` on the host."
+              description: "The filesystem on /dev/mmcblk0p2 of daniel-pi is over 90% full. A filling SD card is the slow Pi death. Read `df -h` on the host."
   # PiFilesystemReadOnly. The root remounted read-only fires at once. A read-only
   # /var/hdd.log is not one of the watched mounts, and /boot/firmware reads writable.
   - interval: 1m
@@ -567,7 +564,6 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi's / is mounted read-only."
               description: "/ on daniel-pi is read-only, which is an SD card remounting itself after an I/O error. Every other arm stays green through it. A reboot does not come back from it."
@@ -593,7 +589,6 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi publishes no memory series."
               description: "daniel-pi is scraped but its node-exporter publishes no series for the memory arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
@@ -604,7 +599,6 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi publishes no filesystem series."
               description: "daniel-pi is scraped but its node-exporter publishes no series for the filesystem arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
@@ -615,7 +609,6 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi publishes no read-only series."
               description: "daniel-pi is scraped but its node-exporter publishes no series for the read-only arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
