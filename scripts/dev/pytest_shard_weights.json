@@ -1560,6 +1560,7 @@
  "scripts/validate/tests/test_k8s_net_rules.py": 0.0,
  "scripts/validate/tests/test_k8s_schema.py": 0.16,
  "scripts/validate/tests/test_package_roots.py": 2.77,
+ "scripts/validate/tests/test_pi_host_seed.py": 1.87,
  "scripts/validate/tests/test_refresh_vendored_schemas.py": 0.0,
  "scripts/validate/tests/test_renovate_config_retry.py": 0.05,
  "scripts/validate/tests/test_repos_case.py": 0.0,
