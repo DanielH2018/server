@@ -145,11 +145,16 @@ def test_the_real_claude_code_role_yields_its_units_with_content():
         role, "daniel-box", applied.context(role, "daniel-box")
     )
     by_path = {w.path: w for w in wants}
-    for unit in ("claude-memory-sync.timer", "claude-fanout-server-lander.service"):
+    for unit in ("claude-triage-poll.timer", "claude-triage@.service"):
         want = by_path[f"/etc/systemd/system/{unit}"]
         assert want.sha256 is not None and want.mode == "0644"
-    # daniel-box's package ships these two, so the role skips them there.
-    for unit in ("claude-rc.service", "claude-cgroup-metrics.timer"):
+    # daniel-box's package ships these, so the role skips them there.
+    for unit in (
+        "claude-rc.service",
+        "claude-cgroup-metrics.timer",
+        "claude-memory-sync.timer",
+        "claude-fanout-server-lander.service",
+    ):
         assert f"/etc/systemd/system/{unit}" not in by_path
 
 
@@ -431,7 +436,7 @@ def test_the_real_claude_code_role_walks_its_shared_alert_import():
         role, "daniel-box", applied.context(role, "daniel-box")
     )
     named = {w.path for w in wants} | {s.task for s in skips}
-    assert any("claude-fanout-server-lander-alert" in n for n in named), sorted(named)
+    assert any("claude-triage-poll-alert" in n for n in named), sorted(named)
 
 
 def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_path):

@@ -2,7 +2,11 @@
 Description=Snapshot the per-PR pipeline timeline before its journal inputs rotate
 After=network-online.target
 Wants=network-online.target
+{% if claude_code_sync_alert_unit is defined %}
+OnFailure={{ claude_code_sync_alert_unit }}
+{% else %}
 OnFailure=claude-pipeline-timeline-alert.service
+{% endif %}
 
 [Service]
 Type=oneshot

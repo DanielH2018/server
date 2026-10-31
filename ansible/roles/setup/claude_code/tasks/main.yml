@@ -195,10 +195,12 @@
     mode: "0750"
   become: true
 
-# The webhook directory of the alerts the role still installs. Not /etc/claude-rc, which the
-# claude-code component retires on a host whose package ships the Remote Control host.
+# The webhook directory of the memory sync, server-batch lander and pipeline timeline alerts. Not
+# /etc/claude-rc, which the claude-code component retires on a host whose package ships the
+# Remote Control host. A host whose package ships those three timers retires this one too.
 - name: Ensure the config directory of the role's remaining alerts exists
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['memory_sync']
   ansible.builtin.file:
     path: "{{ claude_code_alert_env_dir }}"
     state: directory
@@ -403,8 +405,8 @@
 
 # ── Memory store copy (issue #3123) ─────────────────────────────────────────────────────
 # Copies this host's Claude memory store to claude_code_memory_sync_target, one-way and
-# overwriting. Armed only in daniel-box's host_vars; see defaults/main.yml and this role's
-# CLAUDE.md contract. The alert unit reads the webhook file written above.
+# overwriting. Armed only in daniel-box's host_vars, whose package ships it, so every task here
+# skips there; see defaults/main.yml and this role's CLAUDE.md contract.
 
 - name: Install the memory store copy units
   tags: [claude_code]
@@ -418,12 +420,16 @@
     - claude-memory-sync.service
     - claude-memory-sync.timer
   become: true
-  when: claude_code_memory_sync_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['memory_sync']
+    - claude_code_memory_sync_enabled
   notify: Reload systemd for claude_code
 
 - name: Install the memory store copy failure alert
   tags: [claude_code]
-  when: claude_code_memory_sync_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['memory_sync']
+    - claude_code_memory_sync_enabled
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
   vars:
     alert_unit_name: claude-memory-sync
@@ -439,7 +445,9 @@
     state: started
     daemon_reload: true
   become: true
-  when: claude_code_memory_sync_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['memory_sync']
+    - claude_code_memory_sync_enabled
 
 # The way out: false stops the timer and removes all three units, so a disarmed host is left
 # with nothing that could copy. The far store keeps whatever the last run wrote.
@@ -449,7 +457,9 @@
     path: /etc/systemd/system/claude-memory-sync.timer
   register: claude_code_memory_sync_timer_file
   become: true
-  when: not claude_code_memory_sync_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['memory_sync']
+    - not claude_code_memory_sync_enabled
 
 # Guarded on the file: systemd refuses to stop a unit it has never heard of, which is every
 # host that was never armed.
@@ -461,6 +471,7 @@
     state: stopped
   become: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['memory_sync']
     - not claude_code_memory_sync_enabled
     - claude_code_memory_sync_timer_file.stat.exists
 
@@ -474,7 +485,9 @@
     - claude-memory-sync.timer
     - claude-memory-sync-alert.service
   become: true
-  when: not claude_code_memory_sync_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['memory_sync']
+    - not claude_code_memory_sync_enabled
   notify: Reload systemd for claude_code
 
 # ── The agent users ─────────────────────────────────────────────────────────────────────
@@ -625,11 +638,13 @@
 # ── The server-batch lander ─────────────────────────────────────────────────────────────
 - name: Install the server-batch lander timer, or take it back
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['server_lander']
   ansible.builtin.import_tasks: fanout_server_lander.yml
 
 # ── The pipeline timeline snapshot ──────────────────────────────────────────────────────
 - name: Install the pipeline timeline timer, or take it back
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['pipeline_timeline']
   ansible.builtin.import_tasks: pipeline_timeline.yml
 
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
@@ -637,6 +652,7 @@
 # settings against an inventory override (tasks/lander.yml).
 - name: Install the agent's lander, or take it back
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['lander']
   ansible.builtin.import_tasks: lander.yml
 
 # ── The D5 takeover check ───────────────────────────────────────────────────────────────
@@ -703,15 +719,6 @@
     stamp_render_templates:
       - ansible/roles/setup/common/templates/unit-failure-alert.service.j2
       - ansible/roles/setup/common/templates/alert-webhook.env.j2
-      - ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.timer.j2
-      - ansible/roles/setup/claude_code/templates/claude-pipeline-timeline.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-pipeline-timeline.timer.j2
-      - ansible/roles/setup/claude_code/templates/claude-memory-sync.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-memory-sync.timer.j2
-      - ansible/roles/setup/claude_code/templates/claude-land@.service.j2
-      - ansible/roles/setup/claude_code/templates/50-claude-land.rules.j2
-      - ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2
       - ansible/roles/setup/claude_code/templates/claude-triage@.service.j2
       - ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2
       - ansible/roles/setup/claude_code/templates/claude-triage-config.env.j2

@@ -1,4 +1,4 @@
-"""daniel-box's claude-code subjects ship in its host package, and the role skips them (H7.40, slice 1).
+"""daniel-box's claude-code subjects ship in its host package, and the role skips them (H7.40, slices 1-2).
 
 The component renders the claude_code role's templates in place, and the role still applies to
 daniel-box for the subjects later slices move. These tests hold the two writers apart: every
@@ -39,6 +39,18 @@ SLICE_ONE = (
     "/etc/sudoers.d/homelab-rootq",
     "/usr/lib/homelab/secret-templates/var/lib/claude/.config/gh/hosts.yml",
 )
+# The second slice: the lander, the server-batch lander, the pipeline timeline, the memory sync
+# and the takeover check's wrapper and grant. Each is armed only in daniel-box's host_vars.
+SLICE_TWO = (
+    f"{UNITS}/homelab-claude-land@.service",
+    "/usr/share/polkit-1/rules.d/50-claude-land.rules",
+    "/etc/claude-land/approval-paths",
+    f"{UNITS}/homelab-claude-fanout-server-lander.timer",
+    f"{UNITS}/homelab-claude-pipeline-timeline.timer",
+    f"{UNITS}/homelab-claude-memory-sync.timer",
+    "/usr/local/sbin/homelab-takeover-check",
+    "/etc/sudoers.d/homelab-takeover-check",
+)
 AGENT_UID = {"daniel-box": 996, "daniel-server": 995}
 
 
@@ -68,6 +80,35 @@ def test_daniel_box_ships_each_slice_one_subject(box):
     assert [path for path in SLICE_ONE if path not in box.files] == []
     legacy = {entry.get("unit") for entry in box.legacy}
     assert {"claude-rc.service", "claude-cgroup-metrics.timer"} <= legacy
+
+
+def test_daniel_box_ships_each_slice_two_subject_and_retires_its_ansible_copy(box):
+    assert [path for path in SLICE_TWO if path not in box.files] == []
+    # The packaged units page through homelab-alert@, which the failure-alert component ships.
+    assert f"{UNITS}/homelab-alert@.service" in box.files
+    legacy = {entry.get("unit") for entry in box.legacy}
+    assert {
+        "claude-land@.service",
+        "claude-fanout-server-lander.timer",
+        "claude-pipeline-timeline.timer",
+        "claude-memory-sync.timer",
+    } <= legacy
+    retired = {entry.get("path") for entry in box.legacy}
+    assert {
+        "/etc/polkit-1/rules.d/50-claude-land.rules",
+        "/etc/sudoers.d/claude-takeover-check",
+    } <= retired
+
+
+def test_daniel_server_ships_no_slice_two_subject(server):
+    assert [path for path in SLICE_TWO if path in server.files] == []
+
+
+def test_the_agents_profile_hands_landings_to_the_unit_the_box_ships(box):
+    (profile,) = [p for p in box.files if p.endswith("/claude-agent/profile")]
+    text = box.files[profile][0].decode()
+    (unit,) = re.findall(r"^export LAND_HANDOFF_UNIT=(\S+)$", text, re.M)
+    assert f"{UNITS}/{unit}@.service" in box.files
 
 
 def test_daniel_box_declares_the_agent_with_its_own_uid(box):
@@ -232,6 +273,10 @@ def test_the_role_skips_on_daniel_box_every_file_the_package_ships():
         "agent-gitconfig.j2",
         "homelab_rootq.py",
         "50-claude-stop-alert.rules.j2",
+        "claude-land@.service.j2",
+        "claude-memory-sync.timer.j2",
+        "claude-pipeline-timeline.service.j2",
+        "claude-takeover-check.sudoers.j2",
     } <= reached
     assert unguarded(writers, shipped) == []
 
@@ -240,7 +285,7 @@ def test_the_role_writes_nothing_on_daniel_box_that_its_package_retires(box):
     writers = main_writers()
     retired = {entry["path"] for entry in box.legacy if "path" in entry}
     # The webhooks and the stamps reach the census only through the common imports.
-    assert "/etc/claude-rc" in retired
+    assert {"/etc/claude-rc", "/etc/claude-code-alerts"} <= retired
     assert retired_writes(writers, retired) == []
     webhook = "alert-webhook" + ".env"
     assert {
@@ -281,7 +326,7 @@ def test_a_guard_on_the_task_or_its_enclosing_block_is_clean():
     assert unguarded(role_writers([block]), {"x.j2"}) == []
 
 
-def test_the_packaged_map_names_daniel_box_for_exactly_the_slice_one_subjects():
+def test_the_packaged_map_names_daniel_box_for_exactly_the_moved_subjects():
     defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
     assert defaults[GUARD] == {
         subject: ["daniel-box"]
@@ -293,5 +338,10 @@ def test_the_packaged_map_names_daniel_box_for_exactly_the_slice_one_subjects():
             "alerts",
             "rootq",
             "agent",
+            "lander",
+            "server_lander",
+            "pipeline_timeline",
+            "memory_sync",
+            "takeover_check",
         )
     }

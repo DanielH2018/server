@@ -1937,6 +1937,16 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
         2. The lander and every `claude-land@` caller, the server-batch lander,
            pipeline-timeline, memory-sync and the takeover-check sudoers grant. It renames the
            fourth window-test entry, `claude-memory-sync.timer`.
+           As landed (#6676): the lander is `homelab-claude-land@.service`, and its name and
+           settings are literals in the role's `claude-land-pins.j2`, which the unit, the
+           polkit rule and the agent's profile import. A component's `defaults:` sit below the
+           inventory, so the block vars `tasks/lander.yml` pinned them with would pin nothing
+           in the package. The pins file and `component.yml` join the approval list. The
+           server-batch lander and the pipeline timeline are monotonic timers too, so their
+           window-test entries take the `homelab-*` names with the memory sync's. The takeover
+           check ships its wrapper and grant; the role keeps the pinned flux copy and the state
+           directory until slice 4, because no package mechanism yet ships a tool at the
+           `/usr/local/lib/homelab-takeover-check/flux` path the wrapper runs.
         3. Triage, then the agent's home: the peer key, the ssh config, the operator config,
            the memory seed, the homelab-ui login and the browser oneshot, with the *What goes
            where* amendment below.

@@ -113,6 +113,8 @@ LOCK_SECONDS = 5  # a holder rewrites a small file; homelab-secrets waits as lon
 
 # An upgrade never restarts the run that installed it, whatever the manifest says.
 ALWAYS_MANUAL = frozenset({"homelab-updater.service", "homelab-reconcile.service"})
+# A template's own name: `claude-land@.service`, with no instance between `@` and the suffix.
+TEMPLATE_NAME = re.compile(r"[A-Za-z0-9_.:-]+@\.(service|timer|socket|path)")
 UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
 PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 POLICIES = frozenset({"manual", "windowed"})
@@ -441,8 +443,19 @@ def retire_cron(name: str, user: str) -> bool:
     return True
 
 
+def template_unit(unit: str) -> bool:
+    """True for a template's own name, `x@.service`, which systemd refuses to start or stop."""
+    return TEMPLATE_NAME.fullmatch(unit) is not None
+
+
 def retire_unit(unit: str) -> bool:
+    """Disable, stop and remove an unowned Ansible-era unit; a template is not stopped.
+
+    systemctl refuses a template's own name as missing its instance, and `running_service` has
+    already kept the entry while any instance runs.
+    """
     path = ETC_UNIT_DIR / unit
+    template = template_unit(unit)
     if os.path.lexists(under_root(path)):
         owner = owned(path)
         if owner is not False:
@@ -451,10 +464,10 @@ def retire_unit(unit: str) -> bool:
         if systemctl("disable", unit).returncode != 0:
             log(f"disable {unit} failed", ERR)
             return False
-        if not stop(unit) or not retire_path(path):
+        if not (template or stop(unit)) or not retire_path(path):
             return False
         return systemctl("daemon-reload").returncode == 0
-    return stop(unit)
+    return template or stop(unit)
 
 
 def retire(entry: dict) -> bool:
@@ -831,12 +844,21 @@ def run_arms(names: list, manifest: dict, prev: dict, arms: dict, drift: dict) -
 
 
 def running_service(entry: dict) -> bool:
-    """True for a legacy entry that names a service systemd is running or starting."""
+    """True for a legacy entry that names a service systemd is running or starting.
+
+    For a template service, true while any of its instances is.
+    """
     unit = entry.get("unit", "")
-    return (
-        unit.endswith(".service")
-        and systemctl("is-active", unit).stdout.strip() in activate.RUNNING
-    )
+    if not unit.endswith(".service"):
+        return False
+    if template_unit(unit):
+        instances = unit.replace("@.", "@*.", 1)
+        listed = systemctl(
+            "list-units", "--plain", "--no-legend",
+            f"--state={','.join(sorted(activate.RUNNING))}", instances,
+        )  # fmt: skip
+        return listed.returncode != 0 or bool(listed.stdout.strip())
+    return systemctl("is-active", unit).stdout.strip() in activate.RUNNING
 
 
 def left_alone(unit: str, units: dict, links: set[str], manual: set[str]) -> bool:
