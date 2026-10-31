@@ -3,13 +3,12 @@
 # carries this file verbatim. The design is M6's batch A1
 # (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A") on M2's recipe.
 #
-# THESE RULES PAGE since A1's Cutover-b, except the Pi pressure arms. They ran with
+# THESE RULES PAGE since A1's Cutover-b, and the Pi pressure arms since B8's. They ran with
 # `shadow: "true"` beside the Kuma tiles of the rows they port until then. HostDiskFull and the
 # five UPS rules are critical, so Discord and email; the rest are warnings, so Discord alone.
-# PiLoadHigh, PiMemoryLow, PiDiskFull, PiFilesystemReadOnly and PiMetricsMissing stay shadow
-# until B8, which cuts the `pi_pressure` row over: its `Pi Pressure` tile also holds the port
-# arm, so A1 adds no `CheckWithoutPager` term for it. PiUndervoltage and PiUndervoltageMissing
-# are check_host_temp's, so they page with A1.
+# PiLoadHigh, PiMemoryLow, PiDiskFull, PiFilesystemReadOnly and PiMetricsMissing are the
+# Prometheus half of `pi_pressure`, and `PiPortDead` in extra-probes.yaml is the other half.
+# PiUndervoltage and PiUndervoltageMissing are check_host_temp's, so they paged with A1.
 #
 # ONE RULE PER HOST. `service` must be a literal (scripts/validate/alert_conventions.py), and a
 # node has no workload-service join, so each host gets its own copy, as host-checks.yaml does.
@@ -46,11 +45,11 @@
 # HWMON_TEMP_ORIGINS_CONSECUTIVE (5) is 25m, HWMON_TEMP_CONSECUTIVE (12) is 1h,
 # THERMAL_THROTTLE_CONSECUTIVE (3) is 15m, UPS_CONSECUTIVE (2) and CLAUDE_CGROUP_CONSECUTIVE (2)
 # are 10m. The disk, memory, undervoltage and Pi pressure thresholds had no streak, so they have
-# no `for:`. The numeric literals equal the bridge's env keys, which
-# ansible/tests/services/test_host_check_rule_literals.py holds.
+# no `for:`. The numeric literals equal the retired bridge env keys, which
+# ansible/tests/services/test_host_check_rule_literals.py holds as RETIRED_ENV.
 #
 # DROPPED ON PURPOSE. The retired-uid note on the Memory tile never paged (#5125), so it has no
-# rule. The Pi's published-port arm is B8's `PiPortDead`.
+# rule. The Pi's published-port arm is `PiPortDead` in extra-probes.yaml.
 groups:
   - name: hosts
     rules:
@@ -556,8 +555,7 @@ groups:
             The Raspberry Pi firmware latched its low-critical voltage alarm: the 5V supply fell
             below its critical threshold, which corrupts SD cards and stalls USB devices. Check the
             power supply and cable. A clean reading later does not undo the damage.
-      # The Prometheus half of check_pi_pressure (verdicts.host.pi_pressure): load5 per core over
-      # PI_LOAD_MAX (1.5). Rules for the Pi stay shadow until B8 cuts the row over.
+      # The Prometheus half of the retired pi_pressure check: load5 per core over 1.5.
       - alert: PiLoadHigh
         expr: |
           node_load5{origin="daniel-pi"}
@@ -567,24 +565,22 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's 5-minute load is {{ $value | printf "%.2f" }} per core.
           description: >-
             daniel-pi has a 5-minute load average of {{ $value | printf "%.2f" }} per core, over
             1.5. Read `top` on the host for the process behind it.
-      # Available memory under PI_MEM_MIN_MB (50) MB.
+      # Available memory under 50 MB.
       - alert: PiMemoryLow
         expr: |
           node_memory_MemAvailable_bytes{origin="daniel-pi"} < 50 * 1048576
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi has {{ $value | humanize1024 }}B of memory available.
           description: >-
-            daniel-pi can reclaim under 50 MB of memory (PI_MEM_MIN_MB), and the 456 MB box thrashes
+            daniel-pi can reclaim under 50 MB of memory, and the 456 MB box thrashes
             when that runs out. Read `free -m` and `docker stats` on the host.
       # Fullness per block device, not per mount: the SD card is mounted twice. tmpfs is out,
       # because log2ram's /var/log fills and flushes by design.
@@ -602,13 +598,12 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's {{ $labels.device }} is {{ $value | printf "%.0f" }}% full.
           description: >-
-            The filesystem on {{ $labels.device }} of daniel-pi is over 90% full (PI_DISK_MAX_PCT).
+            The filesystem on {{ $labels.device }} of daniel-pi is over 90% full.
             A filling SD card is the slow Pi death. Read `df -h` on the host.
-      # The read-only arm over PI_READONLY_MOUNTS (`/|/boot/firmware`, anchored). No `for:`: a read-
+      # The read-only arm over `/|/boot/firmware`, anchored. No `for:`: a read-
       # only remount does not self-heal.
       - alert: PiFilesystemReadOnly
         expr: |
@@ -616,17 +611,16 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's {{ $labels.mountpoint }} is mounted read-only.
           description: >-
             {{ $labels.mountpoint }} on daniel-pi is read-only, which is an SD card remounting
             itself after an I/O error. Every other arm stays green through it. A reboot does not
             come back from it.
-      # The missing-series arms of check_pi_pressure: a renamed series or a blind collector must
-      # surface. The bridge paged the same cycle, so `for: 10m` is ScrapeTargetDown's floor. B8
-      # cuts the row over, so this rule stays shadow until then. The undervoltage arm is
-      # check_host_temp's, so it is PiUndervoltageMissing below and pages with A1.
+      # The missing-series arms of the retired pi_pressure check: a renamed series or a blind
+      # collector must surface. The bridge paged the same cycle, so `for: 10m` is
+      # ScrapeTargetDown's floor. The undervoltage arm is check_host_temp's, so it is
+      # PiUndervoltageMissing below and paged with A1.
       - alert: PiMetricsMissing
         expr: |
           label_replace(
@@ -656,7 +650,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi publishes no {{ $labels.arm }} series.
           description: >-
@@ -665,7 +658,7 @@ groups:
       # The empty-vector arm of check_host_temp's undervoltage check: undervoltage_verdict paged
       # "no undervoltage alarm sensor scraped" while the Pi's own scrape was up, because a renamed
       # sensor or a blind hwmon collector leaves PiUndervoltage nothing to read. It was one arm of
-      # PiMetricsMissing, which stays shadow for B8, so it is its own rule and pages with A1. The
+      # PiMetricsMissing, which B8 kept shadow, so it is its own rule and paged with A1. The
       # `up == 1` start keeps a dead scrape ScrapeTargetDown's, as in the bridge.
       - alert: PiUndervoltageMissing
         expr: |

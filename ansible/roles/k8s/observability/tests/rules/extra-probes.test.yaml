@@ -65,7 +65,6 @@ tests:
               module: http_2xx
               page_tier: warning
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: The probe of wg-easy is failing.
               description: >-
@@ -99,7 +98,6 @@ tests:
               module: http_body_OK
               page_tier: critical
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: The probe of traefik is failing.
               description: >-
@@ -112,7 +110,7 @@ tests:
         exp_alerts: []
 
   # A Pi port closes at minute 3 and stays closed. PiPortDead fires after its 10m hold, the
-  # streak the bridge's pi_pressure row held, and not before.
+  # streak the retired pi_pressure row held, and not before.
   - interval: 1m
     input_series:
       - series: 'probe_success{job="blackbox-pi-ports", instance="10.0.0.139:51821", service="wg-easy", module="tcp_connect"}'
@@ -130,7 +128,6 @@ tests:
               service: wg-easy
               module: tcp_connect
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: The Pi's published port for wg-easy is not listening.
               description: >-
@@ -166,7 +163,6 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: Prometheus cannot scrape daniel-pi's node_exporter at 10.0.0.139:9100.
               description: >-

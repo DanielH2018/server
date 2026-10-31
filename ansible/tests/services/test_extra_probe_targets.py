@@ -9,7 +9,6 @@ the tiles, so the target addresses, modules and tiers are literals here, copied 
 tiles' declarations (`git show 50f2b2c410:ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`).
 
 The rejecting halves are `test_a_published_port_the_job_lacks_is_flagged`,
-`test_a_retired_tile_missing_from_the_pager_guard_is_flagged`,
 `test_an_all_clear_pointed_at_an_app_route_is_flagged` and
 `test_an_untiered_service_probe_leaves_the_critical_tier`. The named members are the Mosquitto
 target, the keyword target that expects `OK`, and `wg-easy` on 51821.
@@ -32,8 +31,7 @@ EXTRA_JOB = "blackbox-extra"
 
 # service -> (module, a substring of the target address) for the 12 tiles that became a probe. The
 # substring is the port or path the deleted tile named. Loki's /ready has no probe (M5's
-# `ScrapeTargetDown` covers job loki-homelab) and the Pi ping is `PiHostDown`, so both sit in
-# RETIRED_WITHOUT_A_TARGET.
+# `ScrapeTargetDown` covers job loki-homelab) and the Pi ping is `PiHostDown`.
 PROBES = {
     "wg-easy": ("http_2xx", ":51821"),
     "email-to-rss": ("http_2xx", "/admin/login"),
@@ -51,23 +49,6 @@ PROBES = {
 # The services whose tile took `severity: critical` from the home-critical tier, plus the edge
 # all-clear, which was always critical.
 TIERED_PROBES = {"mosquitto", "pihole"}
-RETIRED_WITHOUT_A_TARGET = {"Daniel Pi Host", "Loki"}
-# The 12 tiles that became a probe, the two above, and the `pi_pressure` row's tile.
-RETIRED_TILES = {
-    "Daniel Pi WG Easy",
-    "Email-to-RSS (Worker)",
-    "iCal Proxy k8s",
-    "k3s LiveSync",
-    "k3s Scrutiny",
-    "k3s homelab-mcp (edge gate)",
-    "Homelab Edge (all-clear)",
-    "Pi-hole k8s DNS",
-    "k3s Mosquitto (VIP)",
-    "k3s Jellyfin (VIP)",
-    "SLZB-06M Coordinator",
-    "k3s nut (upsd)",
-    "Pi Pressure",
-} | RETIRED_WITHOUT_A_TARGET
 EDGE_SELFCHECK_PATH = "/.well-known/traefik-edge-selfcheck"
 KEYWORDS = {"http_body_ok": "ok", "http_body_OK": "OK"}
 
@@ -119,16 +100,6 @@ def pi_containers() -> list[dict]:
     """Every Pi service entry, from `containers_list` and the package's `compose_services`."""
     pi = host_context()["hostvars"]["daniel-pi"]
     return copy.deepcopy([*pi["containers_list"], *pi["compose_services"]])
-
-
-def unguarded_tiles(cutover_text: str, tiles: set[str]) -> list[str]:
-    """The tiles `CheckWithoutPager` has no `absent_over_time` term for."""
-    return sorted(
-        name
-        for name in tiles
-        if f'absent_over_time(monitor_status{{monitor_name="{name}"}}[2h])'
-        not in cutover_text
-    )
 
 
 def probe_by_service() -> dict[str, tuple[str, str, str]]:
@@ -314,14 +285,3 @@ def test_a_pi_port_rule_that_loses_its_hint_or_its_selector_is_flagged():
         "description lacks 'RECREATE'",
         "description lacks 'docker ps'",
     ]
-
-
-def test_the_pager_guard_lists_every_retired_tile():
-    text = (OBS / "files" / "rules" / "kuma-cutover.yaml").read_text()
-    assert unguarded_tiles(text, RETIRED_TILES) == []
-
-
-def test_a_retired_tile_missing_from_the_pager_guard_is_flagged():
-    text = (OBS / "files" / "rules" / "kuma-cutover.yaml").read_text()
-    text = text.replace('monitor_name="Daniel Pi Host"', 'monitor_name="Daniel Pi Hos"')
-    assert unguarded_tiles(text, {"Daniel Pi Host"}) == ["Daniel Pi Host"]
