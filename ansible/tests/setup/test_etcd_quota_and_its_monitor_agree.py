@@ -1,21 +1,25 @@
-"""monitor-bridge's etcd quota threshold and k3s's actual backend quota must name one value.
+"""The etcd quota the alert rule measures against and k3s's actual backend quota must name one value.
 
-`check_etcd_db_size` measures `apiserver_storage_size_bytes` against `ETCD_DB_QUOTA_BYTES`
-(monitor-bridge's Deployment env), and that number is only right while etcd runs its OWN default
+`EtcdDBNearQuota` measures `apiserver_storage_size_bytes` against a quota literal in
+`files/rules/storage.yaml`, and that number is only right while etcd runs its OWN default
 quota. `k3s_server_config` carries no `etcd-arg` `quota-backend-bytes`, so it does. Add one there
-and the check silently measures against a quota the cluster does not have — a threshold too low
+and the rule silently measures against a quota the cluster does not have: a threshold too low
 pages on a healthy DB, one too high stays green past the point etcd goes read-only. Neither
-failure is visible in a render check or in the check's own tests, because both halves are
+failure is visible in a render check or in the rule's own promtool cases, because both halves are
 internally consistent on their own.
+
+Until M6 batch A5's Cutover-a2 the literal lived in monitor-bridge's Deployment env as
+`ETCD_DB_QUOTA_BYTES`, and this guard read it from the render.
 
 Run: uv run pytest ansible/tests/setup/test_etcd_quota_and_its_monitor_agree.py
 """
 
 import re
 
+from lib import yaml_fast
 from lib.repo_paths import REPO
-from _k8s_render import rendered_k8s_text
 
+from _helpers import K8S_ROLES
 
 # etcd's own default, and the only value that is correct while k3s overrides nothing.
 # <https://etcd.io/docs/v3.5/dev-guide/limit/#storage-size-limit>
@@ -23,23 +27,25 @@ ETCD_DEFAULT_QUOTA = 2 * 1024**3
 OVERRIDE_FLAG = "quota-backend-bytes"
 # The server's flags, `k3s_server_config`, since H6.4b.
 K3S_SERVER_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
+STORAGE_RULES = K8S_ROLES / "observability" / "files" / "rules" / "storage.yaml"
+# `100 * max(apiserver_storage_size_bytes) / <quota> >= <percent>`
+QUOTA_IN_EXPR = re.compile(r"/ (\d+) >= \d+\s*$")
 
 
-def deployed_quota() -> int:
-    """`ETCD_DB_QUOTA_BYTES` as the role's Deployment env renders it.
+def rule_quota(text: str | None = None) -> int:
+    """The quota literal in `EtcdDBNearQuota`'s expression.
 
-    Read off the render rather than the template's text, so a threshold that moves into a role
-    default is still the number this guard compares. Against the source a moved value leaves
-    the regex matching `{{ ... }}` instead of digits (#3202).
+    Read off the rule rather than restated here, so a quota that moves in the rule is the number
+    this guard compares.
     """
-    match = re.search(
-        r'^\s*- name: ETCD_DB_QUOTA_BYTES\n\s*value:\s*"?(\d+)"?\s*$',
-        rendered_k8s_text("monitor-bridge", "deployment.yaml.j2"),
-        re.M,
-    )
+    [group] = yaml_fast.safe_load(STORAGE_RULES.read_text() if text is None else text)[
+        "groups"
+    ]
+    [rule] = [r for r in group["rules"] if r["alert"] == "EtcdDBNearQuota"]
+    match = QUOTA_IN_EXPR.search(" ".join(rule["expr"].split()))
     assert match, (
-        "monitor-bridge's Deployment env no longer declares ETCD_DB_QUOTA_BYTES, so the check falls "
-        "back to its in-code default and nothing here pins it to the cluster"
+        "EtcdDBNearQuota's expression no longer divides by a plain byte quota, so nothing here "
+        "pins it to the cluster"
     )
     return int(match.group(1))
 
@@ -56,17 +62,23 @@ def test_the_threshold_matches_the_quota_actually_in_force():
             for line in K3S_SERVER_COMPONENT.read_text().splitlines()
             if OVERRIDE_FLAG in line
         ]
-        assert str(deployed_quota()) in " ".join(override), (
+        assert str(rule_quota()) in " ".join(override), (
             f"k3s_server_config now sets {OVERRIDE_FLAG} ({override}) and "
-            f"ETCD_DB_QUOTA_BYTES is still {deployed_quota()} — check_etcd_db_size measures "
+            f"EtcdDBNearQuota still divides by {rule_quota()} — the rule measures "
             "against a quota the cluster does not have"
         )
         return
-    assert deployed_quota() == ETCD_DEFAULT_QUOTA, (
+    assert rule_quota() == ETCD_DEFAULT_QUOTA, (
         f"k3s_server_config sets no etcd-arg {OVERRIDE_FLAG}, so etcd's own "
-        f"{ETCD_DEFAULT_QUOTA}-byte default is in force, but ETCD_DB_QUOTA_BYTES is "
-        f"{deployed_quota()}"
+        f"{ETCD_DEFAULT_QUOTA}-byte default is in force, but EtcdDBNearQuota divides by "
+        f"{rule_quota()}"
     )
+
+
+def test_a_rule_quota_that_leaves_the_default_would_be_detected():
+    """The rejecting half: the rule's quota edited while k3s overrides nothing."""
+    edited = STORAGE_RULES.read_text().replace("/ 2147483648 >=", "/ 4294967296 >=")
+    assert rule_quota(edited) != ETCD_DEFAULT_QUOTA
 
 
 def test_a_divergent_override_would_be_detected():

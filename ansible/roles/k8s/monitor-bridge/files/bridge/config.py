@@ -13,12 +13,11 @@ constant is a process-wide global with a test-shaped hole in it; a parameter is 
 
 THE FIELDS LIVE IN FOUR DOMAIN MODULES, composed here by inheritance so that flat `cfg.X`
 access survives: `config_host` (disks, SMART, temperatures, the UPS, the Pi), `config_service`
-(n8n, the *arr stack, the deployer, Home Assistant), `config_cluster` (the second
-Prometheus, the coverage floors, Longhorn, PVCs) and `config_io` (B2, R2, Loki, the webhooks).
+(n8n, the *arr stack, the deployer, Home Assistant), `config_cluster` (the Prometheus
+origin pin) and `config_io` (B2, R2, Loki, the webhooks).
 Each declares a frozen dataclass and a builder taking `load_config`'s parsers as arguments, so
 a leaf never imports this facade. What stays HERE is the loop and endpoint fields every domain
-needs, the check filter, and the read a repo test greps for by text: `PVC_EXCLUDE` is rendered in
-`templates/config/env.yaml.j2` beside it.
+needs and the check filter.
 
 BUILDING THIS MUST NOT RAISE. A ValueError on one malformed number used to kill the pod during
 import, before the heartbeat file existed and before any monitor could be told. `_int`/`_num`
@@ -79,7 +78,6 @@ class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig):
     PROM_URL: str
     KUMA_URL: str
     LOKI_URL: str
-    PVC_EXCLUDE: tuple[str, ...]
     CHECKS_ONLY: frozenset[str]
     CHECKS_SKIP: frozenset[str]
     CONFIG_PROBLEMS: tuple[str, ...] = ()
@@ -197,15 +195,6 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         PROM_URL=PROM_URL,
         KUMA_URL=_env("KUMA_URL").rstrip("/"),
         LOKI_URL=_env("LOKI_URL").rstrip("/"),
-        # Claims this arm must NOT scan, comma-separated bare claim names. media-data is a
-        # `local` PV at /srv/media on daniel-box (k8s/media-volume/templates/pv.yaml.j2), i.e.
-        # the `/` filesystem check_disk already watches — including it would page twice for one
-        # full disk. Every other claim is Longhorn with a filesystem of its own. Keep this short
-        # and say WHY in the inventory, like LOG_ERROR_IGNORE: a growing exclusion list means
-        # the arm is decaying.
-        PVC_EXCLUDE=tuple(
-            c.strip() for c in _env("PVC_EXCLUDE").split(",") if c.strip()
-        ),
         # Which checks THIS instance runs. The Phase F twin/remnant split ended with the Docker
         # uninstall (2026-08-14): the cluster deployment is now the ONLY bridge and runs every
         # check (the gitops checks re-pointed at daniel-box's deployer via a hostPath — the pod

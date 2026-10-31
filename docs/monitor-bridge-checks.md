@@ -507,7 +507,7 @@ checks each gate suppresses.
   arm (#2668) exists because an SD card that remounts its root read-only after an I/O error
   freezes the fill % at its last value, keeps its open sockets, and keeps syslog flowing through
   log2ram, so every other arm stays green through the classic Pi failure. It takes no grace, like
-  `kubelet_plugin_readonly`, because a read-only remount does not self-heal. Filesystems are keyed
+  the retired Kubelet CSI Mount Read-Only check, because a read-only remount does not self-heal. Filesystems are keyed
   by device rather than mountpoint because the SD card is mounted twice (`/` and `/var/hdd.log`)
   and one full card is one problem. tmpfs is excluded because log2ram's 128 MiB `/var/log` fills
   and flushes by design. A filling SD card is the slow Pi death the server-only Root Disk check
@@ -694,127 +694,6 @@ checks each gate suppresses.
   marker records held the tile red for 46 and 43 minutes.
   The row is temporary. M6's batch A7 ports the arm to a LogQL rule on `loki-homelab` and deletes
   the row, `check_workload_log_errors` and `with_log_errors`.)
-- **Longhorn Volume Redundancy** (`files/checks/storage.py:check_longhorn_volumes`. Reads the
-  one-hot `longhorn_volume_robustness` metric. `k3s_longhorn_replica_count` is 2, so a `degraded`
-  volume is down to one copy and a `faulted` one has no healthy replica. The decision is
-  `longhorn_robustness.SAFE_ROBUSTNESS` (`healthy`, `unknown`): any other state pages, so a state
-  Longhorn adds later pages instead of passing a `degraded|faulted` selector. The runbook gates in
-  `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` call the same allow-list on the volume CRs (#3668).
-  `unknown` is a detached volume and is not a fault (6 of 43 volumes read it on 2026-08-17,
-  including game servers scaled to zero on purpose). The two longhorn-manager pods report disjoint
-  volume subsets, so offenders are deduped by name. **An absent metric is a breach**, not health:
-  `count(longhorn_volume_robustness{state="healthy"})` doubles as the input assertion that the
-  longhorn scrape job is answering, and it reads "replica redundancy is UNMONITORED." A scrape gap
-  and a degraded volume get different hysteresis labels, and both wait `LONGHORN_CONSECUTIVE` (3)
-  cycles so a node drain or the Sunday restart does not page. **In `PROM_DEPENDENT`**, because its
-  absent-metric branch pages when the longhorn job dies. Runbook: `longhorn-disaster-recovery`.)
-- **k3s PVC Fullness** (`kubelet_volume_stats_available_bytes / _capacity_bytes` via the cluster
-  Prometheus: the SPACE axis of the storage layer, where Longhorn Volume Redundancy is the replica
-  axis. A Longhorn PVC is its own filesystem at a fixed capacity, so a 2 Gi claim can fill to 100%
-  while Root Disk reports 620 GB free. `PVC_MAX_PCT` is **85**, not Root Disk's 90: a full PVC
-  cannot be relieved by deleting something elsewhere, because the operator has to expand the
-  volume, and on the smallest claim (973 MiB) 85% leaves 146 MiB of headroom against 97 MiB at 90%.
-  **A percentage cannot warn before a step.** valheim-server sat at 79% for days and reached 100%
-  inside one 15-minute updater cycle when a Steam update staged a fourth copy of the install
-  (#1866). `PVC_MIN_FREE` (#1875) therefore declares a per-claim free-bytes floor,
-  `<pvc>=<bytes>` (the SNAPSHOT_CAPS shape), and the check pages while a named claim's
-  `kubelet_volume_stats_available_bytes` is below it, with no streak, whatever its percentage
-  reads. The value is the claim's largest transient, declared by its own role
-  (`valheim_k8s_server_update_transient_bytes`, 3 GiB against a 2.2 G copy) and pinned to this one
-  by `tests/test_check_pvc_floors.py`. A rate signal was rejected: the updater's cycle is 15 min
-  and the check runs every 300 s, so a stable window fires after the ENOSPC as often as before. A
-  named claim reporting no free bytes is a breach, and the green summary names every floor held,
-  so an arm that stopped evaluating shows as an absence.
-  `PVC_EXCLUDE` drops `media-data`, the one claim backed by a `local` PV at `/srv/media` rather
-  than by Longhorn: it IS the `/` filesystem Root Disk already watches, so scanning it here pages
-  twice for one full disk. The query aggregates `max by (namespace, persistentvolumeclaim)`, so
-  a claim reads as one value however many series carry it. Until #6331 daniel-box's claims were
-  scraped TWICE (k3s serves the kubelet registry on the supervisor's `/metrics` too, so the same
-  series arrived under `job="kubernetes-kubelet"` and `job="kubernetes-apiserver"`, 43 + 27
-  series over 43 claims). The apiserver job now keeps only `apiserver_` and `etcd_` families, so
-  the kubelet job is the claims' one source.
-  **Fails closed on a thin claim census**, and `PVC_MIN_CLAIMS` (32) is DERIVED: daniel-box's
-  kubelet target reports 27 claims and daniel-server's 16. The hazard is a dead daniel-server
-  target, which leaves 27 claims answering, every one under the limit, while daniel-server's go
-  dark. Any floor at or under 27 reads that as healthy. A dead kubelet job empties the census.
-  For the same reason the check has **no `EXPORTER_DEPENDENT` entry** keyed on the kubelet job:
-  that would suppress the page on exactly the partial outage the floor exists to catch, the
-  `node`-only mistake that blinded Host Temperature on two hosts of three. A fullness breach gets
-  no grace, because it is monotonic, and the census arm rides `PVC_CLAIMS_CONSECUTIVE`.)
-- **Longhorn Snapshot Headroom** (`longhorn_snapshot_actual_size_bytes` joined to
-  `longhorn_volume_capacity_bytes` for the claim name, #1627: the SNAPSHOT axis, where PVC Fullness
-  is the filesystem axis and Longhorn Volume Redundancy the replica axis. Snapshots live in the
-  Longhorn backend, so a volume can fill its `spec.snapshotMaxSize` while its claim reads 12% full
-  and every replica reads healthy. A cap that is REACHED does not prune, it refuses: Longhorn stops
-  accepting new snapshots, and `k8s/volume-snapshot` snapshots before it prunes, so the first
-  deploy past the cap fails and every later one fails identically until snapshots are deleted by
-  hand (#1560). That role's own gate fires only during a deploy of the capped service. This arm
-  watches a volume filling BETWEEN deploys, which a recurring Longhorn backup job does with nobody
-  deploying.
-  **`SNAPSHOT_CAPS` declares the caps**, `<pvc>=<bytes>`, because nothing exports the field:
-  Longhorn's exporter publishes snapshot sizes and no cap, this pod runs with
-  `automountServiceAccountToken: false`, and the Longhorn HTTP API answers only from the
-  node-local manager. Flux is the only writer of a cap. The `jellyfin-snapshot-cap` Job in
-  `roles/k8s/jellyfin/templates/verify/cap.yaml.j2` patches the only one (jellyfin-config, 16 GiB = 2 x the PVC size, the smallest Longhorn
-  accepts), and `tests/test_check_snapshot_headroom.py` derives the capped set from the tree, so a
-  second capped volume missing from the declaration fails CI. `"0"` is Longhorn's UNCAPPED value
-  and the fleet default, so the check drops it instead of reading a cap of zero, which would
-  report every volume full.
-  **Usage is a superset of what the deploy gate sums.** The gate skips `status.markRemoved`
-  snapshots and the metric carries no such label (25 of 114 Snapshot CRs were `markRemoved` and
-  every one still had a series on 2026-09-10). That errs safely, because those blocks are still
-  held until Longhorn purges them, but it can overstate usage for a cycle after a prune, so a
-  breach rides `SNAPSHOT_CAP_CONSECUTIVE`. The sum is deduped by (volume, snapshot), like PVC
-  Fullness's `max by`, because both longhorn-manager pods are scraped independently. A declared
-  cap whose volume has NO series is a breach, not green.
-  `monitor_bridge_snapshot_headroom_push_token` is in SOPS, and both halves read it unguarded: the
-  env-secret's `lookup('vars')` and the Kuma tile loop in
-  `k8s/uptime-kuma/templates/static-monitors.yaml.j2`, both over its `check_table.py` row. The
-  check first shipped inert with the token absent, the shape #1632 names: a gated monitor with an
-  unset variable reads green while watching nothing.)
-- **Kubelet CSI Mount Read-Only** (`node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/
-  plugins/.*"} == 1`, #1243. A reclaim stall dropped Longhorn's iSCSI sessions, `replacement_timeout`
-  expiry aborted several ext4 journals and remounted them read-only, and every other monitor stayed
-  silent for 50 minutes because Volume CRs read `attached healthy` throughout. Longhorn's own state
-  is structurally blind to a filesystem-level fault under it. node-exporter's
-  `mount-points-exclude` hid the metric under a wholesale `var/lib/kubelet` exclusion, so the
-  exclusion is `var/lib/kubelet/pods` (`daemonset.yaml.j2`). The per-pod bind mounts stay excluded
-  (unbounded cardinality), and the CSI global mounts under `plugins/` do not (~40 volumes x ~7
-  series, ~300 total).
-  **No grace**, unlike Longhorn Volume Redundancy: a read-only remount does not self-heal the way
-  a replica rebuild or a kubelet restart does, so a streak would only delay a real page.
-  **`host_metric_sel`, not `origin_sel`**, for the reason `check_disk` and `check_mem` use it:
-  `PROM_ORIGIN` resolves to `origin="daniel-server"` in the deployed env, and pinning would hide
-  the identical fault on daniel-box behind a green tile. An absent series reads as healthy (no CSI
-  global mount is read-only) rather than as blind, because node-exporter being entirely down is
-  `ScrapeTargetDown`'s and `check_disk`'s job. The `node-exporter-scrapes-csi-global-mounts` row
-  of `ansible/tests/k8s/_config_property_rows.py` guards the exclusion regex directly, since this
-  check's empty-is-healthy logic cannot tell a real all-clear from a re-widened exclusion hiding
-  the fault again. **In `PROM_DEPENDENT`**: `prom_vector` raises on an unreachable Prometheus,
-  which `_evaluate` turns into a `down`, so without the gate a Prometheus restart pages this
-  monitor a second time for one root cause.)
-- **etcd DB Size** (`max(apiserver_storage_size_bytes)` against `ETCD_DB_QUOTA_BYTES`, down at
-  `ETCD_DB_MAX_PCT` = 80%, `files/checks/cluster_etcd.py`, #2403. etcd goes READ-ONLY at its
-  backend quota and the control plane stops accepting writes, the failure the restore runbook
-  exists for. **Why the proxy and not etcd's own series:** `k3s_etcd_expose_metrics` is off, so
-  `etcd_mvcc_db_total_size_in_bytes`, `etcd_server_leader_changes_seen_total` and
-  `etcd_disk_wal_fsync_duration_seconds_*` return no data. The `DECIDED:` marker at that switch in
-  `group_vars/all.yml` records why it stays off: arming it restarts k3s and re-encrypts every
-  Secret (#2294) from a manual-plane playbook, and opens an unauthenticated `:2381`.
-  `apiserver_storage_size_bytes` is scraped unconditionally and matches the etcd snapshot's size
-  (#2403: 53,768,192 on 2026-09-24, 2.6% of the quota).
-  **`max(...)` over the bare series, no `by` and no `job` selector.** k3s serves the apiserver and
-  the kubelet from one process, so until #6331 the series was scraped TWICE with the same value,
-  under `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"`. The kubelet job now drops
-  the server node's `apiserver_` families, so one series is left, and `max` keeps
-  `prom_scalar`'s `result[0]` well defined if a second copy returns. Selecting on `job` would tie
-  the check to a scrape-job name rather than to the metric. **2 GiB is etcd's OWN default** and is what is in
-  force: `k3s_server_config` carries no `etcd-arg` `quota-backend-bytes`, so adding one there moves
-  `ETCD_DB_QUOTA_BYTES` with it or the check measures against a quota the cluster does not have.
-  **No grace**, for the reason CSI Read-only Mounts has none: a DB near its quota does not shrink
-  on its own. An absent series reads as healthy and points at `ScrapeTargetDown`. PVC Fullness fails
-  closed because 27 of 43 claims survive a dead kubelet job, but one series carried by two jobs
-  has no partial-coverage case, so empty means total scrape loss, which `ScrapeTargetDown` already pages on. **In `PROM_DEPENDENT`**, because it reads Prometheus.)
 - **etcd Restore Drill** (`files/checks/service.py:check_etcd_restore_drill`. Reads the
   `last-success-list-only` stamp that the weekly etcd restore drill cron on daniel-box writes
   under `ETCD_DRILL_STATE_DIR` (`/etcd-drill-state`, a hostPath), and checks its `epoch=` line
@@ -931,6 +810,17 @@ keys are gone. The 20-pod census floor behind `CAdvisorCoverageShortfall` is pin
 now sits. The CPU rule's 3-cycle streak became `for: 15m` over a `max_over_time(...[5m:1m])`
 smoothing, whose reasoning is at `ContainerCPUThrottled` in
 `ansible/roles/k8s/observability/files/rules/container-checks.yaml`.
+Longhorn Volume Redundancy, k3s PVC Fullness, Longhorn Snapshot Headroom, Kubelet CSI Mount
+Read-Only and etcd DB Size (M6 batch A5) retired into the `storage` rule group in
+observability, and their tiles, rows and env keys are gone. The thresholds those rules carry
+are pinned in `ansible/tests/services/test_storage_rule_literals.py`, which also holds
+`PVCBelowFreeFloor` to the transient valheim declares, `LonghornSnapshotNearCap` to the
+jellyfin snapshot cap, and `LonghornVolumeDegraded` to `longhorn_robustness.SAFE_ROBUSTNESS`.
+The `DECIDED:` marker for the 3 GiB free-bytes floor sits there too.
+`ansible/tests/setup/test_etcd_quota_and_its_monitor_agree.py` holds `EtcdDBNearQuota`'s
+quota to the one k3s runs. The reasoning behind each rule (the one-hot `state` label, the
+`max by` that reads a doubled scrape once, the claim census, why an absent etcd series is
+`ScrapeTargetDown`'s) is in `ansible/roles/k8s/observability/files/rules/storage.yaml`.
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
 `PROM_DEPENDENT`. Each check's retirement note is in the repository history.
 

@@ -27,7 +27,7 @@ scripts/secrets_mgmt/consumers.py finds who to redeploy after a rotation by grep
 role's files for the secret's name, so a derived name would drop monitor-bridge from that census
 and leave the pod pushing a revoked token. uptime-kuma renders the same tokens from this file;
 the census credits it through the cross-role read `deploy_changes.cross_role_readers` derives.
-Ten rows predate the `monitor_bridge_<name>_push_token` rule and keep their old name, because
+Six rows predate the `monitor_bridge_<name>_push_token` rule and keep their old name, because
 renaming a secret is a rotation.
 
 `kuma_id`, `display` and `description` are what AutoKuma compares, and it runs with
@@ -41,7 +41,6 @@ from checks import (
     b2,
     cloudflare_ips,
     cluster,
-    cluster_etcd,
     gitops,
     healthchecks,
     host,
@@ -51,7 +50,6 @@ from checks import (
     notify,
     r2,
     service,
-    storage,
     wan,
 )
 
@@ -115,15 +113,6 @@ CHECKS: tuple[PushCheck, ...] = (
         name="etcd_restore_drill", fn=service.check_etcd_restore_drill, token="monitor_bridge_etcd_drill_push_token",
         kuma_id="etcd-restore-drill", display="etcd Restore Drill", status_group="Backups & Storage", runbook="k3s-etcd-restore",
         description="monitor-bridge reads the last-success-list-only stamp written by the weekly (Monday 10:20) etcd restore drill cron on daniel-box. DOWN means no list-only drill has ever passed, the stamp is older than 8 days, or the pod cannot read it. Run journalctl on daniel-box for etcd-restore-drill and check the stamp mode.",
-    ),
-    # #2403: etcd goes read-only at its backend quota, so this is critical: the fix is an operator
-    # compacting or raising the quota. Reads the apiserver's proxy for the db size, because etcd's
-    # own series is empty while k3s_etcd_expose_metrics is off. Both the apiserver and kubelet job
-    # carry that series, so there is no partial-coverage case and the gate suppresses it whole.
-    PushCheck(
-        name="etcd_db_size", fn=cluster_etcd.check_etcd_db_size, token="monitor_bridge_etcd_db_size_push_token",
-        kuma_id="etcd-db-size", display="etcd DB Size", status_group="Backups & Storage", gate="prometheus", critical=True, runbook="k3s-etcd-restore",
-        description="monitor-bridge reads apiserver_storage_size_bytes against etcd's 2 GiB backend quota, because etcd's own db-size series is empty while k3s_etcd_expose_metrics is off. DOWN means the DB is over ETCD_DB_MAX_PCT of the quota; at the quota etcd rejects every write and the control plane stops. Compact and defragment, or raise --etcd-arg=quota-backend-bytes.",
     ),
     PushCheck(
         name="scrutiny", fn=host_thermal.check_scrutiny, token="monitor_bridge_scrutiny_push_token",
@@ -209,34 +198,6 @@ CHECKS: tuple[PushCheck, ...] = (
         name="workload_log_errors", fn=logs.check_workload_log_errors, token="monitor_bridge_k8s_workloads_push_token",
         kuma_id="monitor-bridge-k8s-workloads", display="Workload Log Errors", status_group="Cluster Health", gate="startup_grace",
         description="Loki via monitor-bridge: a container logged more than LOG_ERROR_MAX (20) lines matching panic, fatal, traceback or out of memory in the last hour. The message names the container. The Kubernetes arms of the old k3s Workload Health tile are the k8s-workloads alert rules.",
-    ),
-    # Gated because its absent-metric branch pages when the longhorn job dies, so a Prometheus
-    # outage would page it a second time.
-    PushCheck(
-        name="longhorn_volumes", fn=storage.check_longhorn_volumes, token="monitor_bridge_longhorn_volumes_push_token",
-        kuma_id="monitor-bridge-longhorn-volumes", display="Longhorn Volume Redundancy", status_group="Backups & Storage", gate="prometheus", critical=True, runbook="longhorn-disaster-recovery",
-        description="monitor-bridge reads Longhorn's volume metrics via the cluster Prometheus, held 3 cycles for a replica rebuild. DOWN: a volume is degraded or faulted, or the census emptied. The message names the volume; `longhorn-disaster-recovery` has the revert and rebuild procedures.",
-    ),
-    # No EXPORTER_DEPENDENT entry on job="kubernetes-kubelet": a dead kubelet job empties the
-    # claim census, which PVC_MIN_CLAIMS pages on. The apiserver job stopped carrying the claims
-    # in #6331, so this is total blindness now, not partial, and it still pages.
-    PushCheck(
-        name="pvc_fullness", fn=storage.check_pvc_fullness, token="monitor_bridge_pvc_push_token",
-        kuma_id="monitor-bridge-pvc-fullness", display="k3s PVC Fullness", status_group="Backups & Storage", gate="prometheus", critical=True, runbook="longhorn-disaster-recovery",
-        description="kubelet volume stats via monitor-bridge: a Longhorn PVC over 85%, or a named claim under its declared free-bytes floor. A PVC cannot borrow space — expand the volume in its role.",
-    ),
-    # #1627: snapshots live in the Longhorn backend, so a volume can reach its snapshotMaxSize while
-    # the claim reads empty; a reached cap refuses new snapshots and fails every deploy (#1560).
-    PushCheck(
-        name="snapshot_headroom", fn=storage.check_snapshot_headroom, token="monitor_bridge_snapshot_headroom_push_token",
-        kuma_id="monitor-bridge-snapshot-headroom", display="Longhorn Snapshot Headroom", status_group="Backups & Storage", gate="prometheus", critical=True, runbook="longhorn-disaster-recovery",
-        description="monitor-bridge sums a volume's snapshot bytes against the cap declared in SNAPSHOT_CAPS (only jellyfin-config carries one). DOWN: the cap is near, and Longhorn refuses new snapshots at it, which fails every deploy of that service until snapshots are deleted by hand.",
-    ),
-    # #1243: CSI global mounts remounted ext4 read-only with every monitor silent for 50 minutes.
-    PushCheck(
-        name="kubelet_plugin_readonly", fn=storage.check_kubelet_plugin_readonly, token="monitor_bridge_kubelet_readonly_push_token",
-        kuma_id="monitor-bridge-kubelet-readonly", display="Kubelet CSI Mount Read-Only", status_group="Backups & Storage", gate="prometheus", critical=True, runbook="longhorn-disaster-recovery",
-        description="monitor-bridge reads node_filesystem_readonly for /var/lib/kubelet/plugins mounts. DOWN: a Longhorn volume's ext4 remounted read-only after an iSCSI stall (#1243); Longhorn's own state stays healthy through it. Scale the workload to 0, wait for detached, scale back.",
     ),
     # The three reachability gates. A gate has no gate of its own: a tile that cannot go red is
     # not coverage (#2825).

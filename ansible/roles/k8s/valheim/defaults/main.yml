@@ -152,11 +152,11 @@ valheim_k8s_server_size: 20Gi
 valheim_k8s_server_storage_class: longhorn-nobackup
 # The largest single transient an update writes to the claim: the fourth install copy in
 # bepinex.tmp, 2.2 G measured, declared as 3 GiB so the floor fires before the
-# copy is refused rather than at it. monitor-bridge's PVC_MIN_FREE names this claim with this
-# value: the percentage arm cannot warn before a step-shaped peak, so the check pages
+# copy is refused rather than at it. The PVCBelowFreeFloor rule names this claim with this
+# value: the percentage arm cannot warn before a step-shaped peak, so the rule pages
 # while free bytes are below the transient, whatever the percentage reads. The number lives
 # here because the workload's own updater is the only thing that knows it; nothing exports
-# it. monitor-bridge/tests/test_check_pvc_floors.py fails when the two declarations drift.
+# it. ansible/tests/services/test_storage_rule_literals.py fails when the two declarations drift.
 valheim_k8s_server_update_transient_bytes: 3221225472
 
 # ── server identity ─────────────────────────────────────────────────────────────────────

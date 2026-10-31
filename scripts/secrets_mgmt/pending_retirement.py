@@ -37,5 +37,14 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         "monitor_bridge_restarts_push_token",
         "monitor_bridge_oom_push_token",
         "monitor_bridge_cpu_push_token",
+        # M6 batch A5's Cutover-a1 deleted the Longhorn Volume Redundancy, k3s PVC Fullness,
+        # Longhorn Snapshot Headroom, Kubelet CSI Mount Read-Only and etcd DB Size tiles, and
+        # Cutover-a2 deleted their bridge rows. A5's token PR retires the keys a week after
+        # Cutover-b and deletes these five entries with them.
+        "monitor_bridge_longhorn_volumes_push_token",
+        "monitor_bridge_pvc_push_token",
+        "monitor_bridge_snapshot_headroom_push_token",
+        "monitor_bridge_kubelet_readonly_push_token",
+        "monitor_bridge_etcd_db_size_push_token",
     }
 )

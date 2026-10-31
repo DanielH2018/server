@@ -324,7 +324,7 @@ CONFIG_PROPERTIES = (
         name="node-exporter-scrapes-csi-global-mounts",
         reason=(
             "A wholesale exclusion of `var/lib/kubelet` hides CSI global mounts from "
-            "node_filesystem_readonly, and `checks.storage.check_kubelet_plugin_readonly` reads "
+            "node_filesystem_readonly, and the `KubeletCSIMountReadOnly` rule reads "
             "green on an EMPTY vector by design. So a regex that widens back to excluding "
             "`var/lib/kubelet/plugins` is invisible to the check: node-exporter stays up, the "
             "family goes empty, and the monitor reads healthy forever (#1243). The pattern must "

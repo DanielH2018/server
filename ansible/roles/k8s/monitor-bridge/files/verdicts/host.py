@@ -37,7 +37,7 @@ def pi_pressure(
     remounting its root read-only after an I/O error is the classic Pi failure, and every
     other arm stays green through it — the fill % freezes, open sockets stay open, and
     log2ram keeps syslog flowing from RAM. It leads the message because it is the fault a
-    reboot does not come back from. No grace, like kubelet_plugin_readonly: a read-only
+    reboot does not come back from. No grace, like the `KubeletCSIMountReadOnly` rule: a read-only
     remount does not self-heal.
     """
     if (

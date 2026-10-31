@@ -183,7 +183,7 @@ def test_pi_check_up_when_quiet(cfg):
 
 
 def test_pi_check_readonly_root_pages_on_the_first_cycle(cfg):
-    # No grace, like kubelet_plugin_readonly: a read-only remount does not self-heal, so two
+    # No grace, like the KubeletCSIMountReadOnly rule: a read-only remount does not self-heal, so two
     # consecutive cycles must both page.
     cfg = _pressure_cfg(cfg)
     src = _prom(readonly={"/": 1.0, "/boot/firmware": 0.0})

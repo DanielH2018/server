@@ -11,7 +11,6 @@
 | GitOps Deploy — Status | `gitops_status` | none |  | Automation & Drift |  |
 | Host Packages — Status | `host_packages` | `prometheus` |  | Automation & Drift |  |
 | etcd Restore Drill | `etcd_restore_drill` | none |  | Backups & Storage | `k3s-etcd-restore` |
-| etcd DB Size | `etcd_db_size` | `prometheus` | yes | Backups & Storage | `k3s-etcd-restore` |
 | SMART Data / Health | `scrutiny` | `startup_grace` | yes | Hosts & Power |  |
 | Host Temperature | `host_temp` | `prometheus` |  | Hosts & Power |  |
 | UPS Battery Health | `ups` | `prometheus` | yes | Hosts & Power |  |
@@ -25,10 +24,6 @@
 | Healthchecks.io Console Drift | `healthchecks_drift` | `wan_reachable` |  | Automation & Drift |  |
 | B2 Free Tier Headroom | `b2_storage` | `b2_reachable` | yes | Backups & Storage | `longhorn-backup-tiering` |
 | Workload Log Errors | `workload_log_errors` | `startup_grace` |  | Cluster Health |  |
-| Longhorn Volume Redundancy | `longhorn_volumes` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
-| k3s PVC Fullness | `pvc_fullness` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
-| Longhorn Snapshot Headroom | `snapshot_headroom` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
-| Kubelet CSI Mount Read-Only | `kubelet_plugin_readonly` | `prometheus` | yes | Backups & Storage | `longhorn-disaster-recovery` |
 | Prometheus Reachable | `prometheus` | is a gate |  | Observability |  |
 | B2 Reachable | `b2_reachable` | is a gate | yes | Backups & Storage | `longhorn-backup-tiering` |
 | WAN Reachable | `wan_reachable` | is a gate | yes | Observability |  |
