@@ -3,9 +3,6 @@
 |---|---|---|---|---|---|
 | Root Disk | `disk` | `prometheus` | yes | Hosts & Power |  |
 | Memory | `memory` | `prometheus` |  | Hosts & Power |  |
-| k3s Container Restarts | `restarts` | `prometheus` |  | Cluster Health |  |
-| k3s Container OOM | `oom` | `prometheus` |  | Cluster Health |  |
-| k3s CPU Throttling | `cpu` | `prometheus` |  | Cluster Health |  |
 | n8n Prod Workflows | `n8n` | `startup_grace` |  | Services |  |
 | Arr Queue Warnings | `arr_queue` | none |  | Media Automation |  |
 | Bazarr Health | `bazarr` | `startup_grace` |  | Media Automation |  |

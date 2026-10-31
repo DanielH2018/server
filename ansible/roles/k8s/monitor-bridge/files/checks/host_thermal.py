@@ -118,7 +118,7 @@ def _thermal_throttle_arm(
     holds streak state and decisions only, so its tests hand it inputs directly instead of
     answering queries. `check_host_temp` does the two fetches through `src`.
 
-    Distinct from check_cpu_throttle, which reads CFS throttling — a cgroup quota being hit, not
+    Distinct from the `ContainerCPUThrottled` rule, which reads CFS throttling — a cgroup quota being hit, not
     heat. Distinct from the temperature arm too: the firmware can enforce a limit lower than the
     one the driver declares, so a CPU can sit under its declared max and still be throttled.
 
@@ -244,7 +244,7 @@ def check_host_temp(cfg: Config, src: Sources) -> tuple[bool, str]:
 
     Answers the one thermal question nothing else here asks: is a host cooking? A hot box
     throttles, then corrupts, then dies, and every existing monitor reads green throughout —
-    check_cpu_throttle sees CFS throttling (a cgroup limit, not heat), and the Grafana
+    the `ContainerCPUThrottled` rule sees CFS throttling (a cgroup limit, not heat), and the Grafana
     "Hardware Temperature Monitor" panel plots these series but nobody watches a panel.
 
     Drives are NOT read here; see HWMON_TEMP_EXCLUDE_CHIP. Two arms assign every remaining

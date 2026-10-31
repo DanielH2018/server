@@ -31,5 +31,11 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         "monitor_bridge_traefik_latency_push_token",
         "monitor_bridge_traefik_404_push_token",
         "monitor_bridge_traefik_421_push_token",
+        # M6 batch A2's Cutover-a1 deleted the k3s Container Restarts, k3s Container OOM and
+        # k3s CPU Throttling tiles, and Cutover-a2 deleted their bridge rows. A2's token PR
+        # retires the keys a week after Cutover-b and deletes these three entries with them.
+        "monitor_bridge_restarts_push_token",
+        "monitor_bridge_oom_push_token",
+        "monitor_bridge_cpu_push_token",
     }
 )

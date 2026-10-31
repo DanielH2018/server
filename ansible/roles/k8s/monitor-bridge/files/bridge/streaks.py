@@ -60,12 +60,6 @@ class State:
     Attributes:
       down_streaks: Consecutive-down count per check name, advanced through `down_streak()` and
         reset to 0 by each check on an `ok` result.
-      cadvisor_streaks: The cAdvisor coverage-floor streak, per check (`checks.cluster`). One
-        counter per check, not one shared: the three run in the same cycle, so a shared counter
-        would take three increments per cycle and blow through CADVISOR_CONSECUTIVE at once.
-      cpu_breach_streak: check_cpu_throttle's breach count. Its own int rather than a
-        `down_streaks` key: its down branch embeds the throttle thresholds in the page message,
-        so it does not use the generic `down_streak()` format.
       host_origin_streaks: The host-coverage-floor streak per key (`checks.host`): disk per
         mountpoint, memory and host temperature age independently.
       n8n_streaks: Per-workflow consecutive-failure streaks (`checks.service.check_n8n`).
@@ -83,8 +77,6 @@ class State:
     """
 
     down_streaks: dict[str, int] = field(default_factory=dict)
-    cadvisor_streaks: dict[str, int] = field(default_factory=dict)
-    cpu_breach_streak: int = 0
     host_origin_streaks: dict[str, int] = field(default_factory=dict)
     n8n_streaks: dict = field(default_factory=dict)
     grace_streaks: dict[str, int] = field(default_factory=dict)
@@ -120,9 +112,7 @@ def down_streak(
     apply_startup_grace. Call on a DOWN result — the caller resets its own counter to 0 on
     `ok`. Increments `count` and returns (new_count, hold_ok, out_msg): while under
     `threshold` it holds `up` with a "<held_label> n/N (<grace_note>): msg" note; the
-    `threshold`'th straight down pages with "msg (n cycles)". (check_cpu_throttle keeps its
-    own down branch — its page message embeds the throttle thresholds, so it can't use the
-    generic format.)
+    `threshold`'th straight down pages with "msg (n cycles)".
     """
     count += 1
     if count < threshold:

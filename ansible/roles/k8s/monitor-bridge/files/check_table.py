@@ -69,23 +69,6 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="monitor-bridge-mem", display="Memory", status_group="Hosts & Power", gate="prometheus",
         description="node-exporter via monitor-bridge: host memory pressure on a cluster node, a Claude Code cgroup stalling or OOM-killing, or one node missing from the census. Claude Code running as a uid the host retired is named in the message without paging. The message names host and cgroup.",
     ),
-    # restarts, oom and cpu re-armed 2026-08-14 (Phase G) against kubernetes-cadvisor, grouped by
-    # pod, on their Docker-era tokens. They add OOM and throttle depth to the K8sContainerCrashLooping rule.
-    PushCheck(
-        name="restarts", fn=cluster.check_restarts, token="monitor_bridge_restarts_push_token",
-        kuma_id="k3s-container-restarts", display="k3s Container Restarts", status_group="Cluster Health", gate="prometheus",
-        description="cAdvisor via monitor-bridge: a container restarted more than RESTART_MAX times in 15m. The message names it. `kubectl -n homelab describe pod` for the last state.",
-    ),
-    PushCheck(
-        name="oom", fn=cluster.check_oom, token="monitor_bridge_oom_push_token",
-        kuma_id="k3s-container-oom", display="k3s Container OOM", status_group="Cluster Health", gate="prometheus",
-        description="cAdvisor via monitor-bridge: a container was OOM-killed in the last hour. The message names it; the tile clears one hour after the kill, so read the Discord alert, not the tile, for the evidence.",
-    ),
-    PushCheck(
-        name="cpu", fn=cluster.check_cpu_throttle, token="monitor_bridge_cpu_push_token",
-        kuma_id="k3s-cpu-throttling", display="k3s CPU Throttling", status_group="Cluster Health", gate="prometheus",
-        description="cAdvisor via monitor-bridge: a container pinned at its CPU limit for 3 cycles (~15m). Raise the limit in its role or accept it; short bursts never page.",
-    ),
     PushCheck(
         name="n8n", fn=service.check_n8n, token="monitor_bridge_n8n_push_token",
         kuma_id="monitor-bridge-n8n", display="n8n Prod Workflows", status_group="Services", gate="startup_grace",

@@ -1,6 +1,6 @@
 """The cluster-facing half of monitor-bridge's configuration.
 
-The origin pin, the scrape-target and cAdvisor coverage floors, the kube-state-metrics
+The origin pin, the scrape-target coverage floors, the kube-state-metrics
 workload floors, Longhorn and the PVC fullness arm.
 
 Most of these are FLOORS rather than limits, and the comments beside them say what an absent
@@ -17,16 +17,7 @@ from dataclasses import dataclass
 class ClusterConfig:
     """The origin pin, the coverage floors, Longhorn and the PVC arm."""
 
-    OOM_WINDOW: str
-    CPU_WINDOW: str
-    CPU_THROTTLE_PCT: float
-    CPU_MIN_THROTTLED_CORES: float
-    CPU_CONSECUTIVE: int
-    RESTART_WINDOW: str
-    RESTART_MAX: float
     PROM_ORIGIN: str
-    CADVISOR_PODS_MIN: int
-    CADVISOR_CONSECUTIVE: int
     LONGHORN_CONSECUTIVE: int
     PVC_MAX_PCT: float
     PVC_MIN_CLAIMS: int
@@ -46,23 +37,16 @@ def cluster_config(
 ) -> ClusterConfig:
     """The cluster fields, read through the parsers `load_config` built over its environment."""
     return ClusterConfig(
-        OOM_WINDOW=_env("OOM_WINDOW", "1h"),
-        CPU_WINDOW=_env("CPU_WINDOW", "15m"),
-        CPU_THROTTLE_PCT=_num("CPU_THROTTLE_PCT", "25"),
-        CPU_MIN_THROTTLED_CORES=_num("CPU_MIN_THROTTLED_CORES", "0.05"),
-        CPU_CONSECUTIVE=_int("CPU_CONSECUTIVE", "3"),
-        RESTART_WINDOW=_env("RESTART_WINDOW", "15m"),
-        RESTART_MAX=_num("RESTART_MAX", "3"),
         # Which estate the host-health checks mean, when one Prometheus holds two (slice 3, B5).
         #
         # Since B3 the cluster Prometheus carries daniel-server's whole TSDB alongside its own,
         # tagged with `origin` (Prometheus external_labels). Three metric families genuinely
         # exist on BOTH sides — measured 2026-08-07: container_start_time_seconds (99
         # cluster-native / 53 here), container_memory_failcnt and the container_cpu_cfs_* pair,
-        # plus `up` (5 / 11). So the moment PROMETHEUS_URL points at the cluster, restarts / oom
-        # / cpu / janitorr silently widen from "daniel-server's containers" to "every
-        # container in the homelab", and would start naming k8s pods as offenders. The remaining
-        # PROM_DEPENDENT checks are pinned (restarts/oom/cpu/ups). Disk and memory are the two
+        # plus `up` (5 / 11). So the moment PROMETHEUS_URL points at the cluster, a check on
+        # those families silently widens from "daniel-server's containers" to "every
+        # container in the homelab", and would start naming k8s pods as offenders. The
+        # PROM_DEPENDENT checks on node-exporter series are pinned. Disk and memory are the two
         # exceptions: they are HOST checks, and pinning them to one origin would leave the other
         # host's root disk and memory unwatched — so they group `by (origin)` and report the
         # worst, covering both.
@@ -86,18 +70,10 @@ def cluster_config(
         # every check reading it decodes as healthy. The default therefore pins, and a third
         # estate whose series carry no `origin` sets PROM_ORIGIN="" explicitly.
         PROM_ORIGIN=_env("PROM_ORIGIN", 'origin="daniel-server"'),
-        # Coverage floor for the three cAdvisor checks (restarts/oom/cpu), which filter a
-        # per-pod vector down to offenders and so cannot tell "quiet" from "gone". Reasoning and
-        # the measurements behind the value: cadvisor_coverage_shortfall in verdicts/cluster.py.
-        CADVISOR_PODS_MIN=_int("CADVISOR_PODS_MIN"),
-        # Hysteresis for the same reason HOST_ORIGINS_CONSECUTIVE exists: a kubelet restart
-        # takes a node's cAdvisor away briefly, and three monitors going down together on one
-        # transient is the alert storm the gates elsewhere in this file exist to prevent.
-        CADVISOR_CONSECUTIVE=_int("CADVISOR_CONSECUTIVE", "2"),
         # Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both
         # degrade every volume on the departing node BY DESIGN, so a single breaching cycle must
         # not page — 3 cycles at the bridge cadence is longer than either takes to settle. Same
-        # shape as CPU_CONSECUTIVE / UPS_CONSECUTIVE.
+        # shape as UPS_CONSECUTIVE.
         LONGHORN_CONSECUTIVE=_int("LONGHORN_CONSECUTIVE"),
         # Filesystem fullness of the cluster's PersistentVolumeClaims (check_pvc_fullness). A
         # separate arm from check_disk rather than another DISK_MOUNTPOINTS entry: a Longhorn
@@ -110,7 +86,7 @@ def cluster_config(
         # against 97 MiB at 90%.
         PVC_MAX_PCT=_num("PVC_MAX_PCT"),
         # Coverage floor, in CLAIMS not series — see check_pvc_fullness for why the two differ.
-        # NOT a conservative under-count like CADVISOR_PODS_MIN, because the degraded state here
+        # NOT a conservative under-count, because the degraded state here
         # is a specific number rather than an empty vector. The two scrape jobs cover unequally
         # (measured 2026-09-01, groups not series): kubelet alone reports all 43 claims,
         # apiserver alone reports 27. So the apiserver job dying costs no coverage at all, and

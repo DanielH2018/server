@@ -9,7 +9,6 @@
 | `DISK_MAX_PCT` | `90` |
 | `MEM_MAX_PCT` | `90` |
 | `HOST_ORIGINS_MIN` | `2` |
-| `CADVISOR_PODS_MIN` | `20` |
 | `N8N_FAIL_WINDOW` | `2h` |
 | `N8N_CONSECUTIVE_MAX` | `3` |
 | `N8N_SYSTEMIC_STREAK` | `2` |

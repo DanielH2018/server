@@ -468,15 +468,7 @@ stringData:
   # bridge tile. The tokens are bare lookups, so a row whose secret is missing fails the
   # render rather than dropping its tile (#1632). `ensure_ascii=False` keeps an em dash a literal
   # character, the bytes the hand-written tiles carried, so AutoKuma sees no change.
-  #
-  # The `if` on the loop is M6 batch A2's Cutover-a1 (m6-retire-kuma.md, "The cutover order").
-  # It drops the three tiles that the container-checks rules replace. Their rows stay in the
-  # table until Cutover-a2 deletes them, so the bridge keeps pushing into the deleted tokens in
-  # between and logs `push failed`. Both roles are `owner: flux`, so no deploy orders a tile
-  # deletion before a row deletion, and this exclusion takes that order instead. The tuple is a
-  # literal because probe_lib/kuma_table_loop.py reads it, which keeps `kuma-drift` from naming
-  # the three tiles missing. Cutover-a2 removes the `if`.
-{% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') if check.name not in ('restarts', 'oom', 'cpu') %}
+{% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') %}
 {%   set tags = ([{'name': 'tag-severity', 'value': 'critical'}] if check.critical | default(false) else [])
               + ([{'name': 'tag-runbook', 'value': 'https://docs.local.' ~ domain ~ '/' ~ check.runbook ~ '/'}] if check.runbook | default(none) else []) %}
   {{ check.kuma_id }}.json: |

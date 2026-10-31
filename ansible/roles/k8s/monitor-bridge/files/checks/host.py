@@ -125,12 +125,12 @@ def check_disk(cfg: Config, src: Sources) -> tuple[bool, str]:
 def check_mem(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Checks whether any host's memory usage is over cfg.MEM_MAX_PCT.
 
-    Host-level pressure only; per-container OOM kills are check_oom's job. Computed
+    Host-level pressure only; per-container OOM kills are the `ContainerOOMKilled` rule's job. Computed
     per-origin so a two-host estate can't pair one host's avail with another's total.
     Returns (ok, msg).
     """
     # Host memory pressure only. Per-container OOM kills are reported (with the
-    # offending container named) by check_oom — single source of truth.
+    # offending container named) by the `ContainerOOMKilled` rule — single source of truth.
     #
     # Per-origin for the same reason as check_disk: the bare prom_scalar form took result[0],
     # so which host it reported was an ordering artifact of Prometheus's response once both

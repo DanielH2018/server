@@ -110,7 +110,6 @@
  "ansible/roles/k8s/monitor-bridge/tests/test_check_arr_title_hold.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_b2_dashboard.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_b2_gate.py": 0.0,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_cadvisor_floor.py": 0.21,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_claude_cgroup_origins.py": 0.03,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_claude_cgroups.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_cli.py": 0.0,

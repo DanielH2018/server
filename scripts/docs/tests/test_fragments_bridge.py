@@ -119,7 +119,7 @@ def test_gate_set_names_come_from_the_members_assignments():
 def test_every_check_row_reaches_the_checks_fragment():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
     body = fb.render_bridge_checks(rows)
-    assert len(rows) >= 34
+    assert len(rows) >= 31
     assert all(f"`{row['name']}`" in body for row in rows)
 
 
@@ -206,7 +206,7 @@ def test_every_live_check_has_a_bullet_and_every_bullet_a_live_check():
     displays = {row["display"] for row in rows}
     page = CHECKS_PAGE.read_text()
     titles = live_check_titles(page)
-    assert len(titles) >= 34
+    assert len(titles) >= 31
     assert {"etcd Restore Drill", "B2 Free Tier Headroom"} <= set(titles)
     assert title_drift(page, displays) == (set(), set())
 

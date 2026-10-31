@@ -147,8 +147,8 @@ playbooks). The manual post-deploy setup Ansible can't do is verified by
   tree is the single source of truth and is mounted into the cluster Grafana, which is why
   the role survives the migration despite not being in any `containers_list`. Uptime Kuma
   takes monitors from AutoKuma labels and a static-monitors Secret; `monitor-bridge` turns
-  Prometheus/Longhorn signals into Uptime Kuma push alerts (backup freshness, disk, cert,
-  memory, restarts/OOM, CPU throttling, scrape-target down).
+  Prometheus/Longhorn signals into Uptime Kuma push alerts (backup freshness, disk,
+  memory).
 - **Backups** — Longhorn takes scheduled volume backups to **Backblaze B2**; the per-volume
   tier (daily / weekly / no-backup) and its rationale are in
   [`docs/longhorn-backup-tiering.md`](docs/longhorn-backup-tiering.md). Recovery procedure:

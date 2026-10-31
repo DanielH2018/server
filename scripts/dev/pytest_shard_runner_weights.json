@@ -82,7 +82,6 @@
  "ansible/roles/k8s/monitor-bridge/tests/test_check.py": 0.1,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_arr_fetch_streak.py": 0.15,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_b2_gate.py": 0.15,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_cadvisor_floor.py": 0.54,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_claude_cgroup_origins.py": 0.11,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_claude_cgroups.py": 0.11,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_cli.py": 0.08,
