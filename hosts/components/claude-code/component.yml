@@ -1,4 +1,4 @@
-# The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40's first two slices,
+# The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40's first three slices,
 # docs/target-architecture/host/h7-delete-ansible.md). The claude_code role ends on daniel-server
 # (`meta: end_role` in its tasks/main.yml). On daniel-box it skips each subject listed here through
 # `claude_code_packaged_hosts`, and keeps the rest until H7.40's later slices move them.
@@ -19,6 +19,12 @@
 #     server-batch lander, the pipeline timeline, the memory store copy, and the D5 takeover
 #     check's wrapper and sudoers grant. Each is armed only in daniel-box's host_vars, so
 #     daniel-server's package ships none of them.
+#   - H7.40's third slice: alert-triggered triage, armed only in daniel-box's host_vars; the
+#     agent's peer key and ssh config on claude_agent_ssh_key_host and its one-time memory seed,
+#     both in claude-agent-setup; its homelab-ui login; and its homelab-ui browser oneshot,
+#     which ships wherever the agent exists so that switching homelab-ui off takes it back. The
+#     operator config subset is not shipped: the role runs it only where
+#     claude_code_agent_dotfiles is false, which no host sets.
 #
 # The component renders the role's own templates and copies its scripts in place (`role:
 # claude_code`), H4's pattern, so daniel-box's Ansible render and this package read one source.

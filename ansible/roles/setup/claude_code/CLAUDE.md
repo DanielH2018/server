@@ -25,9 +25,11 @@ daniel-box the same component ships the subjects H7.40's first slice moved, in
 `homelab-daniel-box`: the Remote Control host, the background resume, the cgroup metrics, the
 caps, the two alerts, rootq and the agent user. The second slice added the agent's lander, the
 server-batch lander, the pipeline timeline, the memory store copy, and the takeover check's
-wrapper and sudoers grant. The role skips each there through `claude_code_packaged_hosts` in
-`defaults/main.yml`, and applies the rest to daniel-box until H7.40's later slices move them:
-triage, the agent's home, the artifacts node's crons and the takeover check's flux copy.
+wrapper and sudoers grant. The third slice added triage, the agent's peer key and ssh config,
+its memory seed, its homelab-ui login and the homelab-ui browser toolchain. The role skips each
+there through `claude_code_packaged_hosts` in `defaults/main.yml`, and applies the rest to
+daniel-box until H7.40's last slice moves them: the artifacts node's crons and the takeover
+check's flux copy.
 
 - **The component renders this role's templates and copies its scripts in place**, through
   `role: claude_code`. An edit here changes both hosts: the next apply on daniel-box and the
@@ -69,10 +71,31 @@ triage, the agent's home, the artifacts node's crons and the takeover check's fl
   lander. A block var would pin nothing here, because the host package renderer puts the
   inventory above a component's defaults. The pins file and `component.yml` are on the
   lander's approval list.
+- **Triage's caps and identity are pinned in `templates/claude-triage-pins.j2`**, for the
+  lander's reason. Every triage template imports it. `tasks/triage.yml` keeps its block vars
+  for the role, and `ansible/tests/setup/test_claude_triage.py` holds the two equal. The poller
+  is `homelab-claude-triage-poll`, and its page,
+  `hosts/components/claude-code/units/homelab-claude-triage-poll-alert.service`, keeps the
+  one-hour quiet window a poller failing every tick needs. `claude-triage@` and
+  `claude-triage-report-alert@` keep their names, because the poller, the runner and the polkit
+  rule start them by name.
+- **The agent's home steps run in `claude-agent-setup`.** On `claude_agent_ssh_key_host` it
+  generates the peer key and installs the ssh config that names each peer. Where
+  `claude_code_user` is the agent, it copies the operator's memory store once, while the agent
+  has no `MEMORY.md`. The homelab-ui login is an output of the host's SOPS file. The operator
+  config subset (`tasks/agent_operator_config.yml`) is not packaged: it runs only where
+  `claude_code_agent_dotfiles` is false, and no host sets that.
+- **The homelab-ui browser is `homelab-claude-agent-browser.service`**, a oneshot run as the
+  agent. Its script installs the pinned Node, `@playwright/mcp` and Chromium and registers the
+  MCP server, or removes all of it while `claude_code_agent_homelab_ui_enabled` is false. The
+  unit ships wherever the agent exists, so the way out runs. The Node and `@playwright/mcp`
+  pins are in the component's `defaults:`, where Renovate and `asset_pins.py --refresh node`
+  read them.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
   ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,
-  `hosts/lib/tests/test_claude_code_on_daniel_box.py`.
+  `hosts/lib/tests/test_claude_code_on_daniel_box.py`,
+  `hosts/lib/tests/test_claude_agent_browser.py`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -217,10 +240,10 @@ the tasks read. `docs/claude-agent-user.md` has the rest. `claude` lands a PR th
 `homelab-claude-land@<n>.service`.
 
 `claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
-leaves a report (`tasks/triage.yml`, shipped off behind `claude_code_triage_enabled`).
-`claude-triage-poll.timer` starts one when a monitor goes down, and ships in `shadow` mode,
-which only logs. The task file, templates, runner and poller are on the lander's approval
-list, and the caps and the poll mode are pinned block vars. `docs/claude-agent-user.md`,
+leaves a report (shipped off behind `claude_code_triage_enabled`, and in daniel-box's package).
+`homelab-claude-triage-poll.timer` starts one when a monitor goes down, and ships in `shadow`
+mode, which only logs. The task file, templates, runner and poller are on the lander's approval
+list, and the caps and the poll mode are pinned in `templates/claude-triage-pins.j2`. `docs/claude-agent-user.md`,
 *Alert-triggered triage*, has the design.
 
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as; its home and
@@ -292,9 +315,9 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Mode:** `claude_code_triage_enabled`, false by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.
   `claude_code_triage_poll_mode` is `off`, `shadow` or `armed`, pinned at `shadow` in
-  `tasks/triage.yml`, so arming the trigger needs the operator's approval.
+  `templates/claude-triage-pins.j2`, so arming the trigger needs the operator's approval.
 - **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, and six runs a UTC day,
-  all pinned in `tasks/triage.yml`, plus a lock that holds runs to one at a time. The runner
+  all pinned in `templates/claude-triage-pins.j2`, plus a lock that holds runs to one at a time. The runner
   enforces the daily cap, because polkit lets `claude` start a run without the poller. The
   poller opens an episode only on a fall that holds for two polls, makes one storm episode of
   more than three falls at once, and opens nothing while `DeployHoldActive` fires or the weekly
@@ -303,7 +326,7 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Evidence:** `/var/lib/claude/triage/runs/<episode>.json`, the report under
   `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately, and a
   poller failure pages at most once an hour. In shadow
-  mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u claude-triage-poll` list each
+  mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u homelab-claude-triage-poll` list each
   run the poller would have started. `claude-triage-poll.prom` pages a poller that stopped.
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
   what the runs diagnosed and what they cost.

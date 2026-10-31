@@ -467,7 +467,7 @@ The exit criterion is seven observations:
 | `k3s` (host halves) | — | `agent.yml`, `agent_verify.yml`, `static-address.yml`, the node files and the agent ufw rules | node files, netplan, `coredns-host.service`, disk health, etcd list drill, kubeconfig oneshot, the join-firewall rules | install moves to bootstrap step 4 |
 | `nut_host` (box half) | — | — | `nut-secondary` with the pinned ClusterIP | — |
 | `common` | the alert unit, resolver template | the alert unit | the alert unit, resolver template | `host_lib.py` and `kuma_push.py` move to `hosts/lib/`; `stamp_*` and `release_bin` are deleted |
-| `claude_code`, `renovate_agent`, `renovate_notify`, `fake_remux`, `deploy_ui`, `homelab_builder` | — | `claude_code` units and the agent users | all of them | per-user tooling goes to chezmoi |
+| `claude_code`, `renovate_agent`, `renovate_notify`, `fake_remux`, `deploy_ui`, `homelab_builder` | — | `claude_code` units and the agent users | all of them | per-user tooling goes to chezmoi, except the agent's homelab-ui browser toolchain (pinned Node, `@playwright/mcp`, its Chromium and the MCP registration), which is a `claude-code` component oneshot run as the agent (ruled 2026-10-30) |
 | `config_files` | `/etc/profile.d/homelab.sh` | — | — | the Pi's tracked `~/.bashrc` reverts to Ubuntu's |
 | `github_cli`, `chezmoi_setup` | — | — | — | chezmoi, which bootstrap step 5 installs |
 | `gitops_deploy` | — | — | the two GitHub check timers; `homelab-checkout-sync` replaces the fast-forward | H7.19a retires the deployer and empties the role; H7.20a deletes the role |
@@ -1950,6 +1950,17 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
         3. Triage, then the agent's home: the peer key, the ssh config, the operator config,
            the memory seed, the homelab-ui login and the browser oneshot, with the *What goes
            where* amendment below.
+           As landed (#6677): triage's units keep their names except the poller, which is
+           `homelab-claude-triage-poll`, and its caps are literals in the role's
+           `claude-triage-pins.j2`, for the lander's reason. The poller pages through a packaged
+           unit that keeps its one-hour quiet window; the run pages through `homelab-alert@`.
+           `claude-agent-setup` generates the peer key and installs the ssh config on the key
+           host, and seeds the memory store where the Remote Control host runs as the agent.
+           The homelab-ui login and triage's credential are outputs of daniel-box's SOPS file.
+           The operator config subset needed nothing: it runs only where
+           `claude_code_agent_dotfiles` is false, which no host sets. The browser oneshot is
+           `homelab-claude-agent-browser.service`, and the role's `agent_browser.yml` is deleted
+           with the pins it read. `asset_pins.py` reads a component's `defaults:` map.
         4. The artifacts `tmpfiles.d` lines and the two crons. Then the sources move into
            `hosts/components/claude-code/`, the role empties, and the Ansible-only tests are
            deleted.

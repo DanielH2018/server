@@ -158,6 +158,18 @@ def test_a_host_with_homelab_ui_off_removes_the_agents_login(box, server):
     assert UI_LOGIN_REMOVAL in server.files[SETUP][0].decode()
 
 
+@pytest.mark.parametrize("host", sorted(AGENT_UID))
+def test_every_packaged_agent_takes_the_dotfiles_so_no_operator_config_copy_is_owed(
+    host,
+):
+    # The package ships no copy of the operator config subset: the role runs it only for an
+    # agent without the dotfiles. A host that turned them off would lose its subset silently.
+    host_vars = yaml.safe_load(
+        (REPO / "ansible" / "inventory" / "host_vars" / f"{host}.yml").read_text()
+    )
+    assert host_vars["claude_code_agent_dotfiles"] is True
+
+
 def test_the_key_host_names_each_peer_whose_login_is_on(box):
     config = box.files["/usr/lib/homelab/claude-agent/ssh-config"][0].decode()
     assert re.findall(r"^Host (\S+)$", config, re.M) == ["daniel-server"]

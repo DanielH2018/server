@@ -6,7 +6,10 @@
 #
 # Gives the {{ claude_code_agent_user }} agent user what its home and groups need on every run:
 # the groups it reads the host through, its login profile, git identity and instructions, its
-# commit-signing key, the operator's read-only kubeconfig, its dotfiles source and its clone.
+# commit-signing key, the operator's read-only kubeconfig, its dotfiles source and its clone. On
+# the peers' key host it also generates the agent's peer key and names each peer in its ssh
+# config, and where the Remote Control host runs as the agent it copies the operator's memory
+# store into the agent's once.
 # The users arm creates the user itself (/usr/lib/sysusers.d/homelab.conf). The dotfiles sync
 # installs its tooling (uv, Python, prek, Claude Code) once the dotfiles source exists, and the
 # clone sync keeps its clone, venv and collections current.
