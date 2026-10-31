@@ -1,14 +1,13 @@
-"""The WAN-reachability gate: the verdict, the membership, and what it suppresses.
+"""The WAN-reachability gate: the verdict and the membership.
 
-Without a gate, one internet outage pages every dependent tile. The behaviour that has to hold is narrow: down only when EVERY endpoint
-fails, one page rather than none, and the dependents held green with a `skipped` message.
+Without a gate, one internet outage pages every dependent tile. The behaviour that has to hold is
+narrow: down only when EVERY endpoint fails, and the dependents named in the table. What a down
+gate does to them is `test_check.py`.
 """
 
 import checks.wan
-import gates
-import registry
-from _check_gate_helpers import wire_run_once_reachability
 from bridge.config_io import WAN_PROBE_DEFAULT
+from check_table import CHECKS
 
 
 def _fetch(failing: set[str]):
@@ -78,47 +77,6 @@ def test_the_default_endpoints_are_hostnames_not_addresses():
         assert not host.replace(".", "").isdigit(), host
 
 
-def test_wan_dependent_names_real_checks_and_is_not_empty():
-    names = {c.name for c in registry.build_checks()}
-    assert gates.WAN_DEPENDENT <= names
-    assert {"r2_usage", "cloudflare_ips_drift", "discord"} <= gates.WAN_DEPENDENT
-
-
-def test_run_once_suppresses_wan_dependents_and_pages_once(cfg):
-    """One page for the outage, not eleven — and not zero."""
-    ran, pushes = wire_run_once_reachability(
-        cfg,
-        ["r2_usage", "discord", "targets"],
-        wan_result=(False, "no WAN: both endpoints failed"),
-        wan_dependent={"r2_usage", "discord"},
-    )
-    assert not ({"r2_usage", "discord"} & set(ran))
-    assert "targets" in ran
-    by_tok = {t: (ok, m) for t, ok, m in pushes}
-    for name in ("r2_usage", "discord"):
-        ok, msg = by_tok["tok_%s" % name]
-        assert ok is True
-        assert "WAN unreachable" in msg
-    # Not zero pages: the WAN tile itself still goes down with its own message.
-    assert any(ok is False and "no WAN" in msg for _, ok, msg in pushes)
-
-
-def test_run_once_runs_wan_dependents_when_the_link_is_up(cfg):
-    """The reject half: a healthy gate must suppress nothing."""
-    ran, _ = wire_run_once_reachability(
-        cfg,
-        ["r2_usage", "discord"],
-        wan_dependent={"r2_usage", "discord"},
-    )
-    assert set(ran) == {"r2_usage", "discord"}
-
-
-def test_a_raising_probe_is_a_down_gate(cfg):
-    """The real outage path: the probe raises rather than returning a pair."""
-    ran, _ = wire_run_once_reachability(
-        cfg,
-        ["r2_usage"],
-        wan_result=RuntimeError("Temporary failure in name resolution"),
-        wan_dependent={"r2_usage"},
-    )
-    assert "r2_usage" not in ran
+def test_wan_dependents_are_derived_from_the_table_and_not_empty():
+    dependents = {row.name for row in CHECKS if row.gate == "wan_reachable"}
+    assert {"r2_usage", "cloudflare_ips_drift", "discord"} <= dependents

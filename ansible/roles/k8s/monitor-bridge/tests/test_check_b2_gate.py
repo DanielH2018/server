@@ -18,11 +18,7 @@ from dataclasses import replace
 import pytest
 
 import checks.b2
-import check
-from _check_gate_helpers import mk
-from _fake_sources import FakeSink, FakeSources
-from bridge.types import Check
-from gates import Gates
+from _fake_sources import FakeSources
 
 
 def _arm_b2(cfg, key_id="kid", app_key="akey", interval=1800, transport_retry=300):
@@ -172,53 +168,3 @@ def test_b2_reachable_reprobes_after_the_interval(cfg):
     assert len(calls) == 1
     checks.b2.b2_reachable(cfg, src, now=10_000 + 1801)  # interval elapsed
     assert len(calls) == 2
-
-
-def _wire_run_once_b2(cfg, b2_result, checks, b2_dependent):
-    """Drive run_once with Prometheus UP and a stated B2-reachability result."""
-    ran = []
-    sink = FakeSink()
-    check.run_once(
-        cfg,
-        FakeSources(prom_vector=lambda q: []),
-        [Check(n, "tok_%s" % n, mk(ran, n)) for n in checks],
-        gates=Gates(
-            prom_dependent=frozenset(),
-            startup_grace=frozenset(),
-            b2_dependent=frozenset(b2_dependent),
-            probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
-            probe_wan=lambda _cfg, _src: (True, "wan ok"),
-            probe_b2=lambda _cfg, _src: b2_result,
-        ),
-        sink=sink,
-    )
-    return ran, sink.pushes
-
-
-def test_run_once_suppresses_b2_dependent_when_b2_down(cfg):
-    ran, pushes = _wire_run_once_b2(
-        cfg,
-        (False, "B2 unreachable: HTTP Error 403: transaction_cap_exceeded"),
-        ["b2_usage", "verify", "backup"],
-        {"b2_usage", "verify"},
-    )
-    # The four state-file checks stop reporting their last-successful-run as current health...
-    assert not ({"b2_usage", "verify"} & set(ran))
-    by_tok = {t: (ok, m) for t, ok, m in pushes}
-    assert by_tok["tok_b2_usage"][0] is True
-    assert "b2" in by_tok["tok_b2_usage"][1].lower()
-    # ...while Backup Freshness still runs and can page — it is the signal that was right.
-    assert "backup" in ran
-    assert any(
-        ok is False and "transaction_cap_exceeded" in m for _, ok, m in pushes
-    ), "the B2 Reachable monitor must page with B2's own error text"
-
-
-def test_run_once_runs_b2_dependent_when_b2_up(cfg):
-    ran, _ = _wire_run_once_b2(
-        cfg,
-        (True, "B2 reachable"),
-        ["b2_usage", "verify"],
-        {"b2_usage", "verify"},
-    )
-    assert "b2_usage" in ran and "verify" in ran

@@ -19,8 +19,14 @@ cycles need different answers builds a second fake with `FakeSources(state=first
 `FakeSink` records every push `run_once` would have sent to Kuma as `(token, ok, msg)` in
 `pushes`, so a test reads what was pushed without patching `bridge.net.push`.
 
-A module with a leading underscore rather than a `conftest.py` fixture, for the reason
-`_check_gate_helpers.py` gives: it takes arguments, and the name is unique repo-wide.
+`mk` and `as_body` build the check bodies a registry of `Check` entries carries: one that records
+that it ran, and one that returns or raises a stated result. The second exists because an
+unreachable dependency raises out of its probe rather than returning `(False, msg)`, and
+`_evaluate` is what turns that into a down verdict, so a driver that could only return a pair
+would never exercise the real outage path.
+
+A module with a leading underscore rather than a `conftest.py` fixture: these take arguments and
+return values, which a fixture would have to wrap in a factory, and the name is unique repo-wide.
 """
 
 from collections.abc import Callable
@@ -115,3 +121,27 @@ class FakeSink(Sink):
 
     def push(self, token: str, ok: bool, msg: str) -> None:
         self.pushes.append((token, ok, msg))
+
+
+def mk(ran: list[str], name: str):
+    """A check body that records that it ran, then reports `ok`."""
+
+    def fn(_cfg, _src):
+        ran.append(name)
+        return True, "%s ok" % name
+
+    return fn
+
+
+def as_body(result):
+    """A check body returning `result`, or raising it when it is an Exception."""
+    if isinstance(result, Exception):
+
+        def _body(_cfg, _src):
+            raise result
+    else:
+
+        def _body(_cfg, _src):
+            return result
+
+    return _body

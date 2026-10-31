@@ -10,7 +10,6 @@ import re
 from pathlib import Path
 
 import checks.logs
-import gates
 import registry
 from _fake_sources import FakeSources
 from _shell_render import rendered_shell_texts
@@ -261,9 +260,8 @@ def test_the_logql_excludes_the_transient_retry_line_at_the_source():
 
 
 def test_the_check_is_registered_and_startup_graced():
-    names = {c.name for c in registry.build_checks()}
-    assert "swallowed_verdicts" in names
-    assert "swallowed_verdicts" in gates.STARTUP_GRACE
+    gates = {c.name: c.gate for c in registry.build_checks()}
+    assert gates["swallowed_verdicts"] == "startup_grace"
 
 
 def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted():
