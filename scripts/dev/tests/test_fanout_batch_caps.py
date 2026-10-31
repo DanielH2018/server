@@ -27,6 +27,8 @@ def test_every_launch_shape_carries_the_batch_limits():
     ):
         props = _props(command)
         assert props["MemoryMax"] == str(BATCH_MEMORY_MAX)
+        # A MemoryHigh at or above MemoryMax would never throttle before the kill.
+        assert int(props["MemoryHigh"]) < BATCH_MEMORY_MAX
         assert props["MemorySwapMax"] == "512M"
         assert props["TasksMax"] == "1024"
 
