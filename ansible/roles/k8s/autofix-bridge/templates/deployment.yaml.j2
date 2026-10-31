@@ -53,10 +53,6 @@ spec:
             # also renders the scrape job and the Service port (M6 batch B7).
             - name: CHECK_EXPORTER_PORT
               value: "{{ containers_list | metrics_port('autofix-bridge') }}"
-            # In-cluster Service names replace the -k8s LAN routes (same move as the
-            # monitor-bridge twin): no VIP, no Traefik, no monitoring IngressRoute in the path.
-            - name: KUMA_URL
-              value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:{{ containers_list | entry_port('uptime-kuma') }}
             # LIVE remediation, carried over unchanged — the operator flipped it 2026-07-06 and
             # the autonomous-role contract (this role's CLAUDE.md) governs any change here.
             - name: DRY_RUN

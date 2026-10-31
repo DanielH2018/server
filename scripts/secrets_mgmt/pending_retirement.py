@@ -37,6 +37,14 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         "monitor_bridge_restarts_push_token",
         "monitor_bridge_oom_push_token",
         "monitor_bridge_cpu_push_token",
+        # M6 batch B7's Cutover-1a deleted the Arr Auto-Block, Cloudflare DDNS Direct, Cloudflare
+        # DDNS Proxied and WG Pi Peer Backup tiles, and Cutover-2 removed the pods' pushes.
+        # B7's token PR retires the keys a week after Cutover-1b and deletes these four entries
+        # with them.
+        "arr_autoblock_push_token",
+        "cloudflare_ddns_direct_push_token",
+        "cloudflare_ddns_proxied_push_token",
+        "monitor_bridge_pi_peers_push_token",
         # M6 batch A5's Cutover-a1 deleted the Longhorn Volume Redundancy, k3s PVC Fullness,
         # Longhorn Snapshot Headroom, Kubelet CSI Mount Read-Only and etcd DB Size tiles, and
         # Cutover-a2 deleted their bridge rows. A5's token PR retires the keys a week after

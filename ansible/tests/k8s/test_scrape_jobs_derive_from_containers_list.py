@@ -166,10 +166,6 @@ def test_the_alloy_pi_job_reads_its_port_from_the_pis_entry():
         ("uptime-kuma", "status-page-sync-cronjob.yaml.j2"),
         # The callers outside the role, the ones the entry's `netpol_from` lists (#3867).
         ("monitor-bridge", "deployment.yaml.j2"),
-        ("autofix-bridge", "deployment.yaml.j2"),
-        ("cloudflare-ddns", "deployment-direct.yaml.j2"),
-        ("cloudflare-ddns", "deployment-proxied.yaml.j2"),
-        ("pi-peer-backup", "secret.yaml.j2"),
     ],
 )
 def test_kumas_listener_and_callers_follow_the_entry_port(role, template):
