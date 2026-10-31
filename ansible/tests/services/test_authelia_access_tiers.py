@@ -132,9 +132,10 @@ def _rendered_rules():
     raise AssertionError("authelia configuration.yml not found in the render")
 
 
-def _matches(rule, host, source):
+def _matches(rule, host, source, groups=()):
     """Authelia's first-match test for a UI request to `/`, so a path-scoped bypass never
-    matches: `*.x` matches any host ending in `.x`, and `networks` scopes by source.
+    matches: `*.x` matches any host ending in `.x`, `networks` scopes by source, and a
+    `group:` subject matches only a user in one of the named groups.
 
     The wildcard is a suffix match here. Every host the
     tests below resolve is either named exactly by a generated rule or is one label under
@@ -149,11 +150,18 @@ def _matches(rule, host, source):
         ipaddress.ip_address(source) in ipaddress.ip_network(n) for n in networks
     ):
         return False
+    subjects = rule.get("subject") or []
+    if isinstance(subjects, str):
+        subjects = [subjects]
+    if subjects and not any(s in {f"group:{g}" for g in groups} for s in subjects):
+        return False
     return "resources" not in rule
 
 
-def _policy(rules, host, source):
-    return next((r["policy"] for r in rules if _matches(r, host, source)), "deny")
+def _policy(rules, host, source, groups=()):
+    return next(
+        (r["policy"] for r in rules if _matches(r, host, source, groups)), "deny"
+    )
 
 
 def _sso_entries():
@@ -208,3 +216,28 @@ def test_the_one_factor_rule_is_scoped_like_the_wildcard_it_replaces():
     )
     assert generated["networks"] == wildcard["networks"]
     assert wildcard["networks"] == RFC1918
+
+
+def _alertmanager_host(rules):
+    domain = next(
+        r["domain"] for r in rules if str(r["domain"]).startswith("*.local.")
+    )[len("*.local.") :]
+    return f"alertmanager.local.{domain}"
+
+
+def test_an_admins_member_reaches_alertmanager_at_two_factor():
+    """The silence-capable UI asks the `admins` group, claude-ui included, for a second
+    factor rather than riding the `*.local` one_factor wildcard (#6689)."""
+    rules = _rendered_rules()
+    host = _alertmanager_host(rules)
+    assert _policy(rules, host, "10.0.0.5", groups=("admins", "dev")) == "two_factor"
+
+
+def test_a_user_outside_admins_is_denied_alertmanager():
+    """claude-agent has no groups and holds a one_factor session. Without the `deny` rule
+    it would skip the subject-scoped rule and fall through to the `*.local` wildcard."""
+    # fact: ansible/roles/k8s/authelia/CLAUDE.md#Access control comes from containers_list
+    rules = _rendered_rules()
+    host = _alertmanager_host(rules)
+    assert _policy(rules, host, "10.0.0.5") == "deny"
+    assert _policy(rules, host, "192.168.1.20", groups=("dev",)) == "deny"

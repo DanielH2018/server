@@ -32,8 +32,9 @@ A role reaches the hosts `land_reach.setup_role_hosts` names, less those its lea
 `<role>_packaged_hosts` writes nothing on a host the map lists
 (`setup_gates.packaged_guard_hosts`; `test_host_package_ufw_two_writers.py` holds the proof). A role that function cannot place, such as `common`,
 whose task files other roles import, reaches every host. `k3s` is the exception: its playbook is
-`k3s-bringup.yml`, which applies it to the cluster nodes only (`k3s_server_hosts` and
-`k3s_agent_hosts`), so `role_reach` reads those and no Pi write of `k3s` is invented.
+`k3s-bringup.yml`, which applies the whole role to `k3s_server_hosts` only and runs
+K3S_AGENT_TASK_FILES alone on `k3s_agent_hosts`, so `role_reach` reads those and invents no Pi
+write of `k3s` and no agent write of a server-only task file.
 
 Run: uv run pytest ansible/tests/setup/test_host_package_two_writers.py
 """
@@ -77,6 +78,11 @@ WRITERS = frozenset(
     )
 )
 CRON = "ansible.builtin.cron"
+# The `k3s` task files that `k3s-bringup.yml`'s join and pin plays run on an agent node
+# (`tasks_from: agent` and `tasks_from: static-address`), with the file `agent.yml` imports.
+K3S_AGENT_TASK_FILES = frozenset(
+    {"agent.yml", "static-address.yml", "unit-logging.yml"}
+)
 # Where the cron module writes a relative `cron_file:`. An absolute one replaces it on join.
 CRON_D = PurePosixPath("/etc/cron.d")
 
@@ -175,23 +181,28 @@ def task_writes(task: dict, ctx: dict) -> set[Key]:
     return writes
 
 
-def role_reach(name: str) -> frozenset[str]:
-    """The hosts a setup role reaches: `initial_setup.yml`'s reading, or the cluster nodes for `k3s`."""
+def role_reach(name: str, task_file: str) -> frozenset[str]:
+    """The hosts a setup role's task file reaches.
+
+    `initial_setup.yml`'s reading, or for `k3s` the server nodes plus, for an agent task file,
+    the agent nodes.
+    """
     if name == "k3s":
         nodes = yaml_fast.safe_load(ALL_VARS.read_text())
-        return frozenset(nodes["k3s_server_hosts"] + nodes["k3s_agent_hosts"])
+        agents = nodes["k3s_agent_hosts"] if task_file in K3S_AGENT_TASK_FILES else []
+        return frozenset(nodes["k3s_server_hosts"] + agents)
     return setup_role_hosts(name)
 
 
 def ansible_writes(
     roles: list[tuple[Path, Path]],
     hosts: tuple[str, ...],
-    reach_of: Callable[[str], frozenset[str]] = role_reach,
+    reach_of: Callable[[str, str], frozenset[str]] = role_reach,
 ) -> dict[str, dict[Key, set[str]]]:
     """Per host, each write the setup roles make there, mapped to the task files making it."""
     by_host: dict[str, dict[Key, set[str]]] = defaultdict(lambda: defaultdict(set))
     for role, task_file in roles:
-        reach = reach_of(role.name) or frozenset(hosts)
+        reach = reach_of(role.name, task_file.name) or frozenset(hosts)
         tasks = list(delegated_tasks(role, task_file))
         for host in sorted(reach & set(hosts)):
             ctx = _role_context(role, host)
@@ -277,6 +288,17 @@ def test_k3s_writes_the_cluster_nodes_and_never_the_pi():
     resolver = ("path", "/etc/resolv.conf")
     assert "ansible/roles/setup/k3s/tasks/node.yml" in ansible["daniel-box"][resolver]
     assert resolver not in ansible["daniel-pi"]
+
+
+def test_k3s_writes_its_server_only_task_files_on_the_server_alone():
+    ansible, _ = _tree()
+    key = ("path", "/etc/healthchecks/ping.env")
+    assert (
+        "ansible/roles/setup/k3s/tasks/health-crons.yml" in ansible["daniel-box"][key]
+    )
+    assert key not in ansible["daniel-server"]
+    registries = ansible["daniel-server"][("path", "/etc/rancher/k3s/registries.yaml")]
+    assert "ansible/roles/setup/k3s/tasks/agent.yml" in registries
 
 
 def test_the_package_side_finds_the_retired_heartbeat_crons():
@@ -509,7 +531,7 @@ def test_a_role_that_ends_on_the_package_host_collides_with_nothing(
         "files:\n  - {src: demo.conf, dst: /etc/demo.conf, mode: '0644'}\n"
     )
 
-    def reach_of(name: str) -> frozenset[str]:
+    def reach_of(name: str, _task_file: str) -> frozenset[str]:
         return setup_role_hosts(name, playbook, all_vars, host_vars, roles)
 
     ansible = ansible_writes([(roles / "demo", task_file)], HOSTS, reach_of)

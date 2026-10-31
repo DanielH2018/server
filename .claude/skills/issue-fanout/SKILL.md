@@ -436,12 +436,12 @@ Each agent starts with none of this conversation's context, so its brief must ca
 - That it then labels its worktree with its issues, so the session banner and
   `prune_worktrees.py` print what the `agent-<hash>` tree works on:
   `uv run python scripts/dev/label_worktree.py <n>...`.
-- That it starts every compound Bash command with `cd <its worktree> &&`. The Claude Code
-  binary refuses a compound command from an isolated agent ("This agent is isolated in the
-  worktree …") unless the command opens that way, and no hook can lift the refusal: 1,047
-  refusals cost a turn each across 99 sessions in 2026-10-16..25 (#6328). A headless batch
-  needs no such line, because `claude -p` runs in the worktree without isolation and none
-  of its transcripts hold the refusal.
+- That its Bash commands follow the isolated-session rule in root `CLAUDE.md`'s *Parallel
+  Claude Sessions*: open a compound command with `cd <its worktree> &&`, and write no shell
+  expansion, loop, subshell or here-document. The prefix alone is not enough. The Claude Code
+  binary refused 412 commands in the 7 days to 2026-10-31 that carried one of those
+  constructs, many of them after the prefix (#6732), and no hook can lift the refusal. A headless batch needs no such line, because `claude -p` runs in the worktree
+  without isolation and none of its transcripts hold the refusal.
 
 - That `land.sh` (the `land-after-merge` skill) is the landing path, and that hand-polling CI
   is not.

@@ -143,9 +143,10 @@ authelia_k8s_log_size: 512Mi
 # deploy rather than re-enrolling a phone. The operator's own login is untouched by both.
 #
 # Its groups match the operator's deliberately. The access_control rules here are
-# domain-scoped, never `subject:`-scoped, so groups change nothing about what this user can
-# REACH — they change only what the apps behind those routes render. A narrower set would
-# have the UI tier assert against a degraded page while still reporting green.
+# domain-scoped except alertmanager.local's, which `admins` passes (#6689), so groups change
+# almost nothing about what this user can REACH — they change mainly what the apps behind
+# those routes render. A narrower set would have the UI tier assert against a degraded page
+# while still reporting green.
 authelia_k8s_claude_user: claude-ui
 authelia_k8s_claude_groups:
   - 'admins'
@@ -186,9 +187,9 @@ authelia_claude_totp_secret: ''
 # (observability/templates/grafana.yaml.j2), and Headlamp binds `oidc:admins` to the cluster's
 # read RBAC (headlamp_k8s_oidc_group). claude-ui keeps them because its job is to assert
 # against the same pages the operator sees. This account only has to render a service page, so a
-# group nothing reads costs it nothing. The access_control rules are domain-scoped, never
-# `subject:`-scoped, so groups cannot narrow what it REACHES; it reaches every `one_factor`
-# `*.local.<domain>` route from RFC1918, the set the operator's own UI jar reaches. It has no
+# group nothing reads costs it nothing. The access_control rules are domain-scoped except
+# alertmanager.local's, which denies it for want of `admins`; otherwise it reaches every
+# `one_factor` `*.local.<domain>` route from RFC1918, the set the operator's own UI jar reaches. It has no
 # TOTP registration, so the `two_factor` routes (code-server, n8n, longhorn, deploy-ui) refuse it
 # at the second factor, and it has no public name.
 authelia_k8s_agent_user: claude-agent

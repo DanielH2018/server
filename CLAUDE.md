@@ -191,6 +191,8 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   shell control flow (`for`/`while` loops, `if/then/else/fi`); anything that writes or execs
   (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
+- An isolated session meets a stricter rule: the binary refuses a variable or a here-document
+  there too. *Parallel Claude Sessions* below names every construct it refuses.
 
 ### `kubectl` — what actually decides
 Plain `kubectl` authenticates as a **read-only ServiceAccount**, so RBAC refuses every write
@@ -253,8 +255,25 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   the worktree name (prefixing `worktree-`), so `containers-role-cleanup` gets a readable
   branch and `cleanup` doesn't. Accept the prefix; renaming the branch afterwards only
   detaches it from the worktree git has registered.
-- **In an isolated session or agent, start every compound Bash command with `cd <your
-  worktree> &&`**, or the Claude Code binary refuses it as too complex to verify.
+- **In an isolated session or Agent subagent, write each Bash command so the Claude Code
+  binary can verify it stays inside the worktree.** The binary refuses a command it cannot
+  verify ("too complex to verify"), and no hook can lift the refusal. 412 refusals in the 7
+  days to 2026-10-31 cost a turn each (#6732). Open a compound command with `cd <your
+  worktree> &&`. Literal commands joined by `;`, `&&` or a pipe pass, and so does a redirect
+  to a literal path. Three kinds of construct draw the refusal, with or without the prefix:
+  - **A shell expansion:** `$VAR`, `$TMPDIR`, `$?`, `$(…)`, backticks or brace expansion
+    `{a,b}`. Write the literal path. Drop `echo rc=$?`, because the Bash tool reports a
+    non-zero exit itself.
+  - **Control flow:** a `for` or `while` loop, a shell function, a `( … )` subshell, a
+    trailing `&` or a `<(…)`. Make one call per item, or run a script file that holds the loop.
+  - **A here-document:** `cat > f <<'EOF'` or `python3 - <<'EOF'`. Write file content with
+    the Write tool. For a throwaway script, Write it to a literal `/tmp/<name>.py` path and run
+    that file.
+
+  A refusal can quote a `gh --jq` template such as `\(.number)`. Every measured one sat
+  inside one of the constructs above, so remove the construct. To avoid the question, build
+  the row with `[…] | @tsv` instead of `\(…)`. A headless `claude -p` batch runs without
+  isolation and draws none of these refusals.
 - **The SessionStart banner lists the other live sessions** and the paths each has changed
   vs `origin/master`. It's derived from `git worktree list` and `/proc`, not from anything a
   session declares, so check it before editing a file several sessions are near (`CLAUDE.md`,

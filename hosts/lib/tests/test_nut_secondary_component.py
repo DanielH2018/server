@@ -183,14 +183,15 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     manifest = json.loads(text(package, "/usr/lib/homelab/manifest.json"))
     assert "nut-monitor.service" in manifest["units"]
     assert "homelab-ups-watchdog.timer" in manifest["enable_links"]
-    # The claude-code component retires its own entries; the rest are the package's and nut's.
-    claude = yaml.safe_load(
-        (REPO / "hosts/components/claude-code/component.yml").read_text()
-    )
-    # Its one templated entry names daniel-server's sys_user.
+    # These components retire their own entries; the rest are the package's and nut's.
+    others = ("claude-code", "host-maintenance", "integrity-scans")
+    # claude-code's one templated entry names daniel-server's sys_user.
     theirs = [
         json.dumps(e, sort_keys=True).replace("{{ sys_user }}", "ubuntu")
-        for e in claude["legacy"]
+        for name in others
+        for e in yaml.safe_load(
+            (REPO / f"hosts/components/{name}/component.yml").read_text()
+        )["legacy"]
     ]
     ours = [
         e for e in manifest["legacy"] if json.dumps(e, sort_keys=True) not in theirs
@@ -198,6 +199,9 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     assert ours == [
         {"path": "/etc/apt/sources.list.d/github-cli.list"},
         {"path": "/usr/local/bin/sops"},
+        {"path": "/usr/local/bin/host-maintenance.sh"},
+        {"path": "/etc/healthchecks/ping.env"},
+        {"path": "/etc/healthchecks"},
         {"cron_file": "ups-secondary-health"},
         {"path": "/usr/local/bin/ups-secondary-health.sh"},
         {"path": "/etc/nut/kuma-push.env"},
