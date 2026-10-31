@@ -187,6 +187,33 @@ def test_setup_glance_lines_names_every_source_when_a_role_has_none(tmp_path):
     assert lines[1].startswith("- **Crons / timers:** none")
 
 
+def test_setup_glance_lines_lists_no_timer_for_a_role_that_ends_everywhere(tmp_path):
+    role = tmp_path / "widget"
+    _write(
+        role / "tasks" / "main.yml", "- name: End\n  ansible.builtin.meta: end_role\n"
+    )
+    _write(role / "templates" / "widget.timer.j2", "[Timer]\nOnBootSec=5min\n")
+    lines = f.setup_glance_lines(role, playbooks_dir=tmp_path)
+    assert lines[0].endswith("ends on hosts where `True` (leading `meta: end_role`)")
+    assert lines[1:] == [
+        "- **Crons / timers:** none (the role ends on every host before its first task)"
+    ]
+
+
+def test_setup_glance_lines_lists_the_timers_of_a_role_that_ends_on_some_hosts(
+    tmp_path,
+):
+    role = tmp_path / "widget"
+    _write(
+        role / "tasks" / "main.yml",
+        "- name: End\n  ansible.builtin.meta: end_role\n"
+        "  when: inventory_hostname == 'daniel-server'\n",
+    )
+    _write(role / "templates" / "widget.timer.j2", "[Timer]\nOnBootSec=5min\n")
+    lines = f.setup_glance_lines(role, playbooks_dir=tmp_path)
+    assert lines[1] == "- **Timer:** `widget.timer` (`OnBootSec=5min`)"
+
+
 # --- the in-place writer -----------------------------------------------------------------
 
 BLOCK = g.render_block(['- **Deploy tag:** `--tags "x"`'])

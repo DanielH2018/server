@@ -1964,6 +1964,18 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
         4. The artifacts `tmpfiles.d` lines and the two crons. Then the sources move into
            `hosts/components/claude-code/`, the role empties, and the Ansible-only tests are
            deleted.
+           As landed (#6678): the crons are `homelab-sync-artifacts.timer` and
+           `homelab-claude-otel-health.timer`, whose units load the push tokens as
+           credentials of daniel-box's `package.yml`, and whose `SyslogIdentifier=` keeps the
+           cron tags Kuma and Loki read. Their cron files and token-bearing scripts are legacy
+           entries. The flux copy is `homelab-takeover-check-flux.service`, a root oneshot
+           that ships on both hosts and removes the copy while the check is off. The artifacts
+           directories are `tmpfiles.d/homelab-artifacts.conf`, and `k8s_host_files` drops
+           its artifacts task file. The role's `tasks/main.yml` is one unconditional
+           `end_role`. Only the two cron templates moved: the role's other templates, files
+           and defaults stay in the role and render through `role: claude_code`, as
+           `nut_host`'s do, and H7.20a moves them with its deletion. The task-structure tests
+           are deleted, and the tests of what still ships read the package render.
     - **The homelab-ui browser toolchain is a component oneshot, ruled on 2026-10-30.** The
       agent's pinned Node and its sha256, `@playwright/mcp`, its Chromium, and the `claude mcp
       add homelab-ui` registration with its off path move into the `claude-code` component as

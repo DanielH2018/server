@@ -159,3 +159,28 @@ def test_a_tick_staleness_deadline_under_the_gap_is_flagged():
     assert tick_stale_problems(expr, shipped_longest_gap()) == [
         "GitOpsTickStale's 4500s does not outlast a 4800s gap"
     ]
+
+
+# M6 batch B3's Cutover-2: the textfile is the only verdict the two producers send. A script that
+# sources the Kuma library, calls kuma_push or builds a push URL has its Kuma push back.
+KUMA_PUSH_MARKERS = ("kuma-push-lib", "kuma_push", "/api/push/")
+
+
+def kuma_push_markers(body: str) -> list[str]:
+    """The Kuma push markers a rendered script still carries, or nothing."""
+    return [marker for marker in KUMA_PUSH_MARKERS if marker in body]
+
+
+@pytest.mark.parametrize("prefix", sorted(PRODUCERS))
+def test_neither_producer_pushes_to_kuma(prefix):
+    # fact: ansible/roles/setup/gitops_deploy/CLAUDE.md#Autonomous-role contract (it deploys to production with no human in the loop)
+    template, _ = PRODUCERS[prefix]
+    body = render_shell_script(*template)
+    # Non-vacuity: the render is the real script, which still records its verdict.
+    assert "write_check_textfile" in body
+    assert kuma_push_markers(body) == []
+
+
+def test_a_script_that_pushes_to_kuma_is_flagged():
+    pushing = 'source /usr/local/lib/kuma-push-lib.sh\nkuma_push "$1" "$2" "https://kuma/api/push/x"\n'
+    assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)

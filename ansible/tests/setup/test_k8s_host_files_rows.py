@@ -69,9 +69,6 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
     role_dir = _fixture_role(tmp_path)
     (role_dir / "tasks" / "main.yml").write_text("---\n[]\n")
     assert missing_rows(role_dir) == [
-        "artifacts.yml: Ensure a peer directory exists for every synced host",
-        "artifacts.yml: Ensure the local artifacts directory exists",
-        "artifacts.yml: Ensure the star list directory exists",
         "configarr.yml: Remove the retired configarr health reader from the host",
         "configarr.yml: Remove the retired configarr sync heartbeat cron",
         "crowdsec.yml: Remove the retired AppSec verify cron",
@@ -95,16 +92,6 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "traefik.yml: Remove the Cloudflare IP drift cron",
         "traefik.yml: Remove the Cloudflare IP drift script",
         "uptime-kuma.yml: Remove the k8s/volume-claim staging directory autokuma-data left behind",
-    ]
-
-
-def test_an_artifacts_row_that_widens_the_star_list_mode_is_flagged(tmp_path):
-    """The star list directory is the one 0755 row, so its mode is the field most likely to drift."""
-    role_dir = _fixture_role(tmp_path)
-    artifacts = role_dir / "tasks" / "artifacts.yml"
-    artifacts.write_text(artifacts.read_text().replace('mode: "0755"', 'mode: "0777"'))
-    assert missing_rows(role_dir) == [
-        "artifacts.yml: Ensure the star list directory exists"
     ]
 
 

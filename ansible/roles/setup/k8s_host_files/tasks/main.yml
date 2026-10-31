@@ -3,9 +3,6 @@
 # after that role and imported here by its conversion PR
 # (docs/target-architecture/deploy/d5-bulk-move.md, *Host-side rows*). A static import, so the
 # play's `k8s_host_files` tag reaches every task in the file.
-- name: Artifacts' host directories
-  ansible.builtin.import_tasks: artifacts.yml
-
 - name: Janitorr's retired health reader absent arms
   ansible.builtin.import_tasks: janitorr.yml
 

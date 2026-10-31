@@ -1368,7 +1368,7 @@ units on a non-deployer host. One alerts and the other reconciles:
   re-applying it restores the declared state rather than overriding a decision. The limit keeps
   the public repo closed to anyone but a collaborator. To change or clear it, edit the default;
   `none` clears it with a DELETE on the next run. A missing token, a failed PUT and a stored value
-  that differs from the declared one all push DOWN with `UNVERIFIED` or `NOT applied`, never
+  that differs from the declared one all record DOWN with `UNVERIFIED` or `NOT applied`, never
   `armed`. `ansible/tests/setup/test_github_interaction_limit.py` drives each branch.
 
 **One marker module, shipped from one source.** `files/gitops_markers.py` holds the state

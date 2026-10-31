@@ -44,8 +44,6 @@ PLANES = ("k8s", "setup")
 KNOWN_SECRET_SCRIPTS = frozenset(
     {
         ("setup", "k8s_host_files", "registry-gc.sh.j2"),
-        ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2"),
-        ("setup", "gitops_deploy", "github-interaction-limit.sh.j2"),
     }
 )
 
