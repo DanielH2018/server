@@ -132,9 +132,9 @@ uptime_kuma_k8s_push_resend_down_beats: 90
 # the window costs none of that: no PENDING state, and an explicit `down` push still flips the tile
 # immediately and carries its message.
 #
-# The four 600s push monitors that are NOT bridge-fed keep their own interval, because their
-# feeders run on their own cadences: CrowdSec Home Allowlist, Daniel Pi SD Health, Daniel Pi
-# Recovery, Arr Auto-Block. `test_bridge_push_monitors_share_one_interval` is what keeps the split
+# The 600s push monitors that are NOT bridge-fed keep their own interval, because their
+# feeders run on their own cadences: CrowdSec Home Allowlist, Arr Auto-Block.
+# `test_bridge_push_monitors_share_one_interval` is what keeps the split
 # honest, deriving bridge membership from the bridge's own env-secret rather than from a list here.
 uptime_kuma_k8s_bridge_push_interval: 1200
 
@@ -241,7 +241,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^rkhunter-"
   - name: Raspberry Pi
     match:
-      - "^daniel-pi-"
       - "^wg-easy-pi-peers$"
   - name: Media Automation
     match:
