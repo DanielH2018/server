@@ -256,8 +256,6 @@ uptime_kuma_k8s_status_page_groups:
     match:
       - "^renovate-"
       - "-drift-check$"
-      - "^github-ruleset-drift$"
-      - "^github-interaction-limit$"
       - "^secret-rotation$"
       - "^docs-refresh$"
       - "^manifest-prune-check$"
