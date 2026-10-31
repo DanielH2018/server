@@ -39,7 +39,7 @@ checks each gate suppresses.
   **suppressed**, pushed `up` with a "skipped — Prometheus unreachable" `msg` so its push-monitor
   heartbeat stays alive, and only THIS monitor pages. Without the gate one Prometheus outage fires
   all of them at once. A single scrape target down (Prometheus up, one exporter gone) still
-  surfaces separately as `ScrapeTargetDown`. `PROM_DEPENDENT` derives from the `gate="prometheus"`
+  surfaces separately as `ScrapeTargetDown`. The `prometheus` gate's members derive from the `gate="prometheus"`
   rows, so neither a count nor an enumeration of it is written anywhere else. The role CLAUDE.md
   once carried a hardcoded count of ten while the set held more (#1359), and then an enumeration a
   test pinned, until the column made both redundant (#3788).)
@@ -55,7 +55,7 @@ checks each gate suppresses.
   flood. "Prod" means active. Empty `N8N_API_KEY` disables the check (stays up), and an
   unreachable API surfaces as `down`. The check reaches `n8n:5678` over `apps`, bypassing Authelia
   via the `X-N8N-API-KEY` header. The streaks live in `bridge.streaks.State` (`n8n_streaks`), so
-  they reset on a bridge restart, which the STARTUP_GRACE hysteresis rides out. Pure
+  they reset on a bridge restart, which the `startup_grace` hysteresis rides out. Pure
   `n8n_update_streaks()`/`n8n_verdict()` are unit-tested.)
 - **Arr Queue Warnings** (sonarr's + radarr's own `/api/v3/queue`: `down` on any item with
   `trackedDownloadStatus == "warning"`, `trackedDownloadState == "importBlocked"`, or
@@ -71,7 +71,7 @@ checks each gate suppresses.
   2026-09-11 were a fetch error co-timed with a k3s Workload Health `radarr(1)` episode, one rollout
   reported twice. The streak covers the FETCH only: a queue item needing review pages on the cycle
   it is seen, because a poisoned release in the queue is not a transient. **The streak REPLACED
-  `arr_queue`'s `STARTUP_GRACE` membership** rather than stacking on it, since that grace covered
+  `arr_queue`'s `startup_grace` membership** rather than stacking on it, since that grace covered
   the same transient at 2 cycles and covered the queue verdict too. Pure `queue_warnings()` is
   unit-tested, and the fetch streak has its own accept/reject pair in `test_check_service.py`.
   **Sonarr's self-clearing title holds are the one queue reason that waits**, held for
@@ -186,7 +186,7 @@ checks each gate suppresses.
   storage bytes, and five kopia-era state-file checks read green for nine and a half hours because
   they reported their cron's LAST SUCCESSFUL RUN rather than current B2 health. Those checks left
   with kopia, and backup moved to Longhorn
-  (`docs/archive/k3s-migration/backup-consolidation-longhorn.md`). `B2_DEPENDENT` holds
+  (`docs/archive/k3s-migration/backup-consolidation-longhorn.md`). The `b2_reachable` gate's members are
   `check_b2_storage` (B2 Storage Usage), which queries B2 live and is gated here, so a
   transaction-cap incident does not page twice for one root cause. This check reports B2's own
   `transaction_cap_exceeded` error text directly.
@@ -205,8 +205,8 @@ checks each gate suppresses.
   RECOVERY, not just the retry.
   A test that fakes a real cap denial must raise `HTTPError`, because a `RuntimeError` exercises
   the transport path and proves the opposite of what it claims. `_cap_denial()` in
-  `test_check_gates.py` does this. Tests guard `B2_DEPENDENT` against the live `CHECKS` and against
-  `STARTUP_GRACE`.
+  `test_check_b2_gate.py` does this. `test_check_table.py` derives each gate's members from the live
+  `CHECKS`.
   **Assumption, stated in the code because it cannot be tested without a live breach:** that
   `b2_authorize_account` is itself subject to the cap (Backblaze's endpoint docs list
   403/`transaction_cap_exceeded` among its errors). If a future breach leaves this monitor green,
@@ -221,7 +221,7 @@ checks each gate suppresses.
   kind that can size one bucket. A success is cached for `B2_STORAGE_INTERVAL_S` (86400), since
   each 1000 versions costs one Class C call and a budget guard must not be a real part of the
   spend. A failure is not cached, because `b2_reachable` owns the cap signal and a listing
-  failure is more often a 5xx. Empty credentials disable the check. **In `B2_DEPENDENT`**: a
+  failure is more often a 5xx. Empty credentials disable the check. **Behind `b2_reachable`**: a
   transaction cap fails this check and B2 Reachable together, and one root cause must not light
   two tiles. Runbook: `longhorn-backup-tiering`.)
 - **R2 Free Tier Headroom** (Cloudflare's GraphQL Analytics API, `r2StorageAdaptiveGroups` +
@@ -353,7 +353,7 @@ checks each gate suppresses.
   row up to 72 times, delaying the page and proving nothing. `SPEEDTEST_FLOOR_CONSECUTIVE` is not a
   counter-example, because it counts RESULTS, each a separate measurement. The fetch rides
   `SPEEDTEST_CONSECUTIVE` because an app restart under a deploy is a real transient, and
-  `speedtest` is also in `STARTUP_GRACE`. This is the same split as `check_ha_heartbeat`.
+  `speedtest` is also `startup_grace`. This is the same split as `check_ha_heartbeat`.
   Reaching the app needs `monitor-bridge` in speedtest's `netpol_from` list in
   `ansible/inventory/host_vars/daniel-box.yml`, because the baseline admits `traefik`,
   `prometheus` and two cni0 /32s, none of which is this pod.
@@ -372,7 +372,7 @@ checks each gate suppresses.
   the internet-reaching checks, and the peer of Prometheus and B2 Reachable. An internet outage
   had no gate until a single WAN outage on 2026-09-18 turned 11 tiles red inside 90 minutes,
   including four host crons and `b2_reachable`, `r2_usage`, `discord`, the since-deleted Kuma
-  Notification Delivery tile, `cloudflare-ip-drift`, `swallowed_verdicts` and `gitops_alive`. It gates `WAN_DEPENDENT`:
+  Notification Delivery tile, `cloudflare-ip-drift`, `swallowed_verdicts` and `gitops_alive`. It gates the `wan_reachable` rows:
   `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `discord`.
   **DOWN only when NEITHER endpoint answers.** One provider's outage is that provider's problem,
   and suppressing on it would turn Cloudflare's own tiles green during a Cloudflare outage. The
@@ -383,7 +383,7 @@ checks each gate suppresses.
   on 2026-09-27, three runs each: `cloudflare.com/cdn-cgi/trace` 0.095-0.100 s total and
   `www.google.com/generate_204` 0.074-0.122 s, both with 0.002-0.052 s of DNS.
   `b2_reachable` is the tile's PEER rather than a member: it is itself a gate, and
-  `GATE_DEPENDENTS`' values are check names `run_once` iterates, not gates it evaluates. Two tiles
+  a row names at most one gate, and a gate row has none of its own. Two tiles
   for a WAN outage is the accepted cost of not building gate-of-a-gate for one caller.
   `swallowed_verdicts` is not a member either: it reads in-cluster Loki, and what failed for it
   was Kuma's own outbound send, a real fault the tile should report.
@@ -403,7 +403,7 @@ checks each gate suppresses.
   means would leave a single-endpoint outage reported by nothing. The one wrong case is an
   HTTP-level failure coinciding with a WAN outage, reported as a skip; both tiles would have been
   red for one root cause anyway.
-  `r2_usage` and `healthchecks_drift` left `STARTUP_GRACE` to join this set, as `pi_pressure` did
+  `r2_usage` and `healthchecks_drift` left `startup_grace` to join this set, as `pi_pressure` did
   when it gained the Prometheus gate (#2004): the two sets must stay disjoint so a graced check
   reaches the evaluation path every cycle, and the gate covers the post-boot transient the grace
   covered plus the outage it never could. Empty `WAN_PROBE_URLS` disables the gate.)
@@ -572,7 +572,7 @@ hint in `ansible/tests/services/test_extra_probe_targets.py`. A fourth node-expo
 rules added to `hosts.yaml`: its per-host copies name the hosts, and
 `HostTemperatureCoverageShortfall` holds a literal floor of 3 hosts, so a fourth host makes that
 floor satisfiable by any three of four and one host can go dark silently.
-`test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_gates_exporters.py)
+`test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_exporters.py)
 forces the decision for a host under a new scrape job, which is how daniel-pi arrived.
 Workload Log Errors (M6 batch A7) retired into the `WorkloadLogErrors` rule in
 `ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml`, and its tile, row, check body,
@@ -584,7 +584,7 @@ the two home-assistant bursts that held the tile red for 46 and 43 minutes, sits
 The rule is a Loki rule, so its alert never reaches Prometheus `ALERTS` and `probe.py health`
 cannot see it; `loki_prometheus_rule_*` and the ruler's notification counters are the live read.
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
-`PROM_DEPENDENT`. Each check's retirement note is in the repository history.
+the `prometheus` gate's members. Each check's retirement note is in the repository history.
 
 ## Push-monitor mechanics, and what set each number
 
@@ -608,10 +608,10 @@ Cluster Prometheus Reachable retired as a gate (#2825), and its four members are
   costs only detection latency, while a retry hands the Discord message back to the watchdog.
   `test_push_monitors_never_retry` in `ansible/tests/services/test_kuma_static_monitors.py` is the
   guard.
-- **`STARTUP_GRACE` holds the reach-out checks that have no reachability gate and no per-check
+- **`startup_grace` holds the reach-out checks that have no reachability gate and no per-check
   hysteresis**: **n8n Prod Workflows**, **Bazarr Health**, **Prowlarr Indexers** and **SMART Data /
   Health**. It is a hysteresis, not a suppression, and it is the peer of
-  `PROM_DEPENDENT`. The cause is the weekly Sunday 07:30 host reboot: the
+  the `prometheus` gate's members. The cause is the weekly Sunday 07:30 host reboot: the
   bridge's first cycle runs before those heavy apps finish starting, so each un-graced
   `max_retries=0` monitor flipped DOWN for one cycle (`Connection refused`, n8n `HTTP 404`) and
   recovered on the next. `apply_startup_grace()` in `run_once` holds each `up` for the first

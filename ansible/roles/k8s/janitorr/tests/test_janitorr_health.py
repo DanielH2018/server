@@ -154,6 +154,28 @@ def test_the_verdict_is_also_patched_onto_the_verdict_configmap(pushes):
     assert len(pushes) == 1  # the Kuma push still runs beside the export
 
 
+def test_the_verdict_patch_names_a_field_manager_flux_does_not_strip(pushes):
+    calls = []
+
+    def kubectl(*argv):
+        calls.append(argv)
+        return (
+            (0, "")
+            if argv[0] == "patch"
+            else {"get": (0, _STARTED), "logs": (0, "INFO ok\n")}[argv[0]]
+        )
+
+    _main(pushes, kubectl, verdict_configmap="janitorr-health-verdict")
+    [patch] = [c for c in calls if c[0] == "patch"]
+    managers = [
+        a.removeprefix("--field-manager=")
+        for a in patch
+        if a.startswith("--field-manager=")
+    ]
+    # Without the flag kubectl records `kubectl-patch`, which Flux's apply strips (#6746).
+    assert managers == ["janitorr-health"]
+
+
 def test_a_failed_export_exits_one_after_the_push(pushes):
 
     def kubectl(*argv):

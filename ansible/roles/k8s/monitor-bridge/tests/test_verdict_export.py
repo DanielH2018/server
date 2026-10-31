@@ -7,6 +7,7 @@ keeps today's value. The cases here pin the places the two differ: a gate-skippe
 
 import os
 import re
+from dataclasses import replace
 
 import pytest
 
@@ -17,10 +18,9 @@ import cli
 import deploy_pipeline
 import registry
 from _bridge_env import bridge_env
-from _check_gate_helpers import mk
+from _fake_sources import mk
 from _fake_sources import FakeSink, FakeSources
 from bridge.types import Check
-from gates import Gates
 
 SERIES = re.compile(r'^(\w+)\{check="([^"]+)"\} (\S+)$', re.MULTILINE)
 
@@ -48,21 +48,15 @@ def _cycle(cfg, wan_up):
         cfg,
         FakeSources(prom_vector=lambda q: []),
         [
-            Check("wan_row", "tok_wan_row", mk(ran, "wan_row")),
-            Check("graced", "tok_graced", graced),
+            Check("prometheus", "tok_prom", lambda _cfg, _src: (True, "prom ok")),
+            Check("b2_reachable", "tok_b2", lambda _cfg, _src: (True, "b2 ok")),
+            Check("wan_reachable", "tok_wan", lambda _cfg, _src: (wan_up, "wan")),
+            Check("wan_row", "tok_wan_row", mk(ran, "wan_row"), "wan_reachable"),
+            Check("graced", "tok_graced", graced, "startup_grace"),
             Check("boom", "tok_boom", boom),
             Check("after", "tok_after", mk(ran, "after")),
         ],
-        gates=Gates(
-            prom_dependent=frozenset(),
-            b2_dependent=frozenset(),
-            wan_dependent=frozenset({"wan_row"}),
-            startup_grace=frozenset({"graced"}),
-            probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
-            probe_b2=lambda _cfg, _src: (True, "b2 ok"),
-            probe_wan=lambda _cfg, _src: (wan_up, "wan %s" % wan_up),
-        ),
-        sink=sink,
+        sink,
         export=export,
     )
     pushed = {t: (ok, msg) for t, ok, msg in sink.pushes if t.startswith("tok_")}
@@ -119,16 +113,17 @@ def _served_rows():
     export = verdict_export.CheckExposition(300)
     wired = {
         "env": env,
-        "checks": registry.build_checks(env),
+        # The three gate probes reach the network by their own transport, so they are stated.
+        "checks": [
+            replace(c, fn=lambda _cfg, _src: (False, "stub"))
+            if c.name in check.GATE_SKIP
+            else c
+            for c in registry.build_checks(env)
+        ],
         "sources": FakeSources(prom_vector=lambda q: []),
         "sink": FakeSink(),
         "exposition": deploy_pipeline.Exposition(),
         "check_exposition": export,
-        "gate_config": Gates(
-            probe_prometheus=lambda _cfg, _src: (False, "stub"),
-            probe_wan=lambda _cfg, _src: (False, "stub"),
-            probe_b2=lambda _cfg, _src: (False, "stub"),
-        ),
     }
 
     def sleep(_seconds):
@@ -144,6 +139,6 @@ def test_the_row_count_is_the_table_gate_rows_included():
     rows, built = _served_rows()
     names = {row.name for row in check_table.CHECKS}
     assert rows == len(names)
-    # Red on an exporter that counts `registry.build_checks`, which drops every gate row.
     assert {"wan_reachable", "b2_reachable", "prometheus"} <= names
-    assert len(built) < rows
+    # Red on an exporter that counts anything but the table: the registry is the table's length.
+    assert len(built) == rows

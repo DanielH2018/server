@@ -39,6 +39,8 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `janitorr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.
+  The patch passes `--field-manager=janitorr-health`: under kubectl's default `kubectl-patch`
+  manager, Flux's apply dropped the annotations every 10 minutes (#6746).
   kube-state-metrics exports the verdict, and the `pod-producers` shadow rules read it. A
   failed export makes the reader exit 1.
 - **The health pod carries `app: janitorr-health`, never `app: janitorr`.** The reader

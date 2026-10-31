@@ -8,7 +8,6 @@ operator smoke-test that proves B2 accepts the query.
 from dataclasses import replace
 
 import checks.b2
-import gates
 import registry
 from _fake_sources import FakeSources
 
@@ -87,8 +86,8 @@ def test_storage_disabled_without_credentials(cfg):
 def test_storage_is_gated_by_b2_reachable():
     """A transaction cap fails both this and b2_reachable; one root cause must not light two
     monitors, which is precisely what the B2 gate is for."""
-    assert "b2_storage" in gates.B2_DEPENDENT
-    assert "b2_storage" in {c.name for c in registry.build_checks()}
+    gates = {c.name: c.gate for c in registry.build_checks()}
+    assert gates["b2_storage"] == "b2_reachable"
 
 
 # ── the pagination cursor ─────────────────────────────────────────────────────────────────────

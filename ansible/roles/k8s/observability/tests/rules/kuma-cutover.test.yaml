@@ -226,6 +226,10 @@ tests:
             exp_annotations:
               summary: Kuma's Home Assistant Automations tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Home Assistant Automations tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Host Packages — Status, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Host Packages — Status tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Host Packages — Status tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Arr Auto-Block, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Arr Auto-Block tile is gone and no alert rule pages in its place.
@@ -353,6 +357,8 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
@@ -476,6 +482,8 @@ tests:
       - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
         values: '1x140'
@@ -610,6 +618,8 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
         values: '1x160'
+      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
+        values: '1x160'
       - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
@@ -735,6 +745,8 @@ tests:
       - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x1700'
+      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
         values: '1x1700'
@@ -870,6 +882,8 @@ tests:
       - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x3100'
+      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
         values: '1x3100'
@@ -1027,6 +1041,8 @@ tests:
         values: '1x10 _x130'
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
@@ -1170,6 +1186,8 @@ tests:
       - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x300'
+      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
         values: '1x300'
@@ -1327,6 +1345,8 @@ tests:
       - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
+        values: '1x760'
+      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
         values: '1x760'

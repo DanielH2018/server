@@ -14,7 +14,7 @@ import pytest
 
 import checks.gitops
 from _fake_sources import FakeSources
-import gates
+import check
 
 # The last_run marker is written against this epoch and the check reads the same one, so
 # "fresh" and "stale" are exact distances from the 90m default rather than a race with the
@@ -479,7 +479,7 @@ def test_an_undecodable_marker_other_than_the_ledger_is_a_check_error(tmp_path, 
     """
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     (tmp_path / "hold_sha").write_bytes(b"held\xff123abc456789\n")
-    ok, msg = gates._evaluate(
+    ok, msg = check._evaluate(
         cfg, FakeSources(), "gitops_status", checks.gitops.check_gitops_status
     )
     assert not ok

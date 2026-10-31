@@ -46,7 +46,6 @@ monitor_bridge_modules:
   - gitops_ledger.py
   - gitops_hold.py
   - longhorn_robustness.py
-  - gates.py
   - deploy_pipeline.py
   - verdict_export.py
   - bridge/types.py

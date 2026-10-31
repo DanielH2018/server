@@ -2,11 +2,10 @@
 
 This table is the one place a check is declared. Everything else derives from it:
 
-- `registry.build_checks` runs every row without `is_gate`, in table order.
-- `gates.py` builds `PROM_DEPENDENT`, `B2_DEPENDENT`, `WAN_DEPENDENT` and
-  `STARTUP_GRACE` from the `gate` column, and `GATE_DEPENDENTS` from the `is_gate` rows.
-  `EXPORTER_DEPENDENT` stays in `gates.py`: it is keyed by scrape job, and one check can sit
-  under two jobs.
+- `registry.build_checks` turns every row into a `Check` carrying its `gate`, the three gate
+  rows first. `check.run_once` skips a row while the gate row it names reads down, and holds a
+  `startup_grace` row `up` through its first down cycle. `EXPORTER_DEPENDENT` stays in
+  `check.py`: it is keyed by scrape job, and one check can sit under two jobs.
 - `templates/env-secret.yaml.j2` renders one `KUMA_PUSH_<NAME>` per row, the env var
   `bridge.types.push_env(name)` reads.
 - `k8s/uptime-kuma/templates/static-monitors.yaml.j2` renders one push tile per row.
@@ -90,7 +89,7 @@ CHECKS: tuple[PushCheck, ...] = (
     ),
     # A row of its own, not an arm of gitops_status: that check reads the deployer's state
     # directory outside the Prometheus gate, and an arm reading Prometheus there would page on
-    # every Prometheus outage. Under EXPORTER_DEPENDENT["node"] in gates.py as well.
+    # every Prometheus outage. Under EXPORTER_DEPENDENT["node"] in check.py as well.
     PushCheck(
         name="host_packages", fn=gitops.check_host_packages, token="monitor_bridge_host_packages_push_token",
         kuma_id="host-packages-status", display="Host Packages — Status", status_group="Automation & Drift", gate="prometheus",

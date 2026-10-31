@@ -41,6 +41,11 @@ a 2xx on an `authelia`-gated router, kept 7 days, capped at
 `ansible/roles/k8s/crowdsec/files/remote_allowlist.py:CAP` entries, which is what covers a VPN
 exit or a phone (#2123). Its module docstring is the design.
 
+**`remote-ips` never holds an address `home-ips` covers.** The job reads `home-ips` on every
+run, skips a sighting inside it, and prunes a live entry inside it. Before #6709, rotating home
+IPv6 privacy addresses filled the cap, and the job refused the operator's VPN exit, which
+CrowdSec then banned.
+
 To see what is exempt: `… exec deploy/crowdsec -c crowdsec -- cscli allowlists inspect
 remote-ips` (or `home-ips`); to withdraw one, `… cscli allowlists remove remote-ips <ip>`. A
 `home-ips` entry the job did not write is removed on its next run, because the job owns that

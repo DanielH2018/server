@@ -621,43 +621,43 @@ tests:
         exp_alerts: []
 
   # THE STARTUP-GRACE FAMILY (A6-5). Every gauge is 0 from the first sample. Each rule is
-  # `for: 5m`, the grace the push path applies today as one extra 300s cycle: one minute short of
-  # the hold nothing fires, and at the hold all six do. No rule carries `requires`, since no row
-  # here has a gate.
+  # `for: 10m`, two bridge cycles (operator ruling 2026-10-31): one minute short of the hold
+  # nothing fires, and at the hold all six do. No rule carries `requires`, since no row here has
+  # a gate.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="n8n"}
-        values: "0x8"
+        values: "0x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="bazarr"}
-        values: "0x8"
+        values: "0x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="prowlarr_indexers"}
-        values: "0x8"
+        values: "0x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="scrutiny"}
-        values: "0x8"
+        values: "0x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="speedtest"}
-        values: "0x8"
+        values: "0x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="swallowed_verdicts"}
-        values: "0x8"
+        values: "0x12"
     alert_rule_test:
-      - eval_time: 4m
+      - eval_time: 9m
         alertname: N8nWorkflowsFailing
         exp_alerts: []
-      - eval_time: 4m
+      - eval_time: 9m
         alertname: BazarrHealthDegraded
         exp_alerts: []
-      - eval_time: 4m
+      - eval_time: 9m
         alertname: ProwlarrIndexersFailing
         exp_alerts: []
-      - eval_time: 4m
+      - eval_time: 9m
         alertname: SmartHealthFailing
         exp_alerts: []
-      - eval_time: 4m
+      - eval_time: 9m
         alertname: SpeedtestDegraded
         exp_alerts: []
-      - eval_time: 4m
+      - eval_time: 9m
         alertname: SwallowedPushVerdicts
         exp_alerts: []
-      - eval_time: 5m
+      - eval_time: 10m
         alertname: N8nWorkflowsFailing
         exp_alerts:
           - exp_labels:
@@ -670,7 +670,7 @@ tests:
             exp_annotations:
               summary: "An active n8n workflow failed repeatedly, or several workflows are failing."
               description: "An active workflow failed 3 times in a row, or 2 or more workflows are each failing repeatedly. The monitor-bridge log names the workflow; open its last execution in n8n."
-      - eval_time: 5m
+      - eval_time: 10m
         alertname: BazarrHealthDegraded
         exp_alerts:
           - exp_labels:
@@ -683,7 +683,7 @@ tests:
             exp_annotations:
               summary: "Bazarr rejects its sonarr or radarr API key, or reports a health issue."
               description: "Bazarr's own copy of the sonarr or radarr API key is rejected (an empty peer version field), or Bazarr reports a health issue. Bazarr holds those keys in its UI, so a key rotation misses it. The monitor-bridge log names which."
-      - eval_time: 5m
+      - eval_time: 10m
         alertname: ProwlarrIndexersFailing
         exp_alerts:
           - exp_labels:
@@ -696,7 +696,7 @@ tests:
             exp_annotations:
               summary: "A Prowlarr indexer has been failing for a week or more."
               description: "Prowlarr's own initialFailure puts an indexer at a week or more of failures. The Pirate Bay and 1337x are ignored as chronic flappers, and short outages never page. The monitor-bridge log names the indexer."
-      - eval_time: 5m
+      - eval_time: 10m
         alertname: SmartHealthFailing
         exp_alerts:
           - exp_labels:
@@ -709,7 +709,7 @@ tests:
             exp_annotations:
               summary: "Scrutiny reports a failing drive, stale collector data or high NVMe wear."
               description: "A drive's collector data is older than 26h, its SMART self-assessment or an attribute threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured, so this is the only drive-failure page. The monitor-bridge log names the drive."
-      - eval_time: 5m
+      - eval_time: 10m
         alertname: SpeedtestDegraded
         exp_alerts:
           - exp_labels:
@@ -722,7 +722,7 @@ tests:
             exp_annotations:
               summary: "The newest speedtest result is stale, incomplete or under 100 Mbps."
               description: "The last speedtest-tracker run is older than 8 h, did not complete, or downloaded under 100 Mbps. Open the speedtest UI and check its scheduler and last result."
-      - eval_time: 5m
+      - eval_time: 10m
         alertname: SwallowedPushVerdicts
         exp_alerts:
           - exp_labels:
@@ -736,39 +736,40 @@ tests:
               summary: "A host cron pushed a down verdict and the push failed while a sibling's landed."
               description: "The verdict was lost rather than the network. The monitor-bridge log names the cron; run it by hand and read its logger lines."
 
-  # A row down for under the hold and then up again never fires: the 0 samples at minutes 0 to 3
-  # start the pending state, and the 1 at minute 4 ends it before the 5m hold.
+  # A one-cycle blip never fires. A gauge that reads 0 for one 300s cycle spans five to seven
+  # 1-minute samples (the A6 soak saw both five and six), so the 0 samples at minutes 0 to 6
+  # start the pending state and the 1 at minute 7 ends it before the 10m hold.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="n8n"}
-        values: "0x3 1x6"
+        values: "0x6 1x8"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="bazarr"}
-        values: "0x3 1x6"
+        values: "0x6 1x8"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="prowlarr_indexers"}
-        values: "0x3 1x6"
+        values: "0x6 1x8"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="scrutiny"}
-        values: "0x3 1x6"
+        values: "0x6 1x8"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="speedtest"}
-        values: "0x3 1x6"
+        values: "0x6 1x8"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="swallowed_verdicts"}
-        values: "0x3 1x6"
+        values: "0x6 1x8"
     alert_rule_test:
-      - eval_time: 8m
+      - eval_time: 13m
         alertname: N8nWorkflowsFailing
         exp_alerts: []
-      - eval_time: 8m
+      - eval_time: 13m
         alertname: BazarrHealthDegraded
         exp_alerts: []
-      - eval_time: 8m
+      - eval_time: 13m
         alertname: ProwlarrIndexersFailing
         exp_alerts: []
-      - eval_time: 8m
+      - eval_time: 13m
         alertname: SmartHealthFailing
         exp_alerts: []
-      - eval_time: 8m
+      - eval_time: 13m
         alertname: SpeedtestDegraded
         exp_alerts: []
-      - eval_time: 8m
+      - eval_time: 13m
         alertname: SwallowedPushVerdicts
         exp_alerts: []
 
@@ -777,21 +778,72 @@ tests:
   - interval: 1m
     input_series: []
     alert_rule_test:
-      - eval_time: 10m
+      - eval_time: 12m
         alertname: N8nWorkflowsFailing
         exp_alerts: []
-      - eval_time: 10m
+      - eval_time: 12m
         alertname: BazarrHealthDegraded
         exp_alerts: []
-      - eval_time: 10m
+      - eval_time: 12m
         alertname: ProwlarrIndexersFailing
         exp_alerts: []
-      - eval_time: 10m
+      - eval_time: 12m
         alertname: SmartHealthFailing
         exp_alerts: []
-      - eval_time: 10m
+      - eval_time: 12m
         alertname: SpeedtestDegraded
         exp_alerts: []
-      - eval_time: 10m
+      - eval_time: 12m
         alertname: SwallowedPushVerdicts
+        exp_alerts: []
+
+  # THE HOST-PACKAGES ROW (operator ruling 2026-10-31). The gauge is 0 and every `node` target
+  # is up, so the rule fires at once with no `for:` and no `requires` label.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="host_packages"}
+        values: "0x5"
+      - series: up{job="node",instance="daniel-box:9100"}
+        values: "1x5"
+      - series: up{job="node",instance="daniel-server:9100"}
+        values: "1x5"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: HostPackageBuilderStalled
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: host_packages
+              severity: warning
+              service: host-packages
+              shadow: "true"
+            exp_annotations:
+              summary: "The host-package builder has stopped fetching master or has left a commit unbuilt."
+              description: "The builder's last good fetch of master is older than 30 minutes or its series is absent, or a commit of master has waited more than 11760 seconds to be built. The monitor-bridge log names the builder's reason and sha, and the builder's pages in docs/host-packages.md have the fix for each reason."
+              runbook_url: https://docs.local.daniel-hunter.com/host-packages/
+
+  # A dead `node` exporter keeps the rule quiet, as the bridge's suppression does today:
+  # ScrapeTargetDown names the dead exporter. The suppression is estate-wide, so a dead
+  # daniel-server exporter holds the rule while daniel-box's is up. The gauge is 0 throughout,
+  # which is what the bridge exports for a suppressed row.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="host_packages"}
+        values: "0x5"
+      - series: up{job="node",instance="daniel-box:9100"}
+        values: "1x5"
+      - series: up{job="node",instance="daniel-server:9100"}
+        values: "0x5"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: HostPackageBuilderStalled
+        exp_alerts: []
+
+  # The zero-series case: a missing row is BridgeCheckStale's page.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: HostPackageBuilderStalled
         exp_alerts: []

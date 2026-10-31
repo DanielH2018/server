@@ -132,6 +132,28 @@ def test_the_cap_stops_additions_and_names_what_it_left_out():
     assert decided.over_cap == ["9.9.9.9"]
 
 
+HOME = ra.home_networks(
+    [{"value": "198.51.100.7"}, {"value": "2001:db8:1:2::/64"}, {"value": "junk"}]
+)
+
+
+def test_a_sighting_inside_home_ips_takes_no_slot():
+    items = [_item(f"10{i}.0.0.1", 100) for i in range(ra.CAP - 1)]
+    seen = {"198.51.100.7", "2001:db8:1:2:aaaa::1", "9.9.9.9"}
+    decided = ra.plan(seen, items, NOW, home=HOME)
+    assert decided.add == ["9.9.9.9"]
+    assert decided.over_cap == []
+
+
+def test_a_live_entry_inside_home_ips_is_pruned_to_free_its_slot():
+    items = [_item("2001:db8:1:2:bbbb::1", 150), _item("198.51.100.7", 150)]
+    items += [_item(f"10{i}.0.0.1", 100) for i in range(ra.CAP - 2)]
+    decided = ra.plan({"9.9.9.9", "2001:db8:1:3::1"}, items, NOW, home=HOME)
+    assert decided.prune == ["2001:db8:1:2:bbbb::1", "198.51.100.7"]
+    assert decided.add == ["2001:db8:1:3::1", "9.9.9.9"]
+    assert decided.over_cap == []
+
+
 def test_main_writes_exactly_the_plan_and_refuses_with_no_authelia_router():
     calls = []
 
@@ -144,6 +166,12 @@ def test_main_writes_exactly_the_plan_and_refuses_with_no_authelia_router():
                 _line(AUTH_ROUTER, 200, "173.249.254.219")
                 + "\n"
                 + _line(AUTH_ROUTER, 200, "10.0.0.5")
+                + "\n"
+                + _line(AUTH_ROUTER, 200, "198.51.100.7")
+            )
+        if "inspect" in argv and ra.HOME_ALLOWLIST in argv:
+            return json.dumps(
+                {"name": ra.HOME_ALLOWLIST, "items": [{"value": "198.51.100.7"}]}
             )
         if "inspect" in argv:
             return json.dumps({"name": ra.ALLOWLIST, "items": [_item("8.8.8.8", -2)]})

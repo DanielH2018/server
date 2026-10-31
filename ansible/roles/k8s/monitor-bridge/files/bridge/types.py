@@ -54,11 +54,16 @@ class Check:
       name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP and the gate sets refer to.
       token: The Kuma push-monitor token this check's result is pushed to. Empty skips the push.
       fn: The check body. Takes the frozen `Config` and the `Sources`, and returns (ok, msg).
+      gate: The row's `gate` column. A reachability gate's name (`prometheus`, `b2_reachable`,
+        `wan_reachable`) skips this row while that gate row reads down, `startup_grace` holds
+        it `up` through its first down cycle, and None does neither. `check.run_once` reads
+        it, so the gate sets are never stated twice.
     """
 
     name: str
     token: str
     fn: CheckFn
+    gate: str | None = None
 
 
 @dataclass(frozen=True)

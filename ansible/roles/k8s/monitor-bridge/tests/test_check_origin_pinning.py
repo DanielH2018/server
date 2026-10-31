@@ -7,7 +7,7 @@ only by stating `PROM_ORIGIN=""`, which is the escape hatch a Prometheus whose s
 `origin` would need.
 
 These are source-level and selector-level guards rather than run-loop ones; the suppression
-behaviour is `test_check_gates.py`.
+behaviour is `test_check.py`.
 """
 
 from dataclasses import replace
