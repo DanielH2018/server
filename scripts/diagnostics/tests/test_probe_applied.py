@@ -145,9 +145,12 @@ def test_the_real_claude_code_role_yields_its_units_with_content():
         role, "daniel-box", applied.context(role, "daniel-box")
     )
     by_path = {w.path: w for w in wants}
-    for unit in ("claude-rc.service", "claude-cgroup-metrics.timer"):
+    for unit in ("claude-memory-sync.timer", "claude-fanout-server-lander.service"):
         want = by_path[f"/etc/systemd/system/{unit}"]
         assert want.sha256 is not None and want.mode == "0644"
+    # daniel-box's package ships these two, so the role skips them there.
+    for unit in ("claude-rc.service", "claude-cgroup-metrics.timer"):
+        assert f"/etc/systemd/system/{unit}" not in by_path
 
 
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])

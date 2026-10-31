@@ -21,12 +21,23 @@
 # and `failure-alert`, the page its oneshots name. The role ends on this host. Both need
 # `gitops_deploy_discord_webhook`, and the agent's gh login needs `claude_code_agent_gh_token`.
 description: daniel-server's homelab host package
+# The claude-code component's agent user. Its uid differs per host, so the users entry and the
+# agent's login-slice cap sit here; `role: claude_code` reaches only these files (H7.40).
+role: claude_code
+users:
+  # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
+  - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
 components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, failure-alert, claude-code, sops]
 credentials:
   - ups_secondary_daniel_server_push_token
 maintainer_scripts: [preinst, postinst, prerm]
 enable:
   homelab-updater.timer: timers.target
+files:
+  # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
+  - src: "role:login-slice-caps.conf.j2"
+    dst: /usr/lib/systemd/system/user-995.slice.d/homelab-claude-caps.conf
+    when: claude_code_login_caps_enabled and claude_code_agent_user_enabled
 # H7.24a: daniel-server installs `gh` by hand. The apt-github-cli component ships the source, and
 # the hand-installed github-cli.list names the same repository, so reconcile retires it.
 legacy:

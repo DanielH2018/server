@@ -1,0 +1,14 @@
+{
+  "checksum": "92a279366a5cdea05866e5c5c202e82d518cc61bfe6bc047664ad4395e1e85dd",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The host packages own most of it",
+  "row": {
+    "atoms": {
+      "hosts/components/claude-code/": "0c7d7c48948f71952dce53fd0751b7c0c4df73b56724f2b6883863c36ef7bfcd",
+      "hosts/lib/tests/test_claude_code_component.py": "63e1788f1ae83ed0a6599561f903d285d5b8fe17eacfd0bce6ab7b864e62e440",
+      "hosts/lib/tests/test_claude_code_on_daniel_box.py": "b836e539bbfdc262583f0726bdc3679aa00c07aca74e8f80f0444d2340208483"
+    },
+    "python": "3.14",
+    "verified_sha": "85d2bf9f7"
+  }
+}

@@ -18,6 +18,8 @@ ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 CLAUDE_MAIN = ROLE / "tasks" / "agent.yml"
 AGENT_PEERS = ROLE / "tasks" / "agent_peers.yml"
 SSH_LOGIN = ROLE / "tasks" / "agent_ssh_login.yml"
+# daniel-box's claude-code component ships the agent user, so each agent task skips it there.
+PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
 
 
 def tasks(path) -> list[dict]:
@@ -123,7 +125,7 @@ def test_the_agent_user_lingers_while_enabled_and_stops_when_not() -> None:
         main,
         "Keep the agent user's manager alive after logout, so its fan-out batches survive",
     )
-    assert on["when"] == "claude_code_agent_user_enabled"
+    assert on["when"] == [PACKAGED, "claude_code_agent_user_enabled"]
     assert on["ansible.builtin.command"] == (
         "loginctl enable-linger {{ claude_code_agent_user }}"
     )
@@ -131,7 +133,7 @@ def test_the_agent_user_lingers_while_enabled_and_stops_when_not() -> None:
     created = named(main, "Create the agent user, its tools and its clone")
     assert main.index(created) < main.index(on)
     off = named(main, "Stop the switched-off agent user's manager lingering")
-    assert off["when"] == "not claude_code_agent_user_enabled"
+    assert off["when"] == [PACKAGED, "not claude_code_agent_user_enabled"]
     assert off["args"]["removes"] == on["args"]["creates"]
 
 

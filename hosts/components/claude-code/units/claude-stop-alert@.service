@@ -1,4 +1,4 @@
-# Shipped by homelab-daniel-server. The dotfiles' StopFailure hook starts an instance named by
+# Shipped by the claude-code component. The dotfiles' StopFailure hook starts an instance named by
 # the error cause, through polkit (50-claude-stop-alert.rules). The name keeps its Ansible-era
 # form because that hook, in another repository, names it.
 [Unit]
