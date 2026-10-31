@@ -1,13 +1,12 @@
-"""Log-pipeline checks for monitor-bridge — swallowed verdicts and the workload log arm.
+"""Log-pipeline checks for monitor-bridge — swallowed verdicts.
 
 Slice 3 of the check.py split. Reads config as `cfg.X` and every query through the `src`
 argument (`bridge.sources.Sources`), so a test hands in a fake; the verdicts it from-imports
-are patched on THIS module (`monkeypatch.setattr(checks.logs, "log_error_verdict", ...)`), because this is
-where they are bound. Rule and enforcement: bridge/config.py's header.
+are patched on THIS module, because this is where they are bound. Rule and enforcement:
+bridge/config.py's header.
 
-`check_workload_log_errors` is the one caller of `with_log_errors`. The Kubernetes arms it was
-once folded into are the k8s-workloads alert rules, so it is a Loki arm on a row of its own.
-test_check_loki.py patches `with_log_errors` here, where it is bound.
+The workload log-pattern arm that lived here is the `WorkloadLogErrors` rule on loki-homelab
+(M6's batch A7).
 """
 
 from collections.abc import Callable
@@ -15,45 +14,7 @@ from collections.abc import Callable
 from bridge.common import host_uptime_s
 from bridge.config import Config
 from bridge.sources import Sources
-from verdicts.cluster import log_error_verdict
 from verdicts.logs import swallowed_verdicts
-
-
-def check_workload_log_errors(cfg: Config, src: Sources) -> tuple[bool, str]:
-    """Pages when a container logs a burst of fatal lines, however healthy its pod reads.
-
-    The Kubernetes readiness arms moved to the k8s-workloads alert rules. This arm stays because
-    it reads Loki, and the log rules belong on the loki-homelab ruler (M6's batch A7 ports it).
-    The row's gate is `startup_grace`, so the arm pages on its second consecutive bad cycle.
-    """
-    return with_log_errors(cfg, src, True, "workload logs")
-
-
-def with_log_errors(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, str]:
-    """Fold the log-pattern arm into a verdict, a burst winning the message.
-
-    A container that is Ready while failing at its job reads healthy to every arm that measures
-    Kubernetes state, because by their measure it is. A burst of fatal log lines is the signal
-    those arms cannot see.
-
-    FAILS OPEN on a Loki error, and the rows that call it are gated by `startup_grace` alone.
-    Same reasoning as ha_heartbeat's ban arm.
-    """
-    if not cfg.LOG_ERROR_SELECTOR:
-        return ok, msg
-    ignore = {n.strip().lower() for n in cfg.LOG_ERROR_IGNORE.split(",") if n.strip()}
-    try:
-        matches, total = src.log_error_counts(
-            cfg.LOG_ERROR_SELECTOR, cfg.LOG_ERROR_PATTERN, cfg.LOG_ERROR_WINDOW
-        )
-    except Exception as e:
-        return ok, "%s, log-error arm unavailable (%s)" % (msg, e)
-    log_ok, log_msg = log_error_verdict(
-        matches, total, cfg.LOG_ERROR_MAX, cfg.LOG_ERROR_WINDOW, ignore
-    )
-    if log_ok:
-        return ok, "%s, %s" % (msg, log_msg)
-    return False, "%s | %s" % (log_msg, msg)
 
 
 # Every push-outcome line the host crons emit, and nothing else: the cron's own

@@ -159,15 +159,6 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="monitor-bridge-b2-storage", display="B2 Free Tier Headroom", status_group="Backups & Storage", gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering",
         description="monitor-bridge reads B2's bucket usage against the free tier, gated behind B2 Reachable so a cap incident pages once. DOWN: storage past the threshold. A drain is nearly free; a prune pays per deleted backup, so read longhorn-backup-tiering before deleting.",
     ),
-    # The Kubernetes arms of the old k8s_workloads row now live in the k8s-workloads rules. This
-    # row keeps only the log-pattern arm, which reads Loki; M6's batch A7 ports it to loki-homelab.
-    # `startup_grace` rather than a gate: the row reads no Prometheus, and the arm fails open on a
-    # Loki error by itself, so it names no gate.
-    PushCheck(
-        name="workload_log_errors", fn=logs.check_workload_log_errors, token="monitor_bridge_k8s_workloads_push_token",
-        kuma_id="monitor-bridge-k8s-workloads", display="Workload Log Errors", status_group="Cluster Health", gate="startup_grace",
-        description="Loki via monitor-bridge: a container logged more than LOG_ERROR_MAX (20) lines matching panic, fatal, traceback or out of memory in the last hour. The message names the container. The Kubernetes arms of the old k3s Workload Health tile are the k8s-workloads alert rules.",
-    ),
     # The three reachability gates. A gate has no gate of its own: a tile that cannot go red is
     # not coverage (#2825).
     PushCheck(

@@ -4,5 +4,5 @@
 | `PROM_DEPENDENT` | Prometheus Reachable gate, which suppresses them | 1 | `host_packages` |
 | `B2_DEPENDENT` | B2 Reachable gate, which suppresses them | 1 | `b2_storage` |
 | `WAN_DEPENDENT` | WAN Reachable gate, which suppresses them | 4 | `discord`, `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift` |
-| `STARTUP_GRACE` | startup grace, which holds them `up` through their first down cycles | 7 | `n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `speedtest`, `swallowed_verdicts`, `workload_log_errors` |
+| `STARTUP_GRACE` | startup grace, which holds them `up` through their first down cycles | 6 | `n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `speedtest`, `swallowed_verdicts` |
 | ungated | nothing | 5 | `arr_queue`, `gitops_alive`, `gitops_status`, `etcd_restore_drill`, `ha_heartbeat` |

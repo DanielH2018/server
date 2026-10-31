@@ -52,11 +52,6 @@ class IoConfig:
     HEALTHCHECKS_API_KEY: str = field(repr=False)
     HEALTHCHECKS_EXPECTED: tuple[dict, ...]
     HEALTHCHECKS_PROBE_INTERVAL_S: float
-    LOG_ERROR_SELECTOR: str
-    LOG_ERROR_PATTERN: str
-    LOG_ERROR_WINDOW: str
-    LOG_ERROR_MAX: float
-    LOG_ERROR_IGNORE: str
     SWALLOWED_VERDICTS_WINDOW_S: int
     BOOT_SETTLE_S: int
     DISCORD_WEBHOOK_URL: str = field(repr=False)
@@ -242,29 +237,6 @@ def io_config(
         HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
         HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED")),
         HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S"),
-        # ── log-pattern arm: a workload that is Ready and still failing ──────────────────
-        #
-        # Every other check here reads a metric or an API. None of them can see a service that
-        # answers its probes while logging stack traces — a readiness probe asks "is the port
-        # open", not "is the work succeeding". That is the shape of the Grafana dead-panel
-        # incident: a 1/1 pod, clean rollout, and 19 panels rendering nothing for 55 minutes.
-        #
-        # Both estates in one selector. `job="k8s"` is the cluster Alloy shipper's label and
-        # `job="pi"` is daniel-pi's, so this arm covered the Pi from the day that shipped.
-        LOG_ERROR_SELECTOR=_env("LOG_ERROR_SELECTOR"),
-        # Deliberately narrow. `error` is not here and must not be added: it is the single most
-        # common word in ordinary application logs (every 404, every retried connection), and an
-        # arm that pages on it is an arm that gets muted. These four mean the process itself
-        # gave up.
-        LOG_ERROR_PATTERN=_env("LOG_ERROR_PATTERN"),
-        LOG_ERROR_WINDOW=_env("LOG_ERROR_WINDOW"),
-        # Per container, not estate-wide: one workload melting down must not be diluted by 50
-        # quiet ones, and the offender's name is the whole value of the alert.
-        LOG_ERROR_MAX=_num("LOG_ERROR_MAX"),
-        # Containers whose normal output trips the pattern. Comma-separated, case-insensitive.
-        # Keep this list short and say WHY in the inventory — a growing ignore list is the arm
-        # decaying.
-        LOG_ERROR_IGNORE=_env("LOG_ERROR_IGNORE"),
         # How far back check_swallowed_verdicts reads the host crons' push-outcome lines. Long
         # enough that a lost DOWN verdict stays paged past a cycle or two of Loki ingest lag,
         # and past the next run of a */30 producer that may land; short enough that the fetch

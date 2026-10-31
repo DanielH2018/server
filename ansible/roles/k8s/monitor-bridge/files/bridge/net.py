@@ -250,22 +250,6 @@ def loki_count(
     return _sample_value(result[0])
 
 
-def loki_vector(
-    cfg: Config, query: str, opener: Opener | None = None
-) -> list[tuple[dict[str, str], float]]:
-    """Instant LogQL query keeping each series' labels — the loki_count peer of prom_vector.
-
-    Not prom_vector(base=LOKI_URL): Loki's instant endpoint is /loki/api/v1/query, and
-    prom_vector hardcodes /api/v1/query. Same envelope, different path.
-    """
-    return [
-        (_labels(series), _sample_value(series))
-        for series in _instant_query(
-            cfg.LOKI_URL, "/loki/api/v1/query", query, "loki", opener
-        )
-    ]
-
-
 def loki_lines(
     cfg: Config, logql: str, window_s: int, limit: int, opener: Opener | None = None
 ) -> list[tuple[int, str]]:

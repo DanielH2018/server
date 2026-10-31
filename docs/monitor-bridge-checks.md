@@ -407,24 +407,6 @@ checks each gate suppresses.
   when it gained the Prometheus gate (#2004): the two sets must stay disjoint so a graced check
   reaches the evaluation path every cycle, and the gate covers the post-boot transient the grace
   covered plus the outage it never could. Empty `WAN_PROBE_URLS` disables the gate.)
-- **Workload Log Errors** (the log-pattern arm of the former k3s Workload Health monitor. It
-  counts, per container, the lines matching `LOG_ERROR_PATTERN` (`panic:`, `fatal`, `traceback`,
-  `out of memory`) over `LOG_ERROR_WINDOW` (1h) in the `LOG_ERROR_SELECTOR` streams, and pages
-  when one container exceeds `LOG_ERROR_MAX` (20). A container that is Ready while failing at its
-  job reads healthy to every Kubernetes-state check, which is why this arm exists. It keeps the
-  tile and push token the whole monitor had (`kuma_id` `monitor-bridge-k8s-workloads`), so the
-  tile's history survives its rename.
-  **The Kubernetes arms are gone from the bridge.** Unavailable replicas, a stalled rollout, zero
-  available replicas, DaemonSets, crash loops and a deregistered `devic.es/dri` are the
-  `k8s-workloads` rules in observability (`files/rules/k8s-workloads.yaml`), whose comments carry
-  the hold, floor and window reasoning that used to live here.
-  **The row's gate is `startup_grace`**, not `prometheus`: it reads no Prometheus, and the arm
-  fails open on a Loki error by itself (`with_log_errors`), so it names no reachability gate. The
-  cost of the grace is one held cycle, so the row pages on its second consecutive bad cycle. A
-  burst stays in the 1h window far longer than that: the two bursts the `DECIDED: stays at 20` (now in `homelab-logs.yaml`)
-  marker records held the tile red for 46 and 43 minutes.
-  The row is temporary. M6's batch A7 ports the arm to a LogQL rule on `loki-homelab` and deletes
-  the row, `check_workload_log_errors` and `with_log_errors`.)
 - **etcd Restore Drill** (`files/checks/service.py:check_etcd_restore_drill`. Reads the
   `last-success-list-only` stamp that the weekly etcd restore drill cron on daniel-box writes
   under `ETCD_DRILL_STATE_DIR` (`/etcd-drill-state`, a hostPath), and checks its `epoch=` line
@@ -592,6 +574,15 @@ rules added to `hosts.yaml`: its per-host copies name the hosts, and
 floor satisfiable by any three of four and one host can go dark silently.
 `test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_gates_exporters.py)
 forces the decision for a host under a new scrape job, which is how daniel-pi arrived.
+Workload Log Errors (M6 batch A7) retired into the `WorkloadLogErrors` rule in
+`ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml`, and its tile, row, check body,
+`with_log_errors`, the `log_error_verdict` verdict and the `LOG_ERROR_*` env keys are gone. The
+rule counts, per container, the lines matching `panic:`, `fatal`, `traceback` or `out of memory`
+over 1h in the cluster pod and daniel-pi container streams, and fires above 20 lines. Its
+`for: 5m` replaces the row's `startup_grace`. The `DECIDED: stays at 20` marker, which records
+the two home-assistant bursts that held the tile red for 46 and 43 minutes, sits above the rule.
+The rule is a Loki rule, so its alert never reaches Prometheus `ALERTS` and `probe.py health`
+cannot see it; `loki_prometheus_rule_*` and the ruler's notification counters are the live read.
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
 `PROM_DEPENDENT`. Each check's retirement note is in the repository history.
 

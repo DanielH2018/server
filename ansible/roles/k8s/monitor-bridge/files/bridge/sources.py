@@ -20,10 +20,6 @@ test of the delegations hands in a fake opener rather than patching `urllib.requ
 one pushes to Kuma through `bridge.net.push`; a test hands in `tests/_fake_sources.py`'s
 `FakeSink`, which records the pushes, instead of patching `bridge.net.push` (#3938).
 
-`log_error_counts` is composed from `loki_vector` and `loki_count` ON THIS CLASS rather than
-delegated, so a fake that answers those two primitives answers the composite with the real
-query shape instead of a second copy of it.
-
 Stdlib only, like every module under files/.
 """
 
@@ -63,10 +59,6 @@ class Sources:
         """Total log lines for `selector` over `window`, or None when no stream matches."""
         return bridge.net.loki_count(self.cfg, selector, window, opener=self.opener)
 
-    def loki_vector(self, query: str) -> list[tuple[dict[str, str], float]]:
-        """An instant LogQL metric query as [(labels, value), ...]."""
-        return bridge.net.loki_vector(self.cfg, query, opener=self.opener)
-
     def loki_lines(
         self, logql: str, window_s: int, limit: int
     ) -> list[tuple[int, str]]:
@@ -88,27 +80,6 @@ class Sources:
     ) -> JsonValue:
         """POST `payload` as JSON to `url` and parse the JSON response."""
         return bridge.net._post_json(url, payload, headers, opener=self.opener)
-
-    def log_error_counts(
-        self,
-        selector: str,
-        pattern: str,
-        window: str,
-        by_label: str = "container",
-    ) -> tuple[list[tuple[dict[str, str], float]], float | None]:
-        """(matches, total): per-`by_label` counts of `pattern`, and the selector's own volume.
-
-        `total` keeps the fail-open arm honest. A selector that matches no stream returns no
-        matches and reads exactly like a healthy estate, which is how HA_BAN_SELECTOR once
-        shipped with an `app` label the shipper does not emit and pushed "no ip_ban events"
-        through a window holding a real ban. Counting the selector's volume separates "nothing
-        is wrong" from "I asked the wrong question".
-        """
-        matches = self.loki_vector(
-            "sum by (%s) (count_over_time(%s |~ `%s` [%s]))"
-            % (by_label, selector, pattern, window)
-        )
-        return matches, self.loki_count(selector, window)
 
 
 class Sink:
