@@ -1,4 +1,4 @@
-"""What tasks/rootq.yml installs and removes for the read-only root inspector (#6323).
+"""What the read-only root inspector ships and defaults to (#6323).
 
 Run: uv run pytest ansible/roles/setup/claude_code/tests/test_rootq_install.py
 """
@@ -127,39 +127,7 @@ def test_matches_refuses_a_repo_file_it_cannot_vouch_for(
     assert argv is None
 
 
-def tasks() -> list[dict]:
-    return yaml_fast.safe_load((ROLE / "tasks" / "rootq.yml").read_text())
-
-
-def test_enabling_installs_the_grant_last_and_validates_it() -> None:
-    install = tasks()[0]
-    assert install["when"] == "claude_code_rootq_enabled"
-    copies = [t["ansible.builtin.copy"] for t in install["block"][:-1]]
-    assert [(c["dest"], c["owner"], c["mode"]) for c in copies] == [
-        ("{{ claude_code_rootq_script }}", "root", "0755"),
-        ("{{ claude_code_rootq_shim }}", "root", "0755"),
-    ]
-    grant = install["block"][-1]["ansible.builtin.template"]
-    assert (grant["dest"], grant["mode"], grant["validate"]) == (
-        SUDOERS,
-        "0440",
-        "visudo -cf %s",
-    )
-    assert all(t["become"] is True for t in install["block"])
-
-
-def test_disabling_removes_the_grant_the_shim_and_the_script_in_order() -> None:
-    remove = tasks()[-1]
-    assert remove["when"] == "not claude_code_rootq_enabled"
-    removed = [
-        (t["ansible.builtin.file"]["path"], t["ansible.builtin.file"]["state"])
-        for t in remove["block"]
-    ]
-    assert removed == [
-        (SUDOERS, "absent"),
-        ("{{ claude_code_rootq_shim }}", "absent"),
-        ("{{ claude_code_rootq_script }}", "absent"),
-    ]
+def test_the_defaults_leave_the_inspector_off_and_name_its_script_and_shim() -> None:
     defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
     assert defaults["claude_code_rootq_enabled"] is False
     assert defaults["claude_code_rootq_script"] == SCRIPT
@@ -232,62 +200,11 @@ def test_the_helper_runs_the_script_the_sudo_grant_names() -> None:
     assert defaults()["claude_code_rootq_script"] == SCRIPT
 
 
-def socket_blocks() -> tuple[dict, dict]:
-    (install, install_socket, remove_socket, remove) = tasks()
-    assert install["when"] == "claude_code_rootq_enabled"
-    assert remove["when"] == "not claude_code_rootq_enabled"
-    return install_socket, remove_socket
-
-
-def test_the_socket_exists_only_while_the_script_it_runs_does() -> None:
-    install, remove = socket_blocks()
-    assert install["when"] == "claude_code_rootq_socket_armed"
-    assert remove["when"] == "not claude_code_rootq_socket_armed"
+def test_the_socket_is_armed_only_while_the_script_it_runs_is_enabled() -> None:
     d = defaults()
     assert d["claude_code_rootq_socket_enabled"] is False
     assert d["claude_code_rootq_socket_armed"] == (
         "{{ claude_code_rootq_enabled and claude_code_rootq_socket_enabled }}"
-    )
-
-
-def test_enabling_installs_the_helper_the_client_and_the_units_before_listening() -> (
-    None
-):
-    install, _ = socket_blocks()
-    names = [t["name"] for t in install["block"]]
-    assert names[0].startswith("Create the group")
-    assert names[-1].startswith("Listen on")
-    copies = [
-        t["ansible.builtin.copy"]
-        for t in install["block"]
-        if "ansible.builtin.copy" in t
-    ]
-    assert {c["dest"]: (c["owner"], c["mode"]) for c in copies} == {
-        "{{ claude_code_rootq_socket_helper }}": ("root", "0700"),
-        "{{ claude_code_rootq_socket_client }}": ("root", "0755"),
-    }
-    listen = install["block"][-1]["ansible.builtin.systemd_service"]
-    assert (listen["name"], listen["enabled"]) == ("homelab-rootq.socket", True)
-    assert all(t["become"] is True for t in install["block"])
-
-
-def test_disabling_stops_the_socket_before_its_units_go_and_removes_the_group_last() -> (
-    None
-):
-    _, remove = socket_blocks()
-    steps = remove["block"]
-    stop = next(
-        i for i, t in enumerate(steps) if "ansible.builtin.systemd_service" in t
-    )
-    unit_files = next(i for i, t in enumerate(steps) if "ansible.builtin.file" in t)
-    assert steps[stop]["ansible.builtin.systemd_service"]["state"] == "stopped"
-    assert steps[stop]["when"] == "claude_code_rootq_socket_unit.stat.exists"
-    assert stop < unit_files
-    assert steps[unit_files]["ansible.builtin.file"]["state"] == "absent"
-    group = steps[-1]["ansible.builtin.group"]
-    assert (group["name"], group["state"]) == (
-        "{{ claude_code_rootq_socket_group }}",
-        "absent",
     )
 
 

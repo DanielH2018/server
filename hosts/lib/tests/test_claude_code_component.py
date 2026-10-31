@@ -74,9 +74,9 @@ def test_the_agent_user_is_declared_with_its_live_uid(package, manifest):
     )
 
 
-def test_the_role_ends_on_daniel_server_and_nowhere_else():
+def test_the_role_ends_on_every_host():
     hosts = ["daniel-box", "daniel-server", "daniel-pi"]
-    assert setup_gates.role_end_hosts(ROLE, hosts) == frozenset({"daniel-server"})
+    assert setup_gates.role_end_hosts(ROLE, hosts) == frozenset(hosts)
 
 
 def test_the_remote_control_host_ships_disabled_and_restarts_only_by_hand(

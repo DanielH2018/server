@@ -15,6 +15,7 @@ Run: uv run pytest ansible/tests/setup/test_claude_pipeline_timeline.py
 
 import re
 
+from _agent_package import render_daniel_server_with
 from _helpers import ANSIBLE, load_yaml
 from _setup_render import render_setup_text
 from lib.repo_paths import HOST_VARS
@@ -60,26 +61,24 @@ def test_the_window_survives_a_missed_run():
     assert days > interval_days, "a missed run would leave a day outside every window"
 
 
-def test_armed_only_on_daniel_box_and_disarming_removes_the_units():
+def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):
     assert DEFAULTS[KEY] is False
     assert load_yaml(HOST_VARS / "daniel-box.yml").get(KEY) is True
     assert not load_yaml(HOST_VARS / "daniel-server.yml").get(KEY, False)
 
-    tasks = load_yaml(ROLE / "tasks" / "pipeline_timeline.yml")
-    removal = [
-        t
-        for t in tasks
-        if t.get("ansible.builtin.file", {}).get("state") == "absent"
-        and "claude-pipeline-timeline.timer" in t.get("loop", [])
-    ]
-    assert removal and removal[0]["when"] == f"not {KEY}", (
-        "disarming must remove the units, or a stale timer keeps running"
-    )
+    on = render_daniel_server_with(tmp_path / "on", **{KEY: True})
+    off = render_daniel_server_with(tmp_path / "off", **{KEY: False})
+    for unit in (
+        "/usr/lib/systemd/system/homelab-claude-pipeline-timeline.timer",
+        "/usr/lib/systemd/system/homelab-claude-pipeline-timeline.service",
+    ):
+        assert unit in on.files
+        assert unit not in off.files, (
+            "disarming must drop the units, or a stale timer keeps running"
+        )
 
 
-def test_the_role_imports_the_tasks_and_the_host_component_ships_both_templates():
-    main = (ROLE / "tasks" / "main.yml").read_text()
-    assert "pipeline_timeline.yml" in main
+def test_the_host_component_ships_both_templates():
     component = (
         ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
     ).read_text()

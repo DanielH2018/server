@@ -1,0 +1,23 @@
+# The artifacts node's directories (H7.40's fourth slice), on claude_code_artifacts_node only.
+# homelab-sync-artifacts.service runs `systemd-tmpfiles --create` on this file in ExecStartPre=
+# with the `+` prefix, because the service runs as {{ sys_user }}. systemd-tmpfiles-setup.service
+# also creates them at boot. dpkg never owns a path under /home.
+#
+# The artifacts Deployment (ansible/roles/k8s/artifacts) mounts the local tree, each peer
+# directory and the star list directory as hostPaths of `type: Directory`, so each must exist
+# before the pod starts on a rebuilt host. Their paths equal artifacts' artifacts_host_dir,
+# artifacts_peer_dir/<name> and artifacts_stars_dir, which
+# hosts/lib/tests/test_claude_artifacts_node_timers.py holds equal.
+#
+# The peer directories are 0750 because the sync's `--chmod=D0750` sets the same mode. The star
+# list directory is 0755: the agent user's prune reads the list as `claude`.
+#
+# The textfile directory both timers write to matches the k3s role's disk-health task.
+#Type Path Mode User Group Age
+d {{ claude_code_artifacts_host_dir }} 0750 {{ sys_user }} {{ sys_user }} -
+d {{ claude_code_artifacts_peer_dir }} 0750 {{ sys_user }} {{ sys_user }} -
+{% for peer in claude_code_artifacts_peer_sources %}
+d {{ claude_code_artifacts_peer_dir }}/{{ peer.name }} 0750 {{ sys_user }} {{ sys_user }} -
+{% endfor %}
+d {{ claude_code_artifacts_stars_file | dirname }} 0755 {{ sys_user }} {{ sys_user }} -
+d /var/lib/node-exporter-textfile 2775 root {{ sys_user }} -

@@ -29,13 +29,13 @@ Run: uv run pytest ansible/tests/setup/test_claude_fleet_slice_cap.py
 import re
 
 import pytest
+from _agent_package import render_daniel_server_with
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 
 ROLE = "claude_code"
 ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
 DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
-TASKS = ROLE_DIR / "tasks" / "main.yml"
 
 FLEET_CONF = "fleet-slice-caps.conf.j2"
 RC_UNIT = "claude-rc.service.j2"
@@ -217,24 +217,18 @@ def test_the_sub_bound_check_rejects_a_plane_larger_than_the_fleet() -> None:
     assert to_bytes("2G") == to_bytes("2048M")
 
 
-def test_tasks_render_and_remove_the_parent_drop_in() -> None:
-    """Both directions, in the tasks that actually run: written when enabled, deleted when not.
+def test_the_package_ships_the_parent_drop_in_only_while_the_toggle_is_on(
+    tmp_path,
+) -> None:
+    """Both directions: shipped when enabled, absent from the next version when not.
 
-    A drop-in with no removal task is a one-way door — flipping the var back would leave the
-    shared ceiling in place with nothing in the repo saying so.
+    A drop-in with no way out is a one-way door: flipping the var back would leave the shared
+    ceiling in place with nothing in the repo saying so.
     """
-    tasks = TASKS.read_text()
-    assert "src: fleet-slice-caps.conf.j2" in tasks, (
-        "no task renders the fleet slice drop-in"
+    drop_in = "/usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf"
+    on = render_daniel_server_with(tmp_path / "on", claude_code_fleet_caps_enabled=True)
+    off = render_daniel_server_with(
+        tmp_path / "off", claude_code_fleet_caps_enabled=False
     )
-    assert (
-        'dest: "/etc/systemd/system/{{ claude_code_fleet_slice }}.d/claude-fleet-caps.conf"'
-        in tasks
-    ), "the drop-in must land in the fleet slice's own drop-in directory"
-    assert "- not claude_code_fleet_caps_enabled" in tasks, (
-        "nothing removes the fleet drop-in when claude_code_fleet_caps_enabled is false"
-    )
-    assert re.search(
-        r"state: absent\n\s+become: true\n\s+when:\n(\s+- .*\n)*\s+- not claude_code_fleet",
-        tasks,
-    ), "the removal task must be the file:-absent one guarded on the fleet toggle"
+    assert drop_in in on.files
+    assert drop_in not in off.files

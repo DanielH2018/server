@@ -53,6 +53,7 @@ from validate.validate_lib.cron_checks import (
     cron_uv_interpreter_error,
 )
 from validate.validate_lib.cron_targets import cron_job_scripts
+from lib.estate import role_defaults
 from lib.render_context import render_context
 from lib.render_guard import (
     REPO,
@@ -100,11 +101,14 @@ def template_context(path: Path, overrides: dict | None = None) -> dict:
     component = path.parents[1]
     if component.parent == COMPONENTS:
         spec = yaml_fast.safe_load((component / "component.yml").read_text()) or {}
+        # A component with `role:` renders over that role's defaults, as the host renderer does.
+        role = spec.get("role")
+        defaults = role_defaults(ROLES / "setup" / role) if role else {}
         return render_context(
             None,
             component_host(component.name),
             overrides=overrides,
-            component_defaults=spec.get("defaults") or {},
+            component_defaults={**defaults, **(spec.get("defaults") or {})},
         )
     return render_context(path, overrides=overrides)
 
