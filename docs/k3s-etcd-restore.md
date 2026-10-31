@@ -159,11 +159,11 @@ cron exists to find), and anything created outside the repo.
 <!-- Generated from k3s_etcd_s3_retention in the k3s role's defaults; edit that. -->
 --8<-- "assets/generated/fragments/etcd-offbox-retention.md"
 
-Kuma monitor **Off-box etcd Snapshot** (push, daily) plus the `etcd-snapshot-offbox`
-Healthchecks.io check cover the cron. The two become live differently: the Kuma tile appears once
-`etcd_snapshot_push_token` exists (added 2026-08-16) and the role is deployed, while the
-Healthchecks ping is sent from the first run regardless — but it is discarded until the check is
-created by hand in the console, because the slug is sent bare and never with `?create=1`. See
+The `EtcdSnapshotOffboxFailed` and `EtcdSnapshotOffboxNotReporting` alert rules (read from the
+cron's node_exporter textfile verdict) plus the `etcd-snapshot-offbox` Healthchecks.io check
+cover the cron. The alert rules page since M6 batch B1's Cutover-1b, which replaced the Kuma tile.
+The Healthchecks ping is sent from the first run regardless — but it is discarded until the check
+is created by hand in the console, because the slug is sent bare and never with `?create=1`. See
 `healthchecks-io-deadman.md` for its schedule and grace.
 
 ## Listing what is available
@@ -205,7 +205,7 @@ gate 3 needs the API server up.
 2. **The cluster token has an off-box baseline.** `/var/lib/homelab/etcd-token.sha256` must
    exist — see *Baseline the drift stamp when you take the copy* above. The stamp is root-only,
    so the gate checks that it exists; whether the live token still matches it is the daily
-   cron's verdict, on the **Off-box etcd Snapshot** tile. A missing stamp means no baseline was
+   cron's verdict, in `EtcdSnapshotOffboxFailed`. A missing stamp means no baseline was
    ever taken, and every snapshot since 2026-08-20 is undecryptable without that copy.
 3. **The snapshot you named exists and the cluster calls it restorable.** k3s records every
    local and S3 snapshot as an `ETCDSnapshotFile`; the gate matches `spec.snapshotName` against

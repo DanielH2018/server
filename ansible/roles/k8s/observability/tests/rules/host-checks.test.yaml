@@ -225,7 +225,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's longhorn-backup-health check has stopped reporting.
               description: >-
@@ -244,7 +243,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
               description: >-
@@ -263,7 +261,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's manifest-prune-check has stopped reporting.
               description: >-
@@ -282,7 +279,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's release-staleness-check has stopped reporting.
               description: >-
@@ -301,7 +297,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's live-drift-check has stopped reporting.
               description: >-
@@ -319,7 +314,6 @@ tests:
               job: uptime-kuma
               severity: critical
               service: uptime-kuma
-              shadow: "true"
             exp_annotations:
               summary: Uptime Kuma has stopped serving /metrics.
               description: >-
@@ -368,7 +362,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's Longhorn backup check is red.
               description: >-
@@ -393,7 +386,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's off-box etcd snapshot check is red.
               description: >-
@@ -417,7 +409,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box has deployed-artifact drift.
               description: >-
@@ -441,7 +432,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: A k8s service runs an older release than origin/master.
               description: >-
@@ -465,7 +455,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: A live cluster object differs from its last-applied manifest.
               description: >-
@@ -503,7 +492,6 @@ tests:
               origin: daniel-box
               severity: critical
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's longhorn-backup-health check has stopped reporting.
               description: >-
@@ -524,7 +512,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's release-staleness-check has stopped reporting.
               description: >-
@@ -575,7 +562,6 @@ tests:
               job: uptime-kuma
               severity: critical
               service: uptime-kuma
-              shadow: "true"
             exp_annotations:
               summary: Uptime Kuma has stopped serving /metrics.
               description: >-
