@@ -121,7 +121,7 @@ def test_cluster_vars_refuses_a_malformed_value_in_every_rendered_push_token():
     # Named members: a hand-written tile's token and one from monitor-bridge's lookup loop.
     assert {
         "homelab_eval_push_token",
-        "monitor_bridge_disk_push_token",
+        "monitor_bridge_swallowed_verdicts_push_token",
     } <= variables
     base64_token = "QUJD" * 10 + "QQ+="
     refusals = cluster_vars.successor_refusals(
