@@ -38,6 +38,7 @@ _KEYS = (
     "nut_monitor_password: x\n"
     "homelab_builder_github_token: x\n"
     "gitops_deploy_discord_webhook: x\n"
+    "claude_code_agent_gh_token: x\n"
 )
 
 DEFAULT_ACCURACY_S = 60  # systemd's AccuracySec when a timer sets none
@@ -49,9 +50,9 @@ WINDOW_TIMER = "homelab-k3s-restart.timer"
 EXEMPT = {
     "gitops-deploy.timer": "the `all` deploy lock (step 5); H7.19a removes both",
     "homelab-updater.timer": "the `windowed` mark: reconcile never restarts k3s",
-    "claude-cgroup-metrics.timer": "writes Claude cgroup metrics; never touches k3s",
-    "claude-clone-sync.timer": "syncs a git clone; never touches k3s",
-    "claude-dotfiles-sync.timer": "syncs the dotfiles clone; never touches k3s",
+    "homelab-claude-cgroup-metrics.timer": "writes Claude cgroup metrics; never touches k3s",
+    "homelab-claude-clone-sync.timer": "syncs a git clone; never touches k3s",
+    "homelab-claude-dotfiles-sync.timer": "syncs the dotfiles clone; never touches k3s",
     "claude-memory-sync.timer": "copies the memory store to daniel-server; never touches k3s",
     "claude-fanout-server-lander.timer": "lands a merged PR over ssh; reads no cluster state",
     "claude-triage-poll.timer": "polls monitors and starts a session only on an alert episode",
@@ -141,12 +142,20 @@ def _timer_schedule(name: str, keys: list[tuple[str, str]], monotonic: list[str]
     return calendar_schedule(name, calendars[-1], width)
 
 
-def role_schedules(monotonic: list[str]) -> list[Schedule]:
+def role_schedules(
+    monotonic: list[str], packaged: frozenset[str] = frozenset()
+) -> list[Schedule]:
+    """Every setup role's crons and timers, less each timer whose `homelab-` twin is in `packaged`.
+
+    A role keeps a timer's template after the box package ships it, and skips it on daniel-box.
+    """
     found = []
     for role in glance_facts.setup_role_dirs():
         for name, expr in glance_facts.cron_jobs(role):
             found.append(cron_schedule(name, expr))
         for unit, keys in glance_facts.timer_units(role):
+            if f"homelab-{unit}" in packaged:
+                continue
             pairs = [(k.split("=", 1)[0], k.split("=", 1)[1]) for k in keys]
             schedule = _timer_schedule(unit, pairs, monotonic)
             if schedule:
@@ -227,6 +236,14 @@ def box_package(tmp_path_factory):
     return host_mode.render_host("daniel-box", secrets=secrets, sops_dir=sops)
 
 
+def box_timers(package) -> frozenset[str]:
+    return frozenset(
+        m.group(1)
+        for dst in package.files
+        if (m := re.fullmatch(r"/usr/lib/systemd/system/([^/]+\.timer)", dst))
+    )
+
+
 def _window(package) -> tuple[Schedule, int]:
     timer = package.files[f"/usr/lib/systemd/system/{WINDOW_TIMER}"][0].decode()
     service = package.files["/usr/lib/systemd/system/homelab-k3s-restart.service"][
@@ -260,7 +277,8 @@ def test_the_window_is_found_in_the_box_package_and_runs_on_weekdays_only(box_pa
 def test_no_schedule_that_reads_the_cluster_fires_inside_the_box_window(box_package):
     window, span = _window(box_package)
     monotonic: list[str] = []
-    others = role_schedules(monotonic) + package_schedules(box_package, monotonic)
+    others = role_schedules(monotonic, box_timers(box_package))
+    others += package_schedules(box_package, monotonic)
     others += package_schedules(host_mode.render_package("homelab-updater"), monotonic)
     jobs, _, _ = job_schedules()
     assert violations(window, span, others + jobs) == []
@@ -283,7 +301,7 @@ def test_each_scan_finds_the_member_that_proves_it_reads_something(box_package):
     }
 
 
-def test_every_exemption_names_a_schedule_that_exists():
+def test_every_exemption_names_a_schedule_that_exists(box_package):
     jobs, _, _ = job_schedules()
     crons = {s.name for s in jobs} | {
         n for r in glance_facts.setup_role_dirs() for n, _ in glance_facts.cron_jobs(r)
@@ -293,8 +311,8 @@ def test_every_exemption_names_a_schedule_that_exists():
         for r in glance_facts.setup_role_dirs()
         for u, _ in glance_facts.timer_units(r)
     }
-    # The packaged timers: the updater's, and the builder's since H7.41b.
-    timers |= {"homelab-updater.timer", "homelab-builder.timer"}
+    # The packaged timers: the updater's, and every timer the box package ships.
+    timers |= {"homelab-updater.timer"} | box_timers(box_package)
     missing = sorted(set(EXEMPT) - crons - timers)
     assert missing == [], f"EXEMPT names that no schedule carries: {missing}"
 
@@ -333,6 +351,13 @@ def test_a_restart_timer_without_accuracysec_carries_1132_to_1140():
     assert violations(window, span, [cron_schedule("fixture", "40 11 * * *")])
     window, span = _box_window(accuracy=1)
     assert violations(window, span, [cron_schedule("fixture", "40 11 * * *")]) == []
+
+
+def test_a_role_timer_drops_out_only_once_the_box_package_ships_its_twin():
+    # claude-rc-restart.timer is the role's one calendar timer the claude-code component ships.
+    assert "claude-rc-restart.timer" in {s.name for s in role_schedules([])}
+    twin = frozenset({"homelab-claude-rc-restart.timer"})
+    assert "claude-rc-restart.timer" not in {s.name for s in role_schedules([], twin)}
 
 
 def test_an_unlisted_monotonic_timer_is_reported():

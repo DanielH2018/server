@@ -17,11 +17,15 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 
 `docs/claude-code-rc-caps.md` holds the record behind the rules below.
 
-## daniel-server: the host package owns it
+## The host packages own most of it
 
 The role ends on daniel-server with a leading `meta: end_role` (H7.39). There
-`hosts/components/claude-code/` ships what the role installed, in `homelab-daniel-server`, and
-this role applies to daniel-box alone until H7.40 moves it too.
+`hosts/components/claude-code/` ships what the role installed, in `homelab-daniel-server`. On
+daniel-box the same component ships the subjects H7.40's first slice moved, in
+`homelab-daniel-box`: the Remote Control host, the background resume, the cgroup metrics, the
+caps, the two alerts, rootq and the agent user. The role skips each there through
+`claude_code_packaged_hosts` in `defaults/main.yml`, and applies the rest to daniel-box until
+H7.40's later slices move them.
 
 - **The component renders this role's templates and copies its scripts in place**, through
   `role: claude_code`. An edit here changes both hosts: the next apply on daniel-box and the
@@ -32,16 +36,22 @@ this role applies to daniel-box alone until H7.40 moves it too.
   `defaults:` give the packaged names. Two instanced alerts keep their names,
   `claude-stop-alert@` and `fanout-alert@`, because the dotfiles hook and the fan-out tooling
   start them by name.
-- **The agent user is declared to the users arm** with its live uid, 995.
+- **The agent user is declared to the users arm** in each host's `package.yml`, with its live
+  uid: 995 on daniel-server and 996 on daniel-box. The agent's `user-<uid>.slice.d` cap sits
+  there too, because its path carries the uid.
   `homelab-claude-agent.service` runs `claude-agent-setup` at boot and on each change to its
   inputs. It sets the agent's groups, home directories, profile, git identity and signing key,
   and it clones the dotfiles and the repo when they are missing. The agent's gh token is a
   declared output of the host's SOPS file.
 - **The role's toggles still decide each subject there.** Every file, output and enable link
-  carries the `when:` of the toggle that gated its task, so setting one false in daniel-server's
+  carries the `when:` of the toggle that gated its task, so setting one false in a host's
   host_vars drops that subject from the next package version. The agent user is the one
   exception: the users arm takes no `when:`, so switching the agent off means deleting the
-  component's `users:` entry, which the arm then expires. A test holds the two together.
+  host's `users:` entry, which the arm then expires. A test holds the two together.
+- **Two writers are refused.** Every role task that writes a template or file the package
+  ships names `claude_code_packaged_hosts` in its `when:`, or sits in a block or import that
+  does. The role's render stamp is `claude-code-ansible`, because the component retires the
+  `claude-code` fragment.
 - **The Remote Control host ships without an enable link** while `claude_code_rc_enabled` is
   false, and reconcile never restarts it (`policy: manual`).
 - **The peer login follows `claude_agent_ssh_login_enabled`.** The package cannot read
@@ -51,7 +61,8 @@ this role applies to daniel-box alone until H7.40 moves it too.
   and the agent leaves `ssh-users`. A blank key leaves the file Ansible wrote.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
-  ENFORCED: `hosts/lib/tests/test_claude_code_component.py`.
+  ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,
+  `hosts/lib/tests/test_claude_code_on_daniel_box.py`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->

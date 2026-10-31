@@ -231,18 +231,22 @@ def test_tasks_render_and_remove_the_parent_drop_in() -> None:
         'dest: "/etc/systemd/system/{{ claude_code_fleet_slice }}.d/claude-fleet-caps.conf"'
         in tasks
     ), "the drop-in must land in the fleet slice's own drop-in directory"
-    assert "when: not claude_code_fleet_caps_enabled" in tasks, (
+    assert "- not claude_code_fleet_caps_enabled" in tasks, (
         "nothing removes the fleet drop-in when claude_code_fleet_caps_enabled is false"
     )
     assert re.search(
-        r"state: absent\n\s+become: true\n\s+when: not claude_code_fleet", tasks
+        r"state: absent\n\s+become: true\n\s+when:\n(\s+- .*\n)*\s+- not claude_code_fleet",
+        tasks,
     ), "the removal task must be the file:-absent one guarded on the fleet toggle"
 
 
-def test_parent_drop_in_is_stamped_for_drift_checking() -> None:
-    """An unstamped template can sit edited-but-undeployed with every repo-side check green —
-    the gap the role's stamp_render list exists to close."""
-    tasks = TASKS.read_text()
-    assert (
-        "ansible/roles/setup/claude_code/templates/fleet-slice-caps.conf.j2" in tasks
-    ), "fleet-slice-caps.conf.j2 is missing from stamp_render_templates"
+def test_parent_drop_in_ships_in_the_claude_code_component() -> None:
+    """An unstamped template can sit edited-but-undeployed with every repo-side check green.
+
+    The role stamped it while it installed the drop-in. The claude-code component ships it on
+    every host since H7.40's first slice, so a template edit reaches the next package version.
+    """
+    component = (
+        ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
+    ).read_text()
+    assert 'src: "role:fleet-slice-caps.conf.j2"' in component

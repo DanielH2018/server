@@ -1,4 +1,4 @@
-# Shipped by homelab-daniel-server. homelab-claude-rc.service names it in OnFailure=.
+# Shipped by the claude-code component. homelab-claude-rc.service names it in OnFailure=.
 [Unit]
 Description=Page Discord that the Claude Code Remote Control host failed
 After=homelab-secrets.service

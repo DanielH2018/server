@@ -5,6 +5,29 @@
 # Every var here carries the role's `claude_code_` prefix (ansible-lint
 # var-naming[no-role-prefix]), so the Remote Control ones read `claude_code_rc_*`.
 
+# The hosts whose package owns a subject (docs/target-architecture/host/h7-delete-ansible.md,
+# H7.40). Each task of a listed subject carries
+# `when: inventory_hostname not in claude_code_packaged_hosts['<subject>']`, so the role writes the
+# subject only on the hosts the map does not list. hosts/components/claude-code ships each one.
+# The map sits here, never in `host_vars`, because an `inventory/` edit is a deploy-plane change.
+# daniel-server needs no entry: the role ends there. H7.40's last slice deletes the tasks and the map.
+#   remote_control  claude-rc.service, its weekly restart and its failure page
+#   bg_resume       the background-session resume at boot
+#   cgroup_metrics  the cgroup metrics timer
+#   caps            the fleet and login-session caps and the pytest fan-out cap
+#   alerts          the session stop alert and the fan-out alert
+#   rootq           the root inspector and the agent's socket
+#   agent           the agent user: its account, groups, home, identity, gh login, kubeconfig,
+#                   and its clone and dotfiles syncs
+claude_code_packaged_hosts:
+  remote_control: [daniel-box]
+  bg_resume: [daniel-box]
+  cgroup_metrics: [daniel-box]
+  caps: [daniel-box]
+  alerts: [daniel-box]
+  rootq: [daniel-box]
+  agent: [daniel-box]
+
 # The service hands anything holding the claude.ai account a session on the k3s
 # control-plane node, and it depends on a prerequisite Ansible cannot check: whether a
 # phone-spawned worktree clears the workspace-trust dialog, which nobody can answer remotely.

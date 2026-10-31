@@ -13,6 +13,7 @@
 # root map initial_setup renders from the same profiles (#4295); that map, not this group,
 # decides what the agent's scan covers.
 - name: Create the worktree holder scan's socket group for the agent user to join
+  when: inventory_hostname not in claude_code_packaged_hosts['agent']
   # initial_setup creates it too. Here as well, because useradd refuses a group that does not
   # exist, and a `--tags claude_code` run can come before any worktree-sweep apply.
   ansible.builtin.group:
@@ -25,7 +26,9 @@
 # Created here too, for the reason above: this file runs before rootq.yml. Absent when the
 # socket is switched off, which drops the agent from the group and lets rootq.yml remove it.
 - name: Create the root inspector's socket group for the agent user to join
-  when: claude_code_rootq_socket_armed
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_rootq_socket_armed
   ansible.builtin.group:
     name: "{{ claude_code_rootq_socket_group }}"
     system: true
@@ -35,9 +38,11 @@
 # Skipped by a --check run that has not created a group, because usermod refuses a group it
 # cannot find even when it only reports.
 - name: Set the agent user's journal access, its ssh login group and its socket groups
-  when: >-
-    not (ansible_check_mode and (claude_code_worktree_holders_group_made is changed
-    or claude_code_rootq_socket_group_made is changed))
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - >-
+      not (ansible_check_mode and (claude_code_worktree_holders_group_made is changed
+      or claude_code_rootq_socket_group_made is changed))
   ansible.builtin.user:
     name: "{{ claude_code_agent_user }}"
     groups: >-
@@ -53,6 +58,7 @@
 # each. 0710 gives group sys_user traverse without a listing. Claude Code creates both on a
 # session's first run at a mode nobody has checked, so the role creates them first.
 - name: Let the operator traverse to the agent's memory store
+  when: inventory_hostname not in claude_code_packaged_hosts['agent']
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -67,6 +73,7 @@
 # setgid keeps a file Claude Code writes here in group sys_user. Root runs this, because the
 # agent belongs to no group it could chgrp to.
 - name: Open the agent's artifacts and memory directories to the operator
+  when: inventory_hostname not in claude_code_packaged_hosts['agent']
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -84,6 +91,7 @@
 # bit to keep; a file created 0600 stays unreadable, which is why the slice 4 check reads a
 # new file as the operator rather than reading getfacl.
 - name: Give files the agent writes there the operator's read
+  when: inventory_hostname not in claude_code_packaged_hosts['agent']
   ansible.posix.acl:
     path: "{{ item }}"
     entity: "{{ sys_user }}"

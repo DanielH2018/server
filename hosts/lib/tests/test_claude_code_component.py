@@ -256,16 +256,6 @@ def test_a_blank_peer_key_ships_no_file_and_leaves_the_one_ansible_wrote(tmp_pat
     assert REMOVAL not in text(package, SETUP)
 
 
-def test_the_agent_toggle_and_the_users_entry_agree():
-    # The users arm takes no `when:`. Switching the agent off on daniel-server means deleting
-    # the component's `users:` entry, which the arm then expires.
-    host_vars = REPO / "ansible" / "inventory" / "host_vars" / "daniel-server.yml"
-    enabled = yaml.safe_load(host_vars.read_text())["claude_code_agent_user_enabled"]
-    component = REPO / "hosts" / "components" / "claude-code" / "component.yml"
-    declared = {u["name"] for u in yaml.safe_load(component.read_text())["users"]}
-    assert enabled == ("claude" in declared)
-
-
 VISUDO = shutil.which("visudo") or "/usr/sbin/visudo"
 
 
