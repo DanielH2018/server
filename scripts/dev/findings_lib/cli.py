@@ -261,6 +261,13 @@ def _parser(description: str) -> argparse.ArgumentParser:
     _add_repo(ex)
     ex.add_argument("--out", required=True, help="the JSON file to write")
 
+    bd = sub.add_parser(
+        "board-dates",
+        help='make every open issue\'s "Not before" date on the Project match its label',
+    )
+    _add_dry_run(bd, suppress=True)
+    _add_repo(bd)
+
     sl = sub.add_parser("sync-labels", help="create any missing label")
     _add_dry_run(sl, suppress=True)
     _add_repo(sl)

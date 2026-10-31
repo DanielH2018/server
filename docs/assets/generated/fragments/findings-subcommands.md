@@ -14,6 +14,7 @@
 | `history` | search findings in any state by topic or cited file; prints how each closed |
 | `show` | one finding's body, outcome, closing PR and comment thread |
 | `export` | write every finding in every state to one JSON file, for the break-glass kit |
+| `board-dates` | make every open issue's "Not before" date on the Project match its label |
 | `sync-labels` | create any missing label |
 | `verify` | print each finding's stored instructions for how to verify it; runs nothing |
 | `next` | issues a session may pick up, best first |

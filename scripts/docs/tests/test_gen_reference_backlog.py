@@ -4,6 +4,7 @@ Run: uv run pytest scripts/docs/tests/test_gen_reference_backlog.py
 """
 
 import re
+from datetime import date
 
 import pytest
 
@@ -90,6 +91,40 @@ def test_render_leaves_the_claim_cell_blank_without_one():
 def test_render_empty_says_so_instead_of_an_empty_table():
     md = g.render_markdown([])
     assert "No open findings" in md and "|---|" not in md
+
+
+# --- the deferred dates -----------------------------------------------------------------
+
+
+def _deferred_lines(md):
+    section = md.split("## Deferred, by date", 1)[1].split("\n## ", 1)[0]
+    return [line for line in section.splitlines() if line.startswith("| 20")]
+
+
+def test_render_lists_deferred_findings_soonest_first_with_their_state():
+    rows = [
+        _row(1, not_before="2026-11-12"),
+        _row(2),
+        _row(3, not_before="2026-10-31"),
+        _row(4, not_before="2026-10-20"),
+    ]
+    lines = _deferred_lines(g.render_markdown(rows, today=date(2026, 10, 31)))
+    assert [line.split(" | ")[2] for line in lines] == [
+        "[#4](https://github.com/o/r/issues/4)",
+        "[#3](https://github.com/o/r/issues/3)",
+        "[#1](https://github.com/o/r/issues/1)",
+    ]
+    # `not-before: D` is workable ON D, so the row dated today has passed.
+    assert [line.split(" | ")[1] for line in lines] == [
+        "date passed",
+        "date passed",
+        "withheld",
+    ]
+
+
+def test_render_says_so_when_nothing_is_deferred():
+    md = g.render_markdown([_row(1)], today=date(2026, 10, 31))
+    assert "No deferred findings." in md and not _deferred_lines(md)
 
 
 # --- the settled register ---------------------------------------------------------------

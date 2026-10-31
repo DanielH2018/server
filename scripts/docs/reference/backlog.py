@@ -5,7 +5,9 @@ WHY THIS PAGE IS WORTH HAVING. The issues are the record; this page is the view 
 beside the other generated references at docs.local, so "what is known-broken and unowned"
 is answered where "what runs here" is, without opening GitHub.
 
-TWO TABLES, ONE REGISTER. The first is the open backlog. The second is the settled register:
+THREE TABLES, ONE REGISTER. The first is the open backlog. The second lists the open findings
+that carry a `not-before:` date, sorted by it, because GitHub's issue list can neither match
+a label prefix nor sort by a label. The third is the settled register:
 every finding closed `--accepted` (true, and the operator lives with it) or `--refuted` (a
 skeptic disproved it), grouped by reviewer domain with the close reason beside it. The
 reviewer agents under .claude/agents/ point at that table instead of carrying a hand-copied
@@ -28,6 +30,7 @@ Usage::
     uv run python scripts/docs/reference/backlog.py --out docs/reference/backlog.md
 """
 
+from datetime import date
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -38,19 +41,20 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.gh_calls import load_backlog_issues
-from dev.findings_lib.issue_model import DOMAINS, issue_rows, sort_key
+from dev.findings_lib.issue_model import DOMAINS, issue_rows, sort_key, today_utc
 from lib.cli_help import ArgumentParser
 from lib.docs_provenance import finish_generator, generated_banner, md_cell
 
 SOURCE = "scripts/docs/reference/backlog.py"
 
 
-def render_markdown(rows: list[dict]) -> str:
-    """Renders the backlog page: the banner, the open table, then the settled register.
+def render_markdown(rows: list[dict], today: date | None = None) -> str:
+    """Renders the backlog page: the open table, the deferred dates, the settled register.
 
     Args:
         rows: findings of any state in `issue_rows` shape, as returned by
             `dev.findings_lib.issue_model.issue_rows`.
+        today: the date a not-before date is compared to; UTC today when omitted.
     """
     parts = [generated_banner(SOURCE), "# Backlog\n"]
     open_rows = [r for r in rows if r["state"] == "OPEN"]
@@ -72,6 +76,7 @@ def render_markdown(rows: list[dict]) -> str:
     else:
         parts.extend(_open_table(open_rows))
     parts.append("")
+    parts.extend(_deferred_section(open_rows, today or today_utc()))
     parts.extend(_settled_section(settled))
     return "\n".join(parts).rstrip("\n") + "\n"
 
@@ -100,6 +105,31 @@ def _open_table(rows: list[dict]) -> list[str]:
             f"{r['domain'] or '-'} | {title} | {r['first_seen']} | {r['reobservations']} | "
             f"{claimed} | {verify_by} |"
         )
+    return parts
+
+
+def _deferred_section(rows: list[dict], today: date) -> list[str]:
+    """Every open finding carrying a not-before date, soonest first."""
+    parts = [
+        "## Deferred, by date\n",
+        "Open findings carrying a `not-before:` label, soonest first. `findings.py next` "
+        "withholds a *withheld* row until its date and offers it on that day; a *date "
+        "passed* row is workable again and keeps its label until someone defers or clears "
+        "it. Set or move a date with `findings.py defer <n> --until <date>`.\n",
+    ]
+    dated = [r for r in rows if r.get("not_before")]
+    if not dated:
+        parts.append("No deferred findings.\n")
+        return parts
+    parts.append("| Not before | State | # | Finding |")
+    parts.append("|---|---|---|---|")
+    for r in sorted(dated, key=lambda r: (r["not_before"], r["number"])):
+        state = "withheld" if today.isoformat() < r["not_before"] else "date passed"
+        parts.append(
+            f"| {r['not_before']} | {state} | [#{r['number']}]({r['url']}) | "
+            f"{md_cell(r['title'])} |"
+        )
+    parts.append("")
     return parts
 
 

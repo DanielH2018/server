@@ -11,7 +11,7 @@ import json
 from datetime import date
 
 import pytest
-from _findings_fakes import Fakes, facts, make_issue
+from _findings_fakes import Fakes, board_answer, facts, make_issue
 
 from dev import findings
 from dev.findings_lib.issue_model import LABELS, NOT_BEFORE_STYLE
@@ -149,22 +149,33 @@ def test_open_without_a_date_adds_no_such_label():
 
 
 def test_defer_cli_creates_the_label_once(capsys, make_tools):
-    tools, calls = make_tools(Fakes(view=make_issue(1288)))
+    fakes = Fakes(
+        view=make_issue(1288), board={1288: board_answer(current="2026-09-12")}
+    )
+    tools, calls = make_tools(fakes)
     argv = ["defer", "1288", "--until", "2026-09-12"]
     assert findings.main(argv, tools) == 0
     assert [c[:2] for c in calls.gh] == [
         ["label", "create"],
         ["issue", "edit"],
         ["issue", "comment"],
+        ["api", "graphql"],
     ]
     assert "#1288 deferred until 2026-09-12" in capsys.readouterr().out
 
 
 def test_defer_cli_skips_the_create_when_the_label_exists(make_tools):
-    fakes = Fakes(view=make_issue(1288), labels=ALL_LABELS | {"not-before:2026-09-12"})
+    fakes = Fakes(
+        view=make_issue(1288),
+        labels=ALL_LABELS | {"not-before:2026-09-12"},
+        board={1288: board_answer(current="2026-09-12")},
+    )
     tools, calls = make_tools(fakes)
     assert findings.main(["defer", "1288", "--until", "2026-09-12"], tools) == 0
-    assert [c[:2] for c in calls.gh] == [["issue", "edit"], ["issue", "comment"]]
+    assert [c[:2] for c in calls.gh if c[0] != "api"] == [
+        ["issue", "edit"],
+        ["issue", "comment"],
+    ]
 
 
 def test_defer_cli_clear_exits_3_when_nothing_is_deferred(capsys, make_tools):
@@ -186,7 +197,7 @@ def test_open_cli_with_not_before_creates_the_label_before_the_issue(
 ):
     body = tmp_path / "b.md"
     body.write_text("B")
-    tools, calls = make_tools(Fakes())
+    tools, calls = make_tools(Fakes(board={42: board_answer(current="2026-09-12")}))
     argv = [
         "open",
         "--title",
