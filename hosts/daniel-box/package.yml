@@ -64,8 +64,8 @@ credentials:
 outputs:
   # Triage's own Claude credential, read by systemd as root. It stays out of the agent's files, so
   # a session cannot copy it into the clone or a report.
-  - src: "role:claude-triage-session.env.j2"
-    path: /etc/claude-triage/session.env
+  - src: "role:claude-triage-oauth-token.j2"
+    path: /etc/claude-triage/oauth-token
     owner: root
     group: root
     mode: "0600"

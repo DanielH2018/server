@@ -1,6 +1,6 @@
 #!/bin/bash
 # Shipped by the claude-code component. Run as {{ claude_code_agent_user }} by
-# homelab-claude-agent-browser.service.
+# homelab-claude-agent-browser.service, which its timer starts every six hours.
 #
 # Usage: claude-agent-browser [-h|--help]
 # Takes no arguments. Running it by hand as {{ claude_code_agent_user }} applies every step below.
@@ -72,7 +72,7 @@ want=$(jq -ncS --arg command "$launcher" --arg node_bin "$node_bin" \
 live=$(registered)
 if [ "$live" != "$want" ]; then
   if [ ! -x "$claude" ]; then
-    # The dotfiles sync installs Claude Code; the next start of this unit registers the server.
+    # The dotfiles sync installs Claude Code; the timer's next run registers the server.
     echo "claude-agent-browser: $claude is not installed yet, so homelab-ui is not registered"
     exit 0
   fi

@@ -58,6 +58,7 @@ EXEMPT = {
     "homelab-claude-memory-sync.timer": "copies the memory store to daniel-server; never touches k3s",
     "homelab-claude-fanout-server-lander.timer": "lands a merged PR over ssh; reads no cluster state",
     "homelab-claude-triage-poll.timer": "polls monitors and starts a session only on an alert episode",
+    "homelab-claude-agent-browser.timer": "installs the agent's browser pins; never touches k3s",
     "homelab-claude-pipeline-timeline.timer": "joins GitHub, journals and review records; no cluster",
     "homelab-builder.timer": "builds and signs packages; a build during a restart only waits",
     "Sync peer Claude artifacts": "an ssh pull from daniel-server; reads no cluster state",

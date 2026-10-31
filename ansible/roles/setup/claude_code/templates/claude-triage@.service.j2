@@ -24,10 +24,12 @@ Environment=KUBECONFIG={{ pins.agent_home }}/.kube/config
 Environment=RUN_HOOK_PROJECT_DIR={{ pins.agent_home }}/server
 Environment=RUN_HOOK_UV={{ pins.agent_home }}/.local/bin/uv
 Environment=PYTHONDONTWRITEBYTECODE=1
-# The Claude credential from `claude setup-token`, read by systemd as root (0600), so it is in
-# no unit line `systemctl show` publishes. It is this unit's own token: the interactive login
+# The Claude credential from `claude setup-token`, read by systemd as root (0600) into
+# $CREDENTIALS_DIRECTORY, so it is in no unit line `systemctl show` publishes. A credential rather
+# than an EnvironmentFile=, because a token pasted across a line wrap would end at the newline
+# there; the runner joins the whole file. It is this unit's own token: the interactive login
 # claude-rc.service uses can lapse while idle (#4618).
-EnvironmentFile=/etc/claude-triage/session.env
+LoadCredential=claude_oauth_token:/etc/claude-triage/oauth-token
 SyslogLevel=notice
 # SIGINT ends the session's turn cleanly; SIGTERM exits 143 with the turn unrecorded.
 KillSignal=SIGINT

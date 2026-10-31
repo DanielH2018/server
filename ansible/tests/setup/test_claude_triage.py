@@ -159,7 +159,9 @@ def test_the_unit_runs_as_the_agent_with_its_own_credential_and_a_clean_stop() -
     text = unit()
     agent = defaults()["claude_code_agent_user"]
     assert directive(text, "User") == [agent]
-    assert directive(text, "EnvironmentFile") == ["/etc/claude-triage/session.env"]
+    assert directive(text, "LoadCredential") == [
+        "claude_oauth_token:/etc/claude-triage/oauth-token"
+    ]
     assert directive(text, "KillSignal") == ["SIGINT"]
     assert directive(text, "OnFailure") == ["homelab-alert@%n.service"]
     # A busy lock is a wait, not a failure.

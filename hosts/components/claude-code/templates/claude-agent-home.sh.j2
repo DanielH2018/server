@@ -1,0 +1,74 @@
+#!/bin/bash
+# Shipped by the claude-code component. Run as root by claude-agent-setup.
+#
+# Usage: claude-agent-home [-h|--help]
+# Takes no arguments. Running it by hand applies every step below for real.
+#
+# Gives the {{ claude_code_agent_user }} agent its commit-signing key and allowed_signers file{{ ', its peer key on the peers\' key host' if inventory_hostname == claude_agent_ssh_key_host else '' }}{{ ', and once, the operator\'s memory store' if claude_code_user == claude_code_agent_user and claude_code_agent_memory_seed else '' }}.
+#
+# The agent owns its home, so every write there runs as the agent: root never follows a link
+# the agent left at a path. Root only reads the operator's memory store, into a staging directory
+# of its own. Every step is idempotent.
+set -euo pipefail
+
+case "${1-}" in
+  -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+esac
+
+agent={{ claude_code_agent_user }}
+home={{ claude_code_agent_user_home }}
+
+as_agent() {
+  runuser -u "$agent" -- env HOME="$home" USER="$agent" TMPDIR=/tmp \
+    PATH="$home/.local/bin:/usr/local/bin:/usr/bin:/bin" "$@"
+}
+
+# An ed25519 key generated as the agent, so the private half never leaves its home.
+keypair() {
+  [ -e "$1" ] || as_agent ssh-keygen -q -t ed25519 -N "" -C "$2" -f "$1"
+  as_agent chmod 0600 "$1"
+  as_agent chmod 0644 "$1.pub"
+}
+
+key={{ claude_code_agent_signing_key }}
+keypair "$key" "{{ claude_code_agent_github_login }} commit signing ($(hostname))"
+printf '%s namespaces="git" %s\n' "{{ claude_code_agent_git_email }}" "$(as_agent cat "$key.pub")" |
+  as_agent tee "$home/.config/git/allowed_signers" > /dev/null
+as_agent chmod 0644 "$home/.config/git/allowed_signers"
+{% if inventory_hostname == claude_agent_ssh_key_host %}
+
+# The key host's half of the peer login. Each peer carries the public half as
+# claude_agent_peer_public_key, so a new key is a component edit too.
+peer_key={{ claude_agent_ssh_key_path }}
+case "$peer_key" in
+  "$home"/.ssh/*) ;;
+  *) echo "claude-agent-home: the peer key $peer_key is not under $home/.ssh" >&2; exit 1 ;;
+esac
+keypair "$peer_key" "$agent peers ({{ inventory_hostname }})"
+{% endif %}
+{% if claude_code_user == claude_code_agent_user and claude_code_agent_memory_seed %}
+
+# Once, when the Remote Control host runs as the agent: the operator's memory store becomes the
+# agent's while the agent has no MEMORY.md of its own, so no later run copies over a memory the
+# agent wrote. Each note loses the operator's checkout prefix, matched as a literal, so a repo
+# link resolves from any clone. A failed copy removes the index again, so the next run retries.
+agent_memory="{{ claude_code_agent_memory_dir }}"
+operator_memory="{{ claude_code_operator_memory_dir }}"
+strip='{{ claude_code_agent_memory_seed_strip }}'
+if ! as_agent test -e "$agent_memory/MEMORY.md" && [ -e "$operator_memory/MEMORY.md" ]; then
+  staging=$(mktemp -d)
+  trap 'rm -rf "$staging"' EXIT
+  pattern=$(printf '%s' "$strip" | sed 's/[][\\.*^$|]/\\&/g')
+  if ! {
+    cp -RL --preserve=mode,timestamps "$operator_memory/." "$staging/" &&
+      find "$staging" -type f -name '*.md' -print0 | xargs -0 -r sed -i "s|$pattern||g" &&
+      chmod -R u=rwX,g=rX,o= "$staging" &&
+      chown -R "$agent" "$staging" &&
+      as_agent cp -R --preserve=mode,timestamps "$staging/." "$agent_memory/"
+  }; then
+    as_agent rm -f "$agent_memory/MEMORY.md"
+    echo "claude-agent-home: copying the operator's memory store failed; the next run copies again" >&2
+    exit 1
+  fi
+fi
+{% endif %}

@@ -7,9 +7,8 @@
 # Gives the {{ claude_code_agent_user }} agent user what its home and groups need on every run:
 # the groups it reads the host through, its login profile, git identity and instructions, its
 # commit-signing key, the operator's read-only kubeconfig, its dotfiles source and its clone. On
-# the peers' key host it also generates the agent's peer key and names each peer in its ssh
-# config, and where the Remote Control host runs as the agent it copies the operator's memory
-# store into the agent's once.
+# the peers' key host it also names each peer in the agent's ssh config. claude-agent-home writes
+# the keys and the memory seed as the agent.
 # The users arm creates the user itself (/usr/lib/sysusers.d/homelab.conf). The dotfiles sync
 # installs its tooling (uv, Python, prek, Claude Code) once the dotfiles source exists, and the
 # clone sync keeps its clone, venv and collections current.
@@ -95,52 +94,11 @@ put {{ '0640' if claude_code_agent_operator_read else '0600' }} chezmoi-seed.tom
 # chezmoi's first init needs the answers in its config; later runs render the config themselves.
 [ -e "$home/.config/chezmoi/chezmoi.toml" ] || put 0600 chezmoi-seed.toml .config/chezmoi/chezmoi.toml
 
-# The commit-signing key, generated as the agent so the private half never leaves its home.
-key={{ claude_code_agent_signing_key }}
-[ -e "$key" ] || as_agent ssh-keygen -q -t ed25519 -N "" \
-  -C "{{ claude_code_agent_github_login }} commit signing ($(hostname))" -f "$key"
-chown "$agent:$operator" "$key" "$key.pub"
-chmod 0600 "$key"
-chmod 0644 "$key.pub"
-printf '%s namespaces="git" %s\n' "{{ claude_code_agent_git_email }}" "$(cat "$key.pub")" \
-  > "$home/.config/git/allowed_signers"
-chown "$agent:$operator" "$home/.config/git/allowed_signers"
-chmod 0644 "$home/.config/git/allowed_signers"
-
+# The signing key, the peer key and the memory seed, each written as the agent.
+/usr/lib/homelab/claude-agent-home
 {% if inventory_hostname == claude_agent_ssh_key_host %}
-# The key host's half of the peer login: the agent's peer key, generated as the agent so the
-# private half never leaves its home, and the ssh config naming each peer's agent user. Each peer
-# carries the public half as claude_agent_peer_public_key, so a new key is a component edit too.
-peer_key={{ claude_agent_ssh_key_path }}
-case "$peer_key" in
-  "$home"/.ssh/*) ;;
-  *) echo "claude-agent-setup: the peer key $peer_key is not under $home/.ssh" >&2; exit 1 ;;
-esac
-[ -e "$peer_key" ] || as_agent ssh-keygen -q -t ed25519 -N "" \
-  -C "$agent peers ({{ inventory_hostname }})" -f "$peer_key"
-chown "$agent:$operator" "$peer_key" "$peer_key.pub"
-chmod 0600 "$peer_key"
-chmod 0644 "$peer_key.pub"
+# The ssh config naming each peer's agent user, beside the peer key claude-agent-home generates.
 put 0644 ssh-config .ssh/config
-{% endif %}
-
-{% if claude_code_user == claude_code_agent_user and claude_code_agent_memory_seed %}
-# Once, when the Remote Control host runs as the agent: the operator's memory store becomes the
-# agent's while the agent has no MEMORY.md of its own, so no later run copies over a memory the
-# agent wrote. Each note loses the operator's checkout prefix, so a repo link resolves from any
-# clone. A failed copy removes the index again, so the next run retries.
-agent_memory="{{ claude_code_agent_memory_dir }}"
-operator_memory="{{ claude_code_operator_memory_dir }}"
-if [ ! -e "$agent_memory/MEMORY.md" ] && [ -e "$operator_memory/MEMORY.md" ]; then
-  if ! { rsync -rLptog --chown="$agent:$operator" --chmod=D2750,F0640 \
-           "$operator_memory/" "$agent_memory/" &&
-         find "$agent_memory" -type f -name '*.md' -print0 |
-           xargs -0 -r sed -i 's|{{ claude_code_agent_memory_seed_strip }}||g'; }; then
-    rm -f "$agent_memory/MEMORY.md"
-    echo "claude-agent-setup: copying the operator's memory store failed; the next run copies again" >&2
-    exit 1
-  fi
-fi
 {% endif %}
 
 # The operator's read-only kubeconfig, copied on every run so a re-issued token reaches it.

@@ -724,7 +724,7 @@
       - ansible/roles/setup/claude_code/templates/claude-triage-poll.service.j2
       - ansible/roles/setup/claude_code/templates/claude-triage-poll.timer.j2
       # The stamp hashes the repo source, never the rendered file, so no secret reaches it.
-      - ansible/roles/setup/claude_code/templates/claude-triage-session.env.j2
+      - ansible/roles/setup/claude_code/templates/claude-triage-oauth-token.j2
 
 # Sibling of the stamp above, for the ONE copy:-deployed (not template:-rendered) artifact
 # this role carries — manifest-prune-check.sh's second arm (is the deployed code the repo's

@@ -1,5 +1,7 @@
-# Shipped by the claude-code component. Enabled at boot, and restarted by reconcile when its script
-# changes, which a Node or @playwright/mcp pin bump does.
+# Shipped by the claude-code component. homelab-claude-agent-browser.timer starts it after boot
+# and every six hours, so a Node or @playwright/mcp pin bump, a failed download and a host where
+# Claude Code arrived after the last run all converge without a reboot. A run that changes
+# nothing downloads nothing.
 [Unit]
 Description=Give the {{ claude_code_agent_user }} agent user its homelab-ui browser, or take it back
 OnFailure=homelab-alert@%n.service
@@ -9,8 +11,6 @@ After=network-online.target homelab-claude-agent.service
 
 [Service]
 Type=oneshot
-# Active after a clean run, so reconcile's try-restart reruns it when its script changes.
-RemainAfterExit=yes
 # The agent, never root: every path it writes is in the agent's home.
 User={{ claude_code_agent_user }}
 NoNewPrivileges=yes
@@ -18,6 +18,3 @@ NoNewPrivileges=yes
 TimeoutStartSec=30min
 SyslogLevel=notice
 ExecStart=/usr/lib/homelab/claude-agent-browser
-
-[Install]
-WantedBy=multi-user.target

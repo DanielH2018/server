@@ -121,18 +121,28 @@ def build_argv(cfg: dict[str, str], prompt: str) -> list[str]:
 
 
 TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
+# The unit's LoadCredential= name for the token file.
+TOKEN_CREDENTIAL = "claude_oauth_token"
 
 
 def session_env(environ: dict[str, str]) -> dict[str, str]:
-    """`environ` with every whitespace character removed from the session's Claude token.
+    """`environ` with the session's Claude token set from the unit's credential, whitespace removed.
 
-    session.env carries the token as it was pasted, and `claude setup-token` wraps it onto an
-    indented second line: the 2026-10-17 paste kept two spaces from the wrap, and Claude
-    answered "Not logged in". A token holds no whitespace, so removing it loses nothing.
+    The credential file holds the token as it was pasted, and `claude setup-token` wraps it onto
+    an indented second line: the 2026-10-17 paste kept the wrap, and Claude answered "Not
+    logged in". A token holds no whitespace, so joining the whole file loses nothing and rejoins
+    a wrapped token. Without the credential, a token already in `environ` is joined the same way.
     """
     env = dict(environ)
-    if TOKEN_ENV in env:
-        env[TOKEN_ENV] = "".join(env[TOKEN_ENV].split())
+    token = env.get(TOKEN_ENV)
+    credentials = env.get("CREDENTIALS_DIRECTORY")
+    if credentials:
+        path = os.path.join(credentials, TOKEN_CREDENTIAL)
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                token = f.read()
+    if token is not None:
+        env[TOKEN_ENV] = "".join(token.split())
     return env
 
 

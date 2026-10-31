@@ -79,18 +79,26 @@ check's flux copy.
   one-hour quiet window a poller failing every tick needs. `claude-triage@` and
   `claude-triage-report-alert@` keep their names, because the poller, the runner and the polkit
   rule start them by name.
-- **The agent's home steps run in `claude-agent-setup`.** On `claude_agent_ssh_key_host` it
-  generates the peer key and installs the ssh config that names each peer. Where
-  `claude_code_user` is the agent, it copies the operator's memory store once, while the agent
-  has no `MEMORY.md`. The homelab-ui login is an output of the host's SOPS file. The operator
-  config subset (`tasks/agent_operator_config.yml`) is not packaged: it runs only where
+- **Root writes nothing in the agent's home that the agent could have replaced with a link.**
+  `claude-agent-setup` calls `claude-agent-home`, which writes the signing key, the
+  `allowed_signers` file, the peer key on `claude_agent_ssh_key_host`, and the memory seed, all
+  as the agent. The seed is the one step that reads as root: root copies the operator's store
+  into a private staging directory, and the agent copies it from there. It runs once, while the
+  agent has no `MEMORY.md`, where `claude_code_user` is the agent. The ssh config is installed
+  with `install`, which replaces a link rather than writing through it. The homelab-ui login is
+  an output of the host's SOPS file. The operator config subset
+  (`tasks/agent_operator_config.yml`) is not packaged: it runs only where
   `claude_code_agent_dotfiles` is false, and no host sets that.
 - **The homelab-ui browser is `homelab-claude-agent-browser.service`**, a oneshot run as the
-  agent. Its script installs the pinned Node, `@playwright/mcp` and Chromium and registers the
+  agent, which `homelab-claude-agent-browser.timer` starts 10 minutes after boot and every six
+  hours. Its script installs the pinned Node, `@playwright/mcp` and Chromium and registers the
   MCP server, or removes all of it while `claude_code_agent_homelab_ui_enabled` is false. The
-  unit ships wherever the agent exists, so the way out runs. The Node and `@playwright/mcp`
-  pins are in the component's `defaults:`, where Renovate and `asset_pins.py --refresh node`
-  read them.
+  timer ships wherever the agent exists, so the way out runs, and a pin bump or a failed run
+  converges on the next run. The Node and `@playwright/mcp` pins are in the component's
+  `defaults:`, where Renovate and `asset_pins.py --refresh node` read them.
+- **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`.** The runner
+  joins the whole file without whitespace, so a token pasted across `setup-token`'s line wrap
+  still reaches the session whole.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
   ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,

@@ -102,6 +102,7 @@ outputs:
 files:
   # The agent user.
   - {src: templates/claude-agent-setup.sh.j2, dst: /usr/lib/homelab/claude-agent-setup, mode: "0755", activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: templates/claude-agent-home.sh.j2, dst: /usr/lib/homelab/claude-agent-home, mode: "0755", activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: "role:agent-user-profile.j2", dst: /usr/lib/homelab/claude-agent/profile, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: "role:agent-gitconfig.j2", dst: /usr/lib/homelab/claude-agent/gitconfig, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: "role:agent-user-claude-md.j2", dst: /usr/lib/homelab/claude-agent/CLAUDE.md, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
@@ -113,8 +114,9 @@ files:
   - {src: units/homelab-claude-agent.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent.service, when: "claude_code_agent_user_enabled"}
   # The agent's homelab-ui browser. It ships while the agent exists, whatever
   # claude_code_agent_homelab_ui_enabled says: switched off, the same script takes it back.
-  - {src: templates/claude-agent-browser.sh.j2, dst: /usr/lib/homelab/claude-agent-browser, mode: "0755", activate: "try-restart:homelab-claude-agent-browser.service", when: "claude_code_agent_user_enabled"}
+  - {src: templates/claude-agent-browser.sh.j2, dst: /usr/lib/homelab/claude-agent-browser, mode: "0755", when: "claude_code_agent_user_enabled"}
   - {src: units/homelab-claude-agent-browser.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent-browser.service, when: "claude_code_agent_user_enabled"}
+  - {src: units/homelab-claude-agent-browser.timer, dst: /usr/lib/systemd/system/homelab-claude-agent-browser.timer, when: "claude_code_agent_user_enabled"}
   # The Remote Control host.
   - {src: "role:claude-rc.service.j2", dst: /usr/lib/systemd/system/homelab-claude-rc.service}
   - {src: units/homelab-claude-rc-alert.service, dst: /usr/lib/systemd/system/homelab-claude-rc-alert.service}
@@ -199,7 +201,7 @@ units:
   homelab-claude-bg-resume.service: {policy: manual, when: claude_code_bg_resume_enabled}
 enable:
   homelab-claude-agent.service: {target: multi-user.target, when: claude_code_agent_user_enabled}
-  homelab-claude-agent-browser.service: {target: multi-user.target, when: claude_code_agent_user_enabled}
+  homelab-claude-agent-browser.timer: {target: timers.target, when: claude_code_agent_user_enabled}
   homelab-claude-rc.service: {target: multi-user.target, when: claude_code_rc_enabled}
   homelab-claude-rc-restart.timer: {target: timers.target, when: claude_code_rc_enabled}
   homelab-claude-bg-resume.service: {target: multi-user.target, when: claude_code_bg_resume_enabled}
@@ -278,6 +280,8 @@ legacy:
   - {path: /var/lib/claude/.config/environment.d/90-claude-pytest-cap.conf}
   - {path: /etc/polkit-1/rules.d/50-claude-triage.rules}
   - {path: /etc/claude-triage/alert-webhook.env}
+  # The triage credential as an EnvironmentFile=, before it became a LoadCredential= file.
+  - {path: /etc/claude-triage/session.env}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-triage}
   # Where root downloaded the agent's Node before homelab-claude-agent-browser.service did it.
   - {path: /var/cache/claude-agent-node}
