@@ -115,10 +115,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Swallowed Push Verdicts"}[2h])
             or
-              absent_over_time(monitor_status{monitor_name="GitHub Ruleset Drift"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="GitHub Interaction Limit"}[50h10m])
-            or
               absent_over_time(monitor_status{monitor_name="WAN Reachable"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Discord Delivery"}[2h])

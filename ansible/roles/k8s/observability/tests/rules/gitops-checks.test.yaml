@@ -24,7 +24,7 @@ tests:
       - eval_time: 30h
         alertname: GitHubRulesetDriftNotReporting
         exp_alerts:
-          - exp_labels: {check: github-ruleset-drift, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+          - exp_labels: {check: github-ruleset-drift, origin: daniel-box, severity: warning, service: github}
             exp_annotations:
               summary: daniel-box's GitHub ruleset drift check has stopped reporting.
               description: >-
@@ -38,7 +38,7 @@ tests:
       - eval_time: 30h
         alertname: GitHubInteractionLimitNotReporting
         exp_alerts:
-          - exp_labels: {check: github-interaction-limit, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+          - exp_labels: {check: github-interaction-limit, origin: daniel-box, severity: warning, service: github}
             exp_annotations:
               summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
               description: >-
@@ -78,7 +78,7 @@ tests:
       - eval_time: 4h
         alertname: GitHubRulesetDrift
         exp_alerts:
-          - exp_labels: {check: github-ruleset-drift, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+          - exp_labels: {check: github-ruleset-drift, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github}
             exp_annotations:
               summary: The live GitHub rulesets no longer match the values the repo declares.
               description: >-
@@ -99,7 +99,7 @@ tests:
       - eval_time: 4h
         alertname: GitHubInteractionLimitNotArmed
         exp_alerts:
-          - exp_labels: {check: github-interaction-limit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+          - exp_labels: {check: github-interaction-limit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github}
             exp_annotations:
               summary: The repo's GitHub interaction limit was not re-armed.
               description: >-
@@ -124,7 +124,7 @@ tests:
       - eval_time: 26h
         alertname: GitHubRulesetDriftNotReporting
         exp_alerts:
-          - exp_labels: {check: github-ruleset-drift, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+          - exp_labels: {check: github-ruleset-drift, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github}
             exp_annotations:
               summary: daniel-box's GitHub ruleset drift check has stopped reporting.
               description: >-
@@ -145,7 +145,7 @@ tests:
       - eval_time: 26h
         alertname: GitHubInteractionLimitNotReporting
         exp_alerts:
-          - exp_labels: {check: github-interaction-limit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github, shadow: "true"}
+          - exp_labels: {check: github-interaction-limit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: github}
             exp_annotations:
               summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
               description: >-
