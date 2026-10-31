@@ -1,8 +1,8 @@
 """Tests for `probe.py applied` (`probe_lib/applied.py` and `probe_lib/applied_tasks.py`).
 
 Most tests walk a small role written to `tmp_path`, one task per shape the walk reads or
-skips. One walks the real `claude_code` role, so a walk that stopped finding the role's units
-fails by name.
+skips. One walks the real `claude_code` role, which both hosts' packages emptied, so a walk
+that found a task in it fails by name.
 """
 
 import hashlib
@@ -137,24 +137,15 @@ def test_a_false_gate_drops_the_task_and_an_unreadable_one_is_skipped(tmp_path):
     assert "/etc/x/box" not in {w.path for w in pi_wants}
 
 
-def test_the_real_claude_code_role_skips_what_daniel_boxs_package_ships():
+def test_the_emptied_claude_code_role_runs_on_no_host_and_expects_no_file():
+    """Both hosts' packages ship what the role installed, and its `end_role` leaves no task."""
     role = applied.SETUP / "claude_code"
-    wants, _ = applied_tasks.expected(
-        role, "daniel-box", applied.context(role, "daniel-box")
-    )
-    by_path = {w.path: w for w in wants}
-    # The takeover check's flux copy is one of the few paths the role still writes there.
-    assert "/usr/local/lib/homelab-takeover-check" in by_path
-    # daniel-box's package ships these, so the role skips them there.
-    for unit in (
-        "claude-rc.service",
-        "claude-cgroup-metrics.timer",
-        "claude-memory-sync.timer",
-        "claude-fanout-server-lander.service",
-        "claude-triage-poll.timer",
-        "claude-triage@.service",
-    ):
-        assert f"/etc/systemd/system/{unit}" not in by_path
+    assert applied_hosts.task_files("claude_code", role) == {}
+    for host in ("daniel-box", "daniel-server"):
+        assert applied_tasks.expected(role, host, applied.context(role, host)) == (
+            [],
+            [],
+        )
 
 
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
@@ -295,9 +286,9 @@ def test_every_jinja_import_in_the_real_setup_roles_resolves():
     """A census: an import the walk cannot find hides its tasks, so none may exist today.
 
     Only a path that does not resolve counts here. A gate or loop that reads a run-time value
-    is UNCHECKED too, and `claude_code` has three by design (#6356). `claude_code` reaching
-    `common/tasks/alert_unit.yml` through `{{ role_path }}` is the member
-    `test_the_real_claude_code_role_walks_its_shared_alert_import` pins.
+    is UNCHECKED too. `gitops_deploy` reaching `common/tasks/alert_unit.yml` through
+    `{{ role_path }}` is the member `test_the_real_gitops_deploy_role_walks_its_shared_alert_import`
+    pins.
     """
     walked, lost = [], []
     for role in sorted(p for p in applied.SETUP.iterdir() if (p / "tasks" / "main.yml").is_file()):  # fmt: skip
@@ -311,24 +302,6 @@ def test_every_jinja_import_in_the_real_setup_roles_resolves():
         walked.append(role.name)
     assert "claude_code" in walked and len(walked) > 10
     assert lost == []
-
-
-def test_the_real_node_crons_gate_resolves_for_each_host():
-    """`node_crons.yml` is gated on `claude_code_artifacts_node`, which is `{{ k8s_primary_node }}`."""
-    role = applied.SETUP / "claude_code"
-    walked = {
-        host: applied_tasks.expected(role, host, applied.context(role, host))
-        for host in ("daniel-box", "daniel-server")
-    }
-    box_paths = {w.path for w in walked["daniel-box"][0]}
-    assert {"/usr/local/bin/sync-artifacts.sh", "/usr/local/bin/claude-otel-health.sh"} <= box_paths  # fmt: skip
-    for host, (_, skips) in walked.items():
-        node_crons = [s for s in skips if "node_crons.yml" in s.task]
-        assert all("does not apply" in s.reason for s in node_crons), (host, node_crons)
-    assert any("node_crons" in s.task for s in walked["daniel-server"][1])
-    # The three task files #6359 tracked read static set_facts, which the walk evaluates.
-    for host, (_, skips) in walked.items():
-        assert [s.task for s in skips if s.unchecked] == [], host
 
 
 GATED = """\

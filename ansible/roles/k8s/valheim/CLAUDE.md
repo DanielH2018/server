@@ -108,7 +108,7 @@ it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
   installed and then throw every frame.
 - **Enable one mod at a time and read the boot log before adding the next.** The set is two
   because Valheim 1.0's rolling updates broke the rest. The ten that failed were removed
-  rather than left commented out. `UPDATE_CRON` runs at its default `*/15`, so the game can
+  rather than left commented out. The image's update cron runs at its default `*/15`, so the game can
   update out from under the mods with nothing failing.
 - **Ore through portals is a vanilla world modifier, not a mod** — `valheim_k8s_server_args`
   passes `-modifier portals casual`. A modifier applies at launch and is not written into the

@@ -50,10 +50,8 @@ def test_consumer_tags_non_push_prefixed_token_gets_no_tile():
 
 
 def test_consumer_tags_cloudflare_ddns_tokens():
-    assert consumer_tags("cloudflare_ddns_proxied_push_token") == (
-        "cloudflare-ddns",
-        "uptime-kuma",
-    )
+    # B7's Cutover-1a deleted the tile, so the pusher is the only consumer left.
+    assert consumer_tags("cloudflare_ddns_proxied_push_token") == ("cloudflare-ddns",)
 
 
 def test_consumer_tags_cross_host_tokens_are_manual():
@@ -68,10 +66,7 @@ def test_consumer_tags_cross_host_tokens_are_manual():
 
 def test_consumer_tags_autofix_bridge_token():
     # Single-host, single-redeploy auto token — must auto-rotate, not false-skip as cross-host.
-    assert consumer_tags("arr_autoblock_push_token") == (
-        "autofix-bridge",
-        "uptime-kuma",
-    )
+    assert consumer_tags("arr_autoblock_push_token") == ("autofix-bridge",)
 
 
 def test_consumer_tags_registry_gc_token_is_manual():

@@ -241,7 +241,6 @@ uptime_kuma_k8s_status_page_groups:
   - name: Raspberry Pi
     match:
       - "^daniel-pi-"
-      - "^wg-easy-pi-peers$"
   - name: Media Automation
     match:
       - "^configarr$"
@@ -249,13 +248,10 @@ uptime_kuma_k8s_status_page_groups:
       - "^monitor-bridge-janitorr$"
       - "^autofix-fake-remux"
       - "^mkv-attachment-repair$"
-      - "^arr-autoblock$"
   - name: Automation & Drift
     match:
       - "^renovate-"
       - "-drift-check$"
-      - "^github-ruleset-drift$"
-      - "^github-interaction-limit$"
       - "^secret-rotation$"
       - "^docs-refresh$"
       - "^homelab-eval-sweep$"

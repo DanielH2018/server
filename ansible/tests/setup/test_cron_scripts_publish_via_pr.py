@@ -432,7 +432,6 @@ _LIBRARY_EXEMPT = {
 # Files whose disappearance from the corpus means the derivation broke, not that the estate
 # changed. Every one is a template that can invoke curl against a push URL.
 _EXPECTED_IN_CORPUS = {
-    "ansible/roles/setup/claude_code/templates/telemetry-health.sh.j2",
     "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
     "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
     "hosts/components/secret-rotation/templates/secret-rotate.sh.j2",

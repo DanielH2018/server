@@ -161,9 +161,9 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 
 # OTLP gRPC, bound to loopback ON THE NODE via hostPort. Deliberately not a MetalLB VIP:
 # with content logging on, this must not be reachable from the LAN. Loopback is the whole
-# access control, exactly as the chezmoi bundle intends. roles/setup/claude_code's telemetry
-# heartbeat probes this door from its twins claude_code_otlp_host_ip and claude_code_otlp_port,
-# held equal by ansible/tests/setup/test_claude_code_artifacts_node_crons.py.
+# access control, exactly as the chezmoi bundle intends. daniel-box's package timer
+# homelab-claude-otel-health probes this door from its twins claude_code_otlp_host_ip and
+# claude_code_otlp_port, held equal by hosts/lib/tests/test_claude_artifacts_node_timers.py.
 observability_otlp_port: 4317
 observability_otlp_host_ip: 127.0.0.1
 # Query-side twin of observability_otlp_host_ip, for Loki/Prometheus/Tempo. `otelq` is a

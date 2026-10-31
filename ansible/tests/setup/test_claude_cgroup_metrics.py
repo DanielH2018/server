@@ -17,8 +17,10 @@ from pathlib import Path
 
 import pytest
 from _helpers import ANSIBLE
+from lib import yaml_fast
 from lib.proc_testing import run
 
+COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
 SCRIPT = (
     ANSIBLE / "roles" / "setup" / "claude_code" / "files" / "claude-cgroup-metrics.sh"
 )
@@ -74,18 +76,15 @@ def full_fixture(tmp_path: Path) -> tuple[Path, Path]:
     return cgroot, textfile_dir
 
 
-def test_script_exists_and_task_deploys_it_executable() -> None:
-    """The repo blob itself is 644 (matches every other `copy:`-deployed script here, e.g.
-    b2-usage.sh) — `copy:` sets the live mode independent of the source's, so the executable
-    bit has to come from the task, not the file."""
+def test_script_exists_and_the_component_ships_it_executable() -> None:
+    """The repo blob itself is 644, so the executable bit has to come from the component."""
     assert SCRIPT.exists(), f"{SCRIPT} is missing"
-    tasks = (
-        ANSIBLE / "roles" / "setup" / "claude_code" / "tasks" / "main.yml"
-    ).read_text()
-    assert "src: claude-cgroup-metrics.sh" in tasks, (
-        "no copy: task deploys claude-cgroup-metrics.sh"
-    )
-    assert 'mode: "0755"' in tasks, "the deployed script must be executable (mode 0755)"
+    files = yaml_fast.safe_load(COMPONENT.read_text())["files"]
+    (entry,) = [
+        f for f in files if f.get("src") == "role-file:claude-cgroup-metrics.sh"
+    ]
+    assert entry["dst"] == "/usr/local/bin/claude-cgroup-metrics.sh"
+    assert entry["mode"] == "0755", "the shipped script must be executable"
 
 
 def test_emits_every_metric_family_for_both_cgroups(
