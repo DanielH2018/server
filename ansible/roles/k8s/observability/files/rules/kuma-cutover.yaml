@@ -147,6 +147,8 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Home Assistant Automations"}[2h])
             or
+              absent_over_time(monitor_status{monitor_name="Host Packages — Status"}[2h])
+            or
               absent_over_time(monitor_status{monitor_name="Arr Auto-Block"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Cloudflare DDNS Direct"}[2h])
