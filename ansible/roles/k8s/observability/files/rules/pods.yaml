@@ -4,8 +4,8 @@
 # ruling of 2026-10-23 that a pod exports its verdict through a metrics endpoint rather than a
 # textfile or a Pushgateway. pod-producers.yaml holds B6b's, which this file's CronJob half copies.
 #
-# SHADOW UNTIL B7's CUTOVER-1b. Each rule runs beside the Kuma tile of the producer it ports, so
-# each carries `shadow: "true"` and pages nobody. Cutover-1b drops the label.
+# THESE RULES PAGE SINCE B7's CUTOVER-1b. Each one ports the Kuma tile of a producer, and
+# Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule back.
 #
 # THREE SOURCES.
 # - autofix-bridge serves `homelab_check_*` on the `autofix-bridge` scrape job, the series shape
@@ -44,7 +44,6 @@ groups:
         labels:
           severity: warning
           service: autofix-bridge
-          shadow: "true"
         annotations:
           summary: autofix-bridge's last cycle failed.
           description: >-
@@ -54,15 +53,14 @@ groups:
             namespace.
       # A failed scrape (up 0) or a scrape job missing from prometheus.yml. A restart reads up 0
       # for a scrape or two, and the pod has no readinessProbe, so the 10m hold rides it out.
-      # SHADOW UNTIL B7's CUTOVER-1b, with the rule below, which also adds the inhibit on
-      # ScrapeTargetDown{job="autofix-bridge"} (Cutover-1b is after A3's Cutover-a).
+      # alertmanager-secret.yaml.j2 inhibits ScrapeTargetDown{job="autofix-bridge"} while this
+      # rule fires, so one dead exporter pages once (M6 A3, task 6).
       - alert: AutofixBridgeDown
         expr: up{job="autofix-bridge"} == 0 or absent(up{job="autofix-bridge"})
         for: 10m
         labels:
           severity: critical
           service: autofix-bridge
-          shadow: "true"
         annotations:
           summary: Prometheus cannot scrape autofix-bridge's check exporter.
           description: >-
@@ -92,7 +90,6 @@ groups:
         labels:
           severity: critical
           service: autofix-bridge
-          shadow: "true"
         annotations:
           summary: autofix-bridge's loop has stopped recording its cycle verdict.
           description: >-
@@ -103,10 +100,10 @@ groups:
       # CLOUDFLARE-DDNS. favonia's image serves no metrics and has no readiness probe, so the
       # Deployment's availability is the Prometheus evidence that the updater runs at all. The
       # update loop's success is the LogQL rules' (homelab-logs.yaml). `verify: "true"` makes the
-      # rule gate `probe.py health cloudflare-ddns` once it drops `shadow`, which a warning
-      # alone would not: the gate reads critical alerts and `verify` ones. It overlaps
-      # K8sDeploymentZeroAvailable, a warning keyed by the workload join, and the two page
-      # separately until Cutover-1b. The absent arms cover a Deployment that is gone, and
+      # rule gate `probe.py health cloudflare-ddns`, which a warning alone would not: the gate
+      # reads critical alerts and `verify` ones. It overlaps K8sDeploymentZeroAvailable, a
+      # warning keyed by the workload join, and the two page separately, as the Kuma tile and
+      # that rule did. The absent arms cover a Deployment that is gone, and
       # `unless` leaves a dead kube-state-metrics to ScrapeTargetDown.
       - alert: CloudflareDdnsUnavailable
         expr: |
@@ -123,7 +120,6 @@ groups:
           severity: warning
           service: cloudflare-ddns
           verify: "true"
-          shadow: "true"
         annotations:
           summary: A cloudflare-ddns Deployment has no available replica.
           description: >-
@@ -141,7 +137,6 @@ groups:
         labels:
           severity: warning
           service: pi-peer-backup
-          shadow: "true"
         annotations:
           summary: The nightly daniel-pi peer-key backup failed.
           description: >-
@@ -168,7 +163,6 @@ groups:
         labels:
           severity: warning
           service: pi-peer-backup
-          shadow: "true"
         annotations:
           summary: The pi-peer-backup CronJob has not succeeded in three nights.
           description: >-
