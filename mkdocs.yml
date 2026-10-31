@@ -304,6 +304,7 @@ nav:
           - M4 Blackbox ingress probes: target-architecture/monitoring/m4-blackbox-ingress.md
           - M5 Loki ruler: target-architecture/monitoring/m5-loki-ruler.md
           - M6 Retire Kuma: target-architecture/monitoring/m6-retire-kuma.md
+          - Alertmanager UI and readers: target-architecture/monitoring/alertmanager-ui-and-readers.md
       - Host plane:
           - H1 Cluster config to Flux: target-architecture/host/h1-cluster-config-to-flux.md
           - H2 Shrink the host plane: target-architecture/host/h2-shrink-host-plane.md
