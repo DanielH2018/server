@@ -5,8 +5,7 @@ holds such a row `up` through one extra 300s cycle today, and the exporter write
 before that hold, so the rule's `for: 5m` carries the grace once. Four things must hold, and the
 table is the only source for each:
 
-- every `startup_grace` row but `workload_log_errors` has one rule selecting its `check` label,
-  and `workload_log_errors` has none here, because A7's LogQL rule on loki-homelab replaces it;
+- every `startup_grace` row has one rule selecting its `check` label;
 - a rule has `for: 5m` exactly when its row is `startup_grace`, so a row that loses its grace,
   or a row that gains a `for:` on top of an in-body streak, fails;
 - no such rule carries `requires`, since a `startup_grace` row names no gate;
@@ -26,8 +25,6 @@ RULES = K8S_ROLES / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 GRACE = "startup_grace"
 # The grace is (GRACE_CYCLES - 1) x 300s with GRACE_CYCLES at 2.
 GRACE_FOR = "5m"
-# The one `startup_grace` row whose rule is not in this file (A7, loki-homelab).
-LOKI_RULE_ROW = "workload_log_errors"
 # The `service` label names the thing checked (operator ruling, 2026-10-23), except for the one
 # row whose subject is the bridge's own log read.
 BRIDGE_SERVICE_ROW = "swallowed_verdicts"
@@ -43,7 +40,7 @@ def rules_for(row: str, rules: list[dict]) -> list[dict]:
 
 
 def family() -> list:
-    return [r for r in CHECKS if r.gate == GRACE and r.name != LOKI_RULE_ROW]
+    return [r for r in CHECKS if r.gate == GRACE]
 
 
 def for_problems(rules: list[dict]) -> list[str]:
@@ -75,11 +72,10 @@ def test_the_family_is_the_six_startup_grace_rows_the_exporter_rules_cover():
     }
 
 
-def test_each_family_row_has_one_rule_and_the_loki_row_has_none_here():
+def test_each_family_row_has_one_rule():
     rules = all_rules()
     for row in family():
         assert len(rules_for(row.name, rules)) == 1, row.name
-    assert rules_for(LOKI_RULE_ROW, rules) == []
 
 
 def test_a_rule_has_for_5m_exactly_when_its_row_is_startup_grace():

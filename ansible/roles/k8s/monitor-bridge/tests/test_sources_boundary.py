@@ -24,7 +24,6 @@ FETCHERS = frozenset(
         "prom_scalar",
         "prom_vector",
         "loki_count",
-        "loki_vector",
         "loki_lines",
         "_get_json",
         "_post_json",
@@ -123,13 +122,6 @@ _STREAMS = {
             "/loki/api/v1/query",
             {"query": 'sum(count_over_time({job="x"}[5m]))'},
             2.0,
-        ),
-        (
-            lambda s: s.loki_vector("q"),
-            _VECTOR,
-            "/loki/api/v1/query",
-            {"query": "q"},
-            [({"job": "node"}, 2.0)],
         ),
         (
             lambda s: s.loki_lines("q", 60, 7),

@@ -344,9 +344,8 @@ def check_etcd_restore_drill(
 def with_ha_ban(cfg: Config, src: Sources, ok: bool, msg: str) -> tuple[bool, str]:
     """Fold the ip_ban arm into a heartbeat verdict, ban winning the message.
 
-    Folded into this monitor rather than given its own for the reason recorded at
-    with_log_errors: a new Kuma monitor costs a new push token in
-    SOPS, and a ban is an HA fault, which is what this monitor already reports.
+    Folded into this monitor rather than given its own: a new Kuma monitor costs a new push
+    token in SOPS, and a ban is an HA fault, which is what this monitor already reports.
 
     # DECIDED: fails OPEN on a Loki error rather than gating ha_heartbeat on Loki. A Loki gate
     # would suppress the WHOLE check during a Loki outage, which would blind the real heartbeat

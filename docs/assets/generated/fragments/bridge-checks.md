@@ -18,7 +18,6 @@
 | Cloudflare IP Drift | `cloudflare_ips_drift` | `wan_reachable` |  | Hosts & Power |  |
 | Healthchecks.io Console Drift | `healthchecks_drift` | `wan_reachable` |  | Automation & Drift |  |
 | B2 Free Tier Headroom | `b2_storage` | `b2_reachable` | yes | Backups & Storage | `longhorn-backup-tiering` |
-| Workload Log Errors | `workload_log_errors` | `startup_grace` |  | Cluster Health |  |
 | Prometheus Reachable | `prometheus` | is a gate |  | Observability |  |
 | B2 Reachable | `b2_reachable` | is a gate | yes | Backups & Storage | `longhorn-backup-tiering` |
 | WAN Reachable | `wan_reachable` | is a gate | yes | Observability |  |

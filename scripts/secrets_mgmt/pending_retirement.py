@@ -57,5 +57,9 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # bridge row. B8's token PR retires the key a week after Cutover-b and deletes this
         # entry with it.
         "monitor_bridge_pi_push_token",
+        # M6 batch A7's Cutover-a1 deleted the Workload Log Errors tile, and Cutover-a2 deleted
+        # its bridge row. A7's token PR retires the key a week after Cutover-b and deletes this
+        # entry with it.
+        "monitor_bridge_k8s_workloads_push_token",
     }
 )
