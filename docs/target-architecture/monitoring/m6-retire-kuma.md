@@ -668,7 +668,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | A3 scrape | `targets`, `cluster_targets`, `shipper_dropped` | M2 | monitor-bridge | `CLUSTER_TARGETS_CONSECUTIVE` becomes `for: 10m`. Closes M1's, M4's and M5's handoffs: see *A3 and the handoffs it closes*. Cutover-a was gated on the flapping-target ruling in [#6626](https://github.com/DanielH2018/server/issues/6626), closed by [#6640](https://github.com/DanielH2018/server/pull/6640) (the soak read in *A3 scrape*, under *Status by batch*). | 3 |
 | A4 edge | `cert`, `traefik5xx`, `traefik_latency`, `traefik_404`, `traefik_421` | M2 | monitor-bridge | The volume floors (`TRAEFIK_MIN_RPS`) become `and` clauses. | 5 |
 | A5 storage | `longhorn_volumes`, `pvc_fullness`, `snapshot_headroom`, `kubelet_plugin_readonly`, `etcd_db_size` | M2 | monitor-bridge | All critical. Longhorn's one-hot `state` label is selected explicitly. | 5 |
-| A6 bridge exporter | the 15 other-source checks and `swallowed_verdicts`, plus the `b2_reachable` and `wan_reachable` gates | Exporter | monitor-bridge | See *The bridge as an exporter*. The `prometheus` gate retires with its token, because the Watchdog covers a dead Prometheus. `swallowed_verdicts` is exported until C-7 deletes it. | 19 |
+| A6 bridge exporter | the 15 other-source checks, `swallowed_verdicts` and `host_packages`, plus the `b2_reachable` and `wan_reachable` gates | Exporter | monitor-bridge | See *The bridge as an exporter* and *Amendment for host_packages and a flux-owned bridge*. The `prometheus` gate retires with its token, because the Watchdog covers a dead Prometheus. `swallowed_verdicts` is exported until C-7 deletes it. | 20 |
 | A7 log arm | `workload_log_errors` | M5 | monitor-bridge (`land.sh`); the rule deploys `loki-homelab` | `startup_grace` becomes `for: 5m`, as in A6. See *A7*. | 1 |
 | B0 shared library | No check. Moves `boot_grace_active`, `wan_reachable` and `reachout_verdict` into `homelab-check-lib.sh`, which also gains `write_check_textfile` (M3's atomic write). Its copy task and its `stamp_deployed` record in `initial_setup/tasks/crons.yml` are `tags: [always]`, like the `kuma-push-lib.sh` pair beside them (*B0, B5, B7 and B8*). | — | the tick (initial_setup) on daniel-box; a hand on daniel-server and the Pi | — | 0 |
 | B1 k3s crons | longhorn backup health, etcd snapshot, manifest-prune, release staleness, live-drift | M3 | a hand: `k3s-bringup.yml --tags "backup-health,etcd-snapshot,manifest-prune,release-staleness,live-drift"` (**operator-only**) | `KumaDown` replaces `uptime-kuma-alive` (see below). B1 retires the tiles and tokens of manifest-prune, release staleness and live-drift; D6.17 disarms those three checks and deletes B1's rules for them, and D6.18 deletes their code. | 5 |
@@ -928,7 +928,7 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
       it) exports the verdict `_gate` pushes. `WANUnreachable` and `B2Unreachable` therefore
       soak against real series in A6-3 and A6-4.
     - **A `startup_grace` row** exports the verdict that `gates.py:_evaluate` returns, before
-      `bridge.streaks.apply_startup_grace` runs. Its rule's `for: 5m` carries the grace (*Gates
+      `bridge.streaks.apply_startup_grace` runs. Its rule's `for: 10m` carries the grace (*Gates
       and grace*). The push keeps the held `up` until A6-7a.
     - **A row whose gate reads down this cycle** exports 0 with a fresh timestamp. Its body is
       not called, which is today's behaviour. The push keeps sending `up` with the `skipped`
@@ -975,10 +975,12 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
       protect against here". A cap answer is billed (`checks/b2.py:check_b2_reachable`), so
       calling the body during a cap breach would bill one listing every 300s cycle. The skip
       also keeps the four WAN bodies from waiting on their timeouts during a WAN outage.
-    - **`startup_grace` becomes `for: 5m`** ((`GRACE_CYCLES` − 1) × 300s, with `GRACE_CYCLES`
-      at 2). The baseline shows the bridge applies that grace on every down cycle, so `for:`
-      keeps today's timing. The exported value is taken before the grace from A6-1 on, so the
-      grace never applies twice. A6-7a deletes `apply_startup_grace` and the `grace_streaks`
+    - **`startup_grace` becomes `for: 10m`**, two bridge cycles (the operator ruled so on
+      2026-10-31; the plan's `for: 5m`, (`GRACE_CYCLES` − 1) × 300s, was one cycle). The bridge holds a down row `up` for its first down cycle and pushes `down` on the
+      second, so `for: 10m` needs the same two down cycles. A gauge that reads 0 for one
+      300s cycle spans five to seven 1-minute samples, so `for: 5m` fired on a one-cycle
+      blip or not by scrape alignment (`m6-status/a6.md`). The exported value is taken before
+      the grace from A6-1 on, so the grace never applies twice. A6-7a deletes `apply_startup_grace` and the `grace_streaks`
       field of `State`.
     - **Each in-body streak stays, and its rule has no `for:`.** A rule's `for:` holds the whole
       row. These streaks hold one arm, and the row's other arms page at once:
@@ -996,7 +998,7 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
         - `checks/service.py:check_n8n` keeps `verdicts/service.py:n8n_update_streaks`. It
           counts failed executions per workflow, which is not cycle hysteresis.
     - `n8n` and `speedtest` are under `startup_grace` as well. Today the grace stacks on their
-      in-body streaks, so `for: 5m` on their rules keeps that timing and adds no delay.
+      in-body streaks, so `for: 10m` on their rules needs the same two down cycles and adds no delay.
     - **`bridge/streaks.py` therefore stays.** It keeps `State`, `down_streak` and the probe
       caches `ProbeCache`, `StampedCache` and `B2ProbeCache`. `State` carries the caches that
       space out the external calls: `b2_probe` holds a billed B2 answer for
@@ -1044,11 +1046,11 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
        `critical`, with `service: monitor-bridge`, the component that evaluates it until C-7.
        It carries no `verify`, so it gates no tag. Each rule has a promtool
        firing case and a zero-series case. The 7-day soak per family follows M1 convention 6.
-       The `startup_grace` family's rules carry `for: 5m`, and no other A6 rule has a `for:`
+       The `startup_grace` family's rules carry `for: 10m`, and no other A6 rule has a `for:`
        (*Gates and grace*). The WAN and B2 PRs add a test that derives each `requires` label
        from the row's `gate` column, so a gated row whose rule lacks the label fails. The
        same test checks that each such rule shares a rule group with its gate's rule. It also
-       derives each rule's `for:` from the same column: `for: 5m` for a `startup_grace` row,
+       derives each rule's `for:` from the same column: `for: 10m` for a `startup_grace` row,
        and no `for:` for every other A6 row. A row that loses its grace, or gains a `for:` on
        top of an in-body streak, fails it. The `startup_grace` PR extends it to its family.
     4. **A6-7r, the run loop without `gates.py`, push still on (~200 added, ~1,100
@@ -3241,3 +3243,46 @@ netpol-baseline flipped last in Wave D (#5833), both before C-1. Not adversarial
   Ansible-owned.
 - Updated: exit criterion 1, *Order*, Phase C, *The tree*, *Steps*, *Rollback*, *Risks*,
   *Complexity delta*, Open questions 1 and 11.
+
+### Amendment for host_packages and a flux-owned bridge (2026-10-31)
+
+The A6 soak read of 2026-10-31 (`m6-status/a6.md`) found three facts the plan did not know.
+The operator ruled on two of them the same day. Not adversarially reviewed.
+
+- **A 20th bridge row, `host_packages`.** H3.5c added it after this plan was written. It is
+  the tile "Host Packages — Status", `gate="prometheus"`, and a member of
+  `EXPORTER_DEPENDENT["node"]` in `gates.py`, because its builder arms read series that
+  daniel-box's node exporter publishes. A6 therefore covers 17 non-gate rows and 3 gate rows,
+  and retires 20 tokens, not 19. Every Phase A total that counts A6 grows by one.
+    - **The rule.** `HostPackageBuilderStalled` in `bridge-exporter.yaml`, `warning`,
+      `service: host-packages`, shadow, no `for:` and no `requires` label. Its expression
+      ends in `unless on() (up{job="node"} == 0)`, which keeps the bridge's estate-wide
+      suppression, so `ScrapeTargetDown` is the one page for a dead exporter.
+      `test_bridge_prometheus_gated_rules.py` derives the family from the `gate` column.
+    - **Its soak.** The 7-day soak of M1 convention 6 starts when the rule's `observability`
+      apply lands. A6-7a and A6-7b wait for it. The A6 soak read of 2026-10-31 found 364
+      minutes of the tile reading DOWN with no rule, so that soak is not a substitute.
+    - **A6-7r keeps the row's behaviour.** `Check.gate` carries the `prometheus` gate and the
+      exporter suppression moves into `check.py` as an `EXPORTER_DEPENDENT` entry for
+      `host_packages`, with its `DECIDED` marker. The plan's "empty after A1 to A5" was wrong
+      for both sets, so A6-7r no longer deletes `down_exporters` and `EXPORTER_DEPENDENT`.
+      The row stays an exporter row after A6-7a, so the entry and the marker stay with it
+      until the row is deleted.
+- **`for: 10m` for the `startup_grace` family**, two bridge cycles, in place of `for: 5m`
+  (*Gates and grace*). The rules stay shadow, so the soak measures the final rule.
+- **monitor-bridge and uptime-kuma are `owner: flux`.** The plan's "monitor-bridge flips
+  after A6-7a has deployed" and its `land.sh` lines for A6-7r, A6-7a and A6-7b no longer
+  hold. A merge is the apply, and a live read waits for the Kustomization to report the
+  merge commit. A6-7a takes A7's split form, as A7's Cutover-a1 and Cutover-a2 did:
+    - **A6-7a1, the tiles.** Exclude the bridge tiles in the `CHECKS` loop of
+      `static-monitors.yaml.j2` and remove the bridge pins from
+      `status-page-sync-configmap.yaml.j2`, with every rule still shadow. The row stays, so
+      the bridge pushes into deleted tokens and `swallowed_verdicts` must not page them. A7's
+      Cutover-a1 added a tolerated-orphan set (`A7_ROWS_AWAITING_DELETION`) for this, and
+      A6-7a1 extends it. The PR records `monitor_status{monitor_name="<tile>"}` returning
+      nothing for each tile.
+    - **A6-7a2, the rows.** Delete the push path, `apply_startup_grace`, the `KUMA_*` and
+      `GRACE_CYCLES` settings, the `prometheus` row and `check_prometheus`, and add the
+      bijection test. It follows a read that every tile is gone.
+    - **A6-7b** stays stacked, open and green before A6-7a1 merges, under the two-hour bound
+      from A6-7a1's deploy.
