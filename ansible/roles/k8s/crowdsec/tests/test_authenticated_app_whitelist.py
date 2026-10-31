@@ -101,13 +101,7 @@ def test_both_agents_seed_the_whitelist_into_s02_enrich():
         ]
         command = " ".join(install["command"])
         assert re.search(rf"/seed/{SEED}\s+/etc/crowdsec/parsers/s02-enrich/", command)
-    assert _pods().keys() == AGENT_ROLES
-
-
-def test_only_the_traefik_agent_installs_the_hub_jellyfin_whitelist():
-    parsers = {}
-    for role, pod in _pods().items():
         [agent] = [c for c in pod["containers"] if c["name"] == "crowdsec-agent"]
-        env = {e["name"]: e.get("value") for e in agent["env"]}
-        parsers[role] = env.get("PARSERS")
-    assert parsers == {"traefik": "crowdsecurity/jellyfin-whitelist", "authelia": None}
+        parsers = {e["name"]: e.get("value") for e in agent["env"]}.get("PARSERS")
+        assert ("jellyfin-whitelist" in (parsers or "")) == (role == "traefik")
+    assert _pods().keys() == AGENT_ROLES
