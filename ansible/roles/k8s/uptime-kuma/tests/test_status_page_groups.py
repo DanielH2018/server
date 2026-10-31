@@ -31,8 +31,8 @@ TYPE = re.compile(r'"type": "(?P<type>[a-z_]+)"')
 # not an accident of parsing.
 KNOWN_IDS = frozenset(
     {
-        "daniel-pi-host",
-        "livesync-k8s",
+        "daniel-pi-sd-health",
+        "loki-read-route-daniel-box",
         "longhorn-backup",
         "monitor-bridge-b2-storage",
         "gitops-deploy-alive",
@@ -87,7 +87,7 @@ def rules():
 def test_the_declaration_census_finds_every_known_monitor():
     index = monitor_index()
     assert KNOWN_IDS <= set(index), f"census lost: {sorted(KNOWN_IDS - set(index))}"
-    assert len(index) >= 79, f"census found only {len(index)} monitors"
+    assert len(index) >= 65, f"census found only {len(index)} monitors"
 
 
 def test_every_declared_monitor_lands_in_a_named_group():

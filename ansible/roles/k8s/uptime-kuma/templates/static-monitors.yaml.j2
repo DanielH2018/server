@@ -77,8 +77,7 @@ stringData:
       "config": {"type": "webhook", "applyExisting": false, "webhookURL": "http://127.0.0.1:{{ uptime_kuma_k8s_discord_relay_port }}/", "webhookContentType": "custom", "webhookAdditionalHeaders": "{\"Content-Type\": \"application/json\"}", "webhookCustomBody": {{ (tera_raw ~ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/discord-message.liquid') ~ tera_endraw) | to_json }}}
     }
   # Fans out to BOTH channels: the Discord dead-man's-switch below, plus the critical tier
-  # (both backup targets, disks, SMART, SD, cert expiry, UPS, and the home-critical services' own
-  # tiles) — a *degraded* Discord loses individual alerts while the watchdog stays green, and
+  # (both backup targets, disks, SMART, SD, cert expiry, UPS) — a *degraded* Discord loses individual alerts while the watchdog stays green, and
   # those are the ones that can't wait a day. "Both backup targets" was "backup/B2" until 2026-08-21: B2's headroom tile was on this
   # tier and R2's was not, though R2 is a Longhorn backup target too and a full bucket stops its
   # backups the same way. The membership test is what a monitor guards, not which vendor it names.
@@ -100,110 +99,6 @@ stringData:
     {"type": "tag", "name": "severity", "color": "#f38ba8"}
   tag-runbook.json: |
     {"type": "tag", "name": "runbook", "color": "#89b4fa"}
-  # ── daniel-pi LAN probes ───────────────────────────────────────────────────────────────
-  daniel-pi-host.json: |
-    {"type": "ping", "name": "Daniel Pi Host", "hostname": "{{ hostvars['daniel-pi'].server_ip }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  daniel-pi-wg-easy.json: |
-    {"type": "http", "name": "Daniel Pi WG Easy", "url": "http://{{ hostvars['daniel-pi'].server_ip }}:51821", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # A home-critical service's own availability tile pages like the infrastructure tiles do:
-  # `severity: critical` plus the email leg, decided by the operator on 2026-10-04 (#3480).
-  # The macro reads the entry's `tier` from containers_list, so tiering a service puts its tile
-  # on the email tier and untiering one takes it off. The tag and the email list come out
-  # together because `test_severity_critical_is_exactly_the_email_tier` holds them as one fact.
-  # An argument naming no containers_list entry fails the render, not the page.
-{% macro service_alerting(entry) -%}
-{% if containers_list | in_service_tier(entry, 'home-critical') -%}
-"tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]
-{%- else -%}
-"notification_name_list": ["{{ kuma_notification_id }}"]
-{%- endif %}
-{%- endmacro %}
-  # Probes the edge's LAN-only `livesync-probe` router (roles/k8s/traefik/templates/
-  # livesync-gate-secret.yaml.j2), the one token-free path on this host: k8s edge -> probe
-  # router -> CouchDB. A 401 is CouchDB's require_valid_user answering unauthenticated, the
-  # end-to-end signal; any other path without the X-Sync-Token matches no router and 404s.
-  # The only LiveSync tile. `livesync-bridge.json` ("LiveSync (edge gate)") probed this same
-  # URL after the 2026-08-12 gate move, so one outage paged twice; it was retired (#2782).
-  livesync-k8s.json: |
-    {"type": "http", "name": "k3s LiveSync", "url": "https://livesync.local.{{ domain }}/", "interval": 60, "maxretries": 2, "accepted_statuscodes": ["401"], "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  mosquitto-k8s.json: |
-    {"type": "port", "name": "k3s Mosquitto (VIP)", "hostname": "{{ mqtt_k8s_vip }}", "port": 1883, "interval": 60, "maxretries": 2, {{ service_alerting('mosquitto') }}}
-  # VIP port tiles (kube-proxy ETP-Local DROP mode): joining a Docker host to k3s can
-  # black out a container's VIP while host-side probes stay green, so a real cross-host
-  # TCP check like this is what actually catches it.
-  jellyfin-lan-vip.json: |
-    {"type": "port", "name": "k3s Jellyfin (VIP)", "hostname": "{{ jellyfin_k8s_lan_ip }}", "port": 8096, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # terraria's port tile was HERE and is deliberately gone (2026-09-02, issue #822). It is the
-  # only thing left that opened a TCP connection to the game server, and on Terraria 1.4.5.7 a
-  # connect-and-drop kills the server loop: `TcpSocket.IsConnected` now reads
-  # `DebugNetworkStream.HasBufferedData` -> `NetworkStream.DataAvailable`, which throws
-  # `ObjectDisposedException` on a stream the peer already closed, unhandled, on the server
-  # thread. It crashed terraria 8 times in 51 minutes, every crash on this tile's probe tick.
-  # 1.4.5.6 had no such property in the binary and took the same probe for weeks without a
-  # crash. The workload is scaled to zero for now (terraria_k8s_replicas in group_vars/all.yml),
-  # which would make
-  # this tile permanently red regardless — but the crash, not the scale-down, is why it must not
-  # come back with the server. Restoring it needs an image past 1.4.5.7; #822 carries the check.
-  # wg-easy's VIP is WireGuard-over-UDP — Kuma port monitors are TCP-only, so it cannot get
-  # a port-check tile here.
-  slzb-coordinator.json: |
-    {"type": "port", "name": "SLZB-06M Coordinator", "hostname": "{{ slzb_ip }}", "port": 6638, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Successor to the autokuma-derived "NUT" monitor that retired with the Docker
-  # container (D6 reversed, 2026-08-14). A TCP check of upsd over its ClusterIP Service
-  # — the pod's own liveness probe (upsc) owns UPS-side depth; this owns "upsd
-  # reachable", which is what the host's secondary upsmon depends on.
-  nut-k8s.json: |
-    {"type": "port", "name": "k3s nut (upsd)", "hostname": "nut.{{ k8s_namespace }}.svc.cluster.local", "port": 3493, "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Tokenless probe of the mcp gate. It used to request /mcp with no bearer and accept the 404
-  # that matches no router — but that body is Traefik's own `404 page not found`, identical to
-  # what a router-less edge returns for every host, so a tile named "edge gate" was by
-  # construction incapable of seeing the total-404 outage of #1322 and read 1 throughout it.
-  # It now probes the app's own /health through a LAN-only Path router
-  # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2, homelab-mcp-probe), which
-  # answers 200 `ok` only when the edge routes AND the pod answers. #1341.
-  homelab-mcp-k8s.json: |
-    {"type": "keyword", "name": "k3s homelab-mcp (edge gate)", "url": "https://mcp.local.{{ domain }}/health", "keyword": "ok", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Transcribed 2026-08-10 (Phase D.2 step 3): the tile probes the CLUSTER loki-homelab
-  # through its
-  # ClientIP-gated route (this pod's CIDR is admitted; hostAliases pin the -k8s name to
-  # the VIP). /ready 503s ~15s after a restart while the ingester warms — brief PENDING
-  # after a deploy is normal.
-  # ClusterIP, not the edge route, since 2026-08-24 — see networkpolicy-loki-homelab.yaml.j2.
-  # Probing through the route is what forced that route to admit the whole pod CIDR, and with
-  # PathPrefix(`/`) on an auth_enabled:false Loki that handed every pod the full API. /ready
-  # still 503s ~15s after a restart while the ingester warms, so brief PENDING after a deploy
-  # remains normal.
-  loki.json: |
-    {"type": "http", "name": "Loki", "url": "http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100/ready", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Phase D scrutiny move (2026-08-10, SC5): /api/health rides the LAN Authelia bypass
-  # (this pod's CIDR ⊂ 10.0.0.0/8), so a plain 200 — no 302 dance. Covers the cluster
-  # web+influxdb pair; the per-node collectors are covered by SMART Data Freshness.
-  scrutiny-k8s.json: |
-    {"type": "http", "name": "k3s Scrutiny", "url": "https://scrutiny.local.{{ domain }}/api/health", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # ClusterIP, not the edge route, since 2026-08-24. The route's ClientIP guard had been widened
-  # to the whole pod CIDR so this prober could reach it, which meant every pod could read the
-  # unauthenticated private calendars. Both callers moved in-cluster so a podSelector can gate
-  # them (ical-proxy's `netpol_from` in host_vars/daniel-box.yml admits this pod, and its `homepage_widget` admits homepage). The tile therefore no
-  # longer exercises the Traefik route — accepted, because nothing reaches ical-proxy through the
-  # edge any more.
-  ical-proxy-k8s.json: |
-    {"type": "http", "name": "iCal Proxy k8s", "url": "http://ical-proxy.{{ k8s_namespace }}.svc.cluster.local:5000/calendar1.ics", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  pihole-k8s-dns.json: |
-    {"type": "dns", "name": "Pi-hole k8s DNS", "hostname": "homepage.local.{{ domain }}", "dns_resolve_server": "{{ dns_k8s_vip }}", "dns_resolve_type": "A", "port": 53, "interval": 60, "maxretries": 2, {{ service_alerting('pihole') }}}
-  # ── off-cluster services ───────────────────────────────────────────────────────────────
-  # Email-to-RSS is a Cloudflare Worker, not a homelab workload (docs/email-to-rss.md), so
-  # nothing else in the alerting spine sees it — this tile is its only coverage. Probing
-  # /admin/login for a 200 checks that the route is live AND the script runs: the login page
-  # is the only thing that emits a 200 there. The obvious alternative, a 404 from
-  # /rss/<bogus>, is worse — the catch-all `app.all('*')` returns the same 404, so a deploy
-  # that broke the router would keep the tile green. Interval 300 (not the LAN tiles' 60):
-  # this leaves the house, and Cloudflare's own availability isn't worth a 60s poll.
-  # Ingest (ForwardEmail → /api/inbound → KV) stays unmonitored — see the doc.
-  # No accepted_statuscodes/max_redirects pair here, unlike the -k8s tiles above: those
-  # exist to stop a 302 being followed into an Authelia 200. This endpoint answers 200
-  # directly (verified), so the server-side ["200-299"] default is exactly right.
-  email-to-rss.json: |
-    {"type": "http", "name": "Email-to-RSS (Worker)", "url": "https://email-rss.{{ domain }}/admin/login", "interval": 300, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
   # ── push monitors fed by host crons (tokens unchanged — monitors keep their history) ───
   # docker-fleet + autofix-disk-prune keys removed at the Docker uninstall (2026-08-14):
   # their producers (the fleet-health cron, the disk-prune cron) retired with the
@@ -468,7 +363,15 @@ stringData:
   # bridge tile. The tokens are bare lookups, so a row whose secret is missing fails the
   # render rather than dropping its tile (#1632). `ensure_ascii=False` keeps an em dash a literal
   # character, the bytes the hand-written tiles carried, so AutoKuma sees no change.
-{% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') %}
+  #
+  # The `if` on the loop is M6 batch B8's Cutover-a1 (m6-retire-kuma.md, "The cutover order").
+  # It drops the Pi Pressure tile, which the Pi rules in `hosts.yaml` and `PiPortDead` replace.
+  # The row stays in the table until Cutover-a2 deletes it, so the bridge keeps pushing into the
+  # deleted token in between and logs `push failed`. Both roles are `owner: flux`, so no deploy
+  # orders a tile deletion before a row deletion, and this exclusion takes that order instead.
+  # The tuple is a literal with a trailing comma because probe_lib/kuma_table_loop.py reads it,
+  # which keeps `kuma-drift` from naming the tile missing. Cutover-a2 removes the `if`.
+{% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') if check.name not in ('pi_pressure',) %}
 {%   set tags = ([{'name': 'tag-severity', 'value': 'critical'}] if check.critical | default(false) else [])
               + ([{'name': 'tag-runbook', 'value': 'https://docs.local.' ~ domain ~ '/' ~ check.runbook ~ '/'}] if check.runbook | default(none) else []) %}
   {{ check.kuma_id }}.json: |
@@ -533,49 +436,4 @@ stringData:
 {% if kuma_status_page_sync_push_token is defined %}
   status-page-sync.json: |
     {"type": "push", "name": "Status Page Sync", "description": "The kuma-status-page-sync CronJob runs every 15 min: dump the live monitors, render the group list, apply it to the status page, then beat from its last container. DOWN means silence for 30 min because a dump, render or apply stage failed. Read the newest kuma-status-page-sync Job logs with kubectl -n homelab.", "interval": 1800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ kuma_status_page_sync_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
-  # ── fleet-level all-clear ──────────────────────────────────────────────────────────────
-  # One tile whose recovery is ONE message, so a fleet-wide outage gets an all-clear at all.
-  # #1342: when the edge came back at 11:10:02Z on 2026-09-06, ~17 monitors recovered in the
-  # same second and Discord answered five of them with
-  # `429 {"message":"You are being rate limited.","retry_after":0.3,"global":false}`. That is
-  # the per-webhook bucket refilling, not a ban — but Kuma 2.5.3's discord.js posts once with
-  # no retry and no `retry_after` handling (server/notification-providers/discord.js), so those
-  # five were simply lost. The operator saw ~33 DOWN messages and then silence.
-  # Since #5657 the notification posts to the discord-relay sidecar, which retries a 429 after
-  # its `retry_after`, so a burst like that one is delayed rather than lost. This tile stays:
-  # a relay that gives up still drops messages, and SMTP is the leg that cannot share the bucket.
-  #
-  # The clustering is not a one-off: a Kuma pod recreate starts every monitor's schedule at the
-  # same instant, and essentially every tile here is `interval: 60`, so they stay aligned until
-  # the next restart. #1348 makes those restarts FASTER, not rarer, so this recurs.
-  #
-  # It carries `email` as well as discord for the delivery guarantee — SMTP cannot land in the
-  # same per-webhook bucket, so this one all-clear survives a burst that drops Discord messages.
-  # Both legs, not email alone: every other member of the email tier is declared that way, and
-  # test_every_monitor_is_linked_to_the_discord_notification enforces the discord leg fleet-wide.
-  #
-  # The TARGET is what makes this fleet-level rather than one more app tile. `ping@internal`
-  # behind `PathPrefix(/.well-known/traefik-edge-selfcheck)` on the https entrypoint
-  # (roles/k8s/traefik/templates/edge-selfcheck-ingressroute.yaml.j2) depends on no workload:
-  # it answers the literal `OK` only when Traefik built a routing table, and it is rejected by
-  # exactly the middleware failure that 404'd every host for 3.5 hours in #1322. A keyword, not
-  # a bare http tile, for the #1341 reason — a status code alone reads green through a
-  # total-404 edge.
-  #
-  # The HOSTNAME is not free to choose, which cost one deploy to learn. Traefik ranks routers
-  # by rule length, and an app's Host() rule can be longer than the 48-char
-  # `PathPrefix(`/.well-known/traefik-edge-selfcheck`)`: on `www.local` this tile got
-  # littlelink's own 404 body from its 68-char two-host rule, measured 2026-09-06 right after
-  # the deploy that added it. `edge-selfcheck.local` fronts no workload and is pinned to the
-  # ingress VIP in this pod's hostAliases for exactly this reason, so no Host() router exists
-  # to outrank the path — see deployment.yaml.j2.
-  #
-  # Gated on the same flag as the route it probes, so a checkout with the bouncer plugin off
-  # (daniel-stage) renders no tile rather than one that sits permanently red. Plain truthiness,
-  # not `| bool`: that filter is Ansible-only and test_kuma_static_monitors renders with bare
-  # Jinja. The inventory value is a YAML boolean, so the two agree.
-{% if traefik_k8s_manage_crowdsec | default(true) %}
-  homelab-edge-allclear.json: |
-    {"type": "keyword", "name": "Homelab Edge (all-clear)", "url": "https://edge-selfcheck.local.{{ domain }}/.well-known/traefik-edge-selfcheck", "keyword": "OK", "interval": 60, "maxretries": 2, "max_redirects": 0, "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}

@@ -79,9 +79,10 @@ See repo-root `CLAUDE.md` for shared conventions.
   ~7-18 min and the FP300 is very chatty, so 60 min catches a real dropout within the hour without
   false offline alerts. Tune per observed cadence. Verify after deploy (from daniel-box):
   `kubectl -n homelab logs deploy/zigbee2mqtt | grep "/availability'"` should show `online` publishes.
-- **Coordinator monitored at the infra level (since 2026-06-18).** An AutoKuma `port` monitor
-  ("SLZB-06M Coordinator", `{{ slzb_ip }}:6638`), declared statically as `slzb-coordinator.json`
-  in `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. It pages even if
+- **Coordinator monitored at the infra level (since 2026-06-18).** A blackbox_exporter
+  `tcp_connect` probe of `{{ slzb_ip }}:6638`, the `zigbee2mqtt` target of the `blackbox-extra`
+  job in `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`, which the
+  `ExtraProbeFailed` rule pages. It pages even if
   HA/MQTT are down, catching an `EHOSTUNREACH` like the 2026-06-18 accidental unplug, which a
   pod-level health check misses (Z2M stays running while it crash-loops against an unreachable
   radio). HA layers a second,
