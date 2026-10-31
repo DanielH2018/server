@@ -33,9 +33,11 @@ session with it.
 Run: uv run pytest ansible/tests/setup/test_claude_rc_unit.py
 """
 
+import json
 import re
 
 import pytest
+from _agent_package import render_daniel_server_with
 from _helpers import ANSIBLE, load_yaml
 from _setup_render import render_setup_text, role_context
 
@@ -263,31 +265,29 @@ def test_restart_timer_does_not_start_a_stopped_host() -> None:
     )
 
 
-def test_enable_flag_also_turns_the_host_off() -> None:
+def test_enable_flag_also_turns_the_host_off(tmp_path) -> None:
     """The flag must drive both directions, not just the way in.
 
-    A var that only enables leaves no rollback: the host keeps running and keeps starting at
-    boot after someone sets it back to false. Both systemd tasks therefore have to read the
-    flag for `enabled:` AND for `state:`.
+    A var that only enables leaves no rollback: the host keeps starting at boot after someone
+    sets it back to false. The package therefore enables the host and its restart timer only
+    while the flag is true.
     """
-    tasks = (
-        ANSIBLE / "roles" / "setup" / "claude_code" / "tasks" / "main.yml"
-    ).read_text()
     assert re.search(r"^claude_code_rc_enabled:", DEFAULTS.read_text(), re.M), (
         "claude_code_rc_enabled is missing from the role defaults"
     )
-    for unit_name in ("claude-rc.service", "claude-rc-restart.timer"):
-        block = re.search(
-            rf"name: {re.escape(unit_name)}\n(.*?)(?=\n- name:|\Z)", tasks, re.S
+
+    def enabled_links(flag: bool) -> dict:
+        package = render_daniel_server_with(
+            tmp_path / str(flag), claude_code_rc_enabled=flag
         )
-        assert block, f"no systemd task manages {unit_name}"
-        body = block.group(1)
-        assert 'enabled: "{{ claude_code_rc_enabled }}"' in body, (
-            f"{unit_name} must take `enabled:` from claude_code_rc_enabled"
-        )
-        assert "if claude_code_rc_enabled else 'stopped'" in body, (
-            f"{unit_name} must be STOPPED when claude_code_rc_enabled is false, not merely "
-            "left disabled — otherwise the flag has no rollback."
+        manifest = json.loads(package.files["/usr/lib/homelab/manifest.json"][0])
+        return manifest["enable_links"]
+
+    on, off = enabled_links(True), enabled_links(False)
+    for unit_name in ("homelab-claude-rc.service", "homelab-claude-rc-restart.timer"):
+        assert unit_name in on, f"{unit_name} must be enabled while the flag is true"
+        assert unit_name not in off, (
+            f"{unit_name} must lose its enable link when claude_code_rc_enabled is false"
         )
 
 

@@ -37,13 +37,14 @@ from secrets_mgmt.secret_bearing_host_paths import (
 
 # Path -> a secret name the census MUST report for it. Entries chosen to span the shapes
 # the derivation has to cover:
-#   * github-ruleset-drift.sh — a gitops_deploy script that embeds a push token. The module's
-#     docstring records the incident on secret-rotation-audit.sh, which H7.36 moved to a host
-#     package and which now reads its token from a credential, so it left the census.
+#   * registry-gc.sh — a k8s_host_files script that embeds a push token. The module's docstring
+#     records the incident on secret-rotation-audit.sh, which H7.36 moved to a host package and
+#     which now reads its token from a credential, so it left the census. M6 batch B3's
+#     Cutover-2 took github-ruleset-drift.sh out the same way: its push, and its token with it.
 # The NAME is pinned alongside the path deliberately: a path survives a `GENERIC_NAMES` entry
 # or a tier flipped to `ignore` while losing the very name that made it dangerous.
 MUST_FIND = {
-    "/usr/local/bin/github-ruleset-drift.sh": "ruleset_drift_push_token",
+    "/usr/local/bin/registry-gc.sh": "registry_gc_push_token",
 }
 
 # The hook's own copy of the prefix list. It short-circuits on this before importing anything,
@@ -121,10 +122,10 @@ def test_tiering_the_address_did_not_drop_its_script_from_the_census(real_census
     `MUST_FIND` already pins the path; this says why it is there, and fails with the reason
     rather than with a missing-key diff if a later change removes the push token too.
     """
-    reported = real_census.get("/usr/local/bin/github-ruleset-drift.sh", ())
+    reported = real_census.get("/usr/local/bin/registry-gc.sh", ())
     assert "email" not in reported
-    assert "ruleset_drift_push_token" in reported, (
-        "github-ruleset-drift.sh left the census; the hook now permits a content-printing read "
+    assert "registry_gc_push_token" in reported, (
+        "registry-gc.sh left the census; the hook now permits a content-printing read "
         "of a script that renders a push token inline"
     )
 

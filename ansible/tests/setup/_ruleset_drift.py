@@ -1,13 +1,15 @@
 """The harness every github-ruleset-drift.sh test drives: a rendered script, a stubbed GitHub.
 
-Only two absolute paths in the script are repointed: the Kuma push helper it sources, and
-`curl`, which a stub on PATH shadows to serve one canned body per ruleset id. The fixtures are
+Only two things in the script are repointed: the check library it sources, and `curl`, which a
+stub on PATH shadows to serve one canned body per ruleset id. The verdict is read back from the
+journal line the script logs, which a `logger` stub records. The fixtures are
 the live bodies `gh api repos/DanielH2018/server/rulesets/<id>` returned, less the links, node id
 and timestamps, so a case edits a real shape rather than a hand-built one.
 """
 
 import json
 import os
+import re
 import subprocess
 
 from lib.proc_testing import fake_bin, path_with, write_exec
@@ -15,7 +17,6 @@ from lib.repo_paths import REPO as REPO_ROOT
 from _shell_render import render_shell_script
 
 TEMPLATE = ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2")
-REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 # The role's copy of the check library, so a runner that never ran initial_setup still sources it
 # and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
@@ -34,13 +35,6 @@ DECLARED = [
     "flux-deletion-drill",
 ]
 
-# kuma_push, recording instead of pushing. Signature from
-# roles/setup/initial_setup/files/kuma-push-lib.sh: STATUS MSG PUSH_URL HOST RESOLVE_IP TAG.
-LIB_STUB = """\
-kuma_push() {
-  printf '%s\\n%s\\n' "$1" "$2" > "$KUMA_PUSH_OUT"
-}
-"""
 # The check library the script sources, with `reachout_verdict` stubbed to the WAN-reachable
 # answer — which is what every case here means: the source refused, so the tile must page. The
 # stub follows the real library because that library defines the function too. The skip path is
@@ -158,7 +152,10 @@ def run(
     fence_body=None,
     repo_body=PUBLIC_REPO,
 ):
-    """Render the script, stub curl + the push lib, run it. Returns (exit_code, status, message).
+    """Render the script, stub curl + the check lib, run it. Returns (exit_code, status, message).
+
+    `status` and `message` come from the `status=<up|down> <message>` line the script logs, the
+    last one if it logs several.
 
     `curl_body` answers the merge-gate ruleset fetch, and `branch_body` and `fence_body` the other
     two. `repo_body` answers the repo read that precedes them all. Those three default to a clean body, so each case reads the
@@ -173,13 +170,6 @@ def run(
         fence_body = json.dumps(fence_ruleset())
     body = render_shell_script(*TEMPLATE)
 
-    assert REAL_LIB in body, (
-        "the script no longer sources the shared Kuma push helper — this harness repoints that "
-        "exact path, so a rename silently stops these tests exercising the push at all"
-    )
-    lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text(LIB_STUB)
-    body = body.replace(REAL_LIB, str(lib))
     assert CHECK_LIB in body, "the script no longer sources homelab-check-lib.sh"
     check_lib = tmp_path / "homelab-check-lib.sh"
     check_lib.write_text(CHECK_LIB_STUB)
@@ -238,23 +228,26 @@ def run(
         ),
     )
 
-    out = tmp_path / "push.out"
+    journal = tmp_path / "journal.out"
     textfile_dir = tmp_path / "textfile"
     textfile_dir.mkdir(exist_ok=True)
     env = {
         **os.environ,
         "PATH": path_with(binstub),
-        "KUMA_PUSH_OUT": str(out),
-        "LOGGER_OUT": str(tmp_path / "journal.out"),
+        "LOGGER_OUT": str(journal),
         "TEXTFILE_DIR": str(textfile_dir),
     }
     proc = subprocess.run(
         ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
     )
-    if not out.exists():
+    verdicts = (
+        re.fullmatch(r"status=(up|down) (.*)", line)
+        for line in (journal.read_text().splitlines() if journal.exists() else [])
+    )
+    last = [m for m in verdicts if m][-1:]
+    if not last:
         return proc.returncode, None, None
-    status, message = out.read_text().split("\n", 1)
-    return proc.returncode, status, message.strip()
+    return proc.returncode, last[0].group(1), last[0].group(2).strip()
 
 
 def textfile_series(tmp_path, check):

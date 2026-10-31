@@ -16,18 +16,13 @@ import pytest
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
+from renderer.renderer_lib import host as host_mode
 
 SETUP = ANSIBLE / "roles" / "setup"
 SHARED = SETUP / "common" / "tasks" / "agent_user.yml"
 SHARED_IMPORT = "{{ role_path }}/../common/tasks/agent_user.yml"
-CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "agent.yml"
-# Imported by main.yml under one `when:`, so its tasks carry none and agent_tasks() misses them.
-AGENT_GITHUB = SETUP / "claude_code" / "tasks" / "agent_github.yml"
-AGENT_ACCESS = SETUP / "claude_code" / "tasks" / "agent_access.yml"
-# daniel-box's claude-code component ships the agent user, so each agent task skips it there.
-PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
-# The file in each role that imports the shared one. claude_code's runs once per agent.
-AGENT_TASKS_FILE = {"renovate_agent": "main.yml", "claude_code": "agent.yml"}
+# The file in each role that imports the shared one.
+AGENT_TASKS_FILE = {"renovate_agent": "main.yml"}
 # Every role that builds an agent user, with the role variable each contract key must name.
 AGENTS = {
     "renovate_agent": {
@@ -35,13 +30,6 @@ AGENTS = {
         "agent_user_home": "{{ renovate_agent_home }}",
         "agent_user_clone_dir": "{{ renovate_agent_clone_dir }}",
         "agent_user_repo": "{{ renovate_agent_repo }}",
-        "agent_user_uv_version": "{{ initial_setup_uv_version }}",
-    },
-    "claude_code": {
-        "agent_user_name": "{{ claude_code_agent_user }}",
-        "agent_user_home": "{{ claude_code_agent_user_home }}",
-        "agent_user_clone_dir": "{{ claude_code_agent_user_clone_dir }}",
-        "agent_user_repo": "{{ claude_code_agent_user_repo }}",
         "agent_user_uv_version": "{{ initial_setup_uv_version }}",
     },
 }
@@ -84,34 +72,24 @@ def test_each_agent_user_is_built_by_the_shared_file_with_its_own_paths(
 def test_the_agent_user_joins_no_group() -> None:
     """No group: `ubuntu` reads /etc/rancher/k3s/*.env, and `sudo` is root."""
     assert group_grants(tasks(SHARED)) == []
-    assert group_grants(tasks(CLAUDE_TASKS)) == []
-    assert group_grants(tasks(AGENT_GITHUB)) == []
 
 
-def test_the_claude_agents_only_groups_are_the_journal_ssh_users_and_socket_groups() -> (
+def test_the_packaged_claude_agent_joins_only_the_holder_journal_ssh_and_socket_groups() -> (
     None
 ):
-    """The operator granted systemd-journal on 2026-10-09, ssh-users on a peer for fan-out, the
-    worktree holder scan's socket group on 2026-10-10 (#4297) and the root inspector's socket
-    group on 2026-10-29 (#6350).
-
-    `append: false` makes the list exact, so each switch's false arm removes its group and an
-    added group would have to be written into this one list.
-    """
-    access = tasks(AGENT_ACCESS)
-    name = (
-        "Set the agent user's journal access, its ssh login group and its socket groups"
-    )
-    assert group_grants(access) == [f"{name}: groups", f"{name}: append"]
-    user = named(access, name)["ansible.builtin.user"]
-    assert " ".join(user["groups"].split()) == (
-        "{{ [initial_setup_worktree_holders_group] "
-        "+ ([claude_code_rootq_socket_group] if claude_code_rootq_socket_armed else []) "
-        "+ (['systemd-journal'] if claude_code_agent_journal_access else []) "
-        "+ (['ssh-users'] if claude_agent_ssh_login_enabled and claude_code_agent_is_primary "
-        "and inventory_hostname != claude_agent_ssh_key_host else []) }}"
-    )
-    assert user["append"] is False
+    """`usermod --groups` sets the whole list, so an added group has to be written into this one."""
+    setup = host_mode.render_host("daniel-box").files[
+        "/usr/lib/homelab/claude-agent-setup"
+    ][0]
+    found = re.findall(rb"^groups=\((.*)\)$", setup, re.M)
+    assert len(found) == 1
+    assert set(found[0].split()) <= {
+        b"worktree-holders",
+        b"homelab-rootq",
+        b"systemd-journal",
+        b"ssh-users",
+    }
+    assert b"sudo" not in found[0]
 
 
 def test_a_user_task_granting_a_group_is_flagged() -> None:
@@ -129,27 +107,6 @@ def test_claude_code_installs_into_the_agents_home_under_become() -> None:
         "TMPDIR": "/tmp",
         "CLAUDE_INSTALL_ALLOW_SUDO": "1",
     }
-
-
-def test_the_agent_gets_the_read_only_kubeconfig_and_never_prints_it() -> None:
-    task = named(
-        tasks(CLAUDE_TASKS), "Give the agent user the operator's read-only kubeconfig"
-    )
-    copy = task["ansible.builtin.copy"]
-    assert copy["src"] == "/home/{{ sys_user }}/.kube/config", (
-        "the operator's kubeconfig is the homelab-readonly ServiceAccount; "
-        "/etc/rancher/k3s/k3s.yaml is cluster-admin"
-    )
-    assert copy["mode"] == "0600"
-    assert task["diff"] is False and task["no_log"] is True
-    # daniel-server's operator has no kubeconfig, which failed its first apply (2026-10-10).
-    look = named(tasks(CLAUDE_TASKS), "Look for the operator's read-only kubeconfig")
-    assert look["ansible.builtin.stat"]["path"] == copy["src"]
-    assert task["when"] == [
-        PACKAGED,
-        "claude_code_agent_user_enabled",
-        "claude_code_operator_kubeconfig.stat.exists",
-    ]
 
 
 def test_the_login_profile_points_the_hook_shim_at_the_agents_own_clone_and_uv() -> (
@@ -173,48 +130,12 @@ def test_the_login_profile_points_the_hook_shim_at_the_agents_own_clone_and_uv()
     )
 
 
-def test_switching_the_agent_user_off_expires_it_and_on_lifts_the_expiry() -> None:
-    """Expired, never removed: the home holds the agent's clone and unpushed work."""
-    claude_tasks = tasks(CLAUDE_TASKS)
-    off = named(claude_tasks, "Expire the agent user's account when it is switched off")
-    on = named(claude_tasks, "Lift the agent user's account expiry")
-    # 0 would be day 0 in /etc/shadow, which also reads as "never expires".
-    assert off["ansible.builtin.user"]["expires"] >= 86400
-    assert "not claude_code_agent_user_enabled" in off["when"]
-    assert on["ansible.builtin.user"]["expires"] == -1
-    assert on["when"] == [PACKAGED, "claude_code_agent_user_enabled"]
-    removals = [
-        t.get("name")
-        for t in claude_tasks
-        if (t.get("ansible.builtin.user") or {}).get("state") == "absent"
-    ]
-    assert removals == []
-
-
 def reowns_only_roots_files(argv: list[str]) -> bool:
     """Whether a command is `find <dir> -user root ... -exec chown`, the closing handover."""
     return (
         argv[:1] == ["find"]
         and any(argv[i : i + 2] == ["-user", "root"] for i in range(len(argv)))
         and "chown" in argv
-    )
-
-
-# The trees claude_code's agent_operator_config.yml keeps root-owned inside the agent's home.
-ROOT_OWNED_COPY = (
-    ".claude/operator",
-    ".claude/rules",
-    ".claude/output-styles",
-    ".claude/skills",
-)
-
-
-def prunes_the_root_owned_copy(argv: list[str]) -> bool:
-    """Whether the handover's `find` prunes exactly the root-owned config copy, before -user."""
-    head = argv[: argv.index("-user")] if "-user" in argv else argv
-    pruned = [a for i, a in enumerate(head[1:], 1) if head[i - 1] == "-path"]
-    return "-prune" in head and sorted(p.split("}}/", 1)[-1] for p in pruned) == sorted(
-        ROOT_OWNED_COPY
     )
 
 
@@ -247,31 +168,13 @@ def root_run_writers(task_list: list[dict]) -> list[str]:
     return flagged
 
 
-def agent_tasks(task_list: list[dict]) -> list[dict]:
-    """claude_code's tasks that act on the agent user's home, with a list `when:` included."""
-    gate = "claude_code_agent_user_enabled"
-    return [
-        t
-        for t in task_list
-        if t.get("when") == gate
-        or (isinstance(t.get("when"), list) and gate in t["when"])
-    ]
-
-
 def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent() -> (
     None
 ):
     shared = tasks(SHARED)
-    claude = agent_tasks(tasks(CLAUDE_TASKS))
-    github = tasks(AGENT_GITHUB)
-    # The named members, so the census cannot pass on a renamed or vanished task.
+    # The named member, so the census cannot pass on a renamed or vanished task.
     named(shared, "Install the pinned host Python for the agent user")
-    named(claude, "Sync the repo's venv in the agent user's clone")
-    named(claude, "Fast-forward the agent user's clone to origin's master")
-    named(github, "Generate the agent's commit-signing key")
     assert root_run_writers(shared) == []
-    assert root_run_writers(claude) == []
-    assert root_run_writers(github) == []
 
 
 def test_a_command_run_as_root_on_each_apply_is_flagged() -> None:
@@ -293,74 +196,12 @@ def test_the_handover_reowns_only_roots_files() -> None:
     assert task["changed_when"] == "common_agent_user_home_handover.stdout | length > 0"
 
 
-def test_the_handover_leaves_the_root_owned_config_copy_alone() -> None:
-    """The copy is root's by design; handing it to the agent would undo it every apply."""
-    argv = named(tasks(SHARED), "Hand the agent's home to its own user")[
-        "ansible.builtin.command"
-    ]["argv"]
-    assert prunes_the_root_owned_copy(argv)
-    # skills/synced is the agent's own, so it is not named.
-    assert not any("synced" in a for a in argv)
-    # The pruned names are the ones the copy tasks install.
-    copy = tasks(AGENT_GITHUB.with_name("agent_operator_config.yml"))
-    rsync = named(copy, "Copy the operator's rules, output styles and skills")
-    assert sorted(ROOT_OWNED_COPY) == sorted(
-        [".claude/operator"] + [f".claude/{tree}" for tree in rsync["loop"]]
-    )
-
-
-def test_a_handover_that_would_reown_the_config_copy_is_flagged() -> None:
-    unexempt = [
-        "find",
-        "/srv/agent",
-        "-user",
-        "root",
-        "-exec",
-        "chown",
-        "a:b",
-        "{}",
-        "+",
-    ]
-    assert reowns_only_roots_files(unexempt)
-    assert not prunes_the_root_owned_copy(unexempt)
-    partial = [
-        "find",
-        "/srv/agent",
-        "(",
-        "-path",
-        "/srv/agent/.claude/skills",
-        ")",
-        "-prune",
-        "-o",
-        "-user",
-        "root",
-        "-exec",
-        "chown",
-        "a:b",
-        "{}",
-        "+",
-    ]
-    assert not prunes_the_root_owned_copy(partial)
-
-
 def test_a_chown_of_every_file_is_not_the_handover() -> None:
     everything = ["find", "/srv/agent", "-exec", "chown", "agent:ops", "{}", "+"]
     assert not reowns_only_roots_files(everything)
     assert root_run_writers(
         [{"name": "Chown all", "ansible.builtin.command": {"argv": everything}}]
     ) == ["Chown all"]
-
-
-def test_the_agents_clone_gets_a_venv_its_hooks_can_import_from() -> None:
-    """#3513: the hook shim runs `uv run --no-sync` in the clone the profile names."""
-    task = named(tasks(CLAUDE_TASKS), "Sync the repo's venv in the agent user's clone")
-    cmd = task["ansible.builtin.command"]
-    assert cmd["argv"][-2:] == ["sync", "--frozen"]
-    assert cmd["chdir"] == "{{ claude_code_agent_user_clone_dir }}"
-    assert task["environment"] == {
-        "HOME": "{{ claude_code_agent_user_home }}",
-        "TMPDIR": "/tmp",
-    }
 
 
 def dirs_not_owned_like_the_chown(task_list: list[dict]) -> list[str]:
@@ -382,20 +223,11 @@ def test_every_directory_the_agent_writes_into_is_the_agents_from_its_first_appl
     None
 ):
     shared = tasks(SHARED)
-    github = tasks(AGENT_GITHUB)
     named(
         shared,
         "Create the agent user's bin, claude-guard and claude-worktree directories",
     )
-    named(github, "Create the agent user's ssh and git config directories")
     assert dirs_not_owned_like_the_chown(shared) == []
-    # claude_code names the agent by its own variable, which its import maps to agent_user_name.
-    owners = {
-        (f.get("owner"), f.get("group"))
-        for t in github
-        if (f := t.get("ansible.builtin.file") or {}).get("state") == "directory"
-    }
-    assert owners == {("{{ claude_code_agent_user }}", "{{ sys_user }}")}
 
 
 def test_a_root_owned_directory_is_flagged() -> None:
@@ -405,33 +237,6 @@ def test_a_root_owned_directory_is_flagged() -> None:
         "ansible.builtin.file": {"path": "/srv/agent/.local/bin", "state": "directory"},
     }
     assert dirs_not_owned_like_the_chown([root_dir, chown]) == ["Create bin"]
-
-
-def chmods_after_the_acl(task_list: list[dict]) -> list[str]:
-    """Each file task that sets a mode after the first ACL task, which would reset its mask."""
-    acl_at = next(
-        (i for i, t in enumerate(task_list) if "ansible.posix.acl" in t), len(task_list)
-    )
-    return [
-        t.get("name", "")
-        for t in task_list[acl_at:]
-        if "mode" in (t.get("ansible.builtin.file") or {})
-    ]
-
-
-def test_the_operator_read_acl_runs_after_every_mode_it_depends_on() -> None:
-    """A later chmod rewrites the ACL mask, and a mask of --- disables the operator's entry."""
-    access = tasks(AGENT_ACCESS)
-    named(access, "Give files the agent writes there the operator's read")
-    assert chmods_after_the_acl(access) == []
-    main = [t.get("ansible.builtin.import_tasks") for t in tasks(CLAUDE_TASKS)]
-    assert main.index("agent_github.yml") < main.index("agent_access.yml")
-
-
-def test_a_chmod_after_the_acl_is_flagged() -> None:
-    acl = {"name": "Grant", "ansible.posix.acl": {"path": "/x"}}
-    chmod = {"name": "Reset", "ansible.builtin.file": {"path": "/x", "mode": "0700"}}
-    assert chmods_after_the_acl([acl, chmod]) == ["Reset"]
 
 
 WORKTREE_BOOTSTRAP = ANSIBLE.parent / "scripts" / "lib" / "_claude_worktree.py"

@@ -1,16 +1,18 @@
 #!/bin/bash
-# Daily re-arm of the repo's GitHub interaction limit, and a Kuma beat saying it is armed.
+# Daily re-arm of the repo's GitHub interaction limit, and a recorded verdict saying it is armed.
 #
 # Usage: github-interaction-limit.sh [-h|--help]
 # Takes no arguments. systemd timer kuma-check-github-interaction-limit.timer runs it as root once
 # a day (gitops_deploy_interaction_limit_cron_hour and _minute), and again every 30 minutes while
 # the last run failed. Running it by hand re-applies the limit for real. It needs a gh login for
 # the deploy user, reads gitops_deploy_interaction_limit and its expiry from the values rendered
-# into this file, and pushes to the github-interaction-limit Kuma monitor. Exit 0 = limit re-armed
-# (or disarmed, when the declared limit is none); exit 1 = it was not, and the push says down.
-# Each verdict is also written to $TEXTFILE_DIR/github-interaction-limit.prom for node_exporter's
-# textfile collector (default /var/lib/node-exporter-textfile; a test points it elsewhere), ahead
-# of the push.
+# into this file. Exit 0 = limit re-armed (or disarmed, when the declared limit is none); exit 1 =
+# it was not, and the verdict says down. Each verdict goes to the journal under the
+# github-interaction-limit tag and to $TEXTFILE_DIR/github-interaction-limit.prom for
+# node_exporter's textfile collector (default /var/lib/node-exporter-textfile; a test points it
+# elsewhere). Prometheus's GitHubInteractionLimitNotArmed and GitHubInteractionLimitNotReporting
+# rules page from that file. Until M6 batch B3's Cutover-2 the verdict also went to a Kuma push
+# monitor.
 #
 # The interaction limit is the only lever GitHub offers that keeps a PUBLIC repo closed to
 # everyone but its collaborators: with `collaborators_only` set, nobody else can comment, react,
@@ -36,8 +38,7 @@
 # UNVERIFIED — a check that could not act must not report the setting as armed.
 #
 # The token never lands in argv: curl reads it from a config file handed over as a process
-# substitution (`-K <(...)`), for the same reason the push library feeds the Kuma URL on
-# stdin — /proc is mounted without hidepid here.
+# substitution (`-K <(...)`), because /proc is mounted without hidepid here.
 #
 # set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
 set -uo pipefail
@@ -55,33 +56,24 @@ export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PAT
 export GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t github-interaction-limit "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
-# shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t github-interaction-limit "homelab-check-lib.sh missing — run initial_setup on this host"
   exit 1
 }
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ interaction_limit_push_token }}"
-
 # The longest legitimate gap between two textfile writes: the timer fires daily (86400s), and the
-# extra hour is the margin Kuma's tile keeps (interval 90000).
+# extra hour is the margin the NotReporting rules keep.
 # ansible/tests/services/test_gitops_check_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=90000
 
-# Via the shared library, which feeds the token-bearing URL to curl on stdin (`-K -`) rather than
-# as an argv element: /proc is mounted without hidepid here.
+# Records the verdict: the journal line first, so `journalctl -t github-interaction-limit` reads the
+# outcome the way it does for github-ruleset-drift (the Kuma push library logged only a failed push), then the
+# textfile. A failed write logs and the run goes on to its exit.
+# The function keeps the name `push` from when it also sent the Kuma beat.
 push() { # up|down msg
-  # The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and the
-  # file must not wait on Kuma. A failed write logs and the run goes on to its push.
+  logger -t github-interaction-limit "status=$1 $2"
   write_check_textfile github-interaction-limit "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
     || logger -t github-interaction-limit "textfile write failed (status=$1)"
-  kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" github-interaction-limit
 }
 
 LIMIT_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/interaction-limits"
