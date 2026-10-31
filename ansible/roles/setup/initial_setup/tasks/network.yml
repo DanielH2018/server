@@ -177,23 +177,6 @@
 # be fenced. libvirt's own FORWARD accept is reached first, and no rule ufw can place changes
 # that. A firewall rule that is present and inert reads identical to a working one from the
 # host, so "the rule is in `ufw status`" is not evidence. The probe at the far side is.
-#
-# The task below deletes the inert rule rather than leaving it as belt-and-braces. A rule
-# that reads as protection and provides none is worse than no rule at all — the next
-# operator to run `ufw status` stops looking. Drop this task after 2026-10-01, by which time
-# no host still carries the rule.
-- name: Remove the inert staging route-deny rule that PR 508 left behind
-  tags: [firewall]
-  when:
-    - inventory_hostname not in initial_setup_packaged_hosts['ufw']
-    - has_hypervisor | bool
-  community.general.ufw:
-    rule: deny
-    route: true
-    src: "{{ staging_net_cidr }}"
-    dest: "{{ lan_subnet }}"
-    delete: true
-  become: true
 
 # `ufw enable` on a firewall that is already active still runs ufw-init start, which flushes
 # every ufw chain and reloads them from the files (frontend.py `set_enabled`), and the module

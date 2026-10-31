@@ -1,3 +1,101 @@
 ### B6b pod producers
 
-Nothing recorded.
+B6b's soak read, [#6728](https://github.com/DanielH2018/server/issues/6728): B6b's shadow PR
+merged as `9ebb51406c` at 2026-10-23T21:15Z. Prometheus first evaluated the `pod-producers` group
+at 2026-10-23T21:22:47Z. The read used M1 convention 6's two queries over `[168h:1m]` ending at
+2026-10-31T16:08Z, with M2's 8-minute margin (*Which soak minutes count as explained* in M2). The
+window starts at 2026-10-24T16:08Z, after the group's first evaluation, so every tile has the
+full 168 hours. All five tiles read up when the queries ran. Prometheus's oldest sample was 21.7
+days old, and
+`increase(prometheus_rule_evaluation_failures_total{rule_group=~".*;pod-producers"}[168h])` was 0.
+
+Each tile maps to the rules that the shadow PR's comments in `pod-producers.yaml` assign to its
+producer. The three sidecar tiles share `CrowdSecJobsExporterAbsent` and take
+`CrowdSecJobStale` by the `check` label the sidecar exports:
+
+- `CrowdSec Remote Allowlist`: `CrowdSecRemoteAllowlistFailed`,
+  `CrowdSecJobStale{check="crowdsec-remote-allowlist"}`, `CrowdSecJobsExporterAbsent`.
+- `CrowdSec AppSec`: `CrowdSecAppSecVerifyFailed`,
+  `CrowdSecJobStale{check="crowdsec-appsec-verify"}`, `CrowdSecJobsExporterAbsent`.
+- `CrowdSec Home Allowlist`: `CrowdSecHomeAllowlistFailed`,
+  `CrowdSecJobStale{check="crowdsec-home-allowlist"}`, `CrowdSecJobsExporterAbsent`.
+- `Configarr Sync`: `ConfigarrSyncFailed`, `ConfigarrHealthNotReporting`.
+- `Janitorr Errors`: `JanitorrErrorsFound`, `JanitorrHealthNotReporting`.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| CrowdSec Remote Allowlist | 10040 | 291 | 240 | 69 | 40 | 18 | 0 |
+| CrowdSec AppSec | 9986 | 0 | 0 | 0 | 0 | 0 | 0 |
+| CrowdSec Home Allowlist | 10034 | 15 | 15 | 0 | 0 | 0 | 0 |
+| Configarr Sync | 10015 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Janitorr Errors | 10010 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Every firing minute belongs to a `Failed` rule. `CrowdSecJobStale` never fired: the largest
+value of the job's age minus its deadline over the window was negative for all three jobs.
+The two `NotReporting` rules never fired: the oldest successful run either CronJob reached was
+833 seconds, against the rules' 1800. `CrowdSecJobsExporterAbsent` never fired:
+`absent(up{job="crowdsec-jobs"})` held for 4 minutes on 2026-10-25 from 07:40 and 8 minutes on
+2026-10-28 from 00:45, under its `for: 10m`, both inside spans when Prometheus itself had no
+samples. The episodes, all times UTC:
+
+- **CrowdSec Remote Allowlist and CrowdSec Home Allowlist, 2026-10-25 from 14:16.** Both jobs
+  logged `kubectl … failed rc=1: Error from server (ServiceUnavailable)` while the API server
+  was out. Remote Allowlist's tile and alert cover 14:16 to 14:30. Home Allowlist's cover 14:17
+  to 14:31.
+- **CrowdSec Remote Allowlist, fourteen episodes from 2026-10-30 17:21 to 2026-10-31 15:40.**
+  Each run logged `status=down remote-ips at cap (8)`, with the address it could not add.
+  [#6709](https://github.com/DanielH2018/server/issues/6709) owns that fault: the allowlist
+  spends its cap on home addresses that `home-ips` already covers. In each episode the alert
+  starts and ends one minute after the tile, so 14 Q1 strict and 13 Q2 strict minutes fall
+  inside the margin.
+
+**The 40 Q1 ±8m minutes are pushes Kuma rejected.** They run from 21:09 to 21:48 on 2026-10-30,
+inside one DOWN span of the Remote Allowlist tile from 20:51 to 22:30. The job reported
+`status=up remote-ips: 8 live` at every run from 21:00 to 21:50, and the sidecar exported
+`homelab_check_success` 1, so `CrowdSecRemoteAllowlistFailed` resolved at 21:01 and fired again
+at 21:57. Kuma kept the tile DOWN because it rejected all 12 pushes from 21:00 to 21:56 with
+HTTP 404 and `SQLITE_CONSTRAINT: UNIQUE constraint failed: stat_hourly.monitor_id,
+stat_hourly.timestamp`. Each rejected insert named monitor 480, the Remote Allowlist tile, and
+the hour bucket 21:00Z. Kuma's own log has the same error, for that monitor and that bucket only.
+The rejections began 26 minutes after a Kuma restart at 20:33:53. They ended at the hour: the
+22:00 push landed. The tile showed a stale DOWN, and the rule read the job correctly. Swallowed
+Push Verdicts stayed up by design, because it does not count a rejected push from a tag in
+`KUMA_RETIRING_TAGS`, and the one lost `down` push at 21:56 was followed by the 22:00 push,
+which landed.
+
+**The 5 remaining Q2 strict minutes are a Kuma restart.** Kuma restarted at 01:06:10 on
+2026-10-31, and the Remote Allowlist tile had no `monitor_status` series from 01:07 to 01:10.
+`CrowdSecRemoteAllowlistFailed` kept firing through 01:11 for the at-cap episode that started at
+00:46. A missing series is not DOWN, so Q2 strict counts those minutes, and the margin covers
+them. Kuma restarted 11 times in the window, which explains the samples each tile lacks from
+10080.
+
+**Both sides were blind on 2026-10-28 from 00:40 to 00:52.** The Home Allowlist job logged
+`status=down` at 00:41 and 00:46, because cluster DNS lookups timed out. Its pushes failed with
+`URLError`, and Prometheus kept no samples from 00:40 to 00:52. Neither query can see those runs,
+and neither side reported them.
+
+**The Configarr Sync and Janitorr Errors rows are clean but do not show coverage.** Neither tile
+nor verdict went down all week, so their 0s test nothing. Over the window the verdict series
+`kube_configmap_annotations` held 5067 minute-samples for `configarr-health-verdict` and 4931 for
+`janitorr-health-verdict`, of 10080. Over `[24h:1m]` it held 706 and 669 of 1440, and the
+control, `pi-peer-backup-verdict`, held 1440. Each gap starts at a Flux server-side apply of the
+role's Kustomization and ends at the reader's next `*/10` run. On 2026-10-31, configarr applied
+at 15:17:18, 15:27:13 and 16:03:57, and its series was missing from 15:17 to 15:19, from 15:27 to
+15:29, and from 16:04 to 16:09. The readers write the annotations with `kubectl patch`, which
+records them under the field manager `kubectl-patch`. Flux strips fields owned by kubectl
+managers on each apply. pi-peer-backup sends its PATCH with curl and loses nothing.
+`ConfigarrSyncFailed` and `JanitorrErrorsFound` have no `for:`, so a real `down` verdict would be
+visible only until the next Flux apply, and the rule would flap or miss it. The fix is in the two
+readers, not in a rule. [#6746](https://github.com/DanielH2018/server/issues/6746) tracks it.
+
+**The deployed rules, read at 16:11Z.** `kubectl get configmap -n observability
+prometheus-rules -o jsonpath='{.data.pod-producers\.yaml}'` is byte-identical to
+`pod-producers.yaml` on master. All ten B6b rules carry `shadow: "true"`, and no B6b alert was
+pending or firing.
+
+No Q1 minute is unexplained, so no rule changes. The soak does not block Cutover-a, which B6b
+runs as Cutover-1a (*Every other producer* in M6), for the three crowdsec tiles. It does block
+Cutover-1a for Configarr Sync and Janitorr Errors until
+[#6746](https://github.com/DanielH2018/server/issues/6746) lands and a fresh read shows their
+verdict series present every minute, as the control's is.
