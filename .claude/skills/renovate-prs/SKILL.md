@@ -82,9 +82,11 @@ the body describes one bump while the branch writes another. `gh pr diff` render
 same stale base, which is why the disagreement survives a careful read of the diff.
 
 ```bash
-git fetch -q origin master && git rev-parse origin/master
+git fetch -q origin master
+git rev-parse origin/master
 gh pr list --author app/renovate --state open --limit 50 \
-  --json number,baseRefOid,title -q '.[] | "\(.baseRefOid[0:8]) #\(.number) \(.title)"'
+  --json number,baseRefOid,title \
+  -q '.[] | [.baseRefOid[0:8], "#" + (.number | tostring), .title] | @tsv'
 ```
 
 Any PR whose `baseRefOid` is not that SHA is triaged as stale: tick its rebase checkbox (§5)
@@ -173,7 +175,7 @@ Every `automerge: false` rule in this repo carries a description explaining **wh
 automerge**, which is the same thing as **what you have to finish**. To see the whole landscape:
 
 ```bash
-jq -r '.packageRules[] | "\(.groupName // "-") | automerge=\(.automerge // false)"' renovate.json
+jq -r '.packageRules[] | [(.groupName // "-"), "automerge=" + ((.automerge // false) | tostring)] | @tsv' renovate.json
 ```
 
 Completion criterion for this step: for every open PR you can name either "nothing to finish"

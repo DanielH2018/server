@@ -270,7 +270,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
     the Write tool. For a throwaway script, Write it to a literal `/tmp/<name>.py` path and run
     that file.
 
-  A headless `claude -p` batch runs without isolation and draws none of these refusals.
+  A refusal can quote a `gh --jq` template such as `\(.number)`. Every measured one sat
+  inside one of the constructs above, so remove the construct. To avoid the question, build
+  the row with `[…] | @tsv` instead of `\(…)`. A headless `claude -p` batch runs without
+  isolation and draws none of these refusals.
 - **The SessionStart banner lists the other live sessions** and the paths each has changed
   vs `origin/master`. It's derived from `git worktree list` and `/proc`, not from anything a
   session declares, so check it before editing a file several sessions are near (`CLAUDE.md`,
