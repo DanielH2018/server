@@ -25,7 +25,9 @@ shared VPN exit is exactly the kind of address CAPI flags: an address is exempt 
 its last authenticated sighting, refreshed only when under half of that remains; the list is
 capped, and reaching the cap is a DOWN that names the entries rather than a silent skip; and
 private, loopback and CGNAT addresses never enter, so an Authelia LAN bypass rule cannot feed
-it. The way out is `cscli allowlists remove remote-ips <ip>`, or letting the entry lapse; the
+it. An address inside a `home-ips` entry never enters either, and a live entry inside one is
+pruned on the next run: home devices rotate IPv6 privacy addresses, and each one held a slot for
+TTL until the cap refused the remote exits this list exists for (#6709). The way out is `cscli allowlists remove remote-ips <ip>`, or letting the entry lapse; the
 way to see it is `cscli allowlists inspect remote-ips`.
 
 Runs every 5 minutes in the `crowdsec-jobs` sidecar of the crowdsec pod, started by
@@ -55,6 +57,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ALLOWLIST = "remote-ips"
+HOME_ALLOWLIST = "home-ips"
 AUTH_MIDDLEWARE = "authelia"
 NAMESPACE = "homelab"
 # Sighting window. The cron runs every 5 min; 6 min overlaps the previous run so a request on
@@ -132,6 +135,28 @@ def authenticated_clients(lines, routers):
     return frozenset(seen)
 
 
+def home_networks(items):
+    """The networks `home-ips` holds, from `cscli allowlists inspect -o json`'s `items` list.
+
+    A value that does not parse as an address or network covers nothing and is skipped.
+    """
+    networks = set()
+    for item in items:
+        try:
+            networks.add(ipaddress.ip_network(item.get("value") or "", strict=False))
+        except ValueError:
+            continue
+    return frozenset(networks)
+
+
+def is_home_covered(value, home):
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return any(address in network for network in home)
+
+
 def parse_expiration(raw):
     """An allowlist item's expiry as an aware datetime, or None when it never expires."""
     if not raw or str(raw).startswith("0001-01-01"):
@@ -165,12 +190,16 @@ class Plan:
         return f"remote-ips: {'; '.join(parts)}"
 
 
-def plan(seen, items, now, ttl=TTL, refresh_below=REFRESH_BELOW, cap=CAP):
+def plan(
+    seen, items, now, home=frozenset(), ttl=TTL, refresh_below=REFRESH_BELOW, cap=CAP
+):
     """Decide the writes for this run from the sightings and the LAPI's current items.
 
     `items` is `cscli allowlists inspect -o json`'s `items` list. An item whose expiry cannot be
     read counts as due for refresh: one extra rewrite is cheaper than an entry that quietly
     lapsed. Additions stop at `cap`, and the addresses left out are reported, not dropped.
+    `home` is `home_networks()` of the `home-ips` list: a sighting inside it is ignored and a
+    present item inside it is pruned, because `home-ips` already exempts it.
     """
     live = []
     result = Plan()
@@ -180,12 +209,14 @@ def plan(seen, items, now, ttl=TTL, refresh_below=REFRESH_BELOW, cap=CAP):
         if not value:
             continue
         expires = parse_expiration(item.get("expiration"))
-        if expires is not None and expires <= now:
+        if (expires is not None and expires <= now) or is_home_covered(value, home):
             result.prune.append(value)
             continue
         present[value] = expires
         live.append(value)
     for value in sorted(seen):
+        if is_home_covered(value, home):
+            continue
         if value in present:
             expires = present[value]
             if expires is None or expires - now < refresh_below:
@@ -234,7 +265,15 @@ def main(runner=run, now=None):
     inspected = json.loads(
         cscli(runner, "allowlists", "inspect", ALLOWLIST, "-o", "json") or "{}"
     )
-    decided = plan(seen, inspected.get("items") or [], now)
+    home = json.loads(
+        cscli(runner, "allowlists", "inspect", HOME_ALLOWLIST, "-o", "json") or "{}"
+    )
+    decided = plan(
+        seen,
+        inspected.get("items") or [],
+        now,
+        home=home_networks(home.get("items") or []),
+    )
     ttl_arg = f"{int(TTL.total_seconds() // 3600)}h"
     for value in decided.prune + decided.refresh:
         cscli(runner, "allowlists", "remove", ALLOWLIST, value)
