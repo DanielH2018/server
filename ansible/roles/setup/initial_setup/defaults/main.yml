@@ -69,9 +69,9 @@ initial_setup_packaged_hosts:
   sshd: [daniel-pi, daniel-server, daniel-box]
   sysctl: [daniel-pi, daniel-server, daniel-box]
   loki_route_witness: [daniel-box]
-  fail2ban: [daniel-pi]
-  maintenance: [daniel-pi]
-  ufw: [daniel-pi]
+  fail2ban: [daniel-pi, daniel-server]
+  maintenance: [daniel-pi, daniel-server]
+  ufw: [daniel-pi, daniel-server]
 
 # Where the rkhunter and AIDE scripts source kuma-push-lib.sh and homelab-check-lib.sh from.
 # crons.yml installs both under /usr/local/lib; the integrity-scans host component sets
