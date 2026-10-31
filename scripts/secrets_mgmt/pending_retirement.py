@@ -61,6 +61,16 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # its bridge row. A7's token PR retires the key a week after Cutover-b and deletes this
         # entry with it.
         "monitor_bridge_k8s_workloads_push_token",
+        # M6 batch B1's Cutover-1a deleted the k3s Longhorn Backup, Off-box etcd Snapshot,
+        # Manifest Prune Drift, Release Staleness Drift and Live Object Drift tiles, the only
+        # cluster renders of these five tokens. The k3s role's scripts push into them until
+        # Cutover-2 stops the push. B1's token PR retires the keys a week after Cutover-1b and
+        # deletes these five entries with them.
+        "longhorn_backup_push_token",
+        "etcd_snapshot_push_token",
+        "manifest_prune_push_token",
+        "release_staleness_push_token",
+        "live_drift_push_token",
         # M6 batch B6a's Cutover-1a deleted the Artifacts Peer Sync and k3s Telemetry OTLP Door
         # tiles. The two host crons keep pushing into the deleted tokens until Cutover-2 drops the
         # push. B6a's token PR retires the keys a week after Cutover-1b and deletes these two

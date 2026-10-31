@@ -225,7 +225,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^loki-read-route-"
   - name: Backups & Storage
     match:
-      - "^longhorn-backup$"
       # The registry PVC's only space reclaim: a storage tile, not an automation one.
       - "^registry-gc$"
       - "^etcd-"
@@ -259,8 +258,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^github-interaction-limit$"
       - "^secret-rotation$"
       - "^docs-refresh$"
-      - "^manifest-prune-check$"
-      - "^release-staleness-check$"
       - "^homelab-eval-sweep$"
       - "^status-page-sync$"
   - name: Other
