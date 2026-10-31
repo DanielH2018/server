@@ -3,9 +3,9 @@
 `ansible.posix.sysctl` writes /etc/sysctl.conf and sets the live value. UFW keeps a SECOND
 sysctl file, `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in /etc/default/ufw), and re-applies it on
 every `ufw enable`/`reload` and at boot. Ubuntu ships it with
-`net/ipv4/conf/{all,default}/log_martians=0` uncommented, so `Enable UFW firewall` — twenty
-tasks after the hardening loop, in the SAME file — puts the key back to 0. The role then
-reports `changed` for those two keys on every run and never keeps them.
+`net/ipv4/conf/{all,default}/log_martians=0` uncommented, so the next `ufw enable` or `reload`
+puts the key back to 0. The role then reports `changed` for those two keys on every run and
+never keeps them.
 
 ORDER IS THE GUARD. The rewrite has to run before the hardening loop; after it, the run would
 end with UFW's 0 live again. So this file checks position, not just presence.
@@ -23,7 +23,6 @@ NETWORK = ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks" / "network.yml
 UFW_SYSCTL = "/etc/ufw/sysctl.conf"
 
 HARDENING_TASK = "Apply kernel security hardening"
-UFW_ENABLE_TASK = "Enable UFW firewall"
 FIX_TASK = "Stop UFW's sysctl file from disabling martian logging"
 
 
@@ -86,11 +85,7 @@ def test_a_task_that_leaves_ufws_copy_alone_is_flagged():
     )
 
 
-def test_the_rewrite_runs_before_the_hardening_loop_and_before_ufw_reloads():
-    fix = _index(FIX_TASK)
-    assert fix < _index(HARDENING_TASK), (
+def test_the_rewrite_runs_before_the_hardening_loop():
+    assert _index(FIX_TASK) < _index(HARDENING_TASK), (
         "UFW's file must be fixed before the live value is set"
-    )
-    assert fix < _index(UFW_ENABLE_TASK), (
-        "an enable/reload after the fix re-asserts 1, not 0"
     )

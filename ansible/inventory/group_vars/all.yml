@@ -806,6 +806,10 @@ has_gitops: false
 # runs Docker. A host nobody thought about gets the teardown arm rather than a second container
 # runtime. daniel-pi overrides this true.
 has_docker: false
+# Whether this host has fwupd, so the host-maintenance component ships the weekly firmware update
+# (homelab-firmware-update.timer). False by default; daniel-box overrides it true. The Pi's
+# pi-tuning component purges fwupd, and daniel-server has never had it.
+has_fwupd: false
 # The Docker engine packages, listed once because three readers must agree on the set:
 # homelab-daniel-pi's engine pins (hosts/components/pi-docker) install them, initial_setup's
 # host-basics HOLDS them before its dist-upgrade, and docker_install's teardown unholds them
