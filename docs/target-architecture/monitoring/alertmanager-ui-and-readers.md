@@ -1,6 +1,6 @@
 # Alertmanager's UI and the services that read or silence it
 
-Status: DECIDED (spike [#6688](https://github.com/DanielH2018/server/issues/6688), 2026-10-31)
+Status: DECIDED, pending open questions 1 and 2 (spike [#6688](https://github.com/DanielH2018/server/issues/6688), 2026-10-31)
 
 Alertmanager became the homelab's paging path when M6 began retiring Uptime Kuma. Nothing
 outside the cluster can see it. During M6's cutovers on 2026-10-30 and 2026-10-31, every read of
@@ -16,8 +16,9 @@ Authelia `two_factor`. That item resolves M1's open question 2
 `docs/target-architecture/monitoring/m6-status/pr-b-6.md` reads "Nothing recorded". The
 amendments are these:
 
-1. The Authelia rule also names a subject, `group:admins`, so a one_factor-only account cannot
-   reach it even with a second factor added later.
+1. The Authelia rule names a subject, `group:admins`, and a `deny` rule for the same domain
+   follows it. Without the `deny`, a user outside `admins` falls through to the `*.local`
+   wildcard and gets `one_factor`.
 2. B-6b sets `--web.external-url` on Alertmanager, so the UI's links and any notification link
    resolve to the route.
 3. A read path for `probe.py` lets it list silences and inhibitions, which `ALERTS` cannot show.
@@ -43,8 +44,10 @@ grafana_alerting_rule_group_rules
   no data
 ```
 
-No silence has ever been created on this Alertmanager: the expired count is 0 as well. That is
-consistent with the only silence path being an operator `kubectl exec`.
+No silence is active, and none expired within Alertmanager's retention window. The
+Deployment sets no `--data.retention`, so the 120h default applies, and an older silence would
+no longer be counted. The reading is consistent with the only silence path being an operator
+`kubectl exec`.
 
 Alertmanager holds 8 active alerts while Prometheus' `ALERTS` holds 7 firing. The difference
 is consistent with the gap M5 records: the Loki ruler's alerts reach Alertmanager but never
@@ -171,11 +174,16 @@ B-6a writes is therefore:
   subject:
     - "group:admins"
   networks: <the RFC1918 list the wildcard uses>
+- domain: "alertmanager.local.{{ domain }}"
+  policy: deny
 ```
 
-Authelia evaluates the rules in order and stops at the first match. This rule must therefore sit
-ahead of the generated block and the wildcard. B-6a's render test asserts that the host resolves
-to `two_factor` with the subject.
+Authelia evaluates the rules in order and applies the first rule whose every criterion matches,
+the subject included. A user outside `admins` therefore skips the first rule. Without the
+`deny` rule after it, that user would fall through to the `*.local` wildcard and get
+`one_factor`. Both rules must sit ahead of the generated block and the wildcard. B-6a's render
+test asserts that an `admins` member resolves to `two_factor` and that any other user resolves
+to `deny`.
 
 **Port 9093 has no authentication of its own, and that does not change.** Every pod in the
 observability namespace, the node CIDRs that `netpol_baseline_obs_node_cidrs` admits, and the
@@ -216,7 +224,7 @@ the operator can see a silence they create during Phase C.
 ## Follow-ups filed
 
 - [#6689](https://github.com/DanielH2018/server/issues/6689): M6 B-6a, the `two_factor`
-    Authelia rule with the `admins` subject. Waits on open question 1.
+    Authelia rule for the `admins` group and the `deny` after it. Waits on open question 1.
 - [#6690](https://github.com/DanielH2018/server/issues/6690): M6 B-6b, the route,
     `--web.external-url` and the netpol comment.
 - [#6691](https://github.com/DanielH2018/server/issues/6691): the GET-only door and
