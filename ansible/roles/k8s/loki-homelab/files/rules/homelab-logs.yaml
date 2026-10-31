@@ -166,7 +166,7 @@ groups:
       # 15m (three cycles) without one is a dead or failing updater. The filter deliberately
       # leaves out the "Successfully sent a ping to Uptime Kuma" line, which stops with the Kuma
       # push at Cutover-2, and the "Checking the IP addresses in about" line, which prints
-      # whether or not the update worked. The Kuma tiles wait 6 minutes and page on one missed
+      # whether or not the update worked. The Kuma tiles waited 6 minutes and paged on one missed
       # beat, so these rules are slower by design: a single failed cycle is a retry, not a page.
       # The two Deployments share the `cloudflare-ddns` container name, so the pod name separates
       # them; the `pod` regex is the Deployment name plus the ReplicaSet and pod suffixes.
@@ -178,13 +178,13 @@ groups:
       # entries in ansible/tests/services/test_loki_stream_labels.py and a live evaluation. Every
       # edit of this file restarts Loki.
       #
-      # Shadow beside the Kuma tiles until B7's Cutover-1b drops the label.
+      # These two page since B7's Cutover-1b dropped the `shadow` label, after Cutover-1a
+      # deleted the Kuma tiles they replace.
       - alert: CloudflareDdnsDirectUpdateSilent
         expr: absent_over_time({job="k8s", container="cloudflare-ddns", pod=~"cloudflare-ddns-direct-.*"} |~ `are already up to date|Updated an outdated|Added a new` [15m])
         labels:
           severity: warning
           service: cloudflare-ddns
-          shadow: "true"
         annotations:
           summary: cloudflare-ddns-direct has logged no successful update in 15 minutes.
           description: >-
@@ -196,7 +196,6 @@ groups:
         labels:
           severity: warning
           service: cloudflare-ddns
-          shadow: "true"
         annotations:
           summary: cloudflare-ddns-proxied has logged no successful update in 15 minutes.
           description: >-

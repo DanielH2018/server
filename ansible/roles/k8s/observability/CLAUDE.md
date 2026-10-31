@@ -207,6 +207,10 @@ because the two alerts share no `instance`, and the estate has one Pi.
 and the Pi's port arm. Its per-target alerts take `service` from the `blackbox-extra` and
 `blackbox-pi-ports` scrape jobs, so their rule labels carry none, and they page since M6's batch B8
 Cutover-b.
+`files/rules/pods.yaml` holds the rules that replaced the Kuma tiles of autofix-bridge, the two
+cloudflare-ddns Deployments and the pi-peer-backup CronJob, and they page since M6's batch B7
+Cutover-1b. An inhibit in `alertmanager-secret.yaml.j2` lets `AutofixBridgeDown` hold the
+`ScrapeTargetDown` rule for the same job, so one dead exporter pages once.
 `files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
 while its rule is still shadow, and the last M6 Phase A cutover deletes it.
 
