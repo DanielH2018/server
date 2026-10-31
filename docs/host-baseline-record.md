@@ -96,6 +96,11 @@ the name:
   `allow 51820/udp`, and leaves the hand-added 51822 allow alone. It sets a default policy only
   where it differs and enables only an inactive UFW, as the tasks did.
   `initial_setup_packaged_hosts['ufw']` names the hosts whose package owns the subject.
+- **On daniel-server (H7.31), the same arm owns the two SSH rules and declares nothing else.**
+  The `k3s` role's agent join rules carry no `homelab:` label, so the arm leaves them until
+  H7.34 declares them. It also leaves the hand-added 45876 allow from the pod network, which
+  no task writes. The live defaults already match, so the arm runs no `ufw default`, which on
+  a k3s node would reload the ruleset under kube-router (the 2026-10-25 outage).
 - **UFW owns a SECOND sysctl file**, `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in
   `/etc/default/ufw`), re-applied on every `ufw enable` or `reload`. Ubuntu ships it with
   `log_martians=0`, so before #2977 this role's loop wrote 1 and `Enable UFW firewall` wrote 0
@@ -117,7 +122,8 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
 
 ## Integrity scans, Postfix and the Pi's swap file
 
-- **On daniel-pi (H7.30), the package runs the scans and the maintenance jobs.** The
+- **On daniel-pi (H7.30) and daniel-server (H7.31), the package runs the scans and the
+  maintenance jobs.** The
   `integrity-scans`, `fail2ban`, `postfix`, `accounting` and `host-maintenance` components
   render this role's templates in place (`role: initial_setup`), and each cron becomes a timer
   at the cron's slot. The weekly reboot refuses while the validation flag of `homelab-reconcile` exists. The

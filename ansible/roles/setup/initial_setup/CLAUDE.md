@@ -76,10 +76,11 @@ and dpkg purge, and the rkhunter and AIDE scans run with no human in the loop. H
 docs refresh, the infrastructure-map refresh, the eval sweep, the object-store repair and the
 secret-rotation timers into components under `hosts/components/` (`docs-refresh/`, `infra-map/`,
 `eval-sweep/`, `worktree-sweep/`, `secret-rotation/`). Each component's `component.yml` carries
-its own contract. On daniel-pi, H7.30 moved the reboot, the prune, the apt hygiene jobs and the
-two scans into the `host-maintenance` and `integrity-scans` components, which render this role's
-templates in place and carry their own contracts; `initial_setup_packaged_hosts` in
-`defaults/main.yml` skips the fail2ban group, the maintenance jobs and ufw there. This role
+its own contract. On daniel-pi (H7.30) and daniel-server (H7.31), the host packages moved the
+reboot, the prune, the apt hygiene jobs and the two scans into the `host-maintenance` and
+`integrity-scans` components, which render this role's templates in place and carry their own
+contracts; `initial_setup_packaged_hosts` in `defaults/main.yml` skips the fail2ban group, the
+maintenance jobs and ufw on both hosts, so only daniel-box still gets them from here. This role
 keeps the Loki read-route witness for daniel-server
 (`initial_setup_packaged_hosts` in `defaults/main.yml` excludes daniel-box) and the setup-drift
 check.

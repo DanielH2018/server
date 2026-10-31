@@ -37,8 +37,9 @@ HOST_INPUTS = (
     "ansible/roles/setup/claude_code/defaults/",
     "ansible/roles/setup/claude_code/templates/",
     "ansible/roles/setup/claude_code/files/",
-    # What the Pi's H7.30 components render through `role: initial_setup` until H7.32 moves
-    # daniel-box: the role's defaults, its templates and the maintenance wrapper.
+    # What the H7.30 components render on the Pi and daniel-server (H7.31) through
+    # `role: initial_setup` until H7.32 moves daniel-box: the role's defaults, its templates and
+    # the maintenance wrapper.
     "ansible/roles/setup/initial_setup/defaults/main.yml",
     "ansible/roles/setup/initial_setup/templates/",
     "ansible/roles/setup/initial_setup/files/host-maintenance.sh",

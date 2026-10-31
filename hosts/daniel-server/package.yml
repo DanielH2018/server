@@ -20,6 +20,18 @@
 # H7.39 adds `claude-code`, the agent user and everything the claude_code role installed here,
 # and `failure-alert`, the page its oneshots name. The role ends on this host. Both need
 # `gitops_deploy_discord_webhook`, and the agent's gh login needs `claude_code_agent_gh_token`.
+#
+# Since H7.31 it ships the rest of initial_setup's subjects, the same components as daniel-pi: the
+# fail2ban group (fail2ban, integrity-scans for rkhunter and AIDE, postfix and accounting), the
+# maintenance timers (host-maintenance: the weekly reboot, apt autoremove and dpkg purge; this
+# host has neither Docker nor fwupd) and ufw (ssh-firewall). check-lib ships the textfile library
+# the scans and the maintenance wrapper source. initial_setup skips each subject on this host
+# through `initial_setup_packaged_hosts`. The scans and the reboot read three more credentials,
+# `rkhunter_daniel_server_push_token`, `aide_daniel_server_push_token` and
+# `healthchecks_ping_key` (`host_secrets.py sync daniel-server`, operator-only).
+#
+# The package declares no ufw rule of its own. The k3s agent's join rules stay `setup/k3s`
+# rules until H7.34 declares them `keep`; they carry no `homelab:` label, so the arm leaves them.
 description: daniel-server's homelab host package
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
 # agent's login-slice cap sit here; `role: claude_code` reaches only these files (H7.40).
@@ -27,9 +39,12 @@ role: claude_code
 users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, failure-alert, claude-code, sops]
+components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
 credentials:
   - ups_secondary_daniel_server_push_token
+  - rkhunter_daniel_server_push_token
+  - aide_daniel_server_push_token
+  - healthchecks_ping_key
 maintainer_scripts: [preinst, postinst, prerm]
 enable:
   homelab-updater.timer: timers.target
@@ -44,3 +59,8 @@ legacy:
   - {path: /etc/apt/sources.list.d/github-cli.list}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
+  # H7.31: the maintenance wrapper the crons ran, and the Healthchecks.io key file the reboot cron
+  # sourced. No other job on this host reads the key file.
+  - {path: /usr/local/bin/host-maintenance.sh}
+  - {path: /etc/healthchecks/ping.env}
+  - {path: /etc/healthchecks}
