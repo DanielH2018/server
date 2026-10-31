@@ -32,6 +32,10 @@ SCRIPT = "/usr/lib/homelab/claude-agent-home"
 SETUP = "/usr/lib/homelab/claude-agent-setup"
 # The operator's checkout prefix, with a `.` a regex would read as any character.
 STRIP = "/home/op.x/server/"
+# Where homelab-secrets renders the agent's two logins: daniel-box's package.yml and the
+# claude-code component name these destinations, and the setup script links to them.
+UI_LOGIN = "/run/homelab-secrets/claude-agent/homelab-ui-credentials.json"
+GH_LOGIN = "/run/homelab-secrets/var/lib/claude/.config/gh/hosts.yml"
 RUNUSER = '#!/bin/sh\n[ "$1" = -u ] && shift 2\n[ "$1" = -- ] && shift\nexec "$@"\n'
 
 
@@ -233,6 +237,7 @@ def root_writes_by_name(text: str) -> list[str]:
 
 # Lines the setup and home scripts held before root stopped naming the agent's paths.
 NAMED_PATH_LINES = [
+    'ln -sfn "$ui_login" "$home/.config/homelab-ui/credentials.json"',
     'dir() { install -d -o "$agent" -g "$operator" -m "$1" "$2"; }',
     'put() { install -o "$agent" -g "$operator" -m "$1" "$templates/$2" "$home/$3"; }',
     'chown "$agent:$operator" "$key" "$key.pub"',
@@ -244,6 +249,7 @@ NAMED_PATH_LINES = [
 ]
 # Lines that are safe: the agent acts, or root acts on an open handle or on a path of its own.
 SAFE_LINES = [
+    'ln -sfnT "$1" "$pinned/${2##*/}"',
     'as_agent chmod 0600 "$1"',
     'install -T -o "$1" -g "$2" -m "$3" "$4" "$pinned/${5##*/}"',
     'chown "$agent:$operator" "$pinned"',
@@ -343,6 +349,9 @@ def test_the_setup_gives_each_path_its_mode_and_a_second_run_changes_nothing(
     for name in (".", ".claude/artifacts"):
         assert (home / name).stat().st_mode & stat.S_ISGID
     assert (home / ".kube" / "config").read_text() == "kubeconfig\n"
+    # The logins render under /run, outside the home; the agent reaches them through these links.
+    assert os.readlink(home / ".config/homelab-ui/credentials.json") == UI_LOGIN
+    assert os.readlink(home / ".config/gh/hosts.yml") == GH_LOGIN
     assert (home / ".profile").read_text() == "profile\n"
 
 
@@ -397,3 +406,26 @@ def test_a_link_at_the_login_the_setup_removes_is_removed_and_its_target_left_al
     assert result.returncode == 0, result.stderr
     assert not login.is_symlink() and not login.exists()
     assert untouched(agent_home["decoy"])
+
+
+def test_a_link_to_a_login_replaces_a_file_or_a_link_and_leaves_the_old_target_alone(
+    rendered, agent_home
+):
+    config = agent_home["home"] / ".config"
+    (config / "homelab-ui").mkdir(parents=True)
+    (config / "gh").mkdir()
+    # A file left by an earlier writer, and a link the agent aimed elsewhere.
+    (config / "homelab-ui" / "credentials.json").write_text("old\n")
+    os.symlink(agent_home["decoy"] / "keep", config / "gh" / "hosts.yml")
+    result = run_setup(rendered)
+    assert result.returncode == 0, result.stderr
+    assert os.readlink(config / "homelab-ui" / "credentials.json") == UI_LOGIN
+    assert os.readlink(config / "gh" / "hosts.yml") == GH_LOGIN
+    assert untouched(agent_home["decoy"])
+
+
+def test_a_directory_where_a_login_link_belongs_fails_the_run(rendered, agent_home):
+    (agent_home["home"] / ".config" / "homelab-ui" / "credentials.json").mkdir(
+        parents=True
+    )
+    assert run_setup(rendered).returncode != 0

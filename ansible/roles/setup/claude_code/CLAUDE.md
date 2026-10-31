@@ -92,7 +92,10 @@ check's flux copy.
   at the file rather than writing through it. `hosts/lib/tests/test_claude_agent_home.py` scans
   both rendered scripts for a root command that names such a path, and runs the setup over
   planted links. The homelab-ui login is
-  an output of the host's SOPS file. The operator config subset
+  an output of the host's SOPS file that renders under `/run/homelab-secrets`, outside the
+  agent's home. The package ships no link into the home: `claude-agent-setup` links
+  `~/.config/homelab-ui/credentials.json` to it with `point`, and `drop` removes the link while
+  homelab-ui is off. The operator config subset
   (`tasks/agent_operator_config.yml`) is not packaged: it runs only where
   `claude_code_agent_dotfiles` is false, and no host sets that.
 - **The homelab-ui browser is `homelab-claude-agent-browser.service`**, a oneshot run as the

@@ -149,6 +149,28 @@ def test_a_host_with_homelab_ui_off_removes_the_agents_login(box, server):
     assert UI_LOGIN_REMOVAL in server.files[SETUP][0].decode()
 
 
+def test_the_package_installs_no_link_into_the_agents_home(box, server):
+    # The agent owns its home, so claude-agent-setup links each login there after checking the
+    # path. A link the package installed would put root's write inside that directory.
+    for package in (box, server):
+        assert [p for p in package.links if p.startswith("/var/lib/claude/")] == []
+
+
+def test_each_login_renders_where_the_setup_script_links_to_it(box, server):
+    gh = "var/lib/claude/.config/gh/hosts.yml"
+    for package, destinations in (
+        (box, {"claude-agent/homelab-ui-credentials.json", gh}),
+        (server, {gh}),
+    ):
+        rows = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])["outputs"]
+        assert {
+            r["destination"] for r in rows if r["owner"] == "claude"
+        } == destinations
+        setup = package.files[SETUP][0].decode()
+        for destination in destinations:
+            assert f"/run/homelab-secrets/{destination}" in setup
+
+
 @pytest.mark.parametrize("host", sorted(AGENT_UID))
 def test_every_packaged_agent_takes_the_dotfiles_so_no_operator_config_copy_is_owed(
     host,

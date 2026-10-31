@@ -94,7 +94,9 @@ outputs:
     mode: "0600"
     keys: [claude_code_agent_gh_token]
     persist: false
-    link: true
+    # claude-agent-setup links `path` to the rendered file. A package-installed link would put
+    # root's write inside a directory the agent owns.
+    link: false
     when: claude_code_agent_user_enabled
 # Triage's credential and the agent's homelab-ui login are outputs of hosts/daniel-box/package.yml,
 # not of this component: host_secrets.py names every output key a host's components declare,

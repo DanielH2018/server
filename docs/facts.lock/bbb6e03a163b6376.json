@@ -1,5 +1,5 @@
 {
-  "checksum": "ea4274e856255c04ee8045c2c5dfc621634045bd5358214eb483fb6be40c9721",
+  "checksum": "a69ac58f021b346488361b7ad2ec27eea8bed2594639a1a53eeb9fd6f83c1fb9",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/claude_code/CLAUDE.md#The host packages own most of it",
   "row": {
@@ -13,6 +13,6 @@
       "hosts/lib/tests/test_claude_code_on_daniel_box.py": "b836e539bbfdc262583f0726bdc3679aa00c07aca74e8f80f0444d2340208483"
     },
     "python": "3.14",
-    "verified_sha": "10d068006"
+    "verified_sha": "abbdcc170"
   }
 }

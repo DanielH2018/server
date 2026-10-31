@@ -92,6 +92,14 @@ drop() {
   unpin
 }
 
+# point TARGET LINK makes LINK a link to TARGET inside its pinned parent. A link or a file at LINK
+# is replaced, and a directory there fails the run.
+point() {
+  pin "${2%/*}"
+  ln -sfnT "$1" "$pinned/${2##*/}"
+  unpin
+}
+
 dir 2750 "$home"
 dir 0755 "$home/.local"
 dir 0755 "$home/.local/bin"
@@ -112,6 +120,8 @@ drop "$home/.ssh/authorized_keys"
 dir 0755 "$home/.config"
 dir 0755 "$home/.config/git"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/gh"
+# homelab-secrets renders the agent's gh login under /run, outside the agent's home.
+point /run/homelab-secrets/var/lib/claude/.config/gh/hosts.yml "$home/.config/gh/hosts.yml"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/chezmoi"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.claude"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.claude/projects"
@@ -131,8 +141,11 @@ for shared in "$home/.claude/artifacts" "{{ claude_code_agent_memory_dir }}"; do
 done
 
 {% if claude_code_agent_homelab_ui_enabled %}
-# homelab-secrets links the agent's homelab-ui login in here.
+# homelab-secrets renders the agent's homelab-ui login under /run, outside the agent's home
+# (daniel-box's package.yml names the same destination). The agent reads it through this link.
+ui_login=/run/homelab-secrets/claude-agent/homelab-ui-credentials.json
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/homelab-ui"
+point "$ui_login" "$home/.config/homelab-ui/credentials.json"
 {% else %}
 drop "$home/.config/homelab-ui/credentials.json"
 {% endif %}
