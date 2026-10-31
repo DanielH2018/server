@@ -27,7 +27,7 @@ scripts/secrets_mgmt/consumers.py finds who to redeploy after a rotation by grep
 role's files for the secret's name, so a derived name would drop monitor-bridge from that census
 and leave the pod pushing a revoked token. uptime-kuma renders the same tokens from this file;
 the census credits it through the cross-role read `deploy_changes.cross_role_readers` derives.
-Six rows predate the `monitor_bridge_<name>_push_token` rule and keep their old name, because
+Five rows predate the `monitor_bridge_<name>_push_token` rule and keep their old name, because
 renaming a secret is a rotation.
 
 `kuma_id`, `display` and `description` are what AutoKuma compares, and it runs with
@@ -43,7 +43,6 @@ from checks import (
     cluster,
     gitops,
     healthchecks,
-    host,
     host_edge,
     host_thermal,
     logs,
@@ -57,16 +56,6 @@ from checks import (
 # the 600-line module cap with room for three more checks.
 # fmt: off
 CHECKS: tuple[PushCheck, ...] = (
-    PushCheck(
-        name="disk", fn=host.check_disk, token="monitor_bridge_disk_push_token",
-        kuma_id="monitor-bridge-disk", display="Root Disk", status_group="Hosts & Power", gate="prometheus", critical=True,
-        description="node-exporter via monitor-bridge: `/`, `/boot` or `/boot/efi` over DISK_MAX_PCT on a cluster node, or one node's exporter missing from the census. `df -h` on the named host.",
-    ),
-    PushCheck(
-        name="memory", fn=host.check_mem, token="monitor_bridge_mem_push_token",
-        kuma_id="monitor-bridge-mem", display="Memory", status_group="Hosts & Power", gate="prometheus",
-        description="node-exporter via monitor-bridge: host memory pressure on a cluster node, a Claude Code cgroup stalling or OOM-killing, or one node missing from the census. Claude Code running as a uid the host retired is named in the message without paging. The message names host and cgroup.",
-    ),
     PushCheck(
         name="n8n", fn=service.check_n8n, token="monitor_bridge_n8n_push_token",
         kuma_id="monitor-bridge-n8n", display="n8n Prod Workflows", status_group="Services", gate="startup_grace",
@@ -118,19 +107,6 @@ CHECKS: tuple[PushCheck, ...] = (
         name="scrutiny", fn=host_thermal.check_scrutiny, token="monitor_bridge_scrutiny_push_token",
         kuma_id="monitor-bridge-scrutiny", display="SMART Data / Health", status_group="Hosts & Power", gate="startup_grace", critical=True,
         description="monitor-bridge reads Scrutiny's summary every 5 min. DOWN: a drive's collector data is older than 26h, its SMART self-assessment or an attribute threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured, so this is the only drive-failure page.",
-    ),
-    # HWMON_TEMP_CONSECUTIVE (an hour) holds a boost excursion off the tile, not max_retries.
-    # Gated because its empty-vector branch pages on a blind hwmon collector.
-    PushCheck(
-        name="host_temp", fn=host_thermal.check_host_temp, token="monitor_bridge_host_temp_push_token",
-        kuma_id="host-temperature", display="Host Temperature", status_group="Hosts & Power", gate="prometheus",
-        description="hwmon via monitor-bridge: a board or CPU sensor over 90% of its declared, rated or fallback limit for an hour, the Pi's undervoltage alarm, or kernel CPU thermal throttling for 15m. The message names the sensor and which limit set the bar.",
-    ),
-    # Reads HA's Prometheus-scraped UPS battery sensors.
-    PushCheck(
-        name="ups", fn=host_thermal.check_ups, token="monitor_bridge_ups_push_token",
-        kuma_id="monitor-bridge-ups", display="UPS Battery Health", status_group="Hosts & Power", gate="prometheus", critical=True,
-        description="NUT via monitor-bridge: mains lost, charge under 50%, runtime under 5 min, or the UPS asking for a battery replacement. Mains loss is judged first and alone.",
     ),
     # Reads the Pi's `node-pi` job since #2004, and its absent-series branch pages, so it is
     # gated; that also took it out of the startup grace, which must stay disjoint from the gates.

@@ -1,14 +1,12 @@
 """SMART verdicts for check.py — what scrutiny reports about the drives.
 
-Its own module rather than a section of `verdicts/host.py` for the reason
-`verdicts/host_power.py` records: that file had reached the 600-line cap in
-`ansible/tests/repo/test_module_length_ratchet.py` exactly, so the next line added to it failed
-CI (issue #1708). Splitting the UPS half alone left 39 lines of headroom; this second cut is
-what makes that headroom durable.
+Its own module rather than a section of `verdicts/host.py`, which had reached the 600-line cap
+in `ansible/tests/repo/test_module_length_ratchet.py` exactly, so the next line added to it
+failed CI (issue #1708).
 
 Three arms, all read by `check_scrutiny` (checks/host_thermal.py): the collector's freshness,
-the per-device SMART status and temperature, and NVMe wear. Drive TEMPERATURE belongs here and
-not to `hwmon_temp_verdict` — `test_drive_chips_are_left_to_scrutiny` holds that boundary.
+the per-device SMART status and temperature, and NVMe wear. Drive TEMPERATURE belongs here: the
+`hosts` rules in observability exclude the NVMe chips from their temperature arms.
 
 Decides; does not fetch. Takes its inputs as arguments and reads no module-level config — see
 `bridge/parsing.py`'s header for the rule and why breaking it fails silently rather than loudly.

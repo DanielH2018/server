@@ -131,42 +131,15 @@ def test_the_scrape_config_is_actually_parseable():
 def test_every_node_exporter_job_is_mapped_in_exporter_dependent():
     """The reject half: adding a node-exporter host fails here until its job is placed.
 
-    Every node-exporter job carries hwmon series, so losing a host from any of them trips
-    HWMON_TEMP_ORIGINS_MIN. The map is keyed by Prometheus `job`, so an unmapped job means one root
-    cause pages twice — Scrape Targets plus a coverage complaint naming the same host.
+    The map is keyed by Prometheus `job`, so an unmapped job means one root cause pages twice —
+    Scrape Targets plus a complaint from a check that reads the dead exporter's series.
     """
     unmapped = _node_exporter_jobs() - set(gates.EXPORTER_DEPENDENT)
     assert not unmapped, (
         f"node-exporter scrape job(s) {sorted(unmapped)} have no EXPORTER_DEPENDENT entry, so a "
         "dead exporter there suppresses nothing. Decide which checks that job's hosts feed and add "
-        "it — `host_temp` at minimum, plus disk/memory unless HOST_METRIC_ORIGIN_EXCLUDE excludes "
-        "every origin the job declares."
+        "it."
     )
-
-
-def test_a_job_whose_origins_are_all_excluded_suppresses_no_host_metric_check(cfg):
-    """The other half of the same defect: the two axes have to agree.
-
-    EXPORTER_DEPENDENT keys by job; check_disk and check_mem exclude by ORIGIN. A host added to one
-    axis and not the other is exactly this defect. Only statically-labelled jobs are
-    readable here — `node` discovers its origins from k8s at scrape time — so this covers `node-pi`.
-    """
-    excluded = re.compile(cfg.HOST_METRIC_ORIGIN_EXCLUDE)
-    checked = 0
-    for name, block in _scrape_job_blocks(_PROM_SCRAPE_CONFIG.read_text()):
-        if name not in gates.EXPORTER_DEPENDENT:
-            continue
-        origins = re.findall(r"^\s+origin:\s*(\S+)", block, flags=re.M)
-        if not origins or not all(excluded.fullmatch(o) for o in origins):
-            continue
-        checked += 1
-        leaked = gates.EXPORTER_DEPENDENT[name] & {"disk", "memory"}
-        assert not leaked, (
-            f"job {name!r} declares only origins excluded by HOST_METRIC_ORIGIN_EXCLUDE "
-            f"({cfg.HOST_METRIC_ORIGIN_EXCLUDE!r}), so check_disk and check_mem never read them "
-            f"— suppressing {sorted(leaked)} there hides a real fault and reports nothing"
-        )
-    assert checked, "no excluded statically-labelled job found; this guard is inert"
 
 
 def _wire_run_once_prom_up(cfg, up_vector, checks, prom_dependent):
@@ -197,15 +170,15 @@ def test_run_once_suppresses_node_dependents_when_node_exporter_down(cfg):
     ran, pushes = _wire_run_once_prom_up(
         cfg,
         up,
-        ["disk", "memory", "targets"],
-        {"disk", "memory", "targets"},
+        ["host_packages", "targets"],
+        {"host_packages", "targets"},
     )
     # node-dependents suppressed (never run, pushed up with a skip msg); Scrape Targets still pages
-    assert not ({"disk", "memory"} & set(ran))
+    assert "host_packages" not in ran
     assert "targets" in ran
     by_tok = {t: (ok, m) for t, ok, m in pushes}
-    assert by_tok["tok_disk"][0] is True
-    assert "exporter" in by_tok["tok_disk"][1].lower()
+    assert by_tok["tok_host_packages"][0] is True
+    assert "exporter" in by_tok["tok_host_packages"][1].lower()
 
 
 def test_run_once_suppression_without_cadvisor_series(cfg):
@@ -214,17 +187,17 @@ def test_run_once_suppression_without_cadvisor_series(cfg):
     ran, _ = _wire_run_once_prom_up(
         cfg,
         up,
-        ["disk", "memory", "targets"],
-        {"disk", "memory", "targets"},
+        ["host_packages", "targets"],
+        {"host_packages", "targets"},
     )
-    assert not ({"disk", "memory"} & set(ran))
+    assert "host_packages" not in ran
     assert "targets" in ran
 
 
 def test_run_once_no_suppression_when_exporters_up(cfg):
     up = [({"job": "node"}, 1.0)]
-    ran, _ = _wire_run_once_prom_up(cfg, up, ["disk", "memory"], {"disk", "memory"})
-    assert "disk" in ran and "memory" in ran
+    ran, _ = _wire_run_once_prom_up(cfg, up, ["host_packages"], {"host_packages"})
+    assert "host_packages" in ran
 
 
 def test_run_once_up_probe_failure_does_not_suppress(cfg):
@@ -237,15 +210,15 @@ def test_run_once_up_probe_failure_does_not_suppress(cfg):
     check.run_once(
         cfg,
         FakeSources(prom_vector=boom),
-        [Check("disk", "tok_disk", mk(ran, "disk"))],
+        [Check("host_packages", "tok_host_packages", mk(ran, "host_packages"))],
         gates=Gates(
-            prom_dependent=frozenset({"disk"}),
+            prom_dependent=frozenset({"host_packages"}),
             probe_prometheus=lambda _cfg, _src: (True, "prom ok"),
             probe_wan=lambda _cfg, _src: (True, "wan ok"),
         ),
         sink=sink,
     )
-    assert "disk" in ran  # not suppressed
+    assert "host_packages" in ran  # not suppressed
 
 
 # ── The origin pin the stub above cannot see ────────────────────────────────────────────────
@@ -264,21 +237,21 @@ _THREE_ORIGIN_UP = [
 
 
 def test_pi_exporter_death_suppresses_its_dependents_under_the_deployed_origin_pin(cfg):
-    """The Pi's node-exporter is down; pi_pressure and host_temp must not also page.
+    """The Pi's node-exporter is down; pi_pressure must not also page.
 
     Unsuppressed, pi_pressure pages with "node-pi series missing load/mem/fs", which is
     exactly what EXPORTER_DEPENDENT["node-pi"] exists to suppress. Under
     the pinned probe the whole vector was invisible — daniel-server's only series is healthy, so
     `up{origin="daniel-server"}` carried no dead exporter to suppress on.
     """
-    names = ["pi_pressure", "host_temp", "targets"]
+    names = ["pi_pressure", "targets"]
     ran, pushes = _wire_run_once_prom_up(
         replace(cfg, PROM_ORIGIN='origin="daniel-server"'),
         _THREE_ORIGIN_UP,
         names,
         names,
     )
-    assert not ({"pi_pressure", "host_temp"} & set(ran))
+    assert "pi_pressure" not in ran
     assert "targets" in ran  # Scrape Targets is still the single page
     by_tok = {t: (ok, m) for t, ok, m in pushes}
     assert by_tok["tok_pi_pressure"][0] is True

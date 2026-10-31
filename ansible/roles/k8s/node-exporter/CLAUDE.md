@@ -58,16 +58,16 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   with `has_claude_code: true`). The script writes a `mktemp` file in the same directory,
   sets it to 0644 and moves it over `claude_cgroup.prom`, so the collector never reads a
   partial file.
-- **monitor-bridge pages on it.**
-  `ansible/roles/k8s/monitor-bridge/files/checks/host.py:with_claude_cgroups` folds the
-  series into `check_mem`, and
-  `ansible/roles/k8s/monitor-bridge/files/verdicts/host_cgroups.py:claude_cgroup_verdict`
-  fails when an expected cgroup stops reporting. Arm 3 takes `expected_by_origin`, which
-  pairs each host with the cgroups that host must report, so it judges each host on its own
-  list. The check fills it from `CLAUDE_CGROUP_EXPECTED` in monitor-bridge's settings
-  template, which expects `claude-rc` only on a host that runs the RC unit. A writer that
-  stops on one node therefore pages from Kuma while the other node still reports, and so
-  does a file that is missing or malformed on one host.
+- **Alertmanager pages on it.** The `ClaudeCgroup*` rules in
+  `ansible/roles/k8s/observability/files/rules/hosts.yaml` read the series, and
+  `ClaudeCgroupNotReporting` fires when an expected cgroup stops reporting while the scrape is
+  up. It pairs each host with the cgroups that host must report, and expects `claude-rc` only on
+  a host that runs the RC unit. A writer that stops on one node therefore pages while the other
+  node still reports, and so does a file that is missing or malformed on one host.
+  `ansible/tests/services/test_host_check_rule_literals.py::test_the_cgroup_pairs_follow_the_inventory`
+  holds the pairs to the inventory, and
+  `ansible/tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py` holds the
+  rules' selectors to the series the writer emits.
 - **The sidecar producer: `iscsi-sessions.prom` (#5826).** The `iscsi-sessions` container
   runs `ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh`, which the template inlines
   so that a script change rolls the DaemonSet. Every 60 s it reads

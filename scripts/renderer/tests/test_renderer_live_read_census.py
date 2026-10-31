@@ -62,7 +62,7 @@ def test_the_census_finds_its_named_members():
     assert readers and all("/defaults/" in reader for reader in readers)
     # The two `vars` lookup sources.
     assert {
-        "monitor_bridge_disk_push_token",
+        "monitor_bridge_swallowed_verdicts_push_token",
         "terraria_k8s_replicas",
     } <= found.vars_names
     assert "terraria_k8s_replicas" in found.reached

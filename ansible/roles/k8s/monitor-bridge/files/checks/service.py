@@ -374,7 +374,7 @@ def check_ha_heartbeat(
 
     Empty HA_URL/HA_TOKEN -> disabled (stays up), like check_n8n.
 
-    Hysteresis (HA_CONSECUTIVE, like UPS_CONSECUTIVE): a planned redeploy takes HA's REST
+    Hysteresis (HA_CONSECUTIVE, like DISCORD_CONSECUTIVE): a planned redeploy takes HA's REST
     API unreachable for ~120s and then leaves the automation scheduler a beat behind, so a
     single cycle can read unreachable OR stale — a transient that should NOT page. Only the
     HA_CONSECUTIVE'th consecutive down cycle pushes `down`; earlier ones push `up` with a

@@ -76,7 +76,7 @@ def test_exporter_dependent_union_is_real_checks_and_not_empty():
     names = {c.name for c in registry.build_checks()}
     dependents = set().union(*gates.EXPORTER_DEPENDENT.values())
     assert dependents <= names
-    assert {"disk", "memory", "host_temp"} <= dependents
+    assert {"host_packages", "pi_pressure"} <= dependents
 
 
 def test_a_gates_value_validates_against_its_own_dependent_sets():
@@ -85,11 +85,11 @@ def test_a_gates_value_validates_against_its_own_dependent_sets():
     `run_once` suppresses by the three sets on the VALUE it is handed, so a filter validated
     against `GATE_DEPENDENTS` instead would accept a configuration the run loop then treats
     differently. A `Gates` whose Prometheus gate suppresses nothing must therefore leave
-    `--check disk` alone, where the module table unions `prometheus` in.
+    `--check pi_pressure` alone, where the module table unions `prometheus` in.
     """
     stated = gates.Gates(prom_dependent=frozenset())
     assert stated.gate_dependents()["prometheus"] == frozenset()
-    names = frozenset({"disk"})
+    names = frozenset({"pi_pressure"})
     assert gates.expand_gates_for_cli(names, stated.gate_dependents()) == names
     assert "prometheus" in gates.expand_gates_for_cli(
         names
@@ -122,7 +122,7 @@ def prom_readers(checks) -> set[str]:
 def test_prom_readers_are_derivable_from_the_registry():
     """Non-vacuity: an empty derivation makes the completeness guard below pass on nothing."""
     readers = prom_readers(registry.build_checks())
-    assert {"disk", "memory", "host_temp"} <= readers, (
+    assert {"host_packages", "pi_pressure"} <= readers, (
         f"prom readers derived from the registry look wrong: {sorted(readers)} — "
         "the source-scan or the registry shape changed, and the guard below is now inert"
     )
@@ -144,5 +144,5 @@ def test_every_prometheus_reader_is_gated():
 def test_a_reader_dropped_from_the_gate_sets_is_flagged():
     """The reject half: a Prometheus reader in no gate set must not read as clean."""
     readers = prom_readers(registry.build_checks())
-    without_temp = gates.PROM_DEPENDENT - {"host_temp"}
-    assert readers - without_temp == {"host_temp"}
+    without_pi = gates.PROM_DEPENDENT - {"pi_pressure"}
+    assert readers - without_pi == {"pi_pressure"}

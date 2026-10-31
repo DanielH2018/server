@@ -59,9 +59,12 @@ def _check_modules() -> dict[str, str]:
 def test_no_check_body_calls_the_transport_directly():
     modules = _check_modules()
     # Named members, so a move of the package reads as a failure rather than an empty pass.
-    assert {"checks/host.py", "checks/cluster.py", "checks/logs.py", "check.py"} <= set(
-        modules
-    )
+    assert {
+        "checks/host_edge.py",
+        "checks/cluster.py",
+        "checks/logs.py",
+        "check.py",
+    } <= set(modules)
     offenders = {
         name: hits for name, src in modules.items() if (hits := _direct_fetches(src))
     }

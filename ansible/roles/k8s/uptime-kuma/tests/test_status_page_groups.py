@@ -37,7 +37,7 @@ KNOWN_IDS = frozenset(
         "monitor-bridge-b2-storage",
         "gitops-deploy-alive",
         "secret-rotation",
-        "monitor-bridge-disk",
+        "monitor-bridge-scrutiny",
         "status-page-sync",
     }
 )
@@ -87,7 +87,7 @@ def rules():
 def test_the_declaration_census_finds_every_known_monitor():
     index = monitor_index()
     assert KNOWN_IDS <= set(index), f"census lost: {sorted(KNOWN_IDS - set(index))}"
-    assert len(index) >= 83, f"census found only {len(index)} monitors"
+    assert len(index) >= 79, f"census found only {len(index)} monitors"
 
 
 def test_every_declared_monitor_lands_in_a_named_group():
@@ -108,7 +108,7 @@ def test_every_bridge_tile_lands_in_the_group_its_row_names():
         row["kuma_id"]: row["status_group"]
         for row in py_table(CHECK_TABLE.read_text(), "CHECKS")
     }
-    assert wanted["monitor-bridge-disk"] == "Hosts & Power"
+    assert wanted["monitor-bridge-scrutiny"] == "Hosts & Power"
     assert {i: placed.get(i) for i in wanted} == wanted
 
 

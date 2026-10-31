@@ -13,12 +13,12 @@ ansible/tests/services/test_bridge_patch_boundary.py.
 
 CONFIGURATION IS A PARAMETER, NOT A GLOBAL. Every helper that reads a URL or the origin pin
 takes the frozen `Config` as its FIRST argument, so this module holds no env-derived state and
-a test states the configuration it wants by handing one in. `_origin_name`,
-`_get_json`, `_post_json` and `_instant_query` read no configuration and take none.
+a test states the configuration it wants by handing one in. `_get_json`, `_post_json` and
+`_instant_query` read no configuration and take none.
 
-The selector builders (`origin_sel`, `host_metric_sel`, `_origin_name`) live
-here rather than beside the checks because they are the query-building half of fetching, they
-read `cfg.PROM_ORIGIN`, and the gates test renders them to prove where the origin pin lands.
+The selector builder `origin_sel` lives here rather than beside the checks because it is the
+query-building half of fetching, it reads `cfg.PROM_ORIGIN`, and the gates test renders it to
+prove where the origin pin lands.
 """
 
 from collections.abc import Callable
@@ -56,44 +56,6 @@ def origin_sel(cfg: Config, *matchers: str) -> str:
     if cfg.PROM_ORIGIN:
         parts.append(cfg.PROM_ORIGIN)
     return "{%s}" % ", ".join(parts) if parts else ""
-
-
-def host_metric_sel(cfg: Config, *matchers: str) -> str:
-    """A `{...}` block for the HOST-level node_* checks, minus origins owned by another check.
-
-    node_* is estate-wide the moment a host runs node-exporter, so check_disk and check_mem
-    scan whatever reports. daniel-pi joined that set when its exporter landed — and
-    check_pi_pressure already owns Pi disk and memory, with thresholds written for a 456 MB
-    box rather than the 90% that suits the two x86 hosts. Without this exclusion the Pi's
-    ordinary working state pages twice for one fact, which is exactly the duplication
-    check_mem avoids elsewhere by naming the `ContainerOOMKilled` rule the single source of
-    truth for per-container OOM kills.
-
-    A regex matcher, so HOST_METRIC_ORIGIN_EXCLUDE can carry a `a|b` list. Series with no
-    `origin` label at all are KEPT: Prometheus reads a missing label as "", which `!~` on a
-    named host does not match.
-
-    DECIDED: an EXCLUDE, never origin_sel(). The node-exporter families behind check_disk and
-    check_mem genuinely carry `origin`, which reads like an invitation to pin them with
-    origin_sel() — do not. PROM_ORIGIN resolves to
-    `origin="daniel-server"` by default. Pinning these two checks to one host would hide
-    daniel-box's disk and memory behind two green tiles, which is precisely the fault
-    HOST_ORIGINS_MIN was added for on 2026-08-23. Naming who is OUT keeps every other host in
-    by default.
-    """
-    parts = [m for m in matchers if m]
-    if cfg.HOST_METRIC_ORIGIN_EXCLUDE:
-        parts.append('origin!~"%s"' % cfg.HOST_METRIC_ORIGIN_EXCLUDE)
-    return "{%s}" % ", ".join(parts) if parts else ""
-
-
-def _origin_name(labels: dict) -> str:
-    """The host a per-origin series belongs to, for naming an offender in an alert message.
-
-    The Docker Prometheus has no `origin` label at all (external_labels are applied on
-    remote-write, never to local queries), so an empty one means "the only host there is".
-    """
-    return labels.get("origin") or "host"
 
 
 # HTTP / parsing helpers (pure-ish, unit-tested)
