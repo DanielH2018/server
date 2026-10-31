@@ -1,5 +1,5 @@
 {
-  "checksum": "391eb94997a8ee34d16294c2a950e2eec8096a607f1f43b8a3d53eb11888319d",
+  "checksum": "a30dcded40ab4df4ac8f32728daed30db1d478cf1b0781c95383f39e0f4ce6d3",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Alert plane",
   "row": {
@@ -10,6 +10,7 @@
       "ansible/tests/k8s/test_workload_service_overrides.py": "0ac69454a611040c26c8143d62022d197a8cb78c54b69b51f16fc1fa3abdb941",
       "ansible/tests/services/test_alertmanager_blackbox_inhibit.py": "8c22fa8d8102aa05b59bb096cb401ac383634e11cd6f161d6fcd5086b3838169",
       "ansible/tests/services/test_alertmanager_flux_inhibit.py": "89b720f9571dad8dff4e9f7127e1c3178d9c44e2b2129c3b30faa1f0e16729b8",
+      "ansible/tests/services/test_alertmanager_kuma_inhibit.py": "94c5e7108d759d82e069b001760fb98f3e08359ead7ba348038ef9593b4579cf",
       "ansible/tests/services/test_alertmanager_pi_inhibit.py": "85b73ad4569b8c71fe00dd8925740473833ba1afae0affbe0bdf1aa32a749d2d",
       "ansible/tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute_with_kumas_window": "0af14f1ef04921efec8cb1db1cde1cf3024f7a0290be343f2d41b7596340c7df",
       "ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted": "38dd2c6b5053f1a6b54ff76b6a01e4996f6573a520223734a9b429fa2b49a639",
@@ -24,6 +25,6 @@
       "scripts/validate/notification_renders.py:render_problems": "878ac2e910af92c705c09a01fde99e85b523f269ca4bc8811b024882ab5229b6"
     },
     "python": "3.14",
-    "verified_sha": "5180db5f1"
+    "verified_sha": "40b4e3946"
   }
 }

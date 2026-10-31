@@ -423,16 +423,12 @@ def test_host_sets_names_every_host_check_rule():
     ).split()
     box_only = (
         "FanoutSlotsIdleWithFreeWork ArtifactsSyncFailed ArtifactsSyncNotReporting "
-        "OtlpDoorClosed OtlpDoorNotReporting LonghornBackupHealthFailed "
-        "LonghornBackupHealthNotReporting EtcdSnapshotOffboxFailed "
-        "EtcdSnapshotOffboxNotReporting ManifestPruneCheckFailed "
-        "ManifestPruneCheckNotReporting ReleaseStalenessCheckFailed "
-        "ReleaseStalenessCheckNotReporting LiveDriftCheckFailed LiveDriftCheckNotReporting"
+        "OtlpDoorClosed OtlpDoorNotReporting"
     ).split()
     assert set(host_sets(shadow=True)) == (
         {f"{alert}/{host}" for alert in every_host for host in hosts}
         | {f"{alert}/daniel-box" for alert in box_only}
-        | {"ComposeUpFailed/daniel-pi", "KumaDown/uptime-kuma"}
+        | {"ComposeUpFailed/daniel-pi"}
     )
     assert set(host_sets(shadow=False)) >= {
         "DiskHealthFailed/daniel-box",
