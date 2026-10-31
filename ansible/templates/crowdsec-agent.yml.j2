@@ -18,7 +18,7 @@
   prometheus grant (`networkpolicy-crowdsec-sidecars.yaml.j2`) all derive from that map. The
   sidecar carries the HOST pod's labels, so Prometheus reaches it as `app=<app>`, which is why
   both the job and the grant select the app label plus port 6060. Then the three calls here,
-  and a `<app>-crowdsec` Secret carrying `AGENT_PASSWORD`, `acquis.yaml` and the two whitelist
+  and a `<app>-crowdsec` Secret carrying `AGENT_PASSWORD`, `acquis.yaml` and the three whitelist
   parsers. `ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds the job, the port
   and the grant together.
 
@@ -42,6 +42,7 @@
     uid, gid    the pod uid and gid. crowdsec-hub-install hands the staged hub tree to them,
                 because the agent's entrypoint writes into it.
     collections the hub collections the agent installs (its COLLECTIONS env).
+    parsers     hub parsers the agent installs on top (its PARSERS env), omitted when empty.
     cpu_limit, mem_limit, cpu_request, mem_request
                 the agent sidecar's resources. The three init containers share one fixed size.
 #}
@@ -142,6 +143,7 @@
               install -m 644 /seed/acquis.yaml /etc/crowdsec/ &&
               install -d /etc/crowdsec/parsers/s02-enrich &&
               install -m 644 /seed/whitelist.yaml /seed/trusted-remote-whitelist.yaml
+              /seed/authenticated-app-whitelist.yaml
               /etc/crowdsec/parsers/s02-enrich/ &&
               install -m 640 /dev/null {{ log_dir }}/{{ log_file }}
           # The rsync is the image entrypoint's own "Populating configuration directory" step
@@ -231,7 +233,7 @@
               mountPath: /var/lib/crowdsec/data
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {%- endmacro %}
-{% macro crowdsec_agent_sidecar(app, collections, log_volume, log_dir, cpu_limit, mem_limit, cpu_request, mem_request) %}
+{% macro crowdsec_agent_sidecar(app, collections, log_volume, log_dir, cpu_limit, mem_limit, cpu_request, mem_request, parsers='') %}
         # Log-parsing agent, LAPI-less: it tails this pod's log and ships signals to the
         # in-cluster engine, so the scenarios its collections install cover this app. Runs as
         # the pod's uid, NOT root: root with ALL caps dropped has no DAC_OVERRIDE, so it cannot
@@ -263,6 +265,10 @@
                   key: AGENT_PASSWORD
             - name: COLLECTIONS
               value: "{{ collections }}"
+{% if parsers %}
+            - name: PARSERS
+              value: "{{ parsers }}"
+{% endif %}
 {{ hardened_security_context(non_root=true) }}
           # Declared so Prometheus can find it: pod-role SD emits a target per DECLARED
           # containerPort, so the `crowdsec-{{ app }}-agent` job's keep on port 6060

@@ -60,6 +60,25 @@ period. To lift a ban by hand (a Claude session cannot; the read-only ServiceAcc
 sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli decisions delete --ip <ip>
 ```
 
+## The authenticated-app whitelist keeps normal use from scoring
+
+`files/crowdsec-authenticated-app-whitelist.yaml` is a parse-time whitelist that both agent
+sidecars load into `s02-enrich`. It drops a Traefik access-log event when one named router's
+backend answered behind its own authentication. Each rule keys on `OriginStatus`, which is 0
+when Traefik answered without reaching the backend, so the bouncer's 403s, Authelia redirects
+and the LiveSync gate's no-router 404s still score. Its header has the argument for each rule.
+It covers what banned the operator from a fresh address before `remote-ips` could learn it
+(#6708):
+
+- a stale Homepage tab's widget burst, which Homepage answers with 403s and 404s;
+- LiveSync's existence checks, which CouchDB answers with 404s;
+- a Jellyfin episode's stream segments, which trip `http-crawl-non_statics` on their own.
+
+The Traefik agent also installs the hub's `crowdsecurity/jellyfin-whitelist`, from
+`ansible/roles/k8s/traefik/defaults/main.yml:traefik_k8s_agent_parsers`.
+`tests/test_authenticated_app_whitelist.py` derives the router names from the render, so a
+renamed route fails there rather than exempting nothing.
+
 ## The `crowdsec-jobs` sidecar runs four jobs beside the LAPI
 
 `files/crowdsec_jobs.py` runs in the `crowdsec-jobs` container of the engine pod
