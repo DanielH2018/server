@@ -39,8 +39,8 @@ SHARED_FILES = {
 # renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
 # SHARED_FILES, so a component cannot read any other role. `claude_code` joined in H7.39, which
 # moved daniel-server while daniel-box still applies the role (H7.40). `initial_setup` joined in
-# H7.30, which moved the Pi's fail2ban group, maintenance jobs and ufw. H7.31 moved daniel-server's,
-# and daniel-box still applies the role until H7.32.
+# H7.30, which moved the Pi's fail2ban group, maintenance jobs and ufw. H7.31 moved daniel-server's
+# and H7.32 daniel-box's; the role still applies its other subjects on daniel-box.
 ROLE_SOURCES = frozenset({"claude_code", "common", "initial_setup", "nut_host"})
 # A `src` with this prefix names a template of the component's `role:`, not of the component.
 ROLE_SRC = "role:"
