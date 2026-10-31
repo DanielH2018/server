@@ -30,7 +30,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   `valheim-server` (`longhorn-nobackup`) for the SteamCMD install. The install claim is 20Gi
   for a game update's transient peak; at 10Gi the 2026-09-17 update hit ENOSPC (#1866), and
   the `# DECIDED:` block at `valheim_k8s_server_size` in `defaults/main.yml` has the numbers.
-  The k3s PVC Fullness tile pages while the claim has less than
+  The `PVCBelowFreeFloor` rule pages while the claim has less than
   `valheim_k8s_server_update_transient_bytes` (3 GiB) free, whatever its percentage reads
   (#1875).
 - **Auth:** none possible — a raw UDP game protocol reaches no Traefik, Authelia or CrowdSec

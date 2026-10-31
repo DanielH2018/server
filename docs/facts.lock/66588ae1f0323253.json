@@ -1,5 +1,5 @@
 {
-  "checksum": "69de7287ff40aa5740a7e313bbd1680d171a9f7cb63be39d658c20fd57b16903",
+  "checksum": "a53dd2a53a650f95489654a640a07c370d0327a46bb159648ab3e9cec26276cc",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/registry/CLAUDE.md#Notable",
   "row": {
@@ -16,13 +16,13 @@
       "ansible/roles/setup/k8s_host_files/templates/dockerhub-mirror-gc-job.yaml.j2": "50aae9abccca429a05f9a12a8bb2e8fa4167f56cda3abd43b23b330c5987f36e",
       "ansible/roles/setup/k8s_host_files/templates/ghcr-mirror-gc-job.yaml.j2": "50e1ce77c544a5a383ec5ecd80f5ea56097cd2c0126428d38ec1b468027790c9",
       "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2:DECIDED: a blob that fails to warm": "954d375e47b45650c92e0b42b056da4472e5abe88353ec26b0cf9938c6ed4e0e",
-      "ansible/tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page": "b8da3ca9190d84525868807c3082996ba4cce8b51b06a35d9fe6fed6688b9408",
+      "ansible/tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page": "492217b2902acf3c343bca4b3711a8150474f202a07bc6268b7abb0f4fc848e9",
       "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "docs/registry-push-store-gc.md": "a5745a85123f7a3c05941cfdcf6ba87a5957e0cee80917d0e5f0d43ab774a6ab",
       "scripts/renderer/renderer_lib/images.py:ghcr_text": "2d355f1d1aa99f59d01f5bf5c6ab179e1efa8f7d41400ae0b043aeb259ff760d"
     },
     "python": "3.14",
-    "verified_sha": "86b0a6e04"
+    "verified_sha": "8b8d65e88"
   }
 }

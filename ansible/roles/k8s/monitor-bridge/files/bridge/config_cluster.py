@@ -1,7 +1,7 @@
 """The cluster-facing half of monitor-bridge's configuration.
 
 The origin pin, the scrape-target coverage floors, the kube-state-metrics
-workload floors, Longhorn and the PVC fullness arm.
+workload floors.
 
 Most of these are FLOORS rather than limits, and the comments beside them say what an absent
 series would otherwise read as. Field justifications sit beside the declarations, env var names
@@ -15,19 +15,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ClusterConfig:
-    """The origin pin, the coverage floors, Longhorn and the PVC arm."""
+    """The origin pin and the coverage floors."""
 
     PROM_ORIGIN: str
-    LONGHORN_CONSECUTIVE: int
-    PVC_MAX_PCT: float
-    PVC_MIN_CLAIMS: int
-    PVC_CLAIMS_CONSECUTIVE: int
-    PVC_MIN_FREE: str
-    SNAPSHOT_CAPS: str
-    SNAPSHOT_CAP_WARN_RATIO: float
-    SNAPSHOT_CAP_CONSECUTIVE: int
-    ETCD_DB_QUOTA_BYTES: int
-    ETCD_DB_MAX_PCT: float
 
 
 def cluster_config(
@@ -70,67 +60,4 @@ def cluster_config(
         # every check reading it decodes as healthy. The default therefore pins, and a third
         # estate whose series carry no `origin` sets PROM_ORIGIN="" explicitly.
         PROM_ORIGIN=_env("PROM_ORIGIN", 'origin="daniel-server"'),
-        # Hysteresis for check_longhorn_volumes. A node drain and the Sunday 07:30 reboot both
-        # degrade every volume on the departing node BY DESIGN, so a single breaching cycle must
-        # not page — 3 cycles at the bridge cadence is longer than either takes to settle. Same
-        # shape as UPS_CONSECUTIVE.
-        LONGHORN_CONSECUTIVE=_int("LONGHORN_CONSECUTIVE"),
-        # Filesystem fullness of the cluster's PersistentVolumeClaims (check_pvc_fullness). A
-        # separate arm from check_disk rather than another DISK_MOUNTPOINTS entry: a Longhorn
-        # PVC is its own filesystem at a FIXED capacity, so it cannot borrow the host's free
-        # space and a full one is invisible to every mountpoint query. 85 rather than
-        # DISK_MAX_PCT's 90 because a PVC cannot be grown by deleting something elsewhere — the
-        # operator has to expand the volume, and the alert has to arrive while that is still
-        # unhurried work. Measured 2026-09-01: the fullest claim was uptime-kuma-data at 38.6%,
-        # and the smallest genuine claim is 973 MiB, where 85% leaves 146 MiB of headroom
-        # against 97 MiB at 90%.
-        PVC_MAX_PCT=_num("PVC_MAX_PCT"),
-        # Coverage floor, in CLAIMS not series — see check_pvc_fullness for why the two differ.
-        # NOT a conservative under-count, because the degraded state here
-        # is a specific number rather than an empty vector. The two scrape jobs cover unequally
-        # (measured 2026-09-01, groups not series): kubelet alone reports all 43 claims,
-        # apiserver alone reports 27. So the apiserver job dying costs no coverage at all, and
-        # the ONLY hazard is the kubelet job dying, which leaves 27 claims answering while
-        # daniel-server's go dark. A floor at or under 27 reads that as healthy — the same
-        # partial blindness HOST_ORIGINS_MIN exists for. 32 is strictly above the 27-claim
-        # survivor and 11 below the live 43, so it fires on that outage and still tolerates a
-        # dozen services being retired.
-        PVC_MIN_CLAIMS=_int("PVC_MIN_CLAIMS"),
-        # Hysteresis on the coverage floor only. A kubelet restart or a node drain drops a
-        # node's volume stats for a cycle or two, and that must not page; a fullness breach gets
-        # no grace because it is monotonic rather than flappy.
-        PVC_CLAIMS_CONSECUTIVE=_int("PVC_CLAIMS_CONSECUTIVE"),
-        # Per-claim free-bytes floors, `<pvc>=<bytes>` comma separated, for a claim whose peak
-        # is a step rather than a slope (#1875): valheim-server went 79% -> 100% inside one
-        # updater cycle, under PVC_MAX_PCT the whole way. The value is the claim's largest
-        # transient, declared by its own role — parse_pvc_floors says what keeps it honest.
-        # Empty means no floor is declared; a non-empty string that parses to nothing is a
-        # breach, so a typo cannot read as "nothing to watch".
-        PVC_MIN_FREE=_env("PVC_MIN_FREE"),
-        # Snapshot-space headroom on capped Longhorn volumes (check_snapshot_headroom). The caps
-        # themselves, `<pvc>=<bytes>` comma separated, because nothing exports
-        # `spec.snapshotMaxSize` as a metric — parse_snapshot_caps says why, and why `0` (the
-        # fleet-wide uncapped default) is dropped rather than read as a cap of zero. Empty means
-        # no capped volume is declared, which the check reports as such rather than as green.
-        SNAPSHOT_CAPS=_env("SNAPSHOT_CAPS"),
-        # Fraction of a cap that counts as a breach. 0.9 matches volume_snapshot_cap_warn_ratio,
-        # the deploy-time gate's warn threshold (roles/k8s/volume-snapshot), so the monitor and
-        # the deploy agree about when a cap is close rather than naming two different numbers.
-        SNAPSHOT_CAP_WARN_RATIO=_num("SNAPSHOT_CAP_WARN_RATIO"),
-        # Hysteresis, for the markRemoved reason in snapshot_headroom_verdict: the metric counts
-        # snapshots the deploy gate's sum skips, so usage can read high for a cycle between a
-        # prune and Longhorn purging what it removed. Same shape and cadence as
-        # LONGHORN_CONSECUTIVE above.
-        SNAPSHOT_CAP_CONSECUTIVE=_int("SNAPSHOT_CAP_CONSECUTIVE"),
-        # etcd's backend quota, and how full check_etcd_db_size lets the DB get before it
-        # pages. 2 GiB is etcd's OWN default and it is what is in force: `k3s_server_config`
-        # (hosts/components/k3s-server/component.yml) carries no `etcd-arg` key setting
-        # `quota-backend-bytes`. Add one there and this number moves with it, or the check
-        # measures against a quota the cluster does not have. Deployed value in
-        # monitor-bridge's config/env.yaml.j2.
-        ETCD_DB_QUOTA_BYTES=_int("ETCD_DB_QUOTA_BYTES"),
-        # 80%, in the PVC_MAX_PCT percent form rather than SNAPSHOT_CAP_WARN_RATIO's ratio.
-        # The DB read 2.6% of the quota on 2026-09-25, so a breach is pathological growth rather
-        # than a slow fill and the exact figure is not load-bearing.
-        ETCD_DB_MAX_PCT=_num("ETCD_DB_MAX_PCT"),
     )

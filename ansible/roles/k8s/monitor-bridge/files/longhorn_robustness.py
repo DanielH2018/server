@@ -2,8 +2,11 @@
 
 Two readers classify a volume's robustness, over different transports:
 
-- monitor-bridge's `longhorn_volumes` check reads the one-hot `longhorn_volume_robustness`
-  metric out of Prometheus, inside a stdlib-only pod.
+- The `LonghornVolumeDegraded` rule in observability's `storage.yaml` selects the one-hot
+  `longhorn_volume_robustness` metric with `state!~"healthy|unknown"`, a regex that
+  `ansible/tests/services/test_storage_rule_literals.py` holds to `SAFE_ROBUSTNESS`. Until M6
+  batch A5 deleted the `longhorn_volumes` check, monitor-bridge called `unsafe_volumes` on the
+  same metric inside its stdlib-only pod.
 - `scripts/deploy_tools/runbook_gates.py` reads `status.robustness` off each `volumes.longhorn.io`
   CR through kubectl, before a k3s upgrade or a Longhorn hop.
 
@@ -14,10 +17,10 @@ each side held its own rule, and the rules disagreed. The runbook gates allowed
 state Longhorn renamed or added would read green on the tile while the same volume stopped a
 runbook.
 
-This module is the allow-list both now call. It lives in monitor-bridge's `files/` because the
-pod can import only what its ConfigMap ships; the runbook gates run from the checkout and reach
-it through a `sys.path` insert of `lib.repo_paths.MONITOR_BRIDGE_FILES`. Stdlib only and
-import-free, so neither side drags the other's dependencies in.
+This module is the allow-list both sides hold. It stays in monitor-bridge's `files/`, where the
+runbook gates run from the checkout and reach it through a `sys.path` insert of
+`lib.repo_paths.MONITOR_BRIDGE_FILES`. Stdlib only and import-free, so neither side drags the
+other's dependencies in.
 """
 
 from collections.abc import Iterable

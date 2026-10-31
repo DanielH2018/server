@@ -1,6 +1,6 @@
 # Collecting the registry push store by hand
 
-Use this page when monitor-bridge's `pvc_fullness` check pages on `registry-data`, the push
+Use this page when the `PVCFull` alert pages on `registry-data`, the push
 store's claim. Nothing collects that store on a schedule. Its weekly GC was retired in D5,
 because the GC scaled `deploy/registry` to zero and Flux renders that Deployment's
 `replicas: 1`. Flux's drift correction would restore the pod in the middle of the collection.

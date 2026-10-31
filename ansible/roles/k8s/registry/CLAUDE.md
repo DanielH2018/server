@@ -168,8 +168,8 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   compressed when measured on 2026-10-19, under a new tag. Each upstream rebuild of
   `registry_k8s_probe_source` adds a copy too. Nothing reclaims either, because only
   `garbage-collect` frees blobs.
-  - **monitor-bridge's `pvc_fullness` page is the bound** (#5752). It pages when a claim passes
-    85%, and `registry-data` is not in its `PVC_EXCLUDE`. On 2026-10-24 the claim was 38% full
+  - **The `PVCFull` rule's page is the bound** (#5752). It pages when a claim passes
+    85%, and `registry-data` is not in its `persistentvolumeclaim!~` exclusion. On 2026-10-24 the claim was 38% full
     (3.98 GB), so at about 1 GiB a year of pins it pages years before the claim fills.
     `ansible/tests/services/test_storage_rule_literals.py::test_no_uncollected_claim_is_excluded_from_the_fullness_page`
     fails if the claim joins the exclusion. When it pages, `docs/registry-push-store-gc.md` is

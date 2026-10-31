@@ -508,29 +508,12 @@ def test_the_table_loop_skips_rows_its_if_excludes(tmp_path):
     assert set(declared) == {"Alpha", "After"}
 
 
-# M6 batch A5's five tiles, deleted by the `if` on the template's table loop (Cutover-a1)
-# while their rows stay in the table until Cutover-a2.
-A5_TILES_DELETED = {
-    "Longhorn Volume Redundancy",
-    "k3s PVC Fullness",
-    "Longhorn Snapshot Headroom",
-    "Kubelet CSI Mount Read-Only",
-    "etcd DB Size",
-}
-
-
 def test_the_real_template_declares_every_bridge_tile_ungated():
     """#3781 moved the bridge tiles into a loop; kuma-drift must still list each one."""
     declared = monitors.parse_declared_monitors(
         Path(monitors.STATIC_MONITORS_PATH).read_text()
     )
-    bridge = {
-        row.display: declared.get(row.display)
-        for row in CHECKS
-        if row.display not in A5_TILES_DELETED
-    }
+    bridge = {row.display: declared.get(row.display) for row in CHECKS}
     assert len(bridge) >= 26 and "Root Disk" in bridge
     assert all(d is not None and d["gated"] is False for d in bridge.values()), bridge
     assert not [name for name in declared if "{" in name]
-    # kuma-drift must not name a deleted tile missing: the loop's `if` is read, not ignored.
-    assert not A5_TILES_DELETED & set(declared)
