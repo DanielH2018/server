@@ -85,7 +85,7 @@ def test_declared_monitor_count_reads_the_real_template():
     # template, so a template that moved or a parse that returns nothing shows up here as a
     # missing count rather than as a coverage line that is silent forever.
     declared = monitors.declared_monitor_count()
-    assert declared is not None and declared >= 41, declared
+    assert declared is not None and declared >= 39, declared
 
 
 def _alerts(*firing):
@@ -270,7 +270,7 @@ def test_every_interval_in_the_real_template_resolves_through_the_real_variables
 def test_pi_monitor_names_finds_at_least_the_known_daniel_pi_monitors():
     names = kuma_pi.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
     # A frozenset a caller can name, not just a count — see CLAUDE.md's non-vacuity rule.
-    assert {"Daniel Pi SD Health", "Daniel Pi Recovery"} <= names
+    assert {"AIDE Integrity (daniel-pi)", "rkhunter Scan (daniel-pi)"} <= names
     assert len(names) >= 2
 
 
@@ -313,7 +313,7 @@ def test_kuma_drift_says_so_when_a_gate_cannot_be_read():
 def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, capsys):
     """`kuma-drift --pi` through the real template and a stubbed Prometheus response.
 
-    Live carries every DECLARED name except "Daniel Pi Recovery" and every non-Pi monitor
+    Live carries every DECLARED name except "rkhunter Scan (daniel-pi)" and every non-Pi monitor
     besides — the fixture that proves the cluster's other ~75 monitors do not leak into a
     Pi-scoped run.
     """
@@ -322,7 +322,7 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
     from diagnostics.probe_lib import cli_parser, core
 
     pi_names = kuma_pi.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
-    live = (pi_names | {"k3s Grafana", "Root Disk"}) - {"Daniel Pi Recovery"}
+    live = (pi_names | {"k3s Grafana", "Root Disk"}) - {"rkhunter Scan (daniel-pi)"}
 
     def fake_fetch(url, resolve=None):
         result = [
@@ -336,14 +336,16 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
     monkeypatch.setattr(core, "fetch", fake_fetch)
     monkeypatch.setattr(core, "get_status", lambda url, resolve: (200, page))
     monkeypatch.setattr(core, "k8s_endpoint", lambda host: ("https://k.test", None))
+    # Ten days: the Pi's remaining tiles are weekly, so Kuma must have outlived their 612000 s
+    # interval for the missing one to count as drift rather than "no beat due yet".
     monkeypatch.setattr(
-        kuma_live, "pod_age_seconds", lambda cluster, now=None: 86400 * 3
+        kuma_live, "pod_age_seconds", lambda cluster, now=None: 86400 * 10
     )
 
     ns = cli_parser._build_parser().parse_args(["kuma-drift", "--pi", "--no-secrets"])
     assert monitors.run_kuma_drift(ns) == 1
     out = capsys.readouterr().out
-    assert "Daniel Pi Recovery: declared, not live" in out
+    assert "rkhunter Scan (daniel-pi): declared, not live" in out
     # Cluster-only monitors (declared, live, or both) must not leak into a --pi run.
     assert "k3s Grafana" not in out
     assert "Root Disk" not in out
