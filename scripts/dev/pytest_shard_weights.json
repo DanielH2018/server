@@ -955,6 +955,7 @@
  "hosts/lib/tests/test_secret_rotation_component.py": 0.11,
  "hosts/lib/tests/test_secrets_renderer.py": 1.07,
  "hosts/lib/tests/test_server_initial_setup_part1.py": 1.06,
+ "hosts/lib/tests/test_server_initial_setup_part2.py": 7.65,
  "hosts/lib/tests/test_updater_package.py": 0.06,
  "hosts/lib/tests/test_worktree_sweep_component.py": 0.09,
  "scripts/backup/tests/test_b2_drain.py": 0.0,

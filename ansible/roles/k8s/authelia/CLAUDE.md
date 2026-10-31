@@ -26,8 +26,14 @@ redis incident, the notifier's history and the OIDC derivations are in
 A service's policy is the `auth_tier: one_factor | two_factor` beside its `use_authelia: true` in
 `inventory/host_vars/<host>.yml`, not a rule in this role. `templates/config-secret.yaml.j2` renders
 one rule per tier from those entries through `filter_plugins/authelia_access.py`, plus two scoped
-bypasses and two wildcards. A generated rule names only the LAN name, so the public name keeps the
-`*.<domain>` wildcard's `two_factor` whatever the entry declares (#2057).
+bypasses, Alertmanager's pair and two wildcards. A generated rule names only the LAN name, so
+the public name keeps the `*.<domain>` wildcard's `two_factor` whatever the entry declares (#2057).
+
+**`alertmanager.local.<domain>` is the one `subject:`-scoped rule.** Its UI can silence a page,
+so it takes `two_factor` for `group:admins`, and a `deny` rule for the same domain follows it.
+Authelia skips a rule whose subject does not match, so without the `deny` a user outside
+`admins` would fall through to the `*.local` wildcard at `one_factor`. ENFORCED:
+`ansible/tests/services/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_alertmanager`.
 
 **A `use_authelia: true` entry without `auth_tier` fails the render** — in
 `validate/k8s_manifests.py`, in the test render and in a real deploy alike — so a new service cannot ride
@@ -128,5 +134,6 @@ the container in `templates/deployment.yaml.j2`. ENFORCED:
   multiplied `memory` by 1024 and passed validation silently (#1621). ENFORCED:
   `ansible/tests/services/test_authelia_config_schema.py`.
 - **Revoking Claude's two_factor reach** is deleting the `claude-ui` block from
-  `templates/config-secret.yaml.j2` and redeploying; the rules are domain-scoped, never
-  `subject:`-scoped.
+  `templates/config-secret.yaml.j2` and redeploying. The rules are domain-scoped except
+  Alertmanager's, which `claude-ui` passes through its `admins` group by the operator's ruling
+  of 2026-10-31 (#6689).

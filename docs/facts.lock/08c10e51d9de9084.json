@@ -1,12 +1,13 @@
 {
-  "checksum": "265bdaf791d507bcb29a6d90457f0e5ab7e765f0db3a82d1f0e95822815c0940",
+  "checksum": "18b55a25ebc4f5075281e92f79bedf1475b75e1fc66b0a56a1074eb8892e5ae6",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/authelia/CLAUDE.md#Access control comes from containers_list",
   "row": {
     "atoms": {
-      "ansible/tests/services/test_authelia_access_tiers.py": "30ca87be3382543c38331450efc91968b7f830b95c26d52b1dd2fee681d3f08c"
+      "ansible/tests/services/test_authelia_access_tiers.py": "30ca87be3382543c38331450efc91968b7f830b95c26d52b1dd2fee681d3f08c",
+      "ansible/tests/services/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_alertmanager": "a188c4a3991a2061598dd3f6eb151138b8abc015f7d200bb8bed8298eaefb6eb"
     },
     "python": "3.14",
-    "verified_sha": "55862020d"
+    "verified_sha": "080913749"
   }
 }
