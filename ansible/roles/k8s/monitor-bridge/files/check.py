@@ -116,10 +116,10 @@ def run_once(
     # A BARE `up`, deliberately — no origin_sel(). PROM_ORIGIN resolves to origin="daniel-server",
     # while the `node` job labels each target with its own node name (daniel-box, daniel-server)
     # and `node-pi` is statically labelled daniel-pi. A pinned probe therefore saw one node
-    # exporter of three, so EXPORTER_DEPENDENT["node-pi"] was unreachable and the daniel-box half
-    # of "node" with it: on 2026-09-21 15:09 pi_pressure paged with "node-pi series missing" —
-    # exactly what that entry exists to suppress — and on 2026-09-26 one Pi outage paged both
-    # pi_pressure and cluster_targets (#2779).
+    # exporter of three, so a `node-pi` entry was unreachable and the daniel-box half of "node"
+    # with it: on 2026-09-21 15:09 pi_pressure paged with "node-pi series missing" — exactly what
+    # that entry existed to suppress — and on 2026-09-26 one Pi outage paged both pi_pressure and
+    # cluster_targets (#2779). Both rows are gone.
     #
     # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host
     # now suppresses its dependents estate-wide — one `node` exporter dying holds the other

@@ -1,4 +1,4 @@
-"""Host verdicts for check.py — the Pi and the speedtest.
+"""Host verdicts for check.py — the speedtest.
 
 These decide; check.py fetches. Each takes its inputs as arguments and reads no module-level
 config, which is what makes it safe to live here — see bridge/parsing.py's header for the rule
@@ -9,97 +9,6 @@ import (issue #1708).
 """
 
 from datetime import datetime, timezone
-
-
-def pi_pressure(
-    load5_per_core: float | None,
-    avail_bytes: float | None,
-    disk_used_pct: dict[str, float],
-    readonly_by_mount: dict[str, float],
-    load_max: float,
-    mem_min_mb: float,
-    disk_max_pct: float,
-) -> tuple[bool, str]:
-    """Pure: load per core, available-memory floor, a full or a read-only filesystem on the Pi.
-
-    Fed from the Pi's own node-exporter series on the `node-pi` scrape job (glances until
-    2026-09-18, #2004). load5 (not load1) matches the 5-min poll interval and rides out
-    single-probe spikes; MemAvailable (not MemFree) is what the kernel can actually reclaim —
-    the box thrashes when THAT runs out. `disk_used_pct` is keyed by block device, the SD card
-    being the one that matters: a filling SD card is the classic slow Pi death the server-only
-    Root Disk check can't see. A missing arm alerts rather than silently passing — a renamed
-    series or a blind collector must surface, same principle as the other checks'
-    unreachable-source handling.
-
-    `readonly_by_mount` is `node_filesystem_readonly` keyed by mountpoint: the SD card
-    remounting its root read-only after an I/O error is the classic Pi failure, and every
-    other arm stays green through it — the fill % freezes, open sockets stay open, and
-    log2ram keeps syslog flowing from RAM. It leads the message because it is the fault a
-    reboot does not come back from. No grace, like the `KubeletCSIMountReadOnly` rule: a read-only
-    remount does not self-heal.
-    """
-    if (
-        load5_per_core is None
-        or avail_bytes is None
-        or not disk_used_pct
-        or not readonly_by_mount
-    ):
-        return (
-            False,
-            "node-pi series missing load/mem/fs (Pi node_exporter not reporting?)",
-        )
-    avail_mb = avail_bytes / 1048576.0
-    problems = []
-    readonly = sorted(mp for mp, ro in readonly_by_mount.items() if ro)
-    if readonly:
-        problems.append(
-            "READ-ONLY %s (SD card remounted after an I/O error?)" % ", ".join(readonly)
-        )
-    if load5_per_core > load_max:
-        problems.append("load5 %.2f/core (> %.2f)" % (load5_per_core, load_max))
-    if avail_mb < mem_min_mb:
-        problems.append("mem available %.0fMB (< %.0fMB)" % (avail_mb, mem_min_mb))
-    for dev, pct in sorted(disk_used_pct.items(), key=lambda dp: -dp[1]):
-        if pct > disk_max_pct:
-            problems.append("disk %s %.0f%% (> %.0f%%)" % (dev, pct, disk_max_pct))
-    if problems:
-        return False, "; ".join(problems)
-    # The fullest device is named on the healthy path too: the Pi's vfat /boot/firmware sits
-    # at 37% while the SD root reads 8%, and a bare "disk 37%" reads as the card.
-    fullest, pct = max(disk_used_pct.items(), key=lambda dp: dp[1])
-    return True, "load5 %.2f/core, %.0fMB available, disk %s %.0f%%, rw %s" % (
-        load5_per_core,
-        avail_mb,
-        fullest,
-        pct,
-        ", ".join(sorted(readonly_by_mount)),
-    )
-
-
-def pi_ports_verdict(dead: list[tuple[str, int]], checked: int) -> tuple[bool, str]:
-    """Pure: judge the Pi's published ports.
-
-    After a daniel-pi reboot a container can come back attached to NO Docker network while
-    still reporting `Up (healthy)` — its healthcheck curls loopback inside its own netns, so
-    Docker, autoheal and every healthcheck-based signal read green. The observable harm is
-    that the published port stops listening, and only a recreate restores it; autoheal's
-    restart loop re-enters the same empty sandbox and can never recover it.
-
-    `dead` is the list of (name, port) pairs that failed a TCP connect, `checked` how many
-    were probed. A connect to a port that is either listening or not is cheap, unambiguous,
-    and is the thing the operator actually cares about. Until 2026-09-18 a dead port was
-    attributed to its container's Docker state through glances' `/api/4/containers`; glances
-    retired (#2004) and nothing the cluster can reach serves that view (docker-proxy publishes
-    no port), so the message names the port and the two causes, and `ssh daniel-pi docker ps`
-    tells them apart.
-    """
-    if not dead:
-        return True, "%d pi port(s) listening" % checked
-    return False, (
-        "%d pi port(s) not listening: %s (a container up with no port mapping after a "
-        "reboot is detached and needs a RECREATE, not a restart)"
-        % (len(dead), ", ".join("%s:%d" % (name, port) for name, port in dead))
-    )
 
 
 def _sub_floor(row: dict | None, min_mbps: float) -> bool:

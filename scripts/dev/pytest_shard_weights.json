@@ -126,7 +126,6 @@
  "ansible/roles/k8s/monitor-bridge/tests/test_check_notify.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_origin_pinning.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_parsing.py": 0.0,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_pi.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_post_reboot_grace.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_push_msg_cap.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_r2.py": 0.0,

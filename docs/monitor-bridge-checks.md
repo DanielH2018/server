@@ -292,60 +292,6 @@ checks each gate suppresses.
   legitimately has none. Pure `scrutiny_freshness()`, `scrutiny_health()`,
   `scrutiny_device_wear()` and `scrutiny_wear_verdict()` are unit-tested; those tests mock the
   payload, so they prove the verdict logic and nothing about the endpoint path.)
-- **Pi Pressure** (the Pi's own node-exporter series on the `node-pi` scrape job, five instant
-  queries selected by `origin=PI_ORIGIN`. `down` when `node_load5` per core > `PI_LOAD_MAX`,
-  `node_memory_MemAvailable_bytes` < `PI_MEM_MIN_MB`, any block device's `node_filesystem_*` usage
-  > `PI_DISK_MAX_PCT`, or `node_filesystem_readonly` is 1 on `/` or `/boot/firmware`. The read-only
-  arm (#2668) exists because an SD card that remounts its root read-only after an I/O error
-  freezes the fill % at its last value, keeps its open sockets, and keeps syslog flowing through
-  log2ram, so every other arm stays green through the classic Pi failure. It takes no grace, like
-  the retired Kubelet CSI Mount Read-Only check, because a read-only remount does not self-heal. Filesystems are keyed
-  by device rather than mountpoint because the SD card is mounted twice (`/` and `/var/hdd.log`)
-  and one full card is one problem. tmpfs is excluded because log2ram's 128 MiB `/var/log` fills
-  and flushes by design. A filling SD card is the slow Pi death the server-only Root Disk check
-  cannot see, and the 512MB Zero 2 W dies by swap-thrash (fwupd episodes ran load5/core >1.7 with
-  healthcheck-timeout storms no other monitor saw). The vfat `/boot/firmware` partition is covered
-  for the reason Root Disk watches `/boot` on the nodes. The healthy message names the fullest
-  device (`disk /dev/mmcblk0p1 37%`) because a bare percentage reads as the SD card.
-  **The source is node-exporter, not glances** (#2004): glances held 66 MB of anonymous memory on a
-  456 MB host for facts node-exporter already exports. The check is in `PROM_DEPENDENT` and in
-  `EXPORTER_DEPENDENT["node-pi"]`, so a Prometheus outage or a dead Pi node-exporter suppresses it
-  rather than paging a second time, and it is NOT in `STARTUP_GRACE`: the two sets must stay
-  disjoint, and its source is not a reach-out the post-boot transient reaches. An absent series
-  while Prometheus answers pages, because a Pi whose exporter stopped reporting is a Pi nothing is
-  watching. Empty `PI_ORIGIN` disables the check (stays up).
-  **This check owns the Pi's tile, and the `hosts` rules own the rest of its Prometheus half.**
-  The `hosts.yaml` disk and memory rules name daniel-box and daniel-server, so the Pi stays out of
-  them: `MEM_MAX_PCT` (90) on a 456 MB box would fire at 45.6 MB available while `PI_MEM_MIN_MB`
-  fires at 50 MB, and the Pi's fact would page twice. The Pi has its own rules in the same file
-  (`PiLoadHigh`, `PiMemoryLow`, `PiDiskFull`, `PiFilesystemReadOnly` and `PiMetricsMissing`), which
-  stay shadow until B8 cuts this row over. **A fourth node-exporter host needs rules added to
-  `hosts.yaml`:** its per-host copies name the hosts, and `HostTemperatureCoverageShortfall` holds a
-  literal floor of 3 hosts, so a fourth host makes that floor satisfiable by any three of four and
-  one host can go dark silently. `test_every_node_exporter_job_is_mapped_in_exporter_dependent`
-  (test_check_gates_exporters.py) forces the decision for a host under a new scrape job, which is
-  how daniel-pi arrived. A host joining the existing `node` DaemonSet is still on you.
-  **Published-port arm** (`with_pi_ports`, folded here for the push-token reason recorded at
-  `with_ha_ban`). After a Pi restart a container can come back attached to no Docker network while
-  still reporting `Up (healthy)`, because its healthcheck curls loopback inside its own netns. Its
-  published port stops listening, and only a recreate restores it, because autoheal's restart loop
-  re-enters the same empty sandbox. The arm TCP-connects from the bridge to each expected port on
-  `PI_HOST` (the Pi's LAN address, rendered from `hostvars['daniel-pi'].server_ip`) and names every
-  dead one. The message carries the recreate hint, and `ssh daniel-pi docker ps` tells the causes
-  apart (detached, publishing but unreachable, or not up), since nothing the cluster can reach
-  serves the container view. The arm rides this check's gates: a Prometheus outage or a dead Pi
-  node-exporter skips the port probes with the pressure arms. Both already page, and the Kuma HTTP
-  monitor on wg-easy still watches the one Pi port a person uses. `PI_PUBLISHED_PORTS` renders
-  `name:port` pairs from daniel-pi's `containers_list` (every entry with a `port`), so
-  `docker-proxy`, `autoheal` and `docker-proxy-lifecycle`, which publish nothing, fall out by
-  construction rather than by an exclusion list. `udp_port` is excluded because there is no
-  TCP-connect equivalent for UDP. `PI_PORTS_CONSECUTIVE` (2) rides out the seconds of closed ports
-  a Pi deploy causes when it recreates a container.
-  **This arm adds no reachability coverage. It adds a named port, and that is the whole case for
-  it.** Every publisher was already watched (Kuma HTTP-monitors wg-easy, and `alloy` is a
-  Prometheus scrape target, `job=alloy-pi`, that `ScrapeTargetDown` covers). What nothing said was
-  *which* port went quiet, and the 2026-08-08 sweep across four monitors for that answer missed
-  dozzle entirely. Do not re-justify this arm as filling a monitoring gap.)
 - **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
   `apps`, Bearer `HA_TOKEN`. An HA `time_pattern:/1min` automation stamps that helper with
   `now()`, so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing.
@@ -608,7 +554,7 @@ quota to the one k3s runs. The reasoning behind each rule (the one-hot `state` l
 `ScrapeTargetDown`'s) is in `ansible/roles/k8s/observability/files/rules/storage.yaml`.
 Root Disk, Memory, Host Temperature and UPS Battery Health (M6 batch A1) retired into the
 `hosts` rule group in observability, and their tiles, rows, check bodies, verdicts and env keys
-are gone. The Pi Pressure row stays until B8. The thresholds, floors and `for:` durations those
+are gone. The thresholds, floors and `for:` durations those
 rules carry are pinned in `ansible/tests/services/test_host_check_rule_literals.py`, where the
 `DECIDED:` markers for the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen
 maximum junction temperature, the nut-only UPS source and the retired-uid note now sit. That file also holds the
@@ -617,6 +563,35 @@ maximum junction temperature, the nut-only UPS source and the retired-uid note n
 selectors to the series the writer emits. The reasoning behind each rule (the `up == 1` start of
 every missing-data arm, the per-host copies, the `unless on ()` that lets mains loss outrank the
 UPS runway arms) is in `ansible/roles/k8s/observability/files/rules/hosts.yaml`.
+Pi Pressure (M6 batch B8) retired into `PiLoadHigh`, `PiMemoryLow`, `PiDiskFull`,
+`PiFilesystemReadOnly` and `PiMetricsMissing` in `hosts.yaml`, and into `PiPortDead`. Its row,
+tile, check body, verdicts, `PI_*` keys and push token are gone, and the 14 hand-written Kuma
+probe tiles retired into the `extra-probes` group beside it. The read-only arm (#2668) has no
+grace, like `KubeletCSIMountReadOnly`, because a read-only remount does not self-heal. The
+filesystems are keyed by device, because the SD card is mounted twice (`/` and `/var/hdd.log`),
+and tmpfs is out, because log2ram's 128 MiB `/var/log` fills and flushes by design. The Pi's own
+rules exist because the `hosts.yaml` disk and memory rules name daniel-box and daniel-server: a
+90% memory floor on a 456 MB box would fire at 45.6 MB available, where `PiMemoryLow` fires at
+50 MB. The published-port arm is `PiPortDead`: one `tcp_connect` target per Pi container with a
+`port` in the `blackbox-pi-ports` job, held for 10 minutes, which is the bridge's two cycles. After a
+Pi restart a container can come back attached to no Docker network while it still reports
+`Up (healthy)`, because its healthcheck curls loopback inside its own netns. Its published port
+stops listening, and only a recreate restores it, because autoheal's restart loop re-enters the
+same empty sandbox. The rule's description carries that hint, and `ssh daniel-pi docker ps` tells
+a stopped container from a detached one. `PiHostDown` inhibits `PiPortDead`, as
+`EXPORTER_DEPENDENT["node-pi"]` suppressed the port arm while the Pi's exporter was down.
+`udp_port` is not probed, because a UDP port has no TCP-connect equivalent. The arm adds a named
+port and no reachability coverage: Kuma HTTP-monitored wg-easy and `ScrapeTargetDown` covers
+`alloy`, but nothing said which port went quiet, and the 2026-08-08 sweep across four monitors for
+that answer missed dozzle. The Pi limits are pinned in
+`ansible/tests/services/test_host_check_rule_literals.py`, the port set in
+`ansible/tests/services/test_pi_publishing_containers.py`, and `PiPortDead`'s hold and recreate
+hint in `ansible/tests/services/test_extra_probe_targets.py`. A fourth node-exporter host needs
+rules added to `hosts.yaml`: its per-host copies name the hosts, and
+`HostTemperatureCoverageShortfall` holds a literal floor of 3 hosts, so a fourth host makes that
+floor satisfiable by any three of four and one host can go dark silently.
+`test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_gates_exporters.py)
+forces the decision for a host under a new scrape job, which is how daniel-pi arrived.
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
 `PROM_DEPENDENT`. Each check's retirement note is in the repository history.
 

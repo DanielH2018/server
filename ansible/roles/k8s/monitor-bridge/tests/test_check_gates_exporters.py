@@ -128,18 +128,35 @@ def test_the_scrape_config_is_actually_parseable():
     )
 
 
+# The Pi's exporter feeds no bridge row since M6's batch B8 moved `pi_pressure` to the `hosts`
+# rules and `PiPortDead`. Its one dependent alert, `PiPortDead`, is held by an Alertmanager
+# inhibit on `PiHostDown` (alertmanager-secret.yaml.j2), so the map carries no `node-pi` key.
+JOBS_WITH_NO_BRIDGE_DEPENDENTS = {"node-pi"}
+
+
 def test_every_node_exporter_job_is_mapped_in_exporter_dependent():
     """The reject half: adding a node-exporter host fails here until its job is placed.
 
     The map is keyed by Prometheus `job`, so an unmapped job means one root cause pages twice —
-    Scrape Targets plus a complaint from a check that reads the dead exporter's series.
+    Scrape Targets plus a complaint from a check that reads the dead exporter's series. A job
+    that feeds no bridge row is named in JOBS_WITH_NO_BRIDGE_DEPENDENTS instead.
     """
-    unmapped = _node_exporter_jobs() - set(gates.EXPORTER_DEPENDENT)
+    unmapped = (
+        _node_exporter_jobs()
+        - set(gates.EXPORTER_DEPENDENT)
+        - JOBS_WITH_NO_BRIDGE_DEPENDENTS
+    )
     assert not unmapped, (
         f"node-exporter scrape job(s) {sorted(unmapped)} have no EXPORTER_DEPENDENT entry, so a "
         "dead exporter there suppresses nothing. Decide which checks that job's hosts feed and add "
         "it."
     )
+
+
+def test_the_exempt_jobs_are_still_scraped_and_unmapped():
+    """The exemption names a job the scrape config still has, and the map does not also hold it."""
+    assert JOBS_WITH_NO_BRIDGE_DEPENDENTS <= _node_exporter_jobs()
+    assert not JOBS_WITH_NO_BRIDGE_DEPENDENTS & set(gates.EXPORTER_DEPENDENT)
 
 
 def _wire_run_once_prom_up(cfg, up_vector, checks, prom_dependent):
@@ -230,32 +247,34 @@ def test_run_once_up_probe_failure_does_not_suppress(cfg):
 # One target per node-exporter, labelled the way Prometheus labels them: the `node` job relabels
 # each target with its own node name, `node-pi` is statically labelled daniel-pi.
 _THREE_ORIGIN_UP = [
-    ({"job": "node", "origin": "daniel-box"}, 1.0),
+    ({"job": "node", "origin": "daniel-box"}, 0.0),
     ({"job": "node", "origin": "daniel-server"}, 1.0),
-    ({"job": "node-pi", "origin": "daniel-pi"}, 0.0),
+    ({"job": "node-pi", "origin": "daniel-pi"}, 1.0),
 ]
 
 
-def test_pi_exporter_death_suppresses_its_dependents_under_the_deployed_origin_pin(cfg):
-    """The Pi's node-exporter is down; pi_pressure must not also page.
+def test_a_dead_node_exporter_suppresses_its_dependents_under_the_deployed_origin_pin(
+    cfg,
+):
+    """daniel-box's node-exporter is down; host_packages must not also page.
 
-    Unsuppressed, pi_pressure pages with "node-pi series missing load/mem/fs", which is
-    exactly what EXPORTER_DEPENDENT["node-pi"] exists to suppress. Under
-    the pinned probe the whole vector was invisible — daniel-server's only series is healthy, so
-    `up{origin="daniel-server"}` carried no dead exporter to suppress on.
+    Unsuppressed, host_packages pages on its absent builder series, which is exactly what
+    EXPORTER_DEPENDENT["node"] exists to suppress. Under the pinned probe the whole vector was
+    invisible — daniel-server's only series is healthy, so `up{origin="daniel-server"}` carried
+    no dead exporter to suppress on.
     """
-    names = ["pi_pressure", "targets"]
+    names = ["host_packages", "targets"]
     ran, pushes = _wire_run_once_prom_up(
         replace(cfg, PROM_ORIGIN='origin="daniel-server"'),
         _THREE_ORIGIN_UP,
         names,
         names,
     )
-    assert "pi_pressure" not in ran
+    assert "host_packages" not in ran
     assert "targets" in ran  # Scrape Targets is still the single page
     by_tok = {t: (ok, m) for t, ok, m in pushes}
-    assert by_tok["tok_pi_pressure"][0] is True
-    assert "exporter" in by_tok["tok_pi_pressure"][1].lower()
+    assert by_tok["tok_host_packages"][0] is True
+    assert "exporter" in by_tok["tok_host_packages"][1].lower()
 
 
 def test_an_origin_pinned_probe_would_see_no_dead_exporter():
@@ -266,7 +285,15 @@ def test_an_origin_pinned_probe_would_see_no_dead_exporter():
     """
     pinned = [(m, v) for m, v in _THREE_ORIGIN_UP if m["origin"] == "daniel-server"]
     assert gates.down_exporters(pinned) == set()
-    assert gates.down_exporters(_THREE_ORIGIN_UP) == {"node-pi"}
+    assert gates.down_exporters(_THREE_ORIGIN_UP) == {"node"}
+
+
+def test_a_dead_pi_exporter_suppresses_nothing_in_the_bridge():
+    """The exemption's accepting half: no bridge row reads `node-pi` series, so none is held."""
+    assert (
+        gates.down_exporters([({"job": "node-pi", "origin": "daniel-pi"}, 0.0)])
+        == set()
+    )
 
 
 def _run_host_packages_with_node_up(cfg, node_up):

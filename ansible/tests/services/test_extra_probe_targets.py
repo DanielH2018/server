@@ -18,10 +18,9 @@ Run: uv run pytest ansible/tests/services/test_extra_probe_targets.py
 """
 
 import copy
-import re
 
 from _helpers import K8S_ROLES
-from _k8s_render import host_context, render_pod_env, render_role_template
+from _k8s_render import host_context, render_role_template
 from entry_fields import published_ports
 from lib import yaml_fast
 from service_tier import in_service_tier
@@ -272,15 +271,49 @@ def test_a_published_port_the_job_lacks_is_flagged():
     assert f"{address}:9999" not in targets(PI_PORTS_JOB)
 
 
-def test_pi_port_dead_holds_the_bridges_down_streak():
-    bridge_interval_s = int(render_pod_env("monitor-bridge")["INTERVAL"])
-    config = K8S_ROLES / "monitor-bridge" / "files" / "bridge" / "config_host.py"
-    [default] = re.findall(r'"PI_PORTS_CONSECUTIVE",\s*"(\d+)"', config.read_text())
+def pi_port_dead_rule() -> dict:
     rules = yaml_fast.safe_load(
         (OBS / "files" / "rules" / "extra-probes.yaml").read_text()
     )
     [rule] = [r for r in rules["groups"][0]["rules"] if r["alert"] == "PiPortDead"]
-    assert rule["for"] == f"{int(default) * bridge_interval_s // 60}m"
+    return rule
+
+
+def test_pi_port_dead_holds_the_retired_rows_down_streak():
+    # The deleted pi_pressure row held a dead port for PI_PORTS_CONSECUTIVE (2) bridge cycles of
+    # INTERVAL (300s), so a Pi deploy that recreates a container for a few seconds pages nobody.
+    assert pi_port_dead_rule()["for"] == f"{2 * 300 // 60}m"
+
+
+def recreate_hint_problems(rule: dict) -> list[str]:
+    """Why `rule` would page a dead Pi port without telling the reader what to do about it."""
+    problems = []
+    if rule["expr"] != 'probe_success{job="blackbox-pi-ports"} == 0':
+        problems.append(
+            "does not fire on a refused connect to a blackbox-pi-ports target"
+        )
+    description = rule["annotations"]["description"]
+    for needle in ("RECREATE", "docker ps"):
+        if needle not in description:
+            problems.append(f"description lacks {needle!r}")
+    return problems
+
+
+def test_pi_port_dead_fires_on_a_refused_connect_and_names_the_recreate_hint():
+    # Failure class 6 ("restart is not recreate"): a Pi container that comes back attached to no
+    # network keeps `Up (healthy)` while its port is closed, and only a recreate restores it.
+    assert recreate_hint_problems(pi_port_dead_rule()) == []
+
+
+def test_a_pi_port_rule_that_loses_its_hint_or_its_selector_is_flagged():
+    rule = copy.deepcopy(pi_port_dead_rule())
+    rule["annotations"]["description"] = "A Pi port is closed."
+    rule["expr"] = 'probe_success{job="blackbox-extra"} == 0'
+    assert recreate_hint_problems(rule) == [
+        "does not fire on a refused connect to a blackbox-pi-ports target",
+        "description lacks 'RECREATE'",
+        "description lacks 'docker ps'",
+    ]
 
 
 def test_the_pager_guard_lists_every_retired_tile():

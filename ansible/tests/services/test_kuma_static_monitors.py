@@ -189,57 +189,15 @@ EMAIL_TIER = {
 _WINDOW_PROBE_S = 7777
 
 
-# The one row whose tile M6's batch B8 deleted in Cutover-a1, ahead of the row itself (the
-# owner-independent form of m6-retire-kuma.md's "The cutover order": monitor-bridge and
-# uptime-kuma are both flux-owned, so no deploy orders the tile before the row). Cutover-a2
-# deletes the row and this set together.
-B8_ROWS_AWAITING_DELETION = {"stub-monitor_bridge_pi_push_token"}
-
-# B8's 14 hand-written probe tiles and the Pi Pressure bridge tile. The 14 are deleted outright,
-# and the table loop's `if` drops Pi Pressure.
-B8_TILES_DELETED = {
-    "Daniel Pi Host",
-    "Daniel Pi WG Easy",
-    "k3s LiveSync",
-    "k3s Mosquitto (VIP)",
-    "k3s Jellyfin (VIP)",
-    "SLZB-06M Coordinator",
-    "k3s nut (upsd)",
-    "k3s homelab-mcp (edge gate)",
-    "Loki",
-    "k3s Scrutiny",
-    "iCal Proxy k8s",
-    "Pi-hole k8s DNS",
-    "Email-to-RSS (Worker)",
-    "Homelab Edge (all-clear)",
-    "Pi Pressure",
-}
-
-
-def test_the_deleted_b8_tiles_are_not_declared():
-    # RED if a hand-written tile is restored or the table loop's `if` stops excluding Pi
-    # Pressure: AutoKuma would re-create it beside the Alertmanager rule that replaces it.
-    declared = {e["name"] for e in _entities().values()}
-    assert not declared & B8_TILES_DELETED, sorted(declared & B8_TILES_DELETED)
-    # Non-vacuity by name: a render that declared nothing would pass the line above.
-    assert "Swallowed Push Verdicts" in declared
-
-
 def test_every_bridge_push_token_reaches_a_push_tile():
     # A row in monitor-bridge's `files/check_table.py` with no tile pushes into nothing:
     # Kuma answers an unknown token with 404 and no monitor ever goes red. Joined on rendered
     # values, the same way as the interval guard below, so the token the bridge pushes and the
     # one the tile accepts are compared rather than two variable names.
-    #
-    # The one tolerated orphan set is named and compared both ways: a token that gains a tile
-    # back, or a second row that loses its tile, fails here.
     bridge_tokens = bridge_push_tokens()
     tile_tokens = set(push_tokens_by_monitor().values())
     assert "stub-monitor_bridge_swallowed_verdicts_push_token" in bridge_tokens
-    orphans = bridge_tokens - tile_tokens
-    assert orphans == B8_ROWS_AWAITING_DELETION, sorted(
-        orphans ^ B8_ROWS_AWAITING_DELETION
-    )
+    assert not sorted(bridge_tokens - tile_tokens), sorted(bridge_tokens - tile_tokens)
 
 
 def test_bridge_push_monitors_share_one_interval():
