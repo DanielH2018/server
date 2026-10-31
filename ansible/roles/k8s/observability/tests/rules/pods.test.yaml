@@ -30,7 +30,6 @@ tests:
               check: arr-autoblock
               severity: warning
               service: autofix-bridge
-              shadow: 'true'
             exp_annotations:
               summary: autofix-bridge's last cycle failed.
               description: 'The *arr auto-block loop reported down: Sonarr or Radarr was unreachable,
@@ -62,7 +61,6 @@ tests:
               instance: autofix-bridge.homelab.svc:9183
               severity: critical
               service: autofix-bridge
-              shadow: 'true'
             exp_annotations:
               summary: Prometheus cannot scrape autofix-bridge's check exporter.
               description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
@@ -82,7 +80,6 @@ tests:
               job: autofix-bridge
               severity: critical
               service: autofix-bridge
-              shadow: 'true'
             exp_annotations:
               summary: Prometheus cannot scrape autofix-bridge's check exporter.
               description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
@@ -131,7 +128,6 @@ tests:
               check: arr-autoblock
               severity: critical
               service: autofix-bridge
-              shadow: 'true'
             exp_annotations:
               summary: autofix-bridge's loop has stopped recording its cycle verdict.
               description: For 10 minutes either the cycle's homelab_check_last_run_timestamp_seconds
@@ -173,7 +169,6 @@ tests:
               job: autofix-bridge
               severity: critical
               service: autofix-bridge
-              shadow: 'true'
             exp_annotations:
               summary: autofix-bridge's loop has stopped recording its cycle verdict.
               description: For 10 minutes either the cycle's homelab_check_last_run_timestamp_seconds
@@ -233,7 +228,6 @@ tests:
               instance: autofix-bridge.homelab.svc:9183
               severity: critical
               service: autofix-bridge
-              shadow: 'true'
             exp_annotations:
               summary: Prometheus cannot scrape autofix-bridge's check exporter.
               description: up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either
@@ -260,7 +254,6 @@ tests:
               severity: warning
               service: cloudflare-ddns
               verify: 'true'
-              shadow: 'true'
             exp_annotations:
               summary: A cloudflare-ddns Deployment has no available replica.
               description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
@@ -285,7 +278,6 @@ tests:
               severity: warning
               service: cloudflare-ddns
               verify: 'true'
-              shadow: 'true'
             exp_annotations:
               summary: A cloudflare-ddns Deployment has no available replica.
               description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
@@ -318,7 +310,6 @@ tests:
               severity: warning
               service: cloudflare-ddns
               verify: 'true'
-              shadow: 'true'
             exp_annotations:
               summary: A cloudflare-ddns Deployment has no available replica.
               description: A cloudflare-ddns Deployment (direct or proxied) has had no available replica
@@ -351,7 +342,6 @@ tests:
               annotation_homelab_check_verdict: down
               severity: warning
               service: pi-peer-backup
-              shadow: 'true'
             exp_annotations:
               summary: The nightly daniel-pi peer-key backup failed.
               description: 'The pi-peer-backup script reported down: rsync from daniel-pi failed, daniel-pi''s
@@ -383,7 +373,6 @@ tests:
               cronjob: pi-peer-backup
               severity: warning
               service: pi-peer-backup
-              shadow: 'true'
             exp_annotations:
               summary: The pi-peer-backup CronJob has not succeeded in three nights.
               description: The pi-peer-backup CronJob has no successful run newer than 72 hours, so the
@@ -412,7 +401,6 @@ tests:
               cronjob: pi-peer-backup
               severity: warning
               service: pi-peer-backup
-              shadow: 'true'
             exp_annotations:
               summary: The pi-peer-backup CronJob has not succeeded in three nights.
               description: The pi-peer-backup CronJob has no successful run newer than 72 hours, so the
