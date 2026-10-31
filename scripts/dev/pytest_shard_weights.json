@@ -890,6 +890,7 @@
  "hosts/lib/tests/test_bootstrap_host_pins.py": 0.0,
  "hosts/lib/tests/test_bootstrap_host_steps.py": 0.6,
  "hosts/lib/tests/test_box_initial_setup_part1.py": 1.73,
+ "hosts/lib/tests/test_box_initial_setup_part2.py": 14.26,
  "hosts/lib/tests/test_builder_component.py": 0.24,
  "hosts/lib/tests/test_claude_agent_browser.py": 7.15,
  "hosts/lib/tests/test_claude_agent_home.py": 1.98,
