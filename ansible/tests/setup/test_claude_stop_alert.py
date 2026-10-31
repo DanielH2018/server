@@ -54,7 +54,7 @@ def test_the_rule_admits_a_page_for_every_cause_the_hook_writes(cause) -> None:
         "claude-stop-alert@rate_limit.service.d",
         "claude-stop-alert.service",
         "fanout-alert@fanout-4602:failed.service",
-        "claude-land@3633.service",
+        "homelab-claude-land@3633.service",
     ],
 )
 def test_the_rule_refuses_any_other_unit(name) -> None:

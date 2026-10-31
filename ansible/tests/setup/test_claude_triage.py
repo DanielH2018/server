@@ -131,7 +131,7 @@ def admitted(name: str) -> bool:
         ("claude-triage@drill.service.d", False),
         ("claude-triage-report-alert@drill:merged.service", False),
         ("claude-triage-report-alert@drill.service", False),
-        ("claude-land@3633.service", False),
+        ("homelab-claude-land@3633.service", False),
         ("claude-triage-alert.service", False),
     ],
 )

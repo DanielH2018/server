@@ -21,7 +21,7 @@ from deploy_tools.land_lib.outcome import VERDICTS
 from deploy_tools.land_lib.tools import Tools
 from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 
-UNIT = "claude-land"
+UNIT = "homelab-claude-land"
 PR = "3633"
 INSTANCE = f"{UNIT}@{PR}.service"
 LANDED = "VERDICT: settled (PR #3633, tags: none)"
@@ -119,20 +119,25 @@ def test_an_earlier_landings_verdict_is_never_reported_as_this_ones(tmp_path, ca
     old.write_text(LANDED + "\n")
     rc, _ = _hand_off(
         tmp_path,
-        stderr="Job for claude-land@3633.service failed.",
+        stderr="Job for homelab-claude-land@3633.service failed.",
         status={"Result": "exit-code", "ExecMainStatus": "1"},
     )
     out, err = capsys.readouterr()
     assert rc == 1
     assert LANDED not in out
-    assert "ended without a verdict (Job for claude-land@3633.service failed.)" in err
+    assert (
+        "ended without a verdict (Job for homelab-claude-land@3633.service failed.)"
+        in err
+    )
 
 
 @pytest.mark.parametrize(
     ("fake", "reason"),
     [
         (
-            {"stderr": "Failed to start claude-land@3633.service: Access denied"},
+            {
+                "stderr": "Failed to start homelab-claude-land@3633.service: Access denied"
+            },
             "Access denied",
         ),
         (
@@ -286,7 +291,7 @@ def test_a_start_that_outlasts_the_wait_prints_a_verdict_line(tmp_path, capsys):
 def test_a_unit_that_ends_without_a_verdict_still_prints_one(tmp_path, capsys):
     rc, _ = _hand_off(
         tmp_path,
-        stderr="Failed to start claude-land@3633.service: Access denied",
+        stderr="Failed to start homelab-claude-land@3633.service: Access denied",
     )
     assert rc == 1
     printed = _printed_verdicts(capsys.readouterr().out)

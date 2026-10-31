@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""The agent user lands its own PRs only through claude-land@<n>.service, under land.sh's policy.
+"""The agent user lands its own PRs only through homelab-claude-land@<n>.service.
 
-`roles/setup/claude_code` installs the unit, the polkit rule that lets `claude` start it, and the
-approval list land.sh reads. Each test pins one leg. A leg that slips fails no deploy: the unit
-still lands PRs, only with more reach than the design gives the agent.
+land.sh's landing policy decides what lands.
+
+`roles/setup/claude_code` holds the unit, the polkit rule that lets `claude` start it, and the
+approval list land.sh reads, and the claude-code host component ships them. Each test pins one
+leg. A leg that slips fails no deploy: the unit still lands PRs, only with more reach than the
+design gives the agent.
 
 Run: uv run pytest ansible/tests/setup/test_claude_lander.py
 """
@@ -13,16 +16,19 @@ import shlex
 
 import pytest
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import render_setup_text, role_context
 from deploy_tools.land_lib import handoff, options, policy
 from fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
+from lib.ansible_jinja_env import template_env
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 UNIT = "claude-land@.service.j2"
 RULE = "50-claude-land.rules.j2"
 PATHS = "claude-land-approval-paths.j2"
+PINS = "claude-land-pins.j2"
+COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
 INSTALLED = "claude_code_agent_user_enabled and claude_code_lander_enabled"
 OPERATOR = "lander-sentinel-operator"
 AGENT = "lander-sentinel-agent"
@@ -37,6 +43,14 @@ def defaults(role: str = "claude_code") -> dict:
 def lander_block() -> dict:
     (block,) = yaml_fast.safe_load((ROLE / "tasks" / "lander.yml").read_text())
     return block
+
+
+def pins() -> dict[str, str]:
+    """What claude-land-pins.j2 exports to the templates that import it, by name."""
+    env = template_env(ROLE / "templates")
+    module = env.get_template(PINS).make_module(role_context(ROLE))
+    names = ("unit", "checkout", "branch_prefix", "author", "agent_user", "approver")
+    return {name: getattr(module, name) for name in names}
 
 
 def tasks() -> list[dict]:
@@ -72,9 +86,7 @@ def install_dest(task: dict) -> str:
 def test_the_unit_runs_land_sh_as_the_operator_from_the_primary_checkout() -> None:
     rendered = unit({"sys_user": OPERATOR})
     assert directive(rendered, "User") == [OPERATOR]
-    checkout = defaults()["claude_code_lander_checkout"].replace(
-        "{{ sys_user }}", OPERATOR
-    )
+    checkout = f"/home/{OPERATOR}/server"
     assert directive(rendered, "WorkingDirectory") == [checkout]
     (exec_start,) = directive(rendered, "ExecStart")
     argv = shlex.split(exec_start)
@@ -84,11 +96,7 @@ def test_the_unit_runs_land_sh_as_the_operator_from_the_primary_checkout() -> No
 
 def test_a_landing_that_fails_or_is_refused_pages_through_its_alert() -> None:
     """A refused landing waits on the operator, and the session that asked may be gone (#4602)."""
-    assert directive(unit(), "OnFailure") == ["claude-land-alert.service"]
-    alert = next(t for t in tasks() if "ansible.builtin.import_tasks" in t)
-    assert alert["ansible.builtin.import_tasks"].endswith("common/tasks/alert_unit.yml")
-    assert alert["when"] == INSTALLED
-    assert alert["vars"]["alert_unit_name"] == "claude-land"
+    assert directive(unit(), "OnFailure") == ["homelab-alert@%n.service"]
 
 
 def test_land_sh_accepts_the_units_arguments_and_writes_the_verdict_where_the_session_reads() -> (
@@ -119,7 +127,7 @@ def test_the_unit_switches_on_every_leg_of_the_landing_policy() -> None:
 def test_only_the_operators_approval_lifts_the_approval_path_refusal() -> None:
     """An approver equal to the agent's own login would let the agent approve itself."""
     approver = environment(unit())[options.APPROVER_ENV]
-    assert approver == defaults()["claude_code_lander_approver"]
+    assert approver == pins()["approver"]
     assert approver != defaults()["claude_code_agent_github_login"]
     owner = defaults()["claude_code_agent_user_repo"].split("/")[0]
     assert approver == owner, "the operator is the repo's owner"
@@ -148,13 +156,13 @@ def rule_pattern(rendered: str) -> re.Pattern:
 @pytest.mark.parametrize(
     ("name", "admitted"),
     [
-        ("claude-land@3633.service", True),
-        ("claude-land@1.service", True),
-        ("claude-land@0.service", False),
-        ("claude-land@12345678.service", False),
-        ("claude-land@36a.service", False),
-        ("claude-land@.service", False),
-        ("claude-land@3633.service.d", False),
+        ("homelab-claude-land@3633.service", True),
+        ("homelab-claude-land@1.service", True),
+        ("homelab-claude-land@0.service", False),
+        ("homelab-claude-land@12345678.service", False),
+        ("homelab-claude-land@36a.service", False),
+        ("homelab-claude-land@.service", False),
+        ("homelab-claude-land@3633.service.d", False),
         ("renovate-agent-land@3633.service", False),
         ("gitops-deploy.service", False),
     ],
@@ -193,28 +201,46 @@ def test_the_inventory_cannot_repoint_who_the_lander_serves() -> None:
     )
 
 
-def test_the_unit_and_rule_follow_the_lander_variables() -> None:
-    """The red half of the test above: the templates do read the pinned variables."""
-    moved = {
-        "claude_code_lander_author": "lander-sentinel-login",
-        "claude_code_lander_branch_prefix": "lander-sentinel-prefix+",
-        "claude_code_lander_agent_user": AGENT,
-    }
-    env = environment(unit(moved))
-    assert env[options.REQUIRE_AUTHOR_ENV] == "lander-sentinel-login"
-    assert env[options.REQUIRE_BRANCH_PREFIX_ENV] == "lander-sentinel-prefix+"
-    assert f'subject.user !== "{AGENT}"' in render_setup_text(
-        "claude_code", RULE, moved
+# The names the role's defaults and tasks/lander.yml's block vars gave the lander's settings
+# before the pins moved into a template, set to values that are not the agent's.
+OLD_LANDER_VARS = {
+    "claude_code_lander_checkout": "/srv/lander-sentinel",
+    "claude_code_lander_author": "lander-sentinel-login",
+    "claude_code_lander_branch_prefix": "lander-sentinel-prefix+",
+    "claude_code_lander_agent_user": AGENT,
+    "claude_code_lander_approver": "lander-sentinel-approver",
+}
+
+
+def test_an_inventory_value_under_the_old_setting_names_moves_nothing() -> None:
+    assert unit(OLD_LANDER_VARS) == unit()
+    assert render_setup_text("claude_code", RULE, OLD_LANDER_VARS) == (
+        render_setup_text("claude_code", RULE)
     )
+    assert set(OLD_LANDER_VARS).isdisjoint(defaults())
+    assert "vars" not in lander_block()
+
+
+def test_the_unit_and_rule_carry_the_pins() -> None:
+    """The red half of the two tests above: the templates do read the pins file."""
+    pinned = pins()
+    env = environment(unit())
+    assert env[options.REQUIRE_AUTHOR_ENV] == pinned["author"]
+    assert env[options.REQUIRE_BRANCH_PREFIX_ENV] == pinned["branch_prefix"]
+    assert env[options.APPROVER_ENV] == pinned["approver"]
+    assert directive(unit(), "StateDirectory") == [pinned["unit"]]
+    rule = render_setup_text("claude_code", RULE)
+    assert f'subject.user !== "{pinned["agent_user"]}"' in rule
+    assert rule_pattern(rule).pattern.startswith(f"^{pinned['unit']}@")
 
 
 def test_the_pinned_lander_values_name_the_agent_profile() -> None:
     """The pins are literals, so this is what keeps them equal to the agent they serve."""
-    d = defaults()
-    assert d["claude_code_lander_author"] == d["claude_code_agent_github_login"]
-    assert d["claude_code_lander_agent_user"] == d["claude_code_agent_user"]
-    assert d["claude_code_lander_branch_prefix"] == (
-        f"worktree-{d['claude_code_agent_worktree_prefix']}+"
+    d, pinned = defaults(), pins()
+    assert pinned["author"] == d["claude_code_agent_github_login"]
+    assert pinned["agent_user"] == d["claude_code_agent_user"]
+    assert (
+        pinned["branch_prefix"] == f"worktree-{d['claude_code_agent_worktree_prefix']}+"
     )
 
 
@@ -224,6 +250,9 @@ FLOOR = [
     f"ansible/roles/setup/claude_code/templates/{PATHS}",
     f"ansible/roles/setup/claude_code/templates/{UNIT}",
     f"ansible/roles/setup/claude_code/templates/{RULE}",
+    # The pins and the component that ships the lander joined with H7.40's second slice.
+    f"ansible/roles/setup/claude_code/templates/{PINS}",
+    "hosts/components/claude-code/component.yml",
     # Alert-triggered triage joined the floor on 2026-10-15 (test_claude_triage.py).
     "ansible/roles/setup/claude_code/tasks/triage.yml",
     "ansible/roles/setup/claude_code/templates/claude-triage",
@@ -281,6 +310,8 @@ LANDER_FILES = [
     f"ansible/roles/setup/claude_code/templates/{UNIT}",
     f"ansible/roles/setup/claude_code/templates/{RULE}",
     f"ansible/roles/setup/claude_code/templates/{PATHS}",
+    f"ansible/roles/setup/claude_code/templates/{PINS}",
+    "hosts/components/claude-code/component.yml",
     "ansible/roles/setup/claude_code/tasks/lander.yml",
     "ansible/roles/setup/initial_setup/tasks/access.yml",
     "scripts/deploy_tools/land.sh",
@@ -336,22 +367,6 @@ def test_a_pr_off_the_floor_lands_without_the_operator(path, tmp_path) -> None:
     assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == []
 
 
-def test_the_lander_settings_are_pinned_above_the_inventory_at_their_defaults() -> None:
-    """Block vars outrank host_vars, so the inventory cannot repoint the unit."""
-    pinned = lander_block()["vars"]
-    assert set(pinned) == {
-        "claude_code_lander_checkout",
-        "claude_code_lander_branch_prefix",
-        "claude_code_lander_author",
-        "claude_code_lander_agent_user",
-        "claude_code_lander_approver",
-    }
-    for name, value in pinned.items():
-        assert value == defaults()[name], name
-        # A pin that templates an inventory variable resolves from the inventory.
-        assert "{{" not in value or value == "/home/{{ sys_user }}/server", name
-
-
 def test_main_imports_the_lander_file() -> None:
     main = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
     assert any(t.get("ansible.builtin.import_tasks") == "lander.yml" for t in main)
@@ -361,9 +376,8 @@ def test_switching_either_flag_off_removes_everything_the_install_writes() -> No
     installs = [t for t in tasks() if t.get("when") == INSTALLED]
     assert {install_dest(t) for t in installs} >= {
         "/etc/claude-land/approval-paths",
-        "/etc/systemd/system/claude-land@.service",
+        "/etc/systemd/system/homelab-claude-land@.service",
         "/etc/polkit-1/rules.d/50-claude-land.rules",
-        "/etc/systemd/system/claude-land-alert.service",
     }
     (removal,) = [t for t in tasks() if t.get("when") == f"not ({INSTALLED})"]
     removed = removal["loop"]
@@ -390,7 +404,11 @@ def profile_exports(lander_enabled: bool) -> dict[str, str]:
 
 def test_the_agents_land_sh_hands_off_to_the_unit_the_rule_lets_it_start() -> None:
     name = profile_exports(True)[options.HANDOFF_ENV]
-    assert UNIT == f"{name}@.service.j2"
+    shipped = {
+        entry["src"]: entry["dst"]
+        for entry in yaml_fast.safe_load(COMPONENT.read_text())["files"]
+    }
+    assert shipped[f"role:{UNIT}"] == f"/usr/lib/systemd/system/{name}@.service"
     assert rule_pattern(render_setup_text("claude_code", RULE)).search(
         f"{name}@3633.service"
     )

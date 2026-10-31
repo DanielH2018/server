@@ -102,6 +102,10 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   empty: reconcile runs `rmdir`, never a recursive delete. A non-empty one stays and fails the
   run. A package therefore lists the directory after the files in it, as the Pi's does for
   `/etc/homelab/interim`.
+- **A legacy template unit.** A `unit` entry such as `claude-land@.service` is disabled and its
+  file removed, but never stopped, because `systemctl` refuses a template's own name. While any
+  instance is active, activating or reloading, the entry stays and counts as drift, as a running
+  legacy service does. A run therefore never ends an instance mid-run.
 
 ## Activation, pending state and drift
 

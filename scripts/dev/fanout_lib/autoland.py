@@ -3,10 +3,10 @@
 WHY. A daniel-server batch stops at its PR, because the deploy path lives on daniel-box, and
 nothing landed it until an orchestrator ran `land.sh`. Measured over 2026-10-15 to 2026-10-17,
 across 58 server batches, the median wait was 5.5 minutes and the 90th percentile 350 minutes.
-This command runs on daniel-box from `claude-fanout-server-lander.timer` and starts that
+This command runs on daniel-box from `homelab-claude-fanout-server-lander.timer` and starts that
 `land.sh` for the PRs that qualify. The operator approved it on 2026-10-18.
 
-WHY NOT `claude-land@`. That unit admits only the `claude` user and pins the author
+WHY NOT `homelab-claude-land@`. That unit admits only the `claude` user and pins the author
 `DanielClaudeBot` and the branch prefix `worktree-claude+`. A server batch runs as `ubuntu`
 on `worktree-fanout-<batch>`, and widening the unit would change the agent lander's policy.
 
@@ -19,8 +19,8 @@ read from GitHub must then still be the one the record reviewed: open, not a dra
 `worktree-fanout-<batch>`, at the head the record names, with no operator step in its body.
 
 NO PER-PR LOCK. `land.sh` takes none. It holds the deploy tree and service locks, and
-`claude-land@` holds a flock, so two landings of one PR would both arm the merge. This command
-therefore starts a PR once: it skips a PR whose log directory already holds a `land<pr>-*.log`
+`homelab-claude-land@` holds a flock, so two landings of one PR would both arm the merge. This
+command therefore starts a PR once: it skips a PR whose log directory already holds a `land<pr>-*.log`
 (a landing that ended `refused` or `ci-red` is the operator's to read, not to retry every ten
 minutes), and a PR that any live `land.py` process names with `--pr <n>`, which finds the
 landings an orchestrator started from another log directory.
@@ -83,8 +83,8 @@ STATE_DIR = Path.home() / ".local" / "state" / "fanout-server-lander"
 # gh returns at most this many changed files, so a PR at the cap may hide a path past it.
 FILE_CAP = 100
 # Paths whose change widens what this command or the lander may do, or that the landing path
-# imports. A PR touching one is left for a person, the way `claude-land@`'s approval list leaves
-# it. `scripts/deploy_tools/` is the whole tree because land.sh imports await_ci.py and the rest
+# imports. A PR touching one is left for a person, the way `homelab-claude-land@`'s approval
+# list leaves it. `scripts/deploy_tools/` is the whole tree because land.sh imports await_ci.py and the rest
 # of it, not only land*. The deployer's `files/` decide the CI gate, `ansible/vars/` holds the
 # secrets and the generated cluster file, and `.claude/` holds the repo's hooks and settings.
 OWN_PATHS = (

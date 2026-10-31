@@ -1,8 +1,8 @@
 # Claude memory store copy — daniel-box to daniel-server
 
-`claude-memory-sync.timer` copies daniel-box's Claude memory store to daniel-server every
-`claude_code_memory_sync_interval` (15 minutes). The `setup/claude_code` role installs it, and its
-`CLAUDE.md` carries the contract. This page holds the reasoning and the checks.
+`homelab-claude-memory-sync.timer` copies daniel-box's Claude memory store to daniel-server
+every `claude_code_memory_sync_interval` (15 minutes). daniel-box's host package ships it from
+the `setup/claude_code` role's templates, and the role's `CLAUDE.md` carries the contract. This page holds the reasoning and the checks.
 
 ## Why it exists (#3123)
 
@@ -36,7 +36,7 @@ rsync -ani --delete \
   daniel-server:.claude/projects/-home-ubuntu-server/memory/
 ```
 
-To see what the last runs changed, run `journalctl -u claude-memory-sync -n 50`.
+To see what the last runs changed, run `journalctl -u homelab-claude-memory-sync -n 50`.
 
 To turn the copy off, set `claude_code_memory_sync_enabled: false`; the contract's *Mode* line has the
 mechanics. daniel-server keeps the store the last run wrote.
