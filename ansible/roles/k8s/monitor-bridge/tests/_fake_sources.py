@@ -14,8 +14,7 @@ therefore the fake for a check that must do no I/O at all.
 `calls` records every query in order as `(method, args)`, for a test that asserts on the
 PromQL or URL a check sent. `state` is a fresh `bridge.streaks.State`, so a test seeds or reads a
 streak or probe cache as `src.state.<field>` rather than through a module global. A test whose
-cycles need different answers builds a second fake with `FakeSources(state=first.state, ...)`. `log_error_counts` is inherited from `Sources`, so it reaches the
-`loki_vector` and `loki_count` answers with the real query shape.
+cycles need different answers builds a second fake with `FakeSources(state=first.state, ...)`.
 
 `FakeSink` records every push `run_once` would have sent to Kuma as `(token, ok, msg)` in
 `pushes`, so a test reads what was pushed without patching `bridge.net.push`.
@@ -33,7 +32,6 @@ _METHODS = (
     "prom_scalar",
     "prom_vector",
     "loki_count",
-    "loki_vector",
     "loki_lines",
     "get_json",
     "get_bytes",
@@ -84,9 +82,6 @@ class FakeSources(Sources):
 
     def loki_count(self, selector, window):
         return self._answer("loki_count", selector, window)
-
-    def loki_vector(self, query):
-        return self._answer("loki_vector", query)
 
     def loki_lines(self, logql, window_s, limit):
         return self._answer("loki_lines", logql, window_s, limit)

@@ -73,7 +73,6 @@ monitor_bridge_modules:
   - checks/wan.py
   - bridge/common.py
   - bridge/parsing.py
-  - verdicts/cluster.py
   - verdicts/host.py
   - verdicts/host_smart.py
   - verdicts/service.py

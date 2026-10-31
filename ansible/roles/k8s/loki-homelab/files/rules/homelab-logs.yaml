@@ -79,8 +79,8 @@ groups:
       # `LOG_ERROR_MAX`. `error` is deliberately absent from the pattern: it appears in ordinary
       # output constantly, and an alert on it gets ignored. These four mean the process gave up.
       # `for: 5m` replaces the row's `startup_grace`. The bridge's empty `LOG_ERROR_IGNORE`
-      # carries over, so no container is excluded. The rule is shadow beside the Kuma tile until
-      # Cutover-b drops the label.
+      # carried over, so no container is excluded. The rule has paged since M6's batch A7
+      # Cutover-b dropped its `shadow` label.
       #
       # DECIDED: stays at 20, and home-assistant stays OUT of any ignore list. #1784 proposed
       # raising this or ignoring that container, after `fatal log lines in 1h: home-assistant (23)`
@@ -97,7 +97,6 @@ groups:
         labels:
           severity: warning
           service: k3s
-          shadow: "true"
         annotations:
           summary: '{{ $labels.container }} logged more than 20 fatal-pattern lines in an hour.'
           description: >-

@@ -1,0 +1,56 @@
+{# The one door that lets `probe.py` read Alertmanager's silences and inhibitions (#6691).
+
+   Prometheus' `ALERTS` series shows neither, and M6 moves monitor-bridge's gates into
+   Alertmanager `inhibit_rules`, so without this door an inhibited alert is invisible to every
+   host tool. The design is answer 2 of
+   docs/target-architecture/monitoring/alertmanager-ui-and-readers.md, and the operator ruled
+   the unauthenticated LAN read acceptable on 2026-10-31 (#6689, open question 2 of that note).
+
+   NARROW ON PURPOSE, in the shape of prometheus-ingressroute.yaml.j2:
+     1. `Method(GET)`. Every write in Alertmanager's /api/v2 is a POST or a DELETE, so a write
+        matches no router here and Traefik answers 404.
+     2. Two prefixes: /api/v2/alerts, which carries each alert's `status.silencedBy` and
+        `status.inhibitedBy`, and /api/v2/silences. Those are the only paths
+        scripts/diagnostics/probe_lib/alertmanager_api.py fetches. The first prefix also
+        admits /api/v2/alerts/groups, which is a read too.
+     3. LAN-only, no Authelia, and it ignores k8s_public_route. The client set is the LAN plus
+        the four node addresses a host process arrives as: its node's cni0 gateway when the
+        traefik pod is local, its flannel.1 address when the pod is on the other node (#1693,
+        the loki-homelab read route's comment has the measurement). Pods and WireGuard peers
+        are excluded, as on the Prometheus door.
+
+   The silence-capable UI is a separate router behind Authelia two_factor (M6 B-6b, #6690). It
+   shares the host name and does not exist yet; this router does not need it.
+   ansible/tests/k8s/test_alertmanager_read_route.py is the guard. #}
+{% set clients = [lan_subnet] + k3s_cni0_gateways + k3s_flannel_node_ips %}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: alertmanager-read
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      # OR'd ClientIP matchers, NOT ClientIP(a, b): the multi-arg form fails rule parsing on
+      # this Traefik and the router vanishes (prometheus-ingressroute.yaml.j2).
+      match: "Host(`alertmanager.local.{{ domain }}`) && Method(`GET`) && (PathPrefix(`/api/v2/alerts`) || PathPrefix(`/api/v2/silences`)) && ({% for cidr in clients %}ClientIP(`{{ cidr }}`){% if not loop.last %} || {% endif %}{% endfor %})"
+      middlewares:
+        - name: rate-limit
+      services:
+        - name: alertmanager
+          port: 9093
+  tls:
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
+    options:
+      name: modern
+{% if k8s_tls_cert_resolver %}
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
+{% endif %}

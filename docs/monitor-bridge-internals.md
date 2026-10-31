@@ -17,9 +17,9 @@ reason it is a member. The table lists the members, generated from that column.
 The rules below shaped those memberships.
 
 - **There is no Loki gate.** The `loki_reachable` gate left with M5's PR 4a, and a Loki fault
-  pages from the `loki-homelab` ruler's `LokiHomelabMetricsMissing`. `ha_heartbeat`,
-  `swallowed_verdicts` and `workload_log_errors` read Loki and fail open on a Loki error, so
-  each keeps its own verdict, and none sits in a gate set.
+  pages from the `loki-homelab` ruler's `LokiHomelabMetricsMissing`. `ha_heartbeat` and
+  `swallowed_verdicts` read Loki and fail open on a Loki error, so each keeps its own verdict,
+  and neither sits in a gate set.
 - **`B2_DEPENDENT`**: the gate runs one `b2_authorize_account` per `B2_PROBE_INTERVAL_S`
   (1800 s) with a BILLED outcome cached, because the fault it detects is a transaction cap. A
   failure that never reached B2 takes the short `B2_TRANSPORT_RETRY_S` TTL.
@@ -32,9 +32,6 @@ The rules below shaped those memberships.
   its `node-pi` entry left in batch B8, and `PiHostDown` inhibits `PiPortDead` in Alertmanager.
 - **`STARTUP_GRACE`** is disjoint from every skip set, so a check that gains a gate leaves
   this set; a test holds both.
-- **`workload_log_errors`** is in `STARTUP_GRACE` and in no gate set. It reads Loki, not
-  Prometheus, so `PROM_DEPENDENT` does not apply. Its arm fails open on a Loki error
-  (`with_log_errors`), so a Loki fault pages from the ruler. It is the only caller of `with_log_errors`, and M6's batch A7 deletes the row.
 - **The retired second Prometheus gate.** `Cluster Prometheus Reachable` gated a
   `CLUSTER_DEPENDENT` set reading `CLUSTER_PROMETHEUS_URL` until 2026-09-28. Both URLs named one
   cluster Service after the Docker plane retired (2026-08-14), so its tile could not go red on its
@@ -117,7 +114,7 @@ The rules below shaped those memberships.
 | `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster`, `host_thermal` (Scrutiny), `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `wan`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `check_gitops_status` reads every marker it judges through `gitops_hold.DeployerSnapshot`, the third generated copy. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `PVC_EXCLUDE` stays in `config.py` because a repo test greps for it by text |
 | `bridge/net.py` | the transport: `_get_json`, `_get_bytes`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` (which caps its message with `bridge.common.cap_push_msg`), and the selector builder (`origin_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
-| `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `loki_vector`, `loki_lines`, `get_json`, `get_bytes`, `post_json`, and `log_error_counts` composed from two of them). `cli.main()` builds one; `run_once` hands it to every body as `src`. Also `Sink(cfg)`, where `run_once` pushes every verdict, delegating to `bridge.net.push` |
+| `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `loki_lines`, `get_json`, `get_bytes`, `post_json`). `cli.main()` builds one; `run_once` hands it to every body as `src`. Also `Sink(cfg)`, where `run_once` pushes every verdict, delegating to `bridge.net.push` |
 | `bridge/msgfmt.py` | `format_down(unit, state, items, details)` — the one grammar for a push message naming several things; import-free so `probe.py releases --kuma` loads it from a host too |
 | `bridge/streaks.py` | `State` (every streak counter and probe cache, carried as `src.state`), `down_streak` (the consecutive-down step) and `apply_startup_grace` |
 | `bridge/common.py` | `_env`, `sanitize`, `cap_push_msg` (`PUSH_MSG_MAX`) and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected — plus `host_uptime_s`, the node's boot clock the two post-reboot arms key on |

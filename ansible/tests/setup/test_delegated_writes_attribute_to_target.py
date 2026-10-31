@@ -50,7 +50,7 @@ def _collisions(tmp_path: Path, delegation: str) -> tuple[list[str], dict]:
     pi.mkdir()
     (pi / "package.yml").write_text("legacy:\n  - {unit: crowdsec-edge-probe.timer}\n")
     ansible = ansible_writes(
-        [(roles / "demo", task_file)], HOSTS, lambda _: frozenset({"daniel-box"})
+        [(roles / "demo", task_file)], HOSTS, lambda *_: frozenset({"daniel-box"})
     )
     return collisions(ansible, package_writes(tmp_path / "hosts", HOSTS)), ansible
 

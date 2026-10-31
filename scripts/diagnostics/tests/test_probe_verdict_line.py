@@ -137,6 +137,8 @@ def test_monitors_ends_with_its_verdict(monkeypatch, capsys, status, expected_rc
             return _completed(
                 argv, json.dumps({"status": "success", "data": {"result": []}})
             )
+        if argv[-1].endswith("/api/v2/silences"):
+            return _completed(argv, "[]")  # no active silence
         return _completed(argv, _monitor_status(status))
 
     monkeypatch.setattr(subprocess, "run", run)

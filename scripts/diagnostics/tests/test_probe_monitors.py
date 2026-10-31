@@ -85,7 +85,7 @@ def test_declared_monitor_count_reads_the_real_template():
     # template, so a template that moved or a parse that returns nothing shows up here as a
     # missing count rather than as a coverage line that is silent forever.
     declared = monitors.declared_monitor_count()
-    assert declared is not None and declared >= 42, declared
+    assert declared is not None and declared >= 41, declared
 
 
 def _alerts(*firing):
@@ -507,6 +507,6 @@ def test_the_real_template_declares_every_bridge_tile_ungated():
         Path(monitors.STATIC_MONITORS_PATH).read_text()
     )
     bridge = {row.display: declared.get(row.display) for row in CHECKS}
-    assert len(bridge) >= 21 and "Swallowed Push Verdicts" in bridge
+    assert len(bridge) >= 20 and "Swallowed Push Verdicts" in bridge
     assert all(d is not None and d["gated"] is False for d in bridge.values()), bridge
     assert not [name for name in declared if "{" in name]

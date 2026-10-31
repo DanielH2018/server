@@ -445,8 +445,9 @@ def test_host_sets_names_every_host_check_rule():
 
 
 def test_loki_sets_name_every_m5_rule():
-    """Non-vacuity for `loki_sets`: each paging Loki rule, and two that must stay shadow."""
+    """Non-vacuity for `loki_sets`: each paging Loki rule, and the rules that stay shadow."""
     assert set(loki_sets(shadow=False)) == {
+        "WorkloadLogErrors",
         "HostLogErrors",
         "HostOutOfMemoryKill",
         "LokiHostLogsSilent",
@@ -458,8 +459,23 @@ def test_loki_sets_name_every_m5_rule():
         "LokiRulerNotEvaluating",
         "LokiRulerNotificationsFailing",
     }
-    assert set(loki_sets(shadow=True)) >= {"WorkloadLogErrors"}
+    # A7's Cutover-b dropped `shadow` from WorkloadLogErrors. B7's two rules still carry it.
+    assert set(loki_sets(shadow=True)) >= {
+        "CloudflareDdnsDirectUpdateSilent",
+        "CloudflareDdnsProxiedUpdateSilent",
+    }
+    assert "WorkloadLogErrors" not in loki_sets(shadow=True)
     assert "LokiHomelabDown" not in loki_sets(shadow=True) | loki_sets(shadow=False)
+
+
+def test_the_a7_log_rule_pages_to_discord_and_a_shadowed_one_does_not():
+    """WorkloadLogErrors replaced a warning tile, so it posts to Discord and does not mail. With
+    `shadow` back, the walk ends on the blackhole, so the expected receivers no longer match."""
+    labels, receivers = PAGING["WorkloadLogErrors"]
+    assert (labels["severity"], receivers) == ("warning", ["discord"])
+    assert "WorkloadLogErrors" not in SHADOW
+    shadowed = {**labels, "shadow": "true"}
+    assert [r["receiver"] for r in reached(route_tree(), shadowed)] == [BLACKHOLE]
 
 
 def test_every_a2_container_rule_pages_since_cutover_b():

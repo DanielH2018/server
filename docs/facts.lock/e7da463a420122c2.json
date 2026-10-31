@@ -1,0 +1,12 @@
+{
+  "checksum": "da25dca7e2e1205132f3e47c8cb27124621c46c71e2a00885c88b50167874f2c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/observability/CLAUDE.md#At a glance",
+  "row": {
+    "atoms": {
+      "ansible/tests/k8s/test_alertmanager_read_route.py": "f581fd243bda6aebe44cb128d51889749e54ba32be65592ca9b51dfb1e8ed193"
+    },
+    "python": "3.14",
+    "verified_sha": "b20b4a37f"
+  }
+}
