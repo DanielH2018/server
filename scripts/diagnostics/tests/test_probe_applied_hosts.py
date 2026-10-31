@@ -91,11 +91,7 @@ def test_the_k3s_agent_walk_holds_none_of_the_server_crons():
 
 @pytest.mark.parametrize(
     "path",
-    [
-        "/etc/rancher/k3s/kuma-push.env",
-        "/etc/healthchecks/ping.env",
-        "/etc/rancher/k3s/live-drift-check.env",
-    ],
+    ["/etc/healthchecks/ping.env"],
 )
 def test_a_secret_read_through_default_is_not_compared_by_content(path):
     """`{{ token | default("") }}` rendered empty and was compared against the live token."""

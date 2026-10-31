@@ -4,9 +4,10 @@
 # Usage: etcd-snapshot-offbox.sh [-h|--help]
 # Takes no arguments. Root cron job "Off-box etcd snapshot" (cron file etcd-snapshot-offbox) runs
 # it daily at k3s_etcd_s3_cron_hour:k3s_etcd_s3_cron_minute. Running it by hand takes and uploads
-# a real snapshot. It reads the R2 credentials from /etc/rancher/k3s/etcd-s3.env, the Kuma push
-# token from /etc/rancher/k3s/kuma-push.env and the optional healthchecks ping URL from
-# /etc/healthchecks/ping.env.
+# a real snapshot. It reads the R2 credentials from /etc/rancher/k3s/etcd-s3.env and the optional
+# healthchecks ping URL from /etc/healthchecks/ping.env. Each run writes its verdict to
+# $TEXTFILE_DIR/etcd-snapshot-offbox.prom for node_exporter's textfile collector. Prometheus rules
+# in host-checks.yaml page the verdict through Alertmanager.
 #
 # k3s's own scheduled snapshots write to ${data-dir}/server/db/snapshots on this host's disk.
 # That covers an accidental `kubectl delete` and nothing else: the disk holding the snapshots is
@@ -41,18 +42,13 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t etcd-snapshot-offbox "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
-# shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t etcd-snapshot-offbox "homelab-check-lib.sh missing — run initial_setup on this host"
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: a day plus an hour, the interval that
-# the check's Kuma tile carries. `k3s_daily_check_deadline_s` names it in defaults/main.yml, and
+# The longest legitimate gap between two textfile writes: a day plus an hour.
+# `k3s_daily_check_deadline_s` names it in defaults/main.yml, and
 # ansible/tests/services/test_b1_rule_literals.py pins the rule's literal to this value.
 DEADLINE_S={{ k3s_daily_check_deadline_s }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
@@ -63,28 +59,9 @@ TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 # manifest-prune-check.sh beside it.
 export PATH="/usr/local/bin:${PATH}"
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP, same as the sibling heartbeats: this name resolves through
-# Pi-hole's wildcard, and a DNS outage is exactly when the push must still land.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-# Sourced, never inlined: this script lands 0755, so an inlined token is readable by every local
-# account. 0640 root:{{ sys_user }} env file, the same split the R2 credentials below already use
-# (one tier stricter there, because those are write credentials for the backup store).
-ETCD_SNAPSHOT_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r /etc/rancher/k3s/kuma-push.env ]] && . /etc/rancher/k3s/kuma-push.env
-PUSH_TOKEN="$ETCD_SNAPSHOT_PUSH_TOKEN"
-
-push_kuma() {
-  local status="$1" msg="$2"
-  [[ -z "$PUSH_TOKEN" ]] && return 0
-  kuma_push "$status" "$msg" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \
-    "$KUMA_HOST" "$KUMA_RESOLVE_IP" etcd-snapshot-offbox
-}
-
-# Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale. Kuma
-# runs on the cluster this backs up, so an outage silences both the push and the monitor;
-# hc-ping.com alerts on the silence instead. Sourced, not inlined: this script is 0755.
+# Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
+# Prometheus runs on the cluster this backs up, so an outage silences both the textfile and the
+# rules; hc-ping.com alerts on the silence instead. Sourced, not inlined: this script is 0755.
 push_healthchecks() {
   local status="$1"
   HC_PING_KEY=""
@@ -104,8 +81,8 @@ push_healthchecks() {
 
 # Every exit path reports through here, and the log line is UNCONDITIONAL — see
 # longhorn-backup-health.sh.j2 for the full rationale, and manifest-prune-check.sh.j2 for the same
-# pattern. Short version: the `|| logger` inside the push helpers only fires when the curl itself
-# fails, so a successfully-pushed status leaves no durable local record. That makes journald
+# pattern. Short version: the `|| logger` inside the ping helper only fires when the curl itself
+# fails, so a successfully-pinged status leaves no durable local record. That makes journald
 # silence ambiguous — a run that succeeded quietly and a cron that never fired look identical —
 # and it is what `probe.py alerts` reads to reconstruct a monitor's history from Loki. Bit for
 # real on 2026-08-16: the first manual run of this script produced no output and no journal entry,
@@ -114,11 +91,10 @@ report() {
   local status="$1" msg="$2" success=0
   logger -t etcd-snapshot-offbox "status=${status} ${msg}"
   # Every path out of this script reports through here, so the textfile carries each verdict. It
-  # is written before the push, which must not delay it. A failed write logs and the push goes on.
+  # is written before the ping, which must not delay it. A failed write logs and the ping goes on.
   [[ "$status" == "up" ]] && success=1
   write_check_textfile etcd-snapshot-offbox "$success" "$(date +%s)" "$DEADLINE_S" \
     || logger -t etcd-snapshot-offbox "textfile write to ${TEXTFILE_DIR} failed (status=${status})"
-  push_kuma "$status" "$msg"
   push_healthchecks "$status"
 }
 
@@ -130,7 +106,7 @@ report() {
 ARMED="{{ 1 if k3s_etcd_s3_armed else 0 }}"
 if [[ "$ARMED" != "1" ]]; then
   # Report the disarmed state rather than exiting silently green, so a deliberate pause is
-  # visible in Kuma instead of looking like a healthy backup.
+  # visible as an alert instead of looking like a healthy backup.
   report down "off-box etcd snapshots are DISARMED (k3s_etcd_s3_armed=false)"
   exit 0
 fi
@@ -168,7 +144,7 @@ if [[ $RC -eq 0 ]]; then
   SNAP_STATUS=up
   SNAP_MSG="etcd snapshot uploaded to s3://${ETCD_S3_BUCKET}/{{ k3s_etcd_s3_folder }}"
 else
-  # The message reaches Kuma on the LAN and the local journal. It can name the bucket; the keys
+  # The message reaches the local journal. It can name the bucket; the keys
   # are never in $OUTPUT because they were passed through the environment.
   SUMMARY=$(printf '%s' "$OUTPUT" | tail -n 3 | tr '\n' ' ')
   SNAP_STATUS=down
@@ -221,7 +197,7 @@ fi
 
 if [[ -n "$DRIFT_MSG" ]]; then
   # Down even when the upload succeeded: a snapshot nobody can decrypt is not a backup. This does
-  # fail the off-premises dead-man alongside Kuma, and that is the intended reading — the restore
+  # fail the off-premises dead-man alongside the alert, and that is the intended reading — the restore
   # path is genuinely unproven in every branch above.
   report down "${SNAP_MSG}; ${DRIFT_MSG}"
 else

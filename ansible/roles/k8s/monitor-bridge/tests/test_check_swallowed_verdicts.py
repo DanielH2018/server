@@ -265,11 +265,11 @@ def test_the_check_is_registered_and_startup_graced():
 
 
 def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted():
-    # longhorn-backup-health reads KUMA_PUSH_OK and sends hc-ping `/fail`, which alerts at
-    # once; a second page here is one root cause twice. Its run line still lands a sibling.
+    # pi-sd-health reads KUMA_PUSH_OK and sends hc-ping `/fail`, which alerts at once; a second
+    # page here is one root cause twice. Its run line still lands a sibling.
     ok, msg = swallowed_verdicts(
         [
-            (1, _SIBLING_SWALLOWED),
+            (1, _SIBLING_SWALLOWED.replace("longhorn-backup-health", "pi-sd-health")),
             (2, _RUN_DOWN.replace("release-staleness-check", "disk-health")),
         ],
         "3h",
