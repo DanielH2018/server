@@ -275,6 +275,13 @@ decides and a host the fleet number alone would allow can still be refused. Each
 spends one 2 GiB reservation (`RESERVATION_BYTES` in `scripts/dev/fanout_lib/placement.py`),
 and the host with the most left takes the next batch.
 
+Each batch unit also carries its own runaway limits on memory, swap and PIDs, set in
+`systemd_run_command` in `scripts/dev/fanout_lib/launch.py`. The memory limit is a multiple of
+the reservation, so a batch that placement priced as normal never reaches it. A batch that
+does reach it is OOM-killed alone, and `status` prints its line as `failed … result=oom-kill`.
+[ADR-0027](adr/0027-fanout-batches-stay-on-host-cgroups.md) records why the limits sit on host
+cgroups rather than on k8s pods.
+
 `clean` records each removal in the manifest, because the act destroys its own evidence: the
 remote leg reads the worktree it deletes, so a later pass has nothing left to ask. A batch
 already removed is skipped without an ssh call, `status` reports it as `cleaned` rather than
