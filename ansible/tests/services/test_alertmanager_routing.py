@@ -523,11 +523,10 @@ def test_every_a5_storage_rule_pages_as_critical():
 def test_a_storage_rule_that_regains_shadow_is_flagged():
     """The rejecting half: with `shadow` back, the walk ends on the blackhole, so the receivers
     `PAGING` expects for the rule no longer match."""
-    name = "PVCFull/longhorn"
-    labels, receivers = PAGING[name]
+    labels, receivers = PAGING["PVCFull/longhorn"]
+    assert receivers == ["discord", "email"]
     shadowed = {**labels, "shadow": "true"}
     assert [r["receiver"] for r in reached(route_tree(), shadowed)] == [BLACKHOLE]
-    assert [r["receiver"] for r in reached(route_tree(), shadowed)] != receivers
 
 
 def test_every_a1_rule_is_shadow_and_names_each_host_check():
