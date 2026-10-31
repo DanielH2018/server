@@ -15,6 +15,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from fanout_lib.manifest import Batch
 from fanout_lib.notify import stop_post
+from fanout_lib.placement import RESERVATION_BYTES
 from fanout_lib.prompt_tool import prompt_tool_flags, shim_guarded
 from fanout_lib.target import HEADLESS_PYTHON, SERVER_TARGET, Target, branch_name
 from fanout_lib.transport import REPO, Tools
@@ -68,6 +69,15 @@ RUNTIME_MAX_S = 5 * 3600
 # adds at most two `review_ci.CI_WAIT_S`, so three hours on top of its five covers them.
 # `review.LAND_MARGIN_S` skips the landing rather than start it too close to this cap.
 REVIEW_RUNTIME_MAX_S = 8 * 3600
+# DECIDED: each batch gets its own runaway limits, on its host's cgroups rather than in a k8s
+# pod (ADR-0027). They bound a runaway and never a normal batch: over the 7 days to 2026-10-31
+# the largest batch held 1781 MiB of anon and 215 pids. MemoryMax is a multiple of the
+# placement reservation so the two move together; page cache counts against it, but the kernel
+# reclaims cache before it OOM-kills. The swap bound keeps one batch from taking the swap that
+# stalled daniel-box on 2026-09-05. `io` is not delegated to user managers, so no IOWeight.
+BATCH_MEMORY_MAX = 3 * RESERVATION_BYTES
+BATCH_SWAP_MAX = "512M"
+BATCH_TASKS_MAX = 1024
 # The script a `--review` unit runs as `<it> review`, relative to a checkout; see `review_script`.
 REVIEW_SCRIPT = "scripts/dev/fanout.py"
 # Another repo's batch runs this repo's code from a snapshot of `origin/master` inside its own
@@ -300,6 +310,8 @@ def systemd_run_command(
         f"-p StandardError=file:{wt}/.fanout/stderr.log "
         f"-p Environment=PATH={unit_path(home)} -p Environment=HOME={home} "
         f"-p RuntimeMaxSec={runtime} -p {stop_post(batch, target)} "
+        f"-p MemoryMax={BATCH_MEMORY_MAX} -p MemorySwapMax={BATCH_SWAP_MAX} "
+        f"-p TasksMax={BATCH_TASKS_MAX} "
         f"{command}"
     )
     return _step(shim_guarded(run, home), "systemd-run")
