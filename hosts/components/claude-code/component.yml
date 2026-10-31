@@ -84,6 +84,8 @@ defaults:
   claude_code_agent_playwright_mcp_version: "0.0.83"
 depends:
   - acl
+  # claude-agent-browser reads and writes the agent's MCP registration as JSON.
+  - jq
 outputs:
   - src: templates/agent-gh-hosts.yml.j2
     path: /var/lib/claude/.config/gh/hosts.yml

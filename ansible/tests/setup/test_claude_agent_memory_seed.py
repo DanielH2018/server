@@ -94,10 +94,15 @@ def test_the_import_runs_only_for_an_enabled_agent_that_is_the_hosts_user() -> N
         "Copy the operator's memory store into the agent's, the first time the agent is the host's user",
     )
     assert task["ansible.builtin.import_tasks"] == "agent_memory_seed.yml"
-    base = role_context(ROLE, {"claude_code_agent_user_enabled": True})
+    base = role_context(
+        ROLE,
+        {"claude_code_agent_user_enabled": True, "inventory_hostname": "daniel-server"},
+    )
     assert not holds(task["when"], base), "the default user is the operator"
     agent = base | {"claude_code_user": "claude"}
     assert holds(task["when"], agent)
+    # daniel-box's package seeds the store, so the role skips it there.
+    assert not holds(task["when"], agent | {"inventory_hostname": "daniel-box"})
     assert not holds(task["when"], agent | {"claude_code_agent_user_enabled": False})
     assert not holds(task["when"], agent | {"claude_code_agent_memory_seed": False})
 

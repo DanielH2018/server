@@ -34,15 +34,9 @@ cd "$home"
 # The registration as `claude mcp` reads it back, or nothing. Read from the file rather than with
 # `claude mcp get`, which launches the server: a Chromium and an Authelia login on every run.
 registered() {
-  python3 -c '
-import json, sys
-try:
-    entry = json.load(open(sys.argv[1])).get("mcpServers", {}).get("homelab-ui")
-except (OSError, ValueError):
-    entry = None
-if entry:
-    print(json.dumps({"command": entry.get("command"), "env": entry.get("env") or {}}, sort_keys=True))
-' "$home/.claude.json"
+  [ -f "$home/.claude.json" ] || return 0
+  jq -cS '.mcpServers["homelab-ui"] // empty | {command, env: (.env // {})}' \
+    "$home/.claude.json" 2> /dev/null || true
 }
 
 {% if claude_code_agent_homelab_ui_enabled %}
@@ -73,10 +67,8 @@ fi
 node "$package/node_modules/playwright/cli.js" install chromium
 
 launcher={{ claude_code_agent_user_clone_dir }}/scripts/diagnostics/ui_mcp.sh
-want=$(python3 -c '
-import json, sys
-print(json.dumps({"command": sys.argv[1], "env": {"NODE_BIN": sys.argv[2]}}, sort_keys=True))
-' "$launcher" "$node_bin")
+want=$(jq -ncS --arg command "$launcher" --arg node_bin "$node_bin" \
+  '{command: $command, env: {NODE_BIN: $node_bin}}')
 live=$(registered)
 if [ "$live" != "$want" ]; then
   if [ ! -x "$claude" ]; then
@@ -85,10 +77,8 @@ if [ "$live" != "$want" ]; then
     exit 0
   fi
   [ -z "$live" ] || "$claude" mcp remove --scope user homelab-ui
-  "$claude" mcp add-json --scope user homelab-ui "$(python3 -c '
-import json, sys
-print(json.dumps({"type": "stdio", "command": sys.argv[1], "args": [], "env": {"NODE_BIN": sys.argv[2]}}))
-' "$launcher" "$node_bin")"
+  "$claude" mcp add-json --scope user homelab-ui "$(jq -nc --arg command "$launcher" \
+    --arg node_bin "$node_bin" '{type: "stdio", command: $command, args: [], env: {NODE_BIN: $node_bin}}')"
 fi
 {% else %}
 if [ -n "$(registered)" ] && [ -x "$claude" ]; then

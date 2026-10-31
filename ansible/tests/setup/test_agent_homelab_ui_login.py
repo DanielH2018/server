@@ -42,6 +42,7 @@ def test_the_login_is_given_only_to_an_enabled_agent_user_with_its_browser() -> 
     task = named(tasks("main.yml"), "Give the agent user its homelab-ui login")
     assert task["ansible.builtin.import_tasks"] == "agent_homelab_ui.yml"
     assert task["when"] == [
+        "inventory_hostname not in claude_code_packaged_hosts['agent_home']",
         "claude_code_agent_user_enabled",
         "claude_code_agent_homelab_ui_enabled",
     ]
@@ -106,9 +107,10 @@ def test_switching_the_agent_user_or_its_browser_off_removes_the_login() -> None
         "path": "{{ claude_code_homelab_ui_credentials }}",
         "state": "absent",
     }
-    assert task["when"] == (
-        "not (claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled)"
-    )
+    assert task["when"] == [
+        "inventory_hostname not in claude_code_packaged_hosts['agent_home']",
+        "not (claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled)",
+    ]
 
 
 def test_the_login_names_the_account_the_authelia_role_creates() -> None:

@@ -56,6 +56,7 @@ def test_the_subset_is_installed_only_for_an_enabled_agent_user_without_dotfiles
     )
     assert task["ansible.builtin.import_tasks"] == "agent_operator_config.yml"
     assert task["when"] == [
+        "inventory_hostname not in claude_code_packaged_hosts['agent_home']",
         "claude_code_agent_user_enabled",
         "not claude_code_agent_dotfiles",
     ]
