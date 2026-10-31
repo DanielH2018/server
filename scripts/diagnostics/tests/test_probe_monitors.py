@@ -85,7 +85,7 @@ def test_declared_monitor_count_reads_the_real_template():
     # template, so a template that moved or a parse that returns nothing shows up here as a
     # missing count rather than as a coverage line that is silent forever.
     declared = monitors.declared_monitor_count()
-    assert declared is not None and declared >= 60, declared
+    assert declared is not None and declared >= 56, declared
 
 
 def _alerts(*firing):
@@ -261,7 +261,7 @@ def test_every_interval_in_the_real_template_resolves_through_the_real_variables
     declared = monitors.parse_declared_monitors(REAL_STATIC_MONITORS_TEXT)
     assert declared["etcd Restore Drill (full)"]["interval"] == 3024000
     # uptime_kuma_k8s_bridge_push_interval
-    assert declared["Root Disk"]["interval"] == 1200
+    assert declared["Swallowed Push Verdicts"]["interval"] == 1200
     assert declared["UPS Secondary (daniel-box)"]["interval"] == 1200
     unresolved = sorted(n for n, s in declared.items() if s["interval"] is None)
     assert unresolved == [], f"intervals this check cannot read: {unresolved}"
@@ -508,12 +508,29 @@ def test_the_table_loop_skips_rows_its_if_excludes(tmp_path):
     assert set(declared) == {"Alpha", "After"}
 
 
+# M6 batch A1's four tiles, deleted by the `if` on the template's table loop (Cutover-a1)
+# while their rows stay in the table until Cutover-a2. Pi Pressure is not among them: B8 cuts
+# that row over.
+A1_TILES_DELETED = {
+    "Root Disk",
+    "Memory",
+    "Host Temperature",
+    "UPS Battery Health",
+}
+
+
 def test_the_real_template_declares_every_bridge_tile_ungated():
     """#3781 moved the bridge tiles into a loop; kuma-drift must still list each one."""
     declared = monitors.parse_declared_monitors(
         Path(monitors.STATIC_MONITORS_PATH).read_text()
     )
-    bridge = {row.display: declared.get(row.display) for row in CHECKS}
-    assert len(bridge) >= 26 and "Root Disk" in bridge
+    bridge = {
+        row.display: declared.get(row.display)
+        for row in CHECKS
+        if row.display not in A1_TILES_DELETED
+    }
+    assert len(bridge) >= 22 and "Swallowed Push Verdicts" in bridge
     assert all(d is not None and d["gated"] is False for d in bridge.values()), bridge
     assert not [name for name in declared if "{" in name]
+    # kuma-drift must not name a deleted tile missing: the loop's `if` is read, not ignored.
+    assert not A1_TILES_DELETED & set(declared)
