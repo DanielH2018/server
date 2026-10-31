@@ -54,6 +54,10 @@
 description: daniel-pi's homelab host package
 components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
 credentials:
+  # No unit loads these two, because M6 batch B5's Cutover-2 dropped the heartbeats' Kuma pushes.
+  # They stay listed because `host_secrets.py check` pins this list to the Pi's SOPS file, and
+  # changing that file takes the operator's `host_secrets.py sync daniel-pi`. B5's token PR
+  # removes both keys here and in the file in one step, a week after Cutover-1b.
   - pi_sd_health_push_token
   - pi_recovery_push_token
   - rkhunter_daniel_pi_push_token

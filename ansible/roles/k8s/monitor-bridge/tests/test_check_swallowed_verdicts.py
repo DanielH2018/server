@@ -292,6 +292,25 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
 
 
+def test_the_pi_heartbeats_left_hc_routing_so_only_the_old_package_still_pages():
+    # M6 B5 Cutover-2: the Pi's two heartbeats no longer read KUMA_PUSH_OK. The old package's
+    # `push failed (status=down: ...)` line carries no `by=kuma`, so it is a swallowed DOWN, and
+    # nothing exempts it once the tags leave HC_ROUTED_TAGS: it pages until the Pi installs the
+    # new package. The new package's line is a plain verdict and never pages.
+    assert not {"pi-sd-health", "pi-recovery-health"} & HC_ROUTED_TAGS
+    ok, msg = swallowed_verdicts(
+        [(1, _PI_SWALLOWED), (2, _SIBLING_RUN)], "3h", truncated=False
+    )
+    assert not ok and "pi-recovery-health" in msg
+    verdict = _PI_SWALLOWED.replace(
+        "push failed (status=down: autoheal exited)", "status=down autoheal exited"
+    )
+    ok, msg = swallowed_verdicts(
+        [(1, verdict), (2, _SIBLING_RUN)], "3h", truncated=False
+    )
+    assert ok, msg
+
+
 # B7's pod producer, the pi-peer-backup script. The other B7 pods log to no stream these
 # selectors read. The tag is derived from `report()`: `${HOSTNAME:-<pod>} <tag>: $1`.
 _B7_TAGS = {"pi-peer-backup"}
