@@ -120,12 +120,29 @@ def build_argv(cfg: dict[str, str], prompt: str) -> list[str]:
     ]
 
 
+TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
+
+
+def session_env(environ: dict[str, str]) -> dict[str, str]:
+    """`environ` with every whitespace character removed from the session's Claude token.
+
+    session.env carries the token as it was pasted, and `claude setup-token` wraps it onto an
+    indented second line: the 2026-10-17 paste kept two spaces from the wrap, and Claude
+    answered "Not logged in". A token holds no whitespace, so removing it loses nothing.
+    """
+    env = dict(environ)
+    if TOKEN_ENV in env:
+        env[TOKEN_ENV] = "".join(env[TOKEN_ENV].split())
+    return env
+
+
 def run_session(argv: list[str], cwd: str, timeout: int) -> tuple[dict, bool]:
     """Run the session; return (parsed JSON result or {}, timed_out)."""
     try:
         p = subprocess.run(
             argv,
             cwd=cwd,
+            env=session_env(dict(os.environ)),
             capture_output=True,
             text=True,
             timeout=timeout,

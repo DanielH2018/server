@@ -1071,7 +1071,7 @@ groups:
             No claude-triage-poll verdict newer than 660s reached Prometheus from daniel-box's textfile
             collector, so the monitor triage poll has not completed a clean run: the timer stopped firing, or
             every run since failed and OnFailure has posted to Discord. Read `systemctl status
-            claude-triage-poll.timer` and `journalctl -u claude-triage-poll` on daniel-box. If `claude_code_triage_enabled` was set false on purpose,
+            homelab-claude-triage-poll.timer` and `journalctl -u homelab-claude-triage-poll` on daniel-box. If `claude_code_triage_enabled` was set false on purpose,
             delete this rule.
       - alert: ClaudeFanoutLanderNotReporting
         expr: |

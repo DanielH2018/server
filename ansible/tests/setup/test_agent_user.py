@@ -26,7 +26,6 @@ AGENT_GITHUB = SETUP / "claude_code" / "tasks" / "agent_github.yml"
 AGENT_ACCESS = SETUP / "claude_code" / "tasks" / "agent_access.yml"
 # daniel-box's claude-code component ships the agent user, so each agent task skips it there.
 PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
-AGENT_BROWSER = SETUP / "claude_code" / "tasks" / "agent_browser.yml"
 # The file in each role that imports the shared one. claude_code's runs once per agent.
 AGENT_TASKS_FILE = {"renovate_agent": "main.yml", "claude_code": "agent.yml"}
 # Every role that builds an agent user, with the role variable each contract key must name.
@@ -265,17 +264,14 @@ def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent()
     shared = tasks(SHARED)
     claude = agent_tasks(tasks(CLAUDE_TASKS))
     github = tasks(AGENT_GITHUB)
-    browser = tasks(AGENT_BROWSER)
     # The named members, so the census cannot pass on a renamed or vanished task.
     named(shared, "Install the pinned host Python for the agent user")
     named(claude, "Sync the repo's venv in the agent user's clone")
     named(claude, "Fast-forward the agent user's clone to origin's master")
     named(github, "Generate the agent's commit-signing key")
-    named(browser, "Install the agent user's pinned @playwright/mcp")
     assert root_run_writers(shared) == []
     assert root_run_writers(claude) == []
     assert root_run_writers(github) == []
-    assert root_run_writers(browser) == []
 
 
 def test_a_command_run_as_root_on_each_apply_is_flagged() -> None:

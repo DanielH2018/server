@@ -1,0 +1,98 @@
+#!/bin/bash
+# Shipped by the claude-code component. Run as {{ claude_code_agent_user }} by
+# homelab-claude-agent-browser.service.
+#
+# Usage: claude-agent-browser [-h|--help]
+# Takes no arguments. Running it by hand as {{ claude_code_agent_user }} applies every step below.
+#
+{% if claude_code_agent_homelab_ui_enabled %}
+# Gives the agent its own homelab-ui MCP server: the pinned Node {{ claude_code_agent_node_version }}
+# under {{ claude_code_agent_node_dir }}, @playwright/mcp {{ claude_code_agent_playwright_mcp_version }}
+# and the Chromium that package pins, and a user-scope `homelab-ui` entry in ~/.claude.json that
+# launches its clone's scripts/diagnostics/ui_mcp.sh. The login that wrapper reads is a
+# homelab-secrets output. Only the pinned Node tree stays: a bump removes the previous one.
+{% else %}
+# The homelab-ui browser is switched off here: removes the agent's `homelab-ui` registration, its
+# Node trees and its Chromium cache.
+{% endif %}
+#
+# Every step is idempotent: a step whose result exists already changes nothing. Root never runs
+# this, so no step acts as root on a path the agent controls.
+set -euo pipefail
+
+case "${1-}" in
+  -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+esac
+
+home={{ claude_code_agent_user_home }}
+node_dir={{ claude_code_agent_node_dir }}
+node_bin={{ claude_code_agent_node_bin }}
+claude="$home/.local/bin/claude"
+export HOME="$home" TMPDIR=/tmp PATH="$node_bin:/usr/bin:/bin"
+cd "$home"
+
+# The registration as `claude mcp` reads it back, or nothing. Read from the file rather than with
+# `claude mcp get`, which launches the server: a Chromium and an Authelia login on every run.
+registered() {
+  python3 -c '
+import json, sys
+try:
+    entry = json.load(open(sys.argv[1])).get("mcpServers", {}).get("homelab-ui")
+except (OSError, ValueError):
+    entry = None
+if entry:
+    print(json.dumps({"command": entry.get("command"), "env": entry.get("env") or {}}, sort_keys=True))
+' "$home/.claude.json"
+}
+
+{% if claude_code_agent_homelab_ui_enabled %}
+version={{ claude_code_agent_node_version }}
+tree="node-v$version-linux-x64"
+mkdir -p "$node_dir"
+if [ ! -x "$node_dir/$tree/bin/node" ]; then
+  download=$(mktemp -d)
+  trap 'rm -rf "$download"' EXIT
+  curl -fsSL --retry 3 -o "$download/node.tar.xz" "{{ claude_code_agent_node_url }}"
+  echo "{{ claude_code_agent_node_sha256 }}  $download/node.tar.xz" | sha256sum --check --quiet -
+  tar -xJf "$download/node.tar.xz" -C "$node_dir"
+fi
+# The registration's NODE_BIN names `current`, so a Node bump moves this link and nothing else.
+[ "$(readlink "$node_dir/current" || true)" = "$tree" ] || ln -sfn "$tree" "$node_dir/current"
+for old in "$node_dir"/node-v*; do
+  [ "$old" = "$node_dir/$tree" ] || [ ! -e "$old" ] || { echo "removing $old"; rm -rf "$old"; }
+done
+
+# npm's global prefix is the Node tree, so a Node bump installs @playwright/mcp afresh.
+package="$node_dir/current/lib/node_modules/@playwright/mcp"
+installed=$(node -p "require('$package/package.json').version" 2> /dev/null || true)
+if [ "$installed" != "{{ claude_code_agent_playwright_mcp_version }}" ]; then
+  npm install --global --no-fund --no-audit "@playwright/mcp@{{ claude_code_agent_playwright_mcp_version }}"
+fi
+# The playwright CLI nested under @playwright/mcp, so the browser revision is the one it drives.
+# It skips a revision already in ~/.cache/ms-playwright.
+node "$package/node_modules/playwright/cli.js" install chromium
+
+launcher={{ claude_code_agent_user_clone_dir }}/scripts/diagnostics/ui_mcp.sh
+want=$(python3 -c '
+import json, sys
+print(json.dumps({"command": sys.argv[1], "env": {"NODE_BIN": sys.argv[2]}}, sort_keys=True))
+' "$launcher" "$node_bin")
+live=$(registered)
+if [ "$live" != "$want" ]; then
+  if [ ! -x "$claude" ]; then
+    # The dotfiles sync installs Claude Code; the next start of this unit registers the server.
+    echo "claude-agent-browser: $claude is not installed yet, so homelab-ui is not registered"
+    exit 0
+  fi
+  [ -z "$live" ] || "$claude" mcp remove --scope user homelab-ui
+  "$claude" mcp add-json --scope user homelab-ui "$(python3 -c '
+import json, sys
+print(json.dumps({"type": "stdio", "command": sys.argv[1], "args": [], "env": {"NODE_BIN": sys.argv[2]}}))
+' "$launcher" "$node_bin")"
+fi
+{% else %}
+if [ -n "$(registered)" ] && [ -x "$claude" ]; then
+  "$claude" mcp remove --scope user homelab-ui
+fi
+rm -rf "$node_dir" "$home/.cache/ms-playwright"
+{% endif %}

@@ -407,6 +407,7 @@ def test_the_agents_land_sh_hands_off_to_the_unit_the_rule_lets_it_start() -> No
     shipped = {
         entry["src"]: entry["dst"]
         for entry in yaml_fast.safe_load(COMPONENT.read_text())["files"]
+        if "src" in entry
     }
     assert shipped[f"role:{UNIT}"] == f"/usr/lib/systemd/system/{name}@.service"
     assert rule_pattern(render_setup_text("claude_code", RULE)).search(

@@ -14,9 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import applied, applied_hosts, applied_tasks
-from lib.ansible_jinja_env import template_env
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
-from lib.render_guard import render_or_error
 
 TASKS = """\
 - name: Install the script
@@ -139,21 +137,22 @@ def test_a_false_gate_drops_the_task_and_an_unreadable_one_is_skipped(tmp_path):
     assert "/etc/x/box" not in {w.path for w in pi_wants}
 
 
-def test_the_real_claude_code_role_yields_its_units_with_content():
+def test_the_real_claude_code_role_skips_what_daniel_boxs_package_ships():
     role = applied.SETUP / "claude_code"
     wants, _ = applied_tasks.expected(
         role, "daniel-box", applied.context(role, "daniel-box")
     )
     by_path = {w.path: w for w in wants}
-    for unit in ("claude-triage-poll.timer", "claude-triage@.service"):
-        want = by_path[f"/etc/systemd/system/{unit}"]
-        assert want.sha256 is not None and want.mode == "0644"
+    # The takeover check's flux copy is one of the few paths the role still writes there.
+    assert "/usr/local/lib/homelab-takeover-check" in by_path
     # daniel-box's package ships these, so the role skips them there.
     for unit in (
         "claude-rc.service",
         "claude-cgroup-metrics.timer",
         "claude-memory-sync.timer",
         "claude-fanout-server-lander.service",
+        "claude-triage-poll.timer",
+        "claude-triage@.service",
     ):
         assert f"/etc/systemd/system/{unit}" not in by_path
 
@@ -165,23 +164,6 @@ def test_a_rescue_that_withdraws_a_file_is_not_an_absent_arm(host):
     wants, _ = applied_tasks.expected(role, host, applied.context(role, host))
     path = "/etc/rsyslog.d/49-homelab-info-filter.conf"
     assert [w.present for w in wants if w.path == path] == [True]
-
-
-def test_the_agent_ssh_config_renders_its_peers_from_the_inventory():
-    """The template loops over `groups['all']` and reads each peer's `hostvars` flag (#6484)."""
-    role = applied.SETUP / "claude_code"
-    ctx = applied.context(role, "daniel-box")
-    wants, _ = applied_tasks.expected(role, "daniel-box", ctx)
-    want = {w.path: w for w in wants}["/var/lib/claude/.ssh/config"]
-    assert not want.unchecked and want.sha256 is not None
-    text, err = render_or_error(
-        template_env(role / "templates"), "agent-ssh-config.j2", ctx
-    )
-    assert text is not None, err
-    assert hashlib.sha256(text.encode()).hexdigest() == want.sha256
-    # daniel-server sets claude_agent_ssh_login_enabled; the Pi does not, and daniel-box holds the key.
-    hosts = [line.split()[1] for line in text.splitlines() if line.startswith("Host ")]
-    assert hosts == ["daniel-server"]
 
 
 def _live(want, **changes):
@@ -429,14 +411,14 @@ def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):
     assert binary.mode == "0755"
 
 
-def test_the_real_claude_code_role_walks_its_shared_alert_import():
-    """claude_code reaches common/tasks/alert_unit.yml through `{{ role_path }}`."""
-    role = applied.SETUP / "claude_code"
+def test_the_real_gitops_deploy_role_walks_its_shared_alert_import():
+    """gitops_deploy reaches common/tasks/alert_unit.yml through `{{ role_path }}`."""
+    role = applied.SETUP / "gitops_deploy"
     wants, skips = applied_tasks.expected(
         role, "daniel-box", applied.context(role, "daniel-box")
     )
     named = {w.path for w in wants} | {s.task for s in skips}
-    assert any("claude-triage-poll-alert" in n for n in named), sorted(named)
+    assert "/etc/systemd/system/gitops-deploy-alert.service" in named, sorted(named)
 
 
 def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_path):
