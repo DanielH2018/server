@@ -110,14 +110,6 @@ tests:
             exp_annotations:
               summary: Kuma's Live Object Drift tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Live Object Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Artifacts Peer Sync, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Artifacts Peer Sync tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Artifacts Peer Sync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: k3s Telemetry OTLP Door, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's k3s Telemetry OTLP Door tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the k3s Telemetry OTLP Door tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Daniel Pi SD Health, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Daniel Pi SD Health tile is gone and no alert rule pages in its place.
@@ -299,10 +291,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
@@ -424,10 +412,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x140'
@@ -560,10 +544,6 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x160'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x160'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
@@ -687,10 +667,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x1700'
@@ -825,10 +801,6 @@ tests:
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x5 _x3100'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x3100'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
@@ -983,10 +955,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
@@ -1128,10 +1096,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x5 _x300'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x300'
@@ -1287,10 +1251,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x760'

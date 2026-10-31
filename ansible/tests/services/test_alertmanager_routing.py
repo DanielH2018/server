@@ -422,8 +422,7 @@ def test_host_sets_names_every_host_check_rule():
         "RkhunterScanNotReporting"
     ).split()
     box_only = (
-        "FanoutSlotsIdleWithFreeWork ArtifactsSyncFailed ArtifactsSyncNotReporting "
-        "OtlpDoorClosed OtlpDoorNotReporting LonghornBackupHealthFailed "
+        "FanoutSlotsIdleWithFreeWork LonghornBackupHealthFailed "
         "LonghornBackupHealthNotReporting EtcdSnapshotOffboxFailed "
         "EtcdSnapshotOffboxNotReporting ManifestPruneCheckFailed "
         "ManifestPruneCheckNotReporting ReleaseStalenessCheckFailed "
