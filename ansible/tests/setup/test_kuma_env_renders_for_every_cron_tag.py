@@ -14,6 +14,7 @@ Run: uv run pytest ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.
 """
 
 from _helpers import load_tasks
+from _shell_render import render_shell_script
 from lib.repo_paths import K3S_ROLE
 
 CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
@@ -58,7 +59,10 @@ def test_no_k3s_template_or_task_reads_or_renders_the_file_any_more():
     # The rejecting half: a script that sources the file again would read an empty token, and a
     # task that renders it again would undo the retirement above.
     readers = sorted(
-        path.name for path in TEMPLATES.glob("*") if KUMA_ENV_PATH in path.read_text()
+        path.name
+        for path in TEMPLATES.glob("*")
+        if path.name.endswith(".sh.j2")
+        and KUMA_ENV_PATH in render_shell_script("setup", "k3s", path.name)
     )
     assert readers == [], readers
     assert not (TEMPLATES / "kuma-push.env.j2").exists()
