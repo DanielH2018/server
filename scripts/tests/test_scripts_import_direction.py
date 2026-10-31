@@ -72,6 +72,7 @@ FACADE_EDGES = frozenset(
         ("docs.gen_doc_fragments", "docs.fragment_readers"),
         ("docs.gen_doc_fragments", "docs.fragment_renderers"),
         # scripts/dev/findings.py over the findings_* leaves.
+        ("dev.findings", "dev.findings_lib.board"),
         ("dev.findings", "dev.findings_lib.gh_calls"),
         ("dev.findings", "dev.findings_lib.issue_model"),
         ("dev.findings", "dev.findings_lib.plans"),

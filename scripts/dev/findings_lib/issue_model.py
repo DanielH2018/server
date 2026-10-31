@@ -81,6 +81,9 @@ for _d in DOMAINS:
 # call, so no second write and no item id. It needs the `project` token scope, so the board
 # is best-effort: `cmd_open` retries without it and warns rather than losing the finding.
 PROJECT_TITLE = "Claude findings"
+# The Date field on that board that mirrors an issue's `not-before:` label, so the board can
+# sort and filter by it. `findings_lib/board.py` owns the writes; the label stays the record.
+NOT_BEFORE_FIELD = "Not before"
 
 # DECIDED: the underscore-prefixed names below, and `_prefixed` further down, cross a module
 # boundary on purpose. They moved out of findings.py byte-for-byte, changing no behaviour;

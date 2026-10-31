@@ -98,6 +98,8 @@ label on the issue. `next` and `claim` withhold it while today is before that da
 nothing to clear: the label expires by comparison, which `manual` cannot. `next` still names a deferred issue —
 under a `deferred:` line, and on stderr under `--json` so the array stays the free set — because a silently
 withheld issue reads as a closed one to whoever looks at the backlog. `defer <n> --clear` lifts it early.
+Both also copy the date into the "Not before" field on the Claude findings Project, which the board sorts and
+filters on; a board failure only warns. `board-dates` makes every open issue's board date match its label.
 
 RESERVING AN ISSUE FOR THE OPERATOR. `manual <n>` (or `open --manual`) adds the `manual`
 label: `next` withholds the issue, `claim` refuses it, and `list` still marks it `[manual]`.
@@ -135,6 +137,7 @@ from dev.findings_lib.claim import claim_states
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
 from dev.findings_lib.cli import _parser
+from dev.findings_lib.board import cmd_board_dates, sync_board_date
 from dev.findings_lib.export_cli import cmd_export
 from dev.findings_lib.history_cli import cmd_history, cmd_show
 from dev.findings_lib.gh_calls import (
@@ -232,7 +235,10 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             print(f"(dry-run) would create; fingerprint {fp}")
             return 0
         url = _create_with_optional_project(plans[0], tools)
-        print(f"#{url.rsplit('/', 1)[-1]} created  {url}")
+        number = url.rsplit("/", 1)[-1]
+        if args.not_before:
+            sync_board_date(int(number), args.not_before, tools, dry_run=False)
+        print(f"#{number} created  {url}")
         return 0
     # "created" is the only outcome plan_open returns for a missing issue, so every branch
     # below has one to name. Checked here rather than in each branch: the two of them read
@@ -303,6 +309,7 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
         print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
         return 3
     run(plans, args.dry_run, tools)
+    sync_board_date(args.number, args.until, tools, dry_run=args.dry_run)
     what = (
         "deferral cleared" if args.clear else f"deferred until {args.until.isoformat()}"
     )
@@ -566,6 +573,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "history": cmd_history,
         "show": cmd_show,
         "export": cmd_export,
+        "board-dates": cmd_board_dates,
         "open": cmd_open,
         "touch": cmd_touch,
         "defer": cmd_defer,
