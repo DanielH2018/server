@@ -84,8 +84,14 @@ check's flux copy.
   `allowed_signers` file, the peer key on `claude_agent_ssh_key_host`, and the memory seed, all
   as the agent. The seed is the one step that reads as root: root copies the operator's store
   into a private staging directory, and the agent copies it from there. It runs once, while the
-  agent has no `MEMORY.md`, where `claude_code_user` is the agent. The ssh config is installed
-  with `install`, which replaces a link rather than writing through it. The homelab-ui login is
+  agent has no `MEMORY.md`, where `claude_code_user` is the agent. Root still has to set the
+  operator's group and the setgid bit on the agent's directories and to place a few files, so
+  `claude-agent-setup` opens each directory first (`pin`) and refuses unless the opened directory
+  is the one its path names. It creates, owns, modes and writes through that open handle, and a
+  link on any of those paths fails the run. `install -T` places each file, which replaces a link
+  at the file rather than writing through it. `hosts/lib/tests/test_claude_agent_home.py` scans
+  both rendered scripts for a root command that names such a path, and runs the setup over
+  planted links. The homelab-ui login is
   an output of the host's SOPS file. The operator config subset
   (`tasks/agent_operator_config.yml`) is not packaged: it runs only where
   `claude_code_agent_dotfiles` is false, and no host sets that.

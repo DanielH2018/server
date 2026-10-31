@@ -141,7 +141,7 @@ def test_daniel_server_ships_the_browser_only_to_take_it_back(server):
 
 
 SETUP = "/usr/lib/homelab/claude-agent-setup"
-UI_LOGIN_REMOVAL = 'rm -f "$home/.config/homelab-ui/credentials.json"'
+UI_LOGIN_REMOVAL = 'drop "$home/.config/homelab-ui/credentials.json"'
 
 
 def test_a_host_with_homelab_ui_off_removes_the_agents_login(box, server):

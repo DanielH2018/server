@@ -211,8 +211,8 @@ def test_the_background_resume_toggle_off_drops_its_unit_script_policy_and_link(
 
 AUTHORIZED_KEYS = "/usr/lib/homelab/claude-agent/authorized_keys"
 SETUP = "/usr/lib/homelab/claude-agent-setup"
-REMOVAL = 'rm -f "$home/.ssh/authorized_keys"'
-INSTALL = 'install -o root -g root -m 0644 "$templates/authorized_keys"'
+REMOVAL = 'drop "$home/.ssh/authorized_keys"'
+INSTALL = 'place root root 0644 "$templates/authorized_keys"'
 OLD_KEY = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLD peers"
 )
