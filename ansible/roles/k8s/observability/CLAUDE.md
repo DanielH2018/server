@@ -43,6 +43,14 @@ The working-out lives in `docs/observability-dashboards.md`.
 
 **`probe.py health observability` gates every workload in the role**, none of them named observability.
 
+**A second route, `alertmanager.local.<domain>`, is a GET-only read door with no Authelia.**
+`templates/alertmanager-read-ingressroute.yaml.j2` admits `/api/v2/alerts` and
+`/api/v2/silences` from the LAN and the node addresses, so `probe.py health` can name a
+silenced or inhibited gated alert and `probe.py monitors` can list active silences. The *At a
+glance* block lists `ingressroute.yaml.j2` alone, so it does not show this route.
+`ansible/tests/k8s/test_alertmanager_read_route.py` holds the matcher to `GET` and the two
+paths.
+
 **The `observability-prepull` Kustomization pulls Grafana's image before its `Recreate`**, so the
 dashboards serve through a 482 MB Docker Hub pull (`flux_prepull_timeout` in
 `defaults/main.yml`, #5867). `flux_prepull_workloads` scopes the Job to Grafana alone (#5875).

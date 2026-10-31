@@ -1,6 +1,6 @@
 # Alertmanager's UI and the services that read or silence it
 
-Status: DECIDED, pending open questions 1 and 2 (spike [#6688](https://github.com/DanielH2018/server/issues/6688), 2026-10-31)
+Status: DECIDED, pending open question 1 (spike [#6688](https://github.com/DanielH2018/server/issues/6688), 2026-10-31)
 
 Alertmanager became the homelab's paging path when M6 began retiring Uptime Kuma. Nothing
 outside the cluster can see it. During M6's cutovers on 2026-10-30 and 2026-10-31, every read of
@@ -219,7 +219,10 @@ the operator can see a silence they create during Phase C.
    cover the UI by hand. **Operator-only.**
 2. **Is an unauthenticated LAN read of `/api/v2/alerts` and `/api/v2/silences` acceptable?**
    It exposes silence comments and creators beyond what the Prometheus door exposes.
-   **Operator-only.**
+   **Answered 2026-10-31: yes** (the operator's ruling on
+   [#6689](https://github.com/DanielH2018/server/issues/6689)).
+   `ansible/roles/k8s/observability/templates/alertmanager-read-ingressroute.yaml.j2` is the
+   door, and `scripts/diagnostics/probe_lib/alertmanager_api.py` is its reader.
 
 ## Follow-ups filed
 
@@ -228,4 +231,4 @@ the operator can see a silence they create during Phase C.
 - [#6690](https://github.com/DanielH2018/server/issues/6690): M6 B-6b, the route,
     `--web.external-url` and the netpol comment.
 - [#6691](https://github.com/DanielH2018/server/issues/6691): the GET-only door and
-    `probe.py`'s read of silences and inhibitions. Waits on open question 2.
+    `probe.py`'s read of silences and inhibitions. Built after open question 2 was answered.

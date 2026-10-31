@@ -18,7 +18,8 @@
 # selects alertmanager; NetworkPolicies add up, so this file only widens it:
 #   - prometheus, its only alert source before the ruler, and its own scrape of the
 #     `alertmanager` job: the intra-namespace `podSelector: {}`.
-#   - Alertmanager has no route, so traefik never dials it.
+#   - traefik, for the GET-only read door (observability/templates/
+#     alertmanager-read-ingressroute.yaml.j2): the baseline's homelab-namespace traefik peer.
 #
 # 9093 is the containerPort AND the Service targetPort (observability/templates/alertmanager.yaml.j2).
 #

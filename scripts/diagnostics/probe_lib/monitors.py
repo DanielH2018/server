@@ -41,7 +41,7 @@ from lib.k8s_roles import K8S_ROLES
 from lib.render_context import render_context
 from lib.render_guard import make_env
 from lib.repo_paths import ANSIBLE, REPO
-from diagnostics.probe_lib import firing_ingress, kuma_live, kuma_pi
+from diagnostics.probe_lib import alertmanager_api, firing_ingress, kuma_live, kuma_pi
 from diagnostics.probe_lib.kuma_table_loop import TableLoop
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
@@ -559,12 +559,17 @@ def run_kuma_drift(ns, now=None):
 
 
 def run_monitors(ns):
-    """Print Kuma's down-monitors rollup, then the firing ingress alerts (exit 0 = all up)."""
+    """Print Kuma's down-monitors rollup, the firing ingress alerts, then the active silences.
+
+    Exit 0 = all up and every source read.
+    """
     base, pin = prom_endpoint()
     url = prom_query_url(base, "monitor_status")
     if ns.dry_run:
         core.print_dry_run(url, resolve=pin)
         core.print_dry_run(firing_ingress.query_url(base), resolve=pin)
+        am_base, am_pin = alertmanager_api.endpoint()
+        core.print_dry_run(alertmanager_api.silences_url(am_base), resolve=am_pin)
         core.print_dry_run(*kuma_live.status_page_url())
         return core.print_dry_run(*kuma_live.heartbeat_url())
     data, err = core.fetch_json(url, resolve=pin)
@@ -576,7 +581,7 @@ def run_monitors(ns):
         kuma_live.last_stored_beats() if data.get("data", {}).get("result") else None,
     )
     print(text, file=_sys.stderr if code == PROBE_UNREADABLE else _sys.stdout)
-    return firing_ingress.report(base, pin, code)
+    return alertmanager_api.report(firing_ingress.report(base, pin, code))
 
 
 def declared_monitor_count(path=STATIC_MONITORS_PATH):
