@@ -61,5 +61,11 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # its bridge row. A7's token PR retires the key a week after Cutover-b and deletes this
         # entry with it.
         "monitor_bridge_k8s_workloads_push_token",
+        # M6 batch B6a's Cutover-1a deleted the Artifacts Peer Sync and k3s Telemetry OTLP Door
+        # tiles. The two host crons keep pushing into the deleted tokens until Cutover-2 drops the
+        # push. B6a's token PR retires the keys a week after Cutover-1b and deletes these two
+        # entries with them.
+        "artifacts_sync_push_token",
+        "claude_otel_push_token",
     }
 )
