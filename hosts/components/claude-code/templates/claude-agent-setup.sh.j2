@@ -77,6 +77,13 @@ for shared in "$home/.claude/artifacts" "{{ claude_code_agent_memory_dir }}"; do
 {% endif %}
 done
 
+{% if claude_code_agent_homelab_ui_enabled %}
+# homelab-secrets links the agent's homelab-ui login in here.
+dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/homelab-ui"
+{% else %}
+rm -f "$home/.config/homelab-ui/credentials.json"
+{% endif %}
+
 put() { install -o "$agent" -g "$operator" -m "$1" "$templates/$2" "$home/$3"; }
 put 0644 profile .profile
 put 0644 gitconfig .gitconfig
@@ -96,6 +103,42 @@ printf '%s namespaces="git" %s\n' "{{ claude_code_agent_git_email }}" "$(cat "$k
   > "$home/.config/git/allowed_signers"
 chown "$agent:$operator" "$home/.config/git/allowed_signers"
 chmod 0644 "$home/.config/git/allowed_signers"
+
+{% if inventory_hostname == claude_agent_ssh_key_host %}
+# The key host's half of the peer login: the agent's peer key, generated as the agent so the
+# private half never leaves its home, and the ssh config naming each peer's agent user. Each peer
+# carries the public half as claude_agent_peer_public_key, so a new key is a component edit too.
+peer_key={{ claude_agent_ssh_key_path }}
+case "$peer_key" in
+  "$home"/.ssh/*) ;;
+  *) echo "claude-agent-setup: the peer key $peer_key is not under $home/.ssh" >&2; exit 1 ;;
+esac
+[ -e "$peer_key" ] || as_agent ssh-keygen -q -t ed25519 -N "" \
+  -C "$agent peers ({{ inventory_hostname }})" -f "$peer_key"
+chown "$agent:$operator" "$peer_key" "$peer_key.pub"
+chmod 0600 "$peer_key"
+chmod 0644 "$peer_key.pub"
+put 0644 ssh-config .ssh/config
+{% endif %}
+
+{% if claude_code_user == claude_code_agent_user and claude_code_agent_memory_seed %}
+# Once, when the Remote Control host runs as the agent: the operator's memory store becomes the
+# agent's while the agent has no MEMORY.md of its own, so no later run copies over a memory the
+# agent wrote. Each note loses the operator's checkout prefix, so a repo link resolves from any
+# clone. A failed copy removes the index again, so the next run retries.
+agent_memory="{{ claude_code_agent_memory_dir }}"
+operator_memory="{{ claude_code_operator_memory_dir }}"
+if [ ! -e "$agent_memory/MEMORY.md" ] && [ -e "$operator_memory/MEMORY.md" ]; then
+  if ! { rsync -rLptog --chown="$agent:$operator" --chmod=D2750,F0640 \
+           "$operator_memory/" "$agent_memory/" &&
+         find "$agent_memory" -type f -name '*.md' -print0 |
+           xargs -0 -r sed -i 's|{{ claude_code_agent_memory_seed_strip }}||g'; }; then
+    rm -f "$agent_memory/MEMORY.md"
+    echo "claude-agent-setup: copying the operator's memory store failed; the next run copies again" >&2
+    exit 1
+  fi
+fi
+{% endif %}
 
 # The operator's read-only kubeconfig, copied on every run so a re-issued token reaches it.
 if [ -f "/home/$operator/.kube/config" ]; then

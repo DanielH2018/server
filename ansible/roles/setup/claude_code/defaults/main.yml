@@ -25,6 +25,10 @@
 #   memory_sync     the memory store copy to daniel-server
 #   takeover_check  the D5 takeover check's wrapper and sudoers grant; the role keeps the flux
 #                   copy the wrapper runs and its state directory
+#   triage          alert-triggered triage: its runner, poller, units, polkit rule and credential
+#   agent_home      the agent's peer key and ssh config, the operator config subset, the memory
+#                   seed and the homelab-ui login
+#   agent_browser   the agent's homelab-ui browser toolchain and its MCP registration
 claude_code_packaged_hosts:
   remote_control: [daniel-box]
   bg_resume: [daniel-box]
@@ -38,6 +42,9 @@ claude_code_packaged_hosts:
   pipeline_timeline: [daniel-box]
   memory_sync: [daniel-box]
   takeover_check: [daniel-box]
+  triage: [daniel-box]
+  agent_home: [daniel-box]
+  agent_browser: [daniel-box]
 
 # Where the role's memory sync, server-batch lander and pipeline timeline alerts keep their
 # webhook file on a host the package does not cover. The claude-code component retires it.

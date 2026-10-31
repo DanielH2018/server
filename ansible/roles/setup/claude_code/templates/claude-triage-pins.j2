@@ -1,0 +1,19 @@
+{#- Triage's caps and identity: claude-triage@.service.j2, claude-triage-poll.service.j2,
+claude-triage-config.env.j2 and 50-claude-triage.rules.j2 import these as `pins`. A template's own
+assignment outranks every inventory value, so an agent PR that edits only host_vars cannot raise a
+run's budget, turns or wall clock, run the unit as another user, or arm the poller. The host
+package renderer puts the inventory above a component's defaults, so a component default would pin
+nothing. The `claude-triage` template prefix is on the lander's approval list (operator decision,
+2026-10-15). Each value is a literal. ansible/tests/setup/test_claude_triage.py holds them equal to
+the role defaults and to tasks/triage.yml's block vars.
+-#}
+{%- set agent_user = "claude" -%}
+{%- set agent_home = "/var/lib/claude" -%}
+{%- set state_dir = "/var/lib/claude/triage" -%}
+{%- set model = "opus" -%}
+{%- set budget_usd = 10 -%}
+{%- set max_turns = 60 -%}
+{%- set run_timeout_s = 1800 -%}
+{%- set daily_cap = 6 -%}
+{#- Arming the poller is an operator decision too. -#}
+{%- set poll_mode = "shadow" -%}
