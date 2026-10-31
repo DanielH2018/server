@@ -27,7 +27,7 @@
     alert_unit_name: claude-fanout-server-lander
     alert_unit_description: Alert when the server-batch lander fails
     alert_unit_message: "claude-fanout-server-lander failed on {{ inventory_hostname }}: GitHub could not be read or the run crashed, so finished daniel-server batches wait at their PRs. Check `journalctl -u claude-fanout-server-lander`."
-    alert_unit_env_dir: /etc/claude-rc
+    alert_unit_env_dir: "{{ claude_code_alert_env_dir }}"
 
 - name: Enable and start the server-batch lander timer
   tags: [claude_code]

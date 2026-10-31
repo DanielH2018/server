@@ -11,7 +11,9 @@
 
 - name: Create the agent user, its tools and its clone
   tags: [claude_code]
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/agent_user.yml"
   vars:
     agent_user_name: "{{ claude_code_agent_user }}"
@@ -27,7 +29,9 @@
     name: "{{ claude_code_agent_user }}"
     expires: -1
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Keep the agent user's manager alive after logout, so its fan-out batches survive
   # The same reason as the operator's linger above, for the agent user: fanout_place.py
@@ -39,7 +43,9 @@
   args:
     creates: "/var/lib/systemd/linger/{{ claude_code_agent_user }}"
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Give the agent user a login profile
   tags: [claude_code]
@@ -51,7 +57,9 @@
     group: "{{ sys_user }}"
     mode: "0644"
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 # The shared task file clones once and never pulls, yet two things run from this clone's main
 # working tree rather than from a session's worktree: the hook shim (the profile above) and the
@@ -82,7 +90,9 @@
   changed_when: claude_code_agent_clone_pull.stdout | default('') is search('^advanced ', multiline=True)
   failed_when: false
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Report that the agent user's clone was left behind
   tags: [claude_code]
@@ -94,6 +104,7 @@
       else claude_code_agent_clone_pull.stdout | default('the sync did not run') }}.
       The agent's hook shim and homelab-ui launcher keep running its old code until it moves.
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - claude_code_agent_user_enabled
     - not ansible_check_mode
     - >-
@@ -111,13 +122,17 @@
     mode: "0644"
   loop: [service, timer]
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
   notify: Reload systemd for claude_code
 
 # Shares claude-rc's webhook file in /etc/claude-rc, which the role creates on every host.
 - name: Install the agent user's clone sync failure alert
   tags: [claude_code]
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
   vars:
     alert_unit_name: "{{ claude_code_agent_user }}-clone-sync"
@@ -133,7 +148,9 @@
     state: started
     daemon_reload: true
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Sync the repo's venv in the agent user's clone
   tags: [claude_code]
@@ -160,7 +177,9 @@
   changed_when: >-
     claude_code_agent_user_sync.stderr is search('^(Installed|Uninstalled) ', multiline=True)
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Install the pinned Ansible collections in the agent user's clone
   tags: [claude_code]
@@ -193,7 +212,9 @@
   # last apply installed, and the warning below names it.
   failed_when: false
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Report that the agent user's collections were not installed
   tags: [claude_code]
@@ -203,6 +224,7 @@
       {{ claude_code_agent_collections.stderr | default('') }}.
       The agent's playbooks keep the collections an earlier apply installed, or none.
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - claude_code_agent_user_enabled
     - not ansible_check_mode
     - claude_code_agent_collections.rc | default(0) != 0
@@ -234,7 +256,9 @@
   # core.hooksPath, and the report below names that.
   failed_when: false
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Report that the agent user's commit hooks were not installed
   tags: [claude_code]
@@ -244,6 +268,7 @@
       {{ claude_code_agent_hooks.stderr | default('') }}.
       The agent's commits skip gitleaks and the commit-time checks until it succeeds.
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - claude_code_agent_user_enabled
     - not ansible_check_mode
     - claude_code_agent_hooks.rc | default(0) != 0
@@ -258,7 +283,9 @@
     group: "{{ sys_user }}"
     mode: "0700"
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Look for the operator's read-only kubeconfig
   tags: [claude_code]
@@ -266,7 +293,9 @@
     path: "/home/{{ sys_user }}/.kube/config"
   register: claude_code_operator_kubeconfig
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 # Only where the operator has one. daniel-server, a k3s agent node, has none, and its agent
 # runs fan-out batches that stop at the PR, so it reads no cluster state (2026-10-10).
@@ -288,6 +317,7 @@
   diff: false
   no_log: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - claude_code_agent_user_enabled
     - claude_code_operator_kubeconfig.stat.exists
 
@@ -297,7 +327,9 @@
     path: /home/{{ sys_user }}/.local/share/cc-wait/cc_wait
   register: claude_code_agent_cc_wait
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Create the agent user's cc-wait directory
   tags: [claude_code]
@@ -308,7 +340,9 @@
     group: "{{ sys_user }}"
     mode: "0755"
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Give the agent user the operator's cc-wait
   tags: [claude_code]
@@ -330,6 +364,7 @@
       dest: "{{ claude_code_agent_user_home }}/.local/bin/cc-wait"
   become: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - claude_code_agent_user_enabled
     - claude_code_agent_cc_wait.stat.exists | default(false)
     - not claude_code_agent_dotfiles
@@ -340,7 +375,9 @@
     path: /home/{{ sys_user }}/.local/share/jsonq
   register: claude_code_agent_jsonq
   become: true
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
 
 - name: Give the agent user the operator's jsonq
   tags: [claude_code]
@@ -363,13 +400,16 @@
       dest: "{{ claude_code_agent_user_home }}/.local/bin/jsonq"
   become: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - claude_code_agent_user_enabled
     - claude_code_agent_jsonq.stat.exists | default(false)
     - not claude_code_agent_dotfiles
 
 - name: Give the agent user its GitHub identity
   tags: [claude_code]
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
   ansible.builtin.import_tasks: agent_github.yml
 
 - name: Give the agent user an ssh key for the peers and name them
@@ -390,7 +430,9 @@
 
 - name: Set what the agent reads of the host, and what the operator reads of the agent
   tags: [claude_code]
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
   ansible.builtin.import_tasks: agent_access.yml
 
 # One of the two, never both: chezmoi rewrites settings.json whole, and the subset's settings
@@ -404,7 +446,9 @@
 
 - name: Apply the operator's dotfiles to the agent, or take them back
   tags: [claude_code]
-  when: claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agent_user_enabled
   ansible.builtin.import_tasks: agent_dotfiles.yml
 
 # Once, when the phone host moves to the agent: its sessions would otherwise start with an
@@ -426,7 +470,9 @@
     path: "{{ claude_code_agent_user_home }}/.config/gh/hosts.yml"
     state: absent
   become: true
-  when: not claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - not claude_code_agent_user_enabled
 
 - name: Look for the agent user on a host that has it switched off
   tags: [claude_code]
@@ -434,7 +480,9 @@
     database: passwd
     key: "{{ claude_code_agent_user }}"
     fail_key: false
-  when: not claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - not claude_code_agent_user_enabled
 
 # The way out. Expired rather than removed: removing the user strands its files under a bare
 # uid, and the home holds the agent's clone and any work it has not pushed. 86400 is
@@ -446,6 +494,7 @@
     expires: 86400
   become: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - not claude_code_agent_user_enabled
     - ansible_facts.getent_passwd[claude_code_agent_user] is not none
 
@@ -459,7 +508,9 @@
     database: group
     key: "{{ initial_setup_worktree_holders_group }}"
     fail_key: false
-  when: not claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - not claude_code_agent_user_enabled
 
 - name: Take the switched-off agent user out of the worktree holder scan's socket group
   tags: [claude_code]
@@ -471,6 +522,7 @@
       - "{{ initial_setup_worktree_holders_group }}"
   become: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - not claude_code_agent_user_enabled
     - ansible_facts.getent_group[initial_setup_worktree_holders_group] is not none
     - >-
@@ -485,7 +537,9 @@
     database: group
     key: "{{ claude_code_rootq_socket_group }}"
     fail_key: false
-  when: not claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - not claude_code_agent_user_enabled
 
 - name: Take the switched-off agent user out of the root inspector's socket group
   tags: [claude_code]
@@ -497,6 +551,7 @@
       - "{{ claude_code_rootq_socket_group }}"
   become: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - not claude_code_agent_user_enabled
     - ansible_facts.getent_group[claude_code_rootq_socket_group] is not none
     - >-
@@ -509,7 +564,9 @@
   args:
     removes: "/var/lib/systemd/linger/{{ claude_code_agent_user }}"
   become: true
-  when: not claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - not claude_code_agent_user_enabled
 
 # The way out for the clone sync. An expired account does not stop a `User=` service, which
 # runs with no PAM account check, so the units must go or the timer keeps pulling.
@@ -519,7 +576,9 @@
     path: "/etc/systemd/system/{{ claude_code_agent_user }}-clone-sync.timer"
   register: claude_code_agent_clone_sync_timer_file
   become: true
-  when: not claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - not claude_code_agent_user_enabled
 
 # Guarded on the file: systemd refuses to stop a unit it has never heard of.
 - name: Stop and disable the agent clone sync timer when the agent user is switched off
@@ -530,6 +589,7 @@
     state: stopped
   become: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
     - not claude_code_agent_user_enabled
     - claude_code_agent_clone_sync_timer_file.stat.exists
 
@@ -543,5 +603,7 @@
     - clone-sync.timer
     - clone-sync-alert.service
   become: true
-  when: not claude_code_agent_user_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - not claude_code_agent_user_enabled
   notify: Reload systemd for claude_code

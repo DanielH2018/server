@@ -24,6 +24,8 @@ from lib.git_testing import git
 
 TASKS = ANSIBLE / "roles" / "setup" / "claude_code" / "tasks"
 TOKEN = "sentinel-agent-gh-token"
+# daniel-box's claude-code component ships the agent user, so each agent task skips it there.
+PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
 
 
 def tasks(name: str) -> list[dict]:
@@ -39,7 +41,7 @@ def named(task_list: list[dict], name: str) -> dict:
 def test_the_identity_is_given_only_to_an_enabled_agent_user() -> None:
     task = named(tasks("agent.yml"), "Give the agent user its GitHub identity")
     assert task["ansible.builtin.import_tasks"] == "agent_github.yml"
-    assert task["when"] == "claude_code_agent_user_enabled"
+    assert task["when"] == [PACKAGED, "claude_code_agent_user_enabled"]
 
 
 def test_gh_reads_the_token_for_the_agents_own_account() -> None:
@@ -140,7 +142,7 @@ def test_switching_the_agent_user_off_removes_its_token() -> None:
         "path": "{{ claude_code_agent_user_home }}/.config/gh/hosts.yml",
         "state": "absent",
     }
-    assert task["when"] == "not claude_code_agent_user_enabled"
+    assert task["when"] == [PACKAGED, "not claude_code_agent_user_enabled"]
 
 
 def enter_worktree_branch(name: str) -> str:

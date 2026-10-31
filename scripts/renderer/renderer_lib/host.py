@@ -6,7 +6,8 @@
 `nfpm.yaml`, its spec. `write_packages` writes them under `--out`.
 
 A package lists its components, and may carry files and defaults of its own, laid out as a
-component's are. A component directory under `hosts/components/` holds a `component.yml`::
+component's are. A package's `role:` reaches only the package's own files, such as a file whose
+path differs per host. A component directory under `hosts/components/` holds a `component.yml`::
 
     defaults: {name: value}         # beneath group_vars/all.yml (H3, *Component variables*)
     role: nut_host                  # its defaults sit below `defaults`; `role:<t>.j2` is its template
@@ -124,6 +125,7 @@ PACKAGE_KEYS = frozenset(
         "legacy",
         "maintainer_scripts",
         "outputs",
+        "role",
         "tools",
         "units",
         *ARM_KEYS,

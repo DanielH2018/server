@@ -32,6 +32,7 @@ _KEYS = (
     "nut_monitor_password: x\n"
     "homelab_builder_github_token: x\n"
     "gitops_deploy_discord_webhook: x\n"
+    "claude_code_agent_gh_token: x\n"
 )
 
 COMPONENT = REPO / "hosts/components/k3s-restart"

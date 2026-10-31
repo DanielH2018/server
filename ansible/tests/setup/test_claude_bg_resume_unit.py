@@ -76,7 +76,8 @@ def test_the_role_enables_it_for_the_next_boot_and_never_starts_it() -> None:
     assert "state:" not in body, (
         "starting or restarting the unit on an apply would respawn sessions mid-day"
     )
-    assert "when: claude_code_bg_resume_enabled" in body
+    assert "- claude_code_bg_resume_enabled\n" in body
+    assert "- inventory_hostname not in claude_code_packaged_hosts['bg_resume']" in body
 
 
 def test_the_flag_also_takes_it_out() -> None:

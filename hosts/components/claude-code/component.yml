@@ -1,10 +1,12 @@
-# daniel-server's Claude Code host (H7.39, docs/target-architecture/host/h7-delete-ansible.md).
-# Until H7.39 the claude_code role installed all of it; the role now ends on daniel-server
-# (`meta: end_role` in its tasks/main.yml), and daniel-box keeps the role until H7.40.
+# The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40's first slice,
+# docs/target-architecture/host/h7-delete-ansible.md). The claude_code role ends on daniel-server
+# (`meta: end_role` in its tasks/main.yml). On daniel-box it skips each subject listed here through
+# `claude_code_packaged_hosts`, and keeps the rest until H7.40's later slices move them.
 #
 # What it ships, by subject:
-#   - the agent user: the users arm creates `claude` with its live uid, and
-#     homelab-claude-agent.service gives it its groups, home, identity and clone;
+#   - the agent user: homelab-claude-agent.service gives it its groups, home, identity and clone.
+#     Each host's package.yml declares the user to the users arm, because its uid differs per
+#     host, and ships the agent's per-uid login-slice cap;
 #   - the Remote Control host (homelab-claude-rc.service), installed but not enabled while
 #     claude_code_rc_enabled is false, its weekly restart and its failure page;
 #   - the background-session resume at boot, the cgroup metrics timer, and the agent's clone and
@@ -25,7 +27,7 @@
 # until H7.40. dpkg takes each unowned file over at install.
 #
 # Each file, output and enable link carries the `when:` of the role toggle that gated its task,
-# so a toggle set false in daniel-server's host_vars still takes its subject back. The `users:`
+# so a toggle set false in a host's host_vars still takes its subject back. The host's `users:`
 # entry takes no `when:`: to switch the agent off, delete it, and the users arm expires the user.
 #
 # The agent's peer login: daniel-box's agent logs in here as `claude` with a key the role used
@@ -52,9 +54,6 @@ defaults:
   claude_agent_peer_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKVVuTPBnaLKLqpjXXSIozN+t+uzJ2Xq5deus3yau/P claude peers (daniel-box)"
 depends:
   - acl
-users:
-  # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
-  - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
 outputs:
   - src: templates/agent-gh-hosts.yml.j2
     path: /var/lib/claude/.config/gh/hosts.yml
@@ -96,10 +95,10 @@ files:
   - {src: "role:claude-dotfiles-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.timer, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
   # The caps. systemd merges drop-ins by file name across /etc and /usr/lib, so these sort after
   # the Ansible-era claude-*.conf copies and their values govern while those remain. The login
-  # caps cover uid 1000 (the operator) and uid 995 (the agent above).
+  # caps cover the operator while claude_code_login_uids names uid 1000; each host's package.yml
+  # caps its agent's uid.
   - {src: "role:fleet-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf, when: "claude_code_fleet_caps_enabled"}
-  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled"}
-  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-995.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled and claude_code_agent_user_enabled"}
+  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled and 1000 in claude_code_login_uids"}
   # Every user manager on the host reads it, where the role wrote one copy per capped home.
   - {src: "role:pytest-fanout-cap.conf.j2", dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf, when: "claude_code_login_caps_enabled"}
   # The stop and fan-out alerts.

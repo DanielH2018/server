@@ -1917,6 +1917,38 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
       them, so the packaged values govern until then.
 16. **H7.40** stays alone as the second canary host. It carries the artifacts directories'
     `tmpfiles.d` lines and empties `claude_code`.
+    - **Four slices, ruled on 2026-10-30.** A first attempt measured 257 `claude_code` census
+      items left on daniel-box (`setup_census.py --host daniel-box`), 4,565 lines of tasks, 46
+      templates and about 9,100 lines of task-structure tests, which is too large for one PR.
+      The operator ruled that H7.40 lands as four slices, each in its own restart window. The
+      first three keep the role applying to daniel-box, and each adds the subjects it moved to
+      `claude_code_packaged_hosts` in the role's defaults, which every moved task's `when:`
+      names.
+        1. The subjects `hosts/components/claude-code/` already ships for daniel-server,
+           switched on for daniel-box: the Remote Control host, the caps, the alerts, rootq,
+           the clone and dotfiles syncs, and the agent user. The agent's uid differs per host
+           (995 on daniel-server, 996 on daniel-box, where 995 is `homelab-builder`), so its
+           `users:` entry and its `user-<uid>.slice.d` drop-in move into each host's
+           `package.yml`. The slice renames the window-test entries for the three timers it
+           ships to their `homelab-*` names (#6672). The agent's GitHub identity moves here
+           rather than in slice 3: `claude-agent-setup` and the component's gh output already
+           write every file `agent_github.yml` wrote, so leaving the task would make two
+           writers of the agent's gh login.
+        2. The lander and every `claude-land@` caller, the server-batch lander,
+           pipeline-timeline, memory-sync and the takeover-check sudoers grant. It renames the
+           fourth window-test entry, `claude-memory-sync.timer`.
+        3. Triage, then the agent's home: the peer key, the ssh config, the operator config,
+           the memory seed, the homelab-ui login and the browser oneshot, with the *What goes
+           where* amendment below.
+        4. The artifacts `tmpfiles.d` lines and the two crons. Then the sources move into
+           `hosts/components/claude-code/`, the role empties, and the Ansible-only tests are
+           deleted.
+    - **The homelab-ui browser toolchain is a component oneshot, ruled on 2026-10-30.** The
+      agent's pinned Node and its sha256, `@playwright/mcp`, its Chromium, and the `claude mcp
+      add homelab-ui` registration with its off path move into the `claude-code` component as
+      a oneshot unit run as the agent. Its pins sit in the component's defaults, so Renovate
+      and `asset_pins.py --refresh node` keep working. It does not go to chezmoi. Slice 3
+      amends the `claude_code` row of *What goes where* to say so.
 17. **H7.41 splits in two, ruled on 2026-10-24.** Wherever another row or entry names H7.41
     as a dependency, it means H7.41b. H7.41a is tooling and spec amendments and moves no
     builder unit or task. H7.41b is the builder move, and it waits for H7.41a live on
