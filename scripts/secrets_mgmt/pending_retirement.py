@@ -61,6 +61,12 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # its bridge row. A7's token PR retires the key a week after Cutover-b and deletes this
         # entry with it.
         "monitor_bridge_k8s_workloads_push_token",
+        # M6 batch B3's Cutover-1a deleted the GitHub Ruleset Drift and GitHub Interaction Limit
+        # tiles. The cluster file holds both keys for the tile render, and the two gitops_deploy
+        # scripts render them from secrets.yml until B3's Cutover-2 drops the push. B3's token PR
+        # retires the keys a week after Cutover-2 and deletes these two entries with it.
+        "ruleset_drift_push_token",
+        "interaction_limit_push_token",
         # M6 batch B6a's Cutover-1a deleted the Artifacts Peer Sync and k3s Telemetry OTLP Door
         # tiles. The two host crons keep pushing into the deleted tokens until Cutover-2 drops the
         # push. B6a's token PR retires the keys a week after Cutover-1b and deletes these two
