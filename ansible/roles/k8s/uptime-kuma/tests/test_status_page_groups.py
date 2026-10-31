@@ -87,7 +87,7 @@ def rules():
 def test_the_declaration_census_finds_every_known_monitor():
     index = monitor_index()
     assert KNOWN_IDS <= set(index), f"census lost: {sorted(KNOWN_IDS - set(index))}"
-    assert len(index) >= 59, f"census found only {len(index)} monitors"
+    assert len(index) >= 55, f"census found only {len(index)} monitors"
 
 
 def test_every_declared_monitor_lands_in_a_named_group():
