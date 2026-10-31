@@ -228,7 +228,7 @@ def bridge_push_tokens() -> set[str]:
         for key, value in bridge_env().items()
         if key.startswith("KUMA_PUSH_") and value
     }
-    assert len(tokens) >= 22, f"the bridge's push-token census went thin: {len(tokens)}"
+    assert len(tokens) >= 21, f"the bridge's push-token census went thin: {len(tokens)}"
     return tokens
 
 

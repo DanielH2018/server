@@ -1,11 +1,10 @@
-"""The numbers in hosts.yaml equal the bridge limits they ported, and the Pi's equal its env keys.
+"""The numbers in hosts.yaml equal the bridge limits they ported.
 
 M6's batch A1 ported `disk`, `memory`, `host_temp`, `ups` and the Prometheus half of
 `pi_pressure` into `hosts.yaml`. A rule file is never Jinja, so each threshold is a literal.
-Cutover-a2 deleted the first four rows and their env keys, so `RETIRED_ENV` holds their values as
-literals: an edit to a rule limit fails here until this table agrees, which makes the change a
-reviewed decision. The `pi_pressure` row stays until B8, so the `PI_*` limits still come from the
-bridge's rendered env.
+Cutover-a2 deleted the first four rows and their env keys, and B8's Cutover-a2 deleted the
+`pi_pressure` row and its `PI_*` keys, so `RETIRED_ENV` holds their values as literals: an edit to
+a rule limit fails here until this table agrees, which makes the change a reviewed decision.
 
 Run: uv run pytest ansible/tests/services/test_host_check_rule_literals.py
 """
@@ -54,8 +53,8 @@ SECONDS_PER_CYCLE = 300
 # page. The `hosts` rules have no rule for it. `claude_uid_processes` is still written, and
 # `test_claude_cgroup_metrics.py` holds the writer.
 #
-# The values of the env keys that Cutover-a2 deleted from monitor-bridge's
-# templates/config/env.yaml.j2, as they stood. The bridge's streak counts times 300s are the
+# The values of the env keys that the two Cutover-a2 PRs (A1's and B8's) deleted from
+# monitor-bridge's templates/config/env.yaml.j2, as they stood. The bridge's streak counts times 300s are the
 # rules' `for:`, and the floors are the census rules' counts.
 RETIRED_ENV = {
     "DISK_MOUNTPOINTS": "/,/boot,/boot/efi",
@@ -76,6 +75,10 @@ RETIRED_ENV = {
     "UPS_CONSECUTIVE": "2",
     "HOST_ORIGINS_MIN": "2",
     "CLAUDE_CGROUP_EXPECTED": "daniel-box=claude-rc+fleet,daniel-server=fleet",
+    # B8's `pi_pressure` row: load5 per core, MemAvailable in MB and a device's fill percent.
+    "PI_LOAD_MAX": "1.5",
+    "PI_MEM_MIN_MB": "50",
+    "PI_DISK_MAX_PCT": "90",
 }
 
 

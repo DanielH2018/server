@@ -25,7 +25,7 @@ from bridge.types import Check
 from gates import Gates
 
 
-def _silence(pushes, ran, names=("pi_pressure",), probe_prometheus=None, **env):
+def _silence(pushes, ran, names=("host_packages",), probe_prometheus=None, **env):
     """STATE the registry, the I/O and the environment, so main() runs touching nothing live.
 
     Returns the `checks=` / `gate_config=` / `sources=` / `sink=` / `env=` / `exposition=` keyword
@@ -89,8 +89,8 @@ def test_no_arguments_means_loop_forever_and_push(cfg):
 
     with pytest.raises(_Slept):
         cli.main([], sleep=_sleep, **wired)
-    assert ran == ["pi_pressure"]
-    assert ("tok_pi_pressure", True, "pi_pressure ok") in pushes
+    assert ran == ["host_packages"]
+    assert ("tok_host_packages", True, "host_packages ok") in pushes
 
 
 def test_the_loop_publishes_the_deploy_pipeline_gauges_after_the_checks_push():
@@ -103,7 +103,7 @@ def test_the_loop_publishes_the_deploy_pipeline_gauges_after_the_checks_push():
         pass
 
     def _sleep(seconds):
-        assert ("tok_pi_pressure", True, "pi_pressure ok") in pushes
+        assert ("tok_host_packages", True, "host_packages ok") in pushes
         raise _Slept
 
     with pytest.raises(_Slept):
@@ -159,8 +159,8 @@ def test_once_runs_exactly_one_cycle_and_returns_zero():
         )
         == 0
     )
-    assert ran == ["pi_pressure"]
-    assert ("tok_pi_pressure", True, "pi_pressure ok") in pushes
+    assert ran == ["host_packages"]
+    assert ("tok_host_packages", True, "host_packages ok") in pushes
 
 
 def test_dry_run_evaluates_every_check_and_pushes_nothing():
@@ -172,7 +172,7 @@ def test_dry_run_evaluates_every_check_and_pushes_nothing():
     pushes, ran = [], []
     wired = _silence(pushes, ran)
     assert cli.main(["--once", "--dry-run"], **wired) == 0
-    assert ran == ["pi_pressure"]
+    assert ran == ["host_packages"]
     assert pushes == []
 
 
@@ -183,13 +183,13 @@ def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypat
     otherwise be untested — and it is the branch that decides which Kuma monitor a result
     reaches. `os.environ` carries a DIFFERENT token for the same monitor, so a build_checks
     reading the process environment instead of its argument pushes to the wrong monitor and this
-    test sees it. `--check pi_pressure` rather than CHECKS_ONLY, because CHECKS_ONLY is strict about
+    test sees it. `--check host_packages` rather than CHECKS_ONLY, because CHECKS_ONLY is strict about
     naming the gate and `--check` unions it in.
     """
     pushes, ran = [], []
-    wired = _silence(pushes, ran, KUMA_PUSH_PI_PRESSURE="from_the_argument")
-    monkeypatch.setenv("KUMA_PUSH_PI_PRESSURE", "from_os_environ")
-    argv = ["--once", "--check", "pi_pressure"]
+    wired = _silence(pushes, ran, KUMA_PUSH_HOST_PACKAGES="from_the_argument")
+    monkeypatch.setenv("KUMA_PUSH_HOST_PACKAGES", "from_os_environ")
+    argv = ["--once", "--check", "host_packages"]
     assert (
         cli.main(
             argv,
@@ -211,22 +211,22 @@ def test_check_flag_is_repeatable_and_filters_like_checks_only(cfg):
     # The unnamed third entry is what makes this test discriminating. With only the two named
     # checks registered, a --check that was parsed and then never threaded into run_once()
     # produces exactly the same `ran` list, because an empty CHECKS_ONLY enables everything.
-    wired = _silence(pushes, ran, names=("pi_pressure", "host_packages", "scrutiny"))
+    wired = _silence(pushes, ran, names=("host_packages", "n8n", "scrutiny"))
     cfg = replace(cfg, CHECKS_ONLY=frozenset(), CHECKS_SKIP=frozenset())
-    # No need to also name `prometheus`: pi_pressure and host_packages are PROM_DEPENDENT, and
-    # expand_gates_for_cli unions their gate in automatically (see the dedicated test below for
+    # No need to also name `prometheus`: host_packages is PROM_DEPENDENT, and
+    # expand_gates_for_cli unions its gate in automatically (see the dedicated test below for
     # the regression this guards against).
-    argv = ["--once", "--dry-run", "--check", "pi_pressure", "--check", "host_packages"]
+    argv = ["--once", "--dry-run", "--check", "host_packages", "--check", "n8n"]
     assert cli.main(argv, **wired) == 0
-    assert sorted(ran) == ["host_packages", "pi_pressure"]
+    assert sorted(ran) == ["host_packages", "n8n"]
     assert "scrutiny" not in ran
 
 
 def test_check_flag_unions_in_the_gate_a_named_check_depends_on(cfg):
-    """`--check pi_pressure` alone must not trip the "gate disabled under its dependents" refusal.
+    """`--check host_packages` alone must not trip the "gate disabled under its dependents" refusal.
 
-    pi_pressure is PROM_DEPENDENT. `--check` unions in the gate a named check depends on
-    automatically (expand_gates_for_cli), so naming only pi_pressure does not leave `prometheus` out of
+    host_packages is PROM_DEPENDENT. `--check` unions in the gate a named check depends on
+    automatically (expand_gates_for_cli), so naming only host_packages does not leave `prometheus` out of
     `only` and trip validate_check_filter's refusal to start with a gate off under an enabled
     dependent. CHECKS_ONLY below stays strict.
     """
@@ -234,12 +234,12 @@ def test_check_flag_unions_in_the_gate_a_named_check_depends_on(cfg):
     wired = _silence(
         pushes,
         ran,
-        names=("pi_pressure", "host_packages"),
+        names=("host_packages", "n8n"),
         probe_prometheus=mk(ran, "prometheus"),
     )
-    assert cli.main(["--once", "--dry-run", "--check", "pi_pressure"], **wired) == 0
-    assert sorted(ran) == ["pi_pressure", "prometheus"]
-    assert "host_packages" not in ran
+    assert cli.main(["--once", "--dry-run", "--check", "host_packages"], **wired) == 0
+    assert sorted(ran) == ["host_packages", "prometheus"]
+    assert "n8n" not in ran
 
 
 def test_checks_only_env_keeps_the_strict_gate_contract():
@@ -252,7 +252,7 @@ def test_checks_only_env_keeps_the_strict_gate_contract():
     where `load_config` runs — narrowing a Config the test built would not reach it.
     """
     pushes, ran = [], []
-    wired = _silence(pushes, ran, CHECKS_ONLY="pi_pressure")
+    wired = _silence(pushes, ran, CHECKS_ONLY="host_packages")
     assert cli.main(["--once"], **wired) == 2
     assert ran == []
 
@@ -272,7 +272,7 @@ def test_a_gate_disabled_under_its_dependents_exits_two():
     """
     pushes, ran = [], []
     wired = _silence(pushes, ran)
-    assert cli.main(["--once", "--check", "host_packages"], **wired) == 2
+    assert cli.main(["--once", "--check", "scrutiny"], **wired) == 2
     assert ran == []
 
 
@@ -297,11 +297,11 @@ def test_a_rendered_key_missing_from_the_env_is_recorded_rather_than_defaulted()
     """A key the pod environment renders has no Python default since #3659, so its absence is a
     config fault main() reports, never a quiet fall back to a second copy of the value."""
     env = bridge_env()
-    del env["PI_LOAD_MAX"]
+    del env["SCRUTINY_MAX_AGE_H"]
     cfg = load_config(env)
-    assert cfg.PI_LOAD_MAX == 0
-    assert [p for p in cfg.CONFIG_PROBLEMS if p.startswith("PI_LOAD_MAX ")] == [
-        "PI_LOAD_MAX is unset; templates/config/env.yaml.j2 renders it, so this env "
+    assert cfg.SCRUTINY_MAX_AGE_H == 0
+    assert [p for p in cfg.CONFIG_PROBLEMS if p.startswith("SCRUTINY_MAX_AGE_H ")] == [
+        "SCRUTINY_MAX_AGE_H is unset; templates/config/env.yaml.j2 renders it, so this env "
         "is not the one the pod gets"
     ]
 
@@ -335,7 +335,7 @@ def test_a_malformed_http_timeout_reaches_the_same_report(monkeypatch):
 
 def test_main_reports_config_problems_and_exits_two(capsys):
     pushes, ran = [], []
-    wired = _silence(pushes, ran, PI_LOAD_MAX="ninety")
+    wired = _silence(pushes, ran, SCRUTINY_MAX_AGE_H="ninety")
     assert cli.main(["--once"], **wired) == 2
     assert ran == []
-    assert "PI_LOAD_MAX" in capsys.readouterr().err
+    assert "SCRUTINY_MAX_AGE_H" in capsys.readouterr().err

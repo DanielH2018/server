@@ -1,143 +1,21 @@
-"""Edge checks for monitor-bridge: daniel-pi and the internet link.
-
-Covers the Pi's resource pressure with the published-port arm folded into it, and
-speedtest-tracker's newest result row.
+"""Edge checks for monitor-bridge: speedtest-tracker's newest result row.
 
 Reads config as
-`cfg.X` and its streak counters as `src.state` (`bridge.streaks.State`). Every Prometheus and HTTP query goes through the `src` argument
-(`bridge.sources.Sources`), which a test replaces with a `FakeSources`. The verdicts it
-from-imports from verdicts.host are patched on THIS module, where they are bound. The TCP prober is an ARGUMENT rather than a
-module global a test patches — `check_pi_pressure` and `with_pi_ports` both take `tcp_open`,
-defaulting to `_tcp_open`, so a test injects a fake port map by calling them. Rule and
-enforcement: bridge/config.py's header.
-"""
+`cfg.X` and its streak counters as `src.state` (`bridge.streaks.State`). Every HTTP query goes
+through the `src` argument (`bridge.sources.Sources`), which a test replaces with a `FakeSources`.
+The verdict it from-imports from verdicts.host is patched on THIS module, where it is bound. Rule
+and enforcement: bridge/config.py's header.
 
-import socket
-from collections.abc import Callable
+The Pi's resource pressure and published-port arm are rules, not checks: the `hosts` rules
+(`PiLoadHigh`, `PiMemoryLow`, `PiDiskFull`, `PiFilesystemReadOnly`, `PiMetricsMissing`) and
+`PiPortDead` page them through Alertmanager.
+"""
 
 from bridge.config import Config
 from bridge.sources import Sources
 import bridge.streaks
 from bridge.types import as_object, as_object_list
-from verdicts.host import (
-    pi_ports_verdict,
-    pi_pressure,
-    speedtest_verdict,
-)
-
-# The SD card's root and its firmware partition. Anchored by PromQL, so `/var/hdd.log` (the
-# root's second mount) and log2ram's tmpfs are out. Both read 0 across 27 days of retention
-# measured 2026-09-26, and fstab mounts both `defaults`, so the arm starts green.
-PI_READONLY_MOUNTS = "/|/boot/firmware"
-
-
-def _tcp_open(host: str, port: int, timeout: float) -> bool:
-    """True when something accepts a TCP connection on host:port."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
-def with_pi_ports(
-    cfg: Config,
-    streaks: dict[str, int],
-    ok: bool,
-    msg: str,
-    tcp_open: Callable[[str, int, float], bool] = _tcp_open,
-) -> tuple[bool, str]:
-    """Fold the published-port arm into the Pi verdict, a dead port winning the message.
-
-    Folded into this monitor rather than given its own for the reason recorded at with_ha_ban:
-    a new Kuma monitor costs a new push token in SOPS. This monitor already owns "the Pi is
-    unhealthy", and a service that stopped listening is that.
-
-    # DECIDED: TCP connect is the whole signal. Until 2026-09-18 a dead port was attributed
-    # to its container's Docker state through glances' /api/4/containers, fetched only after
-    # the connect failed — measured 2026-08-27 that endpoint took 4.43s and then TIMED OUT at
-    # the 10s HTTP_TIMEOUT on the very next call, so polling it every cycle would have left
-    # the arm failing open most of the time. glances retired (#2004) and nothing the cluster
-    # can reach serves that view (docker-proxy publishes no port), so the verdict names the
-    # port and both causes and the operator reads `docker ps` on the Pi. The verdict never
-    # depended on the attribution, so the arm loses a diagnosis and keeps its page.
-    # DECIDED: the message leads with the dead ports when the arm fires, because
-    # "pi_pressure DOWN" otherwise pages someone to look at load and memory when the fault is
-    # neither. Same shape as with_ha_ban putting the ban first.
-    # DECIDED: a down_streak, unlike with_ha_ban's arm. A Pi deploy recreates containers, so
-    # their ports are legitimately closed for a few seconds and a single cycle can read dead.
-    # A detached container persists until someone recreates it, so it survives the grace.
-    # DECIDED: this arm rides inside a PROM_DEPENDENT check since 2026-09-18, so a Prometheus
-    # outage or a dead Pi node_exporter skips the port probes with the pressure arms. Both
-    # cases already page (Prometheus Reachable / Scrape Targets), and the Kuma HTTP monitor
-    # on wg-easy still watches the one Pi port a person uses. A monitor of its own would
-    # cost a push token in SOPS, the reason the arm was folded in here to begin with.
-    """
-    if not cfg.PI_PUBLISHED_PORTS or not cfg.PI_HOST:
-        return ok, msg
-    dead = [
-        (name, port)
-        for name, port in cfg.PI_PUBLISHED_PORTS
-        if not tcp_open(cfg.PI_HOST, port, cfg.PI_PORT_TIMEOUT)
-    ]
-    arm_ok, arm_msg = pi_ports_verdict(dead, len(cfg.PI_PUBLISHED_PORTS))
-    if arm_ok:
-        streaks["pi_ports"] = 0
-        return ok, "%s, %s" % (msg, arm_msg)
-    streaks["pi_ports"], arm_ok, arm_msg = bridge.streaks.down_streak(
-        streaks.get("pi_ports", 0),
-        cfg.PI_PORTS_CONSECUTIVE,
-        arm_msg,
-        "deploy grace",
-    )
-    if arm_ok:
-        return ok, "%s, %s" % (msg, arm_msg)
-    return False, "%s | %s" % (arm_msg, msg)
-
-
-def check_pi_pressure(
-    cfg: Config, src: Sources, tcp_open: Callable[[str, int, float], bool] = _tcp_open
-) -> tuple[bool, str]:
-    """Swap-thrash / overload early warning for the memory-constrained Pi.
-
-    Reads the Pi's node-exporter series off Prometheus, selected by `origin=PI_ORIGIN` (the
-    `node-pi` scrape job). Empty PI_ORIGIN -> disabled (stays up), like check_n8n without an
-    API key. An unreachable Prometheus raises, which the `prometheus` gate suppresses before
-    it reaches here; a series that is absent while Prometheus answers pages, because a Pi
-    whose exporter stopped reporting is a Pi nothing is watching.
-
-    Filesystems are keyed by block device rather than mountpoint — the SD card is mounted
-    twice (`/` and `/var/hdd.log`) and one full device is one problem. tmpfs is excluded:
-    log2ram's 128 MiB `/var/log` fills and flushes by design.
-
-    The read-only arm is keyed by mountpoint instead, over PI_READONLY_MOUNTS, and reads the
-    value unfiltered so the healthy message can name the mounts it saw rw.
-    """
-    if not cfg.PI_ORIGIN:
-        return True, "pi monitoring disabled (no PI_ORIGIN)"
-    sel = 'origin="%s"' % cfg.PI_ORIGIN
-    load5 = src.prom_scalar("node_load5{%s}" % sel)
-    cores = src.prom_scalar('count(node_cpu_seconds_total{%s,mode="idle"})' % sel)
-    avail = src.prom_scalar("node_memory_MemAvailable_bytes{%s}" % sel)
-    fs_sel = '%s,fstype!="tmpfs"' % sel
-    disk = src.prom_vector(
-        "max by (device) (100 * (1 - node_filesystem_avail_bytes{%s}"
-        " / node_filesystem_size_bytes{%s}))" % (fs_sel, fs_sel),
-    )
-    readonly = src.prom_vector(
-        'node_filesystem_readonly{%s,mountpoint=~"%s"}' % (sel, PI_READONLY_MOUNTS),
-    )
-    per_core = load5 / cores if load5 is not None and cores else None
-    ok, msg = pi_pressure(
-        per_core,
-        avail,
-        {labels.get("device", "?"): pct for labels, pct in disk},
-        {labels.get("mountpoint", "?"): ro for labels, ro in readonly},
-        cfg.PI_LOAD_MAX,
-        cfg.PI_MEM_MIN_MB,
-        cfg.PI_DISK_MAX_PCT,
-    )
-    return with_pi_ports(cfg, src.state.down_streaks, ok, msg, tcp_open)
+from verdicts.host import speedtest_verdict
 
 
 def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:

@@ -175,7 +175,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
     PROM_URL = _env("PROMETHEUS_URL").rstrip("/")
 
     return Config(
-        **vars(host_config(_env, _int, _num, _env_file, problems)),
+        **vars(host_config(_env, _int, _num, _env_file)),
         **vars(service_config(_env, _int, _num, _env_file)),
         **vars(cluster_config(_env, _int, _num)),
         **vars(io_config(_env, _int, _num, _env_file, INTERVAL, problems)),

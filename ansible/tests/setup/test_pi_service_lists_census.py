@@ -9,8 +9,8 @@ other must change nothing a reader renders. This census fails on three condition
 - a name appears in both keys;
 - a `compose_services` entry has no legacy entry for its Ansible-era compose file in the Pi
   package;
-- one of the three cluster readers (monitor-bridge, observability, artifacts) or the recovery
-  heartbeat's script renders differently after any one entry moves.
+- one of the two cluster readers (observability, artifacts) or the recovery heartbeat's script
+  renders differently after any one entry moves.
 
 The cluster readers render twice. One render is `_k8s_render`'s, which builds `hostvars` with
 `lib.render_context`. The other is C1's renderer (`renderer_lib/cluster.py:render_tag`) in
@@ -28,6 +28,7 @@ import shutil
 import pytest
 import yaml
 from _k8s_render import render_texts
+from _role_census import role_dirs
 from lib import yaml_fast
 from lib.render_context import REPO_INVENTORY
 from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO
@@ -39,12 +40,12 @@ from renderer.renderer_lib.placeholders import placeholder_vars
 HOST = "daniel-pi"
 # The hosts a reader's `hostvars` names: the Pi's lists, and the cluster's own addresses.
 HOSTS = (HOST, "daniel-box", "daniel-server")
-READERS = ("monitor-bridge", "observability", "artifacts")
-BRIDGE = frozenset({"monitor-bridge"})
+READERS = ("observability", "artifacts")
+OBSERVABILITY = frozenset({"observability"})
 RECOVERY_SCRIPT = "/usr/lib/homelab/pi-recovery-health"
 # Named members the census must find, so a census that read neither key would fail.
 MUST_FIND = {"docker-proxy", "alloy"}
-PUBLISHED_PORTS = "PI_PUBLISHED_PORTS"
+PI_PORTS_JOB = "blackbox-pi-ports"
 
 
 def host_doc(host: str) -> dict:
@@ -140,22 +141,35 @@ def recovery_script(tmp_path, inventory=REPO_INVENTORY) -> bytes:
 
 
 def published_ports(texts) -> str:
-    """monitor-bridge's `PI_PUBLISHED_PORTS` value, from the pod environment in its Deployment.
+    """The `service:port` pairs of observability's `blackbox-pi-ports` job, comma-joined.
 
-    The Deployment renders the variable as an `- name:` line and a `value:` line after it.
+    Read from the rendered `prometheus.yml`: one target per Pi container with a `port`, labelled
+    with the container's name.
     """
     values = set()
     for text in texts:
-        lines = [line.strip() for line in text.splitlines()]
-        for at, line in enumerate(lines):
-            if line == f"- name: {PUBLISHED_PORTS}":
-                values.add(lines[at + 1])
+        for doc in yaml_fast.safe_load_all(text):
+            if not doc or doc.get("kind") != "ConfigMap":
+                continue
+            config = yaml_fast.safe_load(
+                doc.get("data", {}).get("prometheus.yml", "{}")
+            )
+            for job in config.get("scrape_configs", []):
+                if job["job_name"] != PI_PORTS_JOB:
+                    continue
+                values.add(
+                    ",".join(
+                        f"{item['labels']['service']}:{target.rpartition(':')[2]}"
+                        for item in job["static_configs"] or []
+                        for target in item["targets"]
+                    )
+                )
     (value,) = values
     return value
 
 
-def bridge_texts(rendered: dict) -> list[str]:
-    return [text for key, text in rendered.items() if "monitor-bridge" in key]
+def observability_texts(rendered: dict) -> list[str]:
+    return [text for key, text in rendered.items() if "observability" in key]
 
 
 def test_no_name_is_in_both_lists():
@@ -191,12 +205,12 @@ def test_the_census_reads_both_keys_and_finds_the_named_members():
     doc = host_doc(HOST)
     assert set(doc) >= {"containers_list", "compose_services"}
     assert MUST_FIND <= {e["name"] for e in sum(pi_lists(doc), [])}
-    # Each render produced monitor-bridge's value, so an empty render cannot pass the moves below.
+    # Each render produced observability's value, so an empty render cannot pass the moves below.
     assert "alloy:12345" in published_ports(
-        bridge_texts(ansible_render(doc, only=BRIDGE))
+        observability_texts(ansible_render(doc, only=OBSERVABILITY))
     )
     assert "alloy:12345" in published_ports(
-        bridge_texts(c1_render(doc, tags=("monitor-bridge",)))
+        observability_texts(c1_render(doc, tags=("observability",)))
     )
 
 
@@ -222,20 +236,23 @@ def test_a_move_changes_no_render(name, unmoved, tmp_path):
 
 
 def test_a_reader_of_containers_list_alone_is_flagged(tmp_path):
-    """REJECT: a monitor-bridge that reads `containers_list` alone renders differently after a move.
+    """REJECT: an observability that reads `containers_list` alone renders differently after a move.
 
-    The fixture is a copy of the role whose env template drops the second key. Both renders
-    must see the move, or the equality above proves nothing about them.
+    The fixture is a copy of the role whose Pi job drops the second key. Only C1's render reads
+    a role from the fixture's `roles` directory; `_k8s_render` reads the real tree, so the same
+    rejection for that render is `test_a_publisher_in_either_key_is_still_watched` in
+    `ansible/tests/services/test_pi_publishing_containers.py`.
     """
-    # `ansible/roles/k8s/`: the plane in the path picks the host a role renders for, and the
-    # Deployment reads the env template through `playbook_dir`.
+    # `ansible/roles/k8s/`: the plane in the path picks the host a role renders for.
     playbook = tmp_path / "ansible"
     roles = playbook / "roles" / "k8s"
-    shutil.copytree(K8S_ROLES / "monitor-bridge", roles / "monitor-bridge")
-    # The env template reads the updater units from `../hosts` to size the lag grace (#6530).
-    for unit in ("packages/homelab-updater/units", "daniel-pi/units"):
-        shutil.copytree(REPO / "hosts" / unit, tmp_path / "hosts" / unit)
-    template = roles / "monitor-bridge" / "templates" / "config" / "env.yaml.j2"
+    shutil.copytree(K8S_ROLES / "observability", roles / "observability")
+    # The role reads files of its siblings through `playbook_dir`, so every other path resolves to
+    # the real tree.
+    for sibling in role_dirs(K8S_ROLES):
+        if sibling.name != "observability":
+            (roles / sibling.name).symlink_to(sibling)
+    template = roles / "observability" / "templates" / "prometheus.yaml.j2"
     source = template.read_text()
     second = " + (hostvars['daniel-pi'].compose_services | published_ports)"
     assert second in source
@@ -243,11 +260,7 @@ def test_a_reader_of_containers_list_alone_is_flagged(tmp_path):
     fixture = {"playbook_dir": str(playbook)}
     packaged_pi, listed_pi = host_doc(HOST), reverted("wg-easy")
 
-    after = ansible_render(packaged_pi, BRIDGE, fixture)
-    assert after != ansible_render(listed_pi, BRIDGE, fixture)
-    assert "wg-easy:51821" not in published_ports(bridge_texts(after))
-
-    tags = ("monitor-bridge",)
+    tags = ("observability",)
     after = c1_render(packaged_pi, roles, tags, fixture)
     assert after != c1_render(listed_pi, roles, tags, fixture)
-    assert "wg-easy:51821" not in published_ports(bridge_texts(after))
+    assert "wg-easy:51821" not in published_ports(observability_texts(after))

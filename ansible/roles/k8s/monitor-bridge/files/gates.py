@@ -68,13 +68,13 @@ PROM_DEPENDENT = _members("prometheus")
 # publishes from its textfile directory, so a dead exporter makes the series absent, and the row
 # pages on an absent series. Scrape Targets already names the dead exporter.
 #
-# The Pi scrapes under its OWN job: `node-pi` for daniel-pi, `node` for daniel-server and
-# daniel-box. This map is keyed by the Prometheus job, so pi_pressure sits under `node-pi`. It
-# reads the Pi's node_* series directly (since 2026-09-18, #2004) and pages when they are absent.
-# B8 deletes that entry with the row.
+# The Pi scrapes under its OWN job, `node-pi`, and no bridge row reads its series. M6 batch B8
+# moved pi_pressure to the `hosts` rules, whose missing-data arms start from `up == 1`, and to
+# `PiPortDead`, which `inhibit_rules` in alertmanager-secret.yaml.j2 holds while `PiHostDown`
+# fires. The map therefore has no `node-pi` key, and the key guard in
+# tests/test_check_gates_exporters.py names that exemption.
 EXPORTER_DEPENDENT = {
     "node": frozenset({"host_packages"}),
-    "node-pi": frozenset({"pi_pressure"}),
 }
 
 # B2-reachability gate — the second peer of the Prometheus gate (see check_b2_reachable /
