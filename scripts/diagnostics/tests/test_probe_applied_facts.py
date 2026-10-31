@@ -1,8 +1,7 @@
 """Tests for the static values `probe.py applied` reads (`probe_lib/applied_facts.py`).
 
 Each test writes a small role to `tmp_path` and walks it, or runs `run_applied` on it with a
-fake host read. Three walk the real `claude_code` role, whose set_facts #6359 and #6378 name
-and whose ssh-read register #6518 names.
+fake host read.
 """
 
 import hashlib
@@ -13,7 +12,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from diagnostics.probe_lib import applied, applied_hosts, applied_tasks
+from diagnostics.probe_lib import applied, applied_tasks
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
 
 GATED = "- name: Write the gated file\n  ansible.builtin.copy: {content: x, dest: /etc/x/gated}\n"  # fmt: skip
@@ -133,20 +132,6 @@ def test_a_template_reading_a_run_time_name_is_unchecked_never_drift(tmp_path, c
     assert line in capsys.readouterr().out
 
 
-def test_the_real_fanout_alert_rule_renders_from_the_evaluated_agent_list():
-    """#6378's false DRIFT: the rule reads `claude_code_agents_present`, a set_fact."""
-    role = applied.SETUP / "claude_code"
-    ctx = applied.context(role, "daniel-box")
-    # daniel-box's package ships the rule, so the role skips it there. Emptying the map
-    # walks the role as it applied before the package, which is what reads the set_fact.
-    ctx["claude_code_packaged_hosts"] = {
-        k: [] for k in ctx["claude_code_packaged_hosts"]
-    }
-    wants, _ = applied_tasks.expected(role, "daniel-box", ctx)
-    rule = next(w for w in wants if w.path.endswith("50-claude-fanout-alert.rules"))
-    assert rule.sha256 is not None and not rule.unchecked, rule
-
-
 PEER_READ = """\
 - name: Read the key
   delegate_to: localhost
@@ -201,15 +186,3 @@ def test_the_key_host_carries_the_file_in_its_own_read(tmp_path):
     """One read per host when the run compares the key host: `ufw limit ssh` refuses a sixth."""
     code, calls = _peer_run(tmp_path, _AUTHORIZED, {"status": "ok", "text": KEY}, host=None)  # fmt: skip
     assert (code, calls) == (PROBE_OK, ["daniel-box", "daniel-server"])
-
-
-def test_the_real_agent_authorized_keys_renders_from_the_key_hosts_pub():
-    """#6518's UNCHECKED row: daniel-server's walk reads the agent's peer key on daniel-box."""
-    role = applied.SETUP / "claude_code"
-    ctx = applied.context(role, "daniel-server")
-    files = tuple(applied_hosts.task_files("claude_code", role, "daniel-server")["daniel-server"])  # fmt: skip
-    src = ("daniel-box", "/var/lib/claude/.ssh/peers_ed25519.pub")
-    assert applied_tasks.reads(role, "daniel-server", ctx, files) == {src}
-    wants, _ = applied_tasks.expected(role, "daniel-server", ctx, files, {src: KEY})
-    keys = next(w for w in wants if w.path.endswith("/.ssh/authorized_keys"))
-    assert (keys.sha256, keys.unchecked) == (_AUTHORIZED, False)

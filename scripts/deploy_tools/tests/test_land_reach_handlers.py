@@ -29,7 +29,6 @@ from lib.repo_paths import REPO as REPO_ROOT
 # cases below checking nothing.
 _ROLES_WITH_HANDLERS = frozenset(
     {
-        "claude_code",
         "deploy_ui",
         "docker_install",
         "gitops_deploy",

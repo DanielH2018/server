@@ -211,7 +211,7 @@ def test_census_resolves_each_route_a_writer_takes():
     found = census()
     writers = {
         "k3s: cron `Longhorn backup health`",
-        "claude_code: cron `Claude Code telemetry health`",
+        "fake_remux: cron `fake-remux health`",
         "k3s: timer `kuma-check-live-drift`",
         "claude_code: timer `claude-memory-sync`",
         "renovate_agent: timer `renovate-agent`",

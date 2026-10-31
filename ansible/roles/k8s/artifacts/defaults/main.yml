@@ -28,8 +28,8 @@ artifacts_modules:
 
 # hostPath pins the pod to ONE node. daniel-box is the control-plane node, where Ansible
 # runs and where most sessions work, so its tree is the local mount and every other host's
-# is synced in by roles/setup/claude_code's peer sync, which runs on its twin
-# claude_code_artifacts_node. ansible/tests/setup/test_claude_code_artifacts_node_crons.py
+# is synced in by daniel-box's package timer homelab-sync-artifacts, which runs on its twin
+# claude_code_artifacts_node. hosts/lib/tests/test_claude_artifacts_node_timers.py
 # holds this and every other twin below equal to the claude_code key.
 artifacts_k8s_node: "{{ k8s_primary_node }}"
 

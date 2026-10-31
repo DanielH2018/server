@@ -26,7 +26,7 @@ from pathlib import Path
 import jinja2
 from lib.ansible_jinja_env import make_ansible_env
 from lib.proc_testing import run
-from _helpers import SETUP_ROLES, leaf_tasks, load_tasks, load_yaml
+from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
 from _role_census import task_files_by_role
 
 COMMON = SETUP_ROLES / "common"
@@ -37,17 +37,6 @@ TASKS = COMMON / "tasks" / "alert_unit.yml"
 # empty set.
 KNOWN_ALERTS = frozenset(
     {
-        # One per agent user, named after it.
-        "{{ claude_code_agent_user }}-clone-sync",
-        "claude-memory-sync",
-        "claude-rc",
-        # Instanced, and started by a session's StopFailure hook (#6021).
-        "claude-stop",
-        # Instanced, and started by the triage runner itself rather than OnFailure=.
-        "claude-triage-report",
-        # Instanced, and started by a fan-out batch's ExecStopPost= rather than OnFailure=,
-        # so the OnFailure= scan below does not find it.
-        "fanout",
         "gitops-deploy",
         "renovate-agent",
         "renovate-notify",
@@ -122,11 +111,13 @@ def test_every_onfailure_alert_renders_from_the_shared_template() -> None:
     assert not missing, (
         f"alerts no longer wired through alert_unit.yml: {sorted(missing)}"
     )
-    texts = [p.read_text() for p in SETUP_ROLES.glob("*/templates/*.j2")]
-    instanced = {"fanout", "claude-stop", "claude-triage-report"}
-    assert KNOWN_ALERTS - instanced <= onfailure_alerts(texts), (
-        "the OnFailure= scan found too few"
-    )
+    # claude_code's templates are rendered into the host packages, whose alerts ship as units.
+    texts = [
+        p.read_text()
+        for p in SETUP_ROLES.glob("*/templates/*.j2")
+        if p.parents[1].name != "claude_code"
+    ]
+    assert KNOWN_ALERTS <= onfailure_alerts(texts), "the OnFailure= scan found too few"
     assert "homelab-claude-triage-poll" in packaged_alerts()
     unwired = unwired_alerts(texts, set(wired) | packaged_alerts())
     assert not unwired, (
@@ -160,10 +151,7 @@ def test_a_role_local_alert_template_is_flagged() -> None:
 # What a caller's vars may reference, so each one renders as the play would render it.
 CALLER_CONTEXT = {
     "inventory_hostname": "daniel-box",
-    "claude_code_memory_sync_target": "daniel-server",
-    "claude_code_agent_user": "claude",
     "domain": "example.test",
-    **load_yaml(SETUP_ROLES / "claude_code" / "defaults" / "main.yml"),
 }
 
 
@@ -430,23 +418,13 @@ def test_a_gate_that_stamps_attempts_or_loses_its_stamp_is_flagged() -> None:
 
 
 def test_only_a_positive_quiet_period_renders_the_gate() -> None:
-    # The variable is the switch: the five callers that leave it unset keep a page per
-    # failure, and the one that sets it gets the gate.
+    # The variable is the switch: a caller that leaves it unset keeps a page per failure, and
+    # one that sets it gets the gate.
     for minutes in (None, 0):
         unit = _quiet_unit(minutes)
         assert quiet_gate(unit, "widget") is None, f"{minutes!r} rendered a gate"
         assert "ExecCondition" not in service_settings(unit)
     assert quiet_gate(_quiet_unit(1), "widget") is not None, "1 rendered no gate"
-
-
-def test_the_claude_rc_alert_pages_once_per_quiet_period() -> None:
-    # claude-rc.service is the Restart=always parent the gate exists for.
-    resolved = _caller_vars(_wired_alerts()["claude-rc"])
-    minutes = int(resolved.get("alert_unit_quiet_minutes", 0))
-    assert minutes > 0, "the claude-rc alert has no quiet period"
-    unit = _render(UNIT.read_text(), **resolved)
-    assert quiet_gate(unit, "claude-rc") is not None
-    assert f"-mmin -{minutes} " in unit
 
 
 def test_every_notified_handler_exists_in_the_calling_role() -> None:

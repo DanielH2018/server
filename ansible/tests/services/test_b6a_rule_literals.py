@@ -2,10 +2,10 @@
 
 `files/rules/host-checks.yaml` is plain YAML, so `ArtifactsSyncNotReporting` and
 `OtlpDoorNotReporting` each carry the deadline twice: the `> N` of the stale-file arm and the
-`[Ns]` window of the absent_over_time arm. `sync-artifacts.sh` and `telemetry-health.sh`
-render that deadline from their own cron minute. A cron moved to a slower cadence without the
-rule would page on every healthy gap (M1 convention 1). The same pin for disk-health is
-`test_disk_health_rule_literals.py`.
+`[Ns]` window of the absent_over_time arm. `sync-artifacts.sh.j2` and `claude-otel-health.sh.j2`
+render that deadline from the role default their timer's `OnCalendar` also reads. A timer
+moved to a slower cadence without the rule would page on every healthy gap (M1 convention 1).
+The same pin for disk-health is `test_disk_health_rule_literals.py`.
 
 Run: uv run pytest ansible/tests/services/test_b6a_rule_literals.py
 """
@@ -33,7 +33,7 @@ PRODUCERS = {
         "claude_code_artifacts_sync_minute",
     ),
     "OtlpDoorNotReporting": (
-        "telemetry-health.sh.j2",
+        "claude-otel-health.sh.j2",
         "DEADLINE_S",
         "claude_code_telemetry_health_minute",
     ),
@@ -44,7 +44,9 @@ def rendered_deadline(alert: str, minute: str | None = None) -> int:
     """The deadline the alert's producer renders, at the role default or at `minute`."""
     template, name, var = PRODUCERS[alert]
     overrides = None if minute is None else {var: minute}
-    body = render_shell_script("setup", "claude_code", template, overrides=overrides)
+    body = render_shell_script(
+        "components", "claude-code", template, overrides=overrides
+    )
     [deadline] = re.findall(rf"^{name}=(\d+)$", body, re.M)
     return int(deadline)
 
@@ -99,7 +101,7 @@ def test_a_cron_minute_that_is_not_every_n_is_refused_not_rendered_with_a_guess(
     # The shared harness renders an undefined name as STUB, so the refusal only shows under
     # StrictUndefined, which is how Ansible renders.
     template, _name, var = PRODUCERS[alert]
-    path = shell_template_path("setup", "claude_code", template)
+    path = shell_template_path("components", "claude-code", template)
     env = template_env(path.parent, undefined_cls=StrictUndefined)
     _, err = render_or_error(env, path.name, template_context(path, {var: "7,37"}))
     assert err and "_cron_minute_not_every_n" in err, err
