@@ -136,7 +136,9 @@
     group: root
     mode: "0755"
   become: true
-  when: claude_code_fleet_caps_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['caps']
+    - claude_code_fleet_caps_enabled
 
 - name: Bound the whole Claude fleet with one cap on the slice that parents both planes
   tags: [claude_code]
@@ -147,7 +149,9 @@
     group: root
     mode: "0644"
   become: true
-  when: claude_code_fleet_caps_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['caps']
+    - claude_code_fleet_caps_enabled
   notify: Reload systemd for claude_code
 
 # The way out: removing the drop-in drops the shared ceiling, and the unit's own Slice= line
@@ -159,11 +163,14 @@
     path: "/etc/systemd/system/{{ claude_code_fleet_slice }}.d/claude-fleet-caps.conf"
     state: absent
   become: true
-  when: not claude_code_fleet_caps_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['caps']
+    - not claude_code_fleet_caps_enabled
   notify: Reload systemd for claude_code
 
 - name: Install the Remote Control host units
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['remote_control']
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
@@ -179,8 +186,21 @@
 
 - name: Ensure the Remote Control config directory exists
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['remote_control']
   ansible.builtin.file:
     path: /etc/claude-rc
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+# The webhook directory of the alerts the role still installs. Not /etc/claude-rc, which the
+# claude-code component retires on a host whose package ships the Remote Control host.
+- name: Ensure the config directory of the role's remaining alerts exists
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ claude_code_alert_env_dir }}"
     state: directory
     owner: root
     group: root
@@ -194,6 +214,7 @@
 # docs/claude-code-rc-caps.md has that gap (#4618).
 - name: Install the Remote Control failure alert
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['remote_control']
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
   vars:
     alert_unit_name: claude-rc
@@ -207,6 +228,7 @@
 # control-plane node turns out to be a bad idea.
 - name: Set the Remote Control host's running state
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['remote_control']
   ansible.builtin.systemd:
     name: claude-rc.service
     enabled: "{{ claude_code_rc_enabled }}"
@@ -216,6 +238,7 @@
 
 - name: Set the Remote Control restart timer's running state
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['remote_control']
   # Follows the host: a timer restarting a service that is meant to be down is noise, and
   # try-restart would no-op anyway.
   ansible.builtin.systemd:
@@ -235,7 +258,9 @@
       and confirm a session created from the phone reaches a prompt in its own worktree —
       a workspace-trust dialog there cannot be answered remotely. Then set
       claude_code_rc_enabled=true.
-  when: not claude_code_rc_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['remote_control']
+    - not claude_code_rc_enabled
 
 # ── Background-session resume at boot ──────────────────────────────────────────────────
 # Respawns the operator's background sessions the shutdown killed, so their Remote Control
@@ -250,7 +275,9 @@
     group: root
     mode: "0755"
   become: true
-  when: claude_code_bg_resume_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['bg_resume']
+    - claude_code_bg_resume_enabled
 
 - name: Install the background-session resume script
   tags: [claude_code]
@@ -261,7 +288,9 @@
     group: root
     mode: "0644"
   become: true
-  when: claude_code_bg_resume_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['bg_resume']
+    - claude_code_bg_resume_enabled
 
 - name: Install the background-session resume unit
   tags: [claude_code]
@@ -270,7 +299,9 @@
     dest: /etc/systemd/system/claude-bg-resume.service
     mode: "0644"
   become: true
-  when: claude_code_bg_resume_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['bg_resume']
+    - claude_code_bg_resume_enabled
   notify: Reload systemd for claude_code
 
 # Enabled, never started: the unit's job is the next boot. Starting it here would respawn on an
@@ -283,7 +314,9 @@
     enabled: true
     daemon_reload: true
   become: true
-  when: claude_code_bg_resume_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['bg_resume']
+    - claude_code_bg_resume_enabled
 
 # The way out: false disables and removes the unit and the script. Stopping the unit kills no
 # session, because KillMode=process leaves the supervisor it started running.
@@ -293,7 +326,9 @@
     path: /etc/systemd/system/claude-bg-resume.service
   register: claude_code_bg_resume_unit_file
   become: true
-  when: not claude_code_bg_resume_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['bg_resume']
+    - not claude_code_bg_resume_enabled
 
 - name: Stop and disable the background-session resume unit when disarmed
   tags: [claude_code]
@@ -303,6 +338,7 @@
     state: stopped
   become: true
   when:
+    - inventory_hostname not in claude_code_packaged_hosts['bg_resume']
     - not claude_code_bg_resume_enabled
     - claude_code_bg_resume_unit_file.stat.exists
 
@@ -317,7 +353,9 @@
     # The drift-check fragment the stamp at the end of this role writes while armed.
     - /var/lib/homelab/setup-deployed-manifest.d/claude-code-bg-resume
   become: true
-  when: not claude_code_bg_resume_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['bg_resume']
+    - not claude_code_bg_resume_enabled
   notify: Reload systemd for claude_code
 
 # ── Cgroup resource metrics ────────────────────────────────────────────────────────────
@@ -329,6 +367,7 @@
 
 - name: Deploy the cgroup metrics script
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['cgroup_metrics']
   ansible.builtin.copy:
     src: claude-cgroup-metrics.sh
     dest: /usr/local/bin/claude-cgroup-metrics.sh
@@ -339,6 +378,7 @@
 
 - name: Install the cgroup metrics timer units
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['cgroup_metrics']
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
@@ -353,6 +393,7 @@
 
 - name: Enable and start the cgroup metrics timer
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['cgroup_metrics']
   ansible.builtin.systemd:
     name: claude-cgroup-metrics.timer
     enabled: true
@@ -380,7 +421,6 @@
   when: claude_code_memory_sync_enabled
   notify: Reload systemd for claude_code
 
-# Shares claude-rc's webhook file in /etc/claude-rc; rewriting it here changes nothing.
 - name: Install the memory store copy failure alert
   tags: [claude_code]
   when: claude_code_memory_sync_enabled
@@ -389,7 +429,7 @@
     alert_unit_name: claude-memory-sync
     alert_unit_description: Alert when the Claude memory store copy fails
     alert_unit_message: "claude-memory-sync failed on {{ inventory_hostname }}: sessions on {{ claude_code_memory_sync_target }} keep reading a stale memory store. Check `journalctl -u claude-memory-sync`."
-    alert_unit_env_dir: /etc/claude-rc
+    alert_unit_env_dir: "{{ claude_code_alert_env_dir }}"
 
 - name: Enable and start the memory store copy timer
   tags: [claude_code]
@@ -468,7 +508,9 @@
     owner: root
     group: root
   become: true
-  when: claude_code_agents_present | length > 0
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agents_present | length > 0
 
 - name: Build each agent user, or take it back
   tags: [claude_code]
@@ -535,6 +577,7 @@
 # built a user in the same run would otherwise find no uid to cap.
 - name: Cap the login-session slices of every account that starts Claude sessions
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['caps']
   ansible.builtin.import_tasks: login_caps.yml
 
 # The script every agent's clone sync unit runs goes only once no agent is left to run it.
@@ -549,7 +592,9 @@
     # the script removed above, and the setup drift check reports it missing for good.
     - /var/lib/homelab/setup-deployed-manifest.d/claude-code-clone-sync
   become: true
-  when: claude_code_agents_present | length == 0
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agents_present | length == 0
 
 # The same for the script every agent's dotfiles sync unit runs (tasks/agent_dotfiles.yml).
 - name: Remove the dotfiles sync script when no agent user takes the dotfiles
@@ -561,16 +606,20 @@
     - /usr/local/bin/claude-dotfiles-sync.sh
     - /var/lib/homelab/setup-deployed-manifest.d/claude-code-dotfiles-sync
   become: true
-  when: claude_code_agents_with_dotfiles | length == 0
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agents_with_dotfiles | length == 0
 
 # ── The fan-out alert ───────────────────────────────────────────────────────────────────
 - name: Install the fan-out alert, or take it back
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['alerts']
   ansible.builtin.import_tasks: fanout_alert.yml
 
 # ── The session stop alert ──────────────────────────────────────────────────────────────
 - name: Install the session stop alert, or take it back
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['alerts']
   ansible.builtin.import_tasks: stop_alert.yml
 
 # ── The server-batch lander ─────────────────────────────────────────────────────────────
@@ -600,6 +649,7 @@
 # A sudoers-granted, read-only reader of root-only host state: `rootq`.
 - name: Install the root inspector, or take it back
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['rootq']
   ansible.builtin.import_tasks: rootq.yml
 
 # ── Alert-triggered triage ──────────────────────────────────────────────────────────────
@@ -643,35 +693,22 @@
 # Render provenance for manifest-prune-check.sh's stale-script arm: without a stamp, an edit to
 # a rendered file can sit undeployed on this host with every repo-side check green. Last in the
 # role so a failed run leaves the previous checksums rather than claiming these. `import_tasks`,
-# not `include_tasks`: an include renders no fragment.
-- name: Stamp the rendered Remote Control units
+# not `include_tasks`: an include renders no fragment. Its own name, because the claude-code
+# component retires the `claude-code` fragment that also listed the templates it now ships.
+- name: Stamp the rendered units the role still installs
   tags: [claude_code]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
-    stamp_render_name: claude-code
+    stamp_render_name: claude-code-ansible
     stamp_render_templates:
-      - ansible/roles/setup/claude_code/templates/claude-rc.service.j2
       - ansible/roles/setup/common/templates/unit-failure-alert.service.j2
       - ansible/roles/setup/common/templates/alert-webhook.env.j2
-      - ansible/roles/setup/claude_code/templates/claude-rc-restart.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-rc-restart.timer.j2
-      - ansible/roles/setup/claude_code/templates/claude-bg-resume.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-cgroup-metrics.timer.j2
-      - ansible/roles/setup/claude_code/templates/fleet-slice-caps.conf.j2
-      - ansible/roles/setup/claude_code/templates/login-slice-caps.conf.j2
-      - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
       - ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.service.j2
       - ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.timer.j2
       - ansible/roles/setup/claude_code/templates/claude-pipeline-timeline.service.j2
       - ansible/roles/setup/claude_code/templates/claude-pipeline-timeline.timer.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.service.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.timer.j2
-      - ansible/roles/setup/claude_code/templates/claude-clone-sync.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-clone-sync.timer.j2
-      - ansible/roles/setup/claude_code/templates/claude-dotfiles-sync.service.j2
-      - ansible/roles/setup/claude_code/templates/claude-dotfiles-sync.timer.j2
-      - ansible/roles/setup/claude_code/templates/agent-chezmoi-seed.toml.j2
       - ansible/roles/setup/claude_code/templates/claude-land@.service.j2
       - ansible/roles/setup/claude_code/templates/50-claude-land.rules.j2
       - ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2
@@ -689,6 +726,7 @@
 # code?) only sees a copy:-deployed script if it is registered here.
 - name: Record the deployed cgroup metrics script for drift checking
   tags: [claude_code]
+  when: inventory_hostname not in claude_code_packaged_hosts['cgroup_metrics']
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
     stamp_deployed_name: claude-code-cgroup-metrics
@@ -700,7 +738,9 @@
 # arm above that removes the script removes this fragment with it.
 - name: Record the deployed agent clone sync script for drift checking
   tags: [claude_code]
-  when: claude_code_agents_present | length > 0
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agents_present | length > 0
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
     stamp_deployed_name: claude-code-clone-sync
@@ -710,7 +750,9 @@
 
 - name: Record the deployed dotfiles sync script for drift checking
   tags: [claude_code]
-  when: claude_code_agents_with_dotfiles | length > 0
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['agent']
+    - claude_code_agents_with_dotfiles | length > 0
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
     stamp_deployed_name: claude-code-dotfiles-sync
@@ -720,7 +762,9 @@
 
 - name: Record the deployed background-session resume script for drift checking
   tags: [claude_code]
-  when: claude_code_bg_resume_enabled
+  when:
+    - inventory_hostname not in claude_code_packaged_hosts['bg_resume']
+    - claude_code_bg_resume_enabled
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
     stamp_deployed_name: claude-code-bg-resume

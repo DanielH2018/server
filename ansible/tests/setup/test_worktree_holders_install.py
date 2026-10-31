@@ -29,6 +29,8 @@ USERS = "List the worktree holder scan's users"
 ROOT_MAP = "Map each user of the worktree holder scan"
 SUDOERS = "Remove the worktree holder scan's old sudoers rule"
 GROUP = "initial_setup_worktree_holders_group"
+# daniel-box's claude-code component ships the agent user, so the role's agent tasks skip it there.
+PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
 
 PRIMARY = {
     "state": "present",
@@ -281,6 +283,7 @@ def test_a_switched_off_agent_leaves_the_sockets_group():
     members = f"ansible_facts.getent_group[{GROUP}]"
     # The membership read is what keeps a second apply from running gpasswd again.
     assert drop["when"] == [
+        PACKAGED,
         "not claude_code_agent_user_enabled",
         f"{members} is not none",
         f"claude_code_agent_user in {members}[2].split(',')",

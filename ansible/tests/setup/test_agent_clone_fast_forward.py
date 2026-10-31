@@ -195,7 +195,12 @@ def test_the_apply_and_the_timer_run_the_same_script_as_the_agent() -> None:
 
 def test_the_report_fires_when_the_clone_was_left_behind() -> None:
     conditions = named(REPORT)["when"]
-    base = {"claude_code_agent_user_enabled": True, "ansible_check_mode": False}
+    base = {
+        "claude_code_agent_user_enabled": True,
+        "ansible_check_mode": False,
+        "inventory_hostname": "unpackaged-host",
+        "claude_code_packaged_hosts": {"agent": ["daniel-box"]},
+    }
 
     def fires(pull: dict) -> bool:
         return holds(conditions, base | {"claude_code_agent_clone_pull": pull})

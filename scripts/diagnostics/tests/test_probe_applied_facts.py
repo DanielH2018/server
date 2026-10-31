@@ -136,7 +136,13 @@ def test_a_template_reading_a_run_time_name_is_unchecked_never_drift(tmp_path, c
 def test_the_real_fanout_alert_rule_renders_from_the_evaluated_agent_list():
     """#6378's false DRIFT: the rule reads `claude_code_agents_present`, a set_fact."""
     role = applied.SETUP / "claude_code"
-    wants, _ = applied_tasks.expected(role, "daniel-box", applied.context(role, "daniel-box"))  # fmt: skip
+    ctx = applied.context(role, "daniel-box")
+    # daniel-box's package ships the rule, so the role skips it there. Emptying the map
+    # walks the role as it applied before the package, which is what reads the set_fact.
+    ctx["claude_code_packaged_hosts"] = {
+        k: [] for k in ctx["claude_code_packaged_hosts"]
+    }
+    wants, _ = applied_tasks.expected(role, "daniel-box", ctx)
     rule = next(w for w in wants if w.path.endswith("50-claude-fanout-alert.rules"))
     assert rule.sha256 is not None and not rule.unchecked, rule
 

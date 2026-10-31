@@ -24,6 +24,8 @@ CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "agent.yml"
 # Imported by main.yml under one `when:`, so its tasks carry none and agent_tasks() misses them.
 AGENT_GITHUB = SETUP / "claude_code" / "tasks" / "agent_github.yml"
 AGENT_ACCESS = SETUP / "claude_code" / "tasks" / "agent_access.yml"
+# daniel-box's claude-code component ships the agent user, so each agent task skips it there.
+PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
 AGENT_BROWSER = SETUP / "claude_code" / "tasks" / "agent_browser.yml"
 # The file in each role that imports the shared one. claude_code's runs once per agent.
 AGENT_TASKS_FILE = {"renovate_agent": "main.yml", "claude_code": "agent.yml"}
@@ -145,6 +147,7 @@ def test_the_agent_gets_the_read_only_kubeconfig_and_never_prints_it() -> None:
     look = named(tasks(CLAUDE_TASKS), "Look for the operator's read-only kubeconfig")
     assert look["ansible.builtin.stat"]["path"] == copy["src"]
     assert task["when"] == [
+        PACKAGED,
         "claude_code_agent_user_enabled",
         "claude_code_operator_kubeconfig.stat.exists",
     ]
@@ -180,7 +183,7 @@ def test_switching_the_agent_user_off_expires_it_and_on_lifts_the_expiry() -> No
     assert off["ansible.builtin.user"]["expires"] >= 86400
     assert "not claude_code_agent_user_enabled" in off["when"]
     assert on["ansible.builtin.user"]["expires"] == -1
-    assert on["when"] == "claude_code_agent_user_enabled"
+    assert on["when"] == [PACKAGED, "claude_code_agent_user_enabled"]
     removals = [
         t.get("name")
         for t in claude_tasks
