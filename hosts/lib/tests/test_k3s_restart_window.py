@@ -360,6 +360,14 @@ def test_a_role_timer_drops_out_only_once_the_box_package_ships_its_twin():
     assert "claude-rc-restart.timer" not in {s.name for s in role_schedules([], twin)}
 
 
+def test_the_real_box_package_drops_only_the_role_timers_it_ships(box_package):
+    monotonic: list[str] = []
+    role_schedules(monotonic, box_timers(box_package))
+    assert "claude-cgroup-metrics.timer" not in monotonic
+    # Slice 2 moves the memory sync; until then the role's timer must still be checked.
+    assert {"claude-memory-sync.timer", "gitops-deploy.timer"} <= set(monotonic)
+
+
 def test_an_unlisted_monotonic_timer_is_reported():
     monotonic: list[str] = []
     _timer_schedule("fixture.timer", [("OnUnitActiveSec", "10min")], monotonic)
