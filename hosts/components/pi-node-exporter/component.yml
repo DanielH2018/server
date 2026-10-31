@@ -21,8 +21,8 @@
 #   path, so removing the package leaves it in place.
 # - The users arm declares node_exporter at the uid the live Pi holds. The arm compares uids and
 #   creates only a missing user. The live group has gid 986; a rebuilt Pi gets gid equal to uid.
-# - The LAN's 9100 ufw rule (`optimize_pi: node_exporter`) stays an Ansible-era rule that H7.30
-#   declares with the rest of the Pi's ufw rules. The rule persists in ufw when the task goes.
+# - The LAN's 9100 ufw rule is the Pi package's `node-exporter` rule (hosts/daniel-pi/package.yml)
+#   since H7.30, which adopted the Ansible-era rule (`optimize_pi: node_exporter`) in place.
 # - Retired on the live Pi, and left to the next rebuild: /opt/node_exporter-<version>.linux-arm64
 #   and /usr/local/src/node_exporter-<version>.linux-arm64.tar.gz hold about 40 MB of the old
 #   download. Legacy entries remove files, not directories, so the operator removes both by hand.

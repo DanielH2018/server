@@ -1,0 +1,61 @@
+# The weekly maintenance jobs (H7.7d, docs/target-architecture/host/h7-delete-ansible.md). Each was
+# a root cron that initial_setup installed; each is a oneshot service on a timer at the
+# cron's slot here.
+#
+# - homelab-apt-autoremove and homelab-dpkg-purge run the role's host-maintenance.sh, copied in
+#   place through `role: initial_setup` until the last host PR moves it. It writes the textfile
+#   verdict the AptAutoremoveNotReporting and DpkgPurgeNotReporting rules read (#6179).
+# - homelab-reboot pings this host's `weekly-reboot-<host>` Healthchecks.io check, then schedules
+#   the reboot `weekly_reboot_shutdown_delay_minutes` ahead. It refuses while
+#   /run/homelab/validate-failed exists, which reconcile writes when a changed config failed its
+#   validation, so a host never reboots into a config that did not validate. A refusal skips the
+#   ping, so the Healthchecks.io deadman pages.
+# - homelab-docker-prune, on a `has_docker` host, prunes images, containers and build cache older
+#   than a week and pings `<host>-docker-prune` on success. A failed prune pings nothing.
+# - The firmware update is not here yet. Only daniel-box has fwupd, so its PR adds the timer.
+#
+# The schedules render from the variables the old crons read: `weekly_reboot_*` in group_vars,
+# which uptime-kuma's maintenance window also reads, and the role's
+# `initial_setup_docker_prune_cron_*`, which the Healthchecks.io cadences fragment and
+# monitor-bridge read. The Healthchecks.io key arrives as the credential `healthchecks_ping_key`,
+# so each host package lists that key.
+#
+# Each unit sets its Environment= explicitly: a cron line ran with cron's PATH and nothing else.
+#
+# Autonomous-role contract (each job runs with no human in the loop).
+#
+# - Scope / exclusions: reboot this host, remove orphaned packages and the config remnants of
+#   removed ones, and prune unused Docker objects older than a week. None edits the repository, the
+#   cluster or another host.
+# - Mode (explicit and reversible): each timer's enable link arms it; dropping the component, or
+#   `has_docker` for the prune, stops the timer on the install that drops it.
+# - Abort valves: the reboot refuses on reconcile's validation flag; a failed prune leaves its
+#   Healthchecks.io ping unsent.
+# - Required evidence: a `weekly-restart`, `apt-autoremove`, `dpkg-purge` or `docker-prune` line in
+#   the journal, the Healthchecks.io checks for the reboot and the prune, and the `apt-autoremove`
+#   and `dpkg-purge` textfiles.
+role: initial_setup
+files:
+  - {src: "role-file:host-maintenance.sh", dst: /usr/lib/homelab/host-maintenance, mode: "0755"}
+  - {src: units/homelab-apt-autoremove.service, dst: /usr/lib/systemd/system/homelab-apt-autoremove.service}
+  - {src: units/homelab-apt-autoremove.timer, dst: /usr/lib/systemd/system/homelab-apt-autoremove.timer}
+  - {src: units/homelab-dpkg-purge.service, dst: /usr/lib/systemd/system/homelab-dpkg-purge.service}
+  - {src: units/homelab-dpkg-purge.timer, dst: /usr/lib/systemd/system/homelab-dpkg-purge.timer}
+  - {src: templates/homelab-reboot.j2, dst: /usr/lib/homelab/homelab-reboot, mode: "0755"}
+  - {src: units/homelab-reboot.service, dst: /usr/lib/systemd/system/homelab-reboot.service}
+  - {src: units/homelab-reboot.timer.j2, dst: /usr/lib/systemd/system/homelab-reboot.timer}
+  - {src: templates/docker-prune.j2, dst: /usr/lib/homelab/docker-prune, mode: "0755", when: has_docker}
+  - {src: units/homelab-docker-prune.service.j2, dst: /usr/lib/systemd/system/homelab-docker-prune.service, when: has_docker}
+  - {src: units/homelab-docker-prune.timer.j2, dst: /usr/lib/systemd/system/homelab-docker-prune.timer, when: has_docker}
+enable:
+  homelab-apt-autoremove.timer: timers.target
+  homelab-dpkg-purge.timer: timers.target
+  homelab-reboot.timer: timers.target
+  homelab-docker-prune.timer: {target: timers.target, when: has_docker}
+legacy:
+  - {cron: "Weekly apt autoremove", user: root}
+  - {cron: "Weekly dpkg purge orphaned configs", user: root}
+  - {cron: "Weekly system restart", user: root}
+  # Root's crontab, not sys_user's: the task named `ansible_facts.user_id`, which the escalated fact
+  # gather (ansible/pre_tasks/load_secrets.yml) resolves to root.
+  - {cron: "Clean unused Docker images", user: root}

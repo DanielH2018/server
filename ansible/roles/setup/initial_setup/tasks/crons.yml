@@ -89,6 +89,7 @@
 
 - name: Create the Healthchecks.io credential directory
   tags: [crons, prune, weekly-restart, worktree-sweep]
+  when: inventory_hostname not in initial_setup_packaged_hosts['maintenance']
   # The same path, mode and owner as the k3s role's task, so the two writers agree on
   # daniel-box. This role writes it too because its two pinging crons run on every host, and
   # the k3s role reaches neither daniel-pi nor, for this file, daniel-server.
@@ -102,6 +103,7 @@
 
 - name: Deploy the Healthchecks.io ping key
   tags: [crons, prune, weekly-restart, worktree-sweep]
+  when: inventory_hostname not in initial_setup_packaged_hosts['maintenance']
   # Byte-identical to the k3s role's `Deploy the Healthchecks.io ping key`, which carries the
   # reasoning: the project ping key can hold every check green, so it lives in a 0640 file the
   # crons source at run time, never in a crontab line. cron logs each command it runs to the
@@ -118,6 +120,7 @@
 
 - name: Schedule sudo crontab for weekly restart
   tags: [crons, weekly-restart]
+  when: inventory_hostname not in initial_setup_packaged_hosts['maintenance']
   # Pings healthchecks.io's per-host `weekly-reboot-<host>` check, then reboots. The ping lives
   # INSIDE the Ansible-managed job (not a manual crontab append, which a later [crons] deploy
   # would strip). `;` not `&&`: the reboot must happen even if the ping fails.
@@ -142,6 +145,7 @@
 
 - name: Detect whether fwupd is installed on this host
   tags: [crons, firmware]
+  when: inventory_hostname not in initial_setup_packaged_hosts['maintenance']
   # Only daniel-box has fwupd: optimize_pi purges it (the Zero 2 W swapped itself to death on
   # every dbus activation) and daniel-server has never had it. Gate on the binary rather than
   # on inventory_hostname so a future host is covered without editing this file.
@@ -174,7 +178,9 @@
     job: "/usr/local/bin/host-maintenance.sh firmware-update 2>&1 | /usr/bin/logger -t fwupd-auto"
     user: root
   become: true
-  when: initial_setup_fwupdmgr.stat.exists
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['maintenance']
+    - initial_setup_fwupdmgr.stat.exists
 
 - name: Remove the firmware cron on hosts without fwupd
   tags: [crons, firmware]
@@ -185,7 +191,9 @@
     state: absent
     user: root
   become: true
-  when: not initial_setup_fwupdmgr.stat.exists
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['maintenance']
+    - not initial_setup_fwupdmgr.stat.exists
 
 - name: Schedule Docker image cleanup
   # `until=168h` keeps anything created in the last week: after a bad Renovate
@@ -201,7 +209,9 @@
   # instead of leaving a dead-man that never pings on those two hosts.
   # The chain is braced and sent to the journal: prune prints "Total reclaimed space" on
   # every healthy run. A failure is the un-pinged dead-man above.
-  when: has_docker
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['maintenance']
+    - has_docker
   ansible.builtin.cron:
     name: "Clean unused Docker images"
     minute: "{{ initial_setup_docker_prune_cron_minute }}"
@@ -215,7 +225,9 @@
 # entry on a host without Docker, failing and leaving the Healthchecks dead-man un-pinged;
 # this retires the entry so the monitor stops being fed by a host that cannot run it.
 - name: Remove the Docker image cleanup cron from any host without Docker
-  when: not has_docker
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['maintenance']
+    - not has_docker
   ansible.builtin.cron:
     name: "Clean unused Docker images"
     state: absent

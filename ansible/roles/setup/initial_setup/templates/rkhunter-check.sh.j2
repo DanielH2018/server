@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Weekly rkhunter scan — managed by Ansible (initial_setup role); edits overwritten.
+# Weekly rkhunter scan — rendered by the initial_setup role, or by the integrity-scans host
+# component on a host whose package owns it; edits overwritten.
 #
 # Usage: rkhunter-check.sh [-h|--help]
-# Takes no arguments. Cron job "Weekly rkhunter malware scan" runs it as root on every host,
-# Wednesday 02:00. It runs `rkhunter --check` at idle CPU and IO priority, writes the warnings to
-# the journal under the `rkhunter` tag, writes the verdict to the node_exporter textfile as check
-# `rkhunter-check`, and pushes it to this host's "rkhunter Scan (<host>)" Kuma monitor using the
-# token in /etc/homelab/rkhunter-kuma-push.env. Running it by hand is safe; a scan takes two to
-# three minutes, and it pushes.
+# Takes no arguments. Cron job "Weekly rkhunter malware scan", or homelab-rkhunter-check.timer
+# on a packaged host, runs it as root, Wednesday 02:00. It runs `rkhunter --check` at idle CPU and
+# IO priority, writes the warnings to the journal under the `rkhunter` tag, writes the verdict to
+# the node_exporter textfile as check `rkhunter-check`, and pushes it to this host's "rkhunter Scan
+# (<host>)" Kuma monitor using the token in /etc/homelab/rkhunter-kuma-push.env or the unit's
+# credential. Running it by hand is safe; a scan takes two to three minutes, and it pushes.
 #
 # WHY A SCRIPT (#4598). The cron used to pipe `rkhunter --check` straight into
 # `logger -t rkhunter`. The pipeline's exit status was logger's, and nothing read the tag, so a
@@ -28,13 +29,13 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t rkhunter-check "kuma-push-lib.sh missing — run initial_setup on this host"
+source {{ initial_setup_host_lib_dir }}/kuma-push-lib.sh || {
+  logger -t rkhunter-check "kuma-push-lib.sh missing — run initial_setup or install the host package"
   exit 1
 }
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t rkhunter-check "homelab-check-lib.sh missing — run initial_setup on this host"
+source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
+  logger -t rkhunter-check "homelab-check-lib.sh missing — run initial_setup or install the host package"
   exit 1
 }
 
@@ -56,8 +57,14 @@ RKHUNTER_LOG=/var/log/rkhunter.log
 # Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
 # local account.
 RKHUNTER_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r /etc/homelab/rkhunter-kuma-push.env ]] && . /etc/homelab/rkhunter-kuma-push.env
+# A packaged unit passes the token as the credential `rkhunter_push_token`; an Ansible-run host
+# sources the env file instead.
+if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/rkhunter_push_token" ]]; then
+  RKHUNTER_PUSH_TOKEN="$(<"$CREDENTIALS_DIRECTORY/rkhunter_push_token")"
+else
+  # shellcheck source=/dev/null
+  [[ -r /etc/homelab/rkhunter-kuma-push.env ]] && . /etc/homelab/rkhunter-kuma-push.env
+fi
 
 # Captured whole rather than piped, because a pipeline's exit status is its last command's, which
 # is how the old cron lost it. --report-warnings-only keeps the journal to the warnings and any

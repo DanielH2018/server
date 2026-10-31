@@ -1,0 +1,13 @@
+# Shipped by the host package's host-maintenance component. Started by homelab-reboot.timer.
+[Unit]
+Description=Ping the weekly-reboot check and reboot this host, unless reconcile's validation failed
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=weekly-restart
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/lib/homelab/homelab-reboot
+LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key

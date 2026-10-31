@@ -89,6 +89,13 @@ the name:
   The exemption exists because `limit` REJECTs a source at 6 connections in 30 seconds on a
   rolling window, counting SUCCESSFUL ones, so retries sustain the block — parallel Claude
   sessions over ssh crossed it twice. fail2ban's sshd jail is what answers a credential attack.
+- **On daniel-pi (H7.30), the UFW arm of `homelab-reconcile` owns the firewall instead of the tasks.** The
+  `ssh-firewall` component declares the two SSH rules as `keep`, `lan-ssh` before
+  `ssh-limit`, and `hosts/daniel-pi/package.yml` declares the Pi's three LAN metrics rules.
+  The arm adopts each Ansible-era rule in place by relabelling it `homelab:`, deletes the stale
+  `allow 51820/udp`, and leaves the hand-added 51822 allow alone. It sets a default policy only
+  where it differs and enables only an inactive UFW, as the tasks did.
+  `initial_setup_packaged_hosts['ufw']` names the hosts whose package owns the subject.
 - **UFW owns a SECOND sysctl file**, `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in
   `/etc/default/ufw`), re-applied on every `ufw enable` or `reload`. Ubuntu ships it with
   `log_martians=0`, so before #2977 this role's loop wrote 1 and `Enable UFW firewall` wrote 0
@@ -110,6 +117,13 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
 
 ## Integrity scans, Postfix and the Pi's swap file
 
+- **On daniel-pi (H7.30), the package runs the scans and the maintenance jobs.** The
+  `integrity-scans`, `fail2ban`, `postfix`, `accounting` and `host-maintenance` components
+  render this role's templates in place (`role: initial_setup`), and each cron becomes a timer
+  at the cron's slot. The weekly reboot refuses while the validation flag of `homelab-reconcile` exists. The
+  push tokens and the Healthchecks.io key arrive as unit credentials, not as `/etc` env files.
+  The first AIDE and rkhunter baselines and the mask on `dailyaidecheck.timer` stay host state.
+  `initial_setup_packaged_hosts['fail2ban']` and `['maintenance']` name the hosts.
 - **AIDE and rkhunter are scheduled against each other, and the package's own timer is masked.**
   `dailyaidecheck.timer` duplicated the weekly cron nightly with broken mail alerting, at about
   1h20m of CPU per night on the Pi. Both weekly scans run `nice -n19 ionice -c3`, staggered to

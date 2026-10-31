@@ -1,0 +1,15 @@
+# Shipped by the host package's integrity-scans component. Started by homelab-aide-check.timer.
+#
+# No Restart=: a red check is a broken config or a missing database, which a rerun does not
+# clear, and every rerun is another full-filesystem scan of an hour or more.
+[Unit]
+Description=Run the weekly AIDE check and push its verdict to this host's Kuma monitor
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=aide-check
+ExecStart=/usr/lib/homelab/aide-check
+LoadCredential=aide_push_token:/run/credstore/aide_{{ inventory_hostname | replace('-', '_') }}_push_token

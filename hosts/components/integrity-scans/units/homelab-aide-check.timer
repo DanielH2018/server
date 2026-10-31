@@ -1,0 +1,11 @@
+# Shipped by the host package's integrity-scans component with its enable link. Monday 03:00, the
+# cron's slot.
+[Unit]
+Description=Run the weekly AIDE check on Monday at 03:00
+
+[Timer]
+OnCalendar=Mon *-*-* 03:00:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

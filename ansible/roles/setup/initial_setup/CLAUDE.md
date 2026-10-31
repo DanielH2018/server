@@ -36,7 +36,7 @@ every carrying host's `host_vars` (#2981), so replacing a machine is a `host_var
 sit in `group_vars` because `scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when` resolves a gate
 against those two files only, and an unknown name reads as every host.
 
-Three gates keep a host literal behind a `DECIDED:` comment, because they read HOST HISTORY
+Two gates keep a host literal behind a `DECIDED:` comment, because they read HOST HISTORY
 that no capability names, and they delete themselves once the host converges. ENFORCED:
 `ansible/tests/setup/test_initial_setup_host_gates.py::test_a_surviving_host_literal_is_one_of_the_recorded_deliberate_ones`
 refuses a new bare literal.
@@ -76,7 +76,11 @@ and dpkg purge, and the rkhunter and AIDE scans run with no human in the loop. H
 docs refresh, the infrastructure-map refresh, the eval sweep, the object-store repair and the
 secret-rotation timers into components under `hosts/components/` (`docs-refresh/`, `infra-map/`,
 `eval-sweep/`, `worktree-sweep/`, `secret-rotation/`). Each component's `component.yml` carries
-its own contract. This role keeps the Loki read-route witness for daniel-server
+its own contract. On daniel-pi, H7.30 moved the reboot, the prune, the apt hygiene jobs and the
+two scans into the `host-maintenance` and `integrity-scans` components, which render this role's
+templates in place and carry their own contracts; `initial_setup_packaged_hosts` in
+`defaults/main.yml` skips the fail2ban group, the maintenance jobs and ufw there. This role
+keeps the Loki read-route witness for daniel-server
 (`initial_setup_packaged_hosts` in `defaults/main.yml` excludes daniel-box) and the setup-drift
 check.
 - **Scope:** reboot the host, stage firmware, prune unused Docker images older than a week,

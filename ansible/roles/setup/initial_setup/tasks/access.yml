@@ -85,6 +85,7 @@
 
 - name: Enable and start fail2ban
   tags: [fail2ban]
+  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
   ansible.builtin.systemd:
     name: fail2ban
     state: started
@@ -93,6 +94,7 @@
 
 - name: Deploy fail2ban jail configuration
   tags: [fail2ban]
+  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
   ansible.builtin.template:
     src: fail2ban_homelab.conf.j2
     dest: /etc/fail2ban/jail.d/homelab.conf

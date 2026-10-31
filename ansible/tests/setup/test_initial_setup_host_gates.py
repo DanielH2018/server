@@ -78,7 +78,6 @@ DELIBERATE_LITERALS = frozenset(
         "Read the active CPU governor (daniel-server)",
         "Revert the live CPU governor to powersave (daniel-server)",
         "Remove the unused LXD snap and its orphaned bases (daniel-server)",
-        "Remove the stale WireGuard 51820/udp allow on the Pi",
     }
 )
 
@@ -132,7 +131,7 @@ def test_a_surviving_host_literal_is_one_of_the_recorded_deliberate_ones():
 
 def test_each_deliberate_literal_group_records_why():
     """A `DECIDED:` marker at the gate, so the next audit does not re-file #2975."""
-    for stem in ("system-tuning", "network"):
+    for stem in ("system-tuning",):
         text = (TASKS / f"{stem}.yml").read_text()
         assert "DECIDED:" in text and "#2975" in text, stem
 

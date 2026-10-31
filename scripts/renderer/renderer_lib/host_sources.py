@@ -38,8 +38,10 @@ SHARED_FILES = {
 # daniel-server*). The role keeps owning the file until H7.8 moves daniel-box, so a package
 # renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
 # SHARED_FILES, so a component cannot read any other role. `claude_code` joined in H7.39, which
-# moved daniel-server while daniel-box still applies the role (H7.40).
-ROLE_SOURCES = frozenset({"claude_code", "common", "nut_host"})
+# moved daniel-server while daniel-box still applies the role (H7.40). `initial_setup` joined in
+# H7.30, which moved the Pi's fail2ban group, maintenance jobs and ufw while the cluster nodes
+# still apply the role (H7.31, H7.32).
+ROLE_SOURCES = frozenset({"claude_code", "common", "initial_setup", "nut_host"})
 # A `src` with this prefix names a template of the component's `role:`, not of the component.
 ROLE_SRC = "role:"
 # A `src` with this prefix names a static file under the role's `files/`, copied as it stands.
