@@ -868,7 +868,6 @@
  "ansible/tests/setup/test_ssh_dir_paths_are_absolute.py": 0.06,
  "ansible/tests/setup/test_ssh_rate_limit_lan_exempt.py": 0.0,
  "ansible/tests/setup/test_storage_smoke_can_fail.py": 0.0,
- "ansible/tests/setup/test_ufw_enable_skips_an_active_firewall.py": 0.0,
  "ansible/tests/setup/test_ufw_sysctl_keeps_log_martians.py": 0.0,
  "ansible/tests/setup/test_unattended_origins_pattern.py": 0.0,
  "ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py": 0.0,
