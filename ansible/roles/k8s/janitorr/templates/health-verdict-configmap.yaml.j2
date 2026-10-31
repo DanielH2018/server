@@ -10,6 +10,10 @@
   apply records none in its last-applied annotation, and a Flux server-side apply owns none, so
   neither removes or reverts what the reader wrote. This is the field-ownership argument
   crowdsec's home-ips ConfigMap rests on (crowdsec/templates/home-ips-configmap.yaml.j2).
+  It holds only while the reader's field manager is not named `kubectl*`. Flux takes over fields
+  owned by such a manager and drops them at its next apply, which is what `kubectl patch`'s
+  default `kubectl-patch` manager did (#6746), so the reader patches with
+  `--field-manager=janitorr-health`.
 #}
 ---
 apiVersion: v1

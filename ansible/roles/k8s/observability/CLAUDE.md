@@ -43,13 +43,23 @@ The working-out lives in `docs/observability-dashboards.md`.
 
 **`probe.py health observability` gates every workload in the role**, none of them named observability.
 
-**A second route, `alertmanager.local.<domain>`, is a GET-only read door with no Authelia.**
-`templates/alertmanager-read-ingressroute.yaml.j2` admits `/api/v2/alerts` and
-`/api/v2/silences` from the LAN and the node addresses, so `probe.py health` can name a
-silenced or inhibited gated alert and `probe.py monitors` can list active silences. The *At a
-glance* block lists `ingressroute.yaml.j2` alone, so it does not show this route.
-`ansible/tests/k8s/test_alertmanager_read_route.py` holds the matcher to `GET` and the two
-paths.
+**Two more routers share `alertmanager.local.<domain>`, and the *At a glance* block shows
+neither.** It reads `ingressroute.yaml.j2` alone.
+
+- `templates/alertmanager-ingressroute.yaml.j2` is Alertmanager's UI, where the operator lists
+  alerts and inhibitions and manages silences. It names the `authelia` chain, and the
+  authelia role's hand-written rule gives the host `two_factor` for `group:admins` and `deny`
+  to everyone else. The Deployment's `--web.external-url` names the same host, so the UI's
+  links resolve to the route.
+- `templates/alertmanager-read-ingressroute.yaml.j2` is a GET-only read door with no Authelia.
+  It admits `/api/v2/alerts` and `/api/v2/silences`, so `probe.py health` can name a silenced
+  or inhibited gated alert and `probe.py monitors` can list active silences.
+
+Both admit the LAN and the node addresses only, whatever `k8s_public_route` says. Traefik ranks
+the two by rule length, and the read door's rule is the longer, so a GET on its two paths skips
+Authelia. `ansible/tests/k8s/test_alertmanager_read_route.py` holds the door to `GET` and the two
+paths, the UI behind the `authelia` chain, the door's rank above the UI, and the external URL
+to the UI's host.
 
 **The `observability-prepull` Kustomization pulls Grafana's image before its `Recreate`**, so the
 dashboards serve through a 482 MB Docker Hub pull (`flux_prepull_timeout` in

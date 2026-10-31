@@ -110,6 +110,9 @@ def export_verdict(
         "configmap",
         configmap,
         "--type=merge",
+        # Flux's server-side apply strips fields owned by a manager named `kubectl*`, and the
+        # default here is `kubectl-patch`, so the annotations vanished at every apply (#6746).
+        "--field-manager=" + TAG,
         "--patch=" + json.dumps(patch),
     )
     if rc != 0:
