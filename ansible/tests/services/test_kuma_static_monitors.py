@@ -151,10 +151,12 @@ def test_notification_configs_declare_apply_existing():
 # muted channel — the tier that also mails. Enumerated rather than pattern-matched: "has 'B2' in
 # the name" is exactly the rule that would put B2's headroom tile on this tier and leave R2's off
 # it, though both watch a Longhorn backup target's remaining free-tier capacity.
+#
+# M6 batch A5's five storage tiles (Longhorn Volume Redundancy, k3s PVC Fullness, Longhorn
+# Snapshot Headroom, Kubelet CSI Mount Read-Only and etcd DB Size) left the tier when Cutover-a1
+# deleted them. Their critical rules page through Alertmanager once Cutover-b drops `shadow`.
 EMAIL_TIER = {
     "k3s Longhorn Backup",
-    "Longhorn Volume Redundancy",
-    "k3s PVC Fullness",
     "Daniel Pi SD Health",
     "Off-box etcd Snapshot",
     "etcd Restore Drill (full)",
@@ -165,12 +167,7 @@ EMAIL_TIER = {
     "SMART Data / Health",
     "UPS Battery Health",
     "Discord Delivery",
-    "Kubelet CSI Mount Read-Only",
-    # The snapshot-space axis of the same storage layer as the three Longhorn/PVC tiles above,
-    # and on the tier for the same reason: the fix is an operator deleting snapshots or raising
-    # the cap, and a reached cap fails every later deploy of that service.
-    "Longhorn Snapshot Headroom",
-    # Not a "the fix cannot wait a day" tile like the fifteen above — it is on the tier for the
+    # Not a "the fix cannot wait a day" tile like the eleven above — it is on the tier for the
     # transport, not the urgency. A fleet-wide recovery bursts every tile's UP notification into
     # the same second, and Discord's per-webhook bucket drops some of them. SMTP is a different
     # bucket, so this one all-clear lands.
@@ -183,11 +180,6 @@ EMAIL_TIER = {
     # them — their token gate rendered them away under the old stubbed render.
     "UPS Secondary (daniel-box)",
     "UPS Secondary (daniel-server)",
-    # The single existential risk on a one-server control plane: at its backend quota etcd
-    # rejects every write and the cluster stops accepting changes. The fix is an operator
-    # compacting and defragmenting, or raising the quota, so it cannot wait for someone to
-    # notice a muted channel.
-    "etcd DB Size",
     # A home-critical service's own availability tile, put on the tier by the operator on
     # 2026-10-04 (#3480): the house or SSO is down. The template derives these from each
     # entry's containers_list `tier`, so they are named here as the members it must produce.
@@ -203,15 +195,47 @@ EMAIL_TIER = {
 _WINDOW_PROBE_S = 7777
 
 
+# The five rows whose tiles M6's batch A5 deleted in Cutover-a1, ahead of the rows themselves
+# (the owner-independent form of m6-retire-kuma.md's "The cutover order": monitor-bridge and
+# uptime-kuma are both flux-owned, so no deploy orders the tile before the row). Cutover-a2
+# deletes the rows and this set together.
+A5_ROWS_AWAITING_DELETION = {
+    "stub-monitor_bridge_longhorn_volumes_push_token",
+    "stub-monitor_bridge_pvc_push_token",
+    "stub-monitor_bridge_snapshot_headroom_push_token",
+    "stub-monitor_bridge_kubelet_readonly_push_token",
+    "stub-monitor_bridge_etcd_db_size_push_token",
+}
+
+
+def test_the_deleted_a5_tiles_are_not_declared():
+    # RED if the table loop's `if` stops excluding them: AutoKuma would re-create all five.
+    declared = {e["name"] for e in _entities().values()}
+    assert not declared & {
+        "Longhorn Volume Redundancy",
+        "k3s PVC Fullness",
+        "Longhorn Snapshot Headroom",
+        "Kubelet CSI Mount Read-Only",
+        "etcd DB Size",
+    }
+    assert "Root Disk" in declared
+
+
 def test_every_bridge_push_token_reaches_a_push_tile():
     # A row in monitor-bridge's `files/check_table.py` with no tile pushes into nothing:
     # Kuma answers an unknown token with 404 and no monitor ever goes red. Joined on rendered
     # values, the same way as the interval guard below, so the token the bridge pushes and the
     # one the tile accepts are compared rather than two variable names.
+    #
+    # The one tolerated orphan set is named and compared both ways: a token that gains a tile
+    # back, or a sixth row that loses its tile, fails here.
     bridge_tokens = bridge_push_tokens()
     tile_tokens = set(push_tokens_by_monitor().values())
     assert "stub-monitor_bridge_disk_push_token" in bridge_tokens
-    assert not sorted(bridge_tokens - tile_tokens), sorted(bridge_tokens - tile_tokens)
+    orphans = bridge_tokens - tile_tokens
+    assert orphans == A5_ROWS_AWAITING_DELETION, sorted(
+        orphans ^ A5_ROWS_AWAITING_DELETION
+    )
 
 
 def test_bridge_push_monitors_share_one_interval():
