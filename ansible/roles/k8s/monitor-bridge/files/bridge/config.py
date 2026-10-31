@@ -180,7 +180,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         **vars(cluster_config(_env, _int, _num)),
         **vars(io_config(_env, _int, _num, _env_file, INTERVAL, problems)),
         INTERVAL=INTERVAL,
-        # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once).
+        # Startup/redeploy grace for the reach-out checks (`startup_grace` rows, applied in run_once).
         # The bridge's first cycle after a host reboot runs before the heavy apps it polls (n8n,
         # sonarr/radarr, prowlarr, scrutiny) finish starting, so an un-graced
         # reach-out check flips its max_retries=0 push monitor DOWN on that one transient cycle
@@ -203,10 +203,9 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         # it is how any future split would be expressed, and check.py's guards keep it honest.
         # CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops names
         # from whatever is otherwise enabled. The three reachability gates participate under the
-        # names their monitors push as (prometheus, b2_reachable, wan_reachable). A filter that enables a gated check while disabling its gate would
-        # reintroduce the alert storm the gate exists to prevent, so check.py's main() refuses to
-        # start on one (validate_check_filter) — a crash-looping bridge is loud, a mis-gated one
-        # lies quietly.
+        # names their monitors push as (prometheus, b2_reachable, wan_reachable), and a gate row the filter
+        # leaves out reads as up. cli.py's main() refuses to start on a name no registry entry
+        # carries — a crash-looping bridge is loud, a mistyped filter lies quietly.
         #
         # They live here rather than in check.py because this module is monitor-bridge's one
         # env-reading surface, and these were two of the three that had escaped it.

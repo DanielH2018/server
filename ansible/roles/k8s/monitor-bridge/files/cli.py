@@ -3,8 +3,8 @@
 
 The Deployment runs `python /app/cli.py` with no arguments, which loops forever at INTERVAL
 seconds. Everything below the loop is a leaf: `registry.build_checks(env)` says which checks
-exist, `gates.Gates` says what each reachability gate suppresses, `bridge.sources.Sources` is
-what every check queries, and `check.run_once` runs one cycle over them. Nothing here holds env-derived state after import.
+exist and which gate each one names, `bridge.sources.Sources` is what every check queries,
+and `check.run_once` runs one cycle over them. Nothing here holds env-derived state after import.
 
 Design: docs/monitor-bridge-internals.md.
 """
@@ -19,13 +19,11 @@ import bridge.common
 import check
 import verdict_export
 import deploy_pipeline
-import gates
 import registry
 from bridge.config import load_config
 from bridge.sources import Sink, Sources
 from bridge.types import Check
 from check_table import CHECKS
-from gates import Gates
 
 # `lib/exit_codes.py:USAGE_ERROR`, which the pod cannot import: it mounts only this role's
 # `files/` (#4487). 2 stays the config-fault exit `main()` documents.
@@ -62,9 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         dest="checks",
         help=(
-            "run only this check; repeatable. Validated like CHECKS_ONLY — a gate whose "
-            "dependents are enabled may not be disabled — but unlike CHECKS_ONLY, the gate "
-            "each named check depends on is unioned in automatically."
+            "run only this check; repeatable. A gate row left out reads as up, so a named "
+            "check runs even when its gate is not named."
         ),
     )
     parser.add_argument(
@@ -79,7 +76,6 @@ def main(
     argv: list[str] | None = None,
     env: Mapping[str, str] | None = None,
     checks: list[Check] | None = None,
-    gate_config: Gates | None = None,
     sources: Sources | None = None,
     sink: Sink | None = None,
     sleep: Callable[[float], None] | None = None,
@@ -89,12 +85,10 @@ def main(
     """Validates the configuration and the check filter, then runs the check loop.
 
     Returns 2 without running any check if bridge/config.py could not parse an env value, or if
-    CHECKS_ONLY/CHECKS_SKIP names an unknown check or disables a gate whose dependents are still
-    enabled. `--check` is validated the same way, but first has its named checks' gates unioned
-    in (see gates.expand_gates_for_cli) — CHECKS_ONLY keeps the strict env contract, `--check`
-    does not need the gate spelled out alongside the check. Otherwise loops check.run_once() at
-    cfg.INTERVAL seconds, touching the heartbeat file after every cycle, forever unless --once
-    was given.
+    CHECKS_ONLY/CHECKS_SKIP or `--check` names an unknown check. A gate row the filter leaves
+    out reads as up, so a filter may name a check without its gate. Otherwise loops
+    check.run_once() at cfg.INTERVAL seconds, touching the heartbeat file after every cycle,
+    forever unless --once was given.
 
     Args:
       argv: The argument list, without the program name. None reads sys.argv.
@@ -102,11 +96,6 @@ def main(
         one. See the DECIDED note below.
       checks: The registry to run. None builds it from `env`, which is what the pod does; a test
         passes the two entries it means rather than patching a module table.
-      gate_config: The gate configuration `run_once` reads, and the one the check filter is
-        validated against — its `gate_dependents()` map is what `expand_gates_for_cli` and
-        `validate_check_filter` are handed here. None builds the production `Gates()`. Named
-        `gate_config` rather than `gates` because this module imports the `gates` MODULE, and a
-        parameter of that name would shadow it in the body.
       sources: The `Sources` every gate and check body queries through. None builds the live
         `Sources(cfg)` from the config loaded here; a test passes a fake.
       sink: Where every verdict is pushed. None builds the live `Sink(cfg)`, which pushes to
@@ -131,11 +120,8 @@ def main(
     # DECIDED: `env` reaches `load_config` and `registry.build_checks`, and nothing else.
     # Slice 17b moved the registry out of `check.py` precisely so `main(env={...})` can decide
     # which monitor a result is pushed to, which it could not while the KUMA_PUSH_* tokens were
-    # read at import into a module-level list. The THREE reachability-gate tokens are the
-    # remaining exception: `gates._gate` still reads them from `os.environ` at push time, so
-    # `env` does not redirect a gate's push. Each is `bridge.types.push_env(<gate name>)`, derived
-    # rather than stored, so there is no module global left to remove — moving them would be a
-    # new parameter for one caller, not the same fix.
+    # read at import into a module-level list. The three gate rows are registry entries since
+    # M6's A6-7r, so their tokens come from the same `env`.
     environment = os.environ if env is None else env
     cfg = load_config(environment, problems=bridge.common.CONFIG_PROBLEMS)
     if cfg.CONFIG_PROBLEMS:
@@ -151,22 +137,19 @@ def main(
     sources = Sources(cfg) if sources is None else sources
     sink = Sink(cfg) if sink is None else sink
     sleep = time.sleep if sleep is None else sleep
-    # Built here rather than left to run_once's own default, so the filter is validated against
-    # the same dependent sets the run loop will suppress by.
-    gate_config = Gates() if gate_config is None else gate_config
-    dependents = gate_config.gate_dependents()
-    only = (
-        gates.expand_gates_for_cli(frozenset(args.checks), dependents)
-        if args.checks
-        else cfg.CHECKS_ONLY
-    )
-    problems = gates.validate_check_filter(only, cfg.CHECKS_SKIP, checks, dependents)
-    if problems:
-        for p in problems:
-            print("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p, file=sys.stderr, flush=True)
+    only = frozenset(args.checks) if args.checks else cfg.CHECKS_ONLY
+    unknown = sorted((only | cfg.CHECKS_SKIP) - {c.name for c in checks})
+    if unknown:
+        for name in unknown:
+            print(
+                "FATAL: bad CHECKS_ONLY/CHECKS_SKIP: unknown check name:",
+                name,
+                file=sys.stderr,
+                flush=True,
+            )
         return 2
     enabled = [
-        c.name for c in checks if gates.check_enabled(c.name, only, cfg.CHECKS_SKIP)
+        c.name for c in checks if check.check_enabled(c.name, only, cfg.CHECKS_SKIP)
     ]
     bridge.common.log(
         "monitor-bridge starting (interval=%ss, once=%s, dry_run=%s, checks=%d/%d)"
@@ -182,17 +165,16 @@ def main(
         if check_exposition is None:
             check_exposition = verdict_export.CheckExposition(cfg.INTERVAL)
             check_exposition.serve(cfg.CHECK_EXPORTER_PORT)
-        # Counted from the table, not from `checks`: `registry.build_checks` drops every gate
-        # row, so its length would leave the gate rows' series above the count.
+        # Counted from the table, not from `checks`, so the gauge is the table's length whatever
+        # registry a caller hands in.
         check_exposition.set_rows(
-            sum(gates.check_enabled(row.name, only, cfg.CHECKS_SKIP) for row in CHECKS)
+            sum(check.check_enabled(row.name, only, cfg.CHECKS_SKIP) for row in CHECKS)
         )
     while True:
         check.run_once(
             cfg,
             sources,
             checks,
-            gates=gate_config,
             sink=sink,
             dry_run=args.dry_run,
             only=only,

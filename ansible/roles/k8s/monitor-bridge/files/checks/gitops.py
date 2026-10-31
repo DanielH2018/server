@@ -292,7 +292,7 @@ def check_gitops_alive(
 def check_gitops_status(cfg: Config, src: Sources) -> tuple[bool, str]:
     """Read the deployer's markers through `gitops_hold.DeployerSnapshot` and judge them.
 
-    An absent marker is None. Any other failure to read one raises, and `gates._evaluate`
+    An absent marker is None. Any other failure to read one raises, and `check._evaluate`
     reports DOWN "check error": a `hold_sha` the check cannot read is NOT "no hold". The
     snapshot drops each `owed` ledger line that does not decode, so one torn byte cannot turn
     this into "check error" every cycle and mask the hold, diverged, behind and contention

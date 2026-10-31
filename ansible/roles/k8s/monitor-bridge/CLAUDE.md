@@ -36,21 +36,21 @@ the handback, and the Kustomization's `wait` replaces the rollout wait.
 
 ## Gates and hysteresis
 
-Four reachability gates run first each cycle and suppress their dependents, so one outage pages
-once; a suppressed check pushes `up` with a `skipped — <source> unreachable` message, so its
+Three reachability gate rows run first each cycle and skip their dependents, so one outage pages
+once; a skipped check pushes `up` with a `skipped — <source> unreachable` message, so its
 heartbeat survives. A check's row names its gate in the `gate` column, with the reason, and
-`files/gates.py` derives the sets from it.
+`registry.build_checks` hands that value to `check.run_once` on each `Check`.
 
-- **Prometheus, Loki, B2 and WAN Reachable** suppress the rows naming them. One value per row,
-  a gate or `startup_grace`, keeps the sets disjoint. The internals page has the membership
-  rules.
+- **Prometheus, B2 and WAN Reachable** skip the rows naming them. One value per row, a gate or
+  `startup_grace`, keeps a row from being skipped by one and held by the other. The internals
+  page has the membership rules.
 - **A gate has no gate of its own** — a tile that cannot go red is not coverage; #2825 deleted
   the second Prometheus gate on that reasoning.
 - **`EXPORTER_DEPENDENT`** suppresses a dead node-exporter's dependents, keyed by scrape job,
   so one host's dead exporter holds them estate-wide (`DECIDED:` at the probe in
   `files/check.py`; the internals page has the membership). A new scrape job fails
   `test_every_node_exporter_job_is_mapped_in_exporter_dependent`.
-- **`STARTUP_GRACE` and the `*_CONSECUTIVE` streaks** (`bridge/streaks.py`) are the per-check
+- **`startup_grace` and the `*_CONSECUTIVE` streaks** (`bridge/streaks.py`) are the per-check
   hysteresis: a held cycle pushes `up` with a `down streak n/N` note, so a streak delays a page,
   never suppresses one.
 
@@ -118,7 +118,7 @@ job, so neither job sees the other's series.
 `files/` holds its flat modules and three packages: `bridge/` (shared plumbing), `checks/` (one
 module per domain of `check_*` bodies, mirroring its test file) and `verdicts/` (pure logic
 taking its inputs as arguments). `check_table.py` imports only `bridge.types` and the
-`checks.*` bodies; `registry.py` and `gates.py` import it, never each other. A row's fields
+`checks.*` bodies; `registry.py` imports it, and `check.py` never does. A row's fields
 but `fn` are literals: `ansible/filter_plugins/py_table.py` parses the table without running
 it. Modules split at the module-length cap; the internals page has the per-module table.
 
@@ -138,7 +138,7 @@ the checksum.
 
 `cli.py`'s `main()` calls `load_config(os.environ)` ONCE and hands the frozen `Config` to
 `check.run_once`, which passes it to every gate, check body and `bridge.net` helper that reads a
-URL; a test states the registry, the `Gates` and its I/O (a `FakeSources` as `src`).
+URL; a test states the registry, with the gate rows first, and its I/O (a `FakeSources` as `src`).
 Building the config MUST NOT raise: `_int`/`_num` record a malformed or missing value in `CONFIG_PROBLEMS`, and
 `main()` exits 2. **A key the pod's environment renders has no Python default**; the `cfg` fixture is
 that render. A default argument cannot read the config (it evaluates at import), and a

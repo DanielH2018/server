@@ -8,13 +8,11 @@ writes the file, so a builder returns only `(body, sources)`.
 Three fragments, all derived from the monitor-bridge role without importing it:
 
 - `bridge-checks`: one row per `CHECKS` entry in `check_table.py`, in registry order.
-- `bridge-gate-sets`: the members of each gate set, from the `gate` column of those rows. The
-  set names come from the `NAME = _members("<gate>")` assignments in `gates.py`.
+- `bridge-gate-sets`: the members of each gate, from the `gate` column of those rows alone.
 - `bridge-thresholds`: the numeric and duration literals the settings template renders.
   A value built from a role variable (`{{ ... }}`) is skipped, so a secret never reaches a page.
 """
 
-import ast
 import re
 import sys as _sys
 from collections.abc import Callable
@@ -32,7 +30,6 @@ from py_table import py_table
 
 BRIDGE_ROLE = K8S_ROLES / "monitor-bridge"
 CHECK_TABLE = MONITOR_BRIDGE_FILES / "check_table.py"
-GATES = MONITOR_BRIDGE_FILES / "gates.py"
 # The settings the Deployment renders into its `env`; the env-secret holds only credentials
 # since #5574.
 ENV_SETTINGS = BRIDGE_ROLE / "templates" / "config" / "env.yaml.j2"
@@ -60,30 +57,6 @@ def _rel(path: _Path) -> str:
 def read_check_rows(source: str) -> list[dict]:
     """The literal keyword arguments of every `PushCheck` in `CHECKS`, in registry order."""
     return py_table(source, "CHECKS")
-
-
-def read_gate_set_names(source: str) -> dict[str, str]:
-    """gate value -> the set name `gates.py` derives from it.
-
-    Reads the module-level `NAME = _members("<gate>")` assignments, so a set renamed or added
-    in `gates.py` changes the fragment without a second list here.
-    """
-    names = {}
-    for node in ast.parse(source).body:
-        if not (isinstance(node, ast.Assign) and len(node.targets) == 1):
-            continue
-        target, call = node.targets[0], node.value
-        if (
-            isinstance(target, ast.Name)
-            and isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Name)
-            and call.func.id == "_members"
-            and len(call.args) == 1
-            and isinstance(call.args[0], ast.Constant)
-            and isinstance(call.args[0].value, str)
-        ):
-            names[call.args[0].value] = target.id
-    return names
 
 
 def read_env_tunables(template: str) -> list[tuple[str, str]]:
@@ -132,12 +105,11 @@ def render_bridge_checks(rows: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_gate_sets(rows: list[dict], set_names: dict[str, str]) -> str:
-    """Renders the gate-set membership table from the `gate` column.
+def render_gate_sets(rows: list[dict]) -> str:
+    """Renders the gate membership table from the `gate` column.
 
     Args:
         rows: the keyword-literal dicts `read_check_rows` returns.
-        set_names: gate value -> set name, from `read_gate_set_names`.
     """
     displays = {row["name"]: row["display"] for row in rows if row.get("is_gate")}
     members: dict[str | None, list[str]] = {}
@@ -149,20 +121,20 @@ def render_gate_sets(rows: list[dict], set_names: dict[str, str]) -> str:
         return f"| {label} | {held_by} | {len(names)} | {', '.join(names)} |"
 
     lines = [
-        "| Set | Held by | Members | Checks |",
+        "| Gate value | Held by | Members | Checks |",
         "|---|---|---|---|",
     ]
     for gate, display in displays.items():
         lines.append(
             line(
-                f"`{set_names.get(gate, gate)}`",
+                f"`{gate}`",
                 f"{display} gate, which suppresses them",
                 members.get(gate, []),
             )
         )
     lines.append(
         line(
-            f"`{set_names.get(STARTUP_GRACE_GATE, STARTUP_GRACE_GATE)}`",
+            f"`{STARTUP_GRACE_GATE}`",
             "startup grace, which holds them `up` through their first down cycles",
             members.get(STARTUP_GRACE_GATE, []),
         )
@@ -192,8 +164,7 @@ def _bridge_checks() -> tuple[str, list[str]]:
 
 def _bridge_gate_sets() -> tuple[str, list[str]]:
     rows = read_check_rows(CHECK_TABLE.read_text())
-    names = read_gate_set_names(GATES.read_text())
-    return render_gate_sets(rows, names), [_rel(CHECK_TABLE), _rel(GATES)]
+    return render_gate_sets(rows), [_rel(CHECK_TABLE)]
 
 
 def _bridge_thresholds() -> tuple[str, list[str]]:

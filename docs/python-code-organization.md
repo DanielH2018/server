@@ -190,8 +190,7 @@ has no such seam yet, and its count is a measure of how many modules still need 
 
 The second shape, for a program whose boundary is configuration rather than I/O, is
 **config as data**: `monitor-bridge` builds one frozen `Config` from the environment in
-`load_config(env)` and one frozen `Gates` for the run loop, both constructed once in `cli.py`
-and passed down. A test builds its own with `load_config({...})` or `dataclasses.replace(cfg,
+`load_config(env)`, constructed once in `cli.py` and passed down. A test builds its own with `load_config({...})` or `dataclasses.replace(cfg,
 X=...)` rather than a fakes module, because the fields are values, not callables. The
 transport underneath (`bridge.net`) is still patched, which is why
 `ansible/tests/services/test_bridge_patch_boundary.py` stays and why that role's monkeypatch

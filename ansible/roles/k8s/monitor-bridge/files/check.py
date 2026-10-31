@@ -6,18 +6,18 @@ the result (status=up|down): an explicit `down` gives fast, descriptive alerts, 
 the Kuma push monitor's heartbeat interval is the backstop for "the bridge itself died"
 (all pushes stop).
 
-This module holds `run_once` and nothing else. The registry is `registry.py`, the gate sets and
-the `Gates` seam are `gates.py`, the command line and `main()` are `cli.py` — which is what the
+This module holds `run_once`, the gate tables it reads and the two helpers it calls. The
+registry is `registry.py`, which orders the three gate rows first and gives every `Check` the
+`gate` its table row names. The command line and `main()` are `cli.py` — which is what the
 Deployment runs (`python /app/cli.py`). Configuration is a frozen `Config` `main()` builds once
 and threads down; see this role's CLAUDE.md, *Configuration is a parameter, not a module global*.
 
 A name the suite patches is read QUALIFIED from the module that binds it — `bridge.common.log`
 — never from-imported, because a from-import copies the value in at import time and never sees
 the patch. Nothing here is a module table any more: the checks arrive as the `checks` argument,
-every gate fact through `gates`, the queries through `src` and the pushes through `sink`, so a
-test states them instead of patching them. Enforced by
-ansible/tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
-ansible/tests/services/test_monitor_bridge_modules.py.
+the queries through `src` and the pushes through `sink`, so a test states them instead of
+patching them. Enforced by ansible/tests/services/test_bridge_patch_boundary.py; the census of
+what is patched where is ansible/tests/services/test_monitor_bridge_modules.py.
 
 Design: docs/monitor-bridge-internals.md.
 
@@ -30,19 +30,15 @@ to `cli.py` on stderr and exits 2. `-h` and `--help` print this text and exit 0.
 """
 
 import time
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 import bridge.common
 import bridge.streaks
-
-# Aliased because `gates` is also the name of run_once's parameter — the Gates VALUE a caller
-# passes. `gate_lib` is the module the gate sets and helpers are defined in; a bare `import
-# gates` would make the parameter shadow it inside the function body.
-import gates as gate_lib
 from bridge.config import Config
 from bridge.sources import Sink, Sources
-from bridge.types import Check
-from gates import Gates
+from bridge.types import Check, CheckFn, CheckResult
 
 if TYPE_CHECKING:
     # Annotation only: the exporter module is wired in by cli.py.
@@ -54,23 +50,115 @@ if TYPE_CHECKING:
 # blank. ENFORCED: tests/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
 LOGGED_WHEN_UP = frozenset({"b2_storage"})
 
+# The `Check.gate` value that holds a row `up` through its first down cycles instead of skipping
+# it. Every other value names a gate row, which `GATE_SKIP` keys.
+STARTUP_GRACE = "startup_grace"
+
+# What a dependent row pushes while its gate row reads down, keyed by the gate's name. A key is
+# also how `run_once` tells a gate row from any other. One outage then pages once, through the
+# gate's own tile, where every dependent would otherwise page at once: a check that cannot reach
+# Prometheus, B2 or the WAN reports "cannot tell", never "down". The gate rows run first and
+# have no gate of their own — a tile that cannot go red is not coverage (#2825).
+GATE_SKIP = {
+    "prometheus": "skipped — Prometheus unreachable (see Prometheus monitor)",
+    "b2_reachable": "skipped — B2 unreachable (see B2 Reachable monitor)",
+    "wan_reachable": "skipped — WAN unreachable (see WAN Reachable monitor)",
+}
+
+# Prometheus `job` -> the checks a dead exporter of that job skips. Scrape Targets names the dead
+# exporter, so the row that reads the exporter's series pages once, not twice. host_packages
+# reads the series daniel-box's node exporter publishes from its textfile directory, so a dead
+# exporter makes them absent and the row would page on the absent series. M6 batch A1 moved
+# disk, memory and host_temp to the `hosts` rules and batch B8 moved pi_pressure, so the map has
+# no other member and no `node-pi` key. A MappingProxyType, so no test edits the one table every
+# other test reads. It goes with the host_packages row.
+EXPORTER_DEPENDENT: Mapping[str, frozenset[str]] = MappingProxyType(
+    {"node": frozenset({"host_packages"})}
+)
+
+
+def check_enabled(name: str, only: frozenset[str], skip: frozenset[str]) -> bool:
+    """Is `name` enabled under the CHECKS_ONLY/CHECKS_SKIP filter?
+
+    Args:
+      name: The check name to test.
+      only: The enable-exactly-this-set filter. Empty enables everything.
+      skip: The names to drop.
+    """
+    if only and name not in only:
+        return False
+    return name not in skip
+
+
+def _evaluate(cfg: Config, src: Sources, name: str, fn: CheckFn) -> CheckResult:
+    """Runs one check, converting an unreachable source/metric into a descriptive `down`.
+
+    Keeps the loop alive instead of letting an unreachable source or metric raise and
+    kill it.
+    """
+    try:
+        return CheckResult(*fn(cfg, src))
+    except Exception as e:  # an unreachable source/metric must not kill the loop
+        return CheckResult(False, "%s check error: %s" % (name, e))
+
+
+def down_exporters(
+    up_vector: list[tuple[dict[str, str], float]],
+    exporter_dependent: Mapping[str, frozenset[str]] = EXPORTER_DEPENDENT,
+) -> set[str]:
+    """Pure: which `exporter_dependent` jobs report up==0 in a Prometheus `up` vector.
+
+    Fed `src.prom_vector("up")` — [(labels, value), ...]. Returns the subset of
+    `exporter_dependent` keys whose Prometheus job is down.
+
+    Args:
+      up_vector: The Prometheus `up` vector as (labels, value) pairs.
+      exporter_dependent: The job -> dependents map to look jobs up in.
+    """
+    down_jobs = {m.get("job") for m, v in up_vector if v == 0}
+    return {job for job in exporter_dependent if job in down_jobs}
+
+
+def _exporter_suppressed(src: Sources) -> set[str]:
+    """The checks a dead exporter skips this cycle, or an empty set when the probe fails.
+
+    A BARE `up`, deliberately — no origin_sel(). PROM_ORIGIN resolves to origin="daniel-server",
+    while the `node` job labels each target with its own node name (daniel-box, daniel-server).
+    A pinned probe therefore saw one node exporter of three and missed a dead daniel-box one
+    (#2779). A failure to DETERMINE exporter health leaves the set empty: fail toward alerting,
+    never masking.
+    """
+    # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host
+    # holds the dependents' verdicts estate-wide. Accepted over per-origin suppression: the
+    # dependents report the worst origin in one verdict, so splitting suppression by origin
+    # would mean splitting the checks by origin first. ScrapeTargetDown still names the dead
+    # job, so the outage is reported; what is lost is a second host's verdict while one host's
+    # exporter is down. HostPackageBuilderStalled in bridge-exporter.yaml carries the same
+    # estate-wide exclusion in its expression.
+    suppressed: set[str] = set()
+    try:
+        for job in down_exporters(src.prom_vector("up")):
+            suppressed |= EXPORTER_DEPENDENT[job]
+    except Exception as e:
+        bridge.common.log("WARN: exporter-health probe failed:", e)
+    return suppressed
+
 
 def run_once(
     cfg: Config,
     src: Sources,
     checks: list[Check],
-    gates: Gates,
     sink: Sink,
     dry_run: bool = False,
     only: frozenset[str] | None = None,
     export: "CheckExposition | None" = None,
 ) -> None:
-    """Runs one full check cycle: the reachability gates, then every enabled check.
+    """Runs one full check cycle: every enabled check, the three gate rows first.
 
-    Evaluates the Prometheus, B2 and WAN gates first, so a single
-    outage in one of them suppresses its dependent checks (pushed `up` with a skip
-    message) instead of paging each of them separately. Every enabled check in `checks` is
-    then evaluated (unless suppressed by a gate or an exporter outage) and its result is
+    `checks` arrives in the order `registry.build_checks` returns it, the gate rows first. A row
+    whose `gate` names a gate row that read down this cycle is not run: it pushes `up` with a
+    skip message, so its heartbeat survives and only the gate's own tile pages. A row under
+    `startup_grace` is held `up` through its first down cycle. Every other row is evaluated,
     logged and pushed to its Kuma monitor.
 
     Args:
@@ -79,86 +167,25 @@ def run_once(
         check body sends goes through it, and its `state` carries the startup grace's streaks.
         A test hands in a fake holding canned answers.
       checks: The registry to evaluate, as `registry.build_checks(env)` returns it. A
-        parameter rather than a module table so a test hands in the two entries it means.
+        parameter rather than a module table so a test hands in the entries it means. A gate
+        row must come before the rows that name it; a gate the filter disables, or one absent
+        from the list, reads as up.
+      sink: Where every verdict is pushed. REQUIRED rather than defaulted to a live
+        `Sink(cfg)`, so a test that forgets it fails instead of pushing to the real Kuma.
+        cli.main() builds the one production `Sink` per process.
       dry_run: Evaluate and log every check, but push nothing to Kuma. Defaults to False, so
         the pod's own `python /app/cli.py` and every existing caller are unchanged.
       only: The enable-exactly-this-set filter `--check` builds. None reads cfg.CHECKS_ONLY,
-        which is what the pod runs with, so it must be threaded to EVERY check_enabled call
-        below — a filter validated in main() and not passed here would print an enabled count
-        it does not honour.
-      gates: Which checks each gate suppresses, and the three gate bodies. REQUIRED, so a
-        caller states the gate configuration it means: cli.main() builds the one production
-        `Gates()` and passes it every cycle.
-      sink: Where every gate's and every check's verdict is pushed. REQUIRED rather than
-        defaulted to a live `Sink(cfg)`, so a test that forgets it fails instead of pushing to
-        the real Kuma. cli.main() builds the one production `Sink` per process.
+        which is what the pod runs with, so it must reach EVERY check_enabled call below — a
+        filter validated in main() and not passed here would print an enabled count it does
+        not honour.
       export: Where each enabled row's verdict is also recorded for Prometheus. A row skipped
-        by a gate records 0 and its body is not called. Any other row records `_evaluate`'s
-        verdict, taken before `startup_grace` holds it `up`. None records nothing, which is
-        every caller but the looping pod.
+        by a gate or an exporter records 0 and its body is not called. Any other row records
+        `_evaluate`'s verdict, taken before `startup_grace` holds it `up`. None records
+        nothing, which is every caller but the looping pod.
     """
     only = cfg.CHECKS_ONLY if only is None else only
     skip = cfg.CHECKS_SKIP
-    # Prometheus reachability is evaluated FIRST and gates the prom-dependent checks: a single
-    # Prometheus outage would otherwise page all of them at once (one root cause, an alert storm).
-    # When it's down they're suppressed (pushed `up` with a skip msg, keeping each push monitor's
-    # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
-    # whenever Prometheus is up.
-    prom_ok, _prom_msg = gate_lib._gate(
-        cfg, src, "prometheus", gates.probe_prometheus, sink, dry_run, only, export
-    )
-
-    # Exporter-reachability gate (one level below the Prometheus gate): when Prometheus is up, probe
-    # `up` once and suppress each dead exporter's dependents so a node-exporter/cadvisor death is one
-    # page (Scrape Targets), not a 3-monitor false-page storm / silent-green split. A failure to
-    # DETERMINE exporter health leaves `suppressed` empty (fail toward alerting, never masking).
-    #
-    # A BARE `up`, deliberately — no origin_sel(). PROM_ORIGIN resolves to origin="daniel-server",
-    # while the `node` job labels each target with its own node name (daniel-box, daniel-server)
-    # and `node-pi` is statically labelled daniel-pi. A pinned probe therefore saw one node
-    # exporter of three, so a `node-pi` entry was unreachable and the daniel-box half of "node"
-    # with it: on 2026-09-21 15:09 pi_pressure paged with "node-pi series missing" — exactly what
-    # that entry existed to suppress — and on 2026-09-26 one Pi outage paged both pi_pressure and
-    # cluster_targets (#2779). Both rows are gone.
-    #
-    # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host
-    # now suppresses its dependents estate-wide — one `node` exporter dying holds the other
-    # hosts' verdicts of the same dependents too (disk and memory were among them until M6
-    # batch A1). Accepted over per-origin suppression: the
-    # dependents report the worst origin in one verdict, so splitting suppression by origin would
-    # mean splitting the checks by origin first. ScrapeTargetDown still names the dead job, so
-    # the outage is reported; what is lost is a second host's verdict while one host's exporter
-    # is down.
-    suppressed = set()
-    if prom_ok and gate_lib.check_enabled("prometheus", only, skip):
-        try:
-            for job in gate_lib.down_exporters(
-                src.prom_vector("up"),
-                gates.exporter_dependent,
-            ):
-                suppressed |= gates.exporter_dependent[job]
-        except Exception as e:
-            bridge.common.log("WARN: exporter-health probe failed:", e)
-
-    # B2-reachability gate (peer of the Prometheus gate): B2 caps TRANSACTIONS separately from storage
-    # bytes, and the kopia-era state-file checks this used to gate all reported their last
-    # successful cron run rather than current B2 health — the 2026-08-02 transaction-cap incident.
-    # Those checks are gone (backup moved to Longhorn), but b2_reachable stays: Longhorn still
-    # needs B2. The probe is throttled inside b2_reachable (it must not spend the transaction
-    # budget it is watching), but the cached verdict is pushed every cycle so this monitor's own
-    # heartbeat stays alive.
-    b2_ok, _b2_msg = gate_lib._gate(
-        cfg, src, "b2_reachable", gates.probe_b2, sink, dry_run, only, export
-    )
-
-    # WAN-reachability gate (peer of the two above): an internet outage had no gate at all,
-    # so every check reaching the internet paged on its own — 11 tiles red inside 90 minutes on
-    # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
-    # answers, so a single provider's outage does not silence a dependent reading the other.
-    wan_ok, _wan_msg = gate_lib._gate(
-        cfg, src, "wan_reachable", gates.probe_wan, sink, dry_run, only, export
-    )
-
     # A routine verdict is logged only on a narrowed or dry run, where someone reads the
     # output for it. The pod logged ~50 OK lines every 300 s cycle, burying the DOWN ones;
     # it now logs each DOWN line, each `up` that is holding a down streak (a page on its
@@ -166,33 +193,43 @@ def run_once(
     # its gate's DOWN line already says, so it is counted rather than logged.
     log_all = bool(only) or dry_run
     counts = {"up": 0, "down": 0, "skipped": 0}
+    down_gates: set[str] = set()
+    suppressed: set[str] = set()
 
     def log_skip(name: str, msg: str) -> None:
         if log_all:
             bridge.common.log("SKIP", name, "-", msg)
 
     for entry in checks:
-        name, token, fn = entry.name, entry.token, entry.fn
-        if not gate_lib.check_enabled(name, only, skip):
+        name = entry.name
+        if not check_enabled(name, only, skip):
             continue
-        # The verdict the exporter records: 0 for a row a gate skips, else the body's own.
+        # The verdict the exporter records: 0 for a row a gate or an exporter skips, else the
+        # body's own.
         exported = False
-        if not prom_ok and name in gates.prom_dependent:
-            ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
-            log_skip(name, msg)
-        elif not b2_ok and name in gates.b2_dependent:
-            ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
-            log_skip(name, msg)
-        elif not wan_ok and name in gates.wan_dependent:
-            ok, msg = True, "skipped — WAN unreachable (see WAN Reachable monitor)"
+        # DECIDED: the gate skip stays in the bridge, ahead of the body, though Alertmanager
+        # will own the paging suppression. A skipped body is never called, and that is the
+        # point: a B2 cap answer is billed (`checks/b2.py:check_b2_reachable`), so calling
+        # `b2_storage` during a cap breach would bill one listing every 300s cycle, and the
+        # four WAN bodies would each wait out their timeouts through a WAN outage. A rule
+        # cannot stop a call. Full account in
+        # docs/target-architecture/monitoring/m6-retire-kuma.md, "Gates and grace".
+        if entry.gate in down_gates:
+            ok, msg = True, GATE_SKIP[entry.gate]
             log_skip(name, msg)
         elif name in suppressed:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"
             log_skip(name, msg)
         else:
-            ok, msg = gate_lib._evaluate(cfg, src, name, fn)
+            ok, msg = _evaluate(cfg, src, name, entry.fn)
             exported = ok
-            if name in gates.startup_grace:
+            if name in GATE_SKIP and not ok:
+                down_gates.add(name)
+            if name == "prometheus" and ok:
+                # Probed once Prometheus answers, so a dead exporter's dependents are skipped
+                # before they run.
+                suppressed = _exporter_suppressed(src)
+            if entry.gate == STARTUP_GRACE:
                 ok, msg = bridge.streaks.apply_startup_grace(
                     name, ok, msg, cfg.GRACE_CYCLES, src.state.grace_streaks
                 )
@@ -205,7 +242,7 @@ def run_once(
         else:
             counts["up" if ok else "down"] += 1
         if not dry_run:
-            sink.push(token, ok, msg)
+            sink.push(entry.token, ok, msg)
     bridge.common.log(
         "CYCLE",
         "%(up)d up, %(down)d down, %(skipped)d skipped" % counts,

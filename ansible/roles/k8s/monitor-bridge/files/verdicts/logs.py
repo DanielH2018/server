@@ -147,7 +147,7 @@ def swallowed_verdicts(
     Pages ONLY when some other tag landed a push in the same window. When nothing lands, the
     cause is fleet-wide — Kuma unreachable, the edge answering 404 for every route, the host
     that runs Kuma down — and another tile already pages for it; a second page for one root
-    cause is the rule gates.py applies everywhere else, and it is the population
+    cause is the rule the gate skip in check.py applies everywhere else, and it is the population
     uptime-kuma/CLAUDE.md measured when it rejected a plain count of push failures. The one
     case this exists for — one tag's DOWN lost while the rest of the fleet pushes fine — is
     the one that count could not separate. Measured: release-staleness-check's http=500 on

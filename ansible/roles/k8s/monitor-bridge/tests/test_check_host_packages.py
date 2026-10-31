@@ -5,7 +5,7 @@ node exporter. The fetch timestamp ages when the timer dies, the token is missin
 keeps failing, because a failed fetch writes nothing. The unbuilt-since series carries the cause
 in its `reason` and `sha` labels, and its value is non-zero while a commit stays unbuilt. In each
 unbuilt case the builder exits 0, so only this row reports it. The exporter-suppression pair is
-in test_check_gates_exporters.py.
+in test_check_exporters.py.
 """
 
 import pytest

@@ -18,18 +18,16 @@ import cli
 import verdict_export
 import deploy_pipeline
 from _bridge_env import bridge_env
-from _check_gate_helpers import mk
+from _fake_sources import mk
 from _fake_sources import FakeSink, FakeSources
 from _deploy_pipeline_fakes import github
 from bridge.types import Check
-from gates import Gates
 
 
-def _silence(pushes, ran, names=("host_packages",), probe_prometheus=None, **env):
+def _silence(pushes, ran, names=("host_packages",), **env):
     """STATE the registry, the I/O and the environment, so main() runs touching nothing live.
 
-    Returns the `checks=` / `gate_config=` / `sources=` / `sink=` / `env=` / `exposition=` keyword
-    arguments to hand
+    Returns the `checks=` / `sources=` / `sink=` / `env=` / `exposition=` keyword arguments to hand
     `cli.main`, which is how a test says which checks exist and what they read without mutating
     a module. `env` is the rendered pod environment, the one the pod's `main()` reads, with
     `HEARTBEAT_FILE` pointed at the null device so a cycle's heartbeat writes nowhere.
@@ -38,9 +36,6 @@ def _silence(pushes, ran, names=("host_packages",), probe_prometheus=None, **env
       pushes: Collects every (token, ok, msg) the cycle would have pushed, through the sink.
       ran: Collects the name of every check body that ran.
       names: The registry to run — one `Check` per name, each recording into `ran`.
-      probe_prometheus: A replacement Prometheus gate body. Only
-        `test_check_flag_unions_in_the_gate_a_named_check_depends_on` passes one, to watch that
-        gate actually run; the default reports the gate up without recording.
       **env: Overrides laid on the rendered env, as `bridge_env` takes them.
     """
     sink = FakeSink()
@@ -56,11 +51,6 @@ def _silence(pushes, ran, names=("host_packages",), probe_prometheus=None, **env
         # family reads nothing either.
         "exposition": deploy_pipeline.Exposition(),
         "check_exposition": verdict_export.CheckExposition(300),
-        "gate_config": Gates(
-            probe_prometheus=probe_prometheus or (lambda _cfg, _src: (True, "prom ok")),
-            probe_wan=lambda _cfg, _src: (True, "wan ok"),
-            probe_b2=lambda _cfg, _src: (True, "b2 ok"),
-        ),
     }
 
 
@@ -183,8 +173,7 @@ def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypat
     otherwise be untested — and it is the branch that decides which Kuma monitor a result
     reaches. `os.environ` carries a DIFFERENT token for the same monitor, so a build_checks
     reading the process environment instead of its argument pushes to the wrong monitor and this
-    test sees it. `--check host_packages` rather than CHECKS_ONLY, because CHECKS_ONLY is strict about
-    naming the gate and `--check` unions it in.
+    test sees it.
     """
     pushes, ran = [], []
     wired = _silence(pushes, ran, KUMA_PUSH_HOST_PACKAGES="from_the_argument")
@@ -195,7 +184,6 @@ def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypat
             argv,
             env=wired["env"],
             checks=None,
-            gate_config=wired["gate_config"],
             sources=wired["sources"],
             sink=wired["sink"],
         )
@@ -213,48 +201,19 @@ def test_check_flag_is_repeatable_and_filters_like_checks_only(cfg):
     # produces exactly the same `ran` list, because an empty CHECKS_ONLY enables everything.
     wired = _silence(pushes, ran, names=("host_packages", "n8n", "scrutiny"))
     cfg = replace(cfg, CHECKS_ONLY=frozenset(), CHECKS_SKIP=frozenset())
-    # No need to also name `prometheus`: host_packages is PROM_DEPENDENT, and
-    # expand_gates_for_cli unions its gate in automatically (see the dedicated test below for
-    # the regression this guards against).
     argv = ["--once", "--dry-run", "--check", "host_packages", "--check", "n8n"]
     assert cli.main(argv, **wired) == 0
     assert sorted(ran) == ["host_packages", "n8n"]
     assert "scrutiny" not in ran
 
 
-def test_check_flag_unions_in_the_gate_a_named_check_depends_on(cfg):
-    """`--check host_packages` alone must not trip the "gate disabled under its dependents" refusal.
-
-    host_packages is PROM_DEPENDENT. `--check` unions in the gate a named check depends on
-    automatically (expand_gates_for_cli), so naming only host_packages does not leave `prometheus` out of
-    `only` and trip validate_check_filter's refusal to start with a gate off under an enabled
-    dependent. CHECKS_ONLY below stays strict.
-    """
+def test_check_flag_names_one_row_without_its_gate():
+    """`--check host_packages` alone runs that row: the gate it names is not in `only`, so it
+    reads as up and does not run, which is the filter the operator asked for."""
     pushes, ran = [], []
-    wired = _silence(
-        pushes,
-        ran,
-        names=("host_packages", "n8n"),
-        probe_prometheus=mk(ran, "prometheus"),
-    )
+    wired = _silence(pushes, ran, names=("prometheus", "host_packages", "n8n"))
     assert cli.main(["--once", "--dry-run", "--check", "host_packages"], **wired) == 0
-    assert sorted(ran) == ["host_packages", "prometheus"]
-    assert "n8n" not in ran
-
-
-def test_checks_only_env_keeps_the_strict_gate_contract():
-    """CHECKS_ONLY (env) is NOT auto-unioned — only the `--check` CLI flag is.
-
-    An operator setting CHECKS_ONLY by hand is expected to spell the gate out themselves, same
-    as before expand_gates_for_cli existed; only the CLI convenience changed.
-
-    The filter is handed to `main` as the environment it would really read, because that is
-    where `load_config` runs — narrowing a Config the test built would not reach it.
-    """
-    pushes, ran = [], []
-    wired = _silence(pushes, ran, CHECKS_ONLY="host_packages")
-    assert cli.main(["--once"], **wired) == 2
-    assert ran == []
+    assert ran == ["host_packages"]
 
 
 def test_an_unknown_check_name_exits_two_without_running_anything():
@@ -264,15 +223,10 @@ def test_an_unknown_check_name_exits_two_without_running_anything():
     assert ran == []
 
 
-def test_a_gate_disabled_under_its_dependents_exits_two():
-    """--check is validated exactly like CHECKS_ONLY, including the gate rule.
-
-    Enabling a gated check without its gate reintroduces the alert storm the gate prevents, and
-    is refused at startup rather than discovered during an outage.
-    """
+def test_an_unknown_name_in_the_env_filter_exits_two_without_running_anything():
     pushes, ran = [], []
-    wired = _silence(pushes, ran)
-    assert cli.main(["--once", "--check", "scrutiny"], **wired) == 2
+    wired = _silence(pushes, ran, CHECKS_SKIP="no_such_check")
+    assert cli.main(["--once"], **wired) == 2
     assert ran == []
 
 
