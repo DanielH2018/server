@@ -39,7 +39,6 @@ KNOWN_ALERTS = frozenset(
     {
         # One per agent user, named after it.
         "{{ claude_code_agent_user }}-clone-sync",
-        "claude-land",
         "claude-memory-sync",
         "claude-rc",
         # Instanced, and started by a session's StopFailure hook (#6021).

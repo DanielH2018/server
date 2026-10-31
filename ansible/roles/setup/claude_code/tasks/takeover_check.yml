@@ -6,6 +6,10 @@
 # Install order puts the grant last, so the sudoers line never names a command that is not yet
 # on disk. Removal runs the other way round: the grant first, then the wrapper, the flux copy
 # and the state directory.
+#
+# On the hosts `claude_code_packaged_hosts['takeover_check']` lists, the claude-code host
+# component ships the wrapper and the grant in one package version, and the tasks that write them
+# skip. The role keeps the pinned flux copy and the state directory there.
 
 - name: Install the takeover check
   when: claude_code_takeover_check_enabled
@@ -50,6 +54,7 @@
 
     - name: Install the takeover check wrapper
       tags: [claude_code]
+      when: inventory_hostname not in claude_code_packaged_hosts['takeover_check']
       ansible.builtin.copy:
         src: homelab-takeover-check.sh
         dest: "{{ claude_code_takeover_check_wrapper }}"
@@ -73,6 +78,7 @@
 
     - name: Grant the takeover check to its users
       tags: [claude_code]
+      when: inventory_hostname not in claude_code_packaged_hosts['takeover_check']
       ansible.builtin.template:
         src: claude-takeover-check.sudoers.j2
         dest: /etc/sudoers.d/claude-takeover-check
@@ -87,6 +93,7 @@
   block:
     - name: Remove the takeover check's sudoers grant
       tags: [claude_code]
+      when: inventory_hostname not in claude_code_packaged_hosts['takeover_check']
       ansible.builtin.file:
         path: /etc/sudoers.d/claude-takeover-check
         state: absent
@@ -94,6 +101,7 @@
 
     - name: Remove the takeover check wrapper
       tags: [claude_code]
+      when: inventory_hostname not in claude_code_packaged_hosts['takeover_check']
       ansible.builtin.file:
         path: "{{ claude_code_takeover_check_wrapper }}"
         state: absent

@@ -1,4 +1,4 @@
-# The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40's first slice,
+# The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40's first two slices,
 # docs/target-architecture/host/h7-delete-ansible.md). The claude_code role ends on daniel-server
 # (`meta: end_role` in its tasks/main.yml). On daniel-box it skips each subject listed here through
 # `claude_code_packaged_hosts`, and keeps the rest until H7.40's later slices move them.
@@ -14,7 +14,11 @@
 #   - the fleet and login-session caps, and the pytest fan-out cap;
 #   - the session stop alert and the fan-out alert, with the polkit rules that let a session start
 #     them;
-#   - the root inspector: the operator's sudo grant and the agent's socket.
+#   - the root inspector: the operator's sudo grant and the agent's socket;
+#   - daniel-box's own timers and grants (H7.40's second slice): the agent's lander, the
+#     server-batch lander, the pipeline timeline, the memory store copy, and the D5 takeover
+#     check's wrapper and sudoers grant. Each is armed only in daniel-box's host_vars, so
+#     daniel-server's package ships none of them.
 #
 # The component renders the role's own templates and copies its scripts in place (`role:
 # claude_code`), H4's pattern, so daniel-box's Ansible render and this package read one source.
@@ -45,6 +49,8 @@ defaults:
   claude_code_rc_unit: homelab-claude-rc.service
   claude_code_rc_alert_unit: homelab-claude-rc-alert.service
   claude_code_cgroup_metrics_unit: homelab-claude-cgroup-metrics.service
+  # The failure page of the syncs, the memory store copy, the server-batch lander and the
+  # pipeline timeline.
   claude_code_sync_alert_unit: homelab-alert@%n.service
   # What the role computes in tasks: the agents switched on, and the group initial_setup names.
   claude_code_agents_present: [claude]
@@ -114,6 +120,26 @@ files:
   - {src: "role-file:rootq_socket.py", dst: /usr/local/bin/rootq-socket, mode: "0755", when: "claude_code_rootq_socket_armed"}
   - {src: "role:homelab-rootq.socket.j2", dst: /usr/lib/systemd/system/homelab-rootq.socket, when: "claude_code_rootq_socket_armed"}
   - {src: "role:homelab-rootq@.service.j2", dst: /usr/lib/systemd/system/homelab-rootq@.service, when: "claude_code_rootq_socket_armed"}
+  # The agent's lander. Its name and settings are pinned in the role's claude-land-pins.j2, so
+  # no inventory value reaches them. The rule ships under /usr/share, where the Ansible-era copy
+  # in /etc shadows it until reconcile retires that copy.
+  - {src: "role:claude-land-approval-paths.j2", dst: /etc/claude-land/approval-paths, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
+  - {src: "role:claude-land@.service.j2", dst: /usr/lib/systemd/system/homelab-claude-land@.service, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
+  - {src: "role:50-claude-land.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-land.rules, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
+  # The server-batch lander, the pipeline timeline and the memory store copy. Their textfiles keep
+  # the names `claude-fanout-server-lander`, `claude-pipeline-timeline` and `claude-memory-sync`,
+  # which observability's host-checks rules read.
+  - {src: "role:claude-fanout-server-lander.service.j2", dst: /usr/lib/systemd/system/homelab-claude-fanout-server-lander.service, when: "claude_code_fanout_server_lander_enabled"}
+  - {src: "role:claude-fanout-server-lander.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-fanout-server-lander.timer, when: "claude_code_fanout_server_lander_enabled"}
+  - {src: "role:claude-pipeline-timeline.service.j2", dst: /usr/lib/systemd/system/homelab-claude-pipeline-timeline.service, when: "claude_code_pipeline_timeline_enabled"}
+  - {src: "role:claude-pipeline-timeline.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-pipeline-timeline.timer, when: "claude_code_pipeline_timeline_enabled"}
+  - {src: "role:claude-memory-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-memory-sync.service, when: "claude_code_memory_sync_enabled"}
+  - {src: "role:claude-memory-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-memory-sync.timer, when: "claude_code_memory_sync_enabled"}
+  # The D5 takeover check: the wrapper and the grant land in one package version, so the grant
+  # never names a missing command. The role keeps the pinned flux copy the wrapper runs, and the
+  # wrapper creates its own state directory.
+  - {src: "role-file:homelab-takeover-check.sh", dst: /usr/local/sbin/homelab-takeover-check, mode: "0755", when: "claude_code_takeover_check_enabled"}
+  - {src: "role:claude-takeover-check.sudoers.j2", dst: /etc/sudoers.d/homelab-takeover-check, mode: "0440", when: "claude_code_takeover_check_enabled"}
 units:
   # A restart drops every session the host runs, so a changed unit waits for the operator.
   homelab-claude-rc.service: {policy: manual}
@@ -130,10 +156,19 @@ enable:
     target: timers.target
     when: claude_code_agent_user_enabled and claude_code_agent_dotfiles
   homelab-rootq.socket: {target: sockets.target, when: claude_code_rootq_socket_armed}
+  homelab-claude-fanout-server-lander.timer:
+    target: timers.target
+    when: claude_code_fanout_server_lander_enabled
+  homelab-claude-pipeline-timeline.timer:
+    target: timers.target
+    when: claude_code_pipeline_timeline_enabled
+  homelab-claude-memory-sync.timer: {target: timers.target, when: claude_code_memory_sync_enabled}
 # What the role installed. Reconcile retires each unit not shipped under its old name (disable,
 # stop, remove), and hands off each /etc copy of a unit shipped under the same name.
 # Retiring claude-rc.service stops the Remote Control host and drops the phone's sessions, so the
-# PR that adds this list merges in a window the operator picks.
+# PR that adds this list merges in a window the operator picks. Retiring claude-land@.service
+# leaves a landing already running to finish, but a session that started before the agent's
+# profile changed still hands its next landing to the retired name.
 legacy:
   - {unit: claude-rc.service}
   - {unit: claude-rc-alert.service}
@@ -152,6 +187,17 @@ legacy:
   - {unit: fanout-alert@.service}
   - {unit: homelab-rootq.socket}
   - {unit: homelab-rootq@.service}
+  - {unit: claude-land@.service}
+  - {unit: claude-land-alert.service}
+  - {unit: claude-fanout-server-lander.service}
+  - {unit: claude-fanout-server-lander.timer}
+  - {unit: claude-fanout-server-lander-alert.service}
+  - {unit: claude-pipeline-timeline.service}
+  - {unit: claude-pipeline-timeline.timer}
+  - {unit: claude-pipeline-timeline-alert.service}
+  - {unit: claude-memory-sync.service}
+  - {unit: claude-memory-sync.timer}
+  - {unit: claude-memory-sync-alert.service}
   - {path: /etc/claude-rc/alert-webhook.env}
   - {path: /etc/claude-rc}
   - {path: /etc/claude-stop-alert/alert-webhook.env}
@@ -161,6 +207,11 @@ legacy:
   - {path: /etc/polkit-1/rules.d/50-claude-stop-alert.rules}
   - {path: /etc/polkit-1/rules.d/50-claude-fanout-alert.rules}
   - {path: /etc/sudoers.d/claude-rootq}
+  - {path: /etc/sudoers.d/claude-takeover-check}
+  - {path: /etc/polkit-1/rules.d/50-claude-land.rules}
+  - {path: /etc/claude-land/alert-webhook.env}
+  - {path: /etc/claude-code-alerts/alert-webhook.env}
+  - {path: /etc/claude-code-alerts}
   - {path: "/home/{{ sys_user }}/.config/environment.d/90-claude-pytest-cap.conf"}
   - {path: /var/lib/claude/.config/environment.d/90-claude-pytest-cap.conf}
   - {path: /var/lib/homelab/setup-render-manifest.d/claude-code}

@@ -13,8 +13,8 @@ the login profile, and the unit does not. The `claude` agent user's profile sets
 
 DECIDED: the worktree's own `land.sh` runs, the copy the model ran before. The implementer
 already runs arbitrary commands as this user, so the primary checkout's copy would add no
-boundary, and for the agent user the landing itself runs in `claude-land@<n>.service` from
-the operator's checkout either way.
+boundary, and for the agent user the landing itself runs in `homelab-claude-land@<n>.service`
+from the operator's checkout either way.
 """
 
 import re

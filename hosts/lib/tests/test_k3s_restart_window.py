@@ -53,10 +53,10 @@ EXEMPT = {
     "homelab-claude-cgroup-metrics.timer": "writes Claude cgroup metrics; never touches k3s",
     "homelab-claude-clone-sync.timer": "syncs a git clone; never touches k3s",
     "homelab-claude-dotfiles-sync.timer": "syncs the dotfiles clone; never touches k3s",
-    "claude-memory-sync.timer": "copies the memory store to daniel-server; never touches k3s",
-    "claude-fanout-server-lander.timer": "lands a merged PR over ssh; reads no cluster state",
+    "homelab-claude-memory-sync.timer": "copies the memory store to daniel-server; never touches k3s",
+    "homelab-claude-fanout-server-lander.timer": "lands a merged PR over ssh; reads no cluster state",
     "claude-triage-poll.timer": "polls monitors and starts a session only on an alert episode",
-    "claude-pipeline-timeline.timer": "joins GitHub, journals and review records; no cluster",
+    "homelab-claude-pipeline-timeline.timer": "joins GitHub, journals and review records; no cluster",
     "homelab-builder.timer": "builds and signs packages; a build during a restart only waits",
     "Sync peer Claude artifacts": "an ssh pull from daniel-server; reads no cluster state",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.
@@ -363,9 +363,11 @@ def test_a_role_timer_drops_out_only_once_the_box_package_ships_its_twin():
 def test_the_real_box_package_drops_only_the_role_timers_it_ships(box_package):
     monotonic: list[str] = []
     role_schedules(monotonic, box_timers(box_package))
-    assert "claude-cgroup-metrics.timer" not in monotonic
-    # Slice 2 moves the memory sync; until then the role's timer must still be checked.
-    assert {"claude-memory-sync.timer", "gitops-deploy.timer"} <= set(monotonic)
+    assert {"claude-cgroup-metrics.timer", "claude-memory-sync.timer"}.isdisjoint(
+        monotonic
+    )
+    # Slice 3 moves triage; until then the role's timer must still be checked.
+    assert {"claude-triage-poll.timer", "gitops-deploy.timer"} <= set(monotonic)
 
 
 def test_an_unlisted_monotonic_timer_is_reported():

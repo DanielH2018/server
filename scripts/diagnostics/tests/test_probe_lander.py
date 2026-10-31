@@ -26,7 +26,7 @@ NEW_PASS = [
     [1792958995.0, 5, "p2", "uv", "52 PRs in the last records, 2 still open"],
     [1792958995.0, 5, "p2", "uv", "#6333 batch 6327: ineligible, it changes the lander's own surface: .claude/settings.json"],
     [1792958995.0, 5, "p2", "uv", "#6335 batch 6325: ineligible, the head moved since the review (b2c4c6ce -> 8a098e80)"],
-    [1792958996.0, 6, "p2", "systemd", "claude-fanout-server-lander.service: Deactivated successfully."],
+    [1792958996.0, 6, "p2", "systemd", "homelab-claude-fanout-server-lander.service: Deactivated successfully."],
 ]  # fmt: skip
 LOGS = {
     "status": "ok",

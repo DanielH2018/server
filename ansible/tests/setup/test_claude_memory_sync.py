@@ -132,6 +132,6 @@ def test_armed_only_on_daniel_box_and_disarming_removes_the_units():
         if t.get("ansible.builtin.file", {}).get("state") == "absent"
         and "claude-memory-sync.timer" in t.get("loop", [])
     ]
-    assert removal and removal[0]["when"] == "not claude_code_memory_sync_enabled", (
+    assert removal and "not claude_code_memory_sync_enabled" in removal[0]["when"], (
         "disarming must remove the units, or a stale timer keeps copying"
     )

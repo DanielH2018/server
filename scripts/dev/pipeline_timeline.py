@@ -63,9 +63,9 @@ stamps each wait's start and end into `~/.local/state/fanout-server-lander/opera
 (`fanout_lib/operator_waits.py`). A wait still open at the merge ends there. A PR the lander
 never saw held has an empty `waited_h`.
 
-`claude-pipeline-timeline.timer` on daniel-box runs this daily with `--days 3 --pull-reviews
-daniel-server`, so the journal halves are copied out before they rotate. A three-day window
-covers a missed day.
+`homelab-claude-pipeline-timeline.timer` on daniel-box runs this daily with `--days 3
+--pull-reviews daniel-server`, so the journal halves are copied out before they rotate. A
+three-day window covers a missed day.
 """
 
 import json
@@ -97,7 +97,12 @@ WAITS_FILE = (
 REMOTE_REVIEWS = ".local/state/fanout-review/"
 PULL_TIMEOUT_S = 120
 LEDGER_TAG = "landing-annotation"
-LANDER_UNIT = "claude-fanout-server-lander.service"
+# The lander's unit under its packaged name, and the Ansible-era name its older passes logged under,
+# which a window of up to --days still reaches.
+LANDER_UNITS = (
+    "homelab-claude-fanout-server-lander.service",
+    "claude-fanout-server-lander.service",
+)
 # How far before --since an issue may have been filed and still be joined to a PR after it.
 ISSUE_LOOKBACK = timedelta(days=21)
 GAPS = ("issue_to_batch", "batch_to_pr", "pr_to_land", "land_to_merge", "merge_to_done")
@@ -479,6 +484,11 @@ def _journal_lines(*selector: str, since: str) -> list[str]:
     return done.stdout.splitlines()
 
 
+def lander_journal(since: str) -> list[str]:
+    """The server-batch lander's journal lines since `since`, under each of `LANDER_UNITS`."""
+    return _journal_lines(*(f"--unit={unit}" for unit in LANDER_UNITS), since=since)
+
+
 def pull_reviews(host: str, dest: Path) -> str:
     """Copy `host`'s review records into `dest` with a read-only rsync; "" or why it failed.
 
@@ -573,7 +583,7 @@ def main(argv: list[str] | None = None) -> int:
         "--json", "number,createdAt",
     ) or []  # fmt: skip
     landings = parse_landings(_journal_lines("-t", LEDGER_TAG, since=args.since))
-    holds = parse_holds(_journal_lines("-u", LANDER_UNIT, since=args.since))
+    holds = parse_holds(lander_journal(args.since))
     directories = list(args.review_dir or [REVIEW_DIR])
     if args.pull_reviews:
         copy = args.out / f"reviews-{args.pull_reviews}"

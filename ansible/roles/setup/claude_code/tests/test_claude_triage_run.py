@@ -26,7 +26,7 @@ def test_the_session_is_diagnose_only_capped_and_kept_for_resume() -> None:
         "Edit",
         "Write",
         "NotebookEdit",
-        "Bash(systemctl start claude-land@*)",
+        "Bash(systemctl start homelab-claude-land@*)",
     ):
         assert tool in after
     assert argv[argv.index("--max-budget-usd") + 1] == "10"

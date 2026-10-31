@@ -76,7 +76,7 @@ DENIED_TOOLS = (
     "Edit",
     "Write",
     "NotebookEdit",
-    "Bash(systemctl start claude-land@*)",
+    "Bash(systemctl start homelab-claude-land@*)",
     "Bash(gh pr create*)",
     "Bash(git push*)",
 )
