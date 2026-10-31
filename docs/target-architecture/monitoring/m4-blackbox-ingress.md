@@ -116,8 +116,8 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   entry's `extra_hostnames` and `edge-selfcheck.local.<domain>`, to `k3s_metallb_ingress_vip`.
   The comment above it gives the reason: CoreDNS forwards to resolvers that can answer the
   public wildcard with the wrong address.
-  `ansible/tests/services/test_kuma_static_monitors.py::test_the_all_clear_probe_host_is_pinned_to_the_ingress_vip`
-  asserts that the Deployment renders the block. A pod without `hostAliases` resolves through
+  `ansible/tests/services/test_extra_probe_targets.py::test_the_edge_all_clear_host_is_pinned_by_the_exporter`
+  asserts that blackbox-exporter's Deployment, which calls the same macro, renders the block. A pod without `hostAliases` resolves through
   cluster CoreDNS (`ansible/roles/setup/k3s/templates/coredns-corefile.j2`,
   `k3s_coredns_upstreams`).
 - **The network path.** Traefik's `:8443` admits the pod CIDR through
