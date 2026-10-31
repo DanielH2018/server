@@ -85,16 +85,17 @@ Consequences worth knowing before debugging a missing artifact:
   connection, so a `LocalForward` on the peer's host entry applies to this one too, and a bind
   collision on its local port fails the whole connection. rsync needs no forward, so the sync
   declines all of them.
-- **The `Artifacts Peer Sync` Kuma tile is the monitor (#2516).** Every run pushes one verdict
-  for all peers, after the loop. A peer at `claude_code_artifacts_sync_alert_after_failures`
-  consecutive failures or more turns it DOWN, and it stays DOWN on every later run until the peer recovers.
-  A shorter streak pushes UP and names the streak in the message. Ten minutes of silence means
-  the timer itself stopped. The token is `artifacts_sync_push_token`, a credential the unit
-  loads, so the script holds no secret.
+- **The `ArtifactsSyncFailed` and `ArtifactsSyncNotReporting` rules are the monitor (#2516).**
+  Every run records one verdict for all peers, after the loop, as a `status=` journal line and
+  a textfile. A peer at `claude_code_artifacts_sync_alert_after_failures` consecutive failures
+  or more makes it `down`, and it stays `down` on every later run until the peer recovers.
+  A shorter streak records `up` and names the streak in the report. The textfile's deadline
+  lapsing means the timer itself stopped. The script pushes nothing to Kuma since M6 batch
+  B6a's Cutover-2, so it holds no secret.
 - **There is deliberately no file-age staleness check.** rsync copies the peer's own mtimes, so
   the newest file's age measures how often sessions on the peer write artifacts, not whether
-  the sync works. A successful `rsync --delete` leaves the mirror equal to the peer, so a green
-  tile means an old peer artifact really is the newest one the peer has. The script's `DECIDED:`
+  the sync works. A successful `rsync --delete` leaves the mirror equal to the peer, so an `up`
+  verdict means an old peer artifact really is the newest one the peer has. The script's `DECIDED:`
   comment carries the reasoning.
 
 ## A new Python module goes in `artifacts_modules`, and nowhere else

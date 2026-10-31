@@ -185,9 +185,10 @@ files:
   - {src: templates/takeover-check-flux.sh.j2, dst: /usr/lib/homelab/takeover-check-flux, mode: "0755", activate: "try-restart:homelab-takeover-check-flux.service"}
   - {src: units/homelab-takeover-check-flux.service, dst: /usr/lib/systemd/system/homelab-takeover-check-flux.service}
   # The artifacts node's peer sync and OTLP-door heartbeat (H7.40's fourth slice), and the
-  # directories the artifacts pod mounts. Their push tokens are credentials of daniel-box's
-  # package.yml. The tags and textfiles keep the names `sync-artifacts` and `claude-otel-health`,
-  # which Kuma, Loki and observability's host-checks rules read.
+  # directories the artifacts pod mounts. They push to nothing: each logs a `status=` line and
+  # writes a textfile (M6 batch B6a's Cutover-2). The tags and textfiles keep the names
+  # `sync-artifacts` and `claude-otel-health`, which Loki, `probe.py alerts` and observability's
+  # host-checks rules read.
   - {src: tmpfiles.d/homelab-artifacts.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-artifacts.conf, when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: templates/sync-artifacts.sh.j2, dst: /usr/lib/homelab/sync-artifacts, mode: "0755", when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: units/homelab-sync-artifacts.service.j2, dst: /usr/lib/systemd/system/homelab-sync-artifacts.service, when: "inventory_hostname == claude_code_artifacts_node"}

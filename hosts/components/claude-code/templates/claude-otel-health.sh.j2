@@ -26,15 +26,17 @@
 # as `checks/logs.py:with_export_failures` on the Log Shipper Dropped Entries tile. Nothing here reads Prometheus or the cluster any more, which is
 # why the kubeconfig and the ClusterIP resolution are gone with them.
 #
-# Push, not poll: this is a host timer that reports its own verdict. Same curl as
-# longhorn-backup-health.sh, through kuma-push-lib.sh.
+# Push, not poll: this is a host timer that reports its own verdict, as a journal line and a
+# textfile.
 #
 # Usage: claude-otel-health (no arguments)
 # Runs from homelab-claude-otel-health.service on daniel-box, every 10 minutes by default
 # (claude_code_telemetry_health_minute). It probes the OTLP receiver on the node's loopback,
-# reads /usr/lib/homelab/kuma-push-lib.sh and the unit credential `kuma_push_token`, and pushes
-# the verdict to the telemetry Kuma push monitor. claude_code_otlp_host_ip and claude_code_otlp_port are held equal to observability's
-# pair by hosts/lib/tests/test_claude_artifacts_node_timers.py.
+# logs a `status=<up|down>` line under the `claude-otel-health` tag and writes
+# `claude-otel-health.prom` for node_exporter's textfile collector. Prometheus's OtlpDoorClosed and
+# OtlpDoorNotReporting rules page from that file. Until M6 batch B6a's Cutover-2 the verdict also
+# went to a Kuma push monitor. claude_code_otlp_host_ip and claude_code_otlp_port are held equal
+# to observability's pair by hosts/lib/tests/test_claude_artifacts_node_timers.py.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -43,14 +45,8 @@ for arg in "$@"; do
   esac
 done
 
-# shellcheck source=/dev/null
-source /usr/lib/homelab/kuma-push-lib.sh || {
-  logger -t claude-otel-health "kuma-push-lib.sh missing — install homelab-daniel-box on this host"
-  exit 1
-}
-
-# The textfile library, sourced like the Kuma one: a host that misses it fails the run loudly
-# instead of reporting green (M6 batch B6).
+# The textfile library: a host that misses it fails the run loudly instead of reporting green
+# (M6 batch B6).
 # shellcheck source=/dev/null
 source /usr/lib/homelab/homelab-check-lib.sh || {
   logger -t claude-otel-health "homelab-check-lib.sh missing — install homelab-daniel-box on this host"
@@ -68,13 +64,6 @@ DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
 {{ telemetry_health_cron_minute_not_every_n | mandatory('claude_code_telemetry_health_minute must be */N for claude-otel-health to derive DEADLINE_S, got ' ~ claude_code_telemetry_health_minute) }}
 {% endif %}
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_TOKEN="$(cat "${CREDENTIALS_DIRECTORY:-/nonexistent}/kuma_push_token" 2>/dev/null || true)"
-PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
-
 if timeout 5 bash -c "exec 3<>/dev/tcp/{{ claude_code_otlp_host_ip }}/{{ claude_code_otlp_port }}" 2>/dev/null; then
   STATUS=up
   MSG="OTLP receiver reachable on {{ claude_code_otlp_host_ip }}:{{ claude_code_otlp_port }}"
@@ -85,8 +74,7 @@ fi
 
 SUCCESS=0
 [ "$STATUS" = up ] && SUCCESS=1
-# Taken at the verdict and written before the push, so a slow push cannot age it.
+# The journal line first, so `journalctl -t claude-otel-health` reads the outcome.
+logger -t claude-otel-health "status=${STATUS} ${MSG}"
 write_check_textfile claude-otel-health "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
   || logger -t claude-otel-health "textfile write failed (status=${STATUS})"
-
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" claude-otel-health

@@ -1,8 +1,8 @@
 # Shipped by homelab-daniel-box. Started by homelab-sync-artifacts.timer.
 [Unit]
 Description=Pull every peer's Claude artifacts onto this host and push the star list back
-After=homelab-secrets.service network-online.target
-Wants=homelab-secrets.service network-online.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
@@ -13,6 +13,5 @@ SyslogLevel=notice
 # (tmpfiles.d/homelab-artifacts.conf.j2).
 ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-artifacts.conf
 ExecStart=/usr/lib/homelab/sync-artifacts
-LoadCredential=kuma_push_token:/run/credstore/artifacts_sync_push_token
 # The cron's `| logger -t sync-artifacts`, which journalctl -t and Loki read.
 SyslogIdentifier=sync-artifacts

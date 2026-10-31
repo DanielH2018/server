@@ -244,7 +244,7 @@ health` until H7.40's fourth slice, whose `legacy:` entries in
 `hosts/components/claude-code/component.yml` retire the cron files and the scripts that
 embedded the push tokens. Each timer fires every N minutes of its `*/N` minute default, and its
 unit's `SyslogIdentifier=` keeps the tag the cron's `logger -t` wrote, `sync-artifacts` or
-`claude-otel-health`. Kuma, Loki and `probe.py alerts` read that tag.
+`claude-otel-health`. Loki and `probe.py alerts` read that tag.
 `ansible/roles/k8s/artifacts/CLAUDE.md` documents how the sync behaves, and the heartbeat's
 template carries why it is a host timer at all.
 
@@ -258,16 +258,17 @@ template carries why it is a host timer at all.
   `hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2` declares the local tree,
   each peer directory, the star list directory and the textfile directory, and the sync's
   `ExecStartPre=+` runs `systemd-tmpfiles --create` on it.
-- **The push tokens are credentials.** `artifacts_sync_push_token` and `claude_otel_push_token`
-  are in daniel-box's `package.yml` `credentials:`, and each unit loads its token as
-  `kuma_push_token`. A rotation moves the pusher's copy only through `host_secrets.py sync
-  daniel-box`, so both stay in `CROSS_HOST_PUSH_TOKENS` (`scripts/secrets_mgmt/consumers.py`).
-- **Each timer also writes a check file** to `/var/lib/node-exporter-textfile/`,
-  `sync-artifacts.prom` and `claude-otel-health.prom`, through `write_check_textfile` in
-  `homelab-check-lib.sh` (M6 batch B6). The `ArtifactsSync*` and `OtlpDoor*` rules in
-  observability's `host-checks.yaml` page them in shadow beside the Kuma tiles until their
-  cutover. Each script renders its deadline from its own minute default, so that default must
-  stay `*/N`, and `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it.
+- **Neither timer pushes to Kuma, and neither unit loads a credential** (M6 batch B6a's
+  Cutover-2). Each run logs a `status=<up|down>` line under its own syslog tag and writes a check
+  file to `/var/lib/node-exporter-textfile/`, `sync-artifacts.prom` or `claude-otel-health.prom`,
+  through `write_check_textfile` in `homelab-check-lib.sh`. The `ArtifactsSync*` and `OtlpDoor*`
+  rules in observability's `host-checks.yaml` page from those files. Each script renders its
+  deadline from its own minute default, so that default must stay `*/N`, and
+  `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it.
+  ENFORCED: `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`
+  holds both shipped scripts to no Kuma library, `kuma_push` or push URL. The two push tokens,
+  `artifacts_sync_push_token` and `claude_otel_push_token`, are no longer package credentials. They stay in
+  `PENDING_RETIREMENT` (`scripts/secrets_mgmt/pending_retirement.py`) until B6a's token PR.
 
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 
@@ -280,9 +281,10 @@ template carries why it is a host timer at all.
   sync.
 - **Abort valve:** a `flock` holds runs to one at a time, and ssh runs in `BatchMode` with a
   10-second connect timeout, so an unreachable peer fails the run rather than hanging it.
-- **Evidence:** `journalctl -t sync-artifacts`, the `Artifacts Peer Sync` Kuma tile, which
-  goes DOWN at `claude_code_artifacts_sync_alert_after_failures` consecutive failures, and
-  `sync-artifacts.prom`, which carries the same verdict for the shadow rules.
+- **Evidence:** `journalctl -t sync-artifacts`, whose `status=down` line starts at
+  `claude_code_artifacts_sync_alert_after_failures` consecutive failures, and
+  `sync-artifacts.prom`, which carries the same verdict for the `ArtifactsSyncFailed` and
+  `ArtifactsSyncNotReporting` rules.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 

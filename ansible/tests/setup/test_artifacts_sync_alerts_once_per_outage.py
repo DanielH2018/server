@@ -1,4 +1,4 @@
-"""The artifacts peer sync writes stderr once per outage and pushes a Kuma verdict every run.
+"""The artifacts peer sync writes stderr once per outage and logs its verdict every run.
 
 `sync-artifacts` runs every 5 minutes on daniel-box and pulls daniel-server's artifact tree.
 Its unit sends the job's stderr to the journal, so a line on every failure would duplicate the
@@ -13,10 +13,9 @@ bash resolves a function name before it searches PATH. What the runs prove is th
 failure reaches the journal, and only the run that REACHES the threshold writes to stderr, so a
 peer that stays down writes that line once rather than every 5 minutes.
 
-Every run also sources a stub Kuma library that records the verdict instead of pushing it, and
-reads a stub push token from `$CREDENTIALS_DIRECTORY`, where the unit's `LoadCredential=` puts it.
-Pointing the script at the stub is not optional: daniel-box has the real library, and a sourced
-function would override an exported stub.
+Every run also logs a `status=<up|down>` line under the `sync-artifacts` tag, which the logger
+stub records with the rest of the journal. The script pushes nothing to Kuma (M6 batch B6a's
+Cutover-2); `hosts/lib/tests/test_claude_artifacts_node_timers.py` holds that.
 """
 
 import os
@@ -60,7 +59,6 @@ class _Runner:
 
     execute: Callable[[str], subprocess.CompletedProcess]
     journal: Path
-    pushes: Path
     calls: Path
     stars: Path
     prom: Path
@@ -68,22 +66,22 @@ class _Runner:
     def __call__(self, outcome: str) -> subprocess.CompletedProcess:
         return self.execute(outcome)
 
-    def verdicts(self) -> list[str]:
-        return [line.split("|")[0] for line in self.pushes.read_text().splitlines()]
+    def verdict_lines(self) -> list[str]:
+        """The `<status> <report>` text of every verdict line the script logged."""
+        return [
+            line.split("status=", 1)[1]
+            for line in self.journal.read_text().splitlines()
+            if "status=" in line
+        ]
 
-    def last_push(self) -> str:
-        return self.pushes.read_text().splitlines()[-1]
+    def verdicts(self) -> list[str]:
+        return [line.split(" ", 1)[0] for line in self.verdict_lines()]
+
+    def last_verdict(self) -> str:
+        return self.verdict_lines()[-1]
 
     def rsync_calls(self) -> list[str]:
         return self.calls.read_text().splitlines()
-
-
-def _credentials(tmp_path: Path) -> Path:
-    """A credentials directory holding the stub push token the unit would load."""
-    credentials = tmp_path / "credentials"
-    credentials.mkdir()
-    (credentials / "kuma_push_token").write_text("stub-token")
-    return credentials
 
 
 def _runner(tmp_path: Path) -> _Runner:
@@ -106,17 +104,10 @@ def _runner(tmp_path: Path) -> _Runner:
     stub = tmp_path / "outcome"
     journal = tmp_path / "journal"
     journal.touch()
-    pushes = tmp_path / "pushes"
-    pushes.touch()
     calls = tmp_path / "rsync-calls"
     calls.touch()
     textfile = tmp_path / "textfile"
     textfile.mkdir()
-    kuma_lib = tmp_path / "kuma-push-lib.sh"
-    kuma_lib.write_text(
-        'kuma_push() { printf "%s|%s\\n" "$1" "$2" >>"$SYNC_ARTIFACTS_PUSHES"; }\n'
-    )
-    credentials = _credentials(tmp_path)
 
     def run(outcome: str) -> subprocess.CompletedProcess:
         stub.write_text(outcome)
@@ -127,11 +118,8 @@ def _runner(tmp_path: Path) -> _Runner:
                 "SYNC_ARTIFACTS_STATE_DIR": str(tmp_path),
                 "SYNC_ARTIFACTS_STUB": str(stub),
                 "SYNC_ARTIFACTS_JOURNAL": str(journal),
-                "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
                 "SYNC_ARTIFACTS_CHECK_LIB": str(CHECK_LIB),
-                "CREDENTIALS_DIRECTORY": str(credentials),
                 "TEXTFILE_DIR": str(textfile),
-                "SYNC_ARTIFACTS_PUSHES": str(pushes),
                 "SYNC_ARTIFACTS_CALLS": str(calls),
                 "SYNC_ARTIFACTS_STARS": str(stars),
                 "BASH_FUNC_rsync%%": f"() {{ {RSYNC_STUB}; }}",
@@ -139,7 +127,7 @@ def _runner(tmp_path: Path) -> _Runner:
             },
         )
 
-    return _Runner(run, journal, pushes, calls, stars, textfile / "sync-artifacts.prom")
+    return _Runner(run, journal, calls, stars, textfile / "sync-artifacts.prom")
 
 
 def test_a_sustained_outage_writes_stderr_on_the_threshold_run_alone(tmp_path):
@@ -176,33 +164,35 @@ def test_a_successful_run_is_silent_on_both_streams(tmp_path):
     proc = run("ok")
     assert proc.returncode == 0
     assert not proc.stdout and not proc.stderr, proc
-    assert run.journal.read_text() == ""
+    # The verdict line is the only journal line a healthy run leaves.
+    assert run.verdict_lines() == [f"up {PEER} synced"]
+    assert len(run.journal.read_text().splitlines()) == 1
 
 
-def test_a_healthy_run_pushes_up(tmp_path):
+def test_a_healthy_run_logs_up(tmp_path):
     run = _runner(tmp_path)
     run("ok")
-    assert run.last_push() == f"up|{PEER} synced"
+    assert run.last_verdict() == f"up {PEER} synced"
 
 
-def test_the_tile_stays_up_below_the_threshold_and_names_the_streak(tmp_path):
+def test_the_verdict_stays_up_below_the_threshold_and_names_the_streak(tmp_path):
     run = _runner(tmp_path)
     for _ in range(THRESHOLD - 1):
         run("fail")
     assert run.verdicts() == ["up"] * (THRESHOLD - 1)
-    assert f"{PEER} failed {THRESHOLD - 1} consecutive run(s)" in run.last_push()
+    assert f"{PEER} failed {THRESHOLD - 1} consecutive run(s)" in run.last_verdict()
 
 
-def test_the_tile_goes_down_at_the_threshold_and_stays_down_past_it(tmp_path):
-    """Past the threshold matters: the stderr line's `-eq` test would turn the tile green again."""
+def test_the_verdict_goes_down_at_the_threshold_and_stays_down_past_it(tmp_path):
+    """Past the threshold matters: the stderr line's `-eq` test would turn the verdict up again."""
     run = _runner(tmp_path)
     for _ in range(THRESHOLD + 3):
         run("fail")
     assert run.verdicts() == ["up"] * (THRESHOLD - 1) + ["down"] * 4
-    assert run.last_push() == f"down|{PEER} failed {THRESHOLD + 3} consecutive runs"
+    assert run.last_verdict() == f"down {PEER} failed {THRESHOLD + 3} consecutive runs"
 
 
-def test_a_recovery_pushes_up_again(tmp_path):
+def test_a_recovery_logs_up_again(tmp_path):
     run = _runner(tmp_path)
     for _ in range(THRESHOLD):
         run("fail")
@@ -255,17 +245,8 @@ def test_the_packaged_timer_runs_the_script_this_suite_renders():
     assert "ExecStart=/usr/lib/homelab/sync-artifacts\n" in unit
     # The threshold line these tests prove reaches the journal under this tag (#6162).
     assert "SyslogIdentifier=sync-artifacts\n" in unit
-    credstore = "/run/" + "credstore/artifacts_sync_push_token"
-    assert f"LoadCredential=kuma_push_token:{credstore}\n" in unit
-
-
-def test_a_run_without_its_credential_pushes_nothing_and_says_so(tmp_path):
-    run = _runner(tmp_path)
-    (tmp_path / "credentials" / "kuma_push_token").unlink()
-    proc = run("ok")
-    assert proc.returncode == 0, proc
-    assert run.pushes.read_text() == ""
-    assert "credential kuma_push_token missing" in run.journal.read_text()
+    # The unit loads no credential: the sync has nothing left to push to.
+    assert "LoadCredential" not in unit
 
 
 # The pull handed to the real rsync, locally: `-e` and its transport argument are dropped and
@@ -326,9 +307,6 @@ def test_a_sync_leaves_the_peer_directory_at_the_packaged_mode(tmp_path):
             },
         )
     )
-    kuma_lib = tmp_path / "kuma-push-lib.sh"
-    kuma_lib.write_text("kuma_push() { :; }\n")
-    credentials = _credentials(tmp_path)
     # The repo's check library and a temp textfile directory: the defaults are the host's
     # installed library and node_exporter's real directory, which a test must not write (#6191).
     textfile = tmp_path / "textfile"
@@ -338,9 +316,7 @@ def test_a_sync_leaves_the_peer_directory_at_the_packaged_mode(tmp_path):
         env={
             "PATH": os.environ["PATH"],
             "SYNC_ARTIFACTS_STATE_DIR": str(tmp_path),
-            "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
             "SYNC_ARTIFACTS_CHECK_LIB": str(CHECK_LIB),
-            "CREDENTIALS_DIRECTORY": str(credentials),
             "TEXTFILE_DIR": str(textfile),
             "SYNC_ARTIFACTS_SSH": PEER_SSH,
             "SYNC_ARTIFACTS_REAL_RSYNC": real_rsync,
@@ -362,10 +338,10 @@ def _series(prom: Path) -> dict[str, str]:
     return dict(line.rsplit(" ", 1) for line in lines if not line.startswith("#"))
 
 
-def test_the_textfile_follows_the_pushed_verdict_and_carries_the_derived_deadline(
+def test_the_textfile_follows_the_logged_verdict_and_carries_the_derived_deadline(
     tmp_path,
 ):
-    """M6 batch B6 shadows the tile with rules on this file, so it must say what the push says."""
+    """The ArtifactsSync* rules page on this file, so it must say what the journal line says."""
     run = _runner(tmp_path)
     for _ in range(THRESHOLD - 1):
         run("fail")

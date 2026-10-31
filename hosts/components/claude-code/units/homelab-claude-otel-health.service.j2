@@ -1,16 +1,13 @@
 # Shipped by homelab-daniel-box. Started by homelab-claude-otel-health.timer.
 [Unit]
-Description=Check that the OTLP receiver's loopback door is open and push the verdict to Kuma
-After=homelab-secrets.service
-Wants=homelab-secrets.service
+Description=Check that the OTLP receiver's loopback door is open and record the verdict
 
 [Service]
 Type=oneshot
-# It only opens a loopback connection and pushes, so it needs no privilege.
+# It only opens a loopback connection and writes a textfile, so it needs no privilege.
 User={{ sys_user }}
 SyslogLevel=notice
 ExecStart=/usr/lib/homelab/claude-otel-health
-LoadCredential=kuma_push_token:/run/credstore/claude_otel_push_token
-# DECIDED: the tag stays `claude-otel-health`. It is a join key: the AutoKuma monitor id, the
-# Alert History board's syslog query and `probe.py alerts` read it (claude-otel-health.sh.j2).
+# DECIDED: the tag stays `claude-otel-health`. It is a join key: the Alert History board's syslog
+# query and `probe.py alerts` read it (claude-otel-health.sh.j2).
 SyslogIdentifier=claude-otel-health

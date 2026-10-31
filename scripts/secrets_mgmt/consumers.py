@@ -41,8 +41,8 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "pi_sd_health_push_token",  # Pi timer, via optimize_pi's interim file + server label
         "pi_recovery_push_token",  # Pi timer, via optimize_pi's interim file + server label
         "longhorn_backup_push_token",  # daniel-box cron (k3s role) + daniel-server label
-        # daniel-box timer (claude-code component, a credential of its package since H7.40) +
-        # daniel-server label.
+        # daniel-box timer (claude-code component) + daniel-server label. The timer pushes to
+        # nothing since M6 batch B6a's Cutover-2, so the key has no pusher left.
         "claude_otel_push_token",
         "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label
         "manifest_prune_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
@@ -59,9 +59,8 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # Same role, same cron shape, same reason: daniel-box cron (setup/gitops_deploy) +
         # k8s/uptime-kuma static tile, applied by `initial_setup.yml --tags gitops_deploy`.
         "interaction_limit_push_token",
-        # daniel-box timer (claude-code component, a credential of its package since H7.40) +
-        # k8s/uptime-kuma static tile. The pusher's copy moves only with `host_secrets.py sync
-        # daniel-box`, which no deploy tag runs.
+        # daniel-box timer (claude-code component) + k8s/uptime-kuma static tile. The timer pushes
+        # to nothing since M6 batch B6a's Cutover-2, so the key has no pusher left.
         "artifacts_sync_push_token",
         # daniel-box cron (setup/k8s_host_files, since registry's D5 conversion) + k8s/uptime-kuma
         # static tile. k8s_host_files has no `containers_list` entry, so `deploy.yml --tags

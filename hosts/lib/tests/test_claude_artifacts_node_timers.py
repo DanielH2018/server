@@ -44,22 +44,23 @@ TWINS = {
     "claude_code_otlp_host_ip": (OBSERVABILITY, "observability_otlp_host_ip"),
     "claude_code_otlp_port": (OBSERVABILITY, "observability_otlp_port"),
 }
-# Each timer, the script its service runs, the syslog tag Kuma and Loki read, the credential it
-# loads and the minute default it fires on.
+# Each timer, the script its service runs, the syslog tag Loki and `probe.py alerts` read, and the
+# minute default it fires on.
 TIMERS = {
     "homelab-sync-artifacts": (
         "/usr/lib/homelab/sync-artifacts",
         "sync-artifacts",
-        "artifacts_sync_push_token",
         "claude_code_artifacts_sync_minute",
     ),
     "homelab-claude-otel-health": (
         "/usr/lib/homelab/claude-otel-health",
         "claude-otel-health",
-        "claude_otel_push_token",
         "claude_code_telemetry_health_minute",
     ),
 }
+# M6 batch B6a's Cutover-2: the journal line and the textfile are the only verdict a timer sends.
+# A script that sources the Kuma library, calls kuma_push or builds a push URL has its push back.
+KUMA_PUSH_MARKERS = ("kuma-push-lib", "kuma_push", "/api/push/")
 # What the role installed, which the component's legacy list retires.
 ANSIBLE_ERA = [
     {"cron_file": "sync-artifacts"},
@@ -68,6 +69,11 @@ ANSIBLE_ERA = [
     {"path": "/usr/local/bin/claude-otel-health.sh"},
     {"path": "/var/lib/homelab/setup-render-manifest.d/claude-code-node-crons"},
 ]
+
+
+def kuma_push_markers(body: str) -> list[str]:
+    """The Kuma push markers a shipped script still carries, or nothing."""
+    return [marker for marker in KUMA_PUSH_MARKERS if marker in body]
 
 
 def twin_mismatches(claude_code: dict, k8s: dict[Path, dict]) -> list[str]:
@@ -121,23 +127,38 @@ def test_a_twin_that_drifted_is_flagged():
 
 
 @pytest.mark.parametrize("name", sorted(TIMERS))
-def test_each_timer_runs_its_script_as_the_sys_user_with_its_tag_and_credential(
-    box, name
-):
-    script, tag, credential, _ = TIMERS[name]
+def test_each_timer_runs_its_script_as_the_sys_user_with_its_tag(box, name):
+    script, tag, _ = TIMERS[name]
     unit = _text(box, f"{UNITS}/{name}.service")
     assert script in box
     assert f"ExecStart={script}\n" in unit
     assert "User=ubuntu\n" in unit
     assert f"SyslogIdentifier={tag}\n" in unit
-    assert f"LoadCredential=kuma_push_token:/run/credstore/{credential}\n" in unit
-    # No package may install a script that embeds the token, as the Ansible-era copies did.
-    assert credential not in _text(box, script)
+    # Nothing is left to push to, so the unit loads no credential.
+    assert "LoadCredential" not in unit
+
+
+@pytest.mark.parametrize("name", sorted(TIMERS))
+def test_neither_producer_pushes_to_kuma(box, name):
+    # fact: ansible/roles/setup/claude_code/CLAUDE.md#The artifacts node's two timers
+    script, _, _ = TIMERS[name]
+    body = _text(box, script)
+    # Non-vacuity: the shipped bytes are the real script, which still records its verdict.
+    assert "write_check_textfile" in body
+    assert kuma_push_markers(body) == []
+
+
+def test_a_script_that_pushes_to_kuma_is_flagged():
+    pushing = (
+        "source /usr/lib/homelab/kuma-push-lib.sh\n"
+        'kuma_push "$1" "$2" "https://kuma/api/push/x"\n'
+    )
+    assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)
 
 
 @pytest.mark.parametrize("name", sorted(TIMERS))
 def test_each_timer_fires_on_the_period_its_script_derives_its_deadline_from(box, name):
-    minute = render_context(CLAUDE_CODE)[TIMERS[name][3]]
+    minute = render_context(CLAUDE_CODE)[TIMERS[name][2]]
     every_n = re.fullmatch(r"\*/(\d+)", minute)
     assert every_n, minute
     timer = _text(box, f"{UNITS}/{name}.timer")

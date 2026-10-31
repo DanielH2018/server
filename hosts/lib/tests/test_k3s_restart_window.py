@@ -35,8 +35,6 @@ _KEYS = (
     "secret_rotation_push_token: x\n"
     "loki_route_witness_push_token: x\n"
     "ups_secondary_push_token: x\n"
-    "artifacts_sync_push_token: x\n"
-    "claude_otel_push_token: x\n"
     "nut_monitor_password: x\n"
     "homelab_builder_github_token: x\n"
     "gitops_deploy_discord_webhook: x\n"

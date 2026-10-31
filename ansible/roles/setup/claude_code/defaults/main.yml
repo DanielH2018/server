@@ -599,8 +599,8 @@ claude_code_artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
 # artifacts_stars_file.
 claude_code_artifacts_stars_file: /var/lib/artifact-stars/stars.txt
 
-# */10, matching the Longhorn backup heartbeat. The Kuma monitor's heartbeat interval must stay
-# above this (see the uptime-kuma role) so a dead timer trips the watchdog. A `*/N` minute.
+# */10, matching the Longhorn backup heartbeat. The script renders its textfile deadline from this
+# period, so a dead timer trips OtlpDoorNotReporting. A `*/N` minute.
 claude_code_telemetry_health_minute: "*/10"
 # The OTLP door the heartbeat opens a connection to. Twins of observability_otlp_host_ip and
 # observability_otlp_port, which bind the collector's hostPort.

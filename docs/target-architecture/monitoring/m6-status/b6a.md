@@ -70,3 +70,36 @@ prometheus-rules -o jsonpath='{.data.host-checks\.yaml}'` on daniel-box has the 
 
 No minute is unexplained, so no rule changes. The soak does not block Cutover-a, which B6a
 runs as Cutover-1a (*Every other producer* in M6).
+
+**Cutover-2: the push stops.** The two producers are timers in daniel-box's host package, moved
+there by H7.40's fourth slice ([#6788](https://github.com/DanielH2018/server/pull/6788)), so
+this Cutover-2 rides in that PR instead of editing the cron scripts a second time. Cutover-1a
+([#6784](https://github.com/DanielH2018/server/pull/6784)) deleted both tiles, and Cutover-1b
+([#6787](https://github.com/DanielH2018/server/pull/6787)) makes the four rules page.
+`sync-artifacts` and `claude-otel-health` drop the `kuma-push-lib.sh` source, the push URL and
+the token. Each keeps `write_check_textfile` and logs `status=<up|down> <message>` under its own
+syslog tag. The sync script did not log a clean run before, and the heartbeat did not either,
+because `kuma_push` logged only a failed push, so the journal line is new for both.
+
+Neither unit loads a credential now, so `package.yml` drops `artifacts_sync_push_token` and
+`claude_otel_push_token` from `credentials:`, and the SOPS file needs no `host_secrets.py sync`.
+Both keys stay in `PENDING_RETIREMENT`. B6a's token PR retires them a week after Cutover-1b.
+
+**Which plane applies it.** The merge changes the `homelab-daniel-box` package, so daniel-box's
+updater installs the two rewritten units and scripts, and `land.sh` waits for that apply. No
+tick and no hand apply is involved.
+
+**How to verify the push stopped.** After the package installs and the next run of each timer:
+
+1. `journalctl -t sync-artifacts` and `journalctl -t claude-otel-health` show a `status=up` line
+   and no `push failed (... by=kuma ...)` line. Cutover-1a's runs showed that line, because the
+   pushes went into a deleted token.
+2. `homelab_check_success` for both checks stays 1, and `homelab_check_last_run_timestamp_seconds`
+   advances to that run.
+3. `unitq cat homelab-sync-artifacts.service` and `unitq cat homelab-claude-otel-health.service`
+   show no `LoadCredential=` line.
+
+**The test.** `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`
+holds both shipped scripts to no Kuma library, `kuma_push` or push URL. Its red case is
+`test_a_script_that_pushes_to_kuma_is_flagged`. The two script tests read the verdict back from
+the journal line a `logger` stub records, in place of a stubbed `kuma_push`.
