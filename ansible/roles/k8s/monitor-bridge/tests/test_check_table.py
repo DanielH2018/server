@@ -43,7 +43,7 @@ def test_each_name_and_kuma_id_appears_once():
 def test_the_registry_runs_every_row_but_the_gates_in_table_order():
     registered = [c.name for c in registry.build_checks({})]
     # Named members, so an empty table cannot make both sides equal and empty.
-    assert {"disk", "host_temp", "pi_pressure"} <= set(registered)
+    assert {"n8n", "host_packages", "pi_pressure"} <= set(registered)
     assert registered == [row.name for row in CHECKS if not row.is_gate]
     assert {c.fn for c in registry.build_checks({})} == {
         row.fn for row in CHECKS if not row.is_gate
@@ -62,7 +62,7 @@ def test_the_gate_rows_are_the_three_gates_with_the_probes_run_once_uses():
 
 
 def test_every_gate_set_is_its_column():
-    assert {"disk", "memory", "host_temp"} <= gates.PROM_DEPENDENT
+    assert {"host_packages", "pi_pressure"} <= gates.PROM_DEPENDENT
     assert gates.STARTUP_GRACE == {
         row.name for row in CHECKS if row.gate == "startup_grace"
     }
@@ -93,7 +93,7 @@ def test_the_deploy_reads_every_field_but_fn_off_each_row():
         for f in dataclasses.fields(PushCheck)
         if f.default is not dataclasses.MISSING
     }
-    assert len(parsed) == len(CHECKS) >= 26
+    assert len(parsed) == len(CHECKS) >= 22
     for row, read in zip(CHECKS, parsed, strict=True):
         expected = dataclasses.asdict(row)
         del expected["fn"]
@@ -102,7 +102,9 @@ def test_the_deploy_reads_every_field_but_fn_off_each_row():
 
 def test_the_env_secret_renders_one_token_per_row_under_the_name_the_bridge_reads():
     rendered = {key for key in bridge_env() if key.startswith("KUMA_PUSH_")}
-    assert "KUMA_PUSH_MEMORY" in rendered  # a row whose secret predates the naming rule
+    assert (
+        "KUMA_PUSH_HA_HEARTBEAT" in rendered
+    )  # a row whose secret predates the naming rule
     assert rendered == {push_env(row.name) for row in CHECKS}
 
 

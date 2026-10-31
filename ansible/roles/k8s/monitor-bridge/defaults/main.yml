@@ -62,7 +62,6 @@ monitor_bridge_modules:
   - checks/logs.py
   - checks/b2.py
   - checks/r2.py
-  - checks/host.py
   - checks/host_thermal.py
   - checks/host_edge.py
   - checks/cluster.py
@@ -76,8 +75,6 @@ monitor_bridge_modules:
   - bridge/parsing.py
   - verdicts/cluster.py
   - verdicts/host.py
-  - verdicts/host_cgroups.py
-  - verdicts/host_power.py
   - verdicts/host_smart.py
   - verdicts/service.py
   - verdicts/storage.py

@@ -43,54 +43,6 @@ checks each gate suppresses.
   rows, so neither a count nor an enumeration of it is written anywhere else. The role CLAUDE.md
   once carried a hardcoded count of ten while the set held more (#1359), and then an enumeration a
   test pinned, until the column made both redundant (#3788).)
-- **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`**: old kernels filling
-  /boot quietly break upgrades, and a full ESP breaks firmware/bootloader updates the same way.
-  Server-only; the Pi's disk lives in the Pi Pressure check. Root Disk pages without remediating:
-  containerd's image GC owns image cleanup since the Docker daemon retired, and no autoprune cron
-  replaced the old one.)
-- **Memory** (host `node_memory_*` pressure only)
-- **Host coverage floor** — not a monitor of its own, but a second arm inside **Root Disk** and
-  **Memory** (`_host_origin_shortfall`). Both checks group by `origin`, and node-exporter is a
-  DaemonSet on both nodes, so a vector covering fewer than `HOST_ORIGINS_MIN` (2) distinct hosts
-  has **lost** a host rather than measured a healthy estate, and the surviving node's numbers
-  would be reported as the estate's. This happened once: a one-directional UFW rule left
-  daniel-box's node-exporter unreachable for 5.4h (2026-08-23), and both checks pushed OK off
-  daniel-server alone while daniel-box's host memory and `/boot` went unwatched.
-  **Why not lean on `ScrapeTargetDown`:** that keys on `up`, and node-exporter's normal failure is
-  PER-COLLECTOR. A filesystem or meminfo collector can fail with `up == 1`, leaving `ScrapeTargetDown`
-  green while the host silently drops out of these two checks. This is the shape of `check_ups`'s
-  partial-absence arm: never monitor the survivor silently.
-  `HOST_ORIGINS_CONSECUTIVE` gives it hysteresis, for the reason `UPS_CONSECUTIVE` exists: the
-  weekly Sunday restart takes a node's exporter away against a 1m scrape and a 5m loop. The
-  shortfall is reported AFTER each check's own breach scan, because a reporting host that is
-  genuinely out of memory outranks a complaint about the absent one. `HOST_ORIGINS_MIN` is
-  rendered in `templates/config/env.yaml.j2` so a planned single-node maintenance window can lower
-  it and put it back. **At 1 the arm is inert**, which is the original failure, so treat it as a
-  temporary setting rather than a fix for a noisy tile.
-- **Claude Code cgroups** — not a monitor of its own either, but a third arm inside **Memory**
-  (`with_claude_cgroups`, #1258). It reads the `claude_cgroup_*` node-exporter textfile series
-  (PR #1251) for `claude-rc.service` and `user.slice/user-1000.slice`, on every host with
-  `has_claude_code: true` (daniel-box and daniel-server). Both hosts emit the same cgroup names, so
-  the two queries group by `(origin, cgroup)` / `(origin, cgroup, event)` and the verdict's message
-  names `origin/cgroup` (for example `daniel-server/fleet 40.0%`).
-  It is folded into Memory rather than given its own tile for the reason recorded at
-  `with_pi_ports`: a new Kuma monitor costs a new push token in SOPS and a monitor created by hand
-  in the UI, and **Memory** already owns "this box is running out of memory," which a cgroup
-  taking the box is. On 2026-09-05 (#1243) one cgroup held all 8 GiB of the box's swap plus 6.96 GB
-  anon and stalled in reclaim for about ten minutes before anything downstream failed.
-  Three sub-arms, reported in this order: a watched `memory.events` counter increasing
-  (`CLAUDE_CGROUP_EVENTS` = `max|oom|oom_kill|oom_group_kill`, paging on ANY increase, because a
-  kill outranks a stall), the PSI `full` stall rate over `CLAUDE_CGROUP_STALL_MAX_PCT`, and an
-  expected cgroup not reporting at all. `high` is deliberately NOT alerted on: MemoryHigh
-  throttling is the cap working, and its value belongs to `roles/setup/claude_code`, so an arm
-  keyed on it would move whenever those caps move. It is graphed instead on the
-  `AI/claude-code-host-cgroups` board, which carries an `origin` template variable.
-  `CLAUDE_CGROUPS` (rendered in `templates/config/env.yaml.j2`, `claude-rc,fleet`) is the set
-  whose ABSENCE is a fault, not the set that is judged. The queries filter by metric, so
-  `user-1000-slice` is watched whenever it exists and its absence never pages, because that cgroup
-  only exists once somebody has logged in since boot. **Empty disables the whole arm.** The full
-  threshold derivation, settled against 5.8 days of history that included both cgroups hitting
-  their MemoryHigh caps (#1288), is at `CLAUDE_CGROUP_STALL_MAX_PCT` in `bridge/config_host.py`.
 - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure streak**.
   n8n does not save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to bound
   `database.sqlite` and its B2 backup churn), so "consecutive" cannot be read from one snapshot.
@@ -340,166 +292,6 @@ checks each gate suppresses.
   legitimately has none. Pure `scrutiny_freshness()`, `scrutiny_health()`,
   `scrutiny_device_wear()` and `scrutiny_wear_verdict()` are unit-tested; those tests mock the
   payload, so they prove the verdict logic and nothing about the endpoint path.)
-- **Host Temperature** (board and CPU sensors from node-exporter's hwmon collector,
-  `node_hwmon_temp_celsius`, with drives EXCLUDED: `HWMON_TEMP_EXCLUDE_CHIP` drops the `nvme_`
-  chips because SMART Data / Health above owns them, and reading them here would double-page one
-  condition. `ContainerCPUThrottled` sees CFS throttling, which is a cgroup limit rather than heat,
-  and the Grafana **Hardware Temperature Monitor** panel pages nobody, so this check is the only
-  host-temperature alert.
-  Every sensor gets a limit from one of **two exhaustive arms**: `HWMON_TEMP_RATIO` (0.90) of its
-  own declared max or crit where either is plausible (max preferred when both are), else the flat
-  `HWMON_TEMP_FALLBACK_C` (85 °C). **The fallback is not a nicety.** Only 7 of 21 scraped sensors
-  declare a usable max (2026-08-28), and both daniel-pi sensors declare none, so a
-  declared-max-only check would be silent on two thirds of the estate.
-  **The declared value is sanity-bounded, not trusted.** Three NVMe sensors declare 65261.85 (a
-  0xFFFF sentinel for "no max"), and a ratio of that is unreachable, so those sensors would read
-  green through a fire. A declared max or crit outside (`HWMON_TEMP_MIN_PLAUSIBLE_C`,
-  `HWMON_TEMP_MAX_PLAUSIBLE_C`] is treated as UNDECLARED. An EMPTY sensor vector is `down`, not
-  `up`: zero readings means EVERY collector went blind, and "nothing is too hot" from no data is a
-  lie. `HWMON_TEMP_CONSECUTIVE` (12, one hour at `INTERVAL`=300) rides out a boost excursion, and
-  it is ONE streak for the whole check rather than one per sensor.
-  **`max` wins when a sensor declares a plausible value for both**, not `crit`: hwmon's convention
-  has `crit` as the LATER emergency point, not an earlier warning (daniel-server's NVMe declares
-  max 85.85 / crit 86.85), so ratioing `crit` would page closer to hardware failure than the
-  max-based 90%. `node_hwmon_temp_crit_celsius` (#995) is the second declared source. It is read
-  for every sensor, in case a driver declares `crit` without `max`, and is used only when `max` is
-  absent or implausible for that sensor.
-  **The message names hardware, not sysfs paths.** Two extra instant queries
-  (`node_hwmon_chip_names`, `node_hwmon_sensor_label`) turn
-  `daniel-box/pci0000:00_0000:00:18_3/temp1` into `daniel-box k10temp/Tctl`. Both lookups are
-  partial (10 of 21 series carry a sensor label), so each half of the name degrades to its raw
-  sysfs component independently, and an empty answer costs readability rather than the verdict.
-  Each hot sensor also names the arm that set its limit, because a `declared` breach is the
-  hardware calling itself too hot while a `fallback` breach may only mean the flat 85 °C does not
-  suit that chip.
-  **daniel-box's k10temp/Tctl declares neither `max` nor `crit`.** Read from
-  `/sys/class/hwmon/hwmon2/`, only `temp1_input` and `temp1_label` (`Tctl`) exist, so no code
-  change can make its alert a declared-limit one (#995). The offset question (#1003) is settled by
-  the `DECIDED:` marker in `verdicts.host.hwmon_temp_limits`: k10temp reports `Tdie = Tctl -
-  temp_offset` and sets `temp_offset` only for six family 0x17 SKUs, none of them this one, so a
-  Tdie series would carry the SAME number as Tctl. The number is settled by a third arm (#1152).
-  AMD publishes `Max. Operating Temperature (Tjmax)` = 100 °C for the Ryzen 7 8845HS, so
-  `HWMON_TEMP_RATED_MAX_C` carries that rating for this one sensor as
-  `instance/chip/sensor=celsius` and ratios it like a declared max (90 °C, the effective limit
-  daniel-server's coretemp gets from its declared max of 100). A rating is seeded BEFORE `crits`
-  and `maxes`, so a driver that starts declaring either still wins, and it passes the same
-  plausibility gate, so a typo cannot un-watch the sensor. It is keyed by the raw sysfs triple, not
-  the readable `daniel-box k10temp/Tctl`, because `hwmon_name_maps` is partial by construction and
-  a name-keyed entry would stop matching in silence. The amd.com product page answers a fetch that
-  carries a browser `User-Agent`, and a plain fetch fails.
-  **The excursions are workload, so the remedy is hysteresis** (#1186, `HWMON_TEMP_CONSECUTIVE` 3
-  to 12). Over a true 7 days to 2026-09-06 at the 5 min loop cadence (Prometheus retains ~11.4
-  days, so the `[30d]` figures in #1152 and #1186 covered ~11 days, #1314), this sensor is above
-  90 °C for **12.0 %** of samples (p50 52.875 °C, p95 93.125 °C, max 93.75 °C against the rated 100
-  °C). Those 241 hot samples are 115 separate excursions, with run lengths in cycles of 66x1, 23x2,
-  12x3, 5x4, 2x5, 3x6, 3x7, 1x8 and then a single 18 (90 min), and **nothing between 9 and 17**. 3
-  cycles paged 26 times in that week, and 12 pages once, on the 18-cycle outlier, which is kept on
-  purpose because 90 minutes pinned above 90 °C is the shape of a cooling fault. Every excursion
-  falls in the 11:00-03:20Z band with an 8-hour overnight hole, which settles it as scheduled and
-  interactive work rather than an idle-state thermal floor. `HWMON_TEMP_RATIO` was NOT raised,
-  because it is estate-wide and this is one sensor's duty cycle. The derivation and the
-  pages-per-week table are at the `DECIDED: 12 cycles` marker in `files/bridge/config_host.py`.
-  **A PARTIAL blindness is a separate arm** (`HWMON_TEMP_ORIGINS_MIN`, review M-9). The
-  empty-vector branch fires only when ALL hosts go quiet, so one host's hwmon collector could die
-  while the other two answered "all below limit" for the estate. The arm reuses
-  `_host_origin_shortfall`, the helper Root Disk and Memory use, with its OWN floor: **3, not the
-  shared `HOST_ORIGINS_MIN` of 2**, because all three hosts declare non-excluded sensors (9 / 5 / 2
-  on 2026-08-29), so a floor of 2 is met by any two of them. Origins are counted over the series
-  that survive `HWMON_TEMP_EXCLUDE_CHIP`, through the same predicate `hwmon_temp_limits` uses,
-  because a host whose only sensors are `nvme` is a host this check does not cover.
-  `HWMON_TEMP_ORIGINS_CONSECUTIVE` (5) is **longer than `HOST_ORIGINS_CONSECUTIVE`** (3) on
-  purpose: the third host is the Pi, and its hwmon series went absent for about 20 minutes over 7
-  days (6 of 1054 samples at a 5m step), which the shared 15-minute grace would have paged on. The
-  two hysteresis mechanisms never compound: `down_streak` is the thermal-spike grace and applies
-  only to the hot-sensor path, so a missing host pages on its own fifth cycle rather than the
-  fifteenth. The arm is why `host_temp` is in `EXPORTER_DEPENDENT` under **two** job keys, `node`
-  and `node-pi`: a dead node-exporter trips the floor, and the Pi scrapes under its own job
-  (`job=node` for daniel-server and daniel-box, `job=node-pi` for daniel-pi), so a `node`-only
-  entry suppresses two of the three hosts and leaves the Pi double-paging. Pure
-  `hwmon_temp_limits()` and `hwmon_temp_verdict()` are unit-tested in `test_host_temp.py`, each
-  rule as an accept/reject pair. The coverage test is the load-bearing one, since this check's
-  failure mode is silence rather than a wrong threshold.
-
-  **Two more arms** (#1471), each with its own streak key. Both signals were plotted on
-  `Infrastructure/hardware-thermal.json` (PR #1463) and alerted on by nothing. They are folded in
-  here rather than given their own monitors for the reason `check_scrutiny`'s wear arm records: a
-  new Kuma monitor needs a new push token in SOPS, and both answer the question the temperature
-  arm does, which is whether the hardware is being damaged right now.
-
-  - **Undervoltage** (`_undervoltage_arm`, `UNDERVOLTAGE_QUERY` =
-    `node_hwmon_in_lcrit_alarm_volts`). The Raspberry Pi firmware's own low-critical voltage alarm,
-    a clean 0/1 with no threshold to choose. It is evaluated FIRST and returns ahead of every other
-    arm when asserted, because undervoltage corrupts SD cards and cooling down does not undo that.
-    `UNDERVOLTAGE_CONSECUTIVE` is **1**, no grace, unlike every other arm here: the firmware
-    latched a bit, and it did not report a measurement that can spike. The load-bearing part is
-    `UNDERVOLTAGE_UP_QUERY` (`up{job="node-pi"}`). The sensor is ONE series from ONE host, so a
-    `max() > 0` arm reads green the moment daniel-pi stops answering, and a Pi falling off the
-    network is what sustained undervoltage causes. An empty vector therefore defers only while
-    that gate is not affirmatively up (`ScrapeTargetDown` owns a dead scrape, and an
-    unqueryable gate defers too), and pages while the Pi IS scraping, because the sensor was
-    renamed or the collector went blind.
-  - **CPU thermal throttling** (`_thermal_throttle_arm`, `THERMAL_THROTTLE_QUERY` =
-    `node_cooling_device_cur_state{type="Processor"}`). A non-zero `cur_state` means the kernel is
-    derating the CPU now. It is a different fault from `ContainerCPUThrottled` (CFS throttling, a
-    cgroup quota, not heat) and from the temperature arm, since the firmware can enforce a limit
-    below the one the driver declares. `type="Processor"` is load-bearing: unfiltered, the metric
-    also carries PCIe link-speed and `intel_powerclamp` devices, which throttle for reasons that
-    are not heat. The arm has its own source gate, `THERMAL_THROTTLE_UP_QUERY` = `up{job="node"}`
-    (`node` rather than `node-pi`, because the Pi publishes none of these series). A fully empty
-    vector therefore means both amd64 exporters went quiet, which `ScrapeTargetDown` owns, and
-    an empty vector while `node` IS scraping pages, since a driver or kernel change taking the
-    sensors away would otherwise go unnoticed. `THERMAL_THROTTLE_ORIGINS_MIN` is **2**, not the
-    temperature arm's 3, because daniel-pi publishes no Processor cooling device (daniel-box 16
-    devices, daniel-server 8, daniel-pi 0 on 2026-09-10). That floor stops the arm being inert:
-    without it, one node's collector going blind leaves the other answering "not throttling" for
-    the whole estate. `THERMAL_THROTTLE_CONSECUTIVE` is 3 (15 min at `INTERVAL=300`): one cycle of
-    throttling during a compile is ordinary, and sustained throttling is a cooling fault.
-
-  A clean arm returns **None and says nothing**, so an ordinary cycle's tile text is
-  byte-identical to the text from before the arms existed. An arm HOLDING inside its own grace does
-  append its note, because a monitor that is up while a fault accumulates has to say so.
-  `test_host_thermal_arms.py` tests both arms as accept/reject pairs, plus one structural test that
-  reads `check_host_temp.__code__.co_names` to prove the check calls both arms and calls the
-  undervoltage one first. That structural test proves the call sites exist and their order, and it
-  cannot prove the check PROPAGATES an arm's verdict: drop a `return` and the name stays in
-  `co_names`. **`verdicts/host_power.thermal_monitor_verdict` is where the propagation lives**
-  (#1547): the check fetches and holds the streak state, the composer decides which of the four
-  arms reaches Kuma, and every ordering and propagation rule has a direct test in
-  `test_host_thermal_arms.py` with nothing patched. Deleting the undervoltage `return` turns
-  `test_an_asserted_undervoltage_alarm_reaches_the_monitor` red.
-
-  Transport, measured before shipping because the arms read Prometheus: both queries answered in
-  0.48-0.58 ms, three runs each, against Prometheus's loopback on daniel-server (2026-09-10), the
-  same shape as the five instant queries the temperature arm makes.)
-- **UPS Battery Health** (mains loss, the APC UPS's charge %, estimated runtime and the
-  replace-battery self-test verdict, all four read from **nut-exporter** and nothing else. #3105
-  dropped the HA re-export of the same UPS that #1548 had kept as a `max(A) or max(B)` fallback.
-  HA's NUT integration reads the SAME upsd over the `nut` ClusterIP, so the fallback never covered
-  an upsd outage, only nut-exporter dying while upsd lived, which Prometheus reports as
-  `up{job="nut"} == 0` and `ScrapeTargetDown` already pages for. HA's `hass_*` UPS series stay in the
-  `Infrastructure/ups-power-battery` Grafana board as a second view.
-  `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, the NUT `ups.status{flag="OB"}`,
-  one-hot over `flag`, so the exporter forces a 0 when the UPS is not asserting it and the series
-  is a real 0/1 alert input; judged FIRST and returning alone, because charge and runtime read the
-  RUNWAY and hold green through most of an outage; its own streak key) or on a low battery RUNWAY:
-  charge < `UPS_CHARGE_MIN_PCT` (50, a deep discharge while on battery) OR estimated runtime <
-  `UPS_RUNTIME_MIN_S` (300 s: an aged battery whose full-charge runway has decayed, OR a discharge
-  nearing shutdown) OR the UPS's own **replace-battery** verdict (`UPS_REPLACE_QUERY`, the NUT `RB`
-  flag, the earliest signal, since it can trip while charge and runtime still read fine).
-  One defer path avoids double-paging a source outage another monitor owns: ALL arms absent while
-  the nut scrape is down defers to `ScrapeTargetDown`'s page. That covers a dead upsd as well as a dead
-  exporter, because nut-exporter fails the WHOLE `/ups_metrics` scrape when upsd is unreachable,
-  which is why its probes are `tcpSocket` (`roles/k8s/nut-exporter/CLAUDE.md`). A **partial**
-  absence (one arm gone while the others report) is a specific series rename, so it pages through
-  the streak rather than silently monitoring the survivor. The only other UPS alert is an HA
-  automation → **mobile** push (a separate channel from this Kuma→Discord path), and nothing
-  trended the battery, so a slowly degrading battery stayed invisible until an outage collapsed it.
-  **Prom-dependent** (queries the `nut` scrape). `UPS_CONSECUTIVE` (2, like `HA_CONSECUTIVE`) rides
-  out a one-cycle dip from a transient load spike, a restart blip that drops one arm, or a brownout
-  shorter than the grace window. Queries are env-driven
-  (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`/`UPS_ON_BATTERY_QUERY`, all empty =
-  disabled; `UPS_SOURCE_UP_QUERY` is the all-absent gate), so a series rename needs no code edit.
-  Pure `ups_health()` and `ups_on_battery_verdict()` are unit-tested.)
 - **Pi Pressure** (the Pi's own node-exporter series on the `node-pi` scrape job, five instant
   queries selected by `origin=PI_ORIGIN`. `down` when `node_load5` per core > `PI_LOAD_MAX`,
   `node_memory_MemAvailable_bytes` < `PI_MEM_MIN_MB`, any block device's `node_filesystem_*` usage
@@ -522,24 +314,17 @@ checks each gate suppresses.
   disjoint, and its source is not a reach-out the post-boot transient reaches. An absent series
   while Prometheus answers pages, because a Pi whose exporter stopped reporting is a Pi nothing is
   watching. Empty `PI_ORIGIN` disables the check (stays up).
-  **This check owns Pi disk and memory.** `HOST_METRIC_ORIGIN_EXCLUDE` keeps daniel-pi out of the
-  Memory/Root Disk queries (`host_metric_sel`), so they stay two-host checks and this one is the
-  single source of truth for Pi pressure. Dropping the exclusion was rejected: `MEM_MAX_PCT` (90)
-  on a 456 MB box fires at 45.6 MB available and `PI_MEM_MIN_MB` fires at 50 MB, so `check_mem`
-  would be a strictly weaker duplicate that pages the estate-wide Memory tile for a Pi fact this
-  tile already reports. The exclusion also keeps the disk/memory origin floor at 2 hosts rather
-  than 3.
-  **If you add a third node-exporter host, decide explicitly whether it belongs in the estate-wide
-  Memory/Root Disk checks or in a check of its own.** A test forces that decision for ONE of the
-  two ways a host arrives: `test_every_node_exporter_job_is_mapped_in_exporter_dependent`
-  (test_check_gates_exporters.py) derives the node-exporter scrape jobs from the Prometheus config
-  and fails until each has an `EXPORTER_DEPENDENT` entry, and its sibling fails if a job whose
-  origins are all excluded by `HOST_METRIC_ORIGIN_EXCLUDE` suppresses `disk`/`memory` anyway. That
-  covers a host under a **new scrape job**, which is how daniel-pi arrived. **A host joining the
-  existing `node` DaemonSet is still on you.** The job set does not change, so nothing fires, and
-  `HWMON_TEMP_ORIGINS_MIN` is a literal 3 justified by "all three hosts declare non-excluded
-  sensors". A fourth host makes that floor satisfiable by any three of four, so one host can go
-  dark silently. Raise the floor by hand when you add a node.
+  **This check owns the Pi's tile, and the `hosts` rules own the rest of its Prometheus half.**
+  The `hosts.yaml` disk and memory rules name daniel-box and daniel-server, so the Pi stays out of
+  them: `MEM_MAX_PCT` (90) on a 456 MB box would fire at 45.6 MB available while `PI_MEM_MIN_MB`
+  fires at 50 MB, and the Pi's fact would page twice. The Pi has its own rules in the same file
+  (`PiLoadHigh`, `PiMemoryLow`, `PiDiskFull`, `PiFilesystemReadOnly` and `PiMetricsMissing`), which
+  stay shadow until B8 cuts this row over. **A fourth node-exporter host needs rules added to
+  `hosts.yaml`:** its per-host copies name the hosts, and `HostTemperatureCoverageShortfall` holds a
+  literal floor of 3 hosts, so a fourth host makes that floor satisfiable by any three of four and
+  one host can go dark silently. `test_every_node_exporter_job_is_mapped_in_exporter_dependent`
+  (test_check_gates_exporters.py) forces the decision for a host under a new scrape job, which is
+  how daniel-pi arrived. A host joining the existing `node` DaemonSet is still on you.
   **Published-port arm** (`with_pi_ports`, folded here for the push-token reason recorded at
   `with_ha_ban`). After a Pi restart a container can come back attached to no Docker network while
   still reporting `Up (healthy)`, because its healthcheck curls loopback inside its own netns. Its
@@ -821,6 +606,17 @@ The `DECIDED:` marker for the 3 GiB free-bytes floor sits there too.
 quota to the one k3s runs. The reasoning behind each rule (the one-hot `state` label, the
 `max by` that reads a doubled scrape once, the claim census, why an absent etcd series is
 `ScrapeTargetDown`'s) is in `ansible/roles/k8s/observability/files/rules/storage.yaml`.
+Root Disk, Memory, Host Temperature and UPS Battery Health (M6 batch A1) retired into the
+`hosts` rule group in observability, and their tiles, rows, check bodies, verdicts and env keys
+are gone. The Pi Pressure row stays until B8. The thresholds, floors and `for:` durations those
+rules carry are pinned in `ansible/tests/services/test_host_check_rule_literals.py`, where the
+`DECIDED:` markers for the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen
+maximum junction temperature, the nut-only UPS source and the retired-uid note now sit. That file also holds the
+`ClaudeCgroupNotReporting` host and cgroup pairs to the inventory, and
+`test_claude_cgroup_consumers_agree_with_the_writer.py` holds the rules' `claude_cgroup_*`
+selectors to the series the writer emits. The reasoning behind each rule (the `up == 1` start of
+every missing-data arm, the per-host copies, the `unless on ()` that lets mains loss outrank the
+UPS runway arms) is in `ansible/roles/k8s/observability/files/rules/hosts.yaml`.
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
 `PROM_DEPENDENT`. Each check's retirement note is in the repository history.
 

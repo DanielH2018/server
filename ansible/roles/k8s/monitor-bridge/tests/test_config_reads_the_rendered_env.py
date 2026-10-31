@@ -36,7 +36,7 @@ def test_no_rendered_key_carries_a_second_default_in_python():
     rendered = set(bridge_env())
     reads = _reads()
     # Named members, so a parser rename that empties `_reads()` fails here, not silently.
-    assert ("config_host.py", "DISK_MAX_PCT", False) in reads
+    assert ("config_host.py", "PI_LOAD_MAX", False) in reads
     assert ("config_service.py", "HA_BAN_WINDOW", True) in reads
     doubled = sorted(
         (m, k) for m, k, has_default in reads if has_default and k in rendered

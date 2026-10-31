@@ -3,7 +3,7 @@
 Covers the Pi's resource pressure with the published-port arm folded into it, and
 speedtest-tracker's newest result row.
 
-Split out of `checks/host.py`, which keeps disk, certificate expiry and memory. Reads config as
+Reads config as
 `cfg.X` and its streak counters as `src.state` (`bridge.streaks.State`). Every Prometheus and HTTP query goes through the `src` argument
 (`bridge.sources.Sources`), which a test replaces with a `FakeSources`. The verdicts it
 from-imports from verdicts.host are patched on THIS module, where they are bound. The TCP prober is an ARGUMENT rather than a

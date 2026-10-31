@@ -26,8 +26,9 @@ The rules below shaped those memberships.
 - **`WAN_DEPENDENT`**: the gate reads two provider URLs by hostname and is DOWN only when
   NEITHER answers, so one provider's outage cannot silence a dependent reading the other. It
   never probes a shared-anycast IP, because the 2026-09-18 outage included DNS failure.
-- **`EXPORTER_DEPENDENT`** — `node` → disk, memory, `host_temp`, `host_packages`; `node-pi` →
-  `host_temp`, `pi_pressure`.
+- **`EXPORTER_DEPENDENT`** — `node` → `host_packages`; `node-pi` → `pi_pressure`. The disk,
+  memory, host temperature and UPS checks left in M6 batch A1: the `hosts` rules start every
+  missing-data arm from `up == 1`, so a dead exporter leaves them quiet beside `ScrapeTargetDown`.
 - **`STARTUP_GRACE`** is disjoint from every skip set, so a check that gains a gate leaves
   this set; a test holds both.
 - **`workload_log_errors`** is in `STARTUP_GRACE` and in no gate set. It reads Loki, not
@@ -58,7 +59,7 @@ The rules below shaped those memberships.
   every k8s role that `lookup()`s another role's file, and the landing, the deployer's defer
   alert and the secret census all read it.
 - **Fold an arm into an existing monitor** when it answers that tile's existing question
-  (cgroups into Memory, ports into Pi Pressure, `ip_ban` into HA); a new tile costs a push token in
+  (ports into Pi Pressure, `ip_ban` into HA); a new tile costs a push token in
   SOPS and a monitor created by hand.
 - **File-mounted credentials** (`HA_TOKEN_FILE`, `B2_PROBE_APPLICATION_KEY_FILE` reusing
   `longhorn_b2_application_key`, `CF_ANALYTICS_TOKEN_FILE`, `SPEEDTEST_TOKEN_FILE`,
@@ -112,15 +113,15 @@ The rules below shaped those memberships.
 | `verdict_export.py` | the check exporter: `CheckExposition` (a `deploy_pipeline.Exposition` on its own port, `CHECK_EXPORTER_PORT`) serves `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per row and `homelab_check_rows` for the table. `check.run_once` and `gates._gate` record each row's verdict through `export`; `cli.main()` sets the row count from `check_table.CHECKS` |
 | `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Import-free, because `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` imports the same file from the checkout to judge the CRs (#3668) |
 | `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
-| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster`, `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `wan`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `check_gitops_status` reads every marker it judges through `gitops_hold.DeployerSnapshot`, the third generated copy. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
+| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster`, `host_thermal` (Scrutiny), `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `wan`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `check_gitops_status` reads every marker it judges through `gitops_hold.DeployerSnapshot`, the third generated copy. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `PVC_EXCLUDE` stays in `config.py` because a repo test greps for it by text |
-| `bridge/net.py` | the transport: `_get_json`, `_get_bytes`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` (which caps its message with `bridge.common.cap_push_msg`), and the selector builders (`origin_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
+| `bridge/net.py` | the transport: `_get_json`, `_get_bytes`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` (which caps its message with `bridge.common.cap_push_msg`), and the selector builder (`origin_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
 | `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `loki_vector`, `loki_lines`, `get_json`, `get_bytes`, `post_json`, and `log_error_counts` composed from two of them). `cli.main()` builds one; `run_once` hands it to every body as `src`. Also `Sink(cfg)`, where `run_once` pushes every verdict, delegating to `bridge.net.push` |
 | `bridge/msgfmt.py` | `format_down(unit, state, items, details)` — the one grammar for a push message naming several things; import-free so `probe.py releases --kuma` loads it from a host too |
 | `bridge/streaks.py` | `State` (every streak counter and probe cache, carried as `src.state`), `down_streak` (the consecutive-down step) and `apply_startup_grace` |
 | `bridge/common.py` | `_env`, `sanitize`, `cap_push_msg` (`PUSH_MSG_MAX`) and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected — plus `host_uptime_s`, the node's boot clock the two post-reboot arms key on |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
-| `verdicts/<domain>.py` | pure decisions taking every threshold as an argument: `cluster`, `host` (`hwmon_temp_limits`, `pi_pressure`), `host_smart` (`scrutiny_*`), `host_power` (`ups_health`, `thermal_monitor_verdict`), `host_cgroups`, `service`, `logs`, `notify`, `storage` (the B2/R2 decisions with the R2 Class A/B/free ACTION LISTS beside them — policy, not configuration) |
+| `verdicts/<domain>.py` | pure decisions taking every threshold as an argument: `cluster`, `host` (`pi_pressure`, `speedtest_verdict`), `host_smart` (`scrutiny_*`), `service`, `logs`, `notify`, `storage` (the B2/R2 decisions with the R2 Class A/B/free ACTION LISTS beside them — policy, not configuration) |
 
 ## The test seams
 

@@ -54,34 +54,27 @@ def _members(gate: str) -> frozenset[str]:
 PROM_DEPENDENT = _members("prometheus")
 
 # One level BELOW the Prometheus gate: a single exporter down while Prometheus is UP fails every
-# check reading its metrics at once. node-exporter death false-pages Root Disk + Memory (node_* go
-# unavailable -> down) on top of the legitimate Scrape Targets page; cadvisor death makes
-# restarts/oom/cpu read an empty vector -> silently green. Scrape Targets already names the dead
-# `up{job=...}==0`, so run_once suppresses each dead exporter's dependents (pushes `up` with a skip
-# msg, heartbeat kept alive) and lets Scrape Targets be the single page — the same
-# one-root-cause-one-alert shape as the Prometheus gate, keyed by the Prometheus `job` label.
-# Guarded by a test against the registry.
-# host_temp joined 2026-08-29 with HWMON_TEMP_ORIGINS_MIN. Before the floor it had no per-host
-# arm, so a single node-exporter death left it green and there was nothing to suppress. Now a
-# dead node-exporter drops that host's hwmon series and trips the floor, so without this entry
-# one root cause would page twice — Scrape Targets plus a coverage complaint naming the same
-# host. Same reason disk and memory are here.
+# check reading its metrics at once. Scrape Targets already names the dead `up{job=...}==0`, so
+# run_once suppresses each dead exporter's dependents (pushes `up` with a skip msg, heartbeat kept
+# alive) and lets Scrape Targets be the single page — the same one-root-cause-one-alert shape as
+# the Prometheus gate, keyed by the Prometheus `job` label. Guarded by a test against the registry.
+#
+# M6 batch A1 moved disk, memory and host_temp to the `hosts` rules in observability and removed
+# their entries here. Those rules start every missing-data arm from `up == 1`, so a dead exporter
+# leaves them quiet beside ScrapeTargetDown, and no Alertmanager inhibit is needed (the header
+# of files/rules/hosts.yaml has the reasoning).
 #
 # host_packages joined with H3.5c. Its builder arms read the series daniel-box's node exporter
 # publishes from its textfile directory, so a dead exporter makes the series absent, and the row
 # pages on an absent series. Scrape Targets already names the dead exporter.
 #
-# The Pi scrapes under its OWN job — measured 2026-08-29, `count by (job, origin)
-# (node_hwmon_temp_celsius)` returns job=node for daniel-server (12) and daniel-box (7) but
-# job=node-pi for daniel-pi (2). This map is keyed by the Prometheus job, so a `node` entry alone
-# suppresses two of the three hosts and the Pi's exporter death still double-pages. node-pi maps
-# to host_temp and pi_pressure, not to disk and memory: those exclude the Pi by origin
-# (HOST_METRIC_ORIGIN_EXCLUDE, since check_pi_pressure owns them), so they have nothing to
-# suppress there, while the hwmon floor counts all three hosts and pi_pressure reads the Pi's
-# node_* series directly (since 2026-09-18, #2004) and pages when they are absent.
+# The Pi scrapes under its OWN job: `node-pi` for daniel-pi, `node` for daniel-server and
+# daniel-box. This map is keyed by the Prometheus job, so pi_pressure sits under `node-pi`. It
+# reads the Pi's node_* series directly (since 2026-09-18, #2004) and pages when they are absent.
+# B8 deletes that entry with the row.
 EXPORTER_DEPENDENT = {
-    "node": frozenset({"disk", "memory", "host_temp", "host_packages"}),
-    "node-pi": frozenset({"host_temp", "pi_pressure"}),
+    "node": frozenset({"host_packages"}),
+    "node-pi": frozenset({"pi_pressure"}),
 }
 
 # B2-reachability gate — the second peer of the Prometheus gate (see check_b2_reachable /

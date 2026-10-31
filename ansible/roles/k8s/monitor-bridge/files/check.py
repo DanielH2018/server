@@ -122,8 +122,9 @@ def run_once(
     # pi_pressure and cluster_targets (#2779).
     #
     # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host
-    # now suppresses its dependents estate-wide — daniel-box's node exporter dying holds
-    # daniel-server's disk and memory verdicts too. Accepted over per-origin suppression: the
+    # now suppresses its dependents estate-wide — one `node` exporter dying holds the other
+    # hosts' verdicts of the same dependents too (disk and memory were among them until M6
+    # batch A1). Accepted over per-origin suppression: the
     # dependents report the worst origin in one verdict, so splitting suppression by origin would
     # mean splitting the checks by origin first. ScrapeTargetDown still names the dead job, so
     # the outage is reported; what is lost is a second host's verdict while one host's exporter

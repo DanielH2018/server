@@ -28,7 +28,7 @@ from secrets_mgmt.rotation_tools import REPO, load_registry
 # ── consumer mapping (which redeploys apply a rotated token) ─────────────────
 def test_consumer_tags_monitor_bridge_tokens():
     # The pusher AND the tile. Asserting only the pusher is what let the tile go stale.
-    assert consumer_tags("monitor_bridge_disk_push_token") == (
+    assert consumer_tags("monitor_bridge_swallowed_verdicts_push_token") == (
         "monitor-bridge",
         "uptime-kuma",
     )
@@ -188,7 +188,7 @@ def test_uptime_kuma_is_a_consumer_iff_a_tile_exists():
             "CHECKS",
         )
     }
-    assert "monitor_bridge_disk_push_token" in bridge_tokens
+    assert "monitor_bridge_swallowed_verdicts_push_token" in bridge_tokens
     reg = load_registry()
     wrong = []
     for name in reg["entries"]:

@@ -60,8 +60,6 @@ class State:
     Attributes:
       down_streaks: Consecutive-down count per check name, advanced through `down_streak()` and
         reset to 0 by each check on an `ok` result.
-      host_origin_streaks: The host-coverage-floor streak per key (`checks.host`): disk per
-        mountpoint, memory and host temperature age independently.
       n8n_streaks: Per-workflow consecutive-failure streaks (`checks.service.check_n8n`).
       grace_streaks: The startup grace's consecutive-down count per check (`STARTUP_GRACE` in
         gates.py), advanced by `apply_startup_grace` from `run_once`. Keyed by a set of names
@@ -77,7 +75,6 @@ class State:
     """
 
     down_streaks: dict[str, int] = field(default_factory=dict)
-    host_origin_streaks: dict[str, int] = field(default_factory=dict)
     n8n_streaks: dict = field(default_factory=dict)
     grace_streaks: dict[str, int] = field(default_factory=dict)
     b2_probe: B2ProbeCache = field(
@@ -108,7 +105,7 @@ def down_streak(
 ) -> tuple[int, bool, str]:
     """Pure consecutive-down hysteresis step shared by every per-check grace mechanism.
 
-    Used by check_ha_heartbeat's, check_ups's and check_discord's per-check grace, plus
+    Used by check_ha_heartbeat's and check_discord's per-check grace, plus
     apply_startup_grace. Call on a DOWN result — the caller resets its own counter to 0 on
     `ok`. Increments `count` and returns (new_count, hold_ok, out_msg): while under
     `threshold` it holds `up` with a "<held_label> n/N (<grace_note>): msg" note; the

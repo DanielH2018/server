@@ -197,45 +197,15 @@ EMAIL_TIER = {
 _WINDOW_PROBE_S = 7777
 
 
-# The four rows whose tiles M6's batch A1 deleted in Cutover-a1, ahead of the rows themselves
-# (the owner-independent form of m6-retire-kuma.md's "The cutover order": monitor-bridge and
-# uptime-kuma are both flux-owned, so no deploy orders the tile before the row). Cutover-a2
-# deletes the rows and this set together. `pi_pressure` is not here: B8 cuts that row over.
-A1_ROWS_AWAITING_DELETION = {
-    "stub-monitor_bridge_disk_push_token",
-    "stub-monitor_bridge_mem_push_token",
-    "stub-monitor_bridge_host_temp_push_token",
-    "stub-monitor_bridge_ups_push_token",
-}
-
-
-def test_the_deleted_a1_tiles_are_not_declared():
-    # RED if the table loop's `if` stops excluding them: AutoKuma would re-create all four.
-    declared = {e["name"] for e in _entities().values()}
-    assert not declared & {
-        "Root Disk",
-        "Memory",
-        "Host Temperature",
-        "UPS Battery Health",
-    }
-    assert "Pi Pressure" in declared
-
-
 def test_every_bridge_push_token_reaches_a_push_tile():
     # A row in monitor-bridge's `files/check_table.py` with no tile pushes into nothing:
     # Kuma answers an unknown token with 404 and no monitor ever goes red. Joined on rendered
     # values, the same way as the interval guard below, so the token the bridge pushes and the
     # one the tile accepts are compared rather than two variable names.
-    #
-    # The one tolerated orphan set is named and compared both ways: a token that gains a tile
-    # back, or a fifth row that loses its tile, fails here.
     bridge_tokens = bridge_push_tokens()
     tile_tokens = set(push_tokens_by_monitor().values())
-    assert "stub-monitor_bridge_disk_push_token" in bridge_tokens
-    orphans = bridge_tokens - tile_tokens
-    assert orphans == A1_ROWS_AWAITING_DELETION, sorted(
-        orphans ^ A1_ROWS_AWAITING_DELETION
-    )
+    assert "stub-monitor_bridge_swallowed_verdicts_push_token" in bridge_tokens
+    assert not sorted(bridge_tokens - tile_tokens), sorted(bridge_tokens - tile_tokens)
 
 
 def test_bridge_push_monitors_share_one_interval():
