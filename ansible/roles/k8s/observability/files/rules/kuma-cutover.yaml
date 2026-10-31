@@ -85,16 +85,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Renovate Agent — Alive"}[56h10m])
             or
-              absent_over_time(monitor_status{monitor_name="TLS Cert Expiry"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Traefik 5xx"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Traefik Latency"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Traefik 404 Flood"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Traefik 421"}[2h])
-            or
               absent_over_time(monitor_status{monitor_name="k3s Longhorn Backup"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Off-box etcd Snapshot"}[50h10m])

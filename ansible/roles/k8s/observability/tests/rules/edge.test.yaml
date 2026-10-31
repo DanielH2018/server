@@ -24,7 +24,6 @@ tests:
               job: traefik-k8s
               severity: warning
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: Prometheus has lost Traefik's scrape job or its edge series.
               description: >-
@@ -45,7 +44,6 @@ tests:
               job: traefik-k8s
               severity: warning
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: Prometheus has lost Traefik's scrape job or its edge series.
               description: >-
@@ -91,7 +89,6 @@ tests:
               serial: "1"
               severity: critical
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: The certificate soon.example.com expires within 14 days.
               description: >-
@@ -128,7 +125,6 @@ tests:
               backend: homelab-checkout-80@kubernetescrd
               severity: warning
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: Traefik backend homelab-checkout-80@kubernetescrd answers over 5% of requests with a 5xx.
               description: >-
@@ -164,7 +160,6 @@ tests:
               backend: homelab-slow-app-80@kubernetescrd
               severity: warning
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: Over 5% of Traefik backend homelab-slow-app-80@kubernetescrd's requests take longer than 5s.
               description: >-
@@ -196,7 +191,6 @@ tests:
               backend: homelab-bursty-app-80@kubernetescrd
               severity: warning
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: Over 5% of Traefik backend homelab-bursty-app-80@kubernetescrd's requests take longer than 5s.
               description: >-
@@ -246,7 +240,6 @@ tests:
               backend: homelab-odd-app-80@kubernetescrd
               severity: warning
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: Traefik emits no 5.0s latency bucket for homelab-odd-app-80@kubernetescrd.
               description: >-
@@ -273,7 +266,6 @@ tests:
           - exp_labels:
               severity: warning
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: Over 90% of the requests Traefik receives get a 404.
               description: >-
@@ -315,7 +307,6 @@ tests:
               router: homelab-authelia-secure@kubernetescrd
               severity: warning
               service: traefik
-              shadow: "true"
             exp_annotations:
               summary: Traefik router homelab-authelia-secure@kubernetescrd keeps answering 421.
               description: >-

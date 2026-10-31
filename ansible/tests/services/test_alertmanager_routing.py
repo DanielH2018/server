@@ -9,7 +9,8 @@ and reads each route the walk ends on. Each label set carries one expected outco
   k8s-workloads sets stand for those alerts once they drop `shadow`. M4's
   `IngressProbesMissing` pages from the start, and its two `IngressProbeFailed*` sets since
   its PR 5. M4's `BlackboxExporterDown` and every rule of M6's batch A3 (the scrape-target and
-  log-pipeline rules) since A3's Cutover-b.
+  log-pipeline rules) since A3's Cutover-b. Every rule of M6's batch A4 (the edge rules) since
+  A4's Cutover-b.
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
   it pages nobody. M3's two `DiskHealth*` sets move in its PR 5,
@@ -65,6 +66,7 @@ LOG_PIPELINE_RULES = (
 CUTOVER_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "kuma-cutover.yaml"
 )
+EDGE_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "edge.yaml"
 BRIDGE_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 )
@@ -254,6 +256,15 @@ PAGING = {
         )
         for path in (SCRAPE_RULES, LOG_PIPELINE_RULES)
         for name, labels in literal_sets(path, shadow=False).items()
+    },
+    # Batch A4's edge rules since its Cutover-b: `CertExpiringSoon` is critical, so both
+    # channels, and the rest are `warning`.
+    **{
+        name: (
+            labels,
+            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
+        )
+        for name, labels in literal_sets(EDGE_RULES, shadow=False).items()
     },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
@@ -453,6 +464,24 @@ def test_every_a3_rule_pages_and_so_does_the_cutover_guard():
     assert "ScrapeTargetFlapping/observability" in PAGING
     assert "LogShipperDroppingEntries/loki-homelab" in PAGING
     assert "ScrapeTargetDown/observability" not in SHADOW
+
+
+def test_every_a4_edge_rule_pages_with_its_ported_severity():
+    """Non-vacuity for `literal_sets`: batch A4's seven edge rules all page since Cutover-b, so
+    none routes to the blackhole, and the certificate rule is the one that also emails."""
+    assert literal_sets(EDGE_RULES, shadow=True) == {}
+    assert set(literal_sets(EDGE_RULES, shadow=False)) == {
+        "CertExpiringSoon/traefik",
+        "TraefikBackend5xx/traefik",
+        "TraefikBackendSlow/traefik",
+        "TraefikLatencyBucketMissing/traefik",
+        "TraefikEntrypoint404Flood/traefik",
+        "TraefikRouter421/traefik",
+        "EdgeMetricsMissing/traefik",
+    }
+    assert PAGING["CertExpiringSoon/traefik"][1] == ["discord", "email"]
+    assert PAGING["TraefikBackendSlow/traefik"][1] == ["discord"]
+    assert "TraefikBackendSlow/traefik" not in SHADOW
 
 
 def test_every_a1_rule_is_shadow_and_names_each_host_check():
