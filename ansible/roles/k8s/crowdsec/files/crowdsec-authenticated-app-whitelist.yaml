@@ -1,0 +1,30 @@
+# Drops Traefik access-log events that a backend answered behind its own authentication, so
+# the operator's normal use of these apps never feeds http-probing or http-crawl-non_statics
+# (#6708). Each rule pairs one router with a backend status. `OriginStatus` is 0 when Traefik
+# answered without reaching the backend: an Authelia redirect, the bouncer's 403, or the
+# LiveSync gate's no-router 404. None of those is ever exempt, so a ban still feeds itself and
+# a scanner is scored as before.
+#
+# - homepage-public carries the authelia middleware and no Authelia bypass covers its public
+#   name, so a 403 or 404 from Homepage itself means a logged-in browser. A stale tab's widget
+#   burst is the case: Homepage answers 403 to `/api/services/proxy` for a group the deployed
+#   config dropped, and 404 to an old `/_next/static/` chunk.
+# - The livesync-sync routers match only with the X-Sync-Token header, and CouchDB answers 401
+#   until `require_valid_user` passes, so a 404 from CouchDB means the token and a valid user.
+#   LiveSync's existence checks on `/obsidian/_local/` 404 on every sync.
+# - jellyfin-public has no Authelia, so its rule needs an id a scanner cannot guess: a 2xx on
+#   `/Videos/<item GUID>/` is a client streaming an item it listed while logged in. One episode
+#   is enough segments to trip http-crawl-non_statics.
+#
+# Router names are Traefik's: `<namespace>-<ingressroute>-<hash>@kubernetescrd` for a CRD
+# route, the key in `traefik/templates/livesync-gate-secret.yaml.j2` for the gate.
+# `tests/test_authenticated_app_whitelist.py` derives both from the render.
+name: local/authenticated-app-whitelist
+description: "Drop events a backend answered behind its own authentication"
+filter: "evt.Meta.service == 'http' && 'traefik' in evt.Unmarshaled"
+whitelist:
+  reason: "Backend answered an authenticated session"
+  expression:
+    - "evt.Meta.traefik_router_name matches '^homelab-homepage-public-[0-9a-f]{20}@kubernetescrd$' && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) in [403, 404]"
+    - "evt.Meta.traefik_router_name in ['livesync-sync-public@file', 'livesync-sync-local@file'] && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) == 404"
+    - "evt.Meta.traefik_router_name matches '^homelab-jellyfin-public-[0-9a-f]{20}@kubernetescrd$' && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) >= 200 && int(evt.Unmarshaled.traefik.OriginStatus ?? 0) < 300 && evt.Meta.http_path matches '(?i)^/videos/[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}/'"
