@@ -3,8 +3,8 @@
 `files/rules/gitops-checks.yaml` is plain YAML, so each NotReporting rule carries its deadline as
 a literal twice: the `>` of the stale-file arm and the `[<n>s]` window of the absent_over_time arm.
 The producer renders DEADLINE_S, and a producer moved to a slower cadence without its rule would
-page on every healthy gap, while one moved faster would leave the rule slower than the Kuma tile it
-shadows (M1 convention 1).
+page on every healthy gap, while one moved faster would leave the rule slower than the producer's
+own cadence (M1 convention 1).
 
 Run: uv run pytest ansible/tests/services/test_gitops_check_rule_literals.py
 """

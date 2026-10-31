@@ -87,10 +87,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Live Object Drift"}[50h10m])
             or
-              absent_over_time(monitor_status{monitor_name="Artifacts Peer Sync"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="k3s Telemetry OTLP Door"}[2h])
-            or
               absent_over_time(monitor_status{monitor_name="Daniel Pi SD Health"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Daniel Pi Recovery"}[2h])
@@ -116,10 +112,6 @@ groups:
               absent_over_time(monitor_status{monitor_name="k3s Speedtest"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Swallowed Push Verdicts"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="GitHub Ruleset Drift"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="GitHub Interaction Limit"}[50h10m])
             or
               absent_over_time(monitor_status{monitor_name="WAN Reachable"}[2h])
             or

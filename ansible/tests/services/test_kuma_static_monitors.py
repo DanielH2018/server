@@ -189,6 +189,15 @@ EMAIL_TIER = {
 _WINDOW_PROBE_S = 7777
 
 
+def test_the_deleted_b3_tiles_are_not_declared():
+    # RED if either tile is declared again: AutoKuma would re-create it beside the
+    # GitHubRulesetDrift* and GitHubInteractionLimit* rules that replace it (M6 batch B3).
+    declared = {e["name"] for e in _entities().values()}
+    assert not declared & {"GitHub Ruleset Drift", "GitHub Interaction Limit"}
+    # Non-vacuity by name: a render that declared nothing would pass the line above.
+    assert "Swallowed Push Verdicts" in declared
+
+
 def test_every_bridge_push_token_reaches_a_push_tile():
     # A row in monitor-bridge's `files/check_table.py` with no tile pushes into nothing:
     # Kuma answers an unknown token with 404 and no monitor ever goes red. Joined on rendered
