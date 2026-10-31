@@ -77,8 +77,8 @@ resolved from `origin/master` before the merge is armed, so you do not pass it.
 ./scripts/deploy_tools/land.sh --pr <n> --subject "..." ...        # override the squash subject
 ```
 
-**Without `--detach` you own the redirect.** `> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1` is not
-optional: Ansible refuses to start on the non-blocking pipe a backgrounded Bash call hands the
+**Without `--detach` you own the redirect.** `> <job-dir>/tmp/land<n>.log 2>&1`, with the
+literal path `envq CLAUDE_JOB_DIR` prints, is not optional: Ansible refuses to start on the non-blocking pipe a backgrounded Bash call hands the
 script, and the error names Ansible rather than the harness. Then wait with
 `cc-wait file <log> --match '^VERDICT:' --fail '^Traceback'` and **do not end your turn** on the
 landing.
@@ -104,8 +104,8 @@ otherwise and prints the offending line, because GitHub closes an issue named af
 `gh pr edit <n> --body-file`, then re-run the same landing command — the arm is idempotent.
 
 **After a squash merge, reset the branch before any follow-up commit.** Run
-`git fetch origin && git reset --hard origin/master` in the worktree, then commit the follow-up
-work. A plain push from the old branch recreates the deleted remote branch with the
+`cd <your worktree> && git fetch origin && git reset --hard origin/master`, then commit the
+follow-up work. A plain push from the old branch recreates the deleted remote branch with the
 pre-squash commits, so the follow-up PR opens CONFLICTING and GitHub runs no checks on it
 (PR #543).
 
