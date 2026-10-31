@@ -76,10 +76,8 @@ def parse_push_line(line: str) -> tuple[str, str, str, str, str] | None:
 # The crons that read KUMA_PUSH_OK and route a healthchecks.io `/fail` on a lost push, which
 # alerts at once. Their lost DOWN already pages, so counting it here is one root cause twice;
 # their `status=` lines still count as landed siblings. Pinned against the tree by
-# tests/test_check_swallowed_verdicts.py: a fourth reader has to be added here too.
-HC_ROUTED_TAGS = frozenset(
-    {"longhorn-backup-health", "pi-sd-health", "pi-recovery-health"}
-)
+# tests/test_check_swallowed_verdicts.py: a new reader has to be added here too.
+HC_ROUTED_TAGS = frozenset({"longhorn-backup-health"})
 
 # The producers whose Kuma tile M6 is deleting (docs/target-architecture/monitoring/m6-retire-kuma.md,
 # "The cutover order"). From a batch's Cutover-1a until its Cutover-2, the producer still pushes
@@ -118,9 +116,10 @@ KUMA_RETIRING_TAGS = frozenset(
         # swallowed_verdicts reads the pod through `{container="pi-peer-backup"}`. autofix-bridge
         # and cloudflare-ddns log to no stream the selector reads, so they list nothing.
         "pi-peer-backup",
-        # B5: the Pi package's two token heartbeats. They are also HC_ROUTED_TAGS while they
-        # read KUMA_PUSH_OK, and listing them here keeps their refused pushes quiet once
-        # Cutover-2 drops that routing.
+        # B5: the Pi package's two token heartbeats. Cutover-2 stopped their pushes and removed
+        # them from HC_ROUTED_TAGS. The Pi ships only health.log, whose `push failed` lines carry
+        # no `by=kuma`, so they parse as `swallowed` and this entry exempts none of them: until
+        # the Pi installs the package, a DOWN cycle pages. The set goes with C-7.
         "pi-recovery-health",
         "pi-sd-health",
         "release-staleness-check",
@@ -166,7 +165,7 @@ def swallowed_verdicts(
     until one side is redeployed. A Kuma-side error, such as the 2026-10-11
     `SQLITE_CONSTRAINT` on `stat_hourly`, matched the token and survived a redeploy. A fleet-wide rejection
     (every token gone — Kuma restored from an old backup) takes this tile's own token with
-    it; the three HC_ROUTED_TAGS crons page that case through healthchecks.io within their
+    it; the HC_ROUTED_TAGS crons page that case through healthchecks.io within their
     own cycle, which is why they stay excluded here too. A rejection wins the message over
     a swallowed DOWN on another tag in the same window: the tile is red either way, and the
     swallowed one is named on the next cycle once the rejection is cleared.

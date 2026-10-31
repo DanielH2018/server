@@ -68,22 +68,17 @@ def test_an_sd_health_down_line_parses_into_an_episode(tmp_path):
     assert parsed_msg == msg
 
 
-def test_a_failed_push_still_parses(tmp_path):
-    """ACCEPT: when the push fails, this file is the ONLY record of the DOWN."""
-    _, msg, _, lines = run(
-        "pi-recovery-health", tmp_path, running=["docker-proxy"], push_ok="0"
-    )
+def test_a_down_line_is_a_verdict_and_never_a_failed_push(tmp_path):
+    """REJECT: the scripts push nothing, so no line may read `push failed`.
+
+    That form is what `swallowed_verdicts` counts as a lost verdict. Since Cutover-2 this file
+    records a verdict, and the textfile carries it to Prometheus.
+    """
+    _, msg, _, lines = run("pi-recovery-health", tmp_path, running=["docker-proxy"])
 
     line = _only_line(lines)
-    assert "push failed" in line, (
-        f"a failed push must be recorded as such -- got {line!r}"
-    )
-
-    parsed = parse_syslog_down_line(line)
-    assert parsed is not None, f"could not parse the push-failed form: {line!r}"
-    tag, parsed_msg = parsed
-    assert tag == "pi-recovery-health"
-    assert msg in parsed_msg
+    assert "push failed" not in line, line
+    assert f"status=down {msg}" in line
 
 
 @pytest.mark.parametrize(

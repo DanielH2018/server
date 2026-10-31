@@ -440,8 +440,6 @@ _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2",
     "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
     "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2",
     "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
 }
 
