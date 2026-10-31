@@ -278,7 +278,10 @@ def test_every_volume_a_role_caps_is_watched_by_the_snapshot_rules():
 
 def test_a_snapshot_rule_that_watches_another_claim_is_flagged():
     text = RULES.read_text().replace('pvc="jellyfin-config"', 'pvc="other-config"')
-    assert len(snapshot_cap_problems(text)) == 2
+    assert snapshot_cap_problems(text) == [
+        'LonghornSnapshotNearCap: expr lacks `pvc="jellyfin-config"`',
+        'LonghornSnapshotCapUnmonitored: expr lacks `pvc="jellyfin-config"`',
+    ]
 
 
 def test_a_cap_that_no_longer_matches_the_claim_size_is_flagged():
