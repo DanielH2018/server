@@ -157,6 +157,9 @@ traefik_k8s_realip_plugin_name: cloudflarerealip
 traefik_k8s_realip_plugin_module: homelab/cloudflarerealip
 traefik_k8s_agent_collections: >-
   crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
+# Hub parsers on top of the collections. jellyfin-whitelist drops the 403 Jellyfin answers to
+# a playback progress POST and the 404 on a missing thumbnail (#6708).
+traefik_k8s_agent_parsers: crowdsecurity/jellyfin-whitelist
 traefik_k8s_agent_cpu_limit: "0.5"
 traefik_k8s_agent_mem_limit: 256Mi
 traefik_k8s_agent_cpu_request: 50m

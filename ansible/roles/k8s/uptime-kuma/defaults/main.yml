@@ -220,7 +220,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^crowdsec-"
   - name: Observability
     match:
-      - "^claude-otel-health$"
       # One tile per cluster node, both watching the same route from different source addresses.
       # An edge/observability signal rather than a per-app tile.
       - "^loki-read-route-"
@@ -263,7 +262,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^release-staleness-check$"
       - "^homelab-eval-sweep$"
       - "^status-page-sync$"
-      - "^artifacts-sync$"
   - name: Other
     match:
       - ".*"
