@@ -1,0 +1,13 @@
+{% import 'claude-triage-pins.j2' as pins with context -%}
+# Shipped by the claude-code host component as homelab-claude-triage.conf: triage's state directories. Both triage units run
+# `systemd-tmpfiles --create` on this file before they start, and so does every boot.
+#
+# The inbox, the records and the lock, written by the agent. Under operator_read the operator's
+# group gets traverse and no listing, so `probe.py applied` can stat the inbox (#6452). It is the
+# units' UMask=0027 that keeps what they write out of the operator's read, not the group.
+d {{ pins.state_dir }} {{ '0710' if claude_code_agent_operator_read else '0750' }} {{ pins.agent_user }} {{ sys_user if claude_code_agent_operator_read else pins.agent_user }} -
+d {{ pins.state_dir }}/inbox 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
+d {{ pins.state_dir }}/runs 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
+d {{ pins.state_dir }}/done 0750 {{ pins.agent_user }} {{ pins.agent_user }} -
+# The poller appends to this log, so the units' umask never reaches one created before it.
+f {{ pins.state_dir }}/shadow.jsonl 0640 {{ pins.agent_user }} {{ pins.agent_user }} -

@@ -44,6 +44,7 @@ def test_the_key_half_runs_only_on_the_key_host_and_the_login_half_everywhere_el
     peers = named(main, "Give the agent user an ssh key for the peers and name them")
     assert peers["ansible.builtin.import_tasks"] == "agent_peers.yml"
     assert peers["when"] == [
+        "inventory_hostname not in claude_code_packaged_hosts['agent_home']",
         "claude_code_agent_user_enabled",
         "claude_code_agent_is_primary",
         "inventory_hostname == claude_agent_ssh_key_host",
@@ -54,6 +55,7 @@ def test_the_key_half_runs_only_on_the_key_host_and_the_login_half_everywhere_el
     )
     assert login["ansible.builtin.import_tasks"] == "agent_ssh_login.yml"
     assert login["when"] == [
+        "inventory_hostname not in claude_code_packaged_hosts['agent_home']",
         "claude_code_agent_user_enabled",
         "claude_code_agent_is_primary",
         "inventory_hostname != claude_agent_ssh_key_host",

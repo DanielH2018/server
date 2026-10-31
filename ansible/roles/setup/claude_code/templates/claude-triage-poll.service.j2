@@ -1,22 +1,24 @@
+{% import 'claude-triage-pins.j2' as pins with context -%}
 [Unit]
 Description=Poll Kuma and Alertmanager and start triage for monitors that just went down
 After=network-online.target
 Wants=network-online.target
-OnFailure=claude-triage-poll-alert.service
+# A broken poller fails on every tick, so its page is quiet for an hour after each delivery.
+OnFailure=homelab-claude-triage-poll-alert.service
 
 [Service]
 Type=oneshot
 # The agent user: the poller reads Prometheus, writes the agent's own state, and
 # starts claude-triage@<episode>.service, which polkit lets that user start.
-User={{ claude_code_triage_agent_user }}
-Environment=HOME={{ claude_code_triage_agent_home }}
+User={{ pins.agent_user }}
+Environment=HOME={{ pins.agent_home }}
 Environment=PYTHONDONTWRITEBYTECODE=1
 # This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
 SyslogLevel=notice
 TimeoutStartSec=2min
 NoNewPrivileges=yes
-# DECIDED: UMask=0027, as claude-rc.service.j2 sets it. tasks/triage.yml gives the operator's
-# group traverse on the state directory, so under systemd's default 0022 a record, a log or a
+# DECIDED: UMask=0027, as claude-rc.service.j2 sets it. homelab-claude-triage.conf gives the
+# operator's group traverse on the state directory, so under systemd's default 0022 a record, a log or a
 # directory this unit creates there would be world-readable by its fixed name. A report lands
 # in the setgid artifacts directory, where 0640 keeps the operator's group read.
 UMask=0027
@@ -25,7 +27,8 @@ ProtectProc=invisible
 PrivateTmp=yes
 # The code and its config are root-owned under /opt and /etc, never the agent's writable clone,
 # so a steered session cannot change what the poller sees.
-ExecStart={{ claude_code_triage_agent_home }}/.local/bin/uv run --no-project --no-python-downloads \
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-claude-triage.conf
+ExecStart={{ pins.agent_home }}/.local/bin/uv run --no-project --no-python-downloads \
   --python {{ host_python_version }} /opt/claude-triage/claude_triage_poll.py
 # The textfile that tells a timer which stopped firing from one that runs clean (#6165).
 # timer-textfile.j2 has the shape and the deadline rule.

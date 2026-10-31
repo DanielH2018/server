@@ -149,6 +149,7 @@ def test_discover_templates_finds_the_known_set():
         "claude-triage@.service.j2",
         "claude-triage-poll.service.j2",
         "claude-triage-poll.timer.j2",
+        "claude-triage-report-alert@.service.j2",
         "claude-fanout-server-lander.service.j2",
         "claude-fanout-server-lander.timer.j2",
         "claude-pipeline-timeline.service.j2",
@@ -165,7 +166,7 @@ def test_discover_templates_finds_the_known_set():
         "homelab-rootq.socket.j2",
         "homelab-rootq@.service.j2",
     } <= names
-    assert len(names) == 37
+    assert len(names) == 38
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

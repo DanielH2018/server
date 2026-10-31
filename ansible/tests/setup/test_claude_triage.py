@@ -15,9 +15,9 @@ import re
 import pytest
 from _helpers import ANSIBLE
 from _k8s_render import render_role_template
-from _setup_render import render_setup_text
+from _setup_render import render_setup_text, role_context
 from deploy_tools.land_lib import policy
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import make_ansible_env, template_env
 from lib import yaml_fast
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
@@ -25,6 +25,19 @@ UNIT = "claude-triage@.service.j2"
 RULE = "50-claude-triage.rules.j2"
 INSTALLED = "claude_code_agent_user_enabled and claude_code_triage_enabled"
 RUNNER = ROLE / "files" / "claude_triage_run.py"
+CONFIG = "claude-triage-config.env.j2"
+# Each pin claude-triage-pins.j2 exports, and the role variable that carried it before.
+PINNED = {
+    "agent_user": "claude_code_triage_agent_user",
+    "agent_home": "claude_code_triage_agent_home",
+    "state_dir": "claude_code_triage_state_dir",
+    "model": "claude_code_triage_model",
+    "budget_usd": "claude_code_triage_budget_usd",
+    "max_turns": "claude_code_triage_max_turns",
+    "run_timeout_s": "claude_code_triage_run_timeout_s",
+    "daily_cap": "claude_code_triage_daily_cap",
+    "poll_mode": "claude_code_triage_poll_mode",
+}
 
 
 def runner_constants() -> dict:
@@ -92,13 +105,65 @@ def test_the_caps_and_identity_are_pinned_above_the_inventory_at_their_defaults(
     )
 
 
+def pins() -> dict:
+    """What claude-triage-pins.j2 exports to the templates that import it, by name."""
+    env = template_env(ROLE / "templates")
+    module = env.get_template("claude-triage-pins.j2").make_module(role_context(ROLE))
+    return {name: getattr(module, name) for name in PINNED}
+
+
+def test_the_template_pins_equal_the_block_vars_and_the_defaults() -> None:
+    """The host package reads the pins; tasks/triage.yml's block vars only the role."""
+    block = triage_block()["vars"]
+    for name, var in PINNED.items():
+        assert pins()[name] == block[var] == defaults()[var], name
+
+
+# Inventory values under the role's names, none of them the pinned ones. The package renderer
+# puts the inventory above a component's defaults, so only a template's own pin holds here.
+RAISED = {
+    "claude_code_triage_agent_user": "triage-sentinel-user",
+    "claude_code_triage_state_dir": "/srv/triage-sentinel",
+    "claude_code_triage_budget_usd": 999,
+    "claude_code_triage_max_turns": 999,
+    "claude_code_triage_run_timeout_s": 99999,
+    "claude_code_triage_daily_cap": 99,
+    "claude_code_triage_poll_mode": "armed",
+}
+
+
+@pytest.mark.parametrize(
+    "template", [UNIT, RULE, CONFIG, "claude-triage-poll.service.j2"]
+)
+def test_an_inventory_value_under_the_role_names_moves_nothing(template) -> None:
+    assert render_setup_text("claude_code", template, RAISED) == render_setup_text(
+        "claude_code", template
+    )
+
+
+def test_the_config_carries_the_pins() -> None:
+    """The red half of the test above: the config does read the pins file."""
+    pinned = pins()
+    config = dict(
+        line.split("=", 1)
+        for line in render_setup_text("claude_code", CONFIG).splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+    assert config["BUDGET_USD"] == str(pinned["budget_usd"])
+    assert config["DAILY_CAP"] == str(pinned["daily_cap"])
+    assert config["POLL_MODE"] == pinned["poll_mode"]
+    assert config["STATE_DIR"] == pinned["state_dir"]
+
+
 def test_the_unit_runs_as_the_agent_with_its_own_credential_and_a_clean_stop() -> None:
     text = unit()
     agent = defaults()["claude_code_agent_user"]
     assert directive(text, "User") == [agent]
-    assert directive(text, "EnvironmentFile") == ["/etc/claude-triage/session.env"]
+    assert directive(text, "LoadCredential") == [
+        "claude_oauth_token:/etc/claude-triage/oauth-token"
+    ]
     assert directive(text, "KillSignal") == ["SIGINT"]
-    assert directive(text, "OnFailure") == ["claude-triage-alert.service"]
+    assert directive(text, "OnFailure") == ["homelab-alert@%n.service"]
     # A busy lock is a wait, not a failure.
     assert directive(text, "SuccessExitStatus") == ["75"]
     (start,) = directive(text, "ExecStart")
@@ -222,7 +287,7 @@ def test_the_poller_runs_as_the_agent_and_its_timer_is_started() -> None:
         render_setup_text("claude_code", "claude-triage-poll.service.j2"),
     )
     assert directive(text, "User") == [defaults()["claude_code_agent_user"]]
-    assert directive(text, "OnFailure") == ["claude-triage-poll-alert.service"]
+    assert directive(text, "OnFailure") == ["homelab-claude-triage-poll-alert.service"]
     (start,) = directive(text, "ExecStart")
     assert start.endswith("/opt/claude-triage/claude_triage_poll.py")
     (enable,) = [
@@ -301,16 +366,6 @@ def test_a_pr_changing_triage_needs_the_operator(path, tmp_path) -> None:
     listed.write_text(render_setup_text("claude_code", "claude-land-approval-paths.j2"))
     floor = policy.read_approval_paths(str(listed))
     assert policy.approval_hits([{"filename": path}], floor) == [path]
-
-
-def test_a_token_pasted_across_a_wrapped_line_reaches_systemd_whole() -> None:
-    """The 2026-10-17 paste carried two spaces from setup-token's line wrap, and Claude 401'd."""
-    rendered = render_setup_text(
-        "claude_code",
-        "claude-triage-session.env.j2",
-        {"claude_code_triage_claude_oauth_token": "sk-ant-oat01-abc  def\n"},
-    )
-    assert "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-abcdef\n" in rendered
 
 
 @pytest.mark.parametrize(

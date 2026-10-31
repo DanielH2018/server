@@ -103,7 +103,7 @@ def test_an_absent_further_agent_needs_no_identity() -> None:
 
 
 def test_the_homelab_ui_browser_is_the_primarys_alone() -> None:
-    """main.yml installs it from the scalars, so agent_browser.yml stays a static import."""
+    """The host package installs it from the claude_code_agent_* scalars, for the primary alone."""
     with pytest.raises(AnsibleFilterError, match="unknown fields \\['homelab_ui'\\]"):
         claude_agent_profiles([SECOND | {"homelab_ui": True}], "claude", PRIMARY)
 

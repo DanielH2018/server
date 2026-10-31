@@ -6,10 +6,17 @@
 #
 # Gives the {{ claude_code_agent_user }} agent user what its home and groups need on every run:
 # the groups it reads the host through, its login profile, git identity and instructions, its
-# commit-signing key, the operator's read-only kubeconfig, its dotfiles source and its clone.
+# commit-signing key, the operator's read-only kubeconfig, its dotfiles source and its clone. On
+# the peers' key host it also names each peer in the agent's ssh config. claude-agent-home writes
+# the keys and the memory seed as the agent.
 # The users arm creates the user itself (/usr/lib/sysusers.d/homelab.conf). The dotfiles sync
 # installs its tooling (uv, Python, prek, Claude Code) once the dotfiles source exists, and the
 # clone sync keeps its clone, venv and collections current.
+#
+# The agent owns everything below its home, so it can swap a directory there for a link at any
+# moment. Root therefore never acts on a path by name: pin opens a directory and refuses unless
+# the opened directory is the one its path names, and root creates, owns, modes and writes
+# through that open handle. A link on any path fails the run.
 #
 # Every step is idempotent: a step whose result exists already changes nothing.
 set -euo pipefail
@@ -40,7 +47,59 @@ usermod --expiredate '' "$agent"
 # Its user manager outlives a logout, so its fan-out batches survive; so does the operator's.
 loginctl enable-linger "$agent" "$operator"
 
-dir() { install -d -o "$agent" -g "$operator" -m "$1" "$2"; }
+fail() { echo "claude-agent-setup: $*" >&2; exit 1; }
+
+# pin DIR leaves a handle on DIR in $pinned. Opening "DIR/." fails on a file or a fifo, where a
+# plain open of a fifo would block. The handle's resolved path equals DIR only when no link lies on it.
+pinned_fd=
+pinned=
+unpin() {
+  [ -z "$pinned_fd" ] || exec {pinned_fd}<&-
+  pinned_fd=
+  pinned=
+}
+pin() {
+  unpin
+  exec {pinned_fd}< "$1/." || fail "cannot open $1 as a directory"
+  pinned=/proc/$$/fd/$pinned_fd
+  [ "$(readlink "$pinned")" = "$1" ] || fail "$1 is not a plain directory: a link lies on its path"
+}
+
+# dir MODE PATH: PATH is the agent's directory, in the operator's group. A missing one is created
+# only inside its pinned parent.
+dir() {
+  pin "${2%/*}"
+  [ -d "$pinned/${2##*/}" ] || mkdir "$pinned/${2##*/}"
+  pin "$2"
+  chown "$agent:$operator" "$pinned"
+  chmod "$1" "$pinned"
+  unpin
+}
+
+# place OWNER GROUP MODE SRC DEST writes DEST inside its pinned parent. install -T replaces a link
+# at DEST and refuses a directory there, so it never writes through either.
+place() {
+  pin "${5%/*}"
+  install -T -o "$1" -g "$2" -m "$3" "$4" "$pinned/${5##*/}"
+  unpin
+}
+
+# drop PATH removes the file at PATH, a link included, when its directory exists.
+drop() {
+  [ -d "${1%/*}" ] || return 0
+  pin "${1%/*}"
+  rm -f "$pinned/${1##*/}"
+  unpin
+}
+
+# point TARGET LINK makes LINK a link to TARGET inside its pinned parent. A link or a file at LINK
+# is replaced, and a directory there fails the run.
+point() {
+  pin "${2%/*}"
+  ln -sfnT "$1" "$pinned/${2##*/}"
+  unpin
+}
+
 dir 2750 "$home"
 dir 0755 "$home/.local"
 dir 0755 "$home/.local/bin"
@@ -53,14 +112,16 @@ if [ -e "$templates/authorized_keys" ]; then
     echo "claude-agent-setup: $templates/authorized_keys is not one restricted ssh-ed25519 line" >&2
     exit 1
   fi
-  install -o root -g root -m 0644 "$templates/authorized_keys" "$home/.ssh/authorized_keys"
+  place root root 0644 "$templates/authorized_keys" "$home/.ssh/authorized_keys"
 fi
 {% else %}
-rm -f "$home/.ssh/authorized_keys"
+drop "$home/.ssh/authorized_keys"
 {% endif %}
 dir 0755 "$home/.config"
 dir 0755 "$home/.config/git"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/gh"
+# homelab-secrets renders the agent's gh login under /run, outside the agent's home.
+point /run/homelab-secrets/var/lib/claude/.config/gh/hosts.yml "$home/.config/gh/hosts.yml"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/chezmoi"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.claude"
 dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.claude/projects"
@@ -70,14 +131,26 @@ dir 0700 "$home/.kube"
 # the operator's group, and a default ACL that gives each new file the group's read.
 for shared in "$home/.claude/artifacts" "{{ claude_code_agent_memory_dir }}"; do
   dir {{ '2750' if claude_code_agent_operator_read else '0700' }} "$shared"
+  pin "$shared"
 {% if claude_code_agent_operator_read %}
-  setfacl --default --modify "group:$operator:rX" "$shared"
+  setfacl --default --modify "group:$operator:rX" "$pinned"
 {% else %}
-  setfacl --default --remove "group:$operator" "$shared" 2> /dev/null || true
+  setfacl --default --remove "group:$operator" "$pinned" 2> /dev/null || true
 {% endif %}
+  unpin
 done
 
-put() { install -o "$agent" -g "$operator" -m "$1" "$templates/$2" "$home/$3"; }
+{% if claude_code_agent_homelab_ui_enabled %}
+# homelab-secrets renders the agent's homelab-ui login under /run, outside the agent's home
+# (daniel-box's package.yml names the same destination). The agent reads it through this link.
+ui_login=/run/homelab-secrets/claude-agent/homelab-ui-credentials.json
+dir {{ '0710' if claude_code_agent_operator_read else '0700' }} "$home/.config/homelab-ui"
+point "$ui_login" "$home/.config/homelab-ui/credentials.json"
+{% else %}
+drop "$home/.config/homelab-ui/credentials.json"
+{% endif %}
+
+put() { place "$agent" "$operator" "$1" "$templates/$2" "$home/$3"; }
 put 0644 profile .profile
 put 0644 gitconfig .gitconfig
 put 0644 CLAUDE.md .claude/CLAUDE.md
@@ -85,27 +158,22 @@ put {{ '0640' if claude_code_agent_operator_read else '0600' }} chezmoi-seed.tom
 # chezmoi's first init needs the answers in its config; later runs render the config themselves.
 [ -e "$home/.config/chezmoi/chezmoi.toml" ] || put 0600 chezmoi-seed.toml .config/chezmoi/chezmoi.toml
 
-# The commit-signing key, generated as the agent so the private half never leaves its home.
-key={{ claude_code_agent_signing_key }}
-[ -e "$key" ] || as_agent ssh-keygen -q -t ed25519 -N "" \
-  -C "{{ claude_code_agent_github_login }} commit signing ($(hostname))" -f "$key"
-chown "$agent:$operator" "$key" "$key.pub"
-chmod 0600 "$key"
-chmod 0644 "$key.pub"
-printf '%s namespaces="git" %s\n' "{{ claude_code_agent_git_email }}" "$(cat "$key.pub")" \
-  > "$home/.config/git/allowed_signers"
-chown "$agent:$operator" "$home/.config/git/allowed_signers"
-chmod 0644 "$home/.config/git/allowed_signers"
+# The signing key, the peer key and the memory seed, each written as the agent.
+/usr/lib/homelab/claude-agent-home
+{% if inventory_hostname == claude_agent_ssh_key_host %}
+# The ssh config naming each peer's agent user, beside the peer key claude-agent-home generates.
+put 0644 ssh-config .ssh/config
+{% endif %}
 
 # The operator's read-only kubeconfig, copied on every run so a re-issued token reaches it.
 if [ -f "/home/$operator/.kube/config" ]; then
-  install -o "$agent" -g "$operator" -m 0600 "/home/$operator/.kube/config" "$home/.kube/config"
+  place "$agent" "$operator" 0600 "/home/$operator/.kube/config" "$home/.kube/config"
 fi
 
 {% if claude_code_agent_dotfiles %}
 # The dotfiles source. The dotfiles sync applies it on its timer.
 if [ ! -x "$home/.local/bin/chezmoi" ] && [ -x "/home/$operator/.local/bin/chezmoi" ]; then
-  install -o "$agent" -g "$operator" -m 0755 "/home/$operator/.local/bin/chezmoi" "$home/.local/bin/chezmoi"
+  place "$agent" "$operator" 0755 "/home/$operator/.local/bin/chezmoi" "$home/.local/bin/chezmoi"
 fi
 if [ ! -e "$home/.local/share/chezmoi/.git" ]; then
   as_agent "$home/.local/bin/chezmoi" init --no-tty {{ claude_code_agent_dotfiles_repo }}

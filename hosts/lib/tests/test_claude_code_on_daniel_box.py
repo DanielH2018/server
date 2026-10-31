@@ -1,4 +1,4 @@
-"""daniel-box's claude-code subjects ship in its host package, and the role skips them (H7.40, slices 1-2).
+"""daniel-box's claude-code subjects ship in its host package, and the role skips them (H7.40, slices 1-3).
 
 The component renders the claude_code role's templates in place, and the role still applies to
 daniel-box for the subjects later slices move. These tests hold the two writers apart: every
@@ -51,6 +51,18 @@ SLICE_TWO = (
     "/usr/local/sbin/homelab-takeover-check",
     "/etc/sudoers.d/homelab-takeover-check",
 )
+# The third slice: triage, the agent's home and the homelab-ui browser toolchain.
+SLICE_THREE = (
+    f"{UNITS}/claude-triage@.service",
+    f"{UNITS}/claude-triage-report-alert@.service",
+    f"{UNITS}/homelab-claude-triage-poll.timer",
+    "/usr/share/polkit-1/rules.d/50-claude-triage.rules",
+    "/opt/claude-triage/claude_triage_run.py",
+    "/usr/lib/homelab/secret-templates/etc/claude-triage/oauth-token",
+    "/usr/lib/homelab/claude-agent/ssh-config",
+    "/usr/lib/homelab/secret-templates/var/lib/claude/.config/homelab-ui/credentials.json",
+    f"{UNITS}/homelab-claude-agent-browser.service",
+)
 AGENT_UID = {"daniel-box": 996, "daniel-server": 995}
 
 
@@ -102,6 +114,78 @@ def test_daniel_box_ships_each_slice_two_subject_and_retires_its_ansible_copy(bo
 
 def test_daniel_server_ships_no_slice_two_subject(server):
     assert [path for path in SLICE_TWO if path in server.files] == []
+
+
+def test_daniel_box_ships_each_slice_three_subject_and_retires_its_ansible_copy(box):
+    assert [path for path in SLICE_THREE if path not in box.files] == []
+    legacy = {entry.get("unit") for entry in box.legacy}
+    assert {
+        "claude-triage-poll.timer",
+        "claude-triage-alert.service",
+        "claude-triage-poll-alert.service",
+    } <= legacy
+    retired = {entry.get("path") for entry in box.legacy}
+    assert {
+        "/etc/polkit-1/rules.d/50-claude-triage.rules",
+        "/var/cache/claude-agent-node",
+    } <= retired
+
+
+def test_daniel_server_ships_the_browser_only_to_take_it_back(server):
+    # Triage, the peer config and the homelab-ui login are daniel-box's alone. The browser unit
+    # ships wherever the agent exists, and with homelab-ui off its script removes the toolchain.
+    browser = f"{UNITS}/homelab-claude-agent-browser.service"
+    assert [p for p in SLICE_THREE if p in server.files] == [browser]
+    script = server.files["/usr/lib/homelab/claude-agent-browser"][0].decode()
+    assert "mcp remove" in script and "npm install" not in script
+
+
+SETUP = "/usr/lib/homelab/claude-agent-setup"
+UI_LOGIN_REMOVAL = 'drop "$home/.config/homelab-ui/credentials.json"'
+
+
+def test_a_host_with_homelab_ui_off_removes_the_agents_login(box, server):
+    assert UI_LOGIN_REMOVAL not in box.files[SETUP][0].decode()
+    assert UI_LOGIN_REMOVAL in server.files[SETUP][0].decode()
+
+
+def test_the_package_installs_no_link_into_the_agents_home(box, server):
+    # The agent owns its home, so claude-agent-setup links each login there after checking the
+    # path. A link the package installed would put root's write inside that directory.
+    for package in (box, server):
+        assert [p for p in package.links if p.startswith("/var/lib/claude/")] == []
+
+
+def test_each_login_renders_where_the_setup_script_links_to_it(box, server):
+    gh = "var/lib/claude/.config/gh/hosts.yml"
+    for package, destinations in (
+        (box, {"claude-agent/homelab-ui-credentials.json", gh}),
+        (server, {gh}),
+    ):
+        rows = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])["outputs"]
+        assert {
+            r["destination"] for r in rows if r["owner"] == "claude"
+        } == destinations
+        setup = package.files[SETUP][0].decode()
+        for destination in destinations:
+            assert f"/run/homelab-secrets/{destination}" in setup
+
+
+@pytest.mark.parametrize("host", sorted(AGENT_UID))
+def test_every_packaged_agent_takes_the_dotfiles_so_no_operator_config_copy_is_owed(
+    host,
+):
+    # The package ships no copy of the operator config subset: the role runs it only for an
+    # agent without the dotfiles. A host that turned them off would lose its subset silently.
+    host_vars = yaml.safe_load(
+        (REPO / "ansible" / "inventory" / "host_vars" / f"{host}.yml").read_text()
+    )
+    assert host_vars["claude_code_agent_dotfiles"] is True
+
+
+def test_the_key_host_names_each_peer_whose_login_is_on(box):
+    config = box.files["/usr/lib/homelab/claude-agent/ssh-config"][0].decode()
+    assert re.findall(r"^Host (\S+)$", config, re.M) == ["daniel-server"]
 
 
 def test_the_agents_profile_hands_landings_to_the_unit_the_box_ships(box):
@@ -232,7 +316,8 @@ def packaged_sources() -> set[str]:
     specs = [COMPONENT, REPO / "hosts" / "daniel-box" / "package.yml"]
     found = set()
     for spec in specs:
-        for entry in yaml.safe_load(spec.read_text()).get("files") or []:
+        loaded = yaml.safe_load(spec.read_text())
+        for entry in (loaded.get("files") or []) + (loaded.get("outputs") or []):
             src = str(entry.get("src", ""))
             for prefix in ("role:", "role-file:"):
                 if src.startswith(prefix):
@@ -277,6 +362,10 @@ def test_the_role_skips_on_daniel_box_every_file_the_package_ships():
         "claude-memory-sync.timer.j2",
         "claude-pipeline-timeline.service.j2",
         "claude-takeover-check.sudoers.j2",
+        "claude-triage@.service.j2",
+        "claude-triage-oauth-token.j2",
+        "agent-ssh-config.j2",
+        "agent-homelab-ui-credentials.json.j2",
     } <= reached
     assert unguarded(writers, shipped) == []
 
@@ -292,6 +381,7 @@ def test_the_role_writes_nothing_on_daniel_box_that_its_package_retires(box):
         f"/etc/claude-rc/{webhook}",
         "/etc/claude-rc",
         "/var/lib/homelab/setup-render-manifest.d/claude-code-ansible",
+        f"/etc/claude-triage/{webhook}",
     } <= {w.dest for w in writers}
 
 
@@ -343,5 +433,7 @@ def test_the_packaged_map_names_daniel_box_for_exactly_the_moved_subjects():
             "pipeline_timeline",
             "memory_sync",
             "takeover_check",
+            "triage",
+            "agent_home",
         )
     }

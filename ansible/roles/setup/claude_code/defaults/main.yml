@@ -25,6 +25,9 @@
 #   memory_sync     the memory store copy to daniel-server
 #   takeover_check  the D5 takeover check's wrapper and sudoers grant; the role keeps the flux
 #                   copy the wrapper runs and its state directory
+#   triage          alert-triggered triage: its runner, poller, units, polkit rule and credential
+#   agent_home      the agent's peer key and ssh config, the operator config subset, the memory
+#                   seed and the homelab-ui login
 claude_code_packaged_hosts:
   remote_control: [daniel-box]
   bg_resume: [daniel-box]
@@ -38,6 +41,8 @@ claude_code_packaged_hosts:
   pipeline_timeline: [daniel-box]
   memory_sync: [daniel-box]
   takeover_check: [daniel-box]
+  triage: [daniel-box]
+  agent_home: [daniel-box]
 
 # Where the role's memory sync, server-batch lander and pipeline timeline alerts keep their
 # webhook file on a host the package does not cover. The claude-code component retires it.
@@ -426,7 +431,7 @@ claude_code_agent_signing_key: "{{ claude_code_agent_user_home }}/.ssh/git_signi
 claude_code_homelab_ui_username: claude-agent
 claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/homelab-ui/credentials.json"
 
-# Whether the agent user can launch the homelab-ui MCP server itself (tasks/agent_browser.yml):
+# Whether the agent user can launch the homelab-ui MCP server itself (the claude-code component):
 # its own Node, @playwright/mcp and Chromium, plus a user-scope `homelab-ui` registration in its
 # ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh (#4058). claude-clone-sync
 # fast-forwards that clone on each apply and every claude_code_agent_clone_sync_interval, so the
@@ -437,34 +442,17 @@ claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/h
 # and it would start a second Chromium in every operator session.
 #
 # True only in daniel-box's host_vars, and installed only while claude_code_agent_user_enabled
-# is also true. False removes the registration, the Node tree, its download and the browser
+# is also true. False removes the registration, the Node trees and the browser
 # cache. Chromium's shared libraries come from the host: the operator's own Chromium already
 # runs there, so this installs no apt packages.
 claude_code_agent_homelab_ui_enabled: false
-# A Node release tarball rather than fnm: the agent needs one fixed Node, and the operator's
-# fnm lives in their home. The sha256 is the tarball's, from the release's SHASUMS256.txt; a
-# bump finishes with `uv run python scripts/validate/asset_pins.py --refresh node`. x64 is
-# literal because asset_pins.py renders the URL from this file alone, and every
-# has_claude_code host is x86_64.
-# renovate: datasource=node-version depName=node
-claude_code_agent_node_version: "24.21.0"
-claude_code_agent_node_url: >-
-  https://nodejs.org/dist/v{{ claude_code_agent_node_version
-  }}/node-v{{ claude_code_agent_node_version }}-linux-x64.tar.xz
-claude_code_agent_node_sha256: fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
-# The release the operator's homelab-ui runs on daniel-box (0.0.79, measured 2026-10-09), so
-# the agent's browser behaves as the operator's does. Chromium is the revision this package's
-# own playwright pins, installed with that playwright's CLI.
-# renovate: datasource=npm depName=@playwright/mcp
-claude_code_agent_playwright_mcp_version: "0.0.83"
+# The pinned Node, its sha256 and @playwright/mcp sit in hosts/components/claude-code/component.yml,
+# whose homelab-claude-agent-browser.service installs them as the agent (H7.40).
 # Node unpacks to node-v<version>-linux-x64 under this directory, and `current` links to it, so
 # the registration's NODE_BIN survives a Node bump. npm's global prefix is that Node tree, so
 # playwright-mcp lands in the same bin directory.
 claude_code_agent_node_dir: "{{ claude_code_agent_user_home }}/.local/share/node"
 claude_code_agent_node_bin: "{{ claude_code_agent_node_dir }}/current/bin"
-# Root downloads and verifies the tarball here, outside the agent's home, and the agent
-# unpacks it from here.
-claude_code_agent_node_download_dir: /var/cache/claude-agent-node
 
 # ── Every agent user on the host ────────────────────────────────────────────────────────
 # The agent users this host builds, in order. tasks/agent.yml runs once per entry, and

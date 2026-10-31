@@ -66,6 +66,8 @@ def test_discover_templates_finds_the_known_set():
     # caught, not just "fewer templates checked" sliding by unnoticed.
     names = {p.name for p in v.discover_templates()}
     assert names == {
+        "claude-agent-browser.sh.j2",
+        "claude-agent-home.sh.j2",
         "secret-rotate.sh.j2",
         "secret-rotation-audit.sh.j2",
         "ups-secondary-health.sh.j2",

@@ -56,6 +56,10 @@ def test_the_census_names_the_annotated_depname_behind_each_pin():
     by_name = {pin.name: pin for pin in discover_pins()[0]}
     assert by_name["chezmoi_setup_installer"].dep_names == {"twpayne/chezmoi"}
     assert by_name["k3s_install_script"].dep_names == {"k3s-io/k3s"}
+    # A host component's `defaults:` map, where the agent's Node pin moved in H7.40.
+    node = by_name["claude_code_agent_node"]
+    assert node.dep_names == {"node"}
+    assert node.source == "hosts/components/claude-code/component.yml"
 
 
 def test_every_discovered_pin_renders_to_a_fetchable_url():
@@ -63,6 +67,27 @@ def test_every_discovered_pin_renders_to_a_fetchable_url():
     unresolved = [pin.name for pin in pins if pin.error]
     assert unresolved == [], unresolved
     assert all(pin.url.startswith("https://") and "{{" not in pin.url for pin in pins)
+
+
+def test_a_components_defaults_map_carries_pins_and_its_other_keys_do_not(tmp_path):
+    component = tmp_path / "hosts" / "components" / "tool" / "component.yml"
+    component.parent.mkdir(parents=True)
+    component.write_text(
+        "defaults:\n"
+        "  # renovate: datasource=npm depName=tool\n"
+        '  tool_version: "1.2"\n'
+        '  tool_url: "https://host/{{ tool_version }}/x"\n'
+        f"  tool_sha256: {SHA256}\n"
+        "files:\n"
+        f"  - {{other_url: https://host/y, other_sha256: {SHA256}}}\n"
+    )
+    roles = tmp_path / "ansible" / "roles"
+    roles.mkdir(parents=True)
+    pins, unpaired = discover_pins(roles, components=component.parent.parent)
+    assert [(p.name, p.url, p.source, p.dep_names) for p in pins] == [
+        ("tool", "https://host/1.2/x", "hosts/components/tool/component.yml", {"tool"})
+    ]
+    assert unpaired == []
 
 
 def test_a_flat_pair_with_a_templated_url_is_rendered_from_its_own_file():

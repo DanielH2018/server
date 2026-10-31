@@ -463,13 +463,14 @@ instead of the operator.
 **The agent's own browser.** The operator's Node, `playwright-mcp` and Chromium sit under
 `/home/ubuntu`, which `claude` cannot read, and the operator's homelab-ui registration is
 user-scope in their own `~/.claude.json`. `claude_code_agent_homelab_ui_enabled` (true in
-daniel-box's host_vars) has the `claude_code` role give the agent its own copies, in
-`tasks/agent_browser.yml`:
+daniel-box's host_vars) gives the agent its own copies, through
+`homelab-claude-agent-browser.service`, a oneshot the `claude-code` host component ships and
+runs as `claude`:
 
-- The role installs a pinned Node tarball under `~/.local/share/node`, `@playwright/mcp` at the
-  operator's release, and the Chromium that release's playwright pins. Each install runs as
-  `claude`.
-- The role registers `homelab-ui` at user scope in the agent's `~/.claude.json`. The entry
+- It installs a pinned Node tarball under `~/.local/share/node`, `@playwright/mcp` at the
+  operator's release, and the Chromium that release's playwright pins. The pins are in
+  `hosts/components/claude-code/component.yml`'s `defaults:`.
+- It registers `homelab-ui` at user scope in the agent's `~/.claude.json`. The entry
   launches `~/server/scripts/diagnostics/ui_mcp.sh` with `NODE_BIN` set to the agent's Node.
   The registration is not in the repo's `.mcp.json`: a project-scope server waits for an
   approval a phone session cannot give, and it would start a second Chromium in every operator
@@ -586,9 +587,10 @@ switches it on, and it installs only while `claude_code_agent_user_enabled` is a
 - **Every run leaves a record, a report and a page.** An inconclusive or timed-out run does too.
   The page is `claude-triage-report-alert@<episode>:<state>.service`, which holds the webhook. A
   polkit rule lets `claude` start the page and the run, in fixed shapes only. A run that crashes
-  pages through `OnFailure=claude-triage-alert.service`.
-- **The caps are pinned** as literal block vars in `tasks/triage.yml`, which outrank the
-  inventory, the same way `tasks/lander.yml` pins the landing settings.
+  pages through `OnFailure=homelab-alert@%n.service`.
+- **The caps are pinned** as literals in the role's `templates/claude-triage-pins.j2`, which
+  every triage template imports, the same way `claude-land-pins.j2` pins the landing settings.
+  No inventory value reaches them.
 
 To switch it on, the operator:
 
@@ -612,7 +614,8 @@ The drill writes `/var/lib/claude/triage/runs/drill-1.json` and `triage-drill-1.
 
 ### Slice 2: the poller
 
-`claude-triage-poll.timer` runs `files/claude_triage_poll.py` as `claude` every two minutes.
+`homelab-claude-triage-poll.timer` runs `files/claude_triage_poll.py` as `claude` every two
+minutes.
 The code is root-owned under `/opt/claude-triage`, like the runner's.
 
 - **It reads two Prometheus vectors.** One is Kuma's `monitor_status == 0`. The other is the
@@ -645,9 +648,10 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   run holds the runner's lock, so episodes run one after another. A queued episode whose run
   the poller already started is not started again: its run crashed and paged.
 
-A poller failure pages through `claude-triage-poll-alert.service`, at most once an hour.
+A poller failure pages through `homelab-claude-triage-poll-alert.service`, at most once an
+hour.
 
-The mode is a literal in `tasks/triage.yml`, on the approval floor. To arm the poller, the
+The mode is a literal in `templates/claude-triage-pins.j2`, on the approval floor. To arm the poller, the
 operator reads a week of `shadow.jsonl`, changes the literal and its default to `armed`, and
 lands that PR.
 

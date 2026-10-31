@@ -43,8 +43,6 @@ KNOWN_ALERTS = frozenset(
         "claude-rc",
         # Instanced, and started by a session's StopFailure hook (#6021).
         "claude-stop",
-        "claude-triage",
-        "claude-triage-poll",
         # Instanced, and started by the triage runner itself rather than OnFailure=.
         "claude-triage-report",
         # Instanced, and started by a fan-out batch's ExecStopPost= rather than OnFailure=,
@@ -100,6 +98,19 @@ def local_alert_templates(paths: list[Path]) -> list[Path]:
     return [p for p in paths if p.name.endswith("-alert.service.j2") and p != UNIT]
 
 
+def packaged_alerts() -> set[str]:
+    """The `<name>` of each `<name>-alert.service` a host component ships as a unit file.
+
+    A setup template that a host package renders, such as claude_code's triage poller, pages
+    through one of these, which no alert_unit.yml import installs.
+    """
+    components = SETUP_ROLES.parents[2] / "hosts" / "components"
+    return {
+        p.name.removesuffix("-alert.service")
+        for p in components.glob("*/units/*-alert.service")
+    }
+
+
 def _render(text: str, **context: object) -> str:
     env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     return env.from_string(text).render(context)
@@ -116,7 +127,8 @@ def test_every_onfailure_alert_renders_from_the_shared_template() -> None:
     assert KNOWN_ALERTS - instanced <= onfailure_alerts(texts), (
         "the OnFailure= scan found too few"
     )
-    unwired = unwired_alerts(texts, set(wired))
+    assert "homelab-claude-triage-poll" in packaged_alerts()
+    unwired = unwired_alerts(texts, set(wired) | packaged_alerts())
     assert not unwired, (
         f"OnFailure= names {sorted(unwired)}-alert.service, but no import of "
         f"common/tasks/alert_unit.yml installs it under that alert_unit_name"

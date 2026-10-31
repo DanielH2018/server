@@ -79,7 +79,7 @@ NAMED_MEMBERS = [
     ("cron", "Weekly apt autoremove"),
     ("template", "Install the lander unit"),
     ("template", "Pin the node's LAN address in netplan"),
-    ("get_url", "Download the agent user's pinned Node"),
+    ("get_url", "Download the pinned flux CLI"),
     ("systemd_service", "Disable the legacy performance-governor unit (daniel-server)"),
     ("sysctl", "Apply kernel security hardening"),
     ("ufw", "Enable UFW firewall"),

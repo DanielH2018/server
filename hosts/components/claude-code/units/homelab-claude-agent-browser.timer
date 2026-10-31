@@ -1,0 +1,12 @@
+# Shipped by the claude-code component. It writes no textfile: a run that fails pages through
+# homelab-alert@, and a timer that stopped only delays the next pin bump, which the agent's next
+# homelab-ui call shows as the old version.
+[Unit]
+Description=Bring the agent user's homelab-ui browser to its pins, every six hours
+
+[Timer]
+OnBootSec=10min
+OnUnitInactiveSec=6h
+
+[Install]
+WantedBy=timers.target

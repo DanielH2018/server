@@ -58,6 +58,36 @@ units:
 credentials:
   - k3s_readonly_token
   - ups_secondary_push_token
+# Two claude-code secrets only this host uses (H7.40's third slice). They sit here rather than in
+# the component, because host_secrets.py names every output key a component declares for each
+# host that lists it, and daniel-server's SOPS file must not carry them.
+outputs:
+  # Triage's own Claude credential, read by systemd as root. It stays out of the agent's files, so
+  # a session cannot copy it into the clone or a report.
+  - src: "role:claude-triage-oauth-token.j2"
+    path: /etc/claude-triage/oauth-token
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [claude_code_triage_claude_oauth_token]
+    persist: false
+    link: true
+    when: claude_code_agent_user_enabled and claude_code_triage_enabled
+  # The agent's login for the homelab-ui MCP server. homelab-secrets substitutes the password
+  # without JSON escaping, so the SOPS value must hold no `"`, `\` or control character.
+  # The file renders under /run, outside the agent's home. `path` is where the agent looks:
+  # claude-agent-setup links it there (its `ui_login` names the destination), because the
+  # package must not install into a directory the agent owns.
+  - src: "role:agent-homelab-ui-credentials.json.j2"
+    path: /var/lib/claude/.config/homelab-ui/credentials.json
+    destination: claude-agent/homelab-ui-credentials.json
+    owner: claude
+    group: ubuntu
+    mode: "0600"
+    keys: [authelia_agent_password]
+    persist: false
+    link: false
+    when: claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled
 maintainer_scripts: [preinst, postinst, prerm]
 # #6218: arms the shared updater schedule here, as daniel-server and the Pi do. daniel-box ships
 # no drop-in on the timer. See docs/target-architecture/host/h6-k3s-suc.md, H6.2's amendment.
