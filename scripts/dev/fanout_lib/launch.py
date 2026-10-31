@@ -76,6 +76,9 @@ REVIEW_RUNTIME_MAX_S = 8 * 3600
 # reclaims cache before it OOM-kills. The swap bound keeps one batch from taking the swap that
 # stalled daniel-box on 2026-09-05. `io` is not delegated to user managers, so no IOWeight.
 BATCH_MEMORY_MAX = 3 * RESERVATION_BYTES
+# Above this the kernel reclaims the batch's own page cache (p95 about 6 GiB) before the
+# fleet slice's MemoryHigh has to throttle every batch on the host.
+BATCH_MEMORY_HIGH = 2 * RESERVATION_BYTES
 BATCH_SWAP_MAX = "512M"
 BATCH_TASKS_MAX = 1024
 # The script a `--review` unit runs as `<it> review`, relative to a checkout; see `review_script`.
@@ -310,7 +313,8 @@ def systemd_run_command(
         f"-p StandardError=file:{wt}/.fanout/stderr.log "
         f"-p Environment=PATH={unit_path(home)} -p Environment=HOME={home} "
         f"-p RuntimeMaxSec={runtime} -p {stop_post(batch, target)} "
-        f"-p MemoryMax={BATCH_MEMORY_MAX} -p MemorySwapMax={BATCH_SWAP_MAX} "
+        f"-p MemoryHigh={BATCH_MEMORY_HIGH} -p MemoryMax={BATCH_MEMORY_MAX} "
+        f"-p MemorySwapMax={BATCH_SWAP_MAX} "
         f"-p TasksMax={BATCH_TASKS_MAX} "
         f"{command}"
     )
