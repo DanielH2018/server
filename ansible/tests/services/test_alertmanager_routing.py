@@ -10,7 +10,7 @@ and reads each route the walk ends on. Each label set carries one expected outco
   `IngressProbesMissing` pages from the start, and its two `IngressProbeFailed*` sets since
   its PR 5. M4's `BlackboxExporterDown` and every rule of M6's batch A3 (the scrape-target and
   log-pipeline rules) since A3's Cutover-b. Every rule of M6's batch A4 (the edge rules) since
-  A4's Cutover-b.
+  A4's Cutover-b, and every rule of batch A2 (the container-checks rules) since A2's Cutover-b.
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
   it pages nobody. M3's two `DiskHealth*` sets move in its PR 5,
@@ -171,8 +171,8 @@ def container_sets() -> dict[str, dict[str, str]]:
     """The labels each M6 batch A2 rule reaches Alertmanager with, keyed by alert name.
 
     A per-pod rule takes `service` from the workload join, so `homepage` stands in for it, and
-    the census rule's literal `service` wins. A2's Cutover-b drops `shadow`, which moves a set
-    to `PAGING`, and the expected outcome here fails until it does.
+    the census rule's literal `service` wins. A2's Cutover-b dropped `shadow`, so every set
+    here is in `PAGING`; a rule that regains the label moves to the blackhole and fails there.
     """
     [group] = yaml_fast.safe_load(CONTAINER_RULES.read_text())["groups"]
     return {
@@ -266,13 +266,15 @@ PAGING = {
         )
         for name, labels in literal_sets(EDGE_RULES, shadow=False).items()
     },
+    # Batch A2's container-checks rules since its Cutover-b. All four are `warning`, so Discord
+    # alone.
+    **{name: (labels, ["discord"]) for name, labels in container_sets().items()},
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
 SHADOW = {
     **host_sets(shadow=True),
     **loki_sets(shadow=True),
-    **container_sets(),
     **literal_sets(BRIDGE_RULES, shadow=True),
     **literal_sets(HOSTS_RULES, shadow=True),
 }
@@ -439,8 +441,8 @@ def test_loki_sets_name_every_m5_rule():
     assert "LokiHomelabDown" not in loki_sets(shadow=True) | loki_sets(shadow=False)
 
 
-def test_container_sets_name_every_a2_rule_and_all_are_shadow():
-    """Non-vacuity for `container_sets`: A2's four rules, each shadow until its Cutover-b."""
+def test_every_a2_container_rule_pages_since_cutover_b():
+    """Non-vacuity for `container_sets`: A2's four rules, none shadow, each routed to Discord."""
     sets = container_sets()
     assert set(sets) == {
         "ContainerRestartLoop",
@@ -448,7 +450,9 @@ def test_container_sets_name_every_a2_rule_and_all_are_shadow():
         "ContainerCPUThrottled",
         "CAdvisorCoverageShortfall",
     }
-    assert all(labels["shadow"] == "true" for labels in sets.values())
+    assert all("shadow" not in labels for labels in sets.values())
+    assert all(name in PAGING and name not in SHADOW for name in sets)
+    assert all(PAGING[name][1] == ["discord"] for name in sets)
 
 
 def test_every_a3_rule_pages_and_so_does_the_cutover_guard():
