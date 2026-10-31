@@ -1,0 +1,17 @@
+# Shipped by the claude-code component with its enable link, wherever the component is. It runs at
+# boot, and reconcile restarts it when its script changes, which a pin bump or the toggle does.
+# Off, the same script removes the flux copy, so the way out runs.
+[Unit]
+Description=Install the pinned flux CLI the D5 takeover check runs as root, or take it back
+OnFailure=homelab-alert@%n.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+SyslogLevel=notice
+ExecStart=/usr/lib/homelab/takeover-check-flux
+
+[Install]
+WantedBy=multi-user.target

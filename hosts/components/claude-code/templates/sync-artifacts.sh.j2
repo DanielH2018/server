@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Managed by ansible (roles/setup/claude_code) — edits here are overwritten on the next apply.
+# Shipped by homelab-daniel-box (hosts/components/claude-code) as /usr/lib/homelab/sync-artifacts.
 #
 # Copy every other host's ~/.claude/artifacts onto daniel-box, one directory per host, so the
 # artifacts Deployment can serve them all from a single hostPath tree, and copy the GUI's star
@@ -7,11 +7,12 @@
 # run from daniel-box: `daniel-box` does not resolve from daniel-server, and a peer-side job
 # would put an ssh key somewhere this one does not have to go.
 #
-# Usage: sync-artifacts.sh (no arguments)
-# Runs from the sync-artifacts cron on daniel-box as the sys user, every 5 minutes by default
-# (claude_code_artifacts_sync_minute). Environment, optional: SYNC_ARTIFACTS_STATE_DIR (default
-# /tmp), which holds the lock and the per-peer failure counters. The peers it pulls from are
-# the claude_code_artifacts_peer_sources entries rendered into this file.
+# Usage: sync-artifacts (no arguments)
+# Runs from homelab-sync-artifacts.service on daniel-box as the sys user, every 5 minutes by
+# default (claude_code_artifacts_sync_minute). The Kuma push token is the unit's credential
+# `kuma_push_token`. Environment, optional: SYNC_ARTIFACTS_STATE_DIR (default /tmp), which holds
+# the lock and the per-peer failure counters. The peers it pulls from are the
+# claude_code_artifacts_peer_sources entries rendered into this file.
 set -euo pipefail
 
 for arg in "$@"; do
@@ -25,12 +26,12 @@ done
 # script (validate/shell_templates.py renders with the loop unrolled to nothing).
 
 # The lock and the per-peer failure counters. The override exists so the tests can run the
-# rendered script against a temporary directory; cron passes nothing and gets /tmp, where a
+# rendered script against a temporary directory; the unit passes nothing and gets /tmp, where a
 # reboot clears every counter — which is the right reset, since a reboot ends any outage the
 # counters were tracking.
 state_dir="${SYNC_ARTIFACTS_STATE_DIR:-/tmp}"
 
-# One sync at a time. The cron interval is far longer than a run, but a slow or hung ssh must
+# One sync at a time. The timer interval is far longer than a run, but a slow or hung ssh must
 # not stack copies of rsync against the same destination.
 exec 9>"${state_dir}/sync-artifacts.lock"
 flock -n 9 || exit 0
@@ -77,7 +78,7 @@ else
   # DECIDED: a failure goes to the journal, and only the run that REACHES the threshold writes
   # to stderr. The old script mailed every failure: 145 messages reached /var/mail/ubuntu
   # between 2026-08-20 and 2026-09-24, nobody reads that spool, and a peer that is simply
-  # powered off is the common case. The cron pipes stderr to `logger -t sync-artifacts` since
+  # powered off is the common case. The unit sends stderr to the journal as `sync-artifacts` since
   # #6162, because mail was never shipped anywhere, so the threshold line is one journal line
   # per outage that Loki keeps. The Kuma push after the loop is the monitor (#2516).
   fails=$(( $(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails" 2>/dev/null || echo 0) + 1 ))
@@ -107,7 +108,7 @@ fi
 # at 30 days, so the newest file's age measures how often sessions on the peer write artifacts,
 # not whether this sync runs — a quiet week on daniel-server would page. A successful rsync
 # --delete leaves the mirror equal to the peer by construction, so the failure streak covers a
-# broken transport and the push deadline covers a cron that stopped running at all.
+# broken transport and the push deadline covers a timer that stopped running at all.
 #
 # A missing library skips the push rather than exiting: the sync is the job and the push only
 # reports on it. Silence then turns the tile DOWN at its deadline. The override exists for the
@@ -121,10 +122,10 @@ verdict_ts=$(date +%s)
 
 # The textfile, written before the push so the file never waits on the network. node_exporter's
 # collector reads it, and host-checks.yaml pages it in shadow beside the Kuma tile (M6 batch B6).
-# deadline_s is the longest legitimate gap between two writes: two cron periods plus 300s. One
+# deadline_s is the longest legitimate gap between two writes: two timer periods plus 300s. One
 # period is the normal gap, the second is a slot lost to the flock skip or a long run, and the
-# 300s covers cron start jitter, the 1m `node` scrape and the 1m rule evaluation. It renders
-# from the cron's own minute, read as `*/N`. Any other shape has no single period, so the render
+# 300s covers timer start jitter, the 1m `node` scrape and the 1m rule evaluation. It renders
+# from the timer's minute, read as `*/N`. Any other shape has no single period, so the render
 # fails rather than publish a deadline shorter than the real gap.
 # ansible/tests/services/test_b6a_rule_literals.py pins the NotReporting rule to it.
 {% set _every_n = claude_code_artifacts_sync_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
@@ -133,7 +134,7 @@ deadline_s={{ 2 * 60 * (_every_n | int) + 300 }}
 {% else %}
 {{ sync_artifacts_cron_minute_not_every_n | mandatory('claude_code_artifacts_sync_minute must be */N for sync-artifacts.sh to derive deadline_s, got ' ~ claude_code_artifacts_sync_minute) }}
 {% endif %}
-check_lib="${SYNC_ARTIFACTS_CHECK_LIB:-/usr/local/lib/homelab-check-lib.sh}"
+check_lib="${SYNC_ARTIFACTS_CHECK_LIB:-/usr/lib/homelab/homelab-check-lib.sh}"
 if [ -r "$check_lib" ]; then
   # shellcheck source=/dev/null
   source "$check_lib"
@@ -142,18 +143,21 @@ if [ -r "$check_lib" ]; then
   write_check_textfile sync-artifacts "$success" "$verdict_ts" "$deadline_s" \
     || logger -t sync-artifacts "textfile write failed (verdict=$verdict)"
 else
-  logger -t sync-artifacts "$check_lib missing, no textfile written; run initial_setup on this host"
+  logger -t sync-artifacts "$check_lib missing, no textfile written; install homelab-daniel-box on this host"
 fi
 
-kuma_lib="${SYNC_ARTIFACTS_KUMA_LIB:-/usr/local/lib/kuma-push-lib.sh}"
-if [ -r "$kuma_lib" ]; then
+kuma_lib="${SYNC_ARTIFACTS_KUMA_LIB:-/usr/lib/homelab/kuma-push-lib.sh}"
+push_token="$(cat "${CREDENTIALS_DIRECTORY:-/nonexistent}/kuma_push_token" 2>/dev/null || true)"
+if [ -z "$push_token" ]; then
+  logger -t sync-artifacts "credential kuma_push_token missing, no Kuma verdict pushed"
+elif [ -r "$kuma_lib" ]; then
   # shellcheck source=/dev/null
   source "$kuma_lib"
   kuma_push "$verdict" "${report:-no peers configured}" \
-    "https://uptime-kuma.local.{{ domain }}/api/push/{{ artifacts_sync_push_token }}" \
+    "https://uptime-kuma.local.{{ domain }}/api/push/${push_token}" \
     "uptime-kuma.local.{{ domain }}" "{{ k3s_metallb_ingress_vip }}" sync-artifacts
 else
-  logger -t sync-artifacts "$kuma_lib missing, no Kuma verdict pushed; run initial_setup on this host"
+  logger -t sync-artifacts "$kuma_lib missing, no Kuma verdict pushed; install homelab-daniel-box on this host"
 fi
 
 exit "$status"

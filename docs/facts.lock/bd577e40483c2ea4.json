@@ -1,0 +1,16 @@
+{
+  "checksum": "2f6f87238875e068bc69f4ef808fa9752be4c0ce90165b73dd71df5aca47aa5e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The artifacts node's two timers",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/artifacts/CLAUDE.md": "8bb09d7140cfc17a776d5ea8e024d807e2d1b93ef4dd53f4a7d08177e81a7482",
+      "ansible/tests/services/test_b6a_rule_literals.py": "27bb9e5dfc3364b75be7bc3a058af8c4037e1d276ee57731e34d3a8c9c42e81c",
+      "hosts/components/claude-code/component.yml": "149c39e12fb70e993c5890b48e3f6221b36af5ebcd5d191af45bf82a1e1410a1",
+      "hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2": "5010ebf950dbe6e1253e8c0fcf85e2bfc031222fba2746355c612f4ec1cd1333",
+      "hosts/lib/tests/test_claude_artifacts_node_timers.py": "e8dc749ce8b978aeb467c6a7e0fde526c83bb85c46a5631ee4db5f21fae82998"
+    },
+    "python": "3.14",
+    "verified_sha": "dd4bc2a78"
+  }
+}

@@ -5,49 +5,6 @@
 # Every var here carries the role's `claude_code_` prefix (ansible-lint
 # var-naming[no-role-prefix]), so the Remote Control ones read `claude_code_rc_*`.
 
-# The hosts whose package owns a subject (docs/target-architecture/host/h7-delete-ansible.md,
-# H7.40). Each task of a listed subject carries
-# `when: inventory_hostname not in claude_code_packaged_hosts['<subject>']`, so the role writes the
-# subject only on the hosts the map does not list. hosts/components/claude-code ships each one.
-# The map sits here, never in `host_vars`, because an `inventory/` edit is a deploy-plane change.
-# daniel-server needs no entry: the role ends there. H7.40's last slice deletes the tasks and the map.
-#   remote_control  claude-rc.service, its weekly restart and its failure page
-#   bg_resume       the background-session resume at boot
-#   cgroup_metrics  the cgroup metrics timer
-#   caps            the fleet and login-session caps and the pytest fan-out cap
-#   alerts          the session stop alert and the fan-out alert
-#   rootq           the root inspector and the agent's socket
-#   agent           the agent user: its account, groups, home, identity, gh login, kubeconfig,
-#                   and its clone and dotfiles syncs
-#   lander          the agent's lander: its unit, polkit rule and approval list
-#   server_lander   the server-batch lander timer
-#   pipeline_timeline  the daily pipeline timeline snapshot
-#   memory_sync     the memory store copy to daniel-server
-#   takeover_check  the D5 takeover check's wrapper and sudoers grant; the role keeps the flux
-#                   copy the wrapper runs and its state directory
-#   triage          alert-triggered triage: its runner, poller, units, polkit rule and credential
-#   agent_home      the agent's peer key and ssh config, the operator config subset, the memory
-#                   seed and the homelab-ui login
-claude_code_packaged_hosts:
-  remote_control: [daniel-box]
-  bg_resume: [daniel-box]
-  cgroup_metrics: [daniel-box]
-  caps: [daniel-box]
-  alerts: [daniel-box]
-  rootq: [daniel-box]
-  agent: [daniel-box]
-  lander: [daniel-box]
-  server_lander: [daniel-box]
-  pipeline_timeline: [daniel-box]
-  memory_sync: [daniel-box]
-  takeover_check: [daniel-box]
-  triage: [daniel-box]
-  agent_home: [daniel-box]
-
-# Where the role's memory sync, server-batch lander and pipeline timeline alerts keep their
-# webhook file on a host the package does not cover. The claude-code component retires it.
-claude_code_alert_env_dir: /etc/claude-code-alerts
-
 # The service hands anything holding the claude.ai account a session on the k3s
 # control-plane node, and it depends on a prerequisite Ansible cannot check: whether a
 # phone-spawned worktree clears the workspace-trust dialog, which nobody can answer remotely.
@@ -356,7 +313,7 @@ claude_code_agent_operator_read: true
 # Whether the agent reads the GitOps deployer's state directory on the deployer host, so it can
 # check hold_sha and owed.jsonl before it lands (CLAUDE.md, When to wait). Read-only, by ACL,
 # as renovate_agent is granted; nothing there is a secret (the webhook lives in
-# /etc/gitops-deploy/config.env). tasks/agent_access.yml has how; false removes both entries.
+# /etc/gitops-deploy/config.env). claude-agent-setup sets it; false removes both entries.
 claude_code_agent_gitops_read: true
 # The agent's own memory store: Claude Code keys it by the project directory, the agent's clone.
 claude_code_agent_memory_dir: >-
@@ -599,29 +556,26 @@ claude_code_fanout_alert_enabled: true
 # and a session that ends on an error then pages nothing.
 claude_code_stop_alert_enabled: true
 
-# ── The two Claude crons on the artifacts node (H2.7) ───────────────────────────────────
-# `Sync peer Claude artifacts` (templates/sync-artifacts.sh.j2) and `Claude Code telemetry
-# health` (templates/telemetry-health.sh.j2) run only on this node, from tasks/node_crons.yml.
-# Until H2.7 they lived in the k8s artifacts and observability roles, under the same cron file
-# names and script paths.
+# ── The artifacts node's two timers (H2.7, packaged in H7.40's fourth slice) ─────────────
+# The peer sync (hosts/components/claude-code/templates/sync-artifacts.sh.j2) and the OTLP-door
+# heartbeat (claude-otel-health.sh.j2) ship only on this node, in its host package.
 #
 # DECIDED: a key pair held equal by a test, not one shared key in group_vars/all.yml. A shared
-# key routes as a deploy-plane change only, so the tick would never re-apply claude_code when
-# it moved (docs/target-architecture/host/h2-shrink-host-plane.md, H2.7). Each name below that
-# has a twin in a k8s role is held equal to it by
-# ansible/tests/setup/test_claude_code_artifacts_node_crons.py, so a change edits both.
+# key routes as a deploy-plane change only (docs/target-architecture/host/h2-shrink-host-plane.md,
+# H2.7). Each name below that has a twin in a k8s role is held equal to it by
+# hosts/lib/tests/test_claude_artifacts_node_timers.py, so a change edits both.
 #
 # The node the artifacts pod pins, which holds the tree the sync fills and the loopback OTLP
-# door the heartbeat probes. Twin of artifacts_k8s_node. On every other host both tasks skip.
+# door the heartbeat probes. Twin of artifacts_k8s_node. No other host's package ships either.
 claude_code_artifacts_node: "{{ k8s_primary_node }}"
 
-# Every 5 minutes: an artifact written on daniel-server is browsable within one interval. It
+# A `*/N` minute, read as the timer's period. Every 5 minutes: an artifact written on daniel-server is browsable within one interval. It
 # cannot be instant — daniel-server holds no key to daniel-box, so the sync only runs in the
 # pull direction, on a timer. A session on daniel-box mounts its own tree and never waits.
 claude_code_artifacts_sync_minute: "*/5"
 
 # Consecutive failed runs before sync-artifacts.sh writes its once-per-outage line to stderr,
-# which the cron pipes to the journal under the same tag. 12 runs at the interval above is an
+# which the unit sends to the journal under the same tag. 12 runs at the interval above is an
 # hour of a peer being unreachable. Below it each failure writes only its per-run journal line
 # (`journalctl -t sync-artifacts`), because daniel-server being off is the ordinary case.
 claude_code_artifacts_sync_alert_after_failures: 12
@@ -636,6 +590,9 @@ claude_code_artifacts_peer_sources:
     ssh_target: daniel-server
     path: /home/ubuntu/.claude/artifacts
     stars_path: /home/ubuntu/.claude/artifact-stars.txt
+# The artifacts node's own tree, which the package's tmpfiles.d file creates. Twin of
+# artifacts_host_dir.
+claude_code_artifacts_host_dir: /home/ubuntu/.claude/artifacts
 # Where the sync writes each peer's copy, one subdirectory per host. Twin of artifacts_peer_dir.
 claude_code_artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
 # The star list the artifacts GUI writes, which the sync pushes to each peer. Twin of
@@ -643,7 +600,7 @@ claude_code_artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
 claude_code_artifacts_stars_file: /var/lib/artifact-stars/stars.txt
 
 # */10, matching the Longhorn backup heartbeat. The Kuma monitor's heartbeat interval must stay
-# above this (see the uptime-kuma role) so a dead cron trips the watchdog.
+# above this (see the uptime-kuma role) so a dead timer trips the watchdog. A `*/N` minute.
 claude_code_telemetry_health_minute: "*/10"
 # The OTLP door the heartbeat opens a connection to. Twins of observability_otlp_host_ip and
 # observability_otlp_port, which bind the collector's hostPort.

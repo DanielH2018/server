@@ -1,7 +1,7 @@
 """The artifacts peer sync writes stderr once per outage and pushes a Kuma verdict every run.
 
-`sync-artifacts.sh` runs every 5 minutes on daniel-box and pulls daniel-server's artifact tree.
-The cron pipes the job's stderr to the journal, so a line on every failure would duplicate the
+`sync-artifacts` runs every 5 minutes on daniel-box and pulls daniel-server's artifact tree.
+Its unit sends the job's stderr to the journal, so a line on every failure would duplicate the
 per-run journal line rather than mark the outage. Two
 failure shapes matter. One is the peer being unreachable, which is ordinary — daniel-server is
 not always on. The other is `bind [127.0.0.1]:8182: Address already in use`, a LocalForward
@@ -13,7 +13,8 @@ bash resolves a function name before it searches PATH. What the runs prove is th
 failure reaches the journal, and only the run that REACHES the threshold writes to stderr, so a
 peer that stays down writes that line once rather than every 5 minutes.
 
-Every run also sources a stub Kuma library that records the verdict instead of pushing it.
+Every run also sources a stub Kuma library that records the verdict instead of pushing it, and
+reads a stub push token from `$CREDENTIALS_DIRECTORY`, where the unit's `LoadCredential=` puts it.
 Pointing the script at the stub is not optional: daniel-box has the real library, and a sourced
 function would override an exported stub.
 """
@@ -28,14 +29,14 @@ from pathlib import Path
 
 import leakguard
 import pytest
-from lib import yaml_fast
-
 from _helpers import ROLES, load_defaults
 from _shell_render import render_shell_script, rendered_shell_text
+from renderer.renderer_lib import host as host_mode
 
 CLAUDE_CODE = ROLES / "setup" / "claude_code"
 CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
-TEMPLATE = ("setup", "claude_code", "sync-artifacts.sh.j2")
+TEMPLATE = ("components", "claude-code", "sync-artifacts.sh.j2")
+UNITS = "/usr/lib/systemd/system"
 
 DEFAULTS = load_defaults(CLAUDE_CODE)
 THRESHOLD = DEFAULTS["claude_code_artifacts_sync_alert_after_failures"]
@@ -77,6 +78,14 @@ class _Runner:
         return self.calls.read_text().splitlines()
 
 
+def _credentials(tmp_path: Path) -> Path:
+    """A credentials directory holding the stub push token the unit would load."""
+    credentials = tmp_path / "credentials"
+    credentials.mkdir()
+    (credentials / "kuma_push_token").write_text("stub-token")
+    return credentials
+
+
 def _runner(tmp_path: Path) -> _Runner:
     """A rendered sync script plus `run(outcome)` -> CompletedProcess."""
     script = tmp_path / "sync-artifacts.sh"
@@ -107,6 +116,7 @@ def _runner(tmp_path: Path) -> _Runner:
     kuma_lib.write_text(
         'kuma_push() { printf "%s|%s\\n" "$1" "$2" >>"$SYNC_ARTIFACTS_PUSHES"; }\n'
     )
+    credentials = _credentials(tmp_path)
 
     def run(outcome: str) -> subprocess.CompletedProcess:
         stub.write_text(outcome)
@@ -119,6 +129,7 @@ def _runner(tmp_path: Path) -> _Runner:
                 "SYNC_ARTIFACTS_JOURNAL": str(journal),
                 "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
                 "SYNC_ARTIFACTS_CHECK_LIB": str(CHECK_LIB),
+                "CREDENTIALS_DIRECTORY": str(credentials),
                 "TEXTFILE_DIR": str(textfile),
                 "SYNC_ARTIFACTS_PUSHES": str(pushes),
                 "SYNC_ARTIFACTS_CALLS": str(calls),
@@ -236,20 +247,25 @@ def test_the_ssh_transport_drops_inherited_local_forwards():
     assert all("ClearAllForwardings=yes" in line for line in transports), transports
 
 
-def test_the_cron_runs_the_script_this_suite_renders():
-    """Non-vacuity: the suite is pointless if the installed cron runs something else."""
-    tasks = yaml_fast.safe_load((CLAUDE_CODE / "tasks" / "node_crons.yml").read_text())
-    jobs = {
-        task["ansible.builtin.cron"]["name"]: task["ansible.builtin.cron"]["job"]
-        for task in tasks
-        if isinstance(task.get("ansible.builtin.cron"), dict)
-    }
-    # The whole job, pipe included: the threshold line these tests prove reaches the journal
-    # only through `logger -t sync-artifacts` (#6162).
-    assert (
-        jobs["Sync peer Claude artifacts"]
-        == "/usr/local/bin/sync-artifacts.sh 2>&1 | logger -t sync-artifacts"
-    ), jobs
+def test_the_packaged_timer_runs_the_script_this_suite_renders():
+    """Non-vacuity: the suite is pointless if daniel-box's unit runs something else."""
+    files = host_mode.render_host("daniel-box").files
+    assert "/usr/lib/homelab/sync-artifacts" in files
+    unit = files[f"{UNITS}/homelab-sync-artifacts.service"][0].decode()
+    assert "ExecStart=/usr/lib/homelab/sync-artifacts\n" in unit
+    # The threshold line these tests prove reaches the journal under this tag (#6162).
+    assert "SyslogIdentifier=sync-artifacts\n" in unit
+    credstore = "/run/" + "credstore/artifacts_sync_push_token"
+    assert f"LoadCredential=kuma_push_token:{credstore}\n" in unit
+
+
+def test_a_run_without_its_credential_pushes_nothing_and_says_so(tmp_path):
+    run = _runner(tmp_path)
+    (tmp_path / "credentials" / "kuma_push_token").unlink()
+    proc = run("ok")
+    assert proc.returncode == 0, proc
+    assert run.pushes.read_text() == ""
+    assert "credential kuma_push_token missing" in run.journal.read_text()
 
 
 # The pull handed to the real rsync, locally: `-e` and its transport argument are dropped and
@@ -264,23 +280,22 @@ LOCAL_RSYNC_STUB = (
 )
 
 
-def _peer_directory_task_mode() -> str:
-    tasks = yaml_fast.safe_load(
-        (ROLES / "setup" / "k8s_host_files" / "tasks" / "artifacts.yml").read_text()
-    )
-    (task,) = [
-        t
-        for t in tasks[0]["block"]
-        if t["name"] == "Ensure a peer directory exists for every synced host"
+def _peer_directory_package_mode() -> str:
+    """The mode daniel-box's tmpfiles.d file gives the peer's directory."""
+    files = host_mode.render_host("daniel-box").files
+    conf = files["/usr/lib/tmpfiles.d/homelab-artifacts.conf"][0].decode()
+    peer_dir = f"{DEFAULTS['claude_code_artifacts_peer_dir']}/{PEER}"
+    (line,) = [
+        line for line in conf.splitlines() if line.split()[:2] == ["d", peer_dir]
     ]
-    return task["ansible.builtin.file"]["mode"]
+    return line.split()[2]
 
 
-def test_a_sync_leaves_the_peer_directory_at_the_k8s_host_files_mode(tmp_path):
-    """k8s_host_files' task and this sync both own the peer directory, so they agree on its mode.
+def test_a_sync_leaves_the_peer_directory_at_the_packaged_mode(tmp_path):
+    """The package's tmpfiles.d line and this sync both own the peer directory, so they agree on its mode.
 
     With the trailing slash, `rsync -a` copies the peer root's own mode onto the destination.
-    The peer's 0755 then flipped back and forth against the task's 0750 on every sync and
+    The peer's 0755 then flipped back and forth against the Ansible task's 0750 on every sync and
     every apply (#5524).
     """
     real_rsync = shutil.which("rsync", path=str(leakguard._state["real_path"]))
@@ -313,6 +328,7 @@ def test_a_sync_leaves_the_peer_directory_at_the_k8s_host_files_mode(tmp_path):
     )
     kuma_lib = tmp_path / "kuma-push-lib.sh"
     kuma_lib.write_text("kuma_push() { :; }\n")
+    credentials = _credentials(tmp_path)
     # The repo's check library and a temp textfile directory: the defaults are the host's
     # installed library and node_exporter's real directory, which a test must not write (#6191).
     textfile = tmp_path / "textfile"
@@ -324,6 +340,7 @@ def test_a_sync_leaves_the_peer_directory_at_the_k8s_host_files_mode(tmp_path):
             "SYNC_ARTIFACTS_STATE_DIR": str(tmp_path),
             "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
             "SYNC_ARTIFACTS_CHECK_LIB": str(CHECK_LIB),
+            "CREDENTIALS_DIRECTORY": str(credentials),
             "TEXTFILE_DIR": str(textfile),
             "SYNC_ARTIFACTS_SSH": PEER_SSH,
             "SYNC_ARTIFACTS_REAL_RSYNC": real_rsync,
@@ -335,7 +352,7 @@ def test_a_sync_leaves_the_peer_directory_at_the_k8s_host_files_mode(tmp_path):
     # Non-vacuity: the pull really ran, so the mode below is the one rsync left.
     assert (peer_dir / PEER / "sub" / "plan.html").read_text() == "<p>plan</p>\n"
     assert (textfile / "sync-artifacts.prom").is_file()
-    mode = _peer_directory_task_mode()
+    mode = _peer_directory_package_mode()
     assert oct((peer_dir / PEER).stat().st_mode & 0o777) == oct(int(mode, 8)), mode
 
 

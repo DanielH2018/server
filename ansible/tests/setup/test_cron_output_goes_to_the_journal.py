@@ -36,8 +36,6 @@ from _role_census import task_files
 JOURNAL_ROUTED = {
     "Longhorn filesystem trim": "longhorn-trim-cron",
     # The Kuma-verdict crons: silent when healthy, but their failure stderr is the evidence.
-    "Sync peer Claude artifacts": "sync-artifacts",
-    "Claude Code telemetry health": "claude-otel-health",
     "fake-remux health": "fake-remux-health",
     "Longhorn backup health": "longhorn-backup-health",
     "daniel-box disk health": "disk-health",
@@ -94,17 +92,18 @@ def test_a_stdout_only_redirect_does_not_satisfy_the_check():
 
 # ── every cron ───────────────────────────────────────────────────────────────
 
-# Named members from both planes and from the files the census reads, so a glob that
-# stops matching fails here rather than passing over an empty census.
+# Named members from the files the census reads, so a glob that stops matching fails here
+# rather than passing over an empty census.
 KNOWN_CRONS = frozenset(
     {
-        "Sync peer Claude artifacts",  # roles/k8s
+        "fake-remux scan",  # setup/fake_remux/tasks/main.yml
         "Longhorn filesystem trim",  # setup/k3s/tasks/health-crons.yml
         "Weekly AIDE file integrity check",  # setup/initial_setup/tasks/integrity.yml
     }
 )
-# 23 after H7.36 moved the checkout crons into host components (it was 29).
-_CENSUS_FLOOR = 23
+# 21 after H7.40 moved the artifacts node's two crons into package timers (it was 23, and 29
+# before H7.36 moved the checkout crons into host components).
+_CENSUS_FLOOR = 21
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 

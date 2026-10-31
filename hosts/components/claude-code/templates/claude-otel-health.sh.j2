@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Claude Code telemetry OTLP-door heartbeat — managed by Ansible (setup/claude_code role, moved
-# from k8s/observability by H2.7); edits overwritten.
+# Claude Code telemetry OTLP-door heartbeat, shipped by homelab-daniel-box (hosts/components/claude-code)
+# as /usr/lib/homelab/claude-otel-health.
 #
 # ONE check: is the ingest door open? This is the property no k8s object reports and no
 # in-cluster pod can test. The OTLP receiver is a `hostPort` DNAT installed by the CNI portmap
 # plugin — not a socket, so it is invisible to `ss` — and a broken rule leaves every pod Running
 # and Ready while Claude Code, a HOST process rather than a container, silently fails to export.
 #
-# DECIDED: this cron survives the 2026-10-01 fold into monitor-bridge (#3094) because the door
+# DECIDED: this heartbeat survives the 2026-10-01 fold into monitor-bridge (#3094) because the door
 # is pinned to the node's LOOPBACK — `observability_otlp_host_ip` is 127.0.0.1, which the
 # observability role's "Fail if the OTLP receiver is not pinned to loopback" task asserts
 # against the live collector, because content logging ships prompts verbatim. A pod's
@@ -26,15 +26,15 @@
 # as `checks/logs.py:with_export_failures` on the Log Shipper Dropped Entries tile. Nothing here reads Prometheus or the cluster any more, which is
 # why the kubeconfig and the ClusterIP resolution are gone with them.
 #
-# Push, not poll: this is a host cron that reports its own verdict. Same curl as
+# Push, not poll: this is a host timer that reports its own verdict. Same curl as
 # longhorn-backup-health.sh, through kuma-push-lib.sh.
 #
-# Usage: telemetry-health.sh (no arguments)
-# Runs from the telemetry-health cron on daniel-box, every 10 minutes by default
+# Usage: claude-otel-health (no arguments)
+# Runs from homelab-claude-otel-health.service on daniel-box, every 10 minutes by default
 # (claude_code_telemetry_health_minute). It probes the OTLP receiver on the node's loopback,
-# reads /usr/local/lib/kuma-push-lib.sh, and pushes the verdict to the telemetry Kuma push
-# monitor. claude_code_otlp_host_ip and claude_code_otlp_port are held equal to observability's
-# pair by ansible/tests/setup/test_claude_code_artifacts_node_crons.py.
+# reads /usr/lib/homelab/kuma-push-lib.sh and the unit credential `kuma_push_token`, and pushes
+# the verdict to the telemetry Kuma push monitor. claude_code_otlp_host_ip and claude_code_otlp_port are held equal to observability's
+# pair by hosts/lib/tests/test_claude_artifacts_node_timers.py.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -44,35 +44,36 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t claude-otel-health "kuma-push-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/kuma-push-lib.sh || {
+  logger -t claude-otel-health "kuma-push-lib.sh missing — install homelab-daniel-box on this host"
   exit 1
 }
 
-# The textfile library, sourced like the Kuma one: a host that misses it fails the cron loudly
+# The textfile library, sourced like the Kuma one: a host that misses it fails the run loudly
 # instead of reporting green (M6 batch B6).
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t claude-otel-health "homelab-check-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t claude-otel-health "homelab-check-lib.sh missing — install homelab-daniel-box on this host"
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: two cron periods plus 300s, for the
-# reasons sync-artifacts.sh gives. Rendered from the cron's own minute, read as `*/N`; any other
+# The longest legitimate gap between two textfile writes: two timer periods plus 300s, for the
+# reasons sync-artifacts.sh gives. Rendered from the timer's minute, read as `*/N`; any other
 # shape fails the render. ansible/tests/services/test_b6a_rule_literals.py pins the
 # NotReporting rule to it.
 {% set _every_n = claude_code_telemetry_health_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
 {% if _every_n.isdigit() and '*/' ~ _every_n == claude_code_telemetry_health_minute | string %}
 DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
 {% else %}
-{{ telemetry_health_cron_minute_not_every_n | mandatory('claude_code_telemetry_health_minute must be */N for telemetry-health.sh to derive DEADLINE_S, got ' ~ claude_code_telemetry_health_minute) }}
+{{ telemetry_health_cron_minute_not_every_n | mandatory('claude_code_telemetry_health_minute must be */N for claude-otel-health to derive DEADLINE_S, got ' ~ claude_code_telemetry_health_minute) }}
 {% endif %}
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
 # edge's bridge route for this name was removed in the slice-7 bridge teardown.
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ claude_otel_push_token }}"
+PUSH_TOKEN="$(cat "${CREDENTIALS_DIRECTORY:-/nonexistent}/kuma_push_token" 2>/dev/null || true)"
+PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
 if timeout 5 bash -c "exec 3<>/dev/tcp/{{ claude_code_otlp_host_ip }}/{{ claude_code_otlp_port }}" 2>/dev/null; then
   STATUS=up

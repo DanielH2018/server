@@ -4,8 +4,8 @@ Serves the HTML/Markdown artifacts Claude Code sessions write to `~/.claude/arti
 report generated in a terminal session is readable in a browser behind Authelia. Written
 2026-08-24: this role had no `CLAUDE.md` at all, and it was the only role under `roles/k8s/` in
 that state — which mattered because it installed a **cross-host cron** that nothing else in the
-tree documented. Since H2.7 `roles/setup/claude_code` installs that cron, and this file still
-documents how it behaves.
+tree documented. Since H7.40 daniel-box's host package ships that sync as a timer, and this
+file still documents how it behaves.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
@@ -34,32 +34,34 @@ documents how it behaves.
   (`~/.claude/artifacts`, daniel-box's own) and `artifacts_peer_dir`
   (`~/.claude/artifacts-peer`, everything pulled from peers). Stdlib only — no build, no
   extra deps.
-- **This role's deploy creates none of the host directories it mounts.**
-  `ansible/roles/setup/k8s_host_files/tasks/artifacts.yml` creates `artifacts_host_dir`, one
-  peer directory per `artifacts_peer_sources` entry and `artifacts_stars_dir` through the
-  setup plane, because a Flux-owned role runs no task (D5). Each is a `type: Directory`
-  hostPath, so on a fresh host `initial_setup.yml --tags k8s_host_files` runs before the
-  first `artifacts` deploy. Its copies of those four keys, in the block's `vars:`, must equal
-  this role's, which `ansible/tests/setup/test_k8s_host_files_pairs.py` holds.
+- **This role's deploy creates none of the host directories it mounts.** daniel-box's host
+  package creates `artifacts_host_dir`, one peer directory per `artifacts_peer_sources` entry
+  and `artifacts_stars_dir`, from
+  `hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2`, because a Flux-owned role
+  runs no task (D5). Each is a `type: Directory` hostPath, and `systemd-tmpfiles-setup.service`
+  creates them at boot, before the pod starts. The claude_code role's `claude_code_artifacts_*`
+  copies of those keys must equal this role's, which
+  `hosts/lib/tests/test_claude_artifacts_node_timers.py` holds.
 - **The agent user's tree is a third source.** `artifacts_agent_dir`
   (`/var/lib/claude/.claude/artifacts`, set only while `claude_code_agent_user_enabled` is true)
   mounts read-only at `/srv/artifacts/daniel-box-claude`, so the index lists it as the host
   `daniel-box-claude` beside the operator's `daniel-box`. An empty value removes the volume and
   the mount. The hostPath is `type: Directory`, never `DirectoryOrCreate`: a missing directory
   holds the new pod in ContainerCreating while the old one keeps serving, where kubelet would
-  create it root-owned in the agent's home. `roles/setup/claude_code` creates the directory
-  (`2750 claude:ubuntu`, default ACL `g:ubuntu:rX`). The pod runs as `puid:pgid`, not root, so
+  create it root-owned in the agent's home. `claude-agent-setup`, which the claude-code host
+  component ships, creates the directory (`2750 claude:ubuntu`, default ACL `g:ubuntu:rX`). The pod runs as `puid:pgid`, not root, so
   it reads that tree through the `ubuntu` group grant.
 
 ## The peer sync runs from daniel-box, and the direction is not arbitrary
-`ansible/roles/setup/claude_code/tasks/node_crons.yml` installs `/usr/local/bin/sync-artifacts.sh`
-and a cron (`claude_code_artifacts_sync_minute`, every 5 minutes) that rsyncs each entry in
-`claude_code_artifacts_peer_sources` onto daniel-box, then pushes the star list to the peer's
-`stars_path`. This role keeps the twin keys the pod reads, `artifacts_peer_sources` and
-`artifacts_peer_dir`, and
-`ansible/tests/setup/test_claude_code_artifacts_node_crons.py` holds each pair equal. A
-change to the peer list therefore edits both roles and needs both applies: `deploy.sh --tags
-artifacts` for the mounts, and `initial_setup.yml --tags claude_code` for the sync.
+daniel-box's host package ships `/usr/lib/homelab/sync-artifacts` and
+`homelab-sync-artifacts.timer` (`claude_code_artifacts_sync_minute`, every 5 minutes), which
+rsync each entry in `claude_code_artifacts_peer_sources` onto daniel-box, then push the star
+list to the peer's `stars_path`. The template is
+`hosts/components/claude-code/templates/sync-artifacts.sh.j2`. This role keeps the twin keys
+the pod reads, `artifacts_peer_sources` and `artifacts_peer_dir`, and
+`hosts/lib/tests/test_claude_artifacts_node_timers.py` holds each pair equal. A change to the
+peer list therefore edits both roles: Flux applies the mounts, and the next daniel-box package
+version carries the sync and its directories.
 
 **daniel-box opens every connection.** The reason is written at the task and is worth repeating
 because it looks backwards at first glance: the name `daniel-box` does not resolve from
@@ -87,8 +89,8 @@ Consequences worth knowing before debugging a missing artifact:
   for all peers, after the loop. A peer at `claude_code_artifacts_sync_alert_after_failures`
   consecutive failures or more turns it DOWN, and it stays DOWN on every later run until the peer recovers.
   A shorter streak pushes UP and names the streak in the message. Ten minutes of silence means
-  the cron itself stopped. The token is `artifacts_sync_push_token`, so the installed script is
-  `0700` owned by `sys_user` — don't `cat` it on the host.
+  the timer itself stopped. The token is `artifacts_sync_push_token`, a credential the unit
+  loads, so the script holds no secret.
 - **There is deliberately no file-age staleness check.** rsync copies the peer's own mtimes, so
   the newest file's age measures how often sessions on the peer write artifacts, not whether
   the sync works. A successful `rsync --delete` leaves the mirror equal to the peer, so a green

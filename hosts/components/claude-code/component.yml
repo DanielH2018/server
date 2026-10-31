@@ -1,7 +1,6 @@
-# The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40's first three slices,
-# docs/target-architecture/host/h7-delete-ansible.md). The claude_code role ends on daniel-server
-# (`meta: end_role` in its tasks/main.yml). On daniel-box it skips each subject listed here through
-# `claude_code_packaged_hosts`, and keeps the rest until H7.40's later slices move them.
+# The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40,
+# docs/target-architecture/host/h7-delete-ansible.md). The claude_code role ends on every host
+# (`meta: end_role` in its tasks/main.yml), so this component is the one writer.
 #
 # What it ships, by subject:
 #   - the agent user: homelab-claude-agent.service gives it its groups, home, identity and clone.
@@ -19,6 +18,8 @@
 #     server-batch lander, the pipeline timeline, the memory store copy, and the D5 takeover
 #     check's wrapper and sudoers grant. Each is armed only in daniel-box's host_vars, so
 #     daniel-server's package ships none of them.
+#   - H7.40's fourth slice: the artifacts node's peer sync and OTLP-door heartbeat timers with
+#     the directories the artifacts pod mounts, and the takeover check's pinned flux copy;
 #   - H7.40's third slice: alert-triggered triage, armed only in daniel-box's host_vars; the
 #     agent's peer key and ssh config on claude_agent_ssh_key_host and its one-time memory seed,
 #     both in claude-agent-setup; its homelab-ui login; and its homelab-ui browser oneshot,
@@ -29,12 +30,12 @@
 # The component renders the role's own templates and copies its scripts in place (`role:
 # claude_code`), H4's pattern, so daniel-box's Ansible render and this package read one source.
 # Each role template that names a sibling unit takes that name from a variable whose default is
-# the Ansible-era name; the defaults below give the packaged names. H7.40 moves the sources here.
+# the Ansible-era name; the defaults below give the packaged names. H7.20a moves the sources here.
 #
 # DECIDED: the scripts keep their /usr/local paths (/usr/local/bin/rootq, the clone and dotfiles
 # syncs, homelab-rootq and its socket helper). The scripts, the sudoers grant and the dotfiles'
-# claude-guard allowlist name those paths, and daniel-box's role installs the same bytes there
-# until H7.40. dpkg takes each unowned file over at install.
+# claude-guard allowlist name those paths. dpkg took each file the role had installed over at
+# install.
 #
 # Each file, output and enable link carries the `when:` of the role toggle that gated its task,
 # so a toggle set false in a host's host_vars still takes its subject back. The host's `users:`
@@ -47,8 +48,7 @@
 # `claude_agent_ssh_login_enabled` is false, the setup script removes the file and drops the agent
 # from ssh-users. While the key is blank, the file Ansible wrote stays untouched.
 #
-# Not moved, because nothing re-applies it on daniel-server:
-#   - the operator's own Claude Code install, which the dotfiles repo owns since H7.38.
+# Not shipped: the operator's own Claude Code install, which the dotfiles repo owns since H7.38.
 role: claude_code
 defaults:
   # The packaged unit names the role templates read (see the header).
@@ -180,6 +180,21 @@ files:
   # wrapper creates its own state directory.
   - {src: "role-file:homelab-takeover-check.sh", dst: /usr/local/sbin/homelab-takeover-check, mode: "0755", when: "claude_code_takeover_check_enabled"}
   - {src: "role:claude-takeover-check.sudoers.j2", dst: /etc/sudoers.d/homelab-takeover-check, mode: "0440", when: "claude_code_takeover_check_enabled"}
+  # The pinned flux copy the wrapper runs (H7.40's fourth slice). It ships wherever the component
+  # is, so switching the check off removes the copy and the state directory.
+  - {src: templates/takeover-check-flux.sh.j2, dst: /usr/lib/homelab/takeover-check-flux, mode: "0755", activate: "try-restart:homelab-takeover-check-flux.service"}
+  - {src: units/homelab-takeover-check-flux.service, dst: /usr/lib/systemd/system/homelab-takeover-check-flux.service}
+  # The artifacts node's peer sync and OTLP-door heartbeat (H7.40's fourth slice), and the
+  # directories the artifacts pod mounts. Their push tokens are credentials of daniel-box's
+  # package.yml. The tags and textfiles keep the names `sync-artifacts` and `claude-otel-health`,
+  # which Kuma, Loki and observability's host-checks rules read.
+  - {src: tmpfiles.d/homelab-artifacts.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-artifacts.conf, when: "inventory_hostname == claude_code_artifacts_node"}
+  - {src: templates/sync-artifacts.sh.j2, dst: /usr/lib/homelab/sync-artifacts, mode: "0755", when: "inventory_hostname == claude_code_artifacts_node"}
+  - {src: units/homelab-sync-artifacts.service.j2, dst: /usr/lib/systemd/system/homelab-sync-artifacts.service, when: "inventory_hostname == claude_code_artifacts_node"}
+  - {src: units/homelab-sync-artifacts.timer.j2, dst: /usr/lib/systemd/system/homelab-sync-artifacts.timer, when: "inventory_hostname == claude_code_artifacts_node"}
+  - {src: templates/claude-otel-health.sh.j2, dst: /usr/lib/homelab/claude-otel-health, mode: "0755", when: "inventory_hostname == claude_code_artifacts_node"}
+  - {src: units/homelab-claude-otel-health.service.j2, dst: /usr/lib/systemd/system/homelab-claude-otel-health.service, when: "inventory_hostname == claude_code_artifacts_node"}
+  - {src: units/homelab-claude-otel-health.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-otel-health.timer, when: "inventory_hostname == claude_code_artifacts_node"}
   # Alert-triggered triage (H7.40's third slice). Its caps and identity are pinned in the role's
   # claude-triage-pins.j2, which every triage template imports, so no inventory value reaches them.
   # The code and its config are root-owned, so a session cannot change what the next run executes.
@@ -223,6 +238,13 @@ enable:
   homelab-claude-triage-poll.timer:
     target: timers.target
     when: claude_code_agent_user_enabled and claude_code_triage_enabled
+  homelab-takeover-check-flux.service: multi-user.target
+  homelab-sync-artifacts.timer:
+    target: timers.target
+    when: inventory_hostname == claude_code_artifacts_node
+  homelab-claude-otel-health.timer:
+    target: timers.target
+    when: inventory_hostname == claude_code_artifacts_node
 # What the role installed. Reconcile retires each unit not shipped under its old name (disable,
 # stop, remove), and hands off each /etc copy of a unit shipped under the same name.
 # Retiring claude-rc.service stops the Remote Control host and drops the phone's sessions, so the
@@ -293,3 +315,10 @@ legacy:
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-cgroup-metrics}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-clone-sync}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/claude-code-dotfiles-sync}
+  # H7.40's fourth slice: the artifacts node's two crons, their scripts, which embedded the push
+  # tokens, and their render stamp.
+  - {cron_file: sync-artifacts}
+  - {cron_file: claude-otel-health}
+  - {path: /usr/local/bin/sync-artifacts.sh}
+  - {path: /usr/local/bin/claude-otel-health.sh}
+  - {path: /var/lib/homelab/setup-render-manifest.d/claude-code-node-crons}

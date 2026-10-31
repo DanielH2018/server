@@ -9,8 +9,7 @@ Repo-root `CLAUDE.md` has the conventions.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "config_files"`; ends on hosts where `True`
   (leading `meta: end_role`)
-- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
-  `templates/*.timer.j2`)
+- **Crons / timers:** none (the role ends on every host before its first task)
 <!-- /generated_from -->
 
 ## Where the work went

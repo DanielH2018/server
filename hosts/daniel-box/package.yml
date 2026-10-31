@@ -58,6 +58,10 @@ units:
 credentials:
   - k3s_readonly_token
   - ups_secondary_push_token
+  # The claude-code component's artifacts-node timers (H7.40's fourth slice). They sit here, not
+  # in the component, so daniel-server's SOPS file carries neither.
+  - artifacts_sync_push_token
+  - claude_otel_push_token
 # Two claude-code secrets only this host uses (H7.40's third slice). They sit here rather than in
 # the component, because host_secrets.py names every output key a component declares for each
 # host that lists it, and daniel-server's SOPS file must not carry them.

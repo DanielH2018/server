@@ -1,0 +1,18 @@
+# Shipped by homelab-daniel-box. Started by homelab-sync-artifacts.timer.
+[Unit]
+Description=Pull every peer's Claude artifacts onto this host and push the star list back
+After=homelab-secrets.service network-online.target
+Wants=homelab-secrets.service network-online.target
+
+[Service]
+Type=oneshot
+# The peers authorize this user's ssh key, and the artifacts tree is this user's.
+User={{ sys_user }}
+SyslogLevel=notice
+# The `+` runs this one command as root. It creates the artifacts directories
+# (tmpfiles.d/homelab-artifacts.conf.j2).
+ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-artifacts.conf
+ExecStart=/usr/lib/homelab/sync-artifacts
+LoadCredential=kuma_push_token:/run/credstore/artifacts_sync_push_token
+# The cron's `| logger -t sync-artifacts`, which journalctl -t and Loki read.
+SyslogIdentifier=sync-artifacts
