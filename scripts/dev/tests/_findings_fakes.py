@@ -17,11 +17,12 @@ pass while gh ran.
 fixture in conftest.py is how a test reaches it.
 """
 
+import json
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from dev.findings_lib.issue_model import LABELS
+from dev.findings_lib.issue_model import LABELS, NOT_BEFORE_FIELD, PROJECT_TITLE
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
 from lib.worktrees import Worktree
@@ -151,10 +152,74 @@ class Fakes:
     # What the running-batch read answers, `{issue: BatchHold}`, filtered to the issues asked
     # about. Empty by default, so no test reads a real unit or opens an ssh connection.
     batch_holds: dict[int, BatchHold] = field(default_factory=dict)
+    # The board read's answer per issue number, as `board_answer(...)` builds it. Left None
+    # an `api graphql` read ASSERTS, so a test that reaches the board says what it holds.
+    board: dict[int, dict] | None = None
     gh_errors: dict[str, BaseException] = field(default_factory=dict)
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.
     json_errors: dict[str, BaseException] = field(default_factory=dict)
+
+
+ADDED_ITEM = "ITEM-NEW"
+
+
+def board_answer(
+    *, on_board=True, current=None, field=True, project=True, title=PROJECT_TITLE
+):
+    """The board read's GraphQL response for one issue, shaped like the live one."""
+    fields = [{"id": "FIELD-NB", "name": NOT_BEFORE_FIELD}] if field else []
+    boards = (
+        [{"id": "PROJ", "title": title, "fields": {"nodes": [{}, *fields]}}]
+        if project
+        else []
+    )
+    items = (
+        [
+            {
+                "id": "ITEM",
+                "project": {"id": "PROJ"},
+                "fieldValueByName": {"date": current} if current else None,
+            }
+        ]
+        if on_board
+        else []
+    )
+    return {
+        "data": {
+            "repository": {
+                "issue": {"id": "ISSUE", "projectItems": {"nodes": items}},
+                "owner": {"projectsV2": {"nodes": boards}},
+            }
+        }
+    }
+
+
+def graphql_kind(argv) -> str:
+    """Which board call an `api graphql` argv is: `read`, `add`, `set` or `clear`."""
+    query = next(a for a in argv if a.startswith("query="))
+    for kind, marker in (
+        ("add", "addProjectV2ItemById"),
+        ("set", "updateProjectV2ItemFieldValue"),
+        ("clear", "clearProjectV2ItemFieldValue"),
+    ):
+        if marker in query:
+            return kind
+    return "read"
+
+
+def _graphql_answer(f: "Fakes", argv) -> str:
+    kind = graphql_kind(argv)
+    if kind == "add":
+        return json.dumps(
+            {"data": {"addProjectV2ItemById": {"item": {"id": ADDED_ITEM}}}}
+        )
+    if kind != "read":
+        return json.dumps({"data": {}})
+    number = int(next(a for a in argv if a.startswith("number="))[len("number=") :])
+    if f.board is None or number not in f.board:
+        raise AssertionError(f"board read for #{number}; pass Fakes(board={{...}})")
+    return json.dumps(f.board[number])
 
 
 def facts(trees=(), *, dirty=False, merged=False, ok=True):
@@ -260,6 +325,10 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
                 # Stamped as the operator's: `gh` posts as the authenticated account, so a
                 # comment this script wrote is one whose claim trailer counts.
                 issue.setdefault("comments", []).append(operator_comment(body))
+        if list(argv[:2]) == ["api", "graphql"]:
+            return subprocess.CompletedProcess(
+                list(argv), 0, _graphql_answer(f, argv), ""
+            )
         return subprocess.CompletedProcess(list(argv), 0, f"{f.url}\n", "")
 
     def worktree_facts(checkout=None):

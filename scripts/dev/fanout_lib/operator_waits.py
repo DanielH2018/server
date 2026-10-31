@@ -46,8 +46,17 @@ import re
 import subprocess
 import tempfile
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
+
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from findings_lib.issue_model import is_deferred
 
 TEXTFILE = Path("/var/lib/node-exporter-textfile/fanout_operator_waits.prom")
 OWED = Path("/var/lib/gitops-deploy/owed.jsonl")
@@ -236,10 +245,9 @@ def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
             for lbl in issue.get("labels") or []
             if isinstance(lbl, dict)
         }
-        later = [n for n in names if n.startswith("not-before:") and n[11:] > today]
         if "manual" in names:
             out["manual"] += 1
-        elif later:
+        elif is_deferred(dict(issue), date.fromisoformat(today)):
             out["deferred"] += 1
         elif "claimed" in names:
             out["claimed"] += 1
