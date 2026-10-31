@@ -89,16 +89,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Live Object Drift"}[50h10m])
             or
-              absent_over_time(monitor_status{monitor_name="Longhorn Volume Redundancy"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="k3s PVC Fullness"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Longhorn Snapshot Headroom"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Kubelet CSI Mount Read-Only"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="etcd DB Size"}[2h])
-            or
               absent_over_time(monitor_status{monitor_name="Root Disk"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Memory"}[2h])

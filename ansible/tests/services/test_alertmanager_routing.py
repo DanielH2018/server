@@ -10,7 +10,8 @@ and reads each route the walk ends on. Each label set carries one expected outco
   `IngressProbesMissing` pages from the start, and its two `IngressProbeFailed*` sets since
   its PR 5. M4's `BlackboxExporterDown` and every rule of M6's batch A3 (the scrape-target and
   log-pipeline rules) since A3's Cutover-b. Every rule of M6's batch A4 (the edge rules) since
-  A4's Cutover-b, and every rule of batch A2 (the container-checks rules) since A2's Cutover-b.
+  A4's Cutover-b, every rule of batch A2 (the container-checks rules) since A2's Cutover-b, and
+  every rule of batch A5 (the storage rules) since A5's Cutover-b.
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
   it pages nobody. M3's two `DiskHealth*` sets move in its PR 5,
@@ -67,6 +68,7 @@ CUTOVER_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "kuma-cutover.yaml"
 )
 EDGE_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "edge.yaml"
+STORAGE_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "storage.yaml"
 BRIDGE_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 )
@@ -269,6 +271,14 @@ PAGING = {
     # Batch A2's container-checks rules since its Cutover-b. All four are `warning`, so Discord
     # alone.
     **{name: (labels, ["discord"]) for name, labels in container_sets().items()},
+    # Batch A5's storage rules since its Cutover-b. All ten are `critical`, so both channels.
+    **{
+        name: (
+            labels,
+            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
+        )
+        for name, labels in literal_sets(STORAGE_RULES, shadow=False).items()
+    },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
@@ -486,6 +496,38 @@ def test_every_a4_edge_rule_pages_with_its_ported_severity():
     assert PAGING["CertExpiringSoon/traefik"][1] == ["discord", "email"]
     assert PAGING["TraefikBackendSlow/traefik"][1] == ["discord"]
     assert "TraefikBackendSlow/traefik" not in SHADOW
+
+
+def test_every_a5_storage_rule_pages_as_critical():
+    """Non-vacuity for `literal_sets`: batch A5's ten storage rules all page since Cutover-b, so
+    none routes to the blackhole, and each is critical, so it mails as well as posting."""
+    assert literal_sets(STORAGE_RULES, shadow=True) == {}
+    sets = literal_sets(STORAGE_RULES, shadow=False)
+    assert set(sets) == {
+        "LonghornVolumeDegraded/longhorn",
+        "LonghornVolumesMissing/longhorn",
+        "PVCFull/longhorn",
+        "PVCBelowFreeFloor/longhorn",
+        "PVCFreeFloorUnmonitored/longhorn",
+        "PVCCoverageShortfall/longhorn",
+        "LonghornSnapshotNearCap/longhorn",
+        "LonghornSnapshotCapUnmonitored/longhorn",
+        "KubeletCSIMountReadOnly/longhorn",
+        "EtcdDBNearQuota/etcd",
+    }
+    assert all(labels["severity"] == "critical" for labels in sets.values())
+    assert all(name in PAGING and name not in SHADOW for name in sets)
+    assert all(PAGING[name][1] == ["discord", "email"] for name in sets)
+
+
+def test_a_storage_rule_that_regains_shadow_is_flagged():
+    """The rejecting half: with `shadow` back, the walk ends on the blackhole, so the receivers
+    `PAGING` expects for the rule no longer match."""
+    name = "PVCFull/longhorn"
+    labels, receivers = PAGING[name]
+    shadowed = {**labels, "shadow": "true"}
+    assert [r["receiver"] for r in reached(route_tree(), shadowed)] == [BLACKHOLE]
+    assert [r["receiver"] for r in reached(route_tree(), shadowed)] != receivers
 
 
 def test_every_a1_rule_is_shadow_and_names_each_host_check():

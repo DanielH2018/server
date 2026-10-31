@@ -24,7 +24,6 @@ tests:
               job: longhorn
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: Prometheus has lost Longhorn's scrape job or its volume series.
               description: >-
@@ -38,7 +37,6 @@ tests:
           - exp_labels:
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: The kubelet reports fewer than 32 claims.
               description: >-
@@ -60,7 +58,6 @@ tests:
               state: healthy
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: Prometheus has lost Longhorn's scrape job or its volume series.
               description: >-
@@ -112,7 +109,6 @@ tests:
               state: degraded
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: Longhorn volume degraded-vol is degraded.
               description: >-
@@ -126,7 +122,6 @@ tests:
               state: rebalancing
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: Longhorn volume odd-vol is rebalancing.
               description: >-
@@ -175,7 +170,6 @@ tests:
               persistentvolumeclaim: full
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: The claim homelab/full is over 85% full.
               description: >-
@@ -186,7 +180,6 @@ tests:
               persistentvolumeclaim: valheim-server
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: The claim homelab/valheim-server is over 85% full.
               description: >-
@@ -200,7 +193,6 @@ tests:
               persistentvolumeclaim: valheim-server
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: The claim homelab/valheim-server has less free space than its largest transient.
               description: >-
@@ -215,7 +207,6 @@ tests:
           - exp_labels:
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: The kubelet reports fewer than 32 claims.
               description: >-
@@ -239,7 +230,6 @@ tests:
               persistentvolumeclaim: valheim-server
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: The kubelet reports no free bytes for the claim valheim-server.
               description: >-
@@ -259,7 +249,6 @@ tests:
           - exp_labels:
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: The kubelet reports fewer than 32 claims.
               description: >-
@@ -295,7 +284,6 @@ tests:
               pvc: jellyfin-config
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: Snapshot space of jellyfin-config is at 90% of its cap.
               description: >-
@@ -335,7 +323,6 @@ tests:
               pvc: jellyfin-config
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: Longhorn reports no snapshot series for the capped claim jellyfin-config.
               description: >-
@@ -365,7 +352,6 @@ tests:
               mountpoint: /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount
               severity: critical
               service: longhorn
-              shadow: "true"
             exp_annotations:
               summary: The CSI mount /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount is read-only.
               description: >-
@@ -392,7 +378,6 @@ tests:
           - exp_labels:
               severity: critical
               service: etcd
-              shadow: "true"
             exp_annotations:
               summary: The etcd database is over 80% of its backend quota.
               description: >-
