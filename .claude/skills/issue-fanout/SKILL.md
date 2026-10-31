@@ -283,7 +283,9 @@ failure, then fix the branch or re-run the CI before landing.
 that host `done` needs a `VERDICT:` line too — in the final text, or in the batch's
 `.fanout/land<n>.log`, which `status` reads over the same ssh call. Without it the PR is open
 and nothing says it merged or deployed, so the line exits 1 and carries the PR URL to land by
-hand. A `failed` batch keeps its worktree — `status` already
+hand. A `failed` line names systemd's `Result` whenever the unit did not succeed:
+`result=oom-kill` means the kernel killed the batch at its memory limit, and `result=timeout`
+means `RuntimeMaxSec=` stopped it. A `failed` batch keeps its worktree — `status` already
 shows the last 300 bytes of `<worktree>/.fanout/stderr.log`; read the full file there for more
 before deciding what to do.
 
