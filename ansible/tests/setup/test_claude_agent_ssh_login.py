@@ -1,90 +1,64 @@
 #!/usr/bin/env python3
 """daniel-box's agent logs in to a peer as the peer's own agent user, for fan-out placement.
 
-`roles/setup/claude_code/tasks/agent_peers.yml` gives the key host's agent the key and the ssh
-config, and `agent_ssh_login.yml` authorizes that key on each peer that switches the login on.
+The claude-code host component gives the key host's agent the key and the ssh config, and
+authorizes that key on each peer that switches the login on.
 Each test pins one leg. A leg that slips fails no deploy: the login either stops working,
 which `fanout.py place read` reports, or works with more reach than the design gives it.
 
 Run: uv run pytest ansible/tests/setup/test_claude_agent_ssh_login.py
 """
 
+from _agent_package import SETUP, agent_setup_script, render_daniel_server_with
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, HOST_VARS
+from renderer.renderer_lib import host as host_mode
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
-CLAUDE_MAIN = ROLE / "tasks" / "agent.yml"
-AGENT_PEERS = ROLE / "tasks" / "agent_peers.yml"
-SSH_LOGIN = ROLE / "tasks" / "agent_ssh_login.yml"
-# daniel-box's claude-code component ships the agent user, so each agent task skips it there.
-PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
-
-
-def tasks(path) -> list[dict]:
-    return yaml_fast.safe_load(path.read_text())
-
-
-def named(task_list: list[dict], name: str) -> dict:
-    found = [t for t in task_list if t.get("name") == name]
-    assert len(found) == 1, f"expected one task named {name!r}, found {len(found)}"
-    return found[0]
+HOME = "/usr/lib/homelab/claude-agent-home"
+PLACE_KEY = "place root root 0644 "
+KEY = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLD peers"
+)
 
 
 def vars_of(path) -> dict:
     return yaml_fast.safe_load(path.read_text())
 
 
-def test_the_key_half_runs_only_on_the_key_host_and_the_login_half_everywhere_else() -> (
-    None
-):
-    """On the key host `claude` is the one holding the key, so it authorizes nothing there."""
-    main = tasks(CLAUDE_MAIN)
-    peers = named(main, "Give the agent user an ssh key for the peers and name them")
-    assert peers["ansible.builtin.import_tasks"] == "agent_peers.yml"
-    assert peers["when"] == [
-        "inventory_hostname not in claude_code_packaged_hosts['agent_home']",
-        "claude_code_agent_user_enabled",
-        "claude_code_agent_is_primary",
-        "inventory_hostname == claude_agent_ssh_key_host",
-    ]
-    login = named(
-        main,
-        "Let the key host's agent log in as this host's agent user, or take it back",
+def test_the_key_half_runs_only_on_the_key_host_and_the_login_half_everywhere_else(
+    tmp_path,
+) -> None:
+    """On the key host `claude` holds the key, so it authorizes nothing there."""
+    assert vars_of(ALL_VARS)["claude_agent_ssh_key_host"] == "daniel-box"
+    key_path = vars_of(ALL_VARS)["claude_agent_ssh_key_path"]
+    box = host_mode.render_host("daniel-box")
+    server = render_daniel_server_with(
+        tmp_path, claude_agent_ssh_login_enabled=True, claude_agent_peer_public_key=KEY
     )
-    assert login["ansible.builtin.import_tasks"] == "agent_ssh_login.yml"
-    assert login["when"] == [
-        "inventory_hostname not in claude_code_packaged_hosts['agent_home']",
-        "claude_code_agent_user_enabled",
-        "claude_code_agent_is_primary",
-        "inventory_hostname != claude_agent_ssh_key_host",
-    ]
-    assert vars_of(ALL_VARS)["claude_agent_ssh_key_host"] == ("daniel-box")
+    box_home = box.files[HOME][0].decode()
+    assert 'keypair "$peer_key" ' in box_home and f"peer_key={key_path}" in box_home
+    assert "peer_key" not in server.files[HOME][0].decode()
+    assert PLACE_KEY in server.files[SETUP][0].decode()
+    assert PLACE_KEY not in box.files[SETUP][0].decode()
 
 
-def test_the_key_is_authorized_while_enabled_and_removed_when_not() -> None:
-    task_list = tasks(SSH_LOGIN)
-    authorize = named(
-        task_list, "Authorize the key host agent's peer key for this host's agent user"
+def test_a_key_that_was_not_read_as_one_ed25519_line_is_refused(tmp_path) -> None:
+    setup = agent_setup_script(
+        tmp_path, claude_agent_ssh_login_enabled=True, claude_agent_peer_public_key=KEY
     )
-    assert authorize["when"] == "claude_agent_ssh_login_enabled"
-    copy = authorize["ansible.builtin.copy"]
-    assert copy["content"].startswith("restrict ")
-    assert (copy["owner"], copy["group"], copy["mode"]) == ("root", "root", "0644")
-    remove = named(
-        task_list,
-        "Remove the agent's authorized key when the peer login is switched off",
-    )
-    assert remove["when"] == "not claude_agent_ssh_login_enabled"
-    assert remove["ansible.builtin.file"] == {"path": copy["dest"], "state": "absent"}
+    assert '"$(wc -l < "$templates/' in setup and '" -ne 1' in setup
+    assert "grep -Eq '^restrict ssh-ed25519 '" in setup
 
 
-def test_a_key_that_was_not_read_as_one_ed25519_line_is_refused() -> None:
-    refuse = named(tasks(SSH_LOGIN), "Refuse to authorize a key that was not read")
-    that = refuse["ansible.builtin.assert"]["that"]
-    assert any("match('^ssh-ed25519 ')" in rule for rule in that)
-    assert any("splitlines() | length == 1" in rule for rule in that)
+def test_the_agent_user_lingers_after_it_exists(tmp_path) -> None:
+    """A batch started with `systemd-run --user` over ssh dies at logout without linger."""
+    setup = agent_setup_script(tmp_path)
+    assert 'loginctl enable-linger "$agent" "$operator"' in setup
+    # loginctl refuses a user it cannot look up, so the linger comes after usermod.
+    assert setup.index("usermod --groups") < setup.index("loginctl enable-linger")
 
 
 def test_daniel_server_switches_the_agent_and_its_login_on_and_the_default_is_off() -> (
@@ -102,41 +76,6 @@ def test_the_key_path_is_under_the_agent_home_and_is_not_the_signing_key() -> No
     key = vars_of(ALL_VARS)["claude_agent_ssh_key_path"]
     assert key.startswith(defaults["claude_code_agent_user_home"] + "/")
     assert key != defaults["claude_code_agent_signing_key"]
-
-
-def test_the_key_is_generated_once_as_the_agent_and_the_pair_has_its_modes() -> None:
-    task_list = tasks(AGENT_PEERS)
-    keygen = named(task_list, "Generate the agent's ssh key for the peers")
-    argv = keygen["ansible.builtin.command"]["argv"]
-    assert argv[:4] == ["runuser", "-u", "{{ claude_code_agent_user }}", "--"]
-    assert (
-        keygen["ansible.builtin.command"]["creates"]
-        == "{{ claude_agent_ssh_key_path }}"
-    )
-    modes = named(task_list, "Give the peer key pair the home's group and its modes")
-    assert {i["path"]: i["mode"] for i in modes["loop"]} == {
-        "{{ claude_agent_ssh_key_path }}": "0600",
-        "{{ claude_agent_ssh_key_path }}.pub": "0644",
-    }
-
-
-def test_the_agent_user_lingers_while_enabled_and_stops_when_not() -> None:
-    """A batch started with `systemd-run --user` over ssh dies at logout without linger."""
-    main = tasks(CLAUDE_MAIN)
-    on = named(
-        main,
-        "Keep the agent user's manager alive after logout, so its fan-out batches survive",
-    )
-    assert on["when"] == [PACKAGED, "claude_code_agent_user_enabled"]
-    assert on["ansible.builtin.command"] == (
-        "loginctl enable-linger {{ claude_code_agent_user }}"
-    )
-    # loginctl refuses a user it cannot look up, so the linger comes after the user exists.
-    created = named(main, "Create the agent user, its tools and its clone")
-    assert main.index(created) < main.index(on)
-    off = named(main, "Stop the switched-off agent user's manager lingering")
-    assert off["when"] == [PACKAGED, "not claude_code_agent_user_enabled"]
-    assert off["args"]["removes"] == on["args"]["creates"]
 
 
 def peer_config(peers: dict[str, bool]) -> str:

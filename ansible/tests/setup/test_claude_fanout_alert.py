@@ -1,7 +1,8 @@
 """A stopped fan-out batch can start its Discord page, and nothing else (#4602).
 
-`roles/setup/claude_code/tasks/fanout_alert.yml` installs `fanout-alert@.service` and the polkit
-rule that lets the batch accounts start it. `scripts/dev/fanout_lib/notify.py` is what starts
+The claude-code host component ships `fanout-alert@.service` and the polkit rule
+(`roles/setup/claude_code/templates/50-claude-fanout-alert.rules.j2`) that lets the batch
+accounts start it. `scripts/dev/fanout_lib/notify.py` is what starts
 it, so each test holds one side of that contract to the other.
 
 Run: uv run pytest ansible/tests/setup/test_claude_fanout_alert.py
@@ -15,16 +16,12 @@ from _setup_render import render_setup_text
 from fanout_lib.notify import PAGED_STATES, alert_unit
 from lib import yaml_fast
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
 RULE = "50-claude-fanout-alert.rules.j2"
 ACCOUNTS = {
     "sys_user": "fanout-sentinel-operator",
     "claude_code_agents_present": ["claude"],
 }
-
-
-def tasks() -> list[dict]:
-    return yaml_fast.safe_load((ROLE / "tasks" / "fanout_alert.yml").read_text())
 
 
 def rule() -> str:
@@ -72,41 +69,12 @@ def test_the_rule_admits_the_operator_and_each_agent_and_only_the_start_verb() -
     assert rendered.count("polkit.Result.YES") == 1
 
 
-def test_the_alert_it_admits_is_the_one_the_role_installs() -> None:
-    (alert,) = [t for t in tasks() if "ansible.builtin.import_tasks" in t]
-    variables = alert["vars"]
-    assert variables["alert_unit_instanced"] is True
-    assert alert_unit("fanout-1", "failed").startswith(
-        f"{variables['alert_unit_name']}-alert@"
-    )
-
-
-def test_switching_it_off_removes_everything_the_install_writes() -> None:
-    installs = [
-        t for t in tasks() if t.get("when") == "claude_code_fanout_alert_enabled"
-    ]
-    dests = set()
-    for t in installs:
-        if "ansible.builtin.import_tasks" in t:
-            dests.add(
-                f"/etc/systemd/system/{t['vars']['alert_unit_name']}-alert@.service"
-            )
-            dests.add(f"{t['vars']['alert_unit_env_dir']}/alert-webhook.env")
-            continue
-        module = t.get("ansible.builtin.template") or t["ansible.builtin.file"]
-        dests.add(module.get("dest") or module["path"])
-    assert "/etc/polkit-1/rules.d/50-claude-fanout-alert.rules" in dests
-    (removal,) = [
-        t for t in tasks() if t.get("when") == "not claude_code_fanout_alert_enabled"
-    ]
-    removed = removal["loop"]
-    for dest in dests:
-        assert any(dest == r or dest.startswith(f"{r}/") for r in removed), dest
-    assert removed[0].endswith(".rules"), "the rule goes first"
-
-
-def test_main_imports_the_fanout_alert_file() -> None:
-    main = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    assert any(
-        t.get("ansible.builtin.import_tasks") == "fanout_alert.yml" for t in main
-    )
+def test_the_alert_it_admits_is_the_one_the_component_ships() -> None:
+    shipped = {
+        entry["dst"]
+        for entry in yaml_fast.safe_load(COMPONENT.read_text())["files"]
+        if entry.get("src") == "units/fanout-alert@.service"
+    }
+    template = alert_unit("fanout-1", "failed").split("@")[0] + "@.service"
+    assert shipped == {f"/usr/lib/systemd/system/{template}"}
+    assert (COMPONENT.parent / "units" / "fanout-alert@.service").is_file()
