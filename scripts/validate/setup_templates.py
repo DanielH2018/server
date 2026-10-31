@@ -27,7 +27,9 @@ Undefined and then judges each name it collected. A name is allowed to be undefi
   - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
   - declared in the template's own role defaults. `lib.render_context` leaves out a default
     whose value will not expand (it names a filter the light environment lacks), so the key
-    reads as undefined in the render while the role still defines it.
+    reads as undefined in the render while the role still defines it;
+  - supplied by a host component that renders the template through `role:` — a key of its
+    `defaults:`, or `<key>_value` for a secret key one of its `outputs:` declares.
 
 Everything else is a failure naming the template and the variable. That is the shape a rename
 takes: the producer moves and the consumer keeps the old name, which then matches none of the
@@ -69,9 +71,10 @@ from lib.render_guard import (
     load_yaml,
     render_or_error,
 )
-from lib.repo_paths import ROLES
+from lib.repo_paths import REPO, ROLES
 
 SETUP = ROLES / "setup"
+COMPONENTS = REPO / "hosts" / "components"
 SECRET_REGISTRY = ANSIBLE / "secret_rotation.yml"
 
 # Names Ansible itself supplies, which no repo file defines and none should.
@@ -249,6 +252,24 @@ def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
     return problems
 
 
+def component_supplied(role: str, components: Path = COMPONENTS) -> frozenset[str]:
+    """Variable names the host components rendering `role` supply to its templates.
+
+    A component that names the role in `role:` renders the role's templates with its own
+    `defaults:` and, for each secret key an output declares, `<key>_value`. The role's tasks no
+    longer supply these, so they are read from the component rather than from `runtime_vars`.
+    """
+    out: set[str] = set()
+    for path in sorted(components.glob("*/component.yml")):
+        spec = yaml_fast.safe_load(path.read_text()) or {}
+        if spec.get("role") != role:
+            continue
+        out.update(spec.get("defaults") or {})
+        for output in spec.get("outputs") or []:
+            out.update(f"{key}_value" for key in output.get("keys") or [])
+    return frozenset(out)
+
+
 def check_role_template(tpl: Path, known: frozenset[str]) -> list[str]:
     """`check_template` under the context a deploy renders `tpl` with.
 
@@ -258,7 +279,9 @@ def check_role_template(tpl: Path, known: frozenset[str]) -> list[str]:
     """
     ctx = render_context(tpl, overrides=ANSIBLE_RUNTIME_CONTEXT)
     defaults = frozenset(load_yaml(tpl.parents[1] / "defaults" / "main.yml"))
-    return check_template(tpl, ctx, known | defaults)
+    return check_template(
+        tpl, ctx, known | defaults | component_supplied(tpl.parents[1].name)
+    )
 
 
 def main(argv: Sequence[str] = ()) -> int:

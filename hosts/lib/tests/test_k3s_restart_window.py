@@ -64,7 +64,7 @@ EXEMPT = {
     "homelab-claude-agent-browser.timer": "installs the agent's browser pins; never touches k3s",
     "homelab-claude-pipeline-timeline.timer": "joins GitHub, journals and review records; no cluster",
     "homelab-builder.timer": "builds and signs packages; a build during a restart only waits",
-    "Sync peer Claude artifacts": "an ssh pull from daniel-server; reads no cluster state",
+    "homelab-sync-artifacts.timer": "an ssh pull from daniel-server; reads no cluster state",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.
     "CronJob crowdsec */5 * * * *": "home-IP lookup; a missed run is not made up (backoffLimit 0)",
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",

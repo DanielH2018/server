@@ -1,14 +1,14 @@
 {
-  "checksum": "0b12a3779534d485098e5987ba77bd3e04e41f539f0ad55be95e2269ba98a68d",
+  "checksum": "c27f6558b79811e1d5097035c7fe4bbabadf8cd23496ce44d5756dc4f4cd220e",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/artifacts/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
-      "ansible/roles/setup/k8s_host_files/tasks/artifacts.yml": "95f7a58ec177a8ed773265a8d636bc9d2e0830c6124d2fb42ef35fc4efb2b99a",
-      "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec",
-      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
+      "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
+      "hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2": "5010ebf950dbe6e1253e8c0fcf85e2bfc031222fba2746355c612f4ec1cd1333",
+      "hosts/lib/tests/test_claude_artifacts_node_timers.py": "e8dc749ce8b978aeb467c6a7e0fde526c83bb85c46a5631ee4db5f21fae82998"
     },
     "python": "3.14",
-    "verified_sha": "f04bc82cf"
+    "verified_sha": "dd4bc2a78"
   }
 }
