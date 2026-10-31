@@ -97,8 +97,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Daniel Pi Recovery"}[2h])
             or
-              absent_over_time(monitor_status{monitor_name="Workload Log Errors"}[2h])
-            or
               absent_over_time(monitor_status{monitor_name="CrowdSec Remote Allowlist"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="CrowdSec AppSec"}[2h])

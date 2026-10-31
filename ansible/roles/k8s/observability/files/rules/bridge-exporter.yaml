@@ -244,9 +244,8 @@ groups:
             hour. A ban of a cluster gateway locks out everything behind it, so read
             /config/ip_bans.yaml on a ban.
       # THE STARTUP-GRACE FAMILY (A6-5): the six rows whose `gate` column reads `startup_grace`
-      # and whose rule lives here. `workload_log_errors` is the seventh such row, and A7's
-      # WorkloadLogErrors rule on loki-homelab replaces it, so no rule below selects it. Each
-      # rule is `for: 5m`, which is the grace: today `bridge.streaks.apply_startup_grace` holds a
+      # and whose rule lives here. Each rule is `for: 5m`, which is the grace: today
+      # `bridge.streaks.apply_startup_grace` holds a
       # row `up` for GRACE_CYCLES - 1 = 1 cycle of 300s, and the exporter writes the gauge before
       # that hold (m6-retire-kuma.md, "Gates and grace"). `for: 5m` therefore keeps today's
       # timing and applies the grace once. `n8n` and `speedtest` keep their in-body streaks, on
