@@ -48,7 +48,7 @@ conventions.
 - Each Deployment pushes its own Kuma heartbeat over its own token — a shared token would
   hide either arm going stale behind the other still pushing.
 
-- favonia's image serves no metrics, so two shadow rule families watch it (M6 batch B7).
+- favonia's image serves no metrics, so two rule families watch it and page since M6 batch B7's Cutover-1b.
   `CloudflareDdnsUnavailable` in observability's `pods` group reads each Deployment's available
   replicas. `CloudflareDdnsDirectUpdateSilent` and `CloudflareDdnsProxiedUpdateSilent` in
   loki-homelab's `homelab-logs.yaml` fire when a pod logs none of "are already up to date",

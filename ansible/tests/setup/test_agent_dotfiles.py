@@ -16,18 +16,15 @@ Run: uv run pytest ansible/tests/setup/test_agent_dotfiles.py
 import subprocess
 from pathlib import Path
 
-import jinja2
 import pytest
+from _agent_package import agent_setup_script
 from _helpers import ANSIBLE, HOST_VARS, load_yaml
-from lib.ansible_jinja_env import make_ansible_env
 from _setup_render import render_setup_text
-from lib import yaml_fast
 from lib.git_testing import commit, git, init_repo, scrubbed_env
 from lib.proc_testing import run, write_exec
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 SCRIPT = ROLE / "files" / "claude-dotfiles-sync.sh"
-TASKS = ROLE / "tasks"
 
 # Answers the subcommands the script uses. `managed` lists ~/.claude and ~/.config/gh, whose
 # modes the role sets and the first pass must leave out, and three directories it must keep,
@@ -77,7 +74,7 @@ class Agent:
         )
 
     def copied_subset(self, *trees: str) -> None:
-        """Lay down trees the way agent_operator_config.yml left them: root's."""
+        """Lay down trees the way a subset copy made by root leaves them: root's."""
         for tree in trees:
             (self.home / ".claude" / tree).mkdir(parents=True)
             with self.root_owned.open("a") as f:
@@ -149,27 +146,6 @@ def test_a_moved_source_reports_the_range(agent: Agent) -> None:
     assert result.stdout.startswith("applied ") and ".." in result.stdout
 
 
-def tasks(name: str) -> list[dict]:
-    return yaml_fast.safe_load((TASKS / name).read_text())
-
-
-def named(task_list: list[dict], name: str) -> dict:
-    found = [t for t in task_list if t.get("name") == name]
-    assert len(found) == 1, f"expected one task named {name!r}, found {len(found)}"
-    return found[0]
-
-
-def test_the_apply_runs_as_the_agent_and_never_fails_the_play() -> None:
-    """A red task holds the GitOps deployer over the agent's own config."""
-    task = named(
-        tasks("agent_dotfiles.yml"), "Apply the operator's dotfiles to the agent user"
-    )
-    argv = task["ansible.builtin.command"]["argv"]
-    assert argv[:4] == ["runuser", "-u", "{{ claude_code_agent_user }}", "--"]
-    assert argv[4] == "/usr/local/bin/claude-dotfiles-sync.sh"
-    assert task["failed_when"] is False
-
-
 def test_the_root_owned_subset_is_moved_aside_before_chezmoi_writes(
     agent: Agent,
 ) -> None:
@@ -190,39 +166,6 @@ def test_a_refused_source_leaves_the_subset_in_place(agent: Agent) -> None:
     agent.copied_subset("skills")
     assert agent.sync(is_agent="").returncode == 1
     assert (agent.home / ".claude" / "skills").is_dir()
-
-
-def test_the_role_deletes_what_the_script_moved_aside() -> None:
-    task = named(
-        tasks("agent_dotfiles.yml"), "Remove the subset the dotfiles sync moved aside"
-    )
-    assert task["ansible.builtin.file"]["path"].endswith(
-        "/.claude/.subset-copy-{{ item }}"
-    )
-    assert task["loop"] == ["operator", "rules", "output-styles", "skills"]
-
-
-def test_switching_the_dotfiles_off_removes_every_unit() -> None:
-    task = named(
-        tasks("agent_dotfiles.yml"),
-        "Remove the agent user's dotfiles sync units when its dotfiles are switched off",
-    )
-    assert task["when"] == "not claude_code_agent_dotfiles"
-    assert task["loop"] == [
-        "dotfiles-sync.service",
-        "dotfiles-sync.timer",
-        "dotfiles-sync-alert.service",
-    ]
-
-
-def test_chezmoi_owns_cc_wait_and_jsonq_when_the_dotfiles_are_on() -> None:
-    """Both come from the same dotfiles source; two writers would flip them each apply."""
-    agent = tasks("agent.yml")
-    for name in (
-        "Give the agent user the operator's cc-wait",
-        "Give the agent user the operator's jsonq",
-    ):
-        assert "not claude_code_agent_dotfiles" in named(agent, name)["when"]
 
 
 def test_the_unit_runs_the_script_as_the_agent_with_its_seed() -> None:
@@ -249,29 +192,15 @@ def test_the_seed_answers_agent_true() -> None:
     ("operator_read", "modes"), [(True, ("0710", "0640")), (False, ("0700", "0600"))]
 )
 def test_the_operator_reads_the_seed_only_under_operator_read(
-    operator_read: bool, modes: tuple[str, str]
+    operator_read: bool, modes: tuple[str, str], tmp_path: Path
 ) -> None:
     """`probe.py applied` reads seed.toml as the operator, since rootq refuses any path under
-    the agent-owned home (#6408). chezmoi.toml keeps 0600 either way. The False case is the
-    reverse state, not the change: it holds the flag-off modes, so an expression that always
-    opens the seed fails it."""
-    dotfiles = tasks("agent_dotfiles.yml")
-    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
-    ctx = {"claude_code_agent_operator_read": operator_read}
-    rendered = tuple(
-        env.from_string(
-            named(dotfiles, name)["ansible.builtin." + module]["mode"]
-        ).render(ctx)
-        for name, module in (
-            ("Create the agent user's chezmoi config directory", "file"),
-            ("Seed the agent user's chezmoi answers", "template"),
-        )
-    )
-    assert rendered == modes
-    first_init = named(
-        dotfiles, "Seed the agent user's chezmoi config for its first init"
-    )
-    assert first_init["ansible.builtin.copy"]["mode"] == "0600"
+    the agent-owned home (#6408). The False case holds the flag-off modes, so an expression
+    that always opens the seed fails it."""
+    setup = agent_setup_script(tmp_path, claude_code_agent_operator_read=operator_read)
+    dir_mode, seed_mode = modes
+    assert f'dir {dir_mode} "$home/.config/chezmoi"' in setup
+    assert f"put {seed_mode} chezmoi-seed.toml .config/chezmoi/seed.toml" in setup
 
 
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])

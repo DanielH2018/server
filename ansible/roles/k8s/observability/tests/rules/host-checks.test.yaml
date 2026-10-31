@@ -1209,8 +1209,8 @@ tests:
       - eval_time: 6m
         alertname: IscsiSessionsNotReporting
         exp_alerts: []
-  # B6's two daniel-box crons, in shadow beside their Kuma tiles. A failing verdict fires both
-  # Failed rules with shadow="true" and leaves both NotReporting rules quiet.
+  # B6a's two daniel-box crons, paging since Cutover-1b. A failing verdict fires both Failed
+  # rules and leaves both NotReporting rules quiet.
   - interval: 1m
     input_series:
       - series: 'homelab_check_success{check="sync-artifacts", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1234,7 +1234,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: The peer artifact sync on daniel-box is failing.
               description: >-
@@ -1251,7 +1250,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: The telemetry OTLP receiver on daniel-box's loopback refuses connections.
               description: >-
@@ -1289,7 +1287,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations: &sync_not_reporting
               summary: The peer artifact sync on daniel-box has stopped reporting.
               description: >-
@@ -1310,7 +1307,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations: &otlp_not_reporting
               summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
               description: >-
@@ -1333,7 +1329,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations: *sync_not_reporting
       - eval_time: 30m
         alertname: OtlpDoorNotReporting
@@ -1343,7 +1338,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations: *otlp_not_reporting
   # A dead node exporter is the `targets` check's page, so both NotReporting rules stay quiet.
   - interval: 1m

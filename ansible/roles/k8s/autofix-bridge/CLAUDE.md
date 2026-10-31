@@ -94,7 +94,7 @@ here must satisfy this summary.
   role's `containers_list` entry renders the scrape job, the Service in
   `templates/service.yaml.j2` and the container port. Each cycle records its verdict before the
   Kuma push, and a cycle that raises records 0. The `pods` rule group (`ArrAutoBlockFailing`,
-  `AutofixBridgeDown`, `AutofixBridgeStale`) reads it in shadow beside the push.
+  `AutofixBridgeDown`, `AutofixBridgeStale`) reads it and pages since B7's Cutover-1b.
 - **RENAME GOTCHA — don't "fix" it:** the **push monitor id, token and env are deliberately
   kept** `arr-autoblock` / `arr_autoblock_push_token` / `KUMA_PUSH_ARR_AUTOBLOCK`, because a
   monitor names the *check* rather than the container and renaming loses its history. A grep

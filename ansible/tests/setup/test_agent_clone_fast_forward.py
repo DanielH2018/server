@@ -2,9 +2,9 @@
 """claude-clone-sync.sh fast-forwards the agent's clone only when it is a clean master.
 
 The hook shim and the homelab-ui launcher run from that clone's main working tree, which the
-shared agent_user.yml clones once and never pulls (#4067, #4099). The claude_code role runs the
-script on each apply, and claude-clone-sync.timer runs it between applies, because a merge that
-touches only the launcher or `.claude/hooks/` applies no role (#4162). The script runs here
+shared agent_user.yml clones once and never pulls (#4067, #4099). claude-clone-sync.timer runs
+the script, because a merge that touches only the launcher or `.claude/hooks/` applies no role
+(#4162). The script runs here
 against real scratch repositories, so a test passes only if the gate decides correctly.
 
 Run: uv run pytest ansible/tests/setup/test_agent_clone_fast_forward.py
@@ -16,18 +16,11 @@ from pathlib import Path
 import pytest
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
-from ansible.parsing.dataloader import DataLoader
-from ansible.template import Templar, trust_as_template
-from lib import yaml_fast
 from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
 from lib.proc_testing import run, write_exec
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 SCRIPT = ROLE / "files" / "claude-clone-sync.sh"
-CLAUDE_TASKS = ROLE / "tasks" / "agent.yml"
-PULL = "Fast-forward the agent user's clone to origin's master"
-REPORT = "Report that the agent user's clone was left behind"
-SYNC = "Sync the repo's venv in the agent user's clone"
 LIVE_SCRIPT = "/usr/local/bin/claude-clone-sync.sh"
 
 
@@ -158,83 +151,8 @@ def test_a_moved_lock_resyncs_the_venv_and_collections(repos: Repos) -> None:
     ]
 
 
-def tasks() -> list[dict]:
-    return yaml_fast.safe_load(CLAUDE_TASKS.read_text())
-
-
-def named(name: str) -> dict:
-    found = [t for t in tasks() if t.get("name") == name]
-    assert len(found) == 1, f"expected one task named {name!r}, found {len(found)}"
-    return found[0]
-
-
-def holds(conditions: list[str], variables: dict) -> bool:
-    """Whether every `when:` condition is true, evaluated by Ansible's Templar."""
-    templar = Templar(loader=DataLoader(), variables=variables)
-    return all(
-        templar.template(trust_as_template("{{ " + c + " }}")) for c in conditions
-    )
-
-
-def test_the_apply_and_the_timer_run_the_same_script_as_the_agent() -> None:
-    """A red task holds the GitOps deployer over the agent's own working state."""
-    task = named(PULL)
-    assert task["ansible.builtin.command"]["argv"] == [
-        "runuser",
-        "-u",
-        "{{ claude_code_agent_user }}",
-        "--",
-        LIVE_SCRIPT,
-        "{{ claude_code_agent_user_clone_dir }}",
-    ]
-    assert task["failed_when"] is False
+def test_the_timer_runs_the_script_as_the_agent() -> None:
+    """The timer runs the script as the clone's owner, which git requires."""
     unit = render_setup_text("claude_code", "claude-clone-sync.service.j2", {})
     assert "User=claude\n" in unit
     assert f"ExecStart={LIVE_SCRIPT} /var/lib/claude/server\n" in unit
-
-
-def test_the_report_fires_when_the_clone_was_left_behind() -> None:
-    conditions = named(REPORT)["when"]
-    base = {
-        "claude_code_agent_user_enabled": True,
-        "ansible_check_mode": False,
-        "inventory_hostname": "unpackaged-host",
-        "claude_code_packaged_hosts": {"agent": ["daniel-box"]},
-    }
-
-    def fires(pull: dict) -> bool:
-        return holds(conditions, base | {"claude_code_agent_clone_pull": pull})
-
-    assert fires({"skipped": True})
-    assert fires({"rc": 1, "stdout": ""})
-    assert fires({"rc": 0, "stdout": "skipped: /c is not on master\n"})
-    assert not fires({"rc": 0, "stdout": "advanced 0123..4567\n"})
-    assert not fires({"rc": 0, "stdout": "up to date at 0123\n"})
-
-
-def test_the_venv_sync_reads_the_fast_forwarded_lock() -> None:
-    names = [t.get("name") for t in tasks()]
-    assert names.index(PULL) < names.index(SYNC)
-
-
-def test_switching_the_agent_off_removes_what_the_drift_stamp_names() -> None:
-    """A fragment left behind names a removed script, and the drift check stays red for good."""
-    main = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    stamp = next(
-        t["vars"]
-        for t in main
-        if t.get("name")
-        == "Record the deployed agent clone sync script for drift checking"
-    )
-    removed = next(
-        t["loop"]
-        for t in main
-        if t.get("name")
-        == "Remove the agent clone sync script when no agent user is switched on"
-    )
-    fragment = (
-        "/var/lib/homelab/setup-deployed-manifest.d/" + stamp["stamp_deployed_name"]
-    )
-    assert fragment in removed
-    for pair in stamp["stamp_deployed_pairs"]:
-        assert pair["live"] in removed

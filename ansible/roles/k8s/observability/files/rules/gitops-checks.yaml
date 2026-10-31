@@ -5,11 +5,14 @@
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# SHADOW UNTIL M6's BATCH B3 CUTOVER-1B. Each rule runs beside the Kuma tile of the same check, so
-# each carries `shadow: "true"` and pages nobody. Severity is `warning` because both tiles notify
-# Discord only. Each pair is `<Check>Failed` and `<Check>NotReporting`, the shape M3 fixed:
-# NotReporting reads the timestamp against the deadline, falls back to absent_over_time over the
-# same deadline, and leaves a dead exporter to the `targets` check.
+# THE FOUR GITHUB RULES PAGE since M6's batch B3 Cutover-1b. They ran with `shadow: "true"` beside
+# the Kuma tiles of the same checks until Cutover-1a deleted those tiles. Severity is `warning`
+# because both tiles notified Discord only. Each pair is `<Check>Failed` and
+# `<Check>NotReporting`, the shape M3 fixed: NotReporting reads the timestamp against the
+# deadline, falls back to absent_over_time over the same deadline, and leaves a dead exporter to
+# the `targets` check. No Alertmanager inhibit is needed: the NotReporting rules carry
+# `unless on (origin) (up{job="node"} == 0)`, and a failure rule has no data once the exporter
+# is gone, so a dead exporter pages as ScrapeTargetDown alone.
 #
 # DECIDED: `service` names the thing checked, not the host that runs the check (operator,
 # 2026-10-23; the same ruling as bridge-exporter.yaml's). Both checks are about the GitHub
@@ -17,7 +20,7 @@
 # gitops_deploy timers are only where the question is asked.
 #
 # Each deadline is the DEADLINE_S its producer renders, which equals the interval of the Kuma tile
-# it shadows. Both literals of a NotReporting rule are pinned to it by
+# the rule replaced. Both literals of a NotReporting rule are pinned to it by
 # ansible/tests/services/test_gitops_check_rule_literals.py (M1 convention 1).
 #
 # The last two rules read the deployer's own `gitops_tick.prom`, which
@@ -30,13 +33,12 @@
 groups:
   - name: gitops-checks
     rules:
-      # Kuma tile "GitHub Ruleset Drift".
+      # Replaced Kuma tile "GitHub Ruleset Drift".
       - alert: GitHubRulesetDrift
         expr: homelab_check_success{check="github-ruleset-drift",origin="daniel-box"} == 0
         labels:
           severity: warning
           service: github
-          shadow: "true"
         annotations:
           summary: The live GitHub rulesets no longer match the values the repo declares.
           description: >-
@@ -56,7 +58,6 @@ groups:
         labels:
           severity: warning
           service: github
-          shadow: "true"
         annotations:
           summary: daniel-box's GitHub ruleset drift check has stopped reporting.
           description: >-
@@ -64,13 +65,12 @@ groups:
             textfile collector, so nothing confirms the merge gate matches the repo. Read
             `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
             /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
-      # Kuma tile "GitHub Interaction Limit".
+      # Replaced Kuma tile "GitHub Interaction Limit".
       - alert: GitHubInteractionLimitNotArmed
         expr: homelab_check_success{check="github-interaction-limit",origin="daniel-box"} == 0
         labels:
           severity: warning
           service: github
-          shadow: "true"
         annotations:
           summary: The repo's GitHub interaction limit was not re-armed.
           description: >-
@@ -89,7 +89,6 @@ groups:
         labels:
           severity: warning
           service: github
-          shadow: "true"
         annotations:
           summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
           description: >-

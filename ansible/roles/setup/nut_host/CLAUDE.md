@@ -9,8 +9,7 @@ The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` mar
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "nut_host"` when `inventory_hostname == ups_host or
   nut_host_secondary_armed | bool`; ends on hosts where `True` (leading `meta: end_role`)
-- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
-  `templates/*.timer.j2`)
+- **Crons / timers:** none (the role ends on every host before its first task)
 <!-- /generated_from -->
 
 ## Where the work went

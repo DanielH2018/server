@@ -200,8 +200,9 @@ def test_no_ansible_ufw_task_adds_a_rule_a_host_package_declares():
     assert not ufw_collisions(ansible, packages)
 
 
-# The hosts whose package carries the SSH rules: daniel-pi since H7.30, daniel-server since H7.31.
-UFW_PACKAGED = ("daniel-pi", "daniel-server")
+# The hosts whose package carries the SSH rules: daniel-pi since H7.30, daniel-server since H7.31
+# and daniel-box since H7.32.
+UFW_PACKAGED = ("daniel-pi", "daniel-server", "daniel-box")
 
 
 @pytest.mark.parametrize("host", HOSTS)

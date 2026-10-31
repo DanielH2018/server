@@ -90,14 +90,6 @@ tests:
             exp_annotations:
               summary: Kuma's Renovate Agent — Alive tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Renovate Agent — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Artifacts Peer Sync, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Artifacts Peer Sync tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Artifacts Peer Sync tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: k3s Telemetry OTLP Door, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's k3s Telemetry OTLP Door tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the k3s Telemetry OTLP Door tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Daniel Pi SD Health, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Daniel Pi SD Health tile is gone and no alert rule pages in its place.
@@ -106,14 +98,6 @@ tests:
             exp_annotations:
               summary: Kuma's Daniel Pi Recovery tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Daniel Pi Recovery tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: GitHub Ruleset Drift, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's GitHub Ruleset Drift tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the GitHub Ruleset Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: GitHub Interaction Limit, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's GitHub Interaction Limit tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the GitHub Interaction Limit tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: CrowdSec Remote Allowlist, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's CrowdSec Remote Allowlist tile is gone and no alert rule pages in its place.
@@ -210,22 +194,6 @@ tests:
             exp_annotations:
               summary: Kuma's Host Packages — Status tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Host Packages — Status tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Arr Auto-Block, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Arr Auto-Block tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Arr Auto-Block tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Cloudflare DDNS Direct, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Cloudflare DDNS Direct tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Cloudflare DDNS Direct tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Cloudflare DDNS Proxied, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Cloudflare DDNS Proxied tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Cloudflare DDNS Proxied tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: WG Pi Peer Backup, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's WG Pi Peer Backup tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the WG Pi Peer Backup tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -269,17 +237,9 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x140'
@@ -328,14 +288,6 @@ tests:
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -385,17 +337,9 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x140'
@@ -444,14 +388,6 @@ tests:
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -510,17 +446,9 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x160'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x160'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x160'
@@ -569,14 +497,6 @@ tests:
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
         values: '1x160'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -628,17 +548,9 @@ tests:
         values: '1x5 _x1700'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x5 _x1700'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x1700'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x1700'
@@ -688,14 +600,6 @@ tests:
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
         values: '1x1700'
-      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
-        values: '1x1700'
     alert_rule_test:
       - alertname: CheckWithoutPager
         eval_time: 24h
@@ -710,9 +614,9 @@ tests:
             exp_annotations:
               summary: Kuma's Docs Refresh tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Docs Refresh tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-  # A tile with a 90000s interval absent for less than its range stays quiet. The two GitHub
-  # tiles and the other 90000s tiles push daily with an hour of slack, so their range is
-  # 2 x 25h + 10m: absent from minute 5, they are quiet at 49h and named after 50h10m.
+  # A tile with a 90000s interval absent for less than its range stays quiet. These tiles push
+  # daily with an hour of slack, so their range is 2 x 25h + 10m: absent from minute 5, they
+  # are quiet at 49h and named after 50h10m.
   - interval: 1m
     input_series:
       - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
@@ -755,18 +659,10 @@ tests:
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x3100'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x3100'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x3100'
-      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
-        values: '1x5 _x3100'
-      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
-        values: '1x5 _x3100'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
@@ -815,14 +711,6 @@ tests:
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
         values: '1x3100'
-      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
-        values: '1x3100'
     alert_rule_test:
       - alertname: CheckWithoutPager
         eval_time: 49h
@@ -830,14 +718,6 @@ tests:
       - alertname: CheckWithoutPager
         eval_time: 50h20m
         exp_alerts:
-          - exp_labels: {monitor_name: GitHub Ruleset Drift, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's GitHub Ruleset Drift tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the GitHub Ruleset Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: GitHub Interaction Limit, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's GitHub Interaction Limit tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the GitHub Interaction Limit tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Secret Rotation, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Secret Rotation tile is gone and no alert rule pages in its place.
@@ -891,17 +771,9 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x140'
@@ -950,14 +822,6 @@ tests:
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
         values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -1027,17 +891,9 @@ tests:
         values: '1x300'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x300'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x300'
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x300'
@@ -1086,14 +942,6 @@ tests:
       - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
         values: '1x300'
     alert_rule_test:
       - alertname: CheckWithoutPager
@@ -1116,133 +964,6 @@ tests:
             exp_annotations:
               summary: Kuma's Loki Read Route (daniel-server) tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Loki Read Route (daniel-server) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-  # A 2.5-day tile absent for less than its range stays quiet. WG Pi Peer Backup has a 216000s
-  # interval, so its range is 2 x 60h + 10m: it reports for the first 2h and then goes quiet, as
-  # after a Kuma restart until its next push. It is quiet at 119h and named after 122h10m. A [2h]
-  # range would have named it at minute 130.
-  - interval: 10m
-    input_series:
-      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="<tile>", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Docs Refresh", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Secret Rotation", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Setup Plane Drift (agent hosts)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Homelab Evals", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-box)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Loki Read Route (daniel-server)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-box)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="UPS Secondary (daniel-server)", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Fake Remux Scan", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Fake Remux Replace", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="MKV Attachment Repair", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="CrowdSec Home Allowlist", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Configarr Sync", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Janitorr Errors", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Arr Auto-Block", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Direct", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Cloudflare DDNS Proxied", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="WG Pi Peer Backup", monitor_type="push"}'
-        values: '1x12 _x748'
-    alert_rule_test:
-      - alertname: CheckWithoutPager
-        eval_time: 119h
-        exp_alerts: []
-      - alertname: CheckWithoutPager
-        eval_time: 125h
-        exp_alerts:
-          - exp_labels: {monitor_name: WG Pi Peer Backup, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's WG Pi Peer Backup tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the WG Pi Peer Backup tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # A Kuma outage (up == 0) fires no term; KumaDown's own pager covers it.
   - interval: 1m
     input_series:

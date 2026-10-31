@@ -41,6 +41,9 @@ _KEYS = (
     "claude_code_agent_gh_token: x\n"
     "claude_code_triage_claude_oauth_token: x\n"
     "authelia_agent_password: x\n"
+    "rkhunter_daniel_box_push_token: x\n"
+    "aide_daniel_box_push_token: x\n"
+    "healthchecks_ping_key: x\n"
 )
 
 DEFAULT_ACCURACY_S = 60  # systemd's AccuracySec when a timer sets none
@@ -61,7 +64,7 @@ EXEMPT = {
     "homelab-claude-agent-browser.timer": "installs the agent's browser pins; never touches k3s",
     "homelab-claude-pipeline-timeline.timer": "joins GitHub, journals and review records; no cluster",
     "homelab-builder.timer": "builds and signs packages; a build during a restart only waits",
-    "Sync peer Claude artifacts": "an ssh pull from daniel-server; reads no cluster state",
+    "homelab-sync-artifacts.timer": "an ssh pull from daniel-server; reads no cluster state",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.
     "CronJob crowdsec */5 * * * *": "home-IP lookup; a missed run is not made up (backoffLimit 0)",
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",
@@ -387,3 +390,10 @@ def test_the_monthly_first_is_outside_the_window():
     first = date(2026, 11, 1)
     assert cron_fires("20 11 1 * *", first) == [11 * 3600 + 20 * 60]
     assert calendar_fires("Mon..Fri *-*-02..31 11:32:00", first) == []
+
+
+def test_a_calendar_with_a_utc_suffix_fires_at_its_clock():
+    # The weekly reboot's timer renders `weekly_reboot_timezone`, which is UTC.
+    assert calendar_fires("Sun *-*-* 07:30:00 UTC", date(2026, 11, 1)) == [
+        7 * 3600 + 30 * 60
+    ]

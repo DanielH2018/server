@@ -207,6 +207,15 @@ def test_the_deleted_b1_tiles_are_not_declared():
     assert "Swallowed Push Verdicts" in declared
 
 
+def test_the_deleted_b3_tiles_are_not_declared():
+    # RED if either tile is declared again: AutoKuma would re-create it beside the
+    # GitHubRulesetDrift* and GitHubInteractionLimit* rules that replace it (M6 batch B3).
+    declared = {e["name"] for e in _entities().values()}
+    assert not declared & {"GitHub Ruleset Drift", "GitHub Interaction Limit"}
+    # Non-vacuity by name: a render that declared nothing would pass the line above.
+    assert "Swallowed Push Verdicts" in declared
+
+
 def test_every_bridge_push_token_reaches_a_push_tile():
     # A row in monitor-bridge's `files/check_table.py` with no tile pushes into nothing:
     # Kuma answers an unknown token with 404 and no monitor ever goes red. Joined on rendered
@@ -344,17 +353,4 @@ def test_the_all_clear_probe_host_fronts_no_route():
         "an IngressRoute now fronts the all-clear probe host, so a longer Host() rule can "
         "outrank the edge self-check path and the probe reads that app's response instead:\n  "
         + "\n  ".join(offenders)
-    )
-
-
-# M6 batch B6a's Cutover-1a deleted these two tiles. Both crons still push into their deleted
-# tokens until Cutover-2, which `KUMA_RETIRING_TAGS` keeps from paging as a rejected push.
-B6A_TILES_DELETED = frozenset({"claude-otel-health.json", "artifacts-sync.json"})
-
-
-def test_the_deleted_b6a_tiles_are_not_declared():
-    declared = B6A_TILES_DELETED & set(_entities())
-    assert not declared, (
-        f"{sorted(declared)} is declared again: B6a's rules page those checks through "
-        "Alertmanager, and a tile would page them a second time (M1 convention 5)"
     )

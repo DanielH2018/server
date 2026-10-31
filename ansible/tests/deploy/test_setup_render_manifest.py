@@ -232,7 +232,6 @@ def test_other_setup_roles_stamp_their_own_artifacts():
         # watch (staged k8s manifests, netplan, fail2ban, the two daniel-pi scripts that are
         # deliberately exempt). That is a bigger change than this test, so it is a known limit,
         # not a silent omission.
-        "ansible/roles/setup/claude_code/tasks/main.yml",
     }
     for rel in sorted(expected):
         text = (_REPO / rel).read_text()

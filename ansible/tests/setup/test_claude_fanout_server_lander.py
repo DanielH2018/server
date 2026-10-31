@@ -17,6 +17,7 @@ Run: uv run pytest ansible/tests/setup/test_claude_fanout_server_lander.py
 
 import re
 
+from _agent_package import render_daniel_server_with
 from _helpers import ANSIBLE, load_yaml
 from _setup_render import render_setup_text
 from fanout_lib import autoland
@@ -77,27 +78,25 @@ def test_the_timer_runs_every_ten_minutes_by_default():
     assert autoland.MAX_STARTS == 2
 
 
-def test_armed_only_on_daniel_box_and_disarming_removes_the_units():
+def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):
     key = "claude_code_fanout_server_lander_enabled"
     assert DEFAULTS[key] is False
     assert load_yaml(HOST_VARS / "daniel-box.yml").get(key) is True
     assert not load_yaml(HOST_VARS / "daniel-server.yml").get(key, False)
 
-    tasks = load_yaml(ROLE / "tasks" / "fanout_server_lander.yml")
-    removal = [
-        t
-        for t in tasks
-        if t.get("ansible.builtin.file", {}).get("state") == "absent"
-        and "claude-fanout-server-lander.timer" in t.get("loop", [])
-    ]
-    assert removal and removal[0]["when"] == f"not {key}", (
-        "disarming must remove the units, or a stale timer keeps landing"
-    )
+    on = render_daniel_server_with(tmp_path / "on", **{key: True})
+    off = render_daniel_server_with(tmp_path / "off", **{key: False})
+    for unit in (
+        "/usr/lib/systemd/system/homelab-claude-fanout-server-lander.timer",
+        "/usr/lib/systemd/system/homelab-claude-fanout-server-lander.service",
+    ):
+        assert unit in on.files
+        assert unit not in off.files, (
+            "disarming must drop the units, or a stale timer keeps running"
+        )
 
 
-def test_the_role_imports_the_tasks_and_the_host_component_ships_both_templates():
-    main = (ROLE / "tasks" / "main.yml").read_text()
-    assert "fanout_server_lander.yml" in main
+def test_the_host_component_ships_both_templates():
     component = (
         ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
     ).read_text()

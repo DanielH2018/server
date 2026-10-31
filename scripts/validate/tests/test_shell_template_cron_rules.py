@@ -36,15 +36,6 @@ def cron_map():
     return ct.cron_job_scripts()
 
 
-def test_cron_job_scripts_resolves_a_dest_rename(cron_map):
-    # claude_code deploys templates/telemetry-health.sh.j2 to
-    # /usr/local/bin/claude-otel-health.sh — the cron `job:` only ever names the dest, so this
-    # must resolve through the template task's `src:`, not assume dest basename == template name.
-    telemetry = v.ROLES / "setup/claude_code/templates/telemetry-health.sh.j2"
-    assert telemetry in cron_map
-    assert cron_map[telemetry].name == "node_crons.yml"
-
-
 def _fixture_role(roles: Path, role_dir: str) -> Path:
     """Write a minimal role at `roles/<role_dir>` that schedules one shell template."""
     role = roles / role_dir
@@ -62,6 +53,17 @@ def _fixture_role(roles: Path, role_dir: str) -> Path:
         "    job: /usr/local/bin/job.sh\n"
     )
     return role / "templates" / "job.sh.j2"
+
+
+def test_cron_job_scripts_resolves_a_dest_rename(tmp_path):
+    # The cron `job:` only ever names the dest, so a template installed under another
+    # basename must resolve through the template task's `src:`.
+    template = _fixture_role(tmp_path, "containers/renamed-role")
+    tasks = template.parents[1] / "tasks" / "main.yml"
+    tasks.write_text(
+        tasks.read_text().replace("/usr/local/bin/job.sh", "/usr/local/bin/renamed.sh")
+    )
+    assert ct.cron_job_scripts(tmp_path)[template] == tasks
 
 
 def test_cron_job_scripts_finds_a_live_role(tmp_path):

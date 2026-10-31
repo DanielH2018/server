@@ -150,7 +150,9 @@ def test_the_ansible_side_finds_the_hardening_task_where_no_map_guards_it(tmp_pa
 
 def test_the_ansible_side_finds_a_lineinfile_task_by_its_path():
     ansible, _ = _tree()
-    assert ("path", "/etc/default/rkhunter") in ansible["daniel-box"]
+    assert ("path", "/home/ubuntu/.config/chezmoi/chezmoi.toml") in ansible[
+        "daniel-box"
+    ]
 
 
 # ── red proofs: fixture roles and packages ────────────────────────────────────────────
