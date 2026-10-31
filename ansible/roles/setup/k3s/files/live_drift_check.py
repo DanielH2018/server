@@ -20,7 +20,7 @@ Instead each object is compared against its OWN `kubectl.kubernetes.io/last-appl
 configuration` annotation, which `kubectl apply` writes and which holds the manifest exactly
 as Ansible last applied it. That is a plain `get` — no dry-run, no write verb, nothing the
 read-only SA cannot do. Nearly every object in scope carries the annotation; the few that
-don't are named in the push message rather than counted here, since that count moves as
+don't are named in the message rather than counted here, since that count moves as
 kinds are added or objects come and go.
 
 WHAT IT COMPARES. Only the keys the applied manifest declares. Everything else on a live
@@ -50,12 +50,9 @@ check itself failed.
 Usage: live-drift-check.py   (takes no arguments; -h/--help prints this text)
 
 Run by kuma-check-live-drift.timer (daily) as the sys_user, installed as
-/usr/local/bin/live-drift-check.py. Environment, set by the unit and its env file
-/etc/rancher/k3s/live-drift-check.env:
+/usr/local/bin/live-drift-check.py. Environment, set by the unit:
   KUBECONFIG     the read-only ServiceAccount kubeconfig kubectl uses
-  KUMA_HOST      Kuma host the verdict is pushed to
-  PUSH_TOKEN     push token of the live-drift monitor
-  BOOT_GRACE_S   exit 1 with no push while uptime is under this many seconds (default 0)
+  BOOT_GRACE_S   exit 1 with no verdict while uptime is under this many seconds (default 0)
   DEADLINE_S     the longest legitimate gap between two textfile writes, in seconds; the unit
                  renders it from k3s_daily_check_deadline_s. Unset, the run writes no textfile
   TEXTFILE_DIR   node_exporter's textfile directory (default /var/lib/node-exporter-textfile)
@@ -79,7 +76,7 @@ HOST_LIB_DIR = os.environ.get("HOST_LIB_DIR", "/opt/live-drift-check")
 if HOST_LIB_DIR not in sys.path:
     sys.path.insert(0, HOST_LIB_DIR)
 
-from host_lib import kuma_push, write_textfile  # noqa: E402
+from host_lib import write_textfile  # noqa: E402
 
 # Deliberately absent below: the read-only SA cannot read this kind (see the module
 # docstring). Named so the run can say so rather than leaving the gap unstated.
@@ -375,7 +372,7 @@ def fetch(kind: str) -> tuple[list[dict], str | None]:
 def verdict(
     drifted: list, unannotated: list, errors: list, server_side: int = 0
 ) -> tuple[int, str]:
-    """Exit code and the one-line message pushed to Kuma.
+    """Exit code and the one-line message the run prints and logs.
 
     A read failure is exit 2, NOT a clean run: a check that cannot read the cluster must not
     report the cluster as clean. Fail closed, the same shape as the CI gate in gitops_deploy.
@@ -383,7 +380,7 @@ def verdict(
     `unannotated` names client-side-applied objects only, so every entry is a real pruning
     risk and the message names them by identity. This replaced an `unannotated[FLOOR:]` slice
     that excused the first two entries BY POSITION: on 2026-09-02 a third entry sorted ahead
-    of the two it meant to excuse, so the push named an innocent object
+    of the two it meant to excuse, so the message named an innocent object
     (grafana-dashboards-infrastructure) and hid the one that had actually arrived.
     """
     if errors:
@@ -437,8 +434,8 @@ def write_check_textfile(
 def record_textfile(code: int, verdict_ts: int) -> None:
     """Write the verdict's textfile, and report a failure on stderr without ending the run.
 
-    Called before `push`, so a slow or refused push cannot age the file. A missing or malformed
-    DEADLINE_S writes nothing: a file with a guessed deadline would hide a wrong schedule.
+    A missing or malformed DEADLINE_S writes nothing: a file with a guessed deadline would hide
+    a wrong schedule.
     """
     try:
         deadline_s = int(os.environ["DEADLINE_S"])
@@ -455,28 +452,21 @@ def record_textfile(code: int, verdict_ts: int) -> None:
         print(f"{CHECK}: textfile write to {directory} failed: {exc}", file=sys.stderr)
 
 
-def push(status: str, message: str) -> None:
-    """Push the result to Uptime Kuma, if a token is configured, and record it in syslog.
+def log_verdict(status: str, message: str) -> None:
+    """Record the verdict in syslog, where `probe.py alerts` and the Alert History board read it.
 
-    The push goes through host_lib.kuma_push, which retries a rollout's 404s the way
-    kuma-push-lib.sh does and logs a skip when no token is configured.
-
-    The syslog line is not a duplicate of the push. Kuma keeps CURRENT state only, so a DOWN
-    that has since recovered leaves no trace there — `probe.py alerts` and the Alert History
-    board reconstruct episodes for host-cron pushers by matching `status=down` in syslog, and
-    without this line this check was invisible to both (2026-08-22 review M3).
-
-    Emitted BEFORE the push and outside the token guard, so it still lands when the push fails
-    or no token is configured — the cases where syslog is the only record there will ever be.
+    Prometheus keeps the textfile's CURRENT state only, so a DOWN that has since recovered
+    leaves no trace there. `probe.py alerts` reconstructs episodes for host crons by matching
+    `status=down` in syslog, and without this line this check was invisible to it (2026-08-22
+    review M3).
 
     NOTICE, not INFO, on the up path. initial_setup's system-tuning.yml sets BOTH
     MaxLevelStore=notice and MaxLevelSyslog=notice on these hosts, so an info-level line is
-    dropped from the journal AND from forwarding to rsyslog — hence never reaches Loki. This
-    ran at LOG_INFO from its creation until 2026-08-29, which made the docstring above false
-    for the up path: the check beat its Kuma tile daily while leaving zero positive record
-    that it had run, so "clean" and "never ran" were indistinguishable in Loki. The sibling
-    host checks all shell out to `logger`, whose default is user.notice, which is why only
-    this one was affected. ENFORCED by test_the_up_path_logs_at_a_level_this_host_stores.
+    dropped from the journal AND from forwarding to rsyslog, hence never reaches Loki. This
+    ran at LOG_INFO from its creation until 2026-08-29, so "clean" and "never ran" were
+    indistinguishable in Loki. The sibling host checks all shell out to `logger`, whose default
+    is user.notice, which is why only this one was affected. ENFORCED by
+    test_the_up_path_logs_at_a_level_this_host_stores.
     """
     syslog.openlog(ident="live-drift-check", facility=syslog.LOG_DAEMON)
     try:
@@ -487,20 +477,12 @@ def push(status: str, message: str) -> None:
     finally:
         syslog.closelog()
 
-    kuma_push(
-        status,
-        message,
-        os.environ.get("KUMA_HOST", ""),
-        os.environ.get("PUSH_TOKEN", ""),
-        log=lambda line: print(f"live-drift-check: {line}", file=sys.stderr),
-    )
-
 
 def boot_grace_active(uptime_s: float | None, grace_s: int) -> bool:
-    """True when the host booted less than `grace_s` ago, so this run should push nothing.
+    """True when the host booted less than `grace_s` ago, so this run should report nothing.
 
-    The Python twin of kuma-push-lib.sh's `boot_grace_active`. A `Persistent=true` catch-up
-    run lands seconds after boot, while k3s is still starting, and would push a false down.
+    The Python twin of homelab-check-lib.sh's `boot_grace_active`. A `Persistent=true` catch-up
+    run lands seconds after boot, while k3s is still starting, and would write a false down.
     The caller exits 1 without a verdict instead, and the timer's Restart=on-failure reruns
     it once the grace has passed. Fails open: an unreadable clock (`uptime_s` None) or a zero
     grace runs the check.
@@ -519,15 +501,15 @@ def host_uptime_s() -> float | None:
 
 
 def main() -> int:
-    """Fetch every in-scope object, compare it to its last-applied baseline, and push to Kuma.
+    """Fetch every in-scope object, compare it to its last-applied baseline, and record the verdict.
 
     Prints each drifted object's diff, each unannotated object, and each fetch error to
-    stderr, then a one-line summary to stdout. Pushes "up"/"down" plus `verdict`'s message to
-    Kuma. Returns `verdict`'s exit code: 0 clean, 2 on a read failure (fail closed — a check
-    that can't read the cluster must not report it clean), otherwise the drift/unannotated
-    verdict.
+    stderr, then a one-line summary to stdout. Writes the textfile and logs "up"/"down" plus
+    `verdict`'s message to syslog. Returns `verdict`'s exit code: 0 clean, 2 on a read failure
+    (fail closed — a check that can't read the cluster must not report it clean), otherwise the
+    drift/unannotated verdict.
 
-    Exits 1 without pushing when the host is inside BOOT_GRACE_S seconds of boot (set by the
+    Exits 1 without a verdict when the host is inside BOOT_GRACE_S seconds of boot (set by the
     timer unit); the timer's Restart=on-failure reruns it once the cluster is up.
     """
     grace_s = int(os.environ.get("BOOT_GRACE_S", "0") or 0)
@@ -566,7 +548,7 @@ def main() -> int:
     )
 
     record_textfile(code, int(time.time()))
-    push("up" if code == 0 else "down", message)
+    log_verdict("up" if code == 0 else "down", message)
     return code
 
 

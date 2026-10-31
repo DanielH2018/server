@@ -27,7 +27,6 @@ WIRED_SLUGS = frozenset(
     {
         "longhorn-backup-health",
         "daniel-box-disk-health",
-        "uptime-kuma-alive",
         "alertmanager-watchdog",
         "manifest-prune-check",
         "etcd-snapshot-offbox",

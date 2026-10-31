@@ -259,7 +259,7 @@ def test_other_longhorn_kinds_stay_foreign():
 
 
 def test_boot_grace_holds_the_run_just_after_boot():
-    # 12s of uptime is the just-booted case: the check must push nothing and exit 1 so the
+    # 12s of uptime is the just-booted case: the check must report nothing and exit 1 so the
     # kuma-check timer reruns it once the cluster is up.
     assert ldc.boot_grace_active(12.0, 420) is True
 
@@ -383,7 +383,7 @@ def test_a_read_failure_outranks_a_clean_comparison():
 
 # ── the syslog line has to survive the host's own journald cap ──────────────────────────
 #
-# push()'s docstring says its syslog line is what makes this check visible to `probe.py
+# log_verdict()'s docstring says its syslog line is what makes this check visible to `probe.py
 # alerts` and the Alert History board. That is only true if the level it logs at is one the
 # host actually stores.
 #
@@ -426,46 +426,45 @@ def test_the_cap_is_readable_from_the_ansible_source():
     assert _journald_store_cap() == _SEVERITY["notice"]
 
 
-def _level_push_uses(status: str, monkeypatch) -> int:
-    """The severity push() actually hands to syslog for `status`.
+def _level_log_verdict_uses(status: str, monkeypatch) -> int:
+    """The severity log_verdict() actually hands to syslog for `status`.
 
-    Calls the real push(). Asserting a literal here instead would be the guard-scope trap
+    Calls the real log_verdict(). Asserting a literal here instead would be the guard-scope trap
     this whole file's newest tests exist to avoid: it would stay green if the code went back
     to LOG_INFO, because it would be testing the constant rather than the caller's choice.
-    push() returns before any network work when PUSH_TOKEN/KUMA_HOST are unset.
     """
     seen: list[int] = []
     monkeypatch.setattr(ldc.syslog, "openlog", lambda **kwargs: None)
     monkeypatch.setattr(ldc.syslog, "closelog", lambda: None)
     monkeypatch.setattr(ldc.syslog, "syslog", lambda level, msg: seen.append(level))
-    monkeypatch.delenv("PUSH_TOKEN", raising=False)
-    monkeypatch.delenv("KUMA_HOST", raising=False)
-    ldc.push(status, "message")
+    ldc.log_verdict(status, "message")
     assert len(seen) == 1, f"expected exactly one syslog line, got {len(seen)}"
     return seen[0]
 
 
 def test_the_up_path_logs_at_a_level_this_host_stores(monkeypatch):
-    assert _level_push_uses("up", monkeypatch) <= _journald_store_cap(), (
+    assert _level_log_verdict_uses("up", monkeypatch) <= _journald_store_cap(), (
         "the up-path syslog line is logged below the host's MaxLevelStore, so it is dropped "
-        "from the journal and from forwarding to rsyslog — the check beats its Kuma tile "
+        "from the journal and from forwarding to rsyslog — the check writes its textfile "
         "while leaving no positive record it ran"
     )
 
 
 def test_the_down_path_logs_at_a_level_this_host_stores(monkeypatch):
     # The down line is what `probe.py alerts` matches on to reconstruct episodes.
-    assert _level_push_uses("down", monkeypatch) <= _journald_store_cap()
+    assert _level_log_verdict_uses("down", monkeypatch) <= _journald_store_cap()
 
 
 def test_the_two_paths_are_not_the_same_level(monkeypatch):
     # down must outrank up, or the severity carries no information.
-    assert _level_push_uses("down", monkeypatch) < _level_push_uses("up", monkeypatch)
+    assert _level_log_verdict_uses("down", monkeypatch) < _level_log_verdict_uses(
+        "up", monkeypatch
+    )
 
 
 def test_info_would_not_survive_this_cap():
     # The rejecting half: proves the assertions above are discriminating rather than trivially
-    # true of every level. Reverting push() to LOG_INFO makes the up-path test fail, and this
+    # true of every level. Reverting log_verdict() to LOG_INFO makes the up-path test fail, and this
     # is what says so. If this ever passes, the cap moved and that guard stopped testing.
     assert syslog.LOG_INFO > _journald_store_cap()
 
