@@ -28,6 +28,10 @@ claude_code_packaged_hosts:
   rootq: [daniel-box]
   agent: [daniel-box]
 
+# Where the alerts the role still installs keep their webhook file: the memory sync, the
+# server-batch lander and the pipeline timeline. The claude-code component retires /etc/claude-rc.
+claude_code_alert_env_dir: /etc/claude-code-alerts
+
 # The service hands anything holding the claude.ai account a session on the k3s
 # control-plane node, and it depends on a prerequisite Ansible cannot check: whether a
 # phone-spawned worktree clears the workspace-trust dialog, which nobody can answer remotely.

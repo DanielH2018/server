@@ -28,7 +28,7 @@
     alert_unit_name: claude-pipeline-timeline
     alert_unit_description: Alert when the pipeline timeline snapshot fails
     alert_unit_message: "claude-pipeline-timeline failed on {{ inventory_hostname }}: GitHub or the journal could not be read, so a day of the journal inputs to the PR timeline may rotate away unsaved. Check `journalctl -u claude-pipeline-timeline`."
-    alert_unit_env_dir: /etc/claude-rc
+    alert_unit_env_dir: "{{ claude_code_alert_env_dir }}"
 
 - name: Enable and start the pipeline timeline timer
   tags: [claude_code]

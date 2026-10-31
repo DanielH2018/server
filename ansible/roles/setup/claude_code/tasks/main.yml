@@ -195,6 +195,18 @@
     mode: "0750"
   become: true
 
+# The webhook directory of the alerts the role still installs. Not /etc/claude-rc, which the
+# claude-code component retires on a host whose package ships the Remote Control host.
+- name: Ensure the config directory of the role's remaining alerts exists
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ claude_code_alert_env_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
 # OnFailure target, which pages Discord if the host dies, and once per
 # claude_code_rc_alert_quiet_minutes through the restart loop a login that is dead at start
 # causes (#4676). What it CANNOT catch is a login that dies while the host is registered:
@@ -409,7 +421,6 @@
   when: claude_code_memory_sync_enabled
   notify: Reload systemd for claude_code
 
-# Shares claude-rc's webhook file in /etc/claude-rc; rewriting it here changes nothing.
 - name: Install the memory store copy failure alert
   tags: [claude_code]
   when: claude_code_memory_sync_enabled
@@ -418,7 +429,7 @@
     alert_unit_name: claude-memory-sync
     alert_unit_description: Alert when the Claude memory store copy fails
     alert_unit_message: "claude-memory-sync failed on {{ inventory_hostname }}: sessions on {{ claude_code_memory_sync_target }} keep reading a stale memory store. Check `journalctl -u claude-memory-sync`."
-    alert_unit_env_dir: /etc/claude-rc
+    alert_unit_env_dir: "{{ claude_code_alert_env_dir }}"
 
 - name: Enable and start the memory store copy timer
   tags: [claude_code]

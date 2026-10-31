@@ -179,7 +179,7 @@ def test_each_message_renders_a_valid_json_payload() -> None:
             "content": f"{opening}{message} {label} 2026-10-08 11:04 UTC."
         }, f"{name}: the message does not survive as the JSON payload's content"
         assert (
-            f"EnvironmentFile={variables['alert_unit_env_dir']}/alert-webhook.env"
+            f"EnvironmentFile={resolved['alert_unit_env_dir']}/alert-webhook.env"
             in unit
         )
 

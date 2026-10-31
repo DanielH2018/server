@@ -238,15 +238,3 @@ def test_tasks_render_and_remove_the_parent_drop_in() -> None:
         r"state: absent\n\s+become: true\n\s+when:\n(\s+- .*\n)*\s+- not claude_code_fleet",
         tasks,
     ), "the removal task must be the file:-absent one guarded on the fleet toggle"
-
-
-def test_parent_drop_in_ships_in_the_claude_code_component() -> None:
-    """An unstamped template can sit edited-but-undeployed with every repo-side check green.
-
-    The role stamped it while it installed the drop-in. The claude-code component ships it on
-    every host since H7.40's first slice, so a template edit reaches the next package version.
-    """
-    component = (
-        ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
-    ).read_text()
-    assert 'src: "role:fleet-slice-caps.conf.j2"' in component

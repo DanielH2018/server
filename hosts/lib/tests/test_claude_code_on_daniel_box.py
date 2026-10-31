@@ -2,14 +2,16 @@
 
 The component renders the claude_code role's templates in place, and the role still applies to
 daniel-box for the subjects later slices move. These tests hold the two writers apart: every
-role task that writes a template or file the package ships skips daniel-box through
-`claude_code_packaged_hosts`, and the agent's uid comes from each host's own package.yml.
+role task that writes a template or file the package ships, or a path the package retires,
+skips daniel-box through `claude_code_packaged_hosts`, and the agent's uid comes from each
+host's own package.yml.
 
 Run: uv run pytest hosts/lib/tests/test_claude_code_on_daniel_box.py
 """
 
 import json
 import re
+from dataclasses import dataclass
 
 import pytest
 import yaml
@@ -100,6 +102,39 @@ def test_each_hosts_users_entry_names_its_live_uid_and_follows_the_agent_toggle(
 # ── the role skips what the package ships ───────────────────────────────────────────────────
 
 
+DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+# The common task files the role imports, and the path each writes from the caller's vars.
+COMMON_WRITES = {
+    "common/tasks/alert_unit.yml": lambda v: (
+        f"{v['alert_unit_env_dir']}/alert-webhook.env"
+    ),
+    "common/tasks/stamp_render.yml": lambda v: (
+        f"/var/lib/homelab/setup-render-manifest.d/{v['stamp_render_name']}"
+    ),
+    "common/tasks/stamp_deployed.yml": lambda v: (
+        f"/var/lib/homelab/setup-deployed-manifest.d/{v['stamp_deployed_name']}"
+    ),
+}
+WRITE_MODULES = ("template", "copy", "file")
+
+
+@dataclass(frozen=True)
+class Write:
+    task: str
+    src: str
+    dest: str
+    guarded: bool
+
+
+def _resolve(text: str, item: object = None) -> str:
+    """`text` with `{{ item }}` and each `{{ <role default> }}` filled in, other braces kept."""
+    if item is not None:
+        text = text.replace("{{ item }}", str(item))
+    return re.sub(
+        r"\{\{ (\w+) \}\}", lambda m: str(DEFAULTS.get(m.group(1), m.group(0))), text
+    )
+
+
 def _local_import(task: dict) -> str | None:
     for key in ("ansible.builtin.import_tasks", "ansible.builtin.include_tasks"):
         target = task.get(key)
@@ -110,24 +145,34 @@ def _local_import(task: dict) -> str | None:
     return None
 
 
-def _sources(task: dict) -> list[str]:
-    module = task.get("ansible.builtin.template") or task.get("ansible.builtin.copy")
-    if not isinstance(module, dict) or module.get("remote_src") or "src" not in module:
+def _writes(task: dict, guarded: bool) -> list[Write]:
+    name = task.get("name", "")
+    target = str(task.get("ansible.builtin.import_tasks", ""))
+    for common, dest in COMMON_WRITES.items():
+        if target.endswith(common):
+            return [Write(name, "", _resolve(dest(task.get("vars") or {})), guarded)]
+    modules = [task.get(f"ansible.builtin.{m}") for m in WRITE_MODULES]
+    module = next((m for m in modules if isinstance(m, dict)), None)
+    if module is None:
         return []
-    src = str(module["src"])
     loop = task.get("loop")
-    if "{{ item }}" in src and isinstance(loop, list):
-        return [src.replace("{{ item }}", str(item)) for item in loop]
-    return [] if "{{" in src else [src]
+    found = []
+    for item in loop if isinstance(loop, list) else [None]:
+        src = (
+            ""
+            if module.get("remote_src")
+            else _resolve(str(module.get("src", "")), item)
+        )
+        dest = _resolve(str(module.get("dest", module.get("path", ""))), item)
+        found.append(Write(name, "" if "{{" in src else src, dest, guarded))
+    return found
 
 
-def role_writers(
-    tasks: list[dict], guarded: bool = False
-) -> list[tuple[str, str, bool]]:
-    """`(task name, src, guarded)` for each template or copy task reached from `tasks`.
+def role_writers(tasks: list[dict], guarded: bool = False) -> list[Write]:
+    """Each template, copy, file or common-file write reached from `tasks`.
 
-    A task is guarded when its own `when:`, or that of an enclosing block or import, names
-    `claude_code_packaged_hosts`.
+    A write is guarded when its task's own `when:`, or that of an enclosing block or import,
+    names `claude_code_packaged_hosts`.
     """
     found = []
     for task in tasks:
@@ -138,8 +183,7 @@ def role_writers(
             found += role_writers(
                 yaml.safe_load((ROLE / "tasks" / name).read_text()), here
             )
-        for src in _sources(task):
-            found.append((task.get("name", ""), src, here))
+        found += _writes(task, here)
     return found
 
 
@@ -155,18 +199,30 @@ def packaged_sources() -> set[str]:
     return found
 
 
-def unguarded(writers: list[tuple[str, str, bool]], shipped: set[str]) -> list[str]:
+def unguarded(writers: list[Write], shipped: set[str]) -> list[str]:
     return sorted(
-        f"{name}: {src}"
-        for name, src, guarded in writers
-        if src in shipped and not guarded
+        f"{w.task}: {w.src}" for w in writers if w.src in shipped and not w.guarded
     )
 
 
+def retired_writes(writers: list[Write], retired: set[str]) -> list[str]:
+    """Each unguarded write at, or under, a path the package retires."""
+    return sorted(
+        f"{w.task}: {w.dest}"
+        for w in writers
+        if not w.guarded
+        and any(w.dest == path or w.dest.startswith(f"{path}/") for path in retired)
+    )
+
+
+def main_writers() -> list[Write]:
+    return role_writers(yaml.safe_load((ROLE / "tasks" / "main.yml").read_text()))
+
+
 def test_the_role_skips_on_daniel_box_every_file_the_package_ships():
-    writers = role_writers(yaml.safe_load((ROLE / "tasks" / "main.yml").read_text()))
+    writers = main_writers()
     shipped = packaged_sources()
-    reached = {src for _, src, _ in writers} & shipped
+    reached = {w.src for w in writers} & shipped
     assert {
         "claude-rc.service.j2",
         "fleet-slice-caps.conf.j2",
@@ -180,8 +236,39 @@ def test_the_role_skips_on_daniel_box_every_file_the_package_ships():
     assert unguarded(writers, shipped) == []
 
 
+def test_the_role_writes_nothing_on_daniel_box_that_its_package_retires(box):
+    writers = main_writers()
+    retired = {entry["path"] for entry in box.legacy if "path" in entry}
+    # The webhooks and the stamps reach the census only through the common imports.
+    assert "/etc/claude-rc" in retired
+    assert retired_writes(writers, retired) == []
+    webhook = "alert-webhook" + ".env"
+    assert {
+        f"/etc/claude-rc/{webhook}",
+        "/etc/claude-rc",
+        "/var/lib/homelab/setup-render-manifest.d/claude-code-ansible",
+    } <= {w.dest for w in writers}
+
+
 TASK = {"name": "Install it", "ansible.builtin.template": {"src": "x.j2", "dest": "/x"}}
 SKIP_BOX = f"inventory_hostname not in {GUARD}['x']"
+ALERT = {
+    "name": "Page it",
+    "ansible.builtin.import_tasks": "{{ role_path }}/../common/tasks/alert_unit.yml",
+    "vars": {"alert_unit_env_dir": "/etc/old"},
+}
+
+
+def test_an_unguarded_alert_writing_under_a_retired_directory_is_reported():
+    assert retired_writes(role_writers([ALERT]), {"/etc/old"}) == [
+        "Page it: /etc/old/alert-webhook" + ".env"
+    ]
+
+
+def test_a_guarded_alert_or_one_outside_every_retired_path_is_clean():
+    guarded = {**ALERT, "when": SKIP_BOX}
+    assert retired_writes(role_writers([guarded]), {"/etc/old"}) == []
+    assert retired_writes(role_writers([ALERT]), {"/etc/older"}) == []
 
 
 def test_a_role_task_writing_a_packaged_file_without_the_guard_is_reported():
