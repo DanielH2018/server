@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-10-29 18:17 UTC
-generated_sha: 7c54cb69d3
+generated_at: 2026-10-31 18:17 UTC
+generated_sha: 224a2ac08b
 ---
 
 !!! warning "Generated file — do not edit"
@@ -22,19 +22,19 @@ generated_sha: 7c54cb69d3
 | B2 backup budget listing | `20 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | B2 deletion accounting | `10 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Claude Code telemetry health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/claude_code/tasks/node_crons.yml` |
-| Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Clean unused Docker images | `30 6 * * *` | conditional (inventory_hostname not in initial_setup_packaged_hosts['main) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Full etcd restore drill in a throwaway guest | `20 11 1 * *` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/hypervisor/tasks/etcd_drill.yml` |
 | Longhorn backup health | `*/10 * * * *` | every host in the play | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Longhorn filesystem trim | `10 6 * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Off-box etcd snapshot | `45 2 * * *` | every host in the play | `root` | yes (snapshot) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Release staleness drift check | `*/30 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Sync peer Claude artifacts | `*/5 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/claude_code/tasks/node_crons.yml` |
-| Weekly AIDE file integrity check | `0 3 * * 1` | every host in the play | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
-| Weekly apt autoremove | `0 2 * * 0` | every host in the play | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
-| Weekly dpkg purge orphaned configs | `15 2 * * 0` | every host in the play | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
-| Weekly firmware update | `0 7 * * 0` | conditional (initial_setup_fwupdmgr.stat.exists) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Weekly rkhunter malware scan | `0 2 * * 3` | every host in the play | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
-| Weekly system restart | `30 7 * * 0` | every host in the play | `root` | yes (reboot, restart) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Weekly AIDE file integrity check | `0 3 * * 1` | conditional (inventory_hostname not in initial_setup_packaged_hosts['fail) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
+| Weekly apt autoremove | `0 2 * * 0` | conditional (inventory_hostname not in initial_setup_packaged_hosts['main) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
+| Weekly dpkg purge orphaned configs | `15 2 * * 0` | conditional (inventory_hostname not in initial_setup_packaged_hosts['main) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
+| Weekly firmware update | `0 7 * * 0` | conditional (inventory_hostname not in initial_setup_packaged_hosts['main) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Weekly rkhunter malware scan | `0 2 * * 3` | conditional (inventory_hostname not in initial_setup_packaged_hosts['fail) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
+| Weekly system restart | `30 7 * * 0` | conditional (inventory_hostname not in initial_setup_packaged_hosts['main) | `root` | yes (reboot, restart) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | daniel-box disk health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | etcd restore drill | `20 10 * * 1` | conditional (has_repo_checkout) | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | fake-remux health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/fake_remux/tasks/main.yml` |
