@@ -12,7 +12,10 @@
 #   ping, so the Healthchecks.io deadman pages.
 # - homelab-docker-prune, on a `has_docker` host, prunes images, containers and build cache older
 #   than a week and pings `<host>-docker-prune` on success. A failed prune pings nothing.
-# - The firmware update is not here yet. Only daniel-box has fwupd, so its PR adds the timer.
+# - homelab-firmware-update, on a `has_fwupd` host (daniel-box alone, since H7.32), runs the same
+#   wrapper's `firmware-update` job: fwupdmgr refreshes its metadata and stages any update, and the
+#   weekly reboot 30 minutes later commits it. It writes the `firmware-update` textfile the
+#   FirmwareUpdateNotReporting rule reads.
 #
 # The schedules render from the variables the old crons read: `weekly_reboot_*` in group_vars,
 # which uptime-kuma's maintenance window also reads, and the role's
@@ -24,16 +27,16 @@
 #
 # Autonomous-role contract (each job runs with no human in the loop).
 #
-# - Scope / exclusions: reboot this host, remove orphaned packages and the config remnants of
-#   removed ones, and prune unused Docker objects older than a week. None edits the repository, the
+# - Scope / exclusions: reboot this host, stage firmware updates, remove orphaned packages and the
+#   config remnants of removed ones, and prune unused Docker objects older than a week. None edits the repository, the
 #   cluster or another host.
 # - Mode (explicit and reversible): each timer's enable link arms it; dropping the component, or
-#   `has_docker` for the prune, stops the timer on the install that drops it.
+#   `has_docker` for the prune or `has_fwupd` for the firmware update, stops the timer on the install that drops it.
 # - Abort valves: the reboot refuses on reconcile's validation flag; a failed prune leaves its
 #   Healthchecks.io ping unsent.
-# - Required evidence: a `weekly-restart`, `apt-autoremove`, `dpkg-purge` or `docker-prune` line in
-#   the journal, the Healthchecks.io checks for the reboot and the prune, and the `apt-autoremove`
-#   and `dpkg-purge` textfiles.
+# - Required evidence: a `weekly-restart`, `apt-autoremove`, `dpkg-purge`, `fwupd-auto` or
+#   `docker-prune` line in the journal, the Healthchecks.io checks for the reboot and the prune, and
+#   the `apt-autoremove`, `dpkg-purge` and `firmware-update` textfiles.
 role: initial_setup
 files:
   - {src: "role-file:host-maintenance.sh", dst: /usr/lib/homelab/host-maintenance, mode: "0755"}
@@ -44,6 +47,8 @@ files:
   - {src: templates/homelab-reboot.j2, dst: /usr/lib/homelab/homelab-reboot, mode: "0755"}
   - {src: units/homelab-reboot.service, dst: /usr/lib/systemd/system/homelab-reboot.service}
   - {src: units/homelab-reboot.timer.j2, dst: /usr/lib/systemd/system/homelab-reboot.timer}
+  - {src: units/homelab-firmware-update.service, dst: /usr/lib/systemd/system/homelab-firmware-update.service, when: has_fwupd}
+  - {src: units/homelab-firmware-update.timer, dst: /usr/lib/systemd/system/homelab-firmware-update.timer, when: has_fwupd}
   - {src: templates/docker-prune.j2, dst: /usr/lib/homelab/docker-prune, mode: "0755", when: has_docker}
   - {src: units/homelab-docker-prune.service.j2, dst: /usr/lib/systemd/system/homelab-docker-prune.service, when: has_docker}
   - {src: units/homelab-docker-prune.timer.j2, dst: /usr/lib/systemd/system/homelab-docker-prune.timer, when: has_docker}
@@ -52,6 +57,7 @@ enable:
   homelab-dpkg-purge.timer: timers.target
   homelab-reboot.timer: timers.target
   homelab-docker-prune.timer: {target: timers.target, when: has_docker}
+  homelab-firmware-update.timer: {target: timers.target, when: has_fwupd}
 legacy:
   - {cron: "Weekly apt autoremove", user: root}
   - {cron: "Weekly dpkg purge orphaned configs", user: root}
@@ -59,3 +65,5 @@ legacy:
   # Root's crontab, not sys_user's: the task named `ansible_facts.user_id`, which the escalated fact
   # gather (ansible/pre_tasks/load_secrets.yml) resolves to root.
   - {cron: "Clean unused Docker images", user: root}
+# The firmware cron's legacy entry sits in each `has_fwupd` host's package.yml, because a legacy
+# entry carries no `when:`, and a cron the role never wrote is not legacy anywhere else.
