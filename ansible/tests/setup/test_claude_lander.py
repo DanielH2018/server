@@ -16,11 +16,12 @@ import shlex
 
 import pytest
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import render_setup_text, role_context
 from deploy_tools.land_lib import handoff, options, policy
 from fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
+from lib.ansible_jinja_env import template_env
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 UNIT = "claude-land@.service.j2"
@@ -45,9 +46,11 @@ def lander_block() -> dict:
 
 
 def pins() -> dict[str, str]:
-    """The literal values claude-land-pins.j2 sets, by name."""
-    text = (ROLE / "templates" / PINS).read_text()
-    return dict(re.findall(r'\{%- set (\w+) = "([^"]*)" -%\}', text))
+    """What claude-land-pins.j2 exports to the templates that import it, by name."""
+    env = template_env(ROLE / "templates")
+    module = env.get_template(PINS).make_module(role_context(ROLE))
+    names = ("unit", "checkout", "branch_prefix", "author", "agent_user", "approver")
+    return {name: getattr(module, name) for name in names}
 
 
 def tasks() -> list[dict]:
