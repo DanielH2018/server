@@ -160,14 +160,17 @@ def test_notification_configs_declare_apply_existing():
 # Cutover-a1. `HostDiskFull` and the five `UPS*` rules are critical, so Alertmanager mails them
 # once A1's Cutover-b drops `shadow`.
 #
+# M6 batch B1's two critical tiles, k3s Longhorn Backup and Off-box etcd Snapshot, left it the same
+# way in Cutover-1a. `LonghornBackupHealthFailed`, `EtcdSnapshotOffboxFailed` and the two
+# `NotReporting` rules are critical, so Alertmanager mails them once B1's Cutover-1b drops
+# `shadow`.
+#
 # M6 batch B8's three tiles on the tier, Homelab Edge (all-clear), k3s Mosquitto (VIP) and
 # Pi-hole k8s DNS, left it with the other 12 probe tiles in Cutover-a1. The edge probe's rule
 # `ExtraProbeFailedCritical` is critical, and so are the Mosquitto and Pi-hole probes while their
 # entries are home-critical, so Alertmanager mails them once B8's Cutover-b drops `shadow`.
 EMAIL_TIER = {
-    "k3s Longhorn Backup",
     "Daniel Pi SD Health",
-    "Off-box etcd Snapshot",
     "etcd Restore Drill (full)",
     "B2 Reachable",
     "B2 Free Tier Headroom",
@@ -187,6 +190,21 @@ EMAIL_TIER = {
 
 # A heartbeat window no tile holds, for the render that reveals which tiles the variable moves.
 _WINDOW_PROBE_S = 7777
+
+
+def test_the_deleted_b1_tiles_are_not_declared():
+    # M6 batch B1's Cutover-1a deleted these five hand-written tiles. RED if one is declared
+    # again: AutoKuma would re-create it, and its producer (still pushing until Cutover-2)
+    # would feed a tile whose rule already pages from Alertmanager.
+    declared = {e["name"] for e in _entities().values()}
+    assert not declared & {
+        "k3s Longhorn Backup",
+        "Off-box etcd Snapshot",
+        "Manifest Prune Drift",
+        "Release Staleness Drift",
+        "Live Object Drift",
+    }
+    assert "Swallowed Push Verdicts" in declared
 
 
 def test_every_bridge_push_token_reaches_a_push_tile():
