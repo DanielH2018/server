@@ -78,6 +78,8 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `configarr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.
+  The patch passes `--field-manager=configarr-health`: under kubectl's default `kubectl-patch`
+  manager, Flux's apply dropped the annotations every 10 minutes (#6746).
   kube-state-metrics exports the verdict, and the `pod-producers` shadow rules read it. A
   failed export makes the reader exit 1, which also fails its gate Job.
 - **The health pod carries `app: configarr-health`, never `app: configarr`.** The reader judges
