@@ -83,8 +83,8 @@ spec:
               readOnly: true
           # 1 core, not 200m — same burst-shaped poller as autofix-bridge, throttled on
           # 10.7-16.2% of CFS periods across six pod generations (2026-08-29). This is also
-          # the workload whose own CPU Throttling check documents why the period ratio alone
-          # is a poor signal for exactly these sidecars; `CPU_MIN_THROTTLED_CORES` is the
+          # the workload whose own `ContainerCPUThrottled` rule documents why the period ratio
+          # alone is a poor signal for exactly these sidecars; its 0.05-core floor is the
           # floor that keeps it from paging about itself, and raising the ceiling here moves
           # the underlying condition rather than the threshold.
 {{ container_resources(cpu_limit='1', mem_limit='96Mi', cpu_request='20m', mem_request='32Mi') }}

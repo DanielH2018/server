@@ -123,7 +123,7 @@ def check_pvc_fullness(cfg: Config, src: Sources) -> tuple[bool, str]:
     fixed capacity, so a 2 Gi claim can reach 100% while both hosts report hundreds of GB free:
     the app starts failing writes and every existing monitor stays green.
 
-    Reads the CLUSTER Prometheus like check_restarts, so it belongs to CLUSTER_DEPENDENT
+    Reads the CLUSTER Prometheus like check_longhorn_volumes, so it belongs to CLUSTER_DEPENDENT
     rather than PROM_DEPENDENT — the gate has to be the one watching this check's own source.
 
     `max by (namespace, persistentvolumeclaim)` — not `sum` or `avg` — so a claim reads as one

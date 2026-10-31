@@ -62,7 +62,7 @@ def test_the_gate_rows_are_the_three_gates_with_the_probes_run_once_uses():
 
 
 def test_every_gate_set_is_its_column():
-    assert {"disk", "restarts", "etcd_db_size"} <= gates.PROM_DEPENDENT
+    assert {"disk", "memory", "etcd_db_size"} <= gates.PROM_DEPENDENT
     assert gates.STARTUP_GRACE == {
         row.name for row in CHECKS if row.gate == "startup_grace"
     }
@@ -93,7 +93,7 @@ def test_the_deploy_reads_every_field_but_fn_off_each_row():
         for f in dataclasses.fields(PushCheck)
         if f.default is not dataclasses.MISSING
     }
-    assert len(parsed) == len(CHECKS) >= 34
+    assert len(parsed) == len(CHECKS) >= 31
     for row, read in zip(CHECKS, parsed, strict=True):
         expected = dataclasses.asdict(row)
         del expected["fn"]

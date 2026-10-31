@@ -91,20 +91,6 @@ checks each gate suppresses.
   only exists once somebody has logged in since boot. **Empty disables the whole arm.** The full
   threshold derivation, settled against 5.8 days of history that included both cgroups hitting
   their MemoryHigh caps (#1288), is at `CLAUDE_CGROUP_STALL_MAX_PCT` in `bridge/config_host.py`.
-- **k3s Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
-- **k3s Container OOM** (`increase(container_oom_events_total[1h]) by (name)` — names the
-  offender; supersedes the old host-aggregate OOM that lived in the Memory check)
-- **k3s CPU Throttling** (throttled/total CFS *periods* `> CPU_THROTTLE_PCT` **and** throttled
-  *seconds*/s `> CPU_MIN_THROTTLED_CORES`, by name. It catches a container pinned at its
-  `deploy.resources` CPU cap, which throttles silently without OOM, restart or 5xx. The cores floor
-  (the volume-floor idea of Traefik's `TRAEFIK_MIN_RPS`) is essential: the period ratio alone runs
-  30-90% for tiny low-limit sidecars that briefly burst over their slice while losing negligible
-  absolute CPU, a perpetual false `down`, which Kuma renders as "No heartbeat in the time window"
-  because only `up` pushes satisfy a push monitor's watchdog. Unlimited containers give 0/0→NaN
-  and are ignored. `CPU_CONSECUTIVE` (3) adds hysteresis on top of both gates: only the third
-  consecutive breaching cycle (~15 min) pushes `down`, shorter bursts push `up` with a "throttling
-  streak n/3" `msg` naming the offender, and a clean cycle resets the streak, so one-cycle blips
-  (flaresolverr solving a challenge, homepage hugging the cores floor) never page.)
 - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure streak**.
   n8n does not save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to bound
   `database.sqlite` and its B2 backup churn), so "consecutive" cannot be read from one snapshot.
@@ -154,7 +140,7 @@ checks each gate suppresses.
   Sonarr's and Radarr's API keys, in its config on the `bazarr-config` PVC and entered through its
   UI, so no Ansible template carries them and no deploy updates them. The 2026-08-29 key rotation
   swept the eight templated consumers and missed bazarr, which reconnect-looped, leaked to its 1Gi
-  cap and was OOM-killed, and the only signal was the "k3s Container OOM" tile, which clears one
+  cap and was OOM-killed, and the only signal was the `k3s Container OOM` tile (now `ContainerOOMKilled`), which clears one
   hour after the kill. Sonarr's and Radarr's own stale keys surface immediately as failing
   exportarr scrapes, and bazarr had nothing.
   The peer-version fields are the detector: bazarr fills `sonarr_version`/`radarr_version` by
@@ -357,7 +343,7 @@ checks each gate suppresses.
 - **Host Temperature** (board and CPU sensors from node-exporter's hwmon collector,
   `node_hwmon_temp_celsius`, with drives EXCLUDED: `HWMON_TEMP_EXCLUDE_CHIP` drops the `nvme_`
   chips because SMART Data / Health above owns them, and reading them here would double-page one
-  condition. `check_cpu_throttle` sees CFS throttling, which is a cgroup limit rather than heat,
+  condition. `ContainerCPUThrottled` sees CFS throttling, which is a cgroup limit rather than heat,
   and the Grafana **Hardware Temperature Monitor** panel pages nobody, so this check is the only
   host-temperature alert.
   Every sensor gets a limit from one of **two exhaustive arms**: `HWMON_TEMP_RATIO` (0.90) of its
@@ -454,7 +440,7 @@ checks each gate suppresses.
     renamed or the collector went blind.
   - **CPU thermal throttling** (`_thermal_throttle_arm`, `THERMAL_THROTTLE_QUERY` =
     `node_cooling_device_cur_state{type="Processor"}`). A non-zero `cur_state` means the kernel is
-    derating the CPU now. It is a different fault from `check_cpu_throttle` (CFS throttling, a
+    derating the CPU now. It is a different fault from `ContainerCPUThrottled` (CFS throttling, a
     cgroup quota, not heat) and from the temperature arm, since the firmware can enforce a limit
     below the one the driver declares. `type="Processor"` is load-bearing: unfiltered, the metric
     also carries PCIe link-speed and `intel_powerclamp` devices, which throttle for reasons that
@@ -580,7 +566,7 @@ checks each gate suppresses.
   `now()`, so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing.
   `down` once it is older than `HA_HEARTBEAT_MAX_AGE` (300 s): a wedged-but-running HA (HTTP
   `:8123` up, scheduler stuck) that the container healthcheck cannot see. **`HA_CONSECUTIVE` (2)
-  adds consecutive-cycle hysteresis** (the idiom of `CPU_CONSECUTIVE`): a planned redeploy takes
+  adds consecutive-cycle hysteresis** (the idiom of `UPS_CONSECUTIVE`): a planned redeploy takes
   the API unreachable for ~120 s and then leaves the scheduler a beat behind, so one cycle reads
   unreachable OR stale. The first down cycle pushes `up` with a "down streak n/N" `msg`, the
   second pages, and one fresh read resets the streak. The check catches the unreachable-API error
@@ -938,12 +924,19 @@ gone. The numbers that group carries are pinned in
 stream services, for bazarr and prowlarr staying measured, and for jellyfin staying measured
 (#6649) sit there too, and the `DECIDED:` marker for the 5-of-10-minute latency count sits at
 `TraefikBackendSlow` in `ansible/roles/k8s/observability/files/rules/edge.yaml`.
+k3s Container Restarts, k3s Container OOM and k3s CPU Throttling (M6 batch A2) retired into the
+`container-checks` rule group in observability, and their tiles, rows, streak counters and env
+keys are gone. The 20-pod census floor behind `CAdvisorCoverageShortfall` is pinned in
+`ansible/tests/services/test_container_checks_rule_literals.py`, where its `DECIDED:` marker
+now sits. The CPU rule's 3-cycle streak became `for: 15m` over a `max_over_time(...[5m:1m])`
+smoothing, whose reasoning is at `ContainerCPUThrottled` in
+`ansible/roles/k8s/observability/files/rules/container-checks.yaml`.
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
 `PROM_DEPENDENT`. Each check's retirement note is in the repository history.
 
 ## Push-monitor mechanics, and what set each number
 
-- The restart/OOM/cpu/target/5xx/cert checks use `prom_vector()` (keeps series labels) so the
+- The pod-count, target and route checks use `prom_vector()` (keeps series labels) so the
   alert names *which* container / target / route / certificate is failing; the others use
   `prom_scalar()`.
 - An explicit `down` gives a fast, descriptive alert. The push monitor's heartbeat interval

@@ -67,7 +67,7 @@ def thermal_throttle_verdict(
     """Pure: (ok, msg) over node_cooling_device_cur_state{type="Processor"}.
 
     A non-zero cur_state means the kernel is actively throttling the CPU right now. That is a
-    different fault from `check_cpu_throttle`, which reads CFS throttling — a cgroup quota being
+    different fault from the `ContainerCPUThrottled` rule, which reads CFS throttling — a cgroup quota being
     hit, not heat — and from `hwmon_temp_verdict`, which sees the temperature but not the
     kernel's response to it. A CPU can sit below its declared max and still be throttled, if the
     limit the firmware enforces is lower than the one the driver declares.

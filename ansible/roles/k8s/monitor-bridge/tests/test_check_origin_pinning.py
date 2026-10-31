@@ -11,10 +11,8 @@ behaviour is `test_check_gates.py`.
 """
 
 from dataclasses import replace
-from pathlib import Path
 
 import bridge.net
-import check
 from bridge.config import load_config
 
 
@@ -69,47 +67,3 @@ def test_an_explicit_empty_pin_wins():
         {"PROMETHEUS_URL": "http://prometheus:9090", "PROM_ORIGIN": ""}
     )
     assert derived.PROM_ORIGIN == ""
-
-
-_CADVISOR_METRICS = (
-    "container_start_time_seconds",
-    "container_oom_events_total",
-    "container_cpu_cfs_throttled_periods_total",
-    "container_cpu_cfs_periods_total",
-    "container_cpu_cfs_throttled_seconds_total",
-)
-
-
-def test_cadvisor_checks_never_pin_the_origin(cfg):
-    # `origin` is set by ONE relabel rule, on the `node` job, so cAdvisor series never carry it;
-    # pinning them selects the empty vector and check_restarts/check_oom/check_cpu report green
-    # forever. Keep this assertion pointed at the SOURCE of the pin.
-    # Every runtime module, not just the run loop: a literal label block in any check module must
-    # stay visible.
-    files = Path(check.__file__).resolve().parent
-    source = "".join(
-        p.read_text()
-        for p in sorted(files.glob("*.py"))
-        if not p.name.startswith("test_") and p.name != "conftest.py"
-    )
-    for metric in _CADVISOR_METRICS:
-        assert metric + "{" not in source, (
-            "%s uses a literal label block; route it through cadvisor_sel() so the matcher set "
-            "stays in one place" % metric
-        )
-    # The real regression guard: no cAdvisor query may be built with origin_sel(). Checked by
-    # rendering both helpers and asserting the origin pin reaches only the one that should carry
-    # it — a textual check on the call site would miss a pin applied via an intermediate variable,
-    # which is exactly the shape check_cpu uses (`sel = ...` then two format calls).
-    # Guarded on PROM_ORIGIN being non-empty: under the test env PROM_URL is unset so the pin is
-    # "", and `"" not in s` is False for every s — an unguarded assert fails on the empty case
-    # while proving nothing about the real one.
-    if cfg.PROM_ORIGIN:
-        assert cfg.PROM_ORIGIN not in bridge.net.cadvisor_sel('container!=""'), (
-            "cadvisor_sel() must not apply the origin pin — cAdvisor series carry no origin label"
-        )
-    # Independent of the environment: the pin can only enter through PROM_ORIGIN, so a
-    # cadvisor_sel() built with a sentinel pin must still come back without it.
-    pinned = replace(cfg, PROM_ORIGIN='origin="sentinel"')
-    assert "sentinel" not in bridge.net.cadvisor_sel('container!=""')
-    assert "sentinel" in bridge.net.origin_sel(pinned, 'container!=""')

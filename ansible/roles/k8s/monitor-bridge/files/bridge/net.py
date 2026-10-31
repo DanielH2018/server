@@ -13,10 +13,10 @@ ansible/tests/services/test_bridge_patch_boundary.py.
 
 CONFIGURATION IS A PARAMETER, NOT A GLOBAL. Every helper that reads a URL or the origin pin
 takes the frozen `Config` as its FIRST argument, so this module holds no env-derived state and
-a test states the configuration it wants by handing one in. `cadvisor_sel`, `_origin_name`,
+a test states the configuration it wants by handing one in. `_origin_name`,
 `_get_json`, `_post_json` and `_instant_query` read no configuration and take none.
 
-The selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`, `_origin_name`) live
+The selector builders (`origin_sel`, `host_metric_sel`, `_origin_name`) live
 here rather than beside the checks because they are the query-building half of fetching, they
 read `cfg.PROM_ORIGIN`, and the gates test renders them to prove where the origin pin lands.
 """
@@ -58,29 +58,6 @@ def origin_sel(cfg: Config, *matchers: str) -> str:
     return "{%s}" % ", ".join(parts) if parts else ""
 
 
-def cadvisor_sel(*matchers: str) -> str:
-    """A `{...}` block for cAdvisor series, which carry NO origin label — so no origin pin.
-
-    DECIDED: cAdvisor metrics must NOT go through origin_sel(). `origin` is applied by exactly
-    one relabel rule, on the `node` job (observability/templates/prometheus.yaml.j2:202); the
-    kubernetes-cadvisor job has none. PromQL does not match an absent label, so an origin-pinned
-    cAdvisor query selects the empty vector and every check built on it reports green forever.
-
-    That is not hypothetical — it is what check_restarts, check_oom and check_cpu did from the
-    Phase G retarget until 2026-08-24. Live at the time of the fix: the unpinned selector matched
-    110 cAdvisor series and the pinned form returned `no data`, while the bridge logged
-    "OK restarts / OK oom / OK cpu" off empty vectors on every cycle. OOM kills and sustained CFS
-    throttling had no other alert path, so both were unmonitored outright.
-
-    The Docker cAdvisor these checks once shared with the cluster copy retired 2026-08-14, so
-    there is no longer a second estate for a pin to disambiguate. Use origin_sel() for series
-    that genuinely carry the label — `up`, and the node-exporter families behind check_disk and
-    check_mem — and this for anything cAdvisor emits.
-    """
-    parts = [m for m in matchers if m]
-    return "{%s}" % ", ".join(parts) if parts else ""
-
-
 def host_metric_sel(cfg: Config, *matchers: str) -> str:
     """A `{...}` block for the HOST-level node_* checks, minus origins owned by another check.
 
@@ -89,15 +66,16 @@ def host_metric_sel(cfg: Config, *matchers: str) -> str:
     check_pi_pressure already owns Pi disk and memory, with thresholds written for a 456 MB
     box rather than the 90% that suits the two x86 hosts. Without this exclusion the Pi's
     ordinary working state pages twice for one fact, which is exactly the duplication
-    check_mem avoids elsewhere by naming check_oom the single source of truth.
+    check_mem avoids elsewhere by naming the `ContainerOOMKilled` rule the single source of
+    truth for per-container OOM kills.
 
     A regex matcher, so HOST_METRIC_ORIGIN_EXCLUDE can carry a `a|b` list. Series with no
     `origin` label at all are KEPT: Prometheus reads a missing label as "", which `!~` on a
     named host does not match.
 
-    DECIDED: an EXCLUDE, never origin_sel(). cadvisor_sel's note points at "the node-exporter
-    families behind check_disk and check_mem" as series that genuinely carry `origin`, which
-    reads like an invitation to pin them with origin_sel() — do not. PROM_ORIGIN resolves to
+    DECIDED: an EXCLUDE, never origin_sel(). The node-exporter families behind check_disk and
+    check_mem genuinely carry `origin`, which reads like an invitation to pin them with
+    origin_sel() — do not. PROM_ORIGIN resolves to
     `origin="daniel-server"` by default. Pinning these two checks to one host would hide
     daniel-box's disk and memory behind two green tiles, which is precisely the fault
     HOST_ORIGINS_MIN was added for on 2026-08-23. Naming who is OUT keeps every other host in

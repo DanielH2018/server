@@ -13,7 +13,6 @@ from dataclasses import replace
 
 import pytest
 
-import checks.cluster
 import checks.gitops
 import check
 import gates
@@ -207,86 +206,6 @@ def test_run_once_suppresses_node_dependents_when_node_exporter_down(cfg):
     by_tok = {t: (ok, m) for t, ok, m in pushes}
     assert by_tok["tok_disk"][0] is True
     assert "exporter" in by_tok["tok_disk"][1].lower()
-
-
-def _fake_vectors(cfg, by_query):
-    """(cfg, src): a FakeSources whose prom_vector answers by substring of the query.
-
-    Drops CADVISOR_PODS_MIN to 0 for its callers, which are all offender-logic tests built on
-    one- or two-pod fixtures — far below the real floor. Scoped here rather than as an autouse
-    fixture on purpose: an estate-wide default of 0 would make the coverage floor invisible to
-    every other test in the suite, which is the failure the floor itself exists to prevent. The
-    floor's own tests answer prom_vector directly and never come through here.
-    """
-    cfg = replace(cfg, CADVISOR_PODS_MIN=0)
-
-    def fake(promql):
-        for key, vec in by_query.items():
-            if key in promql:
-                return vec
-        raise AssertionError("unexpected query: %s" % promql)
-
-    return cfg, FakeSources(prom_vector=fake)
-
-
-def test_check_restarts_names_the_looping_pod(cfg):
-    cfg, src = _fake_vectors(
-        cfg,
-        {
-            "container_start_time_seconds": [
-                ({"pod": "n8n-abc"}, 7.0),
-                ({"pod": "quiet"}, 0.0),
-            ]
-        },
-    )
-    ok, msg = checks.cluster.check_restarts(cfg, src)
-    assert not ok and "n8n-abc" in msg
-
-
-def test_check_restarts_quiet_is_up(cfg):
-    cfg, src = _fake_vectors(
-        cfg, {"container_start_time_seconds": [({"pod": "quiet"}, 1.0)]}
-    )
-    ok, _ = checks.cluster.check_restarts(cfg, src)
-    assert ok
-
-
-def test_check_oom_names_the_killed_pod(cfg):
-    cfg, src = _fake_vectors(
-        cfg, {"container_oom_events_total": [({"pod": "karakeep-x"}, 2.0)]}
-    )
-    ok, msg = checks.cluster.check_oom(cfg, src)
-    assert not ok and "karakeep-x" in msg
-
-
-def test_check_cpu_throttle_needs_both_gates_and_streak(cfg):
-    # 90% throttled AND real cores lost — but only pages on the CPU_CONSECUTIVE-th
-    # consecutive breaching cycle.
-    cfg, src = _fake_vectors(
-        cfg,
-        {
-            "container_cpu_cfs_throttled_periods_total": [({"pod": "tdarr-y"}, 0.9)],
-            "container_cpu_cfs_throttled_seconds_total": [({"pod": "tdarr-y"}, 0.5)],
-        },
-    )
-    for _ in range(cfg.CPU_CONSECUTIVE - 1):
-        ok, msg = checks.cluster.check_cpu_throttle(cfg, src)
-        assert ok and "tdarr-y" in msg  # named but not paging yet
-    ok, msg = checks.cluster.check_cpu_throttle(cfg, src)
-    assert not ok and "tdarr-y" in msg
-
-
-def test_check_cpu_throttle_tiny_loss_stays_up(cfg):
-    # High ratio but negligible absolute cores lost — the volume floor gates it out.
-    cfg, src = _fake_vectors(
-        cfg,
-        {
-            "container_cpu_cfs_throttled_periods_total": [({"pod": "sidecar"}, 0.9)],
-            "container_cpu_cfs_throttled_seconds_total": [({"pod": "sidecar"}, 0.0001)],
-        },
-    )
-    ok, _ = checks.cluster.check_cpu_throttle(cfg, src)
-    assert ok
 
 
 def test_run_once_suppression_without_cadvisor_series(cfg):
