@@ -38,8 +38,8 @@ RECORDED = {
     "secret-rotation": {("render", "secret-rotation")},
     # a2bed5696^:ansible/roles/setup/nut_host/tasks/main.yml
     "nut-secondary": {("render", "nut-host")},
-    # ansible/roles/setup/claude_code/tasks/main.yml, which still runs on daniel-box (H7.40). Its
-    # triage stamp is left out: claude_code_triage_enabled is false on daniel-server.
+    # 85d2bf9f7:ansible/roles/setup/claude_code/tasks/main.yml, before the role's render stamp
+    # took the name claude-code-ansible. Its triage stamp is left out: the component ships no triage.
     "claude-code": {
         ("render", "claude-code"),
         ("deployed", "claude-code-bg-resume"),

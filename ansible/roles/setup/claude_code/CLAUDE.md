@@ -48,6 +48,9 @@ H7.40's later slices move them.
   host_vars drops that subject from the next package version. The agent user is the one
   exception: the users arm takes no `when:`, so switching the agent off means deleting the
   host's `users:` entry, which the arm then expires. A test holds the two together.
+- **A toggle takes a packaged subject back through the package, not an apply.** Set it false in
+  the host's host_vars, and the next package version drops the subject. Where a section below
+  says "apply the role" for one of the subjects above, that is the step.
 - **Two writers are refused.** Every role task that writes a template or file the package
   ships names `claude_code_packaged_hosts` in its `when:`, or sits in a block or import that
   does. The role's render stamp is `claude-code-ansible`, because the component retires the
@@ -184,7 +187,7 @@ sessions waited five hours, until the operator ran `claude agents`.
   ENFORCED: `ansible/tests/setup/test_claude_bg_resume_unit.py`.
 - **To see what it would do,** run `uv run --no-project /usr/local/lib/claude-bg-resume/bg_session_resume.py
   --claude ~/.local/bin/claude --dry-run`. On a running box it prints 0 sessions. After a boot,
-  `journalctl -b -u claude-bg-resume` shows what it respawned.
+  `journalctl -b -u homelab-claude-bg-resume` shows what it respawned.
 
 What it does not restore:
 
@@ -195,7 +198,7 @@ What it does not restore:
 - **The login environment.** The unit sets `HOME`, `PATH`, `KUBECONFIG` and the pytest cap.
   A respawned session has no `SSH_AUTH_SOCK`, D-Bus session or `XDG_RUNTIME_DIR`, because no
   one is logged in at boot. `gh` reads its token from `~/.config/gh/hosts.yml`, so it works.
-- **Monitoring.** A failed run pages nothing; `systemctl status claude-bg-resume` shows it.
+- **Monitoring.** A failed run pages nothing; `systemctl status homelab-claude-bg-resume` shows it.
   `claude-cgroup-metrics` reads `user-<uid>.slice` and `claude-rc.service`, so it does not
   count the sessions in this unit's cgroup.
 
@@ -423,7 +426,7 @@ only, where `claude_code_takeover_check_enabled` is true.
 
 `rootq` reads root-only host state for a session that has no general sudo. It runs
 `/usr/local/sbin/homelab-rootq` (`files/homelab_rootq.py`) as root, behind one `NOPASSWD`
-line in `/etc/sudoers.d/claude-rootq` (issue #6323). The operator approved the shape on
+line in `/etc/sudoers.d/homelab-rootq` (issue #6323), which the host package ships. The operator approved the shape on
 2026-10-25 and reviews the grant before it lands. It exists where `claude_code_rootq_enabled`
 is true: daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
 only, where fan-out batches and the operator's sessions run. The agent user stays without
@@ -481,8 +484,8 @@ a need appears.
   admit. A new tier-2 source also needs a structural argument, written at `CAT` or `COMMANDS`,
   for why the filter redacts its grammar cleanly, with must-pass and must-redact cases in
   `tests/test_rootq_redaction.py`.
-- **To take it back:** set `claude_code_rootq_enabled: false` and apply the role. The role
-  removes the socket first, then the sudoers file, the shim and the script, in that order.
+- **To take it back:** set `claude_code_rootq_enabled: false` in the host's host_vars. The next
+  package version drops the socket, the sudoers file, the shim and the script.
 
 ### The agent's socket
 
@@ -518,10 +521,8 @@ uid.
   templates are listed in `templates/claude-land-approval-paths.j2` and in `FLOOR` in
   `ansible/tests/setup/test_claude_lander.py`.
 - **To take it back:** set `claude_code_rootq_socket_enabled: false`, or
-  `claude_code_rootq_enabled: false`, and apply the role. The role stops and disables the
-  socket, removes the units, the helper, the client and the group, and `agent_access.yml`
-  drops the agent from the group. The operator's sudo path is untouched. The setting is
+  `claude_code_rootq_enabled: false`, in the host's host_vars. The next package version drops
+  the socket, its units, the helper and the client, and `claude-agent-setup` drops the agent
+  from the group. The operator's sudo path is untouched. The setting is
   `claude_code_rootq_socket_enabled` in the host's `host_vars`.
-- **How to apply it:** `uv run ansible-playbook ansible/initial_setup.yml --tags claude_code`
-  on each of daniel-box and daniel-server. Both nodes are `connection=local`, so the play runs
-  on the host it is started on.
+- **How to apply it:** a new version of the host's package, which the host's updater installs.
