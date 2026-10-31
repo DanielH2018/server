@@ -24,9 +24,10 @@ from secrets_mgmt.secret_bearing_host_paths import (
 
 def test_no_secret_bearing_host_script_is_world_readable():
     # The census this filters is floored by name in test_secret_bearing_host_paths.py; the
-    # count here keeps this file from passing on an emptied one. Three since H7.40, whose
-    # package scripts read their push tokens as credentials instead of embedding them.
-    assert len(secret_bearing_host_paths()) >= 3
+    # count here keeps this file from passing on an emptied one. One since M6 batch B3's
+    # Cutover-2, after H7.40's package scripts and the two gitops_deploy timers stopped
+    # embedding their push tokens: registry-gc.sh is the last script that does.
+    assert len(secret_bearing_host_paths()) >= 1
     assert world_readable_secret_bearing_tasks() == []
 
 

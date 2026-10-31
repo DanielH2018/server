@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run github-interaction-limit.sh for real against a stubbed GitHub and a recording Kuma push.
+"""Run github-interaction-limit.sh for real against a stubbed GitHub and a recording journal.
 
 Same harness shape as test_github_ruleset_drift.py, for the same reason: what breaks in a
 re-arm cron is its BRANCHING — whether a PUT that never happened can read as "armed". Every case
@@ -9,6 +9,7 @@ method and body it was called with so the tests can see WHAT was sent, not only 
 
 import json
 import os
+import re
 import subprocess
 
 import pytest
@@ -20,19 +21,12 @@ from _shell_render import render_shell_script
 
 ROLE = ANSIBLE / "roles" / "setup" / "gitops_deploy"
 TEMPLATE = ("setup", "gitops_deploy", "github-interaction-limit.sh.j2")
-REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 # The role's copy of the check library, so a runner that never ran initial_setup still sources it
 # and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
 REAL_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 GITHUB_REPO = load_defaults(ROLE)["gitops_deploy_github_repo"]
-
-LIB_STUB = """\
-kuma_push() {
-  printf '%s\\n%s\\n' "$1" "$2" > "$KUMA_PUSH_OUT"
-}
-"""
 
 
 def _limit_body(limit, expires_at="2027-03-06T06:50:00Z"):
@@ -53,13 +47,6 @@ def _run(
         *TEMPLATE, overrides={"gitops_deploy_interaction_limit": limit}
     )
 
-    assert REAL_LIB in body, (
-        "the script no longer sources the shared Kuma push helper — this harness repoints that "
-        "exact path, so a rename silently stops these tests exercising the push at all"
-    )
-    lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text(LIB_STUB)
-    body = body.replace(REAL_LIB, str(lib))
     assert CHECK_LIB in body, "the script no longer sources homelab-check-lib.sh"
     body = body.replace(CHECK_LIB, str(REAL_CHECK_LIB))
 
@@ -101,23 +88,37 @@ def _run(
         ),
     )
 
-    out = tmp_path / "push.out"
+    # logger stub: the script's journal line, recorded rather than sent. The verdict is read back
+    # from it, the last `status=<up|down> <message>` line.
+    journal = tmp_path / "journal.out"
+    fake_bin(
+        binstub,
+        logger=(
+            "#!/usr/bin/env bash\n"
+            "shift 2  # -t <tag>\n"
+            'printf \'%s\\n\' "$*" >> "$LOGGER_OUT"\n'
+        ),
+    )
     textfile_dir = tmp_path / "textfile"
     textfile_dir.mkdir(exist_ok=True)
     env = {
         **os.environ,
         "PATH": path_with(binstub),
-        "KUMA_PUSH_OUT": str(out),
+        "LOGGER_OUT": str(journal),
         "TEXTFILE_DIR": str(textfile_dir),
     }
     proc = subprocess.run(
         ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
     )
     argv = argv_out.read_text().splitlines() if argv_out.exists() else []
-    if not out.exists():
+    verdicts = (
+        re.fullmatch(r"status=(up|down) (.*)", line)
+        for line in (journal.read_text().splitlines() if journal.exists() else [])
+    )
+    last = [m for m in verdicts if m][-1:]
+    if not last:
         return proc.returncode, None, None, argv
-    status, message = out.read_text().split("\n", 1)
-    return proc.returncode, status, message.strip(), argv
+    return proc.returncode, last[0].group(1), last[0].group(2).strip(), argv
 
 
 def test_a_successful_put_reports_armed(tmp_path):
@@ -130,7 +131,7 @@ def test_a_successful_put_reports_armed(tmp_path):
 
 
 def test_a_re_arm_writes_an_up_textfile_with_the_tile_deadline(tmp_path):
-    """M6 batch B3: the verdict reaches the textfile collector beside the Kuma push."""
+    """M6 batch B3: the verdict reaches the textfile collector."""
     rc, status, _, _ = _run(tmp_path, curl_body=_limit_body("collaborators_only"))
     series = textfile_series(tmp_path, "github-interaction-limit")
     assert (rc, status) == (0, "up")
