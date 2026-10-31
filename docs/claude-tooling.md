@@ -169,7 +169,7 @@ equivalent of the four cluster checks above, backed by `probe_lib/pi_plane.py`.
   Pi's own live set by itself would repeat `monitors`' N/N-up mistake.
 - **`kuma-drift --pi`** — the same declared-vs-live reconciliation, scoped to daniel-pi's own
   monitors. The scope comes from each monitor's YAML `stringData` key in
-  `static-monitors.yaml.j2` (`daniel-pi-host.json`, `monitor-bridge-pi.json`, …) carrying `pi`
+  `static-monitors.yaml.j2` (`daniel-pi-sd-health.json`, `daniel-pi-recovery.json`, …) carrying `pi`
   as its own hyphen-delimited token — `pihole-k8s-dns.json` is excluded because `pi` there is a
   substring of `pihole`, not a token, and Pi-hole runs on k3s.
 - **`alerts --pi`** — scopes the DOWN-episode reconstruction to daniel-pi. The syslog stream

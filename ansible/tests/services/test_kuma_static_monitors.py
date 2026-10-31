@@ -159,6 +159,11 @@ def test_notification_configs_declare_apply_existing():
 # M6 batch A1's two critical tiles, Root Disk and UPS Battery Health, left it the same way in
 # Cutover-a1. `HostDiskFull` and the five `UPS*` rules are critical, so Alertmanager mails them
 # once A1's Cutover-b drops `shadow`.
+#
+# M6 batch B8's three tiles on the tier, Homelab Edge (all-clear), k3s Mosquitto (VIP) and
+# Pi-hole k8s DNS, left it with the other 12 probe tiles in Cutover-a1. The edge probe's rule
+# `ExtraProbeFailedCritical` is critical, and so are the Mosquitto and Pi-hole probes while their
+# entries are home-critical, so Alertmanager mails them once B8's Cutover-b drops `shadow`.
 EMAIL_TIER = {
     "k3s Longhorn Backup",
     "Daniel Pi SD Health",
@@ -169,12 +174,7 @@ EMAIL_TIER = {
     "R2 Free Tier Headroom",
     "SMART Data / Health",
     "Discord Delivery",
-    # Not a "the fix cannot wait a day" tile like the nine above — it is on the tier for the
-    # transport, not the urgency. A fleet-wide recovery bursts every tile's UP notification into
-    # the same second, and Discord's per-webhook bucket drops some of them. SMTP is a different
-    # bucket, so this one all-clear lands.
-    "Homelab Edge (all-clear)",
-    # The transport reason above at its strongest: no Discord webhook can deliver at all.
+    # On the tier for the transport, not the urgency: no Discord webhook can deliver at all.
     "WAN Reachable",
     # One tile per host, and both mail for the reason the template's own comment gives: a
     # secondary upsmon that is not running is only discovered at a power cut, which is exactly
@@ -182,14 +182,6 @@ EMAIL_TIER = {
     # them — their token gate rendered them away under the old stubbed render.
     "UPS Secondary (daniel-box)",
     "UPS Secondary (daniel-server)",
-    # A home-critical service's own availability tile, put on the tier by the operator on
-    # 2026-10-04 (#3480): the house or SSO is down. The template derives these from each
-    # entry's containers_list `tier`, so they are named here as the members it must produce.
-    # The ingress tiles of Authelia, Zigbee2MQTT and Home Assistant left Kuma in M4's PR 4
-    # (#5625). blackbox-exporter probes those three, and `IngressProbeFailedCritical` alerts
-    # on them, routed to the blackhole receiver until M4's PR 5 drops its `shadow` label.
-    "k3s Mosquitto (VIP)",
-    "Pi-hole k8s DNS",
 }
 
 
@@ -291,134 +283,17 @@ def test_email_tier_membership_is_exactly_declared():
     assert named == EMAIL_TIER
 
 
-# A monitor that accepts 404 without also checking the BODY is green through a total-404 edge:
-# Traefik answers 404 for every host when it has lost its routers.
+# The probe HOST matters as much as the path. Traefik ranks routers by rule length.
+# `PathPrefix(`/.well-known/traefik-edge-selfcheck`)` is 48 characters, and littlelink's
+# `Host(`www...`) || Host(`www.local...`)` is 68, so on `www.local` the edge all-clear probe gets
+# littlelink's own 404 body. Any host that fronts a workload can lose the same way, and it can
+# start losing later, when someone lengthens that workload's rule.
 #
-# Accepting 404 is still legitimate — a probe path that legitimately 404s on a healthy service
-# is the cheapest unauthenticated signal several routes offer. What is not legitimate is
-# accepting it blind. A keyword monitor pins WHICH 404 came back, so the two are separable.
-#
-# The keyword must be INVERTED, and that half is asserted too. Traefik's 404 body is Go's
-# `404 page not found` and healthchecks' is `not found` — the healthy body is a substring of the
-# broken one, so only a keyword the healthy response must NOT contain separates them. A positive
-# keyword here matches both and the tile is back where it started.
-def _accepts_404_without_a_body_check(entity: dict) -> bool:
-    if "404" not in [str(c) for c in entity.get("accepted_statuscodes", [])]:
-        return False
-    return not (entity.get("keyword") and entity.get("invertKeyword"))
-
-
-def test_a_404_accepting_monitor_with_an_inverted_keyword_is_clean():
-    assert not _accepts_404_without_a_body_check(
-        {
-            "type": "keyword",
-            "accepted_statuscodes": ["404"],
-            "keyword": "404 page not found",
-            "invertKeyword": True,
-        }
-    )
-    # And a monitor that does not accept 404 at all is not this rule's business.
-    assert not _accepts_404_without_a_body_check(
-        {"type": "http", "accepted_statuscodes": ["302"]}
-    )
-
-
-def test_a_404_accepting_monitor_without_a_keyword_is_flagged():
-    # An http monitor accepting 404 with no keyword.
-    assert _accepts_404_without_a_body_check(
-        {"type": "http", "accepted_statuscodes": ["404"], "max_redirects": 0}
-    )
-
-
-def test_a_404_accepting_monitor_whose_keyword_is_not_inverted_is_flagged():
-    # Keeping the keyword and dropping the inversion reverses the tile's meaning while looking
-    # like a smaller edit than removing it.
-    assert _accepts_404_without_a_body_check(
-        {
-            "type": "keyword",
-            "accepted_statuscodes": ["404"],
-            "keyword": "404 page not found",
-        }
-    )
-
-
-def test_no_live_monitor_accepts_404_without_checking_the_body():
-    entities = _entities()
-    # Non-vacuity by name, not by count: this rule inspects only the monitors that accept 404,
-    # and a render that stopped emitting them would leave an all() over nothing passing. This
-    # is the census member the rule exists for.
-    named = {"homelab-mcp-k8s.json"}
-    assert named.issubset(entities), sorted(entities)
-    offenders = [n for n, e in entities.items() if _accepts_404_without_a_body_check(e)]
-    assert not offenders, (
-        "monitor(s) accept 404 with no body check — green through a total-404 edge: %s"
-        % sorted(offenders)
-    )
-
-
-# ── the fleet-level all-clear tile ────────────────────────────────────────────────
-# Its value rests on the target, not on the notification list. `Homelab Edge (all-clear)` is
-# the one tile that must go DOWN for a fleet-wide edge failure and come back with a single
-# message, so it has to probe something no workload can break: `ping@internal` behind
-# `PathPrefix(/.well-known/traefik-edge-selfcheck)`, which answers only when Traefik built a
-# routing table at all.
-#
-# Repointing it at an app route is the regression this guards: an app route's body is one
-# Traefik also returns, so the tile reads green through a total-404 edge. An app route fails
-# the other way too — the app can be down while the edge is fine, which pages a fleet outage
-# that is not happening.
-_EDGE_SELFCHECK_PATH = "/.well-known/traefik-edge-selfcheck"
-_ALL_CLEAR_ID = "homelab-edge-allclear.json"
-
-
-def _all_clear_is_app_coupled(entity: dict) -> bool:
-    return _EDGE_SELFCHECK_PATH not in entity.get("url", "")
-
-
-def test_an_all_clear_on_the_edge_selfcheck_path_is_clean():
-    assert not _all_clear_is_app_coupled(
-        {
-            "type": "keyword",
-            "url": "https://www.local.example.com" + _EDGE_SELFCHECK_PATH,
-            "keyword": "OK",
-        }
-    )
-
-
-def test_an_all_clear_pointed_at_an_app_route_is_flagged():
-    # An app's own health path, named for the edge.
-    assert _all_clear_is_app_coupled(
-        {
-            "type": "keyword",
-            "url": "https://mcp.local.example.com/health",
-            "keyword": "ok",
-        }
-    )
-
-
-def test_the_fleet_all_clear_probes_the_edge_selfcheck_route():
-    entities = _entities()
-    # Non-vacuity by name: the render is gated on traefik_k8s_manage_crowdsec, so a template
-    # edit that dropped the tile would leave this rule inspecting nothing.
-    assert _ALL_CLEAR_ID in entities, sorted(entities)
-    entity = entities[_ALL_CLEAR_ID]
-    assert not _all_clear_is_app_coupled(entity), (
-        "the fleet all-clear must probe the edge self-check route, not an app: %s"
-        % entity.get("url")
-    )
-    # A status code alone reads green through a total-404 edge, so the body is checked.
-    assert entity["type"] == "keyword" and entity["keyword"] == "OK", entity
-
-
-# The probe HOST matters as much as the path. Traefik ranks routers by rule length. `PathPrefix(`/.well-known/traefik-edge-selfcheck`)` is
-# 48 characters, and littlelink's `Host(`www...`) || Host(`www.local...`)` is 68 — so on
-# `www.local` the all-clear tile gets littlelink's own 404 body. Any host that fronts a workload can lose the same way, and
-# it can start losing later, when someone lengthens that workload's rule.
-#
-# `edge-selfcheck.local` fronts nothing and is pinned to the ingress VIP in the Kuma pod's
-# hostAliases, so there is no Host() router for the path router to lose to. This guard is what
-# keeps that true: it fails the moment any role renders an IngressRoute naming the probe host.
-# It matches on the label alone, so it holds whatever `domain` the render resolves to.
+# `edge-selfcheck.local` fronts nothing and is pinned to the ingress VIP in the probing pod's
+# hostAliases (`test_extra_probe_targets.py` holds the blackbox-exporter pin), so there is no
+# Host() router for the path router to lose to. This guard is what keeps that true: it fails
+# the moment any role renders an IngressRoute naming the probe host. It matches on the label
+# alone, so it holds whatever `domain` the render resolves to.
 _ALL_CLEAR_PROBE_LABEL = "edge-selfcheck.local."
 
 
@@ -449,34 +324,6 @@ def test_the_all_clear_probe_host_fronts_no_route():
     offenders = _route_rules_naming(_ALL_CLEAR_PROBE_LABEL)
     assert not offenders, (
         "an IngressRoute now fronts the all-clear probe host, so a longer Host() rule can "
-        "outrank the edge self-check path and the tile reads that app's response instead:\n  "
+        "outrank the edge self-check path and the probe reads that app's response instead:\n  "
         + "\n  ".join(offenders)
-    )
-
-
-def test_the_all_clear_probe_host_is_pinned_to_the_ingress_vip():
-    """An unrouted name resolves nowhere unless this pod pins it.
-
-    hostAliases is otherwise derived from containers_list, and every other name in it fronts a
-    workload. The probe host is the one literal, so a template edit that drops it would leave
-    the tile resolving `edge-selfcheck.local` through public DNS (see the hostAliases comment in
-    deployment.yaml.j2).
-    """
-    from _k8s_render import rendered_docs
-
-    aliases = [
-        name
-        for role, _tpl, doc in rendered_docs()
-        if role == "uptime-kuma" and doc.get("kind") == "Deployment"
-        for alias in doc["spec"]["template"]["spec"].get("hostAliases", []) or []
-        for name in alias.get("hostnames", [])
-    ]
-    assert aliases, "the uptime-kuma Deployment renders no hostAliases at all"
-    pinned = [n for n in aliases if n.startswith(_ALL_CLEAR_PROBE_LABEL)]
-    assert len(pinned) == 1, (
-        f"the all-clear probe host must be pinned exactly once, got {pinned}"
-    )
-    assert _entities()[_ALL_CLEAR_ID]["url"].startswith(f"https://{pinned[0]}/"), (
-        "the tile's URL and the pinned hostAlias have drifted apart: %s vs %s"
-        % (_entities()[_ALL_CLEAR_ID]["url"], pinned[0])
     )

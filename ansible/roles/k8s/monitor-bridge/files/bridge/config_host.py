@@ -1,6 +1,6 @@
 """The host-facing half of monitor-bridge's configuration.
 
-SMART, the Pi and the speedtest — every threshold read by a check in
+SMART and the speedtest — every threshold read by a check in
 `checks/host_thermal.py` (Scrutiny) and `checks/host_edge.py`.
 
 A field's justification sits beside its DECLARATION; its env var name sits beside its READ in
@@ -15,20 +15,12 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class HostConfig:
-    """SMART, the Pi and the speedtest."""
+    """SMART and the speedtest."""
 
     SCRUTINY_URL: str
     SCRUTINY_MAX_AGE_H: float
     SCRUTINY_TEMP_MAX: float
     SCRUTINY_WEAR_MAX: float
-    PI_ORIGIN: str
-    PI_HOST: str
-    PI_LOAD_MAX: float
-    PI_MEM_MIN_MB: float
-    PI_DISK_MAX_PCT: float
-    PI_PUBLISHED_PORTS: tuple[tuple[str, int], ...]
-    PI_PORT_TIMEOUT: float
-    PI_PORTS_CONSECUTIVE: int
     SPEEDTEST_URL: str
     SPEEDTEST_TOKEN: str = field(repr=False)
     SPEEDTEST_DOWNLOAD_MIN_MBPS: float
@@ -42,26 +34,8 @@ def host_config(
     _int: Callable[..., int],
     _num: Callable[..., float],
     _env_file: Callable[..., str],
-    problems: list[str],
 ) -> HostConfig:
     """The host fields, read through the parsers `load_config` built over its environment."""
-
-    def _published_ports(raw: str) -> tuple[tuple[str, int], ...]:
-        """`name:port` pairs from a comma-separated list, skipping a malformed port."""
-        pairs = []
-        for pair in raw.split(","):
-            if ":" not in pair:
-                continue
-            name, _, port = pair.partition(":")
-            try:
-                pairs.append((name.strip(), int(port)))
-            except ValueError:
-                problems.append(
-                    "PI_PUBLISHED_PORTS entry %r has a non-integer port; it is not watched"
-                    % pair
-                )
-        return tuple(pairs)
-
     return HostConfig(
         # Scrutiny SMART freshness + health: the collector cron runs daily (00:00) and has no
         # usable container healthcheck (cron is PID 1) — a silently-dead collector only shows as
@@ -84,27 +58,6 @@ def host_config(
         # 2026-08-22: daniel-server's SHPP41-500GM reads 7 at 30,959 power-on hours,
         # daniel-box's CT1000E100SSD8 reads 0 at 576. 0 = disabled.
         SCRUTINY_WEAR_MAX=_num("SCRUTINY_WEAR_MAX"),
-        # Pi pressure: the 512MB Zero 2 W dies by swap-thrash, not by clean failures —
-        # 2026-06-11 (fwupd): hourly load5/core >1.7 episodes with healthcheck-timeout storms
-        # that no other monitor saw (containers stayed "restarting", never down long enough).
-        # Read from the Pi's node-exporter series on Prometheus, selected by origin (the
-        # `node-pi` scrape job); glances served it until 2026-09-18 (#2004). Empty = disabled.
-        PI_ORIGIN=_env("PI_ORIGIN"),
-        # The Pi's LAN address, for the published-port arm's TCP connects. Empty = the arm is
-        # skipped. Separate from PI_ORIGIN because an origin label is not an address.
-        PI_HOST=_env("PI_HOST"),
-        PI_LOAD_MAX=_num("PI_LOAD_MAX"),  # load5 per core
-        PI_MEM_MIN_MB=_num("PI_MEM_MIN_MB"),
-        PI_DISK_MAX_PCT=_num("PI_DISK_MAX_PCT"),
-        # `name:port` pairs for the Pi containers that publish a port, rendered from daniel-pi's
-        # containers_list (every entry with a `port`) so the set cannot drift from the inventory.
-        # Empty = the port arm is disabled, like PI_ORIGIN disables the whole check.
-        PI_PUBLISHED_PORTS=_published_ports(_env("PI_PUBLISHED_PORTS")),
-        PI_PORT_TIMEOUT=_num("PI_PORT_TIMEOUT", "3"),
-        # A Pi deploy recreates containers, so their ports are genuinely closed for a few
-        # seconds. Two cycles of grace, same idiom as HA_CONSECUTIVE; a detached container
-        # persists until someone recreates it and still pages.
-        PI_PORTS_CONSECUTIVE=_int("PI_PORTS_CONSECUTIVE", "2"),
         # speedtest-tracker's own result rows. Empty URL/token = disabled (stays up), like HA
         # above.
         #

@@ -26,9 +26,10 @@ The rules below shaped those memberships.
 - **`WAN_DEPENDENT`**: the gate reads two provider URLs by hostname and is DOWN only when
   NEITHER answers, so one provider's outage cannot silence a dependent reading the other. It
   never probes a shared-anycast IP, because the 2026-09-18 outage included DNS failure.
-- **`EXPORTER_DEPENDENT`** — `node` → `host_packages`; `node-pi` → `pi_pressure`. The disk,
-  memory, host temperature and UPS checks left in M6 batch A1: the `hosts` rules start every
-  missing-data arm from `up == 1`, so a dead exporter leaves them quiet beside `ScrapeTargetDown`.
+- **`EXPORTER_DEPENDENT`** — `node` → `host_packages`. The disk, memory, host temperature and
+  UPS checks left in M6 batch A1: the `hosts` rules start every missing-data arm from
+  `up == 1`, so a dead exporter leaves them quiet beside `ScrapeTargetDown`. `pi_pressure` and
+  its `node-pi` entry left in batch B8, and `PiHostDown` inhibits `PiPortDead` in Alertmanager.
 - **`STARTUP_GRACE`** is disjoint from every skip set, so a check that gains a gate leaves
   this set; a test holds both.
 - **`workload_log_errors`** is in `STARTUP_GRACE` and in no gate set. It reads Loki, not
@@ -59,7 +60,7 @@ The rules below shaped those memberships.
   every k8s role that `lookup()`s another role's file, and the landing, the deployer's defer
   alert and the secret census all read it.
 - **Fold an arm into an existing monitor** when it answers that tile's existing question
-  (ports into Pi Pressure, `ip_ban` into HA); a new tile costs a push token in
+  (`ip_ban` into HA); a new tile costs a push token in
   SOPS and a monitor created by hand.
 - **File-mounted credentials** (`HA_TOKEN_FILE`, `B2_PROBE_APPLICATION_KEY_FILE` reusing
   `longhorn_b2_application_key`, `CF_ANALYTICS_TOKEN_FILE`, `SPEEDTEST_TOKEN_FILE`,
@@ -121,7 +122,7 @@ The rules below shaped those memberships.
 | `bridge/streaks.py` | `State` (every streak counter and probe cache, carried as `src.state`), `down_streak` (the consecutive-down step) and `apply_startup_grace` |
 | `bridge/common.py` | `_env`, `sanitize`, `cap_push_msg` (`PUSH_MSG_MAX`) and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected — plus `host_uptime_s`, the node's boot clock the two post-reboot arms key on |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
-| `verdicts/<domain>.py` | pure decisions taking every threshold as an argument: `cluster`, `host` (`pi_pressure`, `speedtest_verdict`), `host_smart` (`scrutiny_*`), `service`, `logs`, `notify`, `storage` (the B2/R2 decisions with the R2 Class A/B/free ACTION LISTS beside them — policy, not configuration) |
+| `verdicts/<domain>.py` | pure decisions taking every threshold as an argument: `cluster`, `host` (`speedtest_verdict`), `host_smart` (`scrutiny_*`), `service`, `logs`, `notify`, `storage` (the B2/R2 decisions with the R2 Class A/B/free ACTION LISTS beside them — policy, not configuration) |
 
 ## The test seams
 

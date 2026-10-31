@@ -85,7 +85,7 @@ def test_declared_monitor_count_reads_the_real_template():
     # template, so a template that moved or a parse that returns nothing shows up here as a
     # missing count rather than as a coverage line that is silent forever.
     declared = monitors.declared_monitor_count()
-    assert declared is not None and declared >= 56, declared
+    assert declared is not None and declared >= 42, declared
 
 
 def _alerts(*firing):
@@ -270,15 +270,8 @@ def test_every_interval_in_the_real_template_resolves_through_the_real_variables
 def test_pi_monitor_names_finds_at_least_the_known_daniel_pi_monitors():
     names = kuma_pi.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
     # A frozenset a caller can name, not just a count — see CLAUDE.md's non-vacuity rule.
-    assert {"Daniel Pi Host", "Daniel Pi WG Easy", "Daniel Pi Recovery"} <= names
-    assert len(names) >= 3
-
-
-def test_pi_monitor_names_excludes_a_k8s_monitor_that_merely_contains_pi():
-    # "Pi-hole k8s DNS" is declared under the "pihole-k8s-dns" key — "pi" is a substring of
-    # "pihole", not a hyphen-delimited token, and it runs on k3s, not daniel-pi.
-    names = kuma_pi.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
-    assert "Pi-hole k8s DNS" not in names
+    assert {"Daniel Pi SD Health", "Daniel Pi Recovery"} <= names
+    assert len(names) >= 2
 
 
 def test_is_pi_monitor_key_requires_pi_as_its_own_token():
@@ -514,6 +507,6 @@ def test_the_real_template_declares_every_bridge_tile_ungated():
         Path(monitors.STATIC_MONITORS_PATH).read_text()
     )
     bridge = {row.display: declared.get(row.display) for row in CHECKS}
-    assert len(bridge) >= 22 and "Swallowed Push Verdicts" in bridge
+    assert len(bridge) >= 21 and "Swallowed Push Verdicts" in bridge
     assert all(d is not None and d["gated"] is False for d in bridge.values()), bridge
     assert not [name for name in declared if "{" in name]

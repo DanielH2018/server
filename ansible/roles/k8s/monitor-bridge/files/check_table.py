@@ -27,7 +27,7 @@ scripts/secrets_mgmt/consumers.py finds who to redeploy after a rotation by grep
 role's files for the secret's name, so a derived name would drop monitor-bridge from that census
 and leave the pod pushing a revoked token. uptime-kuma renders the same tokens from this file;
 the census credits it through the cross-role read `deploy_changes.cross_role_readers` derives.
-Five rows predate the `monitor_bridge_<name>_push_token` rule and keep their old name, because
+Four rows predate the `monitor_bridge_<name>_push_token` rule and keep their old name, because
 renaming a secret is a rotation.
 
 `kuma_id`, `display` and `description` are what AutoKuma compares, and it runs with
@@ -107,13 +107,6 @@ CHECKS: tuple[PushCheck, ...] = (
         name="scrutiny", fn=host_thermal.check_scrutiny, token="monitor_bridge_scrutiny_push_token",
         kuma_id="monitor-bridge-scrutiny", display="SMART Data / Health", status_group="Hosts & Power", gate="startup_grace", critical=True,
         description="monitor-bridge reads Scrutiny's summary every 5 min. DOWN: a drive's collector data is older than 26h, its SMART self-assessment or an attribute threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured, so this is the only drive-failure page.",
-    ),
-    # Reads the Pi's `node-pi` job since #2004, and its absent-series branch pages, so it is
-    # gated; that also took it out of the startup grace, which must stay disjoint from the gates.
-    PushCheck(
-        name="pi_pressure", fn=host_edge.check_pi_pressure, token="monitor_bridge_pi_push_token",
-        kuma_id="monitor-bridge-pi", display="Pi Pressure", status_group="Raspberry Pi", gate="prometheus",
-        description="daniel-pi's node-exporter via monitor-bridge: load per core, free memory, SD card or boot partition fullness, or a published container port not listening after a reboot. A dead port needs a container recreate, not a restart.",
     ),
     PushCheck(
         name="ha_heartbeat", fn=service.check_ha_heartbeat, token="monitor_bridge_ha_push_token",

@@ -1,0 +1,80 @@
+# The weekly rkhunter scan and AIDE check (H7.7a, docs/target-architecture/host/h7-delete-ansible.md).
+# initial_setup installed both scanners, wrote their config and scripts, and ran each from a root
+# cron. The package ships the same files and runs each script from a timer at the cron's slot.
+# The scripts, rkhunter.conf.local and the AIDE exclusions are the role's own templates, rendered
+# in place through `role: initial_setup` until the last host PR moves them, so the hosts that still
+# apply the role cannot fork them.
+#
+# Each push token arrives through `LoadCredential=` from /run/credstore/, which homelab-secrets
+# fills from the host's SOPS file. The keys stay per host (`rkhunter_<host>_push_token`,
+# `aide_<host>_push_token`), so each host package lists its own two in `credentials:`. Two hosts on
+# one token would let one host's `up` hide another's missing check (#952).
+#
+# What the component leaves to the host or to bootstrap (H7.42):
+#
+# - The first baselines: `rkhunter --propupd` and `aideinit`. Each ran once, guarded by the file it
+#   creates, and the live hosts hold both. A rebuilt host without /var/lib/aide/aide.db makes the
+#   AIDE check push DOWN until the baseline exists.
+# - The mask on the aide package's dailyaidecheck.timer, which would run a second, nightly full
+#   scan. A mask is a symlink in /etc/systemd/system that the live hosts already hold.
+#
+# `rkhunter --update` ran on every Ansible apply. It runs before every scan instead, from
+# `ExecStartPre=-`, which ignores its exit code as the task's `failed_when: false` did.
+#
+# Autonomous-role contract (each scan runs weekly with no human in the loop). Both only read the
+# filesystem and report.
+#
+# - Scope / exclusions: `rkhunter --check` and `aide --check` at idle CPU and IO priority, one Kuma
+#   push each to this host's own monitor, and the `rkhunter-check` and `aide-check` textfiles in
+#   node_exporter's textfile directory. Neither rewrites a baseline, and nothing reaches another
+#   host.
+# - Mode (explicit and reversible): each timer's enable link arms it. Dropping the component from a
+#   host package stops both timers on the install that drops it. An unset credential skips the push
+#   and nothing else.
+# - Authoritative sources: AIDE's own exit code and rkhunter's log summary; each script's header has
+#   why the exit code alone cannot say.
+# - Required evidence, every run: an `aide-check` or `rkhunter-check` line in the journal, the Kuma
+#   push, and the textfile the `host-checks` rule group reads (#6168).
+role: initial_setup
+defaults:
+  initial_setup_host_lib_dir: /usr/lib/homelab
+  # rkhunter reads PermitRootLogin from the main sshd_config only and never follows its Include.
+  # The role read the file on every apply; a package renders before it reaches the host, so the
+  # hosts whose main file carries the line are listed instead. daniel-server's sshd hardening sat
+  # in /etc/ssh/sshd_config itself (`ssh_config_path`) and daniel-box's main file carries the line;
+  # the Pi's does not, and its live rkhunter.conf.local reads `unset` (2026-10-30).
+  integrity_scans_sshd_main_file_sets_root_login: [daniel-box, daniel-server]
+  initial_setup_rkhunter_allow_ssh_root_user: "{{ 'no' if inventory_hostname in integrity_scans_sshd_main_file_sets_root_login else 'unset' }}"
+depends:
+  - rkhunter
+  - aide
+  # aide only Recommends it, and the updater installs with --no-install-recommends. It ships
+  # /etc/aide/aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
+  - aide-common
+files:
+  # A regular file, not a link: rkhunter skips a symlinked .local file.
+  - {src: "role:rkhunter.conf.local.j2", dst: /etc/rkhunter.conf.local}
+  # No dot in the name: aide.conf includes conf.d names matching ^[a-zA-Z0-9_-]+$ only (#5785).
+  - {src: "role:98_aide_local.conf.j2", dst: /etc/aide/aide.conf.d/98_aide_local}
+  - {src: "role:rkhunter-check.sh.j2", dst: /usr/lib/homelab/rkhunter-check, mode: "0755"}
+  - {src: "role:aide-check.sh.j2", dst: /usr/lib/homelab/aide-check, mode: "0755"}
+  - {src: units/homelab-rkhunter-check.service.j2, dst: /usr/lib/systemd/system/homelab-rkhunter-check.service}
+  - {src: units/homelab-rkhunter-check.timer, dst: /usr/lib/systemd/system/homelab-rkhunter-check.timer}
+  - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}
+  - {src: units/homelab-aide-check.timer, dst: /usr/lib/systemd/system/homelab-aide-check.timer}
+enable:
+  homelab-rkhunter-check.timer: timers.target
+  homelab-aide-check.timer: timers.target
+lines:
+  # With APT_AUTOGEN, rkhunter's apt hook refreshes the baseline after every package change, so the
+  # weekly scan flags only changes no trusted package event explains. No package owns the file.
+  - {path: /etc/default/rkhunter, line: 'APT_AUTOGEN="true"', regexp: '^APT_AUTOGEN='}
+legacy:
+  - {cron: "Weekly rkhunter malware scan", user: root}
+  - {cron: "Weekly AIDE file integrity check", user: root}
+  - {path: /usr/local/bin/rkhunter-check.sh}
+  - {path: /usr/local/bin/aide-check.sh}
+  - {path: /etc/homelab/rkhunter-kuma-push.env}
+  - {path: /etc/homelab/aide-kuma-push.env}
+  - {path: /var/lib/homelab/setup-render-manifest.d/rkhunter-check}
+  - {path: /var/lib/homelab/setup-render-manifest.d/aide-check}

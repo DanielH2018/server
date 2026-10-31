@@ -1,0 +1,10 @@
+# Shipped by the host package's host-maintenance component. Started by homelab-dpkg-purge.timer.
+[Unit]
+Description=Purge the config remnants of removed packages and write the dpkg-purge textfile verdict
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=dpkg-purge
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin HOMELAB_LIB_DIR=/usr/lib/homelab DEBIAN_FRONTEND=noninteractive
+ExecStart=/usr/lib/homelab/host-maintenance dpkg-purge

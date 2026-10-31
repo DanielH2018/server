@@ -215,23 +215,14 @@ uptime_kuma_k8s_status_page_groups:
   - name: Services
     match:
       - "-k8s$"
-      - "^pihole-k8s-dns$"
-      - "^jellyfin-lan-vip$"
-      - "^loki$"
-      - "^email-to-rss$"
-      - "^slzb-coordinator$"
   - name: Cluster Health
     match:
       - "^crowdsec-"
   - name: Observability
     match:
-      # A routing signal, not a per-app tile: it probes ping@internal behind the edge's own
-      # self-check path, so it groups with the other edge observability tiles rather than
-      # with Services.
-      - "^homelab-edge-allclear$"
       - "^claude-otel-health$"
       # One tile per cluster node, both watching the same route from different source addresses.
-      # An edge/observability signal rather than a per-app tile, like the all-clear probe above.
+      # An edge/observability signal rather than a per-app tile.
       - "^loki-read-route-"
   - name: Backups & Storage
     match:

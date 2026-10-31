@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# The weekly reboot. Shipped by the host package's host-maintenance component and started by
+# homelab-reboot.timer.
+#
+# Usage: homelab-reboot
+# Takes no arguments. It refuses while /run/homelab/validate-failed exists: reconcile writes that
+# flag when a changed config failed its validation, and a reboot would bring the host up on the
+# config that failed. Otherwise it pings this host's `weekly-reboot-{{ inventory_hostname }}`
+# Healthchecks.io check and schedules the reboot {{ weekly_reboot_shutdown_delay_minutes }}
+# minutes ahead. The reboot happens even when the ping fails. A refusal sends no ping, so the
+# check's deadline pages. Running it by hand reboots the host.
+set -u
+
+# HOMELAB_ROOT prefixes the flag's path, as it does in reconcile. Only the tests set it.
+VALIDATE_FAILED="${HOMELAB_ROOT:-}/run/homelab/validate-failed"
+if [[ -e "$VALIDATE_FAILED" ]]; then
+  echo "not rebooting: reconcile's last validation failed ($VALIDATE_FAILED)"
+  exit 1
+fi
+
+key=""
+if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then
+  key="$(<"$CREDENTIALS_DIRECTORY/healthchecks_ping_key")"
+fi
+if [[ -n "$key" ]]; then
+  curl -fs -m 10 --retry 3 "https://hc-ping.com/$key/weekly-reboot-{{ inventory_hostname }}" >/dev/null 2>&1
+fi
+exec /sbin/shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}

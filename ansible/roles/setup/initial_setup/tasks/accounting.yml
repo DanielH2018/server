@@ -3,6 +3,7 @@
 
 - name: Install sysstat for system accounting
   tags: [accounting]
+  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
   ansible.builtin.apt:
     name: sysstat
     state: present
@@ -10,6 +11,7 @@
 
 - name: Enable sysstat data collection
   tags: [accounting]
+  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
   ansible.builtin.lineinfile:
     path: /etc/default/sysstat
     regexp: '^ENABLED='
@@ -18,6 +20,7 @@
 
 - name: Enable and start sysstat service
   tags: [accounting]
+  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
   ansible.builtin.systemd:
     name: sysstat
     state: started
@@ -27,6 +30,7 @@
 
 - name: Install process accounting tools
   tags: [accounting]
+  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
   ansible.builtin.apt:
     name: acct
     state: present
@@ -34,6 +38,7 @@
 
 - name: Enable and start process accounting service
   tags: [accounting]
+  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
   ansible.builtin.systemd:
     name: acct
     state: started
@@ -68,6 +73,7 @@
 
 - name: Deploy the weekly host-maintenance wrapper
   tags: [crons, apt-hygiene, firmware]
+  when: inventory_hostname not in initial_setup_packaged_hosts['maintenance']
   # The three weekly maintenance crons run through it so each writes a homelab_check textfile
   # that a NotReporting rule reads (#6179). `firmware` too, because crons.yml's firmware cron
   # runs it, and every host gets it: the script is inert on a host whose cron never calls it.
@@ -81,6 +87,7 @@
 
 - name: Schedule weekly package autoremove
   tags: [crons, apt-hygiene]
+  when: inventory_hostname not in initial_setup_packaged_hosts['maintenance']
   ansible.builtin.cron:
     name: "Weekly apt autoremove"
     minute: "0"
@@ -92,6 +99,7 @@
 
 - name: Schedule weekly purge of removed-package config remnants
   tags: [crons, apt-hygiene]
+  when: inventory_hostname not in initial_setup_packaged_hosts['maintenance']
   ansible.builtin.cron:
     name: "Weekly dpkg purge orphaned configs"
     minute: "15"

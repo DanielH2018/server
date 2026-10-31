@@ -9,8 +9,9 @@ left behind names a file reconcile removed, and the manifest-prune check reads i
 every run. loki-route-witness listed its render name for both and left
 `setup-deployed-manifest.d/loki-route-health` on daniel-box.
 
-The loki-route-witness tasks still run on daniel-server, so its row is derived from
-`initial_setup/tasks/crons.yml`. Every other mover's task is gone, so its row is recorded from
+The loki-route-witness and integrity-scans tasks still run on the cluster nodes, so their rows are
+derived from `initial_setup/tasks/crons.yml` and `integrity.yml`. Every other mover's task is
+gone, so its row is recorded from
 the task file at the commit before the move.
 
 Run: uv run pytest hosts/lib/tests/test_component_retired_stamp_fragments.py
@@ -22,6 +23,7 @@ from lib.repo_paths import REPO
 
 COMPONENTS = REPO / "hosts" / "components"
 CRONS = REPO / "ansible" / "roles" / "setup" / "initial_setup" / "tasks" / "crons.yml"
+INTEGRITY = CRONS.with_name("integrity.yml")
 KINDS = {
     "/var/lib/homelab/setup-render-manifest.d/": "render",
     "/var/lib/homelab/setup-deployed-manifest.d/": "deployed",
@@ -51,8 +53,12 @@ RECORDED = {
         ("deployed", "claude-code-dotfiles-sync"),
     },
 }
-# A component whose Ansible task still runs on another host; its row comes from that task.
-DERIVED = {"loki-route-witness": (CRONS, "loki_route_witness")}
+# A component whose Ansible tasks still run on another host; its row comes from those tasks, as
+# (task file, tag) pairs.
+DERIVED = {
+    "loki-route-witness": ((CRONS, "loki_route_witness"),),
+    "integrity-scans": ((INTEGRITY, "rkhunter"), (INTEGRITY, "aide")),
+}
 
 
 def retired_fragments(spec: dict) -> set[tuple[str, str]]:
@@ -94,12 +100,15 @@ def components() -> dict[str, set[tuple[str, str]]]:
 
 
 def expected() -> dict[str, set[tuple[str, str]]]:
-    derived = {name: stamped_fragments(*src) for name, src in DERIVED.items()}
+    derived = {
+        name: set().union(*(stamped_fragments(*src) for src in sources))
+        for name, sources in DERIVED.items()
+    }
     return RECORDED | derived
 
 
 def test_the_loki_witness_tasks_stamp_two_differently_named_fragments():
-    assert stamped_fragments(*DERIVED["loki-route-witness"]) == {
+    assert stamped_fragments(*DERIVED["loki-route-witness"][0]) == {
         ("render", "loki-route-witness"),
         ("deployed", "loki-route-health"),
     }
@@ -107,7 +116,7 @@ def test_the_loki_witness_tasks_stamp_two_differently_named_fragments():
 
 def test_every_component_retires_exactly_the_fragments_its_task_stamped():
     found = components()
-    assert {"loki-route-witness", "builder"} <= set(found)
+    assert {"loki-route-witness", "builder", "integrity-scans"} <= set(found)
     assert mismatches(found, expected()) == []
 
 

@@ -1,0 +1,14 @@
+# System and process accounting (H7.7a, docs/target-architecture/host/h7-delete-ansible.md).
+# initial_setup installed sysstat and acct, set `ENABLED="true"` in /etc/default/sysstat and
+# started both services.
+#
+# /etc/default/sysstat belongs to no package (sysstat's postinst writes it), so it takes the line
+# arm with the lineinfile task's regexp. sysstat.service reads it on start, so a changed line
+# restarts the service. Both Debian packages enable their service on install, so the component
+# ships no enable link. The Pi's retention caps on /etc/sysstat/sysstat and /etc/default/acct are
+# pi-tuning's.
+depends:
+  - sysstat
+  - acct
+lines:
+  - {path: /etc/default/sysstat, line: 'ENABLED="true"', regexp: '^ENABLED=', activate: "try-restart:sysstat.service"}

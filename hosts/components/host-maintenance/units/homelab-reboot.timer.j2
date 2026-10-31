@@ -1,0 +1,12 @@
+# Shipped by the host package's host-maintenance component with its enable link. The slot is
+# group_vars' `weekly_reboot_*`, which uptime-kuma's maintenance window also reads, so the two
+# cannot drift apart.
+[Unit]
+Description=Reboot this host weekly
+
+[Timer]
+OnCalendar={{ ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][weekly_reboot_weekday | int] }} *-*-* {{ '%02d:%02d' | format(weekly_reboot_hour | int, weekly_reboot_minute | int) }}:00 {{ weekly_reboot_timezone }}
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

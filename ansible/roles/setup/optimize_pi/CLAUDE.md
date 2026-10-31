@@ -29,13 +29,13 @@ must not break.
 - `hosts/components/pi-peer-backup-target/` holds pi-peer-backup's forced-command wrapper and
   its authorized key.
 - The three heartbeats left in H3.8b (`hosts/components/pi-heartbeats/`).
+- The LAN's port-9100 ufw rule, declared in `hosts/daniel-pi/package.yml` since H7.30.
+  Reconcile's ufw arm relabelled the Ansible-era rule (`optimize_pi: node_exporter`) in place.
 
 ## What stayed behind
 - The debloat purge (Open vSwitch, snapd, fwupd), the rsyslog and `wpa_supplicant` masks,
   `systemd-resolved`'s disable and the one-off cleanups of stale rsyslog, AIDE and audit logs
   are state the live Pi already holds. The bootstrap debloat step carries them for a rebuild.
-- The LAN's port-9100 ufw rule (`optimize_pi: node_exporter`) stays an Ansible-era rule until
-  H7.30 declares the Pi's ufw rules.
 - Installing `log2ram` stays a bootstrap step: Azlux's apt source arrives in the same package, so
   the package cannot depend on it.
 - The Ansible-era edits stay in the files as harmless duplicates, and the interim push-token

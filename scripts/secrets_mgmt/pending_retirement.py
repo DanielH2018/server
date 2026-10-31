@@ -53,5 +53,9 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         "monitor_bridge_mem_push_token",
         "monitor_bridge_host_temp_push_token",
         "monitor_bridge_ups_push_token",
+        # M6 batch B8's Cutover-a1 deleted the Pi Pressure tile, and Cutover-a2 deleted its
+        # bridge row. B8's token PR retires the key a week after Cutover-b and deletes this
+        # entry with it.
+        "monitor_bridge_pi_push_token",
     }
 )

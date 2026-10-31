@@ -385,7 +385,7 @@ def test_a_manifest_without_secrets_unit_runs_no_secrets_step(tmp_path):
     assert "secrets_inputs_sha256" not in node.applied()
 
 
-def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_two_credentials(
+def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
     tmp_path,
 ):
     package = host_mode.render_host("daniel-pi")
@@ -405,7 +405,14 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_two_credential
     credentials = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])[
         "credentials"
     ]
-    assert credentials == ["pi_recovery_push_token", "pi_sd_health_push_token"]
+    # The two heartbeat tokens (H4.5), and the scan tokens and Healthchecks.io key (H7.30).
+    assert credentials == [
+        "aide_daniel_pi_push_token",
+        "healthchecks_ping_key",
+        "pi_recovery_push_token",
+        "pi_sd_health_push_token",
+        "rkhunter_daniel_pi_push_token",
+    ]
     for key in credentials:
         node.credential(key)
     # H5.7: the Compose env file is an output, which the secrets unit renders before reconcile
@@ -413,8 +420,16 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_two_credential
     outputs = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])["outputs"]
     for output in outputs:
         node.output_file(output["destination"], persist=output["persist"])
-    # H7.27: the line arm edits conffiles that exist on a real host.
-    for unit in ("ssh.service", "systemd-journald.service", "auditd.service"):
+    # H7.27: the line arm edits conffiles that exist on a real host. H7.30 adds the three daemons
+    # whose edited files restart them.
+    for unit in (
+        "ssh.service",
+        "systemd-journald.service",
+        "auditd.service",
+        "fail2ban.service",
+        "postfix.service",
+        "sysstat.service",
+    ):
         live_unit(node, unit)
     node.state["users"] = {
         "node_exporter": 999

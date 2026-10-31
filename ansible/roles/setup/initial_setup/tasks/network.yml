@@ -79,6 +79,7 @@
 
 - name: Remove plain SSH allow rule (superseded by rate-limit)
   tags: [firewall]
+  when: inventory_hostname not in initial_setup_packaged_hosts['ufw']
   community.general.ufw:
     rule: allow
     port: ssh
@@ -99,6 +100,7 @@
 # shape for a targeted fence.
 - name: Set UFW default policy - deny incoming
   tags: [firewall]
+  when: inventory_hostname not in initial_setup_packaged_hosts['ufw']
   community.general.ufw:
     default: deny
     direction: incoming
@@ -106,6 +108,7 @@
 
 - name: Set UFW default policy - allow outgoing
   tags: [firewall]
+  when: inventory_hostname not in initial_setup_packaged_hosts['ufw']
   community.general.ufw:
     default: allow
     direction: outgoing
@@ -139,6 +142,7 @@
 # it only stops rate-limiting hosts that are already inside the LAN.
 - name: Configure UFW firewall - allow SSH from the LAN without rate-limiting
   tags: [firewall]
+  when: inventory_hostname not in initial_setup_packaged_hosts['ufw']
   community.general.ufw:
     rule: allow
     port: ssh
@@ -158,6 +162,7 @@
 
 - name: Configure UFW firewall - rate-limit SSH
   tags: [firewall]
+  when: inventory_hostname not in initial_setup_packaged_hosts['ufw']
   community.general.ufw:
     rule: limit
     port: ssh
@@ -179,7 +184,9 @@
 # no host still carries the rule.
 - name: Remove the inert staging route-deny rule that PR 508 left behind
   tags: [firewall]
-  when: has_hypervisor | bool
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['ufw']
+    - has_hypervisor | bool
   community.general.ufw:
     rule: deny
     route: true
@@ -187,25 +194,6 @@
     dest: "{{ lan_subnet }}"
     delete: true
   become: true
-
-- name: Remove the stale WireGuard 51820/udp allow on the Pi
-  tags: [firewall]
-  # The Pi's wg-easy listens on 51822, not 51820 (both hosts share one public IP, so the
-  # listen ports must differ), so this rule is stale. No replacement is added: wg-easy
-  # publishes its UDP port via Docker, whose nat/FORWARD rules bypass UFW INPUT entirely —
-  # proven by the Pi's glances web UI being LAN-reachable with no UFW allow for 61208.
-  # The Pi's manually-added 51822 allow is left in place (harmless, documents intent).
-  # Kept as a delete-task (not just removed) so existing hosts converge.
-  community.general.ufw:
-    rule: allow
-    port: "51820"
-    proto: udp
-    delete: true
-  become: true
-  # DECIDED: a host literal, not a capability flag (#2975). The rule being deleted was added by
-  # hand on this one machine, so the gate reads "the host that carries that stale rule" — host
-  # history, not hardware. It retires once the Pi has converged.
-  when: inventory_hostname == 'daniel-pi'
 
 # `ufw enable` on a firewall that is already active still runs ufw-init start, which flushes
 # every ufw chain and reloads them from the files (frontend.py `set_enabled`), and the module
@@ -215,6 +203,7 @@
 # runs only on an inactive firewall, which is the only state it changes.
 - name: Read whether UFW is active
   tags: [firewall]
+  when: inventory_hostname not in initial_setup_packaged_hosts['ufw']
   ansible.builtin.command:
     cmd: ufw status
   register: initial_setup_ufw_status
@@ -226,7 +215,9 @@
   tags: [firewall]
   community.general.ufw:
     state: enabled
-  when: "initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True)"
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['ufw']
+    - "initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True)"
 
 # The loaded ruleset can differ from before.rules while the file is intact, which is what the
 # 2026-10-25 outage looked like, so this reads the live chain rather than the file. It only
@@ -242,7 +233,9 @@
   failed_when: false
   check_mode: false
   become: true
-  when: "not (ansible_check_mode and initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True))"
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['ufw']
+    - "not (ansible_check_mode and initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True))"
 
 - name: Fail when UFW's before-input chain lost the loopback accept
   tags: [firewall]
@@ -254,4 +247,6 @@
       /etc/ufw/before.rules and loopback traffic, host DNS on 127.0.0.1 included, is dropped.
       Run `sudo ufw reload`, then `sudo iptables -S ufw-before-input`.
     quiet: true
-  when: "not (ansible_check_mode and initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True))"
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['ufw']
+    - "not (ansible_check_mode and initial_setup_ufw_status.stdout is search('^Status: inactive', multiline=True))"

@@ -10,7 +10,6 @@
 | Host Packages — Status | `host_packages` | `prometheus` |  | Automation & Drift |  |
 | etcd Restore Drill | `etcd_restore_drill` | none |  | Backups & Storage | `k3s-etcd-restore` |
 | SMART Data / Health | `scrutiny` | `startup_grace` | yes | Hosts & Power |  |
-| Pi Pressure | `pi_pressure` | `prometheus` |  | Raspberry Pi |  |
 | Home Assistant Automations | `ha_heartbeat` | none |  | Services |  |
 | k3s Speedtest | `speedtest` | `startup_grace` |  | Services |  |
 | Swallowed Push Verdicts | `swallowed_verdicts` | `startup_grace` |  | Observability |  |

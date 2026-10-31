@@ -1,0 +1,28 @@
+# The SSH rules and the enable of ufw (H7.7g, docs/target-architecture/host/h7-delete-ansible.md,
+# *Reconcilers for state dpkg does not hold*). initial_setup set the default policies, added the
+# two SSH rules and enabled an inactive ufw. Reconcile's ufw arm does all three once a package
+# declares these rules: it sets `deny incoming` and `allow outgoing` only where they differ, and it
+# enables an inactive ufw only once both keep rules are present (`REQUIRED_KEEP` in
+# hosts/lib/reconcile_lib/ufw.py names these two ids).
+#
+# The LAN is exempt from SSH rate-limiting, so `lan-ssh` must sort above `ssh-limit`. The
+# `DECIDED: the LAN is exempt` marker in initial_setup's network.yml has the incident. ufw takes the first matching rule, so an
+# allow below the limit rule does nothing. The arm checks the `before:` relation and fails the run,
+# holding the host, rather than deleting a keep rule to repair it.
+#
+# Both rules are `keep`: no revert and no floor ever deletes them, so a revert leaves SSH reachable.
+# Removing one is the operator's, at the host's console.
+#
+# Each spec is what `ufw show added` prints for the Ansible task's rule, measured with ufw
+# 0.36.2-6's own parser: `port: ssh` prints as `22`. The live rules carry no comment, so the arm
+# adopts each by appending it again, which relabels it in place. The legacy entries name each
+# Ansible-era rule by its exact spec and comment. The first two share a declared spec, so the arm
+# never deletes them; `allow 22/tcp` is the plain allow initial_setup removed on every apply.
+ufw:
+  rules:
+    - {id: lan-ssh, spec: "allow from {{ lan_subnet }} to any port 22 proto tcp", keep: true, position: first, before: ssh-limit}
+    - {id: ssh-limit, spec: "limit 22/tcp", keep: true}
+  legacy:
+    - {spec: "allow from {{ lan_subnet }} to any port 22 proto tcp", comment: "", replaced_by: lan-ssh}
+    - {spec: "limit 22/tcp", comment: "", replaced_by: ssh-limit}
+    - {spec: "allow 22/tcp", comment: "", replaced_by: ssh-limit}

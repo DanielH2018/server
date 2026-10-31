@@ -43,11 +43,22 @@
 # Since H7.26 it ships the docker_install role's subjects (pi-docker): the engine pins and
 # homelab-docker-engine.service, the one path that installs or moves the held engine, daemon.json,
 # the two Go-runtime drop-ins and containerd's config block. No file here needs a credential.
+#
+# Since H7.30 it ships the rest of initial_setup's Pi subjects: the fail2ban group (fail2ban,
+# integrity-scans for rkhunter and AIDE, postfix and accounting), the maintenance timers
+# (host-maintenance: the weekly reboot, apt autoremove, dpkg purge and the Docker prune) and ufw
+# (ssh-firewall and the rules below). initial_setup skips each on this host through
+# `initial_setup_packaged_hosts`. The scans and the timers read three new credentials, so the Pi's
+# SOPS file must hold `rkhunter_daniel_pi_push_token`, `aide_daniel_pi_push_token` and
+# `healthchecks_ping_key` (`host_secrets.py sync daniel-pi`, operator-only).
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
 credentials:
   - pi_sd_health_push_token
   - pi_recovery_push_token
+  - rkhunter_daniel_pi_push_token
+  - aide_daniel_pi_push_token
+  - healthchecks_ping_key
 # H3.11: the Pi is the arm64 pilot of homelab-tools, which ships sops and chezmoi under
 # /usr/lib/homelab/bin. An unversioned Depends already satisfied never upgrades the dependency,
 # so homelab-updater's steps 4 and 5 cover every installed homelab-* package.
@@ -70,3 +81,32 @@ legacy:
   - {path: /usr/local/lib/pi-kuma-push-lib.sh}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
+  # H7.30: the maintenance wrapper the crons ran, and the Healthchecks.io key file they sourced. The
+  # cluster nodes keep both until their own PRs: daniel-box's k3s role and worktree sweep read the
+  # key file there.
+  - {path: /usr/local/bin/host-maintenance.sh}
+  - {path: /etc/healthchecks/ping.env}
+  - {path: /etc/healthchecks}
+# H7.30: the Pi's own LAN rules, beside ssh-firewall's two SSH rules. Each spec is what `ufw show
+# added` prints for the Ansible task that added it, and each legacy entry names that rule by its
+# exact spec and comment. A legacy rule that shares a declared spec is the one the arm adopts: it
+# appends the spec with its `homelab:` label, which relabels the rule in place, and never deletes it.
+#
+# - node-exporter: the host node exporter's metrics port, which optimize_pi opened (H7.25 left it).
+# - dockerd-metrics and containerd-metrics: the two Go runtimes' metrics listeners, which
+#   docker_install opened (H7.26 left them).
+# - `allow 51820/udp` is a stale WireGuard allow initial_setup deleted on every apply. The Pi's
+#   wg-easy listens on 51822, and Docker's nat rules publish it ahead of ufw's INPUT chain, so no
+#   rule replaces it. `replaced_by` only orders its deletion after the SSH keep rule is present.
+# - The hand-added 51822 allow stays undeclared. It carries no `homelab:` label and no legacy
+#   entry names it, so the arm leaves it alone.
+ufw:
+  rules:
+    - {id: node-exporter, spec: "allow from {{ lan_subnet }} to any port 9100 proto tcp"}
+    - {id: dockerd-metrics, spec: "allow from {{ lan_subnet }} to any port 9323 proto tcp"}
+    - {id: containerd-metrics, spec: "allow from {{ lan_subnet }} to any port 1338 proto tcp"}
+  legacy:
+    - {spec: "allow from {{ lan_subnet }} to any port 9100 proto tcp", comment: "optimize_pi: node_exporter", replaced_by: node-exporter}
+    - {spec: "allow from {{ lan_subnet }} to any port 9323 proto tcp", comment: "docker_install: dockerd metrics", replaced_by: dockerd-metrics}
+    - {spec: "allow from {{ lan_subnet }} to any port 1338 proto tcp", comment: "docker_install: containerd metrics", replaced_by: containerd-metrics}
+    - {spec: "allow 51820/udp", comment: "", replaced_by: ssh-limit}

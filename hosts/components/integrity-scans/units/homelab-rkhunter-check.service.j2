@@ -1,0 +1,14 @@
+# Shipped by the host package's integrity-scans component. Started by homelab-rkhunter-check.timer.
+[Unit]
+Description=Run the weekly rkhunter scan and push its verdict to this host's Kuma monitor
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=rkhunter-check
+# The data-file refresh that ran on every Ansible apply. Its exit code is not the verdict.
+ExecStartPre=-/usr/bin/rkhunter --update --nocolors
+ExecStart=/usr/lib/homelab/rkhunter-check
+LoadCredential=rkhunter_push_token:/run/credstore/rkhunter_{{ inventory_hostname | replace('-', '_') }}_push_token

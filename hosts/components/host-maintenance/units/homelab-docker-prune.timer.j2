@@ -1,0 +1,12 @@
+# Shipped by the host package's host-maintenance component with its enable link, on a
+# `has_docker` host. The slot is the role's `initial_setup_docker_prune_cron_*`, which the
+# Healthchecks.io cadences fragment and monitor-bridge also read.
+[Unit]
+Description=Prune unused Docker objects daily
+
+[Timer]
+OnCalendar=*-*-* {{ '%02d:%02d' | format(initial_setup_docker_prune_cron_hour | int, initial_setup_docker_prune_cron_minute | int) }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
