@@ -1,0 +1,51 @@
+{# Alertmanager's own UI, where the operator lists alerts and inhibitions and manages silences
+   (M6 B-6b, #6690). The design is answer 1 (b) of
+   docs/target-architecture/monitoring/alertmanager-ui-and-readers.md.
+
+   The UI can silence every page, so the `authelia` chain is the control, and the rule it
+   meets is the hand-written `two_factor` rule for `group:admins` with the `deny` after it
+   (roles/k8s/authelia/templates/config-secret.yaml.j2, M6 B-6a). Without that rule the
+   `*.local` wildcard would pass this host at one_factor.
+
+   LAN-ONLY, and it ignores k8s_public_route, in the shape of prometheus-ingressroute.yaml.j2.
+   The client set is the read door's: the LAN plus the node addresses a host process arrives
+   as, so the `claude-ui` browser on either node reaches it. Pods and WireGuard peers are
+   excluded.
+
+   The GET-only read door (alertmanager-read-ingressroute.yaml.j2) shares this host. Traefik
+   ranks routers by rule length when none sets `priority`, and the door's rule is the longer,
+   so a GET on /api/v2/alerts or /api/v2/silences reaches it without Authelia, and every other
+   request lands here. ansible/tests/k8s/test_alertmanager_read_route.py is the guard. #}
+{% set clients = [lan_subnet] + k3s_cni0_gateways + k3s_flannel_node_ips %}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: alertmanager
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  entryPoints:
+    - https
+  routes:
+    - kind: Rule
+      # OR'd ClientIP matchers, NOT ClientIP(a, b): the multi-arg form fails rule parsing on
+      # this Traefik and the router vanishes (prometheus-ingressroute.yaml.j2).
+      match: "Host(`alertmanager.local.{{ domain }}`) && ({% for cidr in clients %}ClientIP(`{{ cidr }}`){% if not loop.last %} || {% endif %}{% endfor %})"
+      middlewares:
+        - name: rate-limit
+        - name: authelia
+      services:
+        - name: alertmanager
+          port: 9093
+  tls:
+{% if k8s_tls_cert_resolver %}
+    certResolver: {{ k8s_tls_cert_resolver }}
+{% endif %}
+    options:
+      name: modern
+{% if k8s_tls_cert_resolver %}
+    domains:
+      - main: "{{ domain }}"
+        sans:
+          - "*.{{ domain }}"
+          - "*.local.{{ domain }}"
+{% endif %}
