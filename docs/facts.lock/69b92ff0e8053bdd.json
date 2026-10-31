@@ -1,5 +1,5 @@
 {
-  "checksum": "30dcb7e45068fcbcbaf4d5f0a43c889e32b3914db3272e738378bfebb5013d3a",
+  "checksum": "fe9306f4d54f0b6a698d84b5d3ed710820864b00b099a52b29d8e1356e989ef6",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/authelia/CLAUDE.md#The `claude-ui` user",
   "row": {
@@ -12,6 +12,6 @@
       "scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py": "d286c4866f525e1ad0b86895b2d078218868945daa156580556778eadaf9a09f"
     },
     "python": "3.14",
-    "verified_sha": "ff5cc95cb"
+    "verified_sha": "080913749"
   }
 }
