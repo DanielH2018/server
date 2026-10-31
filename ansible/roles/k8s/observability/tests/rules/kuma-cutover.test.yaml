@@ -126,10 +126,6 @@ tests:
             exp_annotations:
               summary: Kuma's Daniel Pi Recovery tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Daniel Pi Recovery tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Workload Log Errors, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Workload Log Errors tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Workload Log Errors tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: GitHub Ruleset Drift, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's GitHub Ruleset Drift tile is gone and no alert rule pages in its place.
@@ -307,8 +303,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
@@ -432,8 +426,6 @@ tests:
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
         values: '1x140'
@@ -568,8 +560,6 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x160'
-      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
-        values: '1x160'
       - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
@@ -695,8 +685,6 @@ tests:
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
         values: '1x1700'
@@ -832,8 +820,6 @@ tests:
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
         values: '1x5 _x3100'
@@ -991,8 +977,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="GitHub Interaction Limit", monitor_type="push"}'
@@ -1136,8 +1120,6 @@ tests:
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
         values: '1x300'
@@ -1295,8 +1277,6 @@ tests:
       - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Workload Log Errors", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="GitHub Ruleset Drift", monitor_type="push"}'
         values: '1x760'
