@@ -19,6 +19,12 @@
 #   rootq           the root inspector and the agent's socket
 #   agent           the agent user: its account, groups, home, identity, gh login, kubeconfig,
 #                   and its clone and dotfiles syncs
+#   lander          the agent's lander: its unit, polkit rule and approval list
+#   server_lander   the server-batch lander timer
+#   pipeline_timeline  the daily pipeline timeline snapshot
+#   memory_sync     the memory store copy to daniel-server
+#   takeover_check  the D5 takeover check's wrapper and sudoers grant; the role keeps the flux
+#                   copy the wrapper runs and its state directory
 claude_code_packaged_hosts:
   remote_control: [daniel-box]
   bg_resume: [daniel-box]
@@ -27,9 +33,14 @@ claude_code_packaged_hosts:
   alerts: [daniel-box]
   rootq: [daniel-box]
   agent: [daniel-box]
+  lander: [daniel-box]
+  server_lander: [daniel-box]
+  pipeline_timeline: [daniel-box]
+  memory_sync: [daniel-box]
+  takeover_check: [daniel-box]
 
-# Where the alerts the role still installs keep their webhook file: the memory sync, the
-# server-batch lander and the pipeline timeline. The claude-code component retires /etc/claude-rc.
+# Where the role's memory sync, server-batch lander and pipeline timeline alerts keep their
+# webhook file on a host the package does not cover. The claude-code component retires it.
 claude_code_alert_env_dir: /etc/claude-code-alerts
 
 # The service hands anything holding the claude.ai account a session on the k3s
@@ -500,34 +511,21 @@ claude_code_agent_primary_profile:
   dotfiles: "{{ claude_code_agent_dotfiles }}"
 
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
-# claude-land@<n>.service lands PR <n> as {{ sys_user }} by running land.sh with the landing
-# policy switched on (scripts/deploy_tools/land_lib/policy.py). The agent user may start that unit and do
-# nothing else with it (templates/50-claude-land.rules.j2). It reads the outcome back from
-# /var/lib/claude-land/<n>.verdict.
+# homelab-claude-land@<n>.service lands PR <n> as {{ sys_user }} by running land.sh with the
+# landing policy switched on (scripts/deploy_tools/land_lib/policy.py). The agent user may start
+# that unit and do nothing else with it (templates/50-claude-land.rules.j2). It reads the
+# outcome back from /var/lib/homelab-claude-land/<n>.verdict. The claude-code host component
+# ships it (H7.40's second slice).
 #
 # True only in daniel-box's host_vars, and installed only while claude_code_agent_user_enabled
 # is also true. False on either removes the rule, the unit and the approval list; a landing
 # already running finishes.
 claude_code_lander_enabled: false
-# These five are pinned again as block vars in tasks/lander.yml, which wins over any inventory
-# override; the values here are what the validator renders the unit with. Each is a literal,
-# not a reference to the agent profile's variables: a block var that references an inventory
-# variable is resolved from the inventory, so it pins nothing.
-# The checkout land.sh runs from: the deployer's primary, which only ever fast-forwards to
-# master, so the lander runs the land.sh that master holds and never a branch's copy.
-claude_code_lander_checkout: "/home/{{ sys_user }}/server"
-# The only branches the lander lands, the shape EnterWorktree gives a `claude/<slug>` worktree.
-# It must match the fence's exclude (gitops_deploy_fence_ruleset_exclude), the one branch
-# shape the account can push, and claude_code_agent_worktree_prefix.
-claude_code_lander_branch_prefix: "worktree-claude+"
-# The GitHub login a PR must be authored by, the agent's (claude_code_agent_github_login).
-claude_code_lander_author: DanielClaudeBot
-# The Unix user the polkit rule lets start a landing, the agent's (claude_code_agent_user).
-claude_code_lander_agent_user: claude
-# The operator's GitHub login. Its approval of a PR's head SHA lifts the approval-path refusal
-# below, so the agent can land a PR the operator has reviewed. Never the agent's own login.
-claude_code_lander_approver: DanielH2018
-# The approval list (the paths an agent PR cannot land without the approver above) is literal
+# The unit's name and the checkout, branch prefix, author, agent user and approver it lands
+# under are literals in templates/claude-land-pins.j2, not variables here. A template's own
+# assignment outranks the inventory in Ansible and in the host package renderer alike, and the
+# claude-code component renders the lander, so a block var would pin nothing there.
+# The approval list (the paths an agent PR cannot land without the pinned approver) is literal
 # in templates/claude-land-approval-paths.j2, not a variable here, so the inventory cannot
 # override it. That template has the floor and the reason for each entry.
 

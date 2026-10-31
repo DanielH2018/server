@@ -8,6 +8,7 @@ from pipeline_timeline import (
     concurrency,
     job_times,
     join,
+    lander_journal,
     load_reviews,
     parse_holds,
     parse_landings,
@@ -278,3 +279,22 @@ def test_pull_reviews_reads_the_host_into_a_local_directory(tmp_path, monkeypatc
     assert not any(
         a.startswith("--delete") or a == "--remove-source-files" for a in seen[0]
     )
+
+
+def test_the_lander_journal_reads_the_packaged_unit_and_its_ansible_era_name(
+    monkeypatch,
+):
+    seen = []
+
+    def fake_run(cmd, **_):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "1 line\n", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert lander_journal("2026-10-28") == ["1 line"]
+    assert seen[0][0] == "journalctl"
+    assert {
+        "--unit=homelab-claude-fanout-server-lander.service",
+        "--unit=claude-fanout-server-lander.service",
+    } <= set(seen[0])

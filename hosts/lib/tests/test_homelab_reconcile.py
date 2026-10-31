@@ -299,6 +299,55 @@ def test_an_ansible_era_unit_is_disabled_stopped_and_removed_unless_a_package_ow
     assert len(node.applied()["retired"]) == 2
 
 
+def test_a_retired_template_unit_is_disabled_and_removed_but_never_stopped(node):
+    path = node.root / "etc/systemd/system/claude-land@.service"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("[Service]\n")
+    node.state["units"]["claude-land@3633.service"] = {
+        "load": "loaded",
+        "active": "inactive",
+        "enabled": "static",
+    }
+    node.state["units"]["claude-land@.service"] = {
+        "load": "loaded",
+        "active": "inactive",
+        "enabled": "static",
+    }
+    node.manifest["legacy"].append({"unit": "claude-land@.service"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.actions() == [["disable", "claude-land@.service"]]
+    assert not path.exists()
+    assert node.applied()["retired"] == ['{"unit": "claude-land@.service"}']
+
+
+def test_a_template_unit_with_a_running_instance_is_kept(node):
+    """A landing in flight keeps its unit file, as a running service keeps its own."""
+    path = node.root / "etc/systemd/system/claude-land@.service"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("[Service]\n")
+    node.state["units"]["claude-land@3633.service"] = {
+        "load": "loaded",
+        "active": "activating",
+        "enabled": "static",
+    }
+    node.state["units"]["claude-land@.service"] = {
+        "load": "loaded",
+        "active": "inactive",
+        "enabled": "static",
+    }
+    node.manifest["legacy"].append({"unit": "claude-land@.service"})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.actions() == []
+    assert path.exists()
+    assert node.applied()["retired"] == []
+
+
 # The dpkg lock and the record.
 
 

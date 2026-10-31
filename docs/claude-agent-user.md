@@ -206,8 +206,8 @@ refused as a workflow edit, even when its own commits touch no workflow. Rebase 
 
 ## Slice 3: merged work lands through the lander
 
-The agent has its own `claude-land@.service`, not a template shared with Renovate's lander. The
-checks and the merge live in `land.sh`, and the lander does not re-implement them.
+The agent has its own `homelab-claude-land@.service`, not a template shared with Renovate's
+lander. The checks and the merge live in `land.sh`, and the lander does not re-implement them.
 
 - **The landing policy lives in `land.sh`.** The settings change nothing when unset. With
   `LAND_REQUIRE_AUTHOR` set, every merge path is pinned to the head SHA `land.sh` checked, the
@@ -216,9 +216,11 @@ checks and the merge live in `land.sh`, and the lander does not re-implement the
   changes a module the lander imports refuses too, and so does one that can run code on import
   with no import line, such as a non-empty `__init__.py` or a symlink.
   `--verdict-file` writes `PENDING`, then the final `VERDICT:` or `REFUSED:` line.
-- **The unit** `claude-land@.service` in `setup/claude_code` runs `land.sh` as `ubuntu` with the
-  policy pinned to `DanielClaudeBot`, the `worktree-claude+` prefix and a root-owned
-  approval-paths file. A polkit rule lets `claude` start only `claude-land@<n>.service`.
+- **The unit** `homelab-claude-land@.service`, a `setup/claude_code` template that daniel-box's
+  host package ships, runs `land.sh` as `ubuntu` with the policy pinned to `DanielClaudeBot`,
+  the `worktree-claude+` prefix and a root-owned approval-paths file. The pins are literals in
+  `templates/claude-land-pins.j2`, so no inventory value moves them. A polkit rule lets `claude`
+  start only `homelab-claude-land@<n>.service`.
   `scripts/validate/unit_templates.py` node-checks every `*.rules.j2`.
   `claude_code_lander_enabled` switches the unit and the rule on.
 - **An approval-list PR lands when the operator's latest review approves its head SHA.** An
@@ -228,9 +230,9 @@ checks and the merge live in `land.sh`, and the lander does not re-implement the
   a boundary: an agent that skips it has no privileges to land with. `cc-wait` is copied to the
   agent the way `claude_guard` is.
 - **A landing that fails or is refused pages Discord** through
-  `OnFailure=claude-land-alert.service`, because the session that started it may be gone
+  `OnFailure=homelab-alert@%n.service`, because the session that started it may be gone
   (#4602). A refused landing waits on the operator: approve the head, then start
-  `claude-land@<n>` again, since nothing re-runs it.
+  `homelab-claude-land@<n>` again, since nothing re-runs it.
 - **A fan-out batch that stops on any state but `done` pages Discord too**, as
   `fanout-alert@<unit>:<state>.service`. A batch is a user unit, so it can neither name a
   system unit in `OnFailure=` nor read the webhook. Its `ExecStopPost=`
@@ -255,8 +257,9 @@ operator.
 `ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2` is the source of
 truth, with a reason beside each entry. It holds:
 
-- the lander itself: `tasks/lander.yml`, the list template, the unit template and the polkit
-  rule template, all under `ansible/roles/setup/claude_code/`
+- the lander itself: `tasks/lander.yml`, the list template, the unit template, the polkit
+  rule template and the pins template, all under `ansible/roles/setup/claude_code/`, and
+  `hosts/components/claude-code/component.yml`, which ships them
 - `scripts/deploy_tools/land`, a prefix that covers `land.sh`, `land.py`, `land_*.py` and
   `land_lib/`
 - `pyproject.toml`, `uv.lock`, `uv.toml` and `.python-version`, which set the interpreter and
@@ -537,7 +540,7 @@ restarting, and leaves a report to read later. The four rulings:
   `claude-restart@` unit that the agent starts through polkit. It runs `kubectl rollout restart` only, on a list of
   workloads kept in the repo, and it is rate-limited. It cannot scale, delete or change an
   image.
-- **Landing** follows the approval floor of `claude-land@` unchanged. Every file that sets a run's caps
+- **Landing** follows the approval floor of `homelab-claude-land@` unchanged. Every file that sets a run's caps
   or identity is on that floor, so the agent cannot raise its own budget unattended.
 - **The report** is an HTML page in the agent's artifacts tree, served under
   `/a/daniel-box-claude/`. A JSON record in `/var/lib/claude/triage/runs/` sits beside it, and a
@@ -557,7 +560,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 | 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, and running on daniel-box |
 | 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
 | 3 | The `claude-restart@` broker and its allowlist | Planned |
-| 4 | A fix phase that opens a PR and lands it through `claude-land@` | Planned. It needs the bot account visible again (#5126). |
+| 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs the bot account visible again (#5126). |
 | 5 | A Kuma alive push and a weekly summary | Planned |
 
 ### Slice 1: one run, started by hand
@@ -756,7 +759,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 |---|---|---|
 | 1 | As `claude`, `id` lists none of the denied groups, `ls /home/ubuntu` is refused, `sudo -n true` fails, `kubectl get pods -A` works and `uv run pytest` passes. `prek --version` runs, and `~/server/.git/hooks/pre-commit` names `/var/lib/claude/.local/bin/prek`. | Turn `claude_code_agent_user_enabled` off. That locks the account and stops its units. It keeps the home, which holds the agent's clone and any unpushed work. |
 | 2 | As `claude`, a commit shows a good signature locally and `verified: true` on GitHub. A push to a `worktree-claude+` branch is accepted, and the PR is authored by `DanielClaudeBot`. The merge is refused at once by the CI gate, the branch fence and, until its deletion on 2026-10-11, the review gate. A push to a branch outside the prefix is refused with `Cannot create ref due to creations being restricted`. | Delete the branch fence, and revoke the token. |
-| 3 | A session as `claude` runs `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on three PRs. A deployable change ends in `VERDICT: settled` and the verdict file in `/var/lib/claude-land/<n>.verdict` ends with the same line. An approval-list path, a gate-imported module or an import shape such as a symlink refuses with `need the operator's approval: <path>`. After the operator approves the head, the lander logs `merged directly at the checked head`. | `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude` still opens PRs, and the operator lands them. |
+| 3 | A session as `claude` runs `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on three PRs. A deployable change ends in `VERDICT: settled` and the verdict file in `/var/lib/homelab-claude-land/<n>.verdict` ends with the same line. An approval-list path, a gate-imported module or an import shape such as a symlink refuses with `need the operator's approval: <path>`. After the operator approves the head, the lander logs `merged directly at the checked head`. | `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude` still opens PRs, and the operator lands them. |
 | 4 | From the phone, a session prints `id` (it must show `claude`), names the entries in the copied `MEMORY.md`, and writes an artifact and a new memory file. The artifact renders under `/a/daniel-box-claude/`, which proves the artifacts pod can traverse to the file. As `ubuntu`, `cat` of both new files succeeds. A permission error on the memory file means Claude Code created it `0600`, which `UMask=0027` cannot widen, so file a finding with `findings.py open`. `journalctl -u claude-memory-sync` shows a run that copied the file to daniel-server. | `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live sessions. |
 | 5 | As `claude` on daniel-box, `uv run python scripts/dev/fanout.py place read` prints a reading for both hosts, each with `signing=ok`. For the login alone, `uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage` succeeds, and homelab-ui renders a service page. | `claude_agent_ssh_login_enabled: false` in daniel-server's host_vars removes the key and the group. `claude_code_agent_user_enabled: false` there also expires the account and stops its linger. `claude_code_agent_homelab_ui_enabled: false` removes the browser, and deleting the `claude-agent` block from the authelia role revokes the login. |
 | 6 | Starting `claude` as `ubuntu` shows up as `claude_uid_processes{uid="1000"}` within one 30-second timer interval. | Delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns to uid 1000, and an empty `claude_code_watch_uids` stops the series and the page with it. |

@@ -3,8 +3,8 @@
 Five things live here: the **install** (native installer, per-user, auto-updating),
 **`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone,
 **`claude-bg-resume.service`**, which respawns the operator's background sessions at boot,
-**`claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to daniel-server,
-and **the artifacts node's two crons**, the peer artifact sync and the OTLP-door heartbeat.
+**`homelab-claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to
+daniel-server, and **the artifacts node's two crons**, the peer artifact sync and the OTLP-door heartbeat.
 
 Runs on every host with `has_claude_code: true` (daniel-box and daniel-server, with per-host cap
 numbers in host_vars). The unit is enabled only where `claude_code_rc_enabled` is also true
@@ -23,9 +23,11 @@ The role ends on daniel-server with a leading `meta: end_role` (H7.39). There
 `hosts/components/claude-code/` ships what the role installed, in `homelab-daniel-server`. On
 daniel-box the same component ships the subjects H7.40's first slice moved, in
 `homelab-daniel-box`: the Remote Control host, the background resume, the cgroup metrics, the
-caps, the two alerts, rootq and the agent user. The role skips each there through
-`claude_code_packaged_hosts` in `defaults/main.yml`, and applies the rest to daniel-box until
-H7.40's later slices move them.
+caps, the two alerts, rootq and the agent user. The second slice added the agent's lander, the
+server-batch lander, the pipeline timeline, the memory store copy, and the takeover check's
+wrapper and sudoers grant. The role skips each there through `claude_code_packaged_hosts` in
+`defaults/main.yml`, and applies the rest to daniel-box until H7.40's later slices move them:
+triage, the agent's home, the artifacts node's crons and the takeover check's flux copy.
 
 - **The component renders this role's templates and copies its scripts in place**, through
   `role: claude_code`. An edit here changes both hosts: the next apply on daniel-box and the
@@ -62,6 +64,11 @@ H7.40's later slices move them.
   public half. `claude-agent-setup` installs exactly that one line as the agent's authorized_keys,
   so a rotation replaces the old key. Once the toggle is false, the setup script removes the file
   and the agent leaves `ssh-users`. A blank key leaves the file Ansible wrote.
+- **The lander's name and settings are pinned in `templates/claude-land-pins.j2`.** The unit,
+  the polkit rule and the agent's profile import it, so no inventory value repoints the
+  lander. A block var would pin nothing here, because the host package renderer puts the
+  inventory above a component's defaults. The pins file and `component.yml` are on the
+  lander's approval list.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
   ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,
@@ -207,7 +214,7 @@ What it does not restore:
 `tasks/agent.yml` builds one agent user per `claude_code_agents` entry; the include maps each
 profile field (`ansible/filter_plugins/claude_agents.py`) onto the `claude_code_agent_*` name
 the tasks read. `docs/claude-agent-user.md` has the rest. `claude` lands a PR through
-`claude-land@<n>.service`.
+`homelab-claude-land@<n>.service`.
 
 `claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
 leaves a report (`tasks/triage.yml`, shipped off behind `claude_code_triage_enabled`).
@@ -271,16 +278,16 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   on `claude_code_memory_sync_target`, one-way. A memory a daniel-server session writes is lost
   at the next run, by the operator's decision (#3123); `docs/claude-memory-sync.md` has why.
 - **Mode:** `claude_code_memory_sync_enabled`, true only in daniel-box's host_vars; false
-  stops the timer and removes its units.
+  drops the timer and its units from the next package version.
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.
-- **Evidence:** `journalctl -u claude-memory-sync` lists each file a run changed or deleted;
-  a failure pages Discord, and `claude-memory-sync.prom` pages a timer that stopped. A run the
+- **Evidence:** `journalctl -u homelab-claude-memory-sync` lists each file a run changed or
+  deleted; a failure pages Discord, and `claude-memory-sync.prom` pages a timer that stopped. A run the
   empty-index condition skips writes no file either, so an empty store pages too.
 
 ## Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
 
 - **Scope:** one episode per run. Slice 1 diagnoses only: Edit, Write, a landing and a push
-  are denied. The later slices widen this to a fix landed through `claude-land@` and a
+  are denied. The later slices widen this to a fix landed through `homelab-claude-land@` and a
   restart through an allowlisted broker, under the operator's 2026-10-15 rulings.
 - **Mode:** `claude_code_triage_enabled`, false by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.
@@ -316,9 +323,9 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 ## Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)
 
 Issue #5496. A daniel-server fan-out batch stops at its PR, and this timer lands the PRs that
-qualify. The operator approved it on 2026-10-18. `claude-land@` cannot do it: that unit admits
-only the `claude` user and pins the author and branch prefix of the agent's PRs, while a server
-batch runs as `ubuntu` on `worktree-fanout-<batch>`.
+qualify. The operator approved it on 2026-10-18. `homelab-claude-land@` cannot do it: that unit
+admits only the `claude` user and pins the author and branch prefix of the agent's PRs, while a
+server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
 
 - **Scope:** every 10 minutes, `fanout.py land-server` reads the review records of the last 48
   hours from daniel-server in one ssh call, reads the repo's open PRs in one `gh` call, and
@@ -334,16 +341,16 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   which `ubuntu` owns. They are never `claude_code_rc_workdir`, the agent's clone on daniel-box:
   git refuses that clone as dubious ownership, and `ubuntu` cannot write to it (#5861).
 - **Mode:** `claude_code_fanout_server_lander_enabled`, true only in daniel-box's host_vars.
-  Setting it to false and applying the role stops the timer and removes the units, and every
-  server batch stops at its PR again. `fanout.py land-server --dry-run` judges and logs without
-  starting anything.
+  Setting it to false drops the timer and its units from the next package version, and every
+  server batch stops at its PR again. `fanout.py land-server --dry-run` judges and logs
+  without starting anything.
 - **Abort valves:** at most 2 landings start per run (#5526: CI demand already exceeds the
   runner cap). A PR is started once: a log in `~/.local/state/fanout-server-lander/logs/`, or
   a live `land.py --pr <n>` process anywhere, skips it. `land.sh` holds no per-PR lock, so
   this check is the only guard against a second landing. The unit sets
   `LAND_REQUIRE_BRANCH_PREFIX`, which makes `land.sh` refuse while the deployer holds a SHA and
   pin the merge to the head it checked, and `LAND_REQUIRE_AUTHOR`.
-- **Evidence:** `journalctl -u claude-fanout-server-lander` has one line per candidate PR,
+- **Evidence:** `journalctl -u homelab-claude-fanout-server-lander` has one line per candidate PR,
   `eligible` or `ineligible` with the reason. Each landing's own `VERDICT:` is in its
   `land<pr>-*.log`, and `cc-wait land <pr> --log-dir ~/.local/state/fanout-server-lander/logs`
   waits on it. An unreadable daniel-server logs a line and exits 0, because the host is off for
@@ -351,8 +358,8 @@ batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   `homelab_awaiting_operator{reason}` and its `_oldest_seconds` twin to
   `/var/lib/node-exporter-textfile/fanout_operator_waits.prom`: the PRs and batches that wait
   on a person, and the owed manual-plane applies (`scripts/dev/fanout_lib/operator_waits.py`).
-  Disarming removes the file. Each clean run also writes `claude-fanout-server-lander.prom`,
-  which pages a timer that stopped.
+  Disarming leaves the file in place, so it is removed by hand. Each clean run also writes
+  `claude-fanout-server-lander.prom`, which pages a timer that stopped.
 - **Next-run review:** before raising the pace cap or widening the rule, read a week of
   `ineligible` reasons and the verdicts of the landings it started.
 
@@ -379,27 +386,26 @@ nobody ran the joiner was lost. This timer runs it daily as `ubuntu`.
   (one ssh connection, inside the `ufw limit ssh` budget). It writes nothing else, and changes
   no repository, cluster or GitHub state.
 - **Mode:** `claude_code_pipeline_timeline_enabled`, true only in daniel-box's host_vars. False
-  stops the timer, removes the three units and the heartbeat file, and keeps the snapshots.
+  drops the timer and its units from the next package version, and keeps the snapshots. The
+  heartbeat file then stays until it is removed by hand.
   `--days` is `claude_code_pipeline_timeline_days`; a window of N days survives N-1 missed runs,
   because a later snapshot's rows supersede an earlier one's for the same PR.
 - **Abort valves:** the unit's `TimeoutStartSec=30min`. A pull that fails warns and joins the
   copy the last pull left, so a server down for maintenance costs no snapshot. A failed `gh`
   read fails the unit and pages.
-- **Evidence:** `journalctl -u claude-pipeline-timeline` holds the summary; a failure pages
-  Discord through `claude-pipeline-timeline-alert`, and `claude-pipeline-timeline.prom` pages a
+- **Evidence:** `journalctl -u homelab-claude-pipeline-timeline` holds the summary; a failure
+  pages Discord through `homelab-alert@`, and `claude-pipeline-timeline.prom` pages a
   timer that stopped (`ClaudePipelineTimelineNotReporting`, a 174900-second deadline).
 - **Next-run review:** after a week, check that the snapshot files hold one run a day, and that
   rows for daniel-server PRs carry `phases_min`. An empty `phases_min` means the pull failed
   on the first run and no copy exists yet.
 
-Applying it: `initial_setup.yml --tags claude_code`, on daniel-box. The GitOps deployer applies
-the role's template and defaults changes itself. A change to `tasks/` alone is skipped by it, so
-a PR that edits only `tasks/pipeline_timeline.yml` is applied by hand.
+Applying it: a new version of daniel-box's host package, which its updater installs.
 
 ## The takeover check
 
 `/usr/local/sbin/homelab-takeover-check` runs a D5 flip PR's pre-merge dry runs as root, behind
-one `NOPASSWD` line in `/etc/sudoers.d/claude-takeover-check`: `flux diff kustomization` or
+one `NOPASSWD` line in `/etc/sudoers.d/homelab-takeover-check`: `flux diff kustomization` or
 the server-side `kubectl diff`, then the RBAC takeover census (issue #5494). The operator
 granted it on 2026-10-17 ("Let's add those 3 to your allowed commands"). It exists on daniel-box
 only, where `claude_code_takeover_check_enabled` is true.
@@ -417,9 +423,12 @@ only, where `claude_code_takeover_check_enabled` is true.
   directory has no flux file of its own, so its search runs over the base tag's file (#5575).
 - **What it prints:** object names, field paths and exit codes. Full outputs stay in
   `/var/lib/homelab-takeover-check/<label>/`, mode 0700.
-- **To take it back:** set `claude_code_takeover_check_enabled: false` and apply the role. The
-  role removes the sudoers file, the wrapper, the flux copy and the state directory, in that
-  order.
+- **Who installs what:** daniel-box's host package ships the wrapper and the grant in one
+  version, so the grant never names a missing command. The role still downloads the flux copy
+  and creates the state directory, and the wrapper creates that directory too.
+- **To take it back:** set `claude_code_takeover_check_enabled: false`. The next package
+  version drops the grant and the wrapper, and the next apply of the role removes the flux copy
+  and the state directory.
 - **To widen who holds it,** add to `claude_code_takeover_check_users`; one line per user.
 
 ## The root inspector

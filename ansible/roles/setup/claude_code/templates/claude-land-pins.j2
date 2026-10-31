@@ -1,0 +1,14 @@
+{#- What the agent's lander lands, and for whom: claude-land@.service.j2 and 50-claude-land.rules.j2
+import these as `pins`. A template's own assignment outranks every inventory value, so an agent
+PR that edits only host_vars cannot repoint the unit, widen the branches or authors it lands,
+let another Unix user start it, or name another approver. The inventory is off the approval
+list (docs/claude-agent-user.md, "The approval floor"), and this file is on it. Each value is a
+literal, except the checkout, which follows the operator's account as the unit's User= does.
+ansible/tests/setup/test_claude_lander.py holds them equal to the agent profile they describe.
+-#}
+{%- set unit = "homelab-claude-land" -%}
+{%- set checkout = "/home/" ~ sys_user ~ "/server" -%}
+{%- set branch_prefix = "worktree-claude+" -%}
+{%- set author = "DanielClaudeBot" -%}
+{%- set agent_user = "claude" -%}
+{%- set approver = "DanielH2018" -%}

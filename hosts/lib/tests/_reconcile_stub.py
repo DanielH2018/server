@@ -117,7 +117,12 @@ def systemctl(state: dict, args: list[str]) -> int:
         return _show(units, rest)
     if verb == "daemon-reload":
         return 0
+    if verb == "list-units":
+        return _list_units(units, rest)
     (unit,) = rest
+    if "@." in unit and verb in ("start", "stop", "restart"):
+        print(f"Unit name {unit} is missing the instance name.", file=sys.stderr)
+        return 1
     if f"{verb} {unit}" in state["fail"]:
         print(f"Job for {unit} failed.", file=sys.stderr)
         return 1
@@ -151,6 +156,18 @@ def systemctl(state: dict, args: list[str]) -> int:
         known["enabled"] = "disabled"
     else:
         raise SystemExit(f"stub systemctl: unexpected {args}")
+    return 0
+
+
+def _list_units(units: dict, args: list[str]) -> int:
+    """The loaded units matching the glob whose active state is in `--state=`, one per line."""
+    (states,) = [
+        a.removeprefix("--state=").split(",") for a in args if a.startswith("--state=")
+    ]
+    (pattern,) = [a for a in args if not a.startswith("--")]
+    for name, known in sorted(units.items()):
+        if fnmatch.fnmatch(name, pattern) and known["active"] in states:
+            print(f"{name} loaded {known['active']} running")
     return 0
 
 

@@ -55,7 +55,7 @@ def test_the_rule_admits_every_page_notify_starts(unit, state) -> None:
         "fanout-alert@.service",
         "fanout-alert@claude-rc:failed.service",
         "claude-rc-alert.service",
-        "claude-land@3633.service",
+        "homelab-claude-land@3633.service",
         alert_unit("fanout-4602", "failed") + ".d",
     ],
 )

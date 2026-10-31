@@ -1051,7 +1051,7 @@ groups:
             No claude-memory-sync verdict newer than 2100s reached Prometheus from daniel-box's textfile
             collector, so the memory store copy to daniel-server has not completed a clean run: the timer stopped firing, or
             every run since failed and OnFailure has posted to Discord. Read `systemctl status
-            claude-memory-sync.timer` and `journalctl -u claude-memory-sync` on daniel-box. If `claude_code_memory_sync_enabled` was set false on purpose,
+            homelab-claude-memory-sync.timer` and `journalctl -u homelab-claude-memory-sync` on daniel-box. If `claude_code_memory_sync_enabled` was set false on purpose,
             delete this rule. A run the ExecCondition skips, because daniel-box's MEMORY.md is
             empty, writes nothing either, and an empty store is not a healthy state.
       - alert: ClaudeTriagePollNotReporting
@@ -1090,7 +1090,7 @@ groups:
             No claude-fanout-server-lander verdict newer than 3300s reached Prometheus from daniel-box's textfile
             collector, so the fan-out server lander has not completed a clean run: the timer stopped firing, or
             every run since failed and OnFailure has posted to Discord. Read `systemctl status
-            claude-fanout-server-lander.timer` and `journalctl -u claude-fanout-server-lander` on daniel-box. If `claude_code_fanout_server_lander_enabled` was set false on purpose,
+            homelab-claude-fanout-server-lander.timer` and `journalctl -u homelab-claude-fanout-server-lander` on daniel-box. If `claude_code_fanout_server_lander_enabled` was set false on purpose,
             delete this rule.
       - alert: ClaudePipelineTimelineNotReporting
         expr: |
@@ -1109,7 +1109,7 @@ groups:
             No claude-pipeline-timeline verdict newer than 174900s reached Prometheus from daniel-box's textfile
             collector, so the daily snapshot of the PR timeline has not completed a clean run: the timer stopped firing, or
             every run since failed and OnFailure has posted to Discord. The journal inputs it saves rotate after about ten days. Read `systemctl status
-            claude-pipeline-timeline.timer` and `journalctl -u claude-pipeline-timeline` on daniel-box. If `claude_code_pipeline_timeline_enabled` was set false on purpose,
+            homelab-claude-pipeline-timeline.timer` and `journalctl -u homelab-claude-pipeline-timeline` on daniel-box. If `claude_code_pipeline_timeline_enabled` was set false on purpose,
             delete this rule.
       # One rule per k3s node whose host_vars set k3s_node_static_link, reading that link. Each
       # such node falls back to WiFi when the link drops (docs/k3s-node-plane-crons-and-incidents.md),

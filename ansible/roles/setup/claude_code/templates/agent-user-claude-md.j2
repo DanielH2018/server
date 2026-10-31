@@ -53,9 +53,9 @@ You can merge your own PR, and you may arm GitHub's auto-merge on it with
 `gh pr merge --auto --squash <n>`: no ruleset requires a review. You have no sudo, so you
 cannot deploy it. Land it with the command the repo's `land-after-merge` skill gives,
 `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>`, whether or not you
-armed auto-merge. As this user, `land.sh` hands the PR to `claude-land@<n>.service`, which lands
-it as the operator and reports that landing's verdict and exit code as its own. It refuses
-`--tags`, `--since` and `--subject`, because the unit decides what deploys.
+armed auto-merge. As this user, `land.sh` hands the PR to `homelab-claude-land@<n>.service`,
+which lands it as the operator and reports that landing's verdict and exit code as its own. It
+refuses `--tags`, `--since` and `--subject`, because the unit decides what deploys.
 
 The lander refuses a PR that changes a path on its approval list,
 `/etc/claude-land/approval-paths`. Those paths widen your own authority. It also refuses a PR

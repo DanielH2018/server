@@ -2,7 +2,11 @@
 Description=Land the safe PRs of finished daniel-server fan-out batches
 After=network-online.target
 Wants=network-online.target
+{% if claude_code_sync_alert_unit is defined %}
+OnFailure={{ claude_code_sync_alert_unit }}
+{% else %}
 OnFailure=claude-fanout-server-lander-alert.service
+{% endif %}
 
 [Service]
 Type=oneshot

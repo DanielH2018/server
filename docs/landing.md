@@ -167,9 +167,10 @@ and every merge path is pinned to the head SHA the checks read. A push after the
 the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
 the landing's one result line, for a unit to hand on to the agent that started it. A landing
 that sets neither setting is unchanged, and `--any-author` lifts neither.
-`claude-land@<n>.service` (`roles/setup/claude_code`) sets all four for the `claude` agent
-user's PRs, and a polkit rule lets that user start it and do nothing else. That user's profile
-sets `LAND_HANDOFF_UNIT=claude-land`, so its own `land.sh` starts the unit and reports the
+`homelab-claude-land@<n>.service` (`roles/setup/claude_code`'s template, shipped in daniel-box's
+host package) sets all four for the `claude` agent user's PRs, and a polkit rule lets that user
+start it and do nothing else. That user's profile sets `LAND_HANDOFF_UNIT=homelab-claude-land`,
+so its own `land.sh` starts the unit and reports the
 unit's verdict line and exit code as its own (`land_lib/handoff.py`).
 
 **The arm refuses a body whose closing keyword is not its own `Closes #N` line.** GitHub closes
@@ -436,7 +437,7 @@ Instead it reads the cluster every 30 seconds:
   starts by which the landing must print its verdict. The wait then gives up 10 minutes
   before that deadline, whatever is in flight, and the landing still ends `deferred` with a
   ledger line (#5199). So on a lander unit the wait can give up before twice `verify`'s wait.
-  `claude-land@.service` and `renovate-agent-land@.service` each set 28800. After the merge
+  `homelab-claude-land@.service` and `renovate-agent-land@.service` each set 28800. After the merge
   and master CI budgets, that leaves the wait room for `verify`'s wait on the rendered soak,
   once, and the `promote` workflow's `render`, `images` and `publish` jobs at their
   timeouts. It also covers one measured rebuild of every built image by a commit queued ahead
@@ -458,7 +459,7 @@ Instead it reads the cluster every 30 seconds:
   so a landing that merges as the window opens waits up to 22200 seconds before any
   promotion starts. The first poll inside the window moves the cap by the window's remaining
   length, up to the unit's `LAND_WINDOW_GRACE`. Both lander units set the window's full
-  length, and every bound above `LAND_DEADLINE` covers it: claude-land's `TimeoutStartSec` of
+  length, and every bound above `LAND_DEADLINE` covers it: homelab-claude-land's `TimeoutStartSec` of
   15h, and the 860min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
   Renovate lander needs it too: its unit runs on after the session ends, so a landing started
   late on a Saturday can still be waiting on Sunday's window (#5457).

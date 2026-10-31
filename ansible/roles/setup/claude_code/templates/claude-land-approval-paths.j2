@@ -1,5 +1,5 @@
-# Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
-# claude-land@.service refuses an agent PR that changes, adds, deletes or renames out of a path
+# Shipped by the claude-code host component (roles/setup/claude_code's template).
+# homelab-claude-land@.service refuses an agent PR that changes, adds, deletes or renames out of a path
 # under any prefix below, unless the operator approved its head. Plain prefixes, so
 # `scripts/deploy_tools/land` covers land.sh, land.py and land_lib/. The modules the landing
 # process imports are refused the same way, derived at landing time (land_lib/policy.py,
@@ -12,12 +12,15 @@
 # already true under the wider list. docs/claude-agent-user.md, "The approval floor", has the
 # reasoning. The list is literal here, not a variable, so the inventory cannot override it.
 #
-# The lander: this list, the unit that reads it, the rule that lets the agent start it, and the
-# task file that installs them with the lander's settings pinned.
+# The lander: this list, the unit that reads it, the rule that lets the agent start it, the task
+# file that installs them where no host package does, the template that pins the lander's name
+# and settings, and the host component that ships them and decides when (H7.40's second slice).
 ansible/roles/setup/claude_code/tasks/lander.yml
 ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2
 ansible/roles/setup/claude_code/templates/claude-land@.service.j2
 ansible/roles/setup/claude_code/templates/50-claude-land.rules.j2
+ansible/roles/setup/claude_code/templates/claude-land-pins.j2
+hosts/components/claude-code/component.yml
 # Alert-triggered triage (operator decision, 2026-10-15): the task file that pins the run's
 # caps and identity, every claude-triage template (a prefix: the unit, its config, its prompt
 # and its credential file, the poller's unit and timer), the polkit rule that lets the agent

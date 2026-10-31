@@ -1,6 +1,10 @@
 [Unit]
 Description=Copy the Claude memory store from {{ inventory_hostname }} to {{ claude_code_memory_sync_target }}
+{% if claude_code_sync_alert_unit is defined %}
+OnFailure={{ claude_code_sync_alert_unit }}
+{% else %}
 OnFailure=claude-memory-sync-alert.service
+{% endif %}
 
 [Service]
 Type=oneshot

@@ -274,6 +274,15 @@ def test_the_packaged_sudoers_grant_parses(package, tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_daniel_boxs_packaged_takeover_grant_parses(tmp_path):
+    grant = host_mode.render_host("daniel-box").files[
+        "/etc/sudoers.d/homelab-takeover-check"
+    ][0]
+    assert b"NOPASSWD: /usr/local/sbin/homelab-takeover-check" in grant
+    result = visudo_check(tmp_path, grant)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_a_malformed_sudoers_grant_is_flagged(tmp_path):
     result = visudo_check(tmp_path, b"ubu ntu ALL=(root NOPASSWD: /x\n")
     assert result.returncode != 0

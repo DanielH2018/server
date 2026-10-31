@@ -183,10 +183,10 @@ both hosts, the pipeline waits for the PR's CI with `cc-wait gh-ci --pr` after t
 (`scripts/dev/fanout_lib/review/review_ci.py`, #4737 for daniel-server, #5498 for daniel-box).
 On daniel-box it then runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
-landing's log. Any other verdict ends the batch. On daniel-server, `claude-fanout-server-lander.timer` on daniel-box lands the PR within about
+landing's log. Any other verdict ends the batch. On daniel-server, `homelab-claude-fanout-server-lander.timer` on daniel-box lands the PR within about
 ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:
 a reviewed batch with a passed CI gate and no leftover finding, whose PR is open, still at the reviewed
-head, with no operator step in its body. Run `journalctl -u claude-fanout-server-lander -n 40` before
+head, with no operator step in its body. Run `probe.py lander` before
 landing a server batch's PR by hand, because `land.sh` holds no per-PR lock and a second landing would
 arm the merge twice. The orchestrator lands every other server PR, `--no-review` batches included,
 after that wait. A red CI verdict resumes the agent once, with

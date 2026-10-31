@@ -1,6 +1,6 @@
 """`probe.py lander` — what the daniel-server batch lander did with each PR, and how it ended.
 
-Sessions read `journalctl -u claude-fanout-server-lander` by hand, 54 times in two weeks, to
+Sessions read the lander's journal by hand, 54 times in two weeks, to
 learn what the lander did with a wave's PRs (#6324). This makes one read of daniel-box and
 prints:
 
@@ -47,7 +47,8 @@ from lib.repo_paths import ANSIBLE
 from lib.systemd_timer import span_s
 
 NAME = "claude-fanout-server-lander"
-UNIT = f"{NAME}.service"
+# The claude-code host component ships the role's template under the packaged name.
+UNIT = f"homelab-{NAME}.service"
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 SHOW = ["LoadState", "ActiveState", "Result", "ExecMainExitTimestamp"]
@@ -71,7 +72,7 @@ _LOG = re.compile(r"^land(\d+)-")
 def settings(role=ROLE, group_vars=GROUP_VARS) -> tuple[int, int, str]:
     """(timer period, run ceiling, landing log directory), read from the role and inventory."""
     defaults = yaml_fast.safe_load((role / "defaults" / "main.yml").read_text())
-    unit = (role / "templates" / f"{UNIT}.j2").read_text()
+    unit = (role / "templates" / f"{NAME}.service.j2").read_text()
     user = yaml_fast.safe_load(group_vars.read_text())["sys_user"]
     period = span_s(defaults["claude_code_fanout_server_lander_interval"])
     ceiling = unit_span_s(unit, "TimeoutStartSec")

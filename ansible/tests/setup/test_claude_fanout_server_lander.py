@@ -95,11 +95,14 @@ def test_armed_only_on_daniel_box_and_disarming_removes_the_units():
     )
 
 
-def test_the_role_imports_the_tasks_and_stamps_both_templates():
+def test_the_role_imports_the_tasks_and_the_host_component_ships_both_templates():
     main = (ROLE / "tasks" / "main.yml").read_text()
     assert "fanout_server_lander.yml" in main
+    component = (
+        ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
+    ).read_text()
     for name in (SERVICE, TIMER):
-        assert f"claude_code/templates/{name}" in main, f"{name} is not stamped"
+        assert f'src: "role:{name}"' in component, f"{name} is not shipped"
 
 
 def test_the_contract_section_names_the_unit():
