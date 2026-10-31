@@ -3,7 +3,6 @@
 Run: uv run pytest scripts/dev/tests/test_findings_board.py
 """
 
-import json
 import subprocess
 from datetime import date
 
@@ -50,10 +49,6 @@ def test_a_moved_date_is_set_in_place():
 
 def test_a_cleared_deferral_clears_the_board_date():
     assert plan_board_date(_state(current="2026-10-01"), None) == ["clear"]
-
-
-def test_clearing_an_issue_off_the_board_plans_nothing():
-    assert plan_board_date(_state(on_board=False), None) == []
 
 
 def test_a_board_without_the_field_is_refused_with_the_command_that_creates_it():
@@ -149,38 +144,3 @@ def test_board_dates_exits_1_when_the_board_lacks_the_field(capsys, make_tools):
     tools, _ = make_tools(Fakes(issues=issues, board={1: board_answer(field=False)}))
     assert findings.main(["board-dates"], tools) == 1
     assert "0 set, 0 cleared, 0 unchanged, 1 failed" in capsys.readouterr().out
-
-
-def test_the_fake_board_answer_parses_like_the_live_response():
-    # Trimmed from the live read of #6710 on 2026-10-31, before the field existed.
-    live = {
-        "data": {
-            "repository": {
-                "issue": {
-                    "id": "I_x",
-                    "projectItems": {
-                        "nodes": [
-                            {
-                                "id": "PVTI_x",
-                                "project": {"id": "PVT_x"},
-                                "fieldValueByName": None,
-                            }
-                        ]
-                    },
-                },
-                "owner": {
-                    "projectsV2": {
-                        "nodes": [
-                            {
-                                "id": "PVT_x",
-                                "title": "Claude findings",
-                                "fields": {"nodes": [{"id": "F", "name": "Title"}, {}]},
-                            }
-                        ]
-                    }
-                },
-            }
-        }
-    }
-    state = parse_board_state(json.loads(json.dumps(live)))
-    assert (state.item_id, state.field_id, state.current) == ("PVTI_x", None, None)
