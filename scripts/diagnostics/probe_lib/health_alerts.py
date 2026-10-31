@@ -21,7 +21,9 @@ A would-fail result is re-read once after `REREAD_WAIT_S`, because a probe alert
 during a slow rollout can still read firing at the first read.
 
 Every read goes through Prometheus' query-only IngressRoute, which admits `/api/v1/query`
-alone. A read that fails raises `core.Unreadable` (exit 75), never a pass.
+alone. A read that fails raises `core.Unreadable` (exit 75), never a pass. One read goes to
+Alertmanager instead, because `ALERTS` shows no silence or inhibition: `alertmanager_api` names
+the one muting a gated alert, and its failure prints a note rather than changing the verdict.
 """
 
 import calendar
@@ -35,7 +37,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from diagnostics.probe_lib import core
+from diagnostics.probe_lib import alertmanager_api, core
 from diagnostics.probe_lib.obs_api import prom_query_url
 
 from lib.repo_paths import FILTER_PLUGINS
@@ -92,14 +94,19 @@ def prom_query(promql, endpoint=None, fetch=None):
 
 @dataclass(frozen=True)
 class PromTools:
-    """The boundaries `gate` crosses, so a test replaces a field rather than patching."""
+    """The boundaries `gate` crosses, so a test replaces a field rather than patching.
+
+    `silences` reads Alertmanager's alerts for a tag. None skips that read, so a test that
+    builds its own tools never reaches the network; `DEFAULT_PROM` sets the real one.
+    """
 
     query: Callable[[str], list] = prom_query
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.time
+    silences: Callable[[str], list] | None = None
 
 
-DEFAULT_PROM = PromTools()
+DEFAULT_PROM = PromTools(silences=alertmanager_api.service_alerts)
 
 
 def _labels(series, drop=("__name__",)):
@@ -274,7 +281,8 @@ def gate(tag, reference, probe_reference, has_route, tools=DEFAULT_PROM):
         reference: The alert reference time in epoch seconds, or None when the tag has none.
         probe_reference: When the rollout completed, in epoch seconds.
         has_route: Whether the tag's rendered entry has an ingress route.
-        tools: The Prometheus read, sleep and clock.
+        tools: The Prometheus read, sleep and clock, and the Alertmanager read that names a
+            gated alert's silence or inhibition without changing the exit code.
 
     Raises:
         core.Unreadable: a Prometheus read failed.
@@ -295,6 +303,8 @@ def gate(tag, reference, probe_reference, has_route, tools=DEFAULT_PROM):
     if failing:
         tools.sleep(REREAD_WAIT_S)
         failing, notes = judge()
+    if tools.silences is not None:
+        notes += alertmanager_api.gate_notes(tag, tools.silences)
     return (1 if failing else 0), failing + notes
 
 
