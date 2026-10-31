@@ -1,0 +1,11 @@
+# Shipped by the host package's host-maintenance component on a `has_fwupd` host. Started by
+# homelab-firmware-update.timer.
+[Unit]
+Description=Stage firmware updates with fwupdmgr and write the firmware-update textfile verdict
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=fwupd-auto
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin HOMELAB_LIB_DIR=/usr/lib/homelab
+ExecStart=/usr/lib/homelab/host-maintenance firmware-update

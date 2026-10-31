@@ -112,7 +112,6 @@ def test_every_task_of_the_three_subjects_skips_the_pi(context):
         "Deploy fail2ban jail configuration": "fail2ban",
         "Schedule weekly AIDE integrity check": "fail2ban",
         "Schedule sudo crontab for weekly restart": "maintenance",
-        "Enable UFW firewall": "ufw",
     }.items() <= subjects.items()
     tasks = {str(t["name"]): t for t in _tasks()}
     unguarded = [

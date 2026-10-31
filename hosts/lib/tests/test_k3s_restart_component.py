@@ -35,6 +35,9 @@ _KEYS = (
     "claude_code_agent_gh_token: x\n"
     "claude_code_triage_claude_oauth_token: x\n"
     "authelia_agent_password: x\n"
+    "rkhunter_daniel_box_push_token: x\n"
+    "aide_daniel_box_push_token: x\n"
+    "healthchecks_ping_key: x\n"
 )
 
 COMPONENT = REPO / "hosts/components/k3s-restart"
