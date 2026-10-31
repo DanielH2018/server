@@ -11,7 +11,8 @@ and reads each route the walk ends on. Each label set carries one expected outco
   its PR 5. M4's `BlackboxExporterDown` and every rule of M6's batch A3 (the scrape-target and
   log-pipeline rules) since A3's Cutover-b. Every rule of M6's batch A4 (the edge rules) since
   A4's Cutover-b, every rule of batch A2 (the container-checks rules) since A2's Cutover-b, and
-  every rule of batch A5 (the storage rules) since A5's Cutover-b.
+  every rule of batch A5 (the storage rules) since A5's Cutover-b, and every host rule of batch
+  A1 but the Pi pressure arms since A1's Cutover-b.
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
   it pages nobody. M3's two `DiskHealth*` sets move in its PR 5,
@@ -279,6 +280,16 @@ PAGING = {
         )
         for name, labels in literal_sets(STORAGE_RULES, shadow=False).items()
     },
+    # Batch A1's host rules since its Cutover-b: `HostDiskFull` and the five `UPS*` rules are
+    # critical, so both channels, and the rest are `warning`. The Pi pressure arms stay shadow
+    # until B8, so `literal_sets(..., shadow=False)` leaves them out.
+    **{
+        name: (
+            labels,
+            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
+        )
+        for name, labels in literal_sets(HOSTS_RULES, shadow=False).items()
+    },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 # The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
@@ -527,21 +538,6 @@ def test_a_storage_rule_that_regains_shadow_is_flagged():
     assert receivers == ["discord", "email"]
     shadowed = {**labels, "shadow": "true"}
     assert [r["receiver"] for r in reached(route_tree(), shadowed)] == [BLACKHOLE]
-
-
-def test_every_a1_rule_is_shadow_and_names_each_host_check():
-    """Non-vacuity for the A1 sets: the hosts rules all route to the blackhole until their
-    cutovers, and the sets hold the bridge's four host checks and the Pi's pressure arms."""
-    assert literal_sets(HOSTS_RULES, shadow=False) == {}
-    names = {key.split("/")[0] for key in literal_sets(HOSTS_RULES, shadow=True)}
-    assert names >= {
-        "HostDiskFull",
-        "HostMemoryHigh",
-        "HostTemperatureHot",
-        "UPSOnBattery",
-        "PiLoadHigh",
-    }
-    assert "HostDiskFull/daniel-box" in SHADOW
 
 
 def test_a_paging_route_without_the_mute_is_flagged():

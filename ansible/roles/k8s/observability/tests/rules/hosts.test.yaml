@@ -2,9 +2,10 @@
 # `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
 # hook runs it on every commit that touches the rules.
 #
-# Every case asserts shadow="true", because no cutover of M6's batch A1 has dropped it. Each case
-# loads both x86 hosts, so a rule that fires for one host and not the other shows in the same
-# expected list. Annotation text is rendered from the rule's own template, so a case checks which
+# Cases for the Pi pressure rules (PiLoadHigh, PiMemoryLow, PiDiskFull, PiFilesystemReadOnly and
+# PiMetricsMissing) assert shadow="true", because B8 has not cut that row over. Every other rule
+# pages since A1's Cutover-b, so its cases assert no `shadow`. Each case loads both x86 hosts, so
+# a rule that fires for one host and not the other shows in the same expected list. Annotation text is rendered from the rule's own template, so a case checks which
 # alerts fire and with which labels; the wording lives in the rule file.
 rule_files:
   - ../../files/rules/hosts.yaml
@@ -46,7 +47,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box / is 95% full."
               description: "daniel-box has its / filesystem over 90% full. Longhorn stops scheduling replicas on a node at 75%. Read `df -h` on the host."
@@ -57,7 +57,6 @@ tests:
               origin: daniel-server
               service: daniel-server
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "daniel-server /boot/efi is 92% full."
               description: "daniel-server has its /boot/efi filesystem over 90% full. Longhorn stops scheduling replicas on a node at 75%. Read `df -h` on the host."
@@ -82,7 +81,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box memory is 95% used."
               description: "daniel-box has less than 10% of its memory available. Per-container OOM kills are ContainerOOMKilled's. Read `free -h` and the top memory cgroups on the host."
@@ -113,7 +111,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box publishes no disk /boot series."
               description: "daniel-box is scraped but its node-exporter publishes no series for the disk /boot check, so that check is not looking at the host. Read the matching collector on the host."
@@ -124,7 +121,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box publishes no disk /boot/efi series."
               description: "daniel-box is scraped but its node-exporter publishes no series for the disk /boot/efi check, so that check is not looking at the host. Read the matching collector on the host."
@@ -135,7 +131,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box publishes no thermal-throttle series."
               description: "daniel-box is scraped but its node-exporter publishes no series for the thermal-throttle check, so that check is not looking at the host. Read the matching collector on the host."
@@ -164,7 +159,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "A Claude Code cgroup on daniel-box logged a oom_kill memory event."
               description: "daniel-box/fleet had 1 `oom_kill` memory events in the last 10 minutes. The kernel killed something in that cgroup or a hard cap was hit."
@@ -196,7 +190,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box/fleet is memory-stalled 20% of the time."
               description: "The PSI `full` stall rate of daniel-box/fleet is over 10% of the last 5 minutes, for 10 minutes running. No task in the cgroup made progress, which is the 2026-09-05 shape (#1243) while it is still only a stall."
@@ -226,7 +219,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box reports no fleet cgroup metrics."
               description: "daniel-box is scraped but publishes no claude_cgroup_* series for fleet, so that cgroup is not being checked. Read /var/lib/node-exporter- textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host."
@@ -251,7 +243,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box reports no claude-rc cgroup metrics."
               description: "daniel-box is scraped but publishes no claude_cgroup_* series for claude-rc, so that cgroup is not being checked. Read /var/lib/node-exporter- textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host."
@@ -329,7 +320,6 @@ tests:
               sensor: temp1
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box pci0000:00_0000:00:18_3/temp1 is at 91.0C."
               description: "daniel-box sensor pci0000:00_0000:00:18_3/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
@@ -341,7 +331,6 @@ tests:
               sensor: temp1
               service: daniel-server
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-server platform_coretemp_0/temp1 is at 95.0C."
               description: "daniel-server sensor platform_coretemp_0/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
@@ -353,7 +342,6 @@ tests:
               sensor: temp1
               service: daniel-server
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-server pci_ctrl/temp1 is at 80.0C."
               description: "daniel-server sensor pci_ctrl/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
@@ -365,7 +353,6 @@ tests:
               sensor: temp1
               service: daniel-server
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-server acpi/temp1 is at 86.0C."
               description: "daniel-server sensor acpi/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
@@ -377,7 +364,6 @@ tests:
               sensor: temp1
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi thermal_thermal_zone0/temp1 is at 86.0C."
               description: "daniel-pi sensor thermal_thermal_zone0/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
@@ -409,7 +395,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-box publishes no hwmon temperature sensors."
               description: "daniel-box is scraped but its node-exporter publishes no node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its temperature. Read the hwmon collector on the host."
@@ -419,7 +404,6 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi publishes no hwmon temperature sensors."
               description: "daniel-pi is scraped but its node-exporter publishes no node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its temperature. Read the hwmon collector on the host."
@@ -448,7 +432,6 @@ tests:
               origin: daniel-box
               service: daniel-box
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "The kernel is thermally throttling daniel-box's CPU."
               description: "A Processor cooling device on daniel-box has held a non-zero cur_state for 15 minutes, so the kernel is throttling the CPU for heat. CFS throttling is ContainerCPUThrottled's. Read the cooling devices under /sys/class/thermal."
@@ -472,7 +455,6 @@ tests:
               sensor: in0
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi's firmware reports undervoltage."
               description: "The Raspberry Pi firmware latched its low-critical voltage alarm: the 5V supply fell below its critical threshold, which corrupts SD cards and stalls USB devices. Check the power supply and cable. A clean reading later does not undo the damage."
@@ -589,8 +571,8 @@ tests:
             exp_annotations:
               summary: "daniel-pi's / is mounted read-only."
               description: "/ on daniel-pi is read-only, which is an SD card remounting itself after an I/O error. Every other arm stays green through it. A reboot does not come back from it."
-  # PiMetricsMissing. The Pi is scraped and publishes load only, so the memory, filesystem,
-  # read-only and undervoltage arms fire after 10m.
+  # PiMetricsMissing. The Pi is scraped and publishes load only, so the memory, filesystem and
+  # read-only arms fire after 10m. The undervoltage arm is PiUndervoltageMissing's, below.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -637,6 +619,24 @@ tests:
             exp_annotations:
               summary: "daniel-pi publishes no read-only series."
               description: "daniel-pi is scraped but its node-exporter publishes no series for the read-only arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
+  # PiUndervoltageMissing. The Pi is scraped and publishes load only, so the undervoltage arm
+  # fires once, unshadowed, after 10m. A second Pi whose scrape is dead (up 0) stays quiet:
+  # ScrapeTargetDown owns that outage.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+      - series: 'node_load5{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+      - series: 'up{instance="dead-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x30'
+    alert_rule_test:
+      - alertname: PiUndervoltageMissing
+        eval_time: 9m
+        exp_alerts: []
+      - alertname: PiUndervoltageMissing
+        eval_time: 12m
+        exp_alerts:
           - exp_labels:
               arm: undervoltage
               instance: daniel-pi
@@ -644,10 +644,9 @@ tests:
               origin: daniel-pi
               service: daniel-pi
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "daniel-pi publishes no undervoltage series."
-              description: "daniel-pi is scraped but its node-exporter publishes no series for the undervoltage arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
+              description: "daniel-pi is scraped but its node-exporter publishes no node_hwmon_in_lcrit_alarm_volts series, so PiUndervoltage has nothing to read and a latched undervoltage alarm goes unseen. A renamed sensor or a blind hwmon collector is the usual cause. Read the Pi's hwmon collector on the host."
   # HostCoverageShortfall and HostTemperatureCoverageShortfall, zero-series case: no series at
   # all, so every arm counts 0 hosts and fires with `or vector(0)`.
   - interval: 1m
@@ -663,7 +662,6 @@ tests:
               arm: 'disk /'
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 0 hosts report series for the disk / check, under the floor of 2."
               description: "The disk / check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -671,7 +669,6 @@ tests:
               arm: 'disk /boot'
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 0 hosts report series for the disk /boot check, under the floor of 2."
               description: "The disk /boot check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -679,7 +676,6 @@ tests:
               arm: 'disk /boot/efi'
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 0 hosts report series for the disk /boot/efi check, under the floor of 2."
               description: "The disk /boot/efi check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -687,7 +683,6 @@ tests:
               arm: memory
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 0 hosts report series for the memory check, under the floor of 2."
               description: "The memory check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -695,7 +690,6 @@ tests:
               arm: thermal-throttle
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 0 hosts report series for the thermal-throttle check, under the floor of 2."
               description: "The thermal-throttle check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -709,7 +703,131 @@ tests:
               arm: temperature
               service: observability
               severity: warning
-              shadow: "true"
+            exp_annotations:
+              summary: "Only 0 hosts report temperature sensors, under the floor of 3."
+              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
+  # A dead exporter. Both node scrapes read up 0 and every other series is absent, so the
+  # exporter is ScrapeTargetDown's: no per-host rule fires beside it, which is why A1 has no
+  # inhibit. The two coverage floors carry no job or instance and fire as well, the safe
+  # direction recorded in hosts.yaml. A rule added to hosts.yaml that fires on a dead scrape
+  # fails this case, and so does a floor that stops firing.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x40'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x40'
+    alert_rule_test:
+      - alertname: HostDiskFull
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: HostMemoryHigh
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: ClaudeCgroupMemoryEvent
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: ClaudeCgroupMemoryStalled
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: ClaudeCgroupNotReporting
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: HostTemperatureHot
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: HostTemperatureNotReporting
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: CPUThermalThrottled
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: HostMetricsMissing
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: PiUndervoltage
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: PiUndervoltageMissing
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: PiLoadHigh
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: PiMemoryLow
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: PiDiskFull
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: PiFilesystemReadOnly
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: PiMetricsMissing
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: UPSOnBattery
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: UPSBatteryLow
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: UPSRuntimeLow
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: UPSReplaceBattery
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: UPSSensorAbsent
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: HostCoverageShortfall
+        eval_time: 30m
+        exp_alerts:
+          - exp_labels:
+              arm: 'disk /'
+              service: observability
+              severity: warning
+            exp_annotations:
+              summary: "Only 0 hosts report series for the disk / check, under the floor of 2."
+              description: "The disk / check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: 'disk /boot'
+              service: observability
+              severity: warning
+            exp_annotations:
+              summary: "Only 0 hosts report series for the disk /boot check, under the floor of 2."
+              description: "The disk /boot check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: 'disk /boot/efi'
+              service: observability
+              severity: warning
+            exp_annotations:
+              summary: "Only 0 hosts report series for the disk /boot/efi check, under the floor of 2."
+              description: "The disk /boot/efi check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: memory
+              service: observability
+              severity: warning
+            exp_annotations:
+              summary: "Only 0 hosts report series for the memory check, under the floor of 2."
+              description: "The memory check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+          - exp_labels:
+              arm: thermal-throttle
+              service: observability
+              severity: warning
+            exp_annotations:
+              summary: "Only 0 hosts report series for the thermal-throttle check, under the floor of 2."
+              description: "The thermal-throttle check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+      - alertname: HostTemperatureCoverageShortfall
+        eval_time: 30m
+        exp_alerts:
+          - exp_labels:
+              arm: temperature
+              service: observability
+              severity: warning
             exp_annotations:
               summary: "Only 0 hosts report temperature sensors, under the floor of 3."
               description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
@@ -755,7 +873,6 @@ tests:
               arm: temperature
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 2 hosts report temperature sensors, under the floor of 3."
               description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 2 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
@@ -781,7 +898,6 @@ tests:
               arm: 'disk /'
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 1 hosts report series for the disk / check, under the floor of 2."
               description: "The disk / check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -789,7 +905,6 @@ tests:
               arm: 'disk /boot'
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 1 hosts report series for the disk /boot check, under the floor of 2."
               description: "The disk /boot check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -797,7 +912,6 @@ tests:
               arm: 'disk /boot/efi'
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 1 hosts report series for the disk /boot/efi check, under the floor of 2."
               description: "The disk /boot/efi check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -805,7 +919,6 @@ tests:
               arm: memory
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 1 hosts report series for the memory check, under the floor of 2."
               description: "The memory check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -813,7 +926,6 @@ tests:
               arm: thermal-throttle
               service: observability
               severity: warning
-              shadow: "true"
             exp_annotations:
               summary: "Only 1 hosts report series for the thermal-throttle check, under the floor of 2."
               description: "The thermal-throttle check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
@@ -834,7 +946,6 @@ tests:
               job: nut
               service: nut-exporter
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "The UPS is on battery."
               description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
@@ -859,7 +970,6 @@ tests:
               job: nut
               service: nut-exporter
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "The UPS is on battery."
               description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
@@ -896,7 +1006,6 @@ tests:
               job: nut
               service: nut-exporter
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "The UPS battery is at 40%."
               description: "The UPS battery charge is under 50% (UPS_CHARGE_MIN_PCT) while mains power is on, for 10 minutes. Read the UPS on the NUT host."
@@ -908,7 +1017,6 @@ tests:
               job: nut
               service: nut-exporter
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "The UPS has 2m 0s of runtime."
               description: "The UPS estimates under 5 minutes of runtime (UPS_RUNTIME_MIN_S) on a full charge, for 10 minutes. The battery has aged. Read the UPS on the NUT host."
@@ -920,7 +1028,6 @@ tests:
               job: nut
               service: nut-exporter
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "The UPS asks for a battery replacement."
               description: "NUT reports ups.status RB for 10 minutes: the UPS's own self-test says the battery needs replacing. This trips before charge or runtime read low."
@@ -961,7 +1068,6 @@ tests:
               job: nut
               service: nut-exporter
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "The UPS runtime series is absent."
               description: "The NUT exporter answers its scrape but publishes no runtime series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
@@ -971,7 +1077,6 @@ tests:
               job: nut
               service: nut-exporter
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "The UPS replace-battery series is absent."
               description: "The NUT exporter answers its scrape but publishes no replace-battery series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
@@ -981,7 +1086,6 @@ tests:
               job: nut
               service: nut-exporter
               severity: critical
-              shadow: "true"
             exp_annotations:
               summary: "The UPS on-battery series is absent."
               description: "The NUT exporter answers its scrape but publishes no on-battery series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."

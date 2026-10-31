@@ -186,14 +186,14 @@ pages once (`ansible/tests/services/test_alertmanager_blackbox_inhibit.py`).
 while its rule is still shadow, and the last M6 Phase A cutover deletes it.
 
 **`files/rules/hosts.yaml` holds the host rules, one copy per host.** Its disk, memory,
-temperature, UPS and Pi pressure rules replace monitor-bridge's `disk`, `memory`, `host_temp`,
-`ups` and `pi_pressure` checks and carry `shadow` until M6's batch A1 cuts them over (the Pi's
-until B8). A rule's `service` is a literal, so a host gets its own copy, and a fourth host needs
-rules added. Every rule keeps `job` and `instance`, because the inhibit that replaces
-`EXPORTER_DEPENDENT` matches `ScrapeTargetDown` on them. A missing-data arm starts from
+temperature and UPS rules replace monitor-bridge's `disk`, `memory`, `host_temp` and `ups`
+checks and page since M6's batch A1 Cutover-b. Its Pi pressure rules replace `pi_pressure` and
+carry `shadow` until B8 cuts that row over. A rule's `service` is a literal, so a host gets its
+own copy, and a fourth host needs rules added. A1 has no Alertmanager inhibit on
+`ScrapeTargetDown`, by the `DECIDED:` marker in the file's header. A missing-data arm starts from
 `up == 1`, so it fires only while the scrape succeeds and the series is absent. A dead exporter
 pages once, through `ScrapeTargetDown`. The two coverage-floor rules count hosts, so they carry
-neither label, and a dead exporter also pages through them.
+neither `job` nor `instance`, and a dead exporter also pages through them.
 
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per tile the

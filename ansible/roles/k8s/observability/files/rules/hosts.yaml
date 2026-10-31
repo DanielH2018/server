@@ -3,10 +3,13 @@
 # carries this file verbatim. The design is M6's batch A1
 # (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A") on M2's recipe.
 #
-# SHADOW UNTIL THE BATCH'S CUTOVER-b. Kuma's `Root Disk`, `Memory`, `Host Temperature` and `UPS
-# Battery Health` tiles page today, so each rule carries shadow="true" and routes to the
-# blackhole receiver. The `pi_pressure` rules stay shadow until B8, which cuts that row over: its
-# `Pi Pressure` tile also holds the port arm, so A1 adds no `CheckWithoutPager` term for it.
+# THESE RULES PAGE since A1's Cutover-b, except the Pi pressure arms. They ran with
+# `shadow: "true"` beside the Kuma tiles of the rows they port until then. HostDiskFull and the
+# five UPS rules are critical, so Discord and email; the rest are warnings, so Discord alone.
+# PiLoadHigh, PiMemoryLow, PiDiskFull, PiFilesystemReadOnly and PiMetricsMissing stay shadow
+# until B8, which cuts the `pi_pressure` row over: its `Pi Pressure` tile also holds the port
+# arm, so A1 adds no `CheckWithoutPager` term for it. PiUndervoltage and PiUndervoltageMissing
+# are check_host_temp's, so they page with A1.
 #
 # ONE RULE PER HOST. `service` must be a literal (scripts/validate/alert_conventions.py), and a
 # node has no workload-service join, so each host gets its own copy, as host-checks.yaml does.
@@ -14,11 +17,21 @@
 # other host. These rules instead name daniel-box and daniel-server, so a fourth host needs
 # rules added here. The inventory holds three hosts.
 #
-# EVERY TARGET ALERT KEEPS `job` AND `instance`. The inhibit that replaces the bridge's
-# EXPORTER_DEPENDENT map matches `ScrapeTargetDown{job="node"}` or `{job="node-pi"}` with
-# `equal: [job, instance]`, and it lands in the later of A1's Cutover-b and A3's. Each
-# aggregation below therefore groups `by (origin, job, instance, ...)`, never the bridge's bare
-# `by (origin)`.
+# EVERY TARGET ALERT KEEPS `job` AND `instance`, so a future inhibit on ScrapeTargetDown{job="node"}
+# or {job="node-pi"} with `equal: [job, instance]` would match. Each aggregation below therefore
+# groups `by (origin, job, instance, ...)`, never the bridge's bare `by (origin)`.
+#
+# DECIDED: no Alertmanager inhibit for A1. The plan turned the bridge's EXPORTER_DEPENDENT map
+# into an inhibit with ScrapeTargetDown as its source. A3's Cutover-b made that source live, but
+# the rules below never fire beside it, bar two. Every missing-data arm starts from `up == 1`,
+# and every threshold arm reads a series that a dead scrape drops. ClaudeCgroupNotReporting holds
+# its arm for 5m after the last `up == 1` sample, which ends before ScrapeTargetDown's `for: 10m`.
+# The two coverage floors (HostCoverageShortfall, HostTemperatureCoverageShortfall) do fire beside
+# ScrapeTargetDown, and they carry no `job` or `instance`, so an `equal` list cannot match them. A
+# keyless inhibit would mute the census while a renamed series empties another host's vector, so
+# a dead exporter pages twice there, the safe direction. This is A5's ruling too (storage.yaml).
+# The "dead exporter" cases in hosts.test.yaml pin it: only the two floors fire. Read the
+# decision at m6-status/a1.md before adding an A1 rule that fires on a dead scrape.
 #
 # THE MISSING-DATA ARMS start from `up == 1`. The bridge paged "metric unavailable" when a
 # series was absent, which a dead exporter also caused. Each `unless on (origin, instance)` arm
@@ -57,7 +70,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} {{ $labels.mountpoint }} is {{ $value | printf \"%.0f\" }}% full."
           description: >-
@@ -77,7 +89,6 @@ groups:
         labels:
           severity: critical
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} {{ $labels.mountpoint }} is {{ $value | printf \"%.0f\" }}% full."
           description: >-
@@ -97,7 +108,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} memory is {{ $value | printf \"%.0f\" }}% used."
           description: >-
@@ -115,7 +125,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} memory is {{ $value | printf \"%.0f\" }}% used."
           description: >-
@@ -134,7 +143,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: A Claude Code cgroup on {{ $labels.origin }} logged a {{ $labels.event }} memory event.
           description: >-
@@ -150,7 +158,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: A Claude Code cgroup on {{ $labels.origin }} logged a {{ $labels.event }} memory event.
           description: >-
@@ -169,7 +176,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }}/{{ $labels.cgroup }} is memory-stalled {{ $value | printf \"%.0f\" }}% of the time."
           description: >-
@@ -185,7 +191,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }}/{{ $labels.cgroup }} is memory-stalled {{ $value | printf \"%.0f\" }}% of the time."
           description: >-
@@ -216,7 +221,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} reports no {{ $labels.cgroup }} cgroup metrics."
           description: >-
@@ -236,7 +240,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} reports no {{ $labels.cgroup }} cgroup metrics."
           description: >-
@@ -268,7 +271,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} {{ $labels.chip }}/{{ $labels.sensor }} is at {{ $value | printf \"%.1f\" }}C."
           description: >-
@@ -291,7 +293,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} {{ $labels.chip }}/{{ $labels.sensor }} is at {{ $value | printf \"%.1f\" }}C."
           description: >-
@@ -314,7 +315,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} {{ $labels.chip }}/{{ $labels.sensor }} is at {{ $value | printf \"%.1f\" }}C."
           description: >-
@@ -334,7 +334,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} publishes no hwmon temperature sensors."
           description: >-
@@ -350,7 +349,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} publishes no hwmon temperature sensors."
           description: >-
@@ -366,7 +364,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} publishes no hwmon temperature sensors."
           description: >-
@@ -384,7 +381,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The kernel is thermally throttling {{ $labels.origin }}'s CPU.
           description: >-
@@ -400,7 +396,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: The kernel is thermally throttling {{ $labels.origin }}'s CPU.
           description: >-
@@ -445,7 +440,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} publishes no {{ $labels.arm }} series."
           description: >-
@@ -487,7 +481,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: "{{ $labels.origin }} publishes no {{ $labels.arm }} series."
           description: >-
@@ -499,7 +492,7 @@ groups:
       # vector(0)` turns an empty count into 0 < 2. HOST_ORIGINS_MIN is 2 for disk and memory, which
       # exclude daniel-pi by name, and THERMAL_THROTTLE_ORIGINS_MIN is 2 because the Pi publishes no
       # Processor cooling device. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x 300s. The alert
-      # carries no `job` or `instance`, so A3's inhibit cannot hold it: a dead exporter pages here
+      # carries no `job` or `instance`, so no inhibit can hold it: a dead exporter pages here
       # as well as through ScrapeTargetDown, the safe direction.
       - alert: HostCoverageShortfall
         expr: |
@@ -526,7 +519,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Only {{ $value | printf "%.0f" }} hosts report series for the {{ $labels.arm }} check, under the floor of 2.
           description: >-
@@ -544,7 +536,6 @@ groups:
         labels:
           severity: warning
           service: observability
-          shadow: "true"
         annotations:
           summary: Only {{ $value | printf "%.0f" }} hosts report temperature sensors, under the floor of 3.
           description: >-
@@ -559,7 +550,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's firmware reports undervoltage.
           description: >-
@@ -633,9 +623,10 @@ groups:
             {{ $labels.mountpoint }} on daniel-pi is read-only, which is an SD card remounting
             itself after an I/O error. Every other arm stays green through it. A reboot does not
             come back from it.
-      # The missing-series arms of check_pi_pressure and the undervoltage arm: a renamed series or a
-      # blind collector must surface. The bridge paged the same cycle, so `for: 10m` is
-      # ScrapeTargetDown's floor.
+      # The missing-series arms of check_pi_pressure: a renamed series or a blind collector must
+      # surface. The bridge paged the same cycle, so `for: 10m` is ScrapeTargetDown's floor. B8
+      # cuts the row over, so this rule stays shadow until then. The undervoltage arm is
+      # check_host_temp's, so it is PiUndervoltageMissing below and pages with A1.
       - alert: PiMetricsMissing
         expr: |
           label_replace(
@@ -661,12 +652,6 @@ groups:
             unless on (origin, instance)
               node_filesystem_readonly{origin="daniel-pi", mountpoint=~"/|/boot/firmware"},
             "arm", "read-only", "", "")
-          or
-          label_replace(
-            up{job="node-pi", origin="daniel-pi"} == 1
-            unless on (origin, instance)
-              node_hwmon_in_lcrit_alarm_volts{origin="daniel-pi"},
-            "arm", "undervoltage", "", "")
         for: 10m
         labels:
           severity: warning
@@ -677,6 +662,29 @@ groups:
           description: >-
             daniel-pi is scraped but its node-exporter publishes no series for the {{ $labels.arm }}
             arm of the Pi checks, so nothing is watching it. Read the exporter on the host.
+      # The empty-vector arm of check_host_temp's undervoltage check: undervoltage_verdict paged
+      # "no undervoltage alarm sensor scraped" while the Pi's own scrape was up, because a renamed
+      # sensor or a blind hwmon collector leaves PiUndervoltage nothing to read. It was one arm of
+      # PiMetricsMissing, which stays shadow for B8, so it is its own rule and pages with A1. The
+      # `up == 1` start keeps a dead scrape ScrapeTargetDown's, as in the bridge.
+      - alert: PiUndervoltageMissing
+        expr: |
+          label_replace(
+            up{job="node-pi", origin="daniel-pi"} == 1
+            unless on (origin, instance)
+              node_hwmon_in_lcrit_alarm_volts{origin="daniel-pi"},
+            "arm", "undervoltage", "", "")
+        for: 10m
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi publishes no undervoltage series.
+          description: >-
+            daniel-pi is scraped but its node-exporter publishes no node_hwmon_in_lcrit_alarm_volts
+            series, so PiUndervoltage has nothing to read and a latched undervoltage alarm goes
+            unseen. A renamed sensor or a blind hwmon collector is the usual cause. Read the Pi's
+            hwmon collector on the host.
       # The bridge's check_ups, mains-loss arm. It is judged first and alone: while it is red the
       # charge, runtime and replace-battery rules below stay silent through `unless`, because they
       # read the runway and a runway arm adds nothing to an outage. `for: 10m` is UPS_CONSECUTIVE
@@ -688,7 +696,6 @@ groups:
         labels:
           severity: critical
           service: nut-exporter
-          shadow: "true"
         annotations:
           summary: The UPS is on battery.
           description: >-
@@ -704,7 +711,6 @@ groups:
         labels:
           severity: critical
           service: nut-exporter
-          shadow: "true"
         annotations:
           summary: The UPS battery is at {{ $value | printf "%.0f" }}%.
           description: >-
@@ -720,7 +726,6 @@ groups:
         labels:
           severity: critical
           service: nut-exporter
-          shadow: "true"
         annotations:
           summary: The UPS has {{ $value | humanizeDuration }} of runtime.
           description: >-
@@ -736,7 +741,6 @@ groups:
         labels:
           severity: critical
           service: nut-exporter
-          shadow: "true"
         annotations:
           summary: The UPS asks for a battery replacement.
           description: >-
@@ -774,7 +778,6 @@ groups:
         labels:
           severity: critical
           service: nut-exporter
-          shadow: "true"
         annotations:
           summary: The UPS {{ $labels.arm }} series is absent.
           description: >-

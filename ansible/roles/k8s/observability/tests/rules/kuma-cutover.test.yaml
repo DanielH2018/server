@@ -110,22 +110,6 @@ tests:
             exp_annotations:
               summary: Kuma's Live Object Drift tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Live Object Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Root Disk, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Root Disk tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Root Disk tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Memory, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Memory tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Memory tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Host Temperature, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Host Temperature tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Host Temperature tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: UPS Battery Health, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's UPS Battery Health tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the UPS Battery Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: Artifacts Peer Sync, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's Artifacts Peer Sync tile is gone and no alert rule pages in its place.
@@ -375,14 +359,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
@@ -538,14 +514,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x140'
@@ -712,14 +680,6 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x160'
-      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
-        values: '1x160'
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
@@ -877,14 +837,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x1700'
@@ -1053,14 +1005,6 @@ tests:
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x5 _x3100'
-      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
-        values: '1x3100'
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
@@ -1249,14 +1193,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="k3s Telemetry OTLP Door", monitor_type="push"}'
@@ -1432,14 +1368,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x5 _x300'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x300'
@@ -1629,14 +1557,6 @@ tests:
       - series: 'monitor_status{monitor_name="Release Staleness Drift", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Live Object Drift", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Root Disk", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Memory", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="Host Temperature", monitor_type="push"}'
-        values: '1x760'
-      - series: 'monitor_status{monitor_name="UPS Battery Health", monitor_type="push"}'
         values: '1x760'
       - series: 'monitor_status{monitor_name="Artifacts Peer Sync", monitor_type="push"}'
         values: '1x760'
