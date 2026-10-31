@@ -75,13 +75,13 @@ def real_tree() -> dict[str, list[Item]]:
 
 
 NAMED_MEMBERS = [
-    ("cron", "Weekly apt autoremove"),
+    ("cron", "Longhorn backup health"),
     ("template", "Install the host forwarder's unit"),
     ("template", "Pin the node's LAN address in netplan"),
     ("get_url", "Download the pinned CoreDNS release"),
     ("systemd_service", "Disable the legacy performance-governor unit (daniel-server)"),
     ("sysctl", "Apply kernel security hardening"),
-    ("ufw", "Enable UFW firewall"),
+    ("ufw", "Allow cluster traffic from agent nodes"),
 ]
 
 

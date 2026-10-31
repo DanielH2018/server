@@ -1,0 +1,12 @@
+# Shipped by the host package's host-maintenance component with its enable link, on a `has_fwupd`
+# host. Sunday 07:00, the cron's slot: 30 minutes ahead of the weekly reboot, which commits a staged
+# UEFI capsule on the next boot.
+[Unit]
+Description=Run firmware-update weekly on Sunday at 07:00
+
+[Timer]
+OnCalendar=Sun *-*-* 07:00:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
