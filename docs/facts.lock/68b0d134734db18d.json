@@ -1,0 +1,12 @@
+{
+  "checksum": "24b5bcb66e93b6bbcb958bd9f64a743373c3526b880cfcdaf34d8d9ee015ab5c",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The authenticated-app whitelist keeps normal use from scoring",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/traefik/defaults/main.yml:traefik_k8s_agent_parsers": "a44dcf8e0343c71619a9ff035241f15a7ee83827c8b09a3b953c873f5e9c8ab4"
+    },
+    "python": "3.14",
+    "verified_sha": "e97ecb9a8"
+  }
+}
