@@ -63,9 +63,9 @@
 
 # The shared task file clones once and never pulls, yet two things run from this clone's main
 # working tree rather than from a session's worktree: the hook shim (the profile above) and the
-# homelab-ui MCP launcher (agent_browser.yml). A clone left 94 commits behind ran a ui_mcp.sh
-# that still decrypted SOPS, which the agent cannot do, and the MCP server never connected
-# (#4067, #4099). files/claude-clone-sync.sh fast-forwards it when it is a clean master, and
+# homelab-ui MCP launcher (homelab-claude-agent-browser.service registers it). A clone left 94
+# commits behind ran a ui_mcp.sh that still decrypted SOPS, which the agent cannot do, and the
+# MCP server never connected (#4067, #4099). files/claude-clone-sync.sh fast-forwards it when it is a clean master, and
 # leaves anything else alone as the agent's work in progress. This apply runs it before the venv
 # sync below reads the clone's uv.lock. <name>-clone-sync.timer runs it between applies, since a
 # merge touching only the launcher or .claude/hooks/ applies no role at all (#4162).

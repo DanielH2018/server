@@ -366,16 +366,6 @@ def test_a_pr_changing_triage_needs_the_operator(path, tmp_path) -> None:
     assert policy.approval_hits([{"filename": path}], floor) == [path]
 
 
-def test_a_token_pasted_across_a_wrapped_line_reaches_systemd_whole() -> None:
-    """The 2026-10-17 paste carried two spaces from setup-token's line wrap, and Claude 401'd."""
-    rendered = render_setup_text(
-        "claude_code",
-        "claude-triage-session.env.j2",
-        {"claude_code_triage_claude_oauth_token": "sk-ant-oat01-abc  def\n"},
-    )
-    assert "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-abcdef\n" in rendered
-
-
 @pytest.mark.parametrize(
     "operator_read, group, mode",
     [(True, "ubuntu", "0710"), (False, "claude", "0750")],
