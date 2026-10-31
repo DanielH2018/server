@@ -300,12 +300,11 @@ def test_a_file_other_roles_ship_reaches_every_role_shipping_it():
 
 
 def test_a_host_lib_change_reaches_its_consumers_and_not_common():
-    """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The six
+    """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The five
     initial_setup consumers apply on the tick, `k3s` is the one role left to record, and
     `common` is named nowhere. A `common` file no role ships still names `common`."""
     host_lib = ["hosts/lib/host_lib.py"]
     consumers = {
-        "claude_code",
         "deploy_ui",
         "fake_remux",
         "gitops_deploy",
@@ -335,10 +334,9 @@ def test_a_table_holding_only_the_old_host_lib_key_routes_the_moved_file_nowhere
 def test_a_common_task_file_change_reaches_the_roles_importing_it():
     """An `import_tasks` of a `common/tasks/` file is static, so the imported tasks run under
     each importer's tags and only re-applying the importers applies the change (#3317). The
-    same six initial_setup roles apply on the tick, and `k3s` is the one left to record."""
+    same five initial_setup roles apply on the tick, and `k3s` is the one left to record."""
     path = "ansible/roles/setup/common/tasks/install_host_lib.yml"
     consumers = {
-        "claude_code",
         "deploy_ui",
         "fake_remux",
         "gitops_deploy",
@@ -374,24 +372,19 @@ def test_a_kuma_check_template_change_reaches_the_roles_importing_its_task_file(
 
 
 def test_an_initial_setup_defaults_change_reaches_its_readers():
-    """claude_code puts every agent in `initial_setup_worktree_holders_group` (#4303), so a
-    rename re-applied only initial_setup and left the agents in the old group. claude_code,
-    renovate_agent each copy the uv `initial_setup_uv_version` pins, so a
-    uv bump left their copies on the old version (#5945)."""
+    """renovate_agent copies the uv `initial_setup_uv_version` pins, so a uv bump left its copy
+    on the old version (#5945)."""
     path = "ansible/roles/setup/initial_setup/defaults/main.yml"
     assert services_from_changed_paths([path]).setup_roles == {
         "initial_setup",
-        "claude_code",
         "renovate_agent",
     }
     assert setup_roles_for(path) == {
         "initial_setup",
-        "claude_code",
         "renovate_agent",
     }
     assert setup_tags_for([path]) == {
         "initial_setup",
-        "claude_code",
         "renovate_agent",
     }
     tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"

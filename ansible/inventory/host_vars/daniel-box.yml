@@ -21,6 +21,9 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # default swappiness of 60: 18 GiB available, 15 GiB page cache, 166 MiB already in swap.
 # group_vars/all.yml defaults this false.
 has_ample_ram: true
+# fwupd is installed here (`dpkg -l fwupd`, 2026-10-31), so the host-maintenance component ships
+# the weekly firmware update. group_vars/all.yml defaults this false.
+has_fwupd: true
 # Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the
 # fake + import. off/shadow also available.
 autofix_fake_remux_replace_mode: live

@@ -41,7 +41,9 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "pi_sd_health_push_token",  # Pi timer, via optimize_pi's interim file + server label
         "pi_recovery_push_token",  # Pi timer, via optimize_pi's interim file + server label
         "longhorn_backup_push_token",  # daniel-box cron (k3s role) + daniel-server label
-        "claude_otel_push_token",  # daniel-box cron (setup/claude_code) + daniel-server label
+        # daniel-box timer (claude-code component) + daniel-server label. The timer pushes to
+        # nothing since M6 batch B6a's Cutover-2, so the key has no pusher left.
+        "claude_otel_push_token",
         "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label
         "manifest_prune_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "release_staleness_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
@@ -57,10 +59,8 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # Same role, same cron shape, same reason: daniel-box cron (setup/gitops_deploy) +
         # k8s/uptime-kuma static tile, applied by `initial_setup.yml --tags gitops_deploy`.
         "interaction_limit_push_token",
-        # daniel-box cron (setup/claude_code, since H2.7) + k8s/uptime-kuma static tile.
-        # claude_code has no `containers_list` entry, so `deploy.yml --tags claude_code`
-        # matches nothing; the pusher is applied by `initial_setup.yml --tags claude_code`.
-        # Until H2.7 the k8s/artifacts role rendered it and this routed to that tag.
+        # daniel-box timer (claude-code component) + k8s/uptime-kuma static tile. The timer pushes
+        # to nothing since M6 batch B6a's Cutover-2, so the key has no pusher left.
         "artifacts_sync_push_token",
         # daniel-box cron (setup/k8s_host_files, since registry's D5 conversion) + k8s/uptime-kuma
         # static tile. k8s_host_files has no `containers_list` entry, so `deploy.yml --tags
@@ -172,6 +172,19 @@ PREFIX_EXCEPTION_CONSUMERS = {
 # the split from the template rather than trusting this comment.
 UPTIME_KUMA_TAG = "uptime-kuma"
 
+# M6 batch B7's Cutover-1a deleted these four tiles ahead of their producers' push, which Cutover-2
+# removes. Until then the pusher still renders the token and uptime-kuma no longer does, so
+# `consumer_tags` names the pusher alone. Cutover-2 deletes this set and adds the four names to
+# `PENDING_RETIREMENT`.
+B7_TILE_DELETED_PUSH_TOKENS = frozenset(
+    {
+        "arr_autoblock_push_token",
+        "cloudflare_ddns_direct_push_token",
+        "cloudflare_ddns_proxied_push_token",
+        "monitor_bridge_pi_peers_push_token",
+    }
+)
+
 
 def consumer_tags(name: str) -> tuple[str, ...]:
     """Deploy tags whose redeploy makes a rotated push token take effect.
@@ -216,7 +229,7 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     else:
         # anything else unrecognised -> manual
         return ()
-    if name.endswith("_push_token"):
+    if name.endswith("_push_token") and name not in B7_TILE_DELETED_PUSH_TOKENS:
         return (pusher, UPTIME_KUMA_TAG)
     return (pusher,)
 

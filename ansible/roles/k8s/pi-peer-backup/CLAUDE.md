@@ -84,7 +84,7 @@ replaced the retired Kopia scope for the Pi.
   `homelab/check-last-run` and `homelab/check-message` on the ConfigMap `pi-peer-backup-verdict`
   (`templates/verdict-configmap.yaml.j2`, rendered with no annotations so the script is their
   only writer). kube-state-metrics exports the verdict, and the `pods` rule group's
-  `PiPeerBackupFailed` and `PiPeerBackupNotReporting` read it in shadow. `templates/rbac.yaml.j2`
+  `PiPeerBackupFailed` and `PiPeerBackupNotReporting` read it and page since B7's Cutover-1b. `templates/rbac.yaml.j2`
   grants `patch` on that one name. The CronJob mounts the token for that call alone, so the
   backup pod holds an API token it did not hold before. The message is stripped of IPv4
   addresses and JSON-hostile characters. A failed export makes the run exit 1, so the CronJob's

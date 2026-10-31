@@ -207,6 +207,10 @@ because the two alerts share no `instance`, and the estate has one Pi.
 and the Pi's port arm. Its per-target alerts take `service` from the `blackbox-extra` and
 `blackbox-pi-ports` scrape jobs, so their rule labels carry none, and they page since M6's batch B8
 Cutover-b.
+`files/rules/pods.yaml` holds the rules that replaced the Kuma tiles of autofix-bridge, the two
+cloudflare-ddns Deployments and the pi-peer-backup CronJob, and they page since M6's batch B7
+Cutover-1b. An inhibit in `alertmanager-secret.yaml.j2` lets `AutofixBridgeDown` hold the
+`ScrapeTargetDown` rule for the same job, so one dead exporter pages once.
 `files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
 while its rule is still shadow, and the last M6 Phase A cutover deletes it.
 
@@ -302,9 +306,9 @@ The stack can run for days fully green — every pod Ready, zero export failures
 heartbeat — while carrying no real signal. **Run `claude -p` on the quiet host before
 investigating its collector**, and read the logs before the metrics, not from counters alone.
 The four behaviours behind it are on the docs page.
-`telemetry-health.sh` checks OTLP reachability, and the `OtelCollectorExportFailing` rule
+`claude-otel-health` checks OTLP reachability, and the `OtelCollectorExportFailing` rule
 arms export failures — neither can detect "nobody is using it". The heartbeat is a daniel-box
-cron that `roles/setup/claude_code` installs (H2.7), not this role. `TempoBlocklistPollFailing`
+timer that its host package ships (`hosts/components/claude-code/`), not this role. `TempoBlocklistPollFailing`
 pages when Tempo's blocklist poll fails: stored traces go unsearchable behind a Ready pod.
 
 ## Content logging is on

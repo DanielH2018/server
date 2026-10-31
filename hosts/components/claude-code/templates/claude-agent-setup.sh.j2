@@ -140,6 +140,19 @@ for shared in "$home/.claude/artifacts" "{{ claude_code_agent_memory_dir }}"; do
   unpin
 done
 
+{% if has_gitops | default(false) %}
+# The deployer's state directory is 0750 {{ sys_user }}, so without this the agent cannot check
+# hold_sha or owed.jsonl before a landing (#4198). Not recursive: the default entry makes each
+# marker readable as the deployer rewrites it. The agent cannot write there, so no pin is needed.
+if [ -d /var/lib/gitops-deploy ]; then
+{% if claude_code_agent_gitops_read %}
+  setfacl --modify "user:$agent:rX" --modify "default:user:$agent:r" /var/lib/gitops-deploy
+{% else %}
+  setfacl --remove "user:$agent" --remove "default:user:$agent" /var/lib/gitops-deploy 2> /dev/null || true
+{% endif %}
+fi
+{% endif %}
+
 {% if claude_code_agent_homelab_ui_enabled %}
 # homelab-secrets renders the agent's homelab-ui login under /run, outside the agent's home
 # (daniel-box's package.yml names the same destination). The agent reads it through this link.

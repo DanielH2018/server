@@ -1,10 +1,9 @@
 {
-  "checksum": "a69ac58f021b346488361b7ad2ec27eea8bed2594639a1a53eeb9fd6f83c1fb9",
+  "checksum": "768058890ced752ca0c9a75a8312d7a014ed5a56ebebcbbb0ef69da3384cd84b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
-  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The host packages own most of it",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#The host packages own it",
   "row": {
     "atoms": {
-      "ansible/tests/setup/test_claude_triage.py": "cc1a2d7a13da3e403cc93dd14bc248b5044ce8860312bad40fa159f1bcd43be5",
       "hosts/components/claude-code/": "0c7d7c48948f71952dce53fd0751b7c0c4df73b56724f2b6883863c36ef7bfcd",
       "hosts/components/claude-code/units/homelab-claude-triage-poll-alert.service": "0f68641bc8dd8e73cb2aa59aad5749ae0f328addcad54f97ae309298dddbefce",
       "hosts/lib/tests/test_claude_agent_browser.py": "3eb7f63cb7b67c5fe4e537c7355a779b26b97e8de6abf0214f98695c6859e105",
@@ -13,6 +12,6 @@
       "hosts/lib/tests/test_claude_code_on_daniel_box.py": "b836e539bbfdc262583f0726bdc3679aa00c07aca74e8f80f0444d2340208483"
     },
     "python": "3.14",
-    "verified_sha": "abbdcc170"
+    "verified_sha": "dd4bc2a78"
   }
 }

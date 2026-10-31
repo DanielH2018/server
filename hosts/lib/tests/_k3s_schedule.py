@@ -71,8 +71,8 @@ def _weekdays(spec: str) -> set[int]:
 
 
 def _is_zone(token: str) -> bool:
-    """A time zone name has a `/` and no `:`; `*:0/10` is a clock with a step."""
-    return "/" in token and ":" not in token
+    """A time zone name is `UTC` or has a `/` and no `:`; `*:0/10` is a clock with a step."""
+    return token == "UTC" or ("/" in token and ":" not in token)
 
 
 def calendar_fires(expr: str, day: date) -> list[int]:
