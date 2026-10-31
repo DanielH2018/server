@@ -327,3 +327,16 @@ def test_the_all_clear_probe_host_fronts_no_route():
         "outrank the edge self-check path and the probe reads that app's response instead:\n  "
         + "\n  ".join(offenders)
     )
+
+
+# M6 batch B6a's Cutover-1a deleted these two tiles. Both crons still push into their deleted
+# tokens until Cutover-2, which `KUMA_RETIRING_TAGS` keeps from paging as a rejected push.
+B6A_TILES_DELETED = frozenset({"claude-otel-health.json", "artifacts-sync.json"})
+
+
+def test_the_deleted_b6a_tiles_are_not_declared():
+    declared = B6A_TILES_DELETED & set(_entities())
+    assert not declared, (
+        f"{sorted(declared)} is declared again: B6a's rules page those checks through "
+        "Alertmanager, and a tile would page them a second time (M1 convention 5)"
+    )
