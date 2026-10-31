@@ -30,7 +30,11 @@ ENV container=docker
 # exists. The Ubuntu lists stay, so `tree`, which the Depends case's fixture needs, resolves
 # with no fetch. Its deb is downloaded here too, because snapshot.ubuntu.com answers 5xx
 # often enough to fail a case that fetches from it. The Pi package Depends on zram-tools,
-# watchdog and earlyoom (H7.25), so their debs and recommends are downloaded the same way. `age` generates the throwaway key the
+# watchdog and earlyoom (H7.25), so their debs and recommends are downloaded the same way. It
+# also Depends on fail2ban, sysstat, acct, rkhunter, aide and aide-common (H7.30); aide-common
+# pulls in postfix as its mail transport agent. The Pi cases unmount /etc/resolv.conf before the
+# install (`pi_host_seed`), so the container has no DNS and an apt that needs a fetch retries
+# until the case's 900 second timeout (run 41153975441). `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
 # install, and bootstrap-host.sh calls each before it installs anything (H7.15a).
 RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runner-ca.crt \
@@ -48,7 +52,8 @@ RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runn
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt update; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt install -y --no-install-recommends \
         systemd systemd-sysv python3 ca-certificates age git gnupg curl; \
-    apt-get install -y --download-only tree zram-tools watchdog earlyoom
+    apt-get install -y --download-only tree zram-tools watchdog earlyoom \
+        fail2ban sysstat acct rkhunter aide aide-common
 
 # Units that would take dpkg's lock mid-case, or reach the runner's devices through
 # --privileged, never start. The updater's own timer is left alone: neither the fixture nor the
