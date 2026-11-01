@@ -4,10 +4,10 @@
 # Usage: ups-secondary-health.sh [-h|--help]
 # Takes no arguments. Root cron job "UPS secondary watchdog" (cron file ups-secondary-health) runs
 # it every nut_host_watchdog_interval_minutes minutes on daniel-server, only while
-# nut_host_watchdog_armed is true. It reads /etc/nut/upsmon.conf and the Kuma push token from
-# /etc/nut/kuma-push.env. Running it by hand needs root and pushes to the Kuma monitor. Each run
-# also writes its verdict to $TEXTFILE_DIR/ups-secondary-health.prom for node_exporter's textfile
-# collector, before the push (M6 batch B4; rules in other-setup-checks.yaml run in shadow).
+# nut_host_watchdog_armed is true. It reads /etc/nut/upsmon.conf. Running it by hand needs root.
+# Each run writes its verdict to $TEXTFILE_DIR/ups-secondary-health.prom for node_exporter's
+# textfile collector, which UpsSecondaryFailed and UpsSecondaryNotReporting read (M6 batch B4,
+# other-setup-checks.yaml). B4's Cutover-2 removed its Kuma push.
 #
 # Answers the one question nothing else in this estate asks: can THIS host's upsmon still
 # reach upsd, right now?
@@ -52,17 +52,7 @@ done
 
 {# H4.3b3: the packaged branch. Only the component's render context sets
    nut_host_watchdog_packaged, so every host the role applies to renders the Ansible-era
-   branch. The branch differs in exactly three lines: the push library's path, the token's
-   source and the upsmon.conf path. #}
-# shellcheck source=/dev/null
-{% if nut_host_watchdog_packaged | bool %}
-source /usr/lib/homelab/kuma-push-lib.sh || {
-{% else %}
-source /usr/local/lib/kuma-push-lib.sh || {
-{% endif %}
-  logger -t ups-secondary-health "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
+   branch. The branch differs in one line: the upsmon.conf path. #}
 # shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t ups-secondary-health "homelab-check-lib.sh missing — run initial_setup on this host"
@@ -76,24 +66,6 @@ source /usr/local/lib/homelab-check-lib.sh || {
 DEADLINE_S={{ 2 * 60 * (nut_host_watchdog_interval_minutes | int) + 300 }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP, like every sibling: Kuma serves from the k8s edge and the
-# push must not depend on DNS.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-
-# This role's OWN env file, deliberately not /etc/rancher/k3s/kuma-push.env. That one is a
-# whole-content template owned by roles/setup/k3s, so adding a key to it from here would be
-# clobbered on that role's next run — and nut_host also has to work on a host where the k3s
-# role's file does not exist.
-UPS_SECONDARY_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-{% if nut_host_watchdog_packaged | bool %}
-[[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/kuma_push_token" ]] && UPS_SECONDARY_PUSH_TOKEN="$(< "${CREDENTIALS_DIRECTORY}/kuma_push_token")"
-{% else %}
-[[ -r /etc/nut/kuma-push.env ]] && . /etc/nut/kuma-push.env
-{% endif %}
-PUSH_URL="https://${KUMA_HOST}/api/push/${UPS_SECONDARY_PUSH_TOKEN}"
-
 {% if nut_host_watchdog_packaged | bool %}
 UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf
 {% else %}
@@ -106,13 +78,13 @@ UNIT_STATE="$(systemctl is-active nut-monitor 2>/dev/null || true)"
 
 # stdout and stderr are kept APART. upsc writes "Init SSL without certificate database" to
 # stderr on every successful call here, so folding the two with 2>&1 puts that line inside the
-# value: the pushed message goes multi-line, and the empty-status branch below becomes
+# value: the logged message goes multi-line, and the empty-status branch below becomes
 # unreachable because the noise is never empty. Both were live for one cycle on 2026-08-29.
 UPSC_STDERR="$(mktemp)"
 UPS_STATUS="$(upsc "$ENDPOINT" ups.status 2>"$UPSC_STDERR")"
 UPSC_RC=$?
 # Collapsed to one line: ups.status is legitimately multi-token ("OL CHRG"), and a newline in
-# either half would break the syslog line and the push message.
+# either half would break the syslog line.
 UPS_STATUS="$(printf '%s' "$UPS_STATUS" | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//')"
 UPSC_ERR="$(tr '\n' ' ' < "$UPSC_STDERR" | sed 's/  */ /g; s/^ //; s/ $//')"
 rm -f "$UPSC_STDERR"
@@ -139,23 +111,14 @@ else
   MSG="nut-monitor active, upsd reachable at ${ENDPOINT} (ups.status=${UPS_STATUS})"
 fi
 
-# Unconditional and before the push — a successfully-pushed DOWN otherwise leaves no durable
-# record, and `probe.py alerts` reconstructs host-cron episodes by matching status=down in
-# syslog. NOTICE rather than INFO: journald here is capped at MaxLevelStore=notice, so an
+# Unconditional: this line is the durable record of the verdict's message, and `probe.py alerts`
+# reconstructs host-cron episodes by matching status=down in syslog. NOTICE rather than INFO: journald here is capped at MaxLevelStore=notice, so an
 # info-level line is dropped from the journal AND from forwarding to rsyslog, never reaching
 # Loki (2026-08-29 review M-15, which was exactly that bug in live_drift_check.py).
 logger -p daemon.notice -t ups-secondary-health "status=${STATUS} ${MSG}"
 
-# The textfile carries the verdict before the push, which retries for over a minute and must not
-# age it. A failed write logs and the run goes on to its push. The token gates the push only: a
-# host without the token still reports its verdict to Prometheus.
+# The textfile carries the verdict. A failed write logs.
 SUCCESS=0
 [[ "$STATUS" == "up" ]] && SUCCESS=1
 write_check_textfile ups-secondary-health "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
   || logger -t ups-secondary-health "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
-
-if [[ -z "$UPS_SECONDARY_PUSH_TOKEN" ]]; then
-  logger -t ups-secondary-health "push token unreadable — skipping push (see /add-secret)"
-  exit 0
-fi
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" ups-secondary-health

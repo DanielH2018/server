@@ -27,11 +27,11 @@ Run: uv run pytest ansible/tests/setup/test_claude_login_slice_caps.py
 import re
 
 import pytest
-from _helpers import ANSIBLE, load_yaml
-from _setup_render import render_setup_text, role_context
+from _helpers import load_yaml
+from _setup_render import CLAUDE_CODE, render_component_text, role_context
 
-ROLE = "claude_code"
-ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
+COMPONENT = "claude-code"
+ROLE_DIR = CLAUDE_CODE
 TEMPLATES = ROLE_DIR / "templates"
 DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
 
@@ -46,7 +46,7 @@ def render(template: str, **overrides: object) -> str:
     context written beside the assertions drifts from defaults/main.yml silently, and the
     assertion then checks a number the host never renders (#3202).
     """
-    return render_setup_text(ROLE, template, overrides)
+    return render_component_text(COMPONENT, template, overrides)
 
 
 @pytest.fixture(scope="module")

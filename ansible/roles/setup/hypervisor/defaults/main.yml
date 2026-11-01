@@ -86,9 +86,9 @@ hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.
 # nothing else — no kubelet, no CNI, no pods. Measured on daniel-box at 6 s of CPU for
 # the restore stage. 2 GiB / 2 vCPU / 20 G is generous; the cloud image itself needs ~2.5 G.
 hypervisor_etcd_drill_armed: true
-# The cadence (`etcd_drill_full_cron`) and the Kuma deadline derived from it
-# (`etcd_drill_full_kuma_interval_s`) live in group_vars/all.yml: k8s/uptime-kuma sizes the push
-# tile from the same numbers this role schedules the cron with.
+# The cadence (`etcd_drill_full_cron`) and the deadline derived from it
+# (`etcd_drill_full_kuma_interval_s`, named for the Kuma tile it sized until M6 batch B4) live in
+# group_vars/all.yml. The orchestrator renders the deadline as its textfile's DEADLINE_S.
 
 # Guest identity. The MAC is the staging network's one DHCP reservation (the guest attaches to
 # that NAT network and its egress fence — it needs internet for R2 and nothing on the LAN), fixed
@@ -135,10 +135,9 @@ hypervisor_etcd_drill_script_path: /usr/local/lib/etcd-restore-drill.sh
 # node-token here. A wrong token fails the restore stage loudly (the bootstrap blob cannot be
 # decrypted), so it cannot pass by accident.
 hypervisor_etcd_drill_s3_env: /etc/homelab/etcd-drill-s3.env
-hypervisor_etcd_drill_kuma_env: /etc/homelab/etcd-drill-kuma-push.env
 # Same path and stamp format as daniel-box's /var/lib/etcd-restore-drill, so `last-success-full`
 # reads the same way on either host. Nothing in the cluster reads this one (monitor-bridge is
-# pinned to daniel-box's copy); the Kuma push is the alarm, this is the local record.
+# pinned to daniel-box's copy); the textfile verdict is the alarm, this is the local record.
 hypervisor_etcd_drill_stamp_dir: /var/lib/etcd-restore-drill
 hypervisor_etcd_drill_log_dir: /var/log/etcd-restore-drill
 # Longer than a year, so the evidence of the last pass is still

@@ -148,12 +148,19 @@ PATCH_MAINTAINED = {
 # function that writes the object, so the entry reads as stale if that script ever switches to
 # `apply`. Switching it is not the fix: an applied object would need a manifest, which the
 # manifest-prune check would then look for.
+_REGISTRY_GC_KEEP_SET = (
+    "written by `kubectl create configmap` in write_mirror_keep_set of "
+    "roles/setup/k8s_host_files/templates/registry-gc.sh.j2 (the weekly registry GC), "
+    "which deletes and recreates it each run"
+)
+# One entry per mirror phase of registry-gc.sh, each its own MIRROR_KEEP_CM.
 HOST_SCRIPT_WRITTEN = {
-    ("configmap", "homelab", "registry-gc-ghcr-mirror-keep"): (
-        "written by `kubectl create configmap` in write_mirror_keep_set of "
-        "roles/setup/k8s_host_files/templates/registry-gc.sh.j2 (the weekly registry GC), "
-        "which deletes and recreates it each run"
-    ),
+    ("configmap", "homelab", "registry-gc-ghcr-mirror-keep"): _REGISTRY_GC_KEEP_SET,
+    (
+        "configmap",
+        "homelab",
+        "registry-gc-dockerhub-mirror-keep",
+    ): _REGISTRY_GC_KEEP_SET,
 }
 
 # The residue manager `kubectl` writes when it migrates a client-side-applied object to

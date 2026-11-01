@@ -15,7 +15,7 @@
 
   The spec embeds a digest of the inputs that roll the crowdsec pod, the ones `checksum/restart`
   hashes under Flux (`scripts/renderer/renderer_lib/restart.py`): the rendered Deployment and
-  `crowdsec-jobs` ConfigMap, the `crowdsec-config`, `crowdsec-env` and `crowdsec-jobs` Secret
+  `crowdsec-jobs` ConfigMap, the `crowdsec-config` and `crowdsec-env` Secret
   templates with every file `crowdsec-config` embeds, and the `cluster-vars.source` digest of
   each key those Secrets read. So every change that rolls the pod renames the Job, and Flux runs
   it again, as Ansible ran the gate on every deploy. The node-agent DaemonSet is a restart
@@ -53,7 +53,6 @@
 {% set roll = namespace(
   text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'jobs-configmap.yaml.j2'),
   secrets=lookup('file', role_dir + 'templates/config-secret.yaml.j2')
-    + lookup('file', role_dir + 'templates/jobs-secret.yaml.j2')
     + lookup('file', role_dir + 'templates/config/crowdsec-discord.yaml.j2')
     + lookup('file', role_dir + 'files/crowdsec-profiles.yaml')
     + lookup('file', role_dir + 'files/crowdsec-whitelist.yaml')

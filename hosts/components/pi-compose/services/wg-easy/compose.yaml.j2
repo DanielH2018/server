@@ -18,8 +18,9 @@
     - **Ports.** The UDP port is published on every interface, and the web port on the Pi's LAN
       IP only (`server_ip`). The Pi runs no Traefik, so the file emits no Traefik labels. The
       Pi's ufw needs no rule for either port: Docker's nat and FORWARD rules bypass ufw's INPUT
-      chain. The Pi carries a hand-added 51822 allow that nothing declares, and
-      `initial_setup/tasks/network.yml` keeps it on purpose.
+      chain. The Pi carries a hand-added 51822 allow that nothing declares, and reconcile's ufw
+      arm leaves it alone on purpose (the `ufw:` section of `hosts/daniel-pi/package.yml`,
+      and `docs/host-baseline-record.md`).
     - **The UI is unauthenticated on the trusted LAN (accepted risk, 2026-06-23).** The Pi has
       no Authelia and the entry sets no `PASSWORD_HASH`, so anyone on the Pi's LAN can open the
       UI and mint a WireGuard client config, which is VPN access into the homelab. The UI binds

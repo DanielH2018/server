@@ -989,9 +989,6 @@ containers_list:
       - pi-peer-backup
       - kuma-status-page-sync    # KUMA__URL + deadman push (uptime-kuma's status-page-sync CronJob)
       - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
-      - configarr-health         # push_url (configarr/templates/health-secret.yaml.j2), a CronJob (H2.5b)
-      - janitorr-health          # push_url (janitorr/templates/health-secret.yaml.j2), a CronJob (H2.5c)
-      - crowdsec                 # push URLs (crowdsec/templates/jobs-secret.yaml.j2), the crowdsec-jobs sidecar (H2.4b)
 
   # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
   # CI's `images` job builds the image from the role's own Dockerfile and pushes it to GHCR.
@@ -1309,6 +1306,11 @@ claude_code_agent_user_enabled: true
 # store into the agent's once, and needs one interactive `/login` as `claude` afterwards
 # (docs/claude-agent-user.md, slice 4). Rollback: set it to `ubuntu`, or delete this line.
 claude_code_user: "{{ claude_code_agent_user }}"
+# That account's uid, which must equal the `claude` entry in hosts/daniel-box/package.yml's
+# `users:`. claude-rc.service binds /run/user/<uid> into its sandbox and points the user bus
+# there, so `systemd-run --user` works from a phone session (#6764). It has no default: a host
+# that sets claude_code_user to a non-operator account and not this fails its render.
+claude_code_user_uid: 996
 # claude-land@<n>.service: the agent user starts it to land its own PR as the operator, under
 # land.sh's landing policy. False removes the unit, its polkit rule and its approval list.
 claude_code_lander_enabled: true

@@ -3,11 +3,11 @@
 Three properties are asserted, because a rehearsal that fails any of them is worse than none:
 
 - the guest is destroyed and its disk deleted on EVERY exit path, and nothing is ever `virsh define`d;
-- the monthly drill's evidence is untouched: no stamp, no Kuma push, no textfile verdict;
+- the monthly drill's evidence is untouched: no stamp and no textfile verdict;
 - nothing is staged into the guest until the egress fence has been measured, and then only the
   bundle: no cluster token and no R2 credential.
 
-`virsh`, `qemu-img`, `ssh` and the Kuma helper are stubbed. The helper (`suc_rehearsal.py`) and the
+`virsh`, `qemu-img`, `ssh` and `logger` are stubbed. The helper (`suc_rehearsal.py`) and the
 orchestrator's own control flow run unmodified. The rendered tree and the snapshots are fixtures
 (ansible/tests/_suc_bundle.py), because the `system-upgrade` role lands in a parallel PR.
 
@@ -24,9 +24,7 @@ from _fence_probe import (
     CHECK_LIB,
     ENTRYPOINT,
     HYPERVISOR,
-    KUMA_LIB,
     ROLE_CHECK_LIB,
-    _hypervisor_defaults,
     rendered_orchestrator,
 )
 from _helpers import REPO
@@ -41,8 +39,6 @@ from _suc_bundle import (
 from lib.proc_testing import fake_bin, path_with
 
 FILES = HYPERVISOR / "files"
-FULL_TOKEN = "e" * 32
-FENCE_TOKEN = "f" * 32
 # The guest-side subcommands, in the order the orchestrator runs them.
 STEPS = ["k3s", "flux-cli", "base", "publish"]
 
@@ -84,7 +80,6 @@ esac
 exit 0
 """
 LOGGER = "#!/bin/bash\nexit 0\n"
-KUMA_STUB = 'kuma_push() { printf "%s %s %s\\n" "$1" "$3" "$2" >>"$PUSHES"; }\n'
 
 DRIVER = """\
 #!/usr/bin/env bash
@@ -101,7 +96,7 @@ echo "ssh-ed25519 AAAA key" >"$GUEST_HOSTKEY_PUB"
 ssh_argv() { printf '%s\\n' "$STUBS/guest-ssh"; }
 fence_check() { echo fence >>"$EVENTS"; [[ -z "$LEAK" ]] || fail "egress fence BROKEN: PRODVIP answered"; }
 if [[ -n "$PROBE_ONLY" ]]; then
-  echo "REHEARSE=$REHEARSE PUSH_TOKEN=$PUSH_TOKEN FENCE_PUSH_TOKEN=$FENCE_PUSH_TOKEN TAG=$TAG"
+  echo "REHEARSE=$REHEARSE TAG=$TAG"
   exit 0
 fi
 rehearse_suc
@@ -142,24 +137,12 @@ def run(
     extra_args=(),
 ):
     body = rendered_orchestrator()
-    kuma_env = _hypervisor_defaults()["hypervisor_etcd_drill_kuma_env"]
-    assert KUMA_LIB in body and CHECK_LIB in body and kuma_env in body, (
-        "the harness's substitutions are gone"
-    )
+    assert CHECK_LIB in body, "the harness's substitution is gone"
     assert body.rstrip().endswith(ENTRYPOINT)
-    (tmp_path / "kuma-lib.sh").write_text(KUMA_STUB)
-    # Both tokens are seeded, so a rehearsal that forgot to blank them WOULD push to the tiles.
-    (tmp_path / "kuma.env").write_text(
-        f"ETCD_DRILL_FULL_PUSH_TOKEN={FULL_TOKEN}\nETCD_DRILL_FENCE_PUSH_TOKEN={FENCE_TOKEN}\n"
-    )
     textfile = tmp_path / "textfile"
     textfile.mkdir()
     sourceable = (
-        body.replace(KUMA_LIB, str(tmp_path / "kuma-lib.sh"))
-        .replace(CHECK_LIB, str(ROLE_CHECK_LIB))
-        .replace(kuma_env, str(tmp_path / "kuma.env"))
-        .rstrip()
-        .rsplit(ENTRYPOINT, 1)[0]
+        body.replace(CHECK_LIB, str(ROLE_CHECK_LIB)).rstrip().rsplit(ENTRYPOINT, 1)[0]
     )
     (tmp_path / "orch.sh").write_text(f'export TEXTFILE_DIR="{textfile}"\n{sourceable}')
     (tmp_path / "driver.sh").write_text(DRIVER)
@@ -191,7 +174,6 @@ def run(
             "STUBS": str(stubs),
             "T": str(tmp_path),
             "EVENTS": str(tmp_path / "events"),
-            "PUSHES": str(tmp_path / "pushes"),
             "HELPER": str(FILES / "suc_rehearsal.py"),
             "GUEST_SCRIPT": str(FILES / "suc-rehearsal-guest-run.sh"),
             "TEST_DEADLINE": str(deadline),
@@ -220,7 +202,6 @@ def assert_cleaned_up(r):
 
 def assert_drill_evidence_untouched(r):
     assert not (r.t / "stamp").exists(), "a rehearsal wrote the monthly drill's stamp"
-    assert not (r.t / "pushes").exists(), "a rehearsal pushed to a Kuma tile"
     assert not list((r.t / "textfile").iterdir()), (
         "a rehearsal wrote a textfile verdict"
     )
@@ -310,7 +291,7 @@ def sourced(r, *args):
         [
             "bash",
             "-c",
-            'f=$1; shift; source "$f" "$@"; echo "$REHEARSE $PUSH_TOKEN $FENCE_PUSH_TOKEN $TAG"',
+            'f=$1; shift; source "$f" "$@"; echo "$REHEARSE $TAG"',
             "_",
             str(r.t / "orch.sh"),
             *args,
@@ -321,17 +302,12 @@ def sourced(r, *args):
     )
 
 
-def test_without_the_flag_the_orchestrator_is_the_drill_and_with_it_both_tiles_are_blanked(
+def test_without_the_flag_the_orchestrator_is_the_drill_and_with_it_the_tag_is_its_own(
     tmp_path,
 ):
     r = run(tmp_path, probe_only="1")
     drill = sourced(r)
-    assert drill.stdout.split() == [
-        "0",
-        FULL_TOKEN,
-        FENCE_TOKEN,
-        "etcd-restore-drill-vm",
-    ], drill.stderr
+    assert drill.stdout.split() == ["0", "etcd-restore-drill-vm"], drill.stderr
     rehearsal = sourced(r, "--rehearse-suc")
     assert rehearsal.stdout.split() == ["1", "etcd-drill-suc-rehearsal"], (
         rehearsal.stderr

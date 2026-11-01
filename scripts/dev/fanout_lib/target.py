@@ -24,7 +24,7 @@ SERVER = "DanielH2018/server"
 # The interpreter a unit runs repo Python with; `fanout_lib.place.HEALTH_CMD` pins the same one.
 HEADLESS_PYTHON = "3.14.6"
 # The agent user cannot read /home/ubuntu, and its login profile
-# (roles/setup/claude_code/templates/agent-user-profile.j2) points RUN_HOOK_PROJECT_DIR at its
+# (hosts/components/claude-code/templates/agent-user-profile.j2) points RUN_HOOK_PROJECT_DIR at its
 # own clone instead (#3627). The repo's hook shim, .claude/hooks/run-hook.sh, reads the same
 # variable. Unset, the checkout is the primary one this module lives under, which is the
 # operator's /home/ubuntu/server for `ubuntu`.

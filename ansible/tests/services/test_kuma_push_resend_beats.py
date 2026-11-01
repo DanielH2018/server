@@ -39,7 +39,7 @@ def test_no_push_monitor_can_resend_faster_than_four_hours():
         if entity["type"] == "push"
     }
     assert "Swallowed Push Verdicts" in windows
-    assert len(windows) >= 40, f"push tile census went thin: {len(windows)}"
+    assert len(windows) >= 20, f"push tile census went thin: {len(windows)}"
     name, narrowest = min(windows.items(), key=lambda kv: kv[1])
     fastest_beats_per_hour = 3600 / push_period + 3600 / narrowest
     floor_h = beats / fastest_beats_per_hour

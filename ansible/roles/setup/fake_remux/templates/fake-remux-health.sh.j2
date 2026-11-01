@@ -4,27 +4,18 @@
 # Usage: fake-remux-health.sh [-h|--help]
 # Takes no arguments. Cron job "fake-remux health" runs it as the deploy user every
 # fake_remux_health_cron_minute minutes (cron file fake-remux-health). Run it by hand the same way.
-# It reads the three Kuma push tokens from kuma-push.env in fake_remux_config_dir and the three
-# state files in fake_remux_state_dir, then pushes one heartbeat per state file. It logs to syslog
-# under the tag fake-remux-health. Exit 0 also covers unreadable tokens (the push is skipped);
-# exit 1 means /usr/local/lib/kuma-push-lib.sh or homelab-check-lib.sh is missing. Each run also
-# writes one verdict per state file to $TEXTFILE_DIR/<fake-remux-scan|fake-remux-replace|
-# mkv-attachment-repair>.prom for node_exporter's textfile collector, before the pushes (M6 batch
-# B4; rules in other-setup-checks.yaml run in shadow).
-#
-# Pushes the SAME two Kuma monitors monitor-bridge used to push, with the same tokens, so both keep
-# their history. Only the pusher moved: monitor-bridge then ran on daniel-server, reading that
-# host's Docker socket and its bind-mounted /var/lib/autofix-fake-remux, and the crons writing
-# those files now run here. (monitor-bridge itself moved in-cluster at the 2026-08-14 Docker
-# uninstall; that changed nothing for this script.)
+# It reads the three state files in fake_remux_state_dir and writes one verdict per state file to
+# $TEXTFILE_DIR/<fake-remux-scan|fake-remux-replace|mkv-attachment-repair>.prom for
+# node_exporter's textfile collector, which the FakeRemux* and MkvAttachmentRepair* rules in
+# other-setup-checks.yaml read (M6 batch B4). It logs to syslog under the tag fake-remux-health.
+# Exit 1 means /usr/local/lib/homelab-check-lib.sh is missing. B4's Cutover-2 removed its three
+# Kuma pushes.
 #
 # Thin on purpose — the verdict logic is in state_push.py, a plain file with unit tests and a 3.12
 # floor check. Same shape as longhorn-backup-health.sh and telemetry-health.sh.
 #
 # This file carries NO secret. It lands 0755 root:root (the cron runs as {{ sys_user }} and reaches
-# it only through the world-execute bit), so an inlined token was readable by every local account
-# and was enough to forge or suppress either heartbeat. Both tokens moved to the 0640
-# root:{{ sys_user }} env file sourced below, the same split disk-health.sh.j2:29-38 makes.
+# it only through the world-execute bit).
 set -uo pipefail
 
 for arg in "$@"; do
@@ -33,11 +24,6 @@ for arg in "$@"; do
   esac
 done
 
-# shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t fake-remux-health "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
 # shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t fake-remux-health "homelab-check-lib.sh missing — run initial_setup on this host"
@@ -56,64 +42,39 @@ DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
 {% endif %}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-
-FAKE_REMUX_SCAN_PUSH_TOKEN=""
-FAKE_REMUX_REPLACE_PUSH_TOKEN=""
-MKV_ATTACHMENT_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r {{ fake_remux_config_dir }}/kuma-push.env ]] && . {{ fake_remux_config_dir }}/kuma-push.env
-# The tokens gate the push only. The textfile verdicts below do not need them, so a host whose
-# env file is unreadable still reports to Prometheus.
-PUSH_TOKENS_READABLE=1
-if [[ -z "$FAKE_REMUX_SCAN_PUSH_TOKEN" || -z "$FAKE_REMUX_REPLACE_PUSH_TOKEN" || -z "$MKV_ATTACHMENT_PUSH_TOKEN" ]]; then
-  logger -t fake-remux-health "kuma push tokens unreadable — skipping push (run initial_setup.yml --tags fake_remux)"
-  PUSH_TOKENS_READABLE=0
-fi
-
-# Order is load-bearing: state_push.py prints one line per triple, in argument order, and the two
-# tokens below are consumed in that same order.
+# Order is load-bearing: state_push.py prints one line per triple, in argument order, and the
+# LABELS and CHECKS below are consumed in that same order.
 mapfile -t LINES < <(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/state_push.py \
   "fake-remux scan" "{{ fake_remux_state_dir }}/state.json" "{{ fake_remux_scan_max_age_hours }}" \
   "fake-remux replace" "{{ fake_remux_state_dir }}/replace_state.json" "{{ fake_remux_replace_max_age_hours }}" \
   "mkv attachment repair" "{{ fake_remux_state_dir }}/mkv_attachment_state.json" "{{ fake_remux_mkv_attachment_max_age_hours }}")
 
-TOKENS=("$FAKE_REMUX_SCAN_PUSH_TOKEN" "$FAKE_REMUX_REPLACE_PUSH_TOKEN" "$MKV_ATTACHMENT_PUSH_TOKEN")
 LABELS=("fake-remux scan" "fake-remux replace" "mkv attachment repair")
-TAGS=(fake-remux-health fake-remux-health fake-remux-health)
-# One textfile per tile, named for what the tile checks. The syslog tag is shared, so it cannot
+# One textfile per state file, named for what it checks. The syslog tag is shared, so it cannot
 # name them (M3 names a check file after its producer's tag, which assumes one verdict per tag).
 CHECKS=(fake-remux-scan fake-remux-replace mkv-attachment-repair)
 
-# Indexed off LABELS rather than a literal `0 1`, which is what this loop said while it pushed two
-# monitors. A third triple added above a literal index list renders a state_push line nobody reads
-# and pushes nothing — the monitor then times out with no explanation, which is the failure this
-# whole script exists to report.
+# Indexed off LABELS rather than a literal `0 1`, which is what this loop said while it served two
+# state files. A third triple added above a literal index list renders a state_push line nobody
+# reads and writes nothing — the verdict then goes stale with no explanation, which is the
+# failure this whole script exists to report.
 for i in "${!LABELS[@]}"; do
   LINE="${LINES[$i]:-}"
   if [[ -z "$LINE" ]]; then
-    # A missing line means the reader itself broke. Report that rather than pushing nothing, which
-    # would leave the monitor to time out with no explanation.
+    # A missing line means the reader itself broke. Report that rather than writing nothing,
+    # which would leave the verdict to go stale with no explanation.
     STATUS=down
     MSG="${LABELS[$i]} reader produced no output"
   else
     STATUS="${LINE%%$'\t'*}"
     MSG="${LINE#*$'\t'}"
   fi
-  # The textfile carries the verdict before the push, which retries for over a minute and must
-  # not age it. A failed write logs and the run goes on to its push.
+  # The status line is the durable record of the message, and `probe.py alerts` reconstructs
+  # DOWN episodes from it.
+  logger -t fake-remux-health "status=${STATUS} ${LABELS[$i]}: ${MSG}"
+  # The textfile carries the verdict. A failed write logs and the loop goes on.
   SUCCESS=0
   [[ "$STATUS" == "up" ]] && SUCCESS=1
   write_check_textfile "${CHECKS[$i]}" "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
     || logger -t fake-remux-health "textfile write to ${TEXTFILE_DIR} failed (${CHECKS[$i]} status=${STATUS})"
-  [[ "$PUSH_TOKENS_READABLE" == 1 ]] || continue
-  # kuma_push feeds the token-bearing URL to curl on stdin (`-K -`), never as an argv element:
-  # /proc is mounted without hidepid here, so any local user can read another user's
-  # /proc/<pid>/cmdline and this cron runs every 10 minutes.
-  kuma_push "$STATUS" "${LABELS[$i]}: ${MSG}" \
-    "https://${KUMA_HOST}/api/push/${TOKENS[$i]}" \
-    "$KUMA_HOST" "$KUMA_RESOLVE_IP" "${TAGS[$i]}"
 done

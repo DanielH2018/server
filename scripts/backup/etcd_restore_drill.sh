@@ -43,7 +43,9 @@
 # carries the evidence and the re-verify command.
 #
 # STATUS. The FULL drill passes, in a throwaway guest: a run restored and served 8 namespaces,
-# 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets, 50 seconds end to end. `--list-only` is the
+# 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets, 50 seconds end to end. The 2026-11-01 run on
+# k3s v1.37.1 failed at the scratch server's start on its loopback advertise address; the
+# endpoint-reconciler flag in ISOLATION_ARGS is the fix (#6846). `--list-only` is the
 # weekly cheap proof of the off-box leg on daniel-box. It also runs restore gate 3 against the
 # snapshot it lists, so the runbook's ETCDSnapshotFile read is drilled weekly rather than on the
 # day of an outage — see require_snapshot_restorable.
@@ -76,9 +78,9 @@
 # libvirt guest from the reviewed cloud image, copies in the k3s binary, the cluster token and the
 # R2 env file at the paths this script reads, runs THIS script there unmodified (through
 # files/etcd-drill-guest-run.sh, which fetches the snapshot and hands it to --local-snapshot),
-# pulls restore.log and server.log out as evidence, and destroys the guest. Its verdict lands on
-# the `etcd Restore Drill (full)` Kuma tile. The weekly --list-only cron on daniel-box is
-# the cheap proof of the R2 leg on the host that owns the credentials.
+# pulls restore.log and server.log out as evidence, and destroys the guest. Its verdict is the
+# etcd-restore-drill-vm textfile, which EtcdRestoreDrillFailed reads. The weekly --list-only cron
+# on daniel-box is the cheap proof of the R2 leg on the host that owns the credentials.
 #
 # Usage:
 #   sudo ./scripts/backup/etcd_restore_drill.sh --list-only      # the part that works: prove the R2 leg
@@ -318,7 +320,48 @@ verify_restored_objects() {
   [[ "$pvcs" -ge 1 ]]    || die "no PVCs in the restored set — a rebuild would have nothing to reattach"
 }
 
-# Sourced by the test above to drive verify_restored_objects() in isolation. Everything from here
+# Every port and path that could touch the live installation, in ONE array applied to BOTH
+# k3s invocations. Passing them only to the server start is not enough and fails loudly:
+# `--cluster-reset` brings up the internal apiserver load balancer too, and on the default
+# ports it hits `listen tcp 127.0.0.1:6444: bind: address already in use` against the running
+# server. A restore stage that binds the live supervisor port is the
+# trap this drill exists to stay clear of, so the isolation cannot live on one call site.
+ISOLATION_ARGS=(--data-dir "$SCRATCH"
+                --disable-agent
+                --https-listen-port "$PORT"
+                --supervisor-port "$SUPERVISOR_PORT"
+                # A THIRD listener, separate from the API server and the supervisor, and the
+                # one that actually collided: the supervisor client load-balancer binds
+                # 127.0.0.1:6444 and `--disable-agent` does not stop it. Moving the supervisor
+                # port alone is not enough — measured, where the reset reached
+                # `dynamiclistener 127.0.0.1:7444` and still died on 6444.
+                --lb-server-port "$LB_PORT"
+                --bind-address 127.0.0.1
+                --advertise-address 127.0.0.1
+                # A loopback advertise address needs the endpoint reconciler off. From k3s
+                # v1.37.1 the API server refuses to start with one ("cannot use public IP
+                # 127.0.0.1 with endpoint reconciler ... may not be in the loopback range"),
+                # measured on the 2026-11-01 monthly drill (#6846). The check is the reconciler's
+                # own ValidateIP (kubernetes pkg/controlplane/instance.go), and only `none`
+                # accepts any address. `none` also leaves the restored `kubernetes` Endpoints
+                # untouched, so the drill reads the snapshot's object rather than one it rewrote.
+                --kube-apiserver-arg=endpoint-reconciler-type=none
+                # The live server encrypts Secrets at rest (k3s_secrets_encryption), and the
+                # key rides inside the snapshot's bootstrap blob. Without this flag the restore
+                # stage's reconcile has no path to write it to ("Unable to lookup path to
+                # reconcile EncryptionConfig") and the scratch API server then cannot list a
+                # single Secret ("identity transformer tried to read encrypted data"), which
+                # holds its informer-sync readiness check open until the deadline — measured in
+                # the guest. On BOTH invocations, because the restore writes the file
+                # the server reads.
+                --secrets-encryption
+                # The restored cluster's aggregated APIServices point at pod IPs that do not
+                # exist here; with the default egress selector the API server dials them through
+                # the agent tunnel and each call hangs to a timeout (dial tcp 10.42.x.x:10250).
+                --egress-selector-mode=disabled)
+
+# Sourced by the tests to drive verify_restored_objects() and to read ISOLATION_ARGS, which is
+# why the array sits above this guard. Everything from here
 # down does real things — argument parsing, the root check, reading live S3 credentials — so a
 # sourced invocation must stop before any of it runs.
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
@@ -424,38 +467,6 @@ S3_ARGS=(--etcd-s3
          --etcd-s3-endpoint "$ETCD_S3_ENDPOINT"
          --etcd-s3-folder etcd-snapshots
          --etcd-s3-region auto)
-
-# Every port and path that could touch the live installation, in ONE array applied to BOTH
-# k3s invocations. Passing them only to the server start is not enough and fails loudly:
-# `--cluster-reset` brings up the internal apiserver load balancer too, and on the default
-# ports it hits `listen tcp 127.0.0.1:6444: bind: address already in use` against the running
-# server. A restore stage that binds the live supervisor port is the
-# trap this drill exists to stay clear of, so the isolation cannot live on one call site.
-ISOLATION_ARGS=(--data-dir "$SCRATCH"
-                --disable-agent
-                --https-listen-port "$PORT"
-                --supervisor-port "$SUPERVISOR_PORT"
-                # A THIRD listener, separate from the API server and the supervisor, and the
-                # one that actually collided: the supervisor client load-balancer binds
-                # 127.0.0.1:6444 and `--disable-agent` does not stop it. Moving the supervisor
-                # port alone is not enough — measured, where the reset reached
-                # `dynamiclistener 127.0.0.1:7444` and still died on 6444.
-                --lb-server-port "$LB_PORT"
-                --bind-address 127.0.0.1
-                --advertise-address 127.0.0.1
-                # The live server encrypts Secrets at rest (k3s_secrets_encryption), and the
-                # key rides inside the snapshot's bootstrap blob. Without this flag the restore
-                # stage's reconcile has no path to write it to ("Unable to lookup path to
-                # reconcile EncryptionConfig") and the scratch API server then cannot list a
-                # single Secret ("identity transformer tried to read encrypted data"), which
-                # holds its informer-sync readiness check open until the deadline — measured in
-                # the guest. On BOTH invocations, because the restore writes the file
-                # the server reads.
-                --secrets-encryption
-                # The restored cluster's aggregated APIServices point at pod IPs that do not
-                # exist here; with the default egress selector the API server dials them through
-                # the agent tunnel and each call hangs to a timeout (dial tcp 10.42.x.x:10250).
-                --egress-selector-mode=disabled)
 
 cleanup() {
   local rc=$?

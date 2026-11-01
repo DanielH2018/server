@@ -23,12 +23,13 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 from secrets_mgmt.rotation_tools import sops_names
 
+# The roles whose moved job's ConfigMaps this test renders. M6 batch B6b's Cutover-2 removed
+# the Kuma push Secret of configarr, crowdsec and janitorr, so only qbittorrent keeps one.
+MOVED_ROLES = ("configarr", "crowdsec", "janitorr", "qbittorrent")
+
 # Role -> (the Secret template its moved job reads, a secrets.yml key that Secret renders).
 # The second half is the positive control's: that key's sentinel must reach that render.
-MOVED_ROLES = {
-    "configarr": ("health-secret.yaml.j2", "monitor_bridge_configarr_push_token"),
-    "crowdsec": ("jobs-secret.yaml.j2", "monitor_bridge_appsec_push_token"),
-    "janitorr": ("health-secret.yaml.j2", "monitor_bridge_janitorr_push_token"),
+SECRET_ROLES = {
     "qbittorrent": ("prefs-check-secret.yaml.j2", "qbittorrent_password"),
 }
 
@@ -94,7 +95,7 @@ def test_the_sentinels_reach_the_render() -> None:
 
     Without it, a binding that never reached the templates would leave every ConfigMap clean.
     """
-    for role, (template, key) in MOVED_ROLES.items():
+    for role, (template, key) in SECRET_ROLES.items():
         assert sentinels()[key] in render_role_template(role, template, sentinels())
 
 

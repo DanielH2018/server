@@ -98,8 +98,10 @@ agent gets a lander of the same shape.
   from `SO_PEERCRED` and reports only under that user's root in `/etc/worktree-holders.json`.
   For the agent, that root is its own clone, so a worktree removal in `/var/lib/claude/server`
   sees an `ubuntu` process inside the tree. initial_setup's `worktree-sweep` tag renders the
-  map from every present entry of `claude_code_agents` (#4295), and the helper refuses a uid
-  the map does not name. The `claude_code` role's `agent_access.yml` puts each present agent in
+  map from its own per-host copy of the agent users that host's package declares under
+  `users:` (#4295, #6831), and the helper refuses a uid the map does not name. Adding or
+  removing a host's agent edits that host's list in `tasks/crons.yml` too, and
+  `ansible/tests/setup/test_worktree_holders_install.py` fails while the two differ. The `claude_code` role's `agent_access.yml` puts each present agent in
   the group. A session started before its user joined the group falls back to the
   unprivileged scan until it restarts. `sudo -n true` still fails.
 
@@ -112,7 +114,7 @@ agent gets a lander of the same shape.
   and runs `/usr/local/sbin/homelab-rootq`, so the allowlist and the redaction are the sudo
   path's own. The agent runs `rootq-socket`, which takes `rootq`'s verbs. The group is the
   whole grant, so unlike the holder scan there is no per-user map. A session sees the group
-  after `claude-rc.service` restarts. `ansible/roles/setup/claude_code/CLAUDE.md` (*The
+  after `claude-rc.service` restarts. `hosts/components/claude-code/CLAUDE.md` (*The
   agent's socket*) has the protocol, and the approval list names the helper, the client and
   both units.
 - **The agent has its own GitHub identity and signing key.** A PR author cannot approve their
@@ -132,7 +134,7 @@ authorized key.
   apply, before its `uv sync`, and moves only a clean `master`. The deployer routes no change to
   `ui_mcp.sh`, `ui_login.py` or `.claude/hooks/` to `claude_code`, so `claude-clone-sync.timer`
   runs the same fast-forward every `claude_code_agent_clone_sync_interval` (15 minutes). The
-  script is `ansible/roles/setup/claude_code/files/claude-clone-sync.sh`, and it re-syncs the
+  script is `hosts/components/claude-code/files/claude-clone-sync.sh`, and it re-syncs the
   `.venv` and the collections when a pull moves their lock files. The hook shim and the
   homelab-ui launcher run from that clone, so a stale clone breaks both.
 - **The agent has commit hooks.** The shared `agent_user.yml` copies the operator's pinned `prek`
@@ -254,11 +256,11 @@ own roles (`claude_code`, `renovate_agent`), the deployer (`gitops_deploy`), `ag
 `host_lib.py` and `ansible/inventory/` are not on it, so a PR changing them lands without the
 operator.
 
-`ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2` is the source of
+`hosts/components/claude-code/templates/claude-land-approval-paths.j2` is the source of
 truth, with a reason beside each entry. It holds:
 
-- the lander itself: `tasks/lander.yml`, the list template, the unit template, the polkit
-  rule template and the pins template, all under `ansible/roles/setup/claude_code/`, and
+- the lander itself: the list template, the unit template, the polkit rule template and the
+  pins template, all under `hosts/components/claude-code/templates/`, and
   `hosts/components/claude-code/component.yml`, which ships them
 - `scripts/deploy_tools/land`, a prefix that covers `land.sh`, `land.py`, `land_*.py` and
   `land_lib/`
@@ -268,9 +270,10 @@ truth, with a reason beside each entry. It holds:
 - `ansible/roles/setup/initial_setup/tasks/access.yml`, which holds sudo, ssh and the
   operator's login
 - `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
-- alert-triggered triage: `tasks/triage.yml`, every `templates/claude-triage*` template, the
-  rule `templates/50-claude-triage.rules.j2` and `files/claude_triage_run.py`, all under
-  `ansible/roles/setup/claude_code/`. The operator added them on 2026-10-15. Later slices let
+- alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
+  template that sets the run's caps, the rule `templates/50-claude-triage.rules.j2`,
+  `files/claude_triage_run.py` and `files/claude_triage_poll.py`, all under
+  `hosts/components/claude-code/`. The operator added them on 2026-10-15. Later slices let
   a triage run land its own fixes with nobody watching, so it must not be able to raise its own
   caps.
 - `ansible/roles/k8s/cluster-base/`, the agent's read-only cluster RBAC. The operator added it
@@ -281,10 +284,11 @@ truth, with a reason beside each entry. It holds:
 Two choices keep the floor from being bypassed through the inventory:
 
 - The list is literal in the template, not a variable.
-- `tasks/lander.yml` pins the unit's checkout, branch prefix, required author and approver,
-  and the Unix user the polkit rule admits, as block vars. Block vars outrank `host_vars` and
-  `group_vars`. Each pin is a literal. A pin that templated the agent profile's variables
-  resolved from the inventory and pinned nothing.
+- `hosts/components/claude-code/templates/claude-land-pins.j2` pins the unit's checkout,
+  branch prefix, required author and approver, and the Unix user the polkit rule admits. The
+  unit, the polkit rule and the agent's profile import it, so no inventory value repoints the
+  lander. Each pin is a literal. A pin that templated the agent profile's variables resolved
+  from the inventory and pinned nothing.
 
 **The floor is not a barrier to root.** The deployer applies any setup-role change as root, so
 a task added to an unlisted role reaches root without approval. A true root barrier would put
@@ -306,11 +310,16 @@ refuses such a file on any branch.
 daniel-box sets it to the agent. The variable routes the unit's `User=`, `Group=`, `HOME`,
 `PATH`, `KUBECONFIG`, `ExecStart` and `WorkingDirectory`, and `claude_code_memory_sync_dir`.
 
-- **Hardening renders only for a non-operator user.** `ProtectHome=yes`, `NoNewPrivileges=yes`
+- **Hardening renders only for a non-operator user.** `ProtectHome=tmpfs`, `NoNewPrivileges=yes`
   and `PrivateTmp=yes` render when `claude_code_user` is not `sys_user`. As `ubuntu`,
   `ProtectHome` would hide the unit's own home and checkout, and `NoNewPrivileges` would stop sudo
   in phone sessions. The agent's home sits under `/var/lib`, so `ProtectHome` hides every human
   home without hiding the agent's.
+- **A phone session reaches the agent's user manager.** `ProtectHome` also hides `/run/user`.
+  `ProtectHome=yes` therefore hid the agent's bus socket, and `systemd-run --user` failed with
+  `Failed to connect to bus: Permission denied` (#6764). The unit uses `tmpfs` instead, binds
+  back `/run/user/<uid>` alone, and sets `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`. The
+  uid is `claude_code_user_uid` in daniel-box's host_vars.
 - **The agent takes the operator's user-level config through chezmoi.** [The operator's
   dotfiles](#the-operators-dotfiles) describes it. `claude_code_agent_operator_config` switches
   the older copied subset off, and `tasks/agent_operator_config.yml` has its mechanics. The
@@ -385,9 +394,9 @@ of the pod would drop the capability.
 
 | Coupling | Where |
 |---|---|
-| `HOME`, `PATH`, `KUBECONFIG`, `ExecStart`, `WorkingDirectory` through `sys_user` | `ansible/roles/setup/claude_code/templates/claude-rc.service.j2` |
-| `claude_code_login_uid` and `claude_code_login_uids`, which drive the login-slice caps | `ansible/roles/setup/claude_code/defaults/main.yml` |
-| `claude_code_memory_sync_dir` and the path-derived project key | `ansible/roles/setup/claude_code/defaults/main.yml` |
+| `HOME`, `PATH`, `KUBECONFIG`, `ExecStart`, `WorkingDirectory` through `sys_user` | `hosts/components/claude-code/templates/claude-rc.service.j2` |
+| `claude_code_login_uid` and `claude_code_login_uids`, which drive the login-slice caps | `hosts/components/claude-code/defaults/main.yml` |
+| `claude_code_memory_sync_dir` and the path-derived project key | `hosts/components/claude-code/defaults/main.yml` |
 | `artifacts_host_dir` and its bind mount | `ansible/roles/k8s/artifacts/defaults/main.yml` |
 | Hooks that hard-code `/home/ubuntu`, and `SUDO_ASKPASS` | the dotfiles repo's `~/.claude` sources |
 | `/home/ubuntu` literals in repo tooling | the non-test files `git grep -l /home/ubuntu -- '*.py' '*.sh' '*.j2'` lists outside `tests/` (8 on 2026-10-10) |
@@ -419,8 +428,8 @@ a clone, `uv`, Claude Code, a GitHub identity and a signing key.
   `claude_agent_ssh_key_path`, and renders `~/.ssh/config` with one stanza per peer whose switch
   is on: `User claude`, the peer's `server_ip`, `IdentitiesOnly yes` and
   `StrictHostKeyChecking accept-new`.
-- **Both hosts.** The agent user lingers, so a batch started with `systemd-run --user` over ssh
-  outlives the call that started it.
+- **Both hosts.** The agent user lingers, so a batch started with `systemd-run --user`, over ssh
+  or from a phone session, outlives the call that started it.
 - **The Pi** gets nothing. The `docker`-group reasoning above holds for it.
 
 Bringing a peer up is the operator's job, in this order: apply `claude_code` on daniel-box to
@@ -566,7 +575,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 
 ### Slice 1: one run, started by hand
 
-`tasks/triage.yml` in `setup/claude_code` installs the run. `claude_code_triage_enabled`
+The `claude-code` host component installs the run. `claude_code_triage_enabled`
 switches it on, and it installs only while `claude_code_agent_user_enabled` is also true.
 
 - **The unit** `claude-triage@<episode>.service` runs as `claude`, with the hardening the
@@ -630,8 +639,19 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   first heartbeat since it started. Kuma's keys hold while `up{job="uptime-kuma"}` is not 1, and
   the alert keys hold for 20 minutes after Prometheus starts, until its rules can fire again.
   Without these, every Kuma or Prometheus restart would read each standing red as a new fall.
-- **A storm is one run.** More than three keys falling in one poll make a single storm episode
-  that lists them all.
+- **A fall below `critical` opens no run.** Kuma exports each tile's `tag-severity` as a
+  `severity` label, so one floor covers both sources, and an untagged tile ranks below `info`.
+  The poller logs each skipped fall, and in `shadow` mode appends it to `shadow.jsonl` with
+  `"skipped": "below-floor"`. The floor is `poll_min_severity`, pinned in
+  `templates/claude-triage-pins.j2` because lowering it raises the runs a day the poller asks
+  for. An unknown value admits only `critical`.
+  Without the floor, the journal from 2026-10-31 18:21 to 2026-11-01 11:23 UTC held 15 shadow
+  episodes, about 21 a day against the six-run cap (#6861). Replayed through the floor, 3 of
+  them open a run: Kuma's `etcd Restore Drill (full)`, `ProdMovedOutsidePromote` and
+  `CheckWithoutPager`. A per-key cooldown was rejected: every repeat in that window was a
+  warning or an untagged tile, which the floor already drops.
+- **A storm is one run.** More than three keys at or above the floor falling in one poll make
+  a single storm episode that lists them all. Skipped falls never count towards a storm.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window
   around the weekly reboot, read from the same `weekly_reboot_*` group vars as the Kuma and
   Alertmanager mutes. A deferred key opens its episode once the gate lifts, if it is still down.
@@ -643,7 +663,8 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
 
 - `off` reads nothing.
 - `shadow` logs `would start <episode>` to the journal and appends the episode to
-  `/var/lib/claude/triage/shadow.jsonl`. It ships in this mode.
+  `/var/lib/claude/triage/shadow.jsonl`, with each skipped fall beside them. It ships in
+  this mode.
 - `armed` queues the episode in the inbox. Each poll starts the oldest queued episode when no
   run holds the runner's lock, so episodes run one after another. A queued episode whose run
   the poller already started is not started again: its run crashed and paged.
@@ -710,50 +731,47 @@ not against a hostile session, as the copied skills already did.
 
 ## More than one agent
 
-The `claude_code` role builds every agent user in `claude_code_agents`, one run of
-`tasks/agent.yml` per entry (#4196). `claude` stays the primary agent: the
-`claude_code_agent_*` scalars configure it, and its entry carries only its name. A further
-agent is a full entry in the host's `host_vars`:
+The host packages build one agent, `claude`. The `claude-code` host component's
+`claude-agent-setup`, its GitHub token output and its clone and dotfiles sync units all read
+the `claude_code_agent_*` scalars, so they serve that one user. The `claude_code_agents` list
+and its checking filter served the emptied `claude_code` role and went with it.
 
-```yaml
-claude_code_agents:
-  - name: "{{ claude_code_agent_user }}"
-  - name: claude-ops
-    github_login: SomeOtherBot
-    github_id: 123456
-    github_token_var: claude_ops_gh_token
-```
+A further agent's account is two entries:
 
-`filter_plugins/claude_agents.py` refuses a further agent without its own GitHub login, id
-and token variable, so it never pushes as `DanielClaudeBot` by omission. It also refuses two
-agents that share a name, home or worktree prefix. A further agent gets a home under
-`/var/lib/<name>`, its own clone, the shared tools, a GitHub identity, the operator's config
-and the login caps. It gets no journal access unless its entry sets `journal_access: true`.
+1. A `users:` entry in the host's `package.yml`, with the uid the host gives it. The users
+   arm creates the account.
+1. The same name and its clone directory in
+   `initial_setup_worktree_holders_agents_by_host` in
+   `ansible/roles/setup/initial_setup/tasks/crons.yml`, so the worktree holder scan answers
+   it. `ansible/tests/setup/test_worktree_holders_install.py` fails while a host's
+   `users:` names an agent that list does not.
+
+Everything that gives the account an identity is still the primary's alone: the setup script,
+the token, the signing key, the clone and the syncs. A second agent that opens PRs therefore
+needs the component to render those per user first. That is its own change. It has to keep
+the rule the old filter enforced: a further agent never inherits the primary's GitHub login,
+id or token, so it cannot push as `DanielClaudeBot` by omission. No two agents may share a
+name, home or worktree prefix either.
 
 Only the primary agent gets the lander, the peer ssh login, the homelab-ui browser and login,
 the artifacts mount and the memory seed. Each of those is a host-wide object named after
 `claude` or a single Authelia account, and the lander is on the approval floor, so widening any
-of them is its own change. The browser also stays outside the loop so that a Node or playwright
-pin bump narrows to its own tag (#4189).
+of them is its own change.
 
-To add a further agent:
+Outside the repo, each further agent needs:
 
-1. Create its GitHub machine account and make it a write collaborator.
-1. Store its classic `public_repo` token in SOPS under the name its entry gives
-   `github_token_var`.
-1. Add `refs/heads/worktree-<prefix>+**` to the "agent branch fence" ruleset's excludes, and
-   the same pattern to `github-ruleset-drift.sh`'s declaration. A ruleset cannot tell two bot
+1. Its own GitHub machine account, made a write collaborator.
+1. Its classic `public_repo` token in the host's SOPS file.
+1. `refs/heads/worktree-<prefix>+**` in the "agent branch fence" ruleset's excludes, and
+   the same pattern in `github-ruleset-drift.sh`'s declaration. A ruleset cannot tell two bot
    accounts apart, so each can push to the other's prefix. The primary agent's lander lands
    only `worktree-claude+` branches, so it never lands another agent's work.
-1. Add the entry and its `users:` line in the host's `package.yml`, let the next package
-   version install it, then log in as the agent once
-   with `sudo machinectl shell <name>@ /bin/bash -l` and run `/login`.
-1. Add its signing key's `.pub` to its account as a Signing Key.
+1. One login as the agent, with `sudo machinectl shell <name>@ /bin/bash -l`, to run
+   `/login`.
+1. Its signing key's `.pub` added to its account as a Signing Key.
 
-To retire one, set `state: absent` rather than deleting the entry. Ansible removes nothing it
-no longer declares. Absent expires the account, keeps the home, and removes the GitHub token
-and the clone sync units. It also takes the agent out of the `worktree-holders` and
-`homelab-rootq` socket groups.
+To retire one, delete its `users:` entry and its worktree holder entry in the same change. The
+users arm expires the account, and the holder scan refuses its uid at the next apply.
 
 ## Checking and rolling back
 

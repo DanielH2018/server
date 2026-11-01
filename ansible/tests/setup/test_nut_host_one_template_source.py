@@ -44,7 +44,8 @@ _ARM = re.compile(
     r"^[ \t]*\{%-? *endif *-?%\}[ \t]*\n",
     re.DOTALL | re.MULTILINE,
 )
-WATCHDOG_ARMS = 3
+# One since M6 batch B4's Cutover-2 took the push library and token arms with the push.
+WATCHDOG_ARMS = 1
 
 
 def role_template_names(component_text: str) -> set[str]:
@@ -111,7 +112,7 @@ def test_a_template_the_role_stopped_rendering_is_flagged():
 
 
 def test_the_watchdog_carries_its_packaged_arms():
-    """The census must find its subject: three arms, so a renamed flag cannot empty it."""
+    """The census must find its subject: the upsmon.conf arm, so a renamed flag cannot empty it."""
     source = (TEMPLATES / SHARED[1]).read_text()
     assert len(_ARM.findall(source)) == WATCHDOG_ARMS
     assert ansible_arm_only(source) != source

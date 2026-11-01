@@ -99,3 +99,100 @@ runs as Cutover-1a (*Every other producer* in M6), for the three crowdsec tiles.
 Cutover-1a for Configarr Sync and Janitorr Errors until
 [#6746](https://github.com/DanielH2018/server/issues/6746) lands and a fresh read shows their
 verdict series present every minute, as the control's is.
+
+**The soak re-read and the gate, 2026-11-01T13:12Z.** The combined window's cutover PRs repeated
+the queries above over `[168h:1m]` ending at 13:12Z (window start 2026-10-25T13:12Z, after the
+group's first evaluation), with the same tile-to-rule mapping and M2's 8-minute margin.
+Prometheus's oldest sample was 22 days old, and all five tiles read up when the queries ran.
+
+| Tile | Samples | DOWN min | Shadow firing min | Q1 strict | Q1 ±8m | Q2 strict | Q2 ±8m |
+|---|---|---|---|---|---|---|---|
+| CrowdSec Remote Allowlist | 10015 | 392 | 345 | 75 | 40 | 28 | 0 |
+| CrowdSec AppSec | 9945 | 0 | 0 | 0 | 0 | 0 | 0 |
+| CrowdSec Home Allowlist | 10007 | 15 | 15 | 0 | 0 | 0 | 0 |
+| Configarr Sync | 9988 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Janitorr Errors | 9983 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Q1 ±8m is 40 for CrowdSec Remote Allowlist alone, the same 40 minutes of 2026-10-30 21:09 to 21:48
+that the earlier read attributes to pushes Kuma rejected (the `stat_hourly` constraint error).
+A read over the 20 hours since the earlier read's end shows 4 strict Q1 and 5 strict Q2 minutes
+for that tile, all inside the margin: the sidecar logged `remote-ips at cap` through 2026-10-31
+18:40Z, and [#6709](https://github.com/DanielH2018/server/issues/6709) closed at 18:54Z. The
+sidecar has logged no `status=down` line since 18:40Z.
+
+**The gate for Configarr Sync and Janitorr Errors holds.** The earlier read held their cutover
+until [#6746](https://github.com/DanielH2018/server/issues/6746) landed and the verdict series
+was present every minute, as the control's is. The fix merged as `e97ecb9a81` at
+2026-10-31T19:16Z (the readers now patch with `--field-manager=configarr-health` and
+`--field-manager=janitorr-health`).
+
+- Over `[17h:1m]` (window start 2026-10-31T20:16Z), the count of minutes in which
+  `kube_configmap_annotations{configmap="pi-peer-backup-verdict"}` exists and the configarr or
+  janitorr verdict does not is empty for both. The control and the two series are present in the
+  same minutes, which is the parity the earlier read asked for.
+- Over `[18h:1m]` the same count is 5 for configarr and 7 for janitorr, all before 20:16Z, so the
+  fix went live between 19:16Z and 20:16Z. Flux's applies of the role's Kustomization since then
+  have not removed a verdict.
+- Over `[6h:1m]` each of the two holds 358 of 360 minutes, and the control and
+  `up{job="kube-state-metrics"}` hold the same 358, so the 2 missing minutes are common to every
+  series and are not a Flux apply. They fall in the 07:15Z to 08:15Z hour of this morning's
+  weekly reboot.
+- The issue's own verify-by is a 24-hour window that starts after the fix's promote. It cannot be
+  complete before 2026-11-02T20:16Z. The parity read above is the evidence this gate uses, and
+  the 24-hour read stays open for the issue.
+
+**CrowdSec v1.8.2 ([#6812](https://github.com/DanielH2018/server/issues/6812)) did not disturb the
+sidecar.** The `crowdsec` pod started at about 07:37Z today (the weekly reboot) and runs 2 of 2
+containers with 0 restarts. All three jobs export `homelab_check_success` 1, with last runs 131,
+190 and 790 seconds old against their deadlines. `up{job="crowdsec-jobs"}` was 0 for one minute
+in the last 18 hours, under `CrowdSecJobsExporterAbsent`'s `for: 10m`, and no
+`CrowdSec*`, `Configarr*` or `Janitorr*` alert was pending or firing in that time.
+
+**The deployed state, read at 13:20Z.** `pod-producers.yaml` in the live `prometheus-rules`
+ConfigMap is byte-identical to master's file, and `KUMA_RETIRING_TAGS` in the live monitor-bridge
+ConfigMap is identical to master's, which lists `crowdsec-remote-allowlist`,
+`crowdsec-appsec-verify`, `crowdsec-home-allowlist`, `configarr-health` and `janitorr-health`.
+
+B6b cuts over in the combined window of B2, B4 and B6b. The window has four stacked PRs:
+
+1. Cutover-1a deletes the five tiles (`crowdsec-remote-allowlist`, `crowdsec-appsec`,
+   `crowdsec-home-allowlist`, `configarr` and `monitor-bridge-janitorr`) with every rule still
+   shadow. The pods keep pushing into deleted tokens until Cutover-2. Its live read is
+   `probe.py metric 'monitor_status{monitor_name=~"CrowdSec .*|Configarr Sync|Janitorr Errors"}'`,
+   which must return no series after the `uptime-kuma` promote. The pods' own Secrets still
+   render the five tokens, so none enters `PENDING_RETIREMENT`.
+2. Cutover-1b drops `shadow` from the nine rules and removes the five `CheckWithoutPager` terms.
+3. The Flux-plane Cutover-2 stops the pushes from the crowdsec sidecar and the two CronJobs.
+4. B6b's token PR retires the keys a week after Cutover-1b.
+
+Flux does not promote on Sunday between 02:05 and 08:15 UTC, so a Flux-owned half that merges in
+that span waits for 08:15Z, and a revert waits with it.
+
+**Cutover-1b, the rules page.** The combined window's second PR drops `shadow` from the nine rules in `pod-producers.yaml` and
+removes the five `CheckWithoutPager` terms of B6b (the three CrowdSec tiles, Configarr Sync and Janitorr Errors). Every rule file is `files/rules/pod-producers.yaml`.
+`CrowdSecAppSecVerifyFailed`, `CrowdSecJobStale` and `CrowdSecJobsExporterAbsent` are `critical`; the other six are `warning`.
+
+**Inhibits.** None is added. `CrowdSecJobsExporterAbsent` fires on `absent(up{job="crowdsec-jobs"})` and `ScrapeTargetDown` on `up == 0`, so one dead exporter never fires both arms. The two CronJob rules end in `unless on () (up{job="kube-state-metrics"} == 0)`, which leaves a dead kube-state-metrics to `ScrapeTargetDown`.
+
+The no-pager bound is 2 hours from Cutover-1a's `uptime-kuma` apply. Cutover-1b is `observability`,
+which Flux applies through `promote`, so it waits out Sunday 02:05 to 08:15 UTC like the rest of
+the window.
+
+**Cutover-2, the Flux-plane producers.** The combined window's last B6b PR stops the pushes.
+The crowdsec-jobs sidecar no longer imports `kuma_push` or reads a push URL: `Job.exports`
+replaces `Job.push_env`, and `run_job` prints the verdict and records it for `/metrics`. The
+`crowdsec-jobs` Secret (`jobs-secret.yaml.j2`) is gone. The `configarr-health` and
+`janitorr-health` readers log `status=<up|down>` and patch the verdict ConfigMap, and their
+`health-secret.yaml.j2` files and `KUMA_PUSH_URL` variables are gone. The three producers
+leave uptime-kuma's `netpol_from` list in `daniel-box.yml`, since none dials Kuma now.
+
+`kuma_push.py` stays in the two health ConfigMaps, because `host_lib.py` imports it at module
+level; no reader calls it. The five keys (`crowdsec_remote_allowlist_push_token`,
+`monitor_bridge_appsec_push_token`, `monitor_bridge_home_allowlist_push_token`,
+`monitor_bridge_configarr_push_token`, `monitor_bridge_janitorr_push_token`) enter
+`PENDING_RETIREMENT`, and `B6B_TILE_DELETED_PUSH_TOKENS` is deleted. B6b's token PR retires the
+keys a week after Cutover-1b.
+
+The five tags stay in `KUMA_RETIRING_TAGS` until C-7, because pods that ran before the apply may
+still hold a log line from a refused push. The readers' `status=` lines still count as landed
+siblings in `swallowed_verdicts`; that is harmless, since the check pages only on a failed push.

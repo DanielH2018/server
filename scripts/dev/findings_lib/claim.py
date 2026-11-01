@@ -52,6 +52,39 @@ def _no_batch_holds(_issues: Collection[int]) -> Mapping[int, BatchHold]:
     return {}
 
 
+# `() -> worktrees` the other host's checkout registers, or None when it cannot be read: a
+# `FindingsTools.peer_trees`. Asked only when a stale claim names no local worktree.
+PeerTrees = Callable[[], list[Worktree] | None]
+
+
+def _no_peer_trees() -> list[Worktree] | None:
+    return []
+
+
+# The reason a claim reads held because the peer read failed. `cmd_reap` counts it, so a
+# lasting ssh or path failure reaches the sweep's output instead of reading as "0 released".
+PEER_UNREADABLE = (
+    "no worktree here, and the other host's worktrees could not be read; held"
+)
+
+
+def _peer_reason(peer: list[Worktree] | None, branch: str) -> str | None:
+    """Why the peer host holds a claim this host has no worktree for, or None if it does not.
+
+    Held on registration alone: `dirty` and `merged` run git here, where the peer's path
+    either does not exist or is a different tree. Only the peer's own sweep can judge it.
+    """
+    if peer is None:
+        return PEER_UNREADABLE
+    if any(t.branch == branch for t in peer):
+        return "worktree registered by the other host's checkout — only that host can judge it"
+    return None
+
+
+def _unregistered(branch: str, trees: list[Worktree]) -> bool:
+    return not any(t.branch == branch for t in trees)
+
+
 @dataclass(frozen=True)
 class ClaimState:
     """One issue's claim, and whether the worktree behind it is still working.
@@ -164,11 +197,13 @@ def stale_holder(
     dirty: Callable[[str], bool],
     merged: Callable[[Worktree], bool],
     batch_holds: BatchHolds = _no_batch_holds,
+    peer_trees: PeerTrees = _no_peer_trees,
 ) -> tuple[str, str] | None:
     """(holder, why) when this issue's claim is STALE, else None.
 
     A claim the worktree calls stale is still held while ``batch_holds`` names the issue: a
-    fan-out batch is working it under an orchestrator whose session died (#4601).
+    fan-out batch is working it under an orchestrator whose session died (#4601). One naming
+    no local worktree is held while ``peer_trees`` registers it or cannot be read (#6840).
 
     What `cmd_claim` reaps before taking an issue. Takes the same three facts
     `claim_states` does rather than `worktree_facts`'s 4-tuple, so the caller keeps the
@@ -179,7 +214,11 @@ def stale_holder(
     if not held:
         return None
     live, why = claim_is_live(held, trees, dirty, merged)
-    if live or issue["number"] in batch_holds([issue["number"]]):
+    if live:
+        return None
+    if _unregistered(held, trees) and _peer_reason(peer_trees(), held) is not None:
+        return None
+    if issue["number"] in batch_holds([issue["number"]]):
         return None
     return held, why
 
@@ -191,6 +230,7 @@ def claim_states(
     merged: Callable[[Worktree], bool],
     batch_holds: BatchHolds = _no_batch_holds,
     now: datetime | None = None,
+    peer_trees: PeerTrees = _no_peer_trees,
 ) -> list[ClaimState]:
     """One `ClaimState` per issue that is currently claimed, in issue order.
 
@@ -200,7 +240,8 @@ def claim_states(
     A claim the worktree calls stale reads live, under the batch's reason, while
     ``batch_holds`` names its issue. The reason says when the claim's holder is not the branch
     the batch claimed under (#4688). It is called once, with every stale issue, and not at
-    all when none is stale.
+    all when none is stale. ``peer_trees`` is likewise called once, before it, and only when a
+    stale claim names no local worktree; see `stale_holder`.
     """
     states = []
     for issue in issues:
@@ -213,6 +254,15 @@ def claim_states(
                 issue["number"], held, live, reason, _claim_age_days(issue, held, now)
             )
         )
+    missing = {
+        s.number for s in states if not s.live and _unregistered(s.worktree, trees)
+    }
+    if missing:
+        peer = peer_trees()
+        for i, s in enumerate(states):
+            why = _peer_reason(peer, s.worktree) if s.number in missing else None
+            if why is not None:
+                states[i] = replace(s, live=True, reason=why)
     stale = [s.number for s in states if not s.live]
     holds = batch_holds(stale) if stale else {}
     return [

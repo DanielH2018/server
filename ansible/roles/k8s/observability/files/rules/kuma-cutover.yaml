@@ -27,26 +27,15 @@
 # A tile whose interval is 90000s (a daily timer plus an hour) uses [50h10m], as B3's two do.
 # B9's three AIDE tiles (626400s) use [348h10m] and its three rkhunter tiles (612000s) use
 # [340h10m], both inside the 30d retention.
-# B4's two etcd drill tiles have no term: a monthly push tile's range would be 70d10m, which
-# exceeds Prometheus's 30d retention. A Kuma restart drops the series until the next monthly
-# push, and after 30d no earlier sample remains to keep the term quiet, so it would page falsely.
-# Their window is B4's own, so B4's five [2h] terms bound it; ansible/tests/setup/
-# test_b4_rule_literals.py fails while a drill rule is shadow and none of those five remains,
-# and when a drill tile is deleted while all five tiles still render.
+# B4's two etcd drill tiles had no term: a monthly push tile's range would be 70d10m, which
+# exceeds Prometheus's 30d retention. B4's five [2h] terms bounded their window, and all of B4's
+# terms left with its Cutover-1b.
 groups:
   - name: kuma-cutover
     rules:
       - alert: CheckWithoutPager
         expr: |
           (
-              absent_over_time(monitor_status{monitor_name="Docs Refresh"}[26h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Secret Rotation"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Setup Plane Drift (agent hosts)"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Homelab Evals"}[348h10m])
-            or
               absent_over_time(monitor_status{monitor_name="AIDE Integrity (daniel-box)"}[348h10m])
             or
               absent_over_time(monitor_status{monitor_name="AIDE Integrity (daniel-server)"}[348h10m])
@@ -58,34 +47,6 @@ groups:
               absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-server)"}[340h10m])
             or
               absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-pi)"}[340h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-box)"}[4h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Loki Read Route (daniel-server)"}[4h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="UPS Secondary (daniel-box)"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="UPS Secondary (daniel-server)"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Fake Remux Scan"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Fake Remux Replace"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="MKV Attachment Repair"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Renovate Notifier — Alive"}[72h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Renovate Agent — Alive"}[56h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="CrowdSec Remote Allowlist"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="CrowdSec AppSec"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="CrowdSec Home Allowlist"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Configarr Sync"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Janitorr Errors"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="n8n Prod Workflows"}[2h])
             or

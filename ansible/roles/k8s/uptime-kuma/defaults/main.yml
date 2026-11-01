@@ -215,23 +215,17 @@ uptime_kuma_k8s_status_page_groups:
   - name: Services
     match:
       - "-k8s$"
-  - name: Cluster Health
-    match:
-      - "^crowdsec-"
+  # A group with no declared tile of its own keeps `match: []`: monitor-bridge's rows pin
+  # themselves into the group their `status_group` names, so the group still fills.
   - name: Observability
-    match:
-      # One tile per cluster node, both watching the same route from different source addresses.
-      # An edge/observability signal rather than a per-app tile.
-      - "^loki-read-route-"
+    match: []
   - name: Backups & Storage
     match:
       # The registry PVC's only space reclaim: a storage tile, not an automation one.
       - "^registry-gc$"
-      - "^etcd-"
   - name: Hosts & Power
     match:
       - "^daniel-box-disk$"
-      - "^ups-secondary"
       - "^cloudflare-(ddns|ip-drift)"
       # The weekly AIDE check, one tile per host, daniel-pi's included: a host-integrity
       # signal, so the Pi's tile groups with its siblings rather than under Raspberry Pi.
@@ -239,19 +233,9 @@ uptime_kuma_k8s_status_page_groups:
       # The weekly rkhunter scan, one tile per host, grouped with AIDE for the same reason.
       - "^rkhunter-"
   - name: Media Automation
-    match:
-      - "^configarr$"
-      # A janitorr cron's tile, named for the bridge only for Kuma history; not a bridge row.
-      - "^monitor-bridge-janitorr$"
-      - "^autofix-fake-remux"
-      - "^mkv-attachment-repair$"
+    match: []
   - name: Automation & Drift
     match:
-      - "^renovate-"
-      - "-drift-check$"
-      - "^secret-rotation$"
-      - "^docs-refresh$"
-      - "^homelab-eval-sweep$"
       - "^status-page-sync$"
   - name: Other
     match:

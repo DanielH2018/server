@@ -1,7 +1,7 @@
 """A Claude Code session that ends on an API error can start its own Discord page (#6021).
 
 The claude-code host component ships `claude-stop-alert@.service` and the polkit rule
-(`roles/setup/claude_code/templates/50-claude-stop-alert.rules.j2`) that lets the session
+(`hosts/components/claude-code/templates/50-claude-stop-alert.rules.j2`) that lets the session
 accounts start it. The dotfiles StopFailure hook starts it with
 the error cause as the instance, so the rule must admit that alphabet and the message must speak
 about a session, not a fan-out batch.
@@ -13,7 +13,7 @@ import re
 
 import pytest
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from lib import yaml_fast
 
 COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
@@ -25,7 +25,7 @@ ACCOUNTS = {
 
 
 def rule() -> str:
-    return render_setup_text("claude_code", RULE, ACCOUNTS)
+    return render_component_text("claude-code", RULE, ACCOUNTS)
 
 
 def rule_pattern(rendered: str) -> re.Pattern:

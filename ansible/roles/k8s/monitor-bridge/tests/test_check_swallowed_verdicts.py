@@ -174,7 +174,7 @@ def test_a_lost_down_push_from_a_retiring_tag_still_pages_beside_a_landed_siblin
     assert "sync-artifacts" in msg
 
 
-# B6b's pod producers: the crowdsec-jobs sidecar's three pushing jobs and the two health
+# B6b's pod producers: the crowdsec-jobs sidecar's three exporting jobs and the two health
 # CronJobs. Their tags are read from the role files that log them, not from a rendered shell
 # script, because none of them is one.
 _B6B_TAGS = {
@@ -188,9 +188,9 @@ _K8S = Path(__file__).resolve().parents[2]
 
 
 def _pod_producer_tags():
-    """Tags the B6b producers log under: `Job("<tag>", ... push_env=<set>)` and `TAG = "<tag>"`."""
+    """Tags the B6b producers log under: `Job("<tag>", ... exports=True)` and `TAG = "<tag>"`."""
     jobs = (_K8S / "crowdsec" / "files" / "crowdsec_jobs.py").read_text()
-    tags = set(re.findall(r'Job\(\s*"([a-z-]+)",[^)]*?push_env="[A-Z_]+",?\s*\)', jobs))
+    tags = set(re.findall(r'Job\(\s*"([a-z-]+)",[^)]*?exports=True,?\s*\)', jobs))
     for role, script in (
         ("configarr", "configarr_health.py"),
         ("janitorr", "janitorr_health.py"),
@@ -264,20 +264,6 @@ def test_the_check_is_registered_and_startup_graced():
     assert gates["swallowed_verdicts"] == "startup_grace"
 
 
-def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted():
-    # pi-sd-health reads KUMA_PUSH_OK and sends hc-ping `/fail`, which alerts at once; a second
-    # page here is one root cause twice. Its run line still lands a sibling.
-    ok, msg = swallowed_verdicts(
-        [
-            (1, _SIBLING_SWALLOWED.replace("longhorn-backup-health", "pi-sd-health")),
-            (2, _RUN_DOWN.replace("release-staleness-check", "disk-health")),
-        ],
-        "3h",
-        truncated=False,
-    )
-    assert ok, msg
-
-
 def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     # Derived from the tree, not trusted from the constant: a fourth script that starts
     # reading KUMA_PUSH_OK to route `/fail` has to be listed here, and one that stops has to
@@ -290,6 +276,25 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
         if "KUMA_PUSH_OK" in text
     }
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
+
+
+def test_the_pi_heartbeats_left_hc_routing_so_only_the_old_package_still_pages():
+    # M6 B5 Cutover-2: the Pi's two heartbeats no longer read KUMA_PUSH_OK. The old package's
+    # `push failed (status=down: ...)` line carries no `by=kuma`, so it is a swallowed DOWN, and
+    # nothing exempts it once the tags leave HC_ROUTED_TAGS: it pages until the Pi installs the
+    # new package. The new package's line is a plain verdict and never pages.
+    assert not HC_ROUTED_TAGS
+    ok, msg = swallowed_verdicts(
+        [(1, _PI_SWALLOWED), (2, _SIBLING_RUN)], "3h", truncated=False
+    )
+    assert not ok and "pi-recovery-health" in msg
+    verdict = _PI_SWALLOWED.replace(
+        "push failed (status=down: autoheal exited)", "status=down autoheal exited"
+    )
+    ok, msg = swallowed_verdicts(
+        [(1, verdict), (2, _SIBLING_RUN)], "3h", truncated=False
+    )
+    assert ok, msg
 
 
 # B7's pod producer, the pi-peer-backup script. The other B7 pods log to no stream these

@@ -2,8 +2,9 @@
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 {#
   The janitorr error health reader, every 10 minutes: read the running janitorr pod's start
-  time and, past the startup grace, count the cleanup errors in its log, then push the verdict
-  to the "Janitorr Errors" Kuma push monitor. It replaced the daniel-box host cron `janitorr
+  time and, past the startup grace, count the cleanup errors in its log, then record the
+  verdict as a log line and on the verdict ConfigMap's annotations
+  (health-verdict-configmap.yaml.j2). It replaced the daniel-box host cron `janitorr
   error health` at H2.5c (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14).
 
   Two containers, because the reader is Python and kubectl ships in neither image alone. The
@@ -13,8 +14,7 @@
 
   The labels are `app: janitorr-health`, never `app: janitorr`. The reader and tasks/verify.yml
   both take the first Running pod labelled `app=janitorr`, so that label here could make either
-  read this pod instead of janitorr's. uptime-kuma's `netpol_from` admits `janitorr-health`,
-  which is how the push reaches Kuma's Service.
+  read this pod instead of janitorr's.
 
   No gate Job: janitorr's defaults declare no `flux_cronjob_gates`, so `janitorr-verify` runs no
   copy of this CronJob, and the H2 plan's *Who applies each grant* records the first scheduled
@@ -93,11 +93,6 @@ spec:
                 # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
-                - name: KUMA_PUSH_URL
-                  valueFrom:
-                    secretKeyRef:
-                      name: janitorr-health
-                      key: push_url
 {{ job_hardened_security_context(read_only=true) }}
               volumeMounts:
                 - name: janitorr-health-code

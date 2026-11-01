@@ -5,21 +5,21 @@
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# SHADOW UNTIL M6's BATCH B2 CUTOVER-1B. Each rule runs beside the Kuma tile of the same check, so
-# each carries `shadow: "true"` and pages nobody. Severity is `warning` because every one of the
-# six tiles notifies Discord only. `service` is the host as a literal, because a node is not a
+# THESE RULES PAGE SINCE M6's BATCH B2 CUTOVER-1B. Each one ports the Kuma tile of the same check,
+# and Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule back.
+# Severity is `warning` because every one of the six tiles notified Discord only. `service` is the host as a literal, because a node is not a
 # workload (M3's open question 3). Each pair is `<Check>Failed` and `<Check>NotReporting`, the
 # shape M3 fixed: NotReporting reads the timestamp against the deadline, falls back to
 # absent_over_time over the same deadline, and leaves a dead exporter to the `targets` check.
 #
-# Each deadline is the DEADLINE_S its producer renders, which equals the interval of the Kuma tile
-# it shadows. Both literals of a NotReporting rule are pinned to it by
+# Each deadline is the DEADLINE_S its producer renders, which equalled the interval of the Kuma
+# tile it replaced. Both literals of a NotReporting rule are pinned to it by
 # ansible/tests/services/test_initial_setup_check_rule_literals.py (M1 convention 1).
 #
 # The weekly reboot (about 07:35 to 07:50) leaves every writer's gap inside its deadline: the
 # hourly witness writes at 07:23 and 08:23, and the daily and weekly checks run outside the
 # window. The eval sweep's 7-day deadline means its NotReporting rule fires until the first sweep
-# after the deploy writes its file, which is harmless while the rule is shadow.
+# after the deploy writes its file, which pages once, as a warning, in that first week.
 groups:
   - name: initial-setup-checks
     rules:
@@ -29,7 +29,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's generated-docs refresh reported a failure.
           description: >-
@@ -48,7 +47,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's generated-docs refresh has stopped reporting.
           description: >-
@@ -62,7 +60,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly eval sweep reported a failure.
           description: >-
@@ -80,7 +77,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly eval sweep has stopped reporting.
           description: >-
@@ -94,7 +90,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's secret-rotation audit reported a failure.
           description: >-
@@ -113,7 +108,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's secret-rotation audit has stopped reporting.
           description: >-
@@ -127,7 +121,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's setup plane has drifted from the repo.
           description: >-
@@ -146,7 +139,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's setup-drift check has stopped reporting.
           description: >-
@@ -161,7 +153,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box cannot read Loki through the loki-homelab route.
           description: >-
@@ -181,7 +172,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's Loki read-route witness has stopped reporting.
           description: >-
@@ -195,7 +185,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server cannot read Loki through the loki-homelab route.
           description: >-
@@ -215,7 +204,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's Loki read-route witness has stopped reporting.
           description: >-

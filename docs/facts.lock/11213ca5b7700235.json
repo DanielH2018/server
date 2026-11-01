@@ -1,0 +1,12 @@
+{
+  "checksum": "6902350a3248a905ae67a6f167628a1aa5cb777392cf109a44486a02d747f2a9",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/fake_remux/CLAUDE.md#Autonomous-role contract (it deletes media files with no human in the loop)",
+  "row": {
+    "atoms": {
+      "ansible/roles/k8s/observability/files/rules/other-setup-checks.yaml": "ad2e9214bfded1fc9a085615f67341de2afdc740118ef8d15a9bddf3bc0b6cfc"
+    },
+    "python": "3.14",
+    "verified_sha": "2b4addeaa"
+  }
+}

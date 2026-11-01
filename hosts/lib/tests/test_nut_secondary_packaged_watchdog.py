@@ -46,14 +46,14 @@ def code_lines(script: str) -> list[str]:
 def test_the_packaged_render_succeeds_with_every_secret_stripped():
     script = render(ROLE / "templates")
     body = "\n".join(code_lines(script))
-    assert "source /usr/lib/homelab/kuma-push-lib.sh" in body
-    assert 'kuma_push_token")"' in body
     assert "UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf" in body
-    # Nothing of the Ansible-era branch survives in code.
+    # Nothing of the Ansible-era branch survives in code, and since M6 batch B4's Cutover-2
+    # nothing of the Kuma push either: no library, no credential, no call.
     for old in (
-        "/usr/local/lib/kuma-push-lib.sh",
-        "kuma-push.env",
         "UPSMON_CONF=/etc/nut/upsmon.conf",
+        "kuma-push-lib",
+        "kuma_push",
+        "CREDENTIALS_DIRECTORY",
     ):
         assert old not in body
     assert "{{" not in script and "{%" not in script

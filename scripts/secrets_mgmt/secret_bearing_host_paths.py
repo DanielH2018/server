@@ -3,9 +3,9 @@
 
 WHY THIS EXISTS. `grep-on-a-script-prints-the-secret-it-embeds` records three occurrences, every
 one ending in a rotation. The leak is an *inspection*, not an execution: a `grep -nE
-"rotate|--commit|sops set|push"` on `/usr/local/bin/secret-rotation-audit.sh` matches the
-wrapper's own `export SECRET_ROTATION_KUMA=https://.../api/push/<token>` line and prints the
-token into the terminal and the transcript.
+"rotate|--commit|sops set|push"` on `/usr/local/bin/secret-rotation-audit.sh` matched the
+wrapper's own export of the Kuma push URL, token included, and printed the token into the
+terminal and the transcript. M6 batch B2's Cutover-2 removed that line with the audit's push.
 
 WHY A DERIVATION RATHER THAN A LIST. `block-dangerous-bash.sh` guards reads by matching a fixed
 alternation of conventional secret paths — `.env`, `.ssh/`, `id_rsa`. A deployed wrapper script

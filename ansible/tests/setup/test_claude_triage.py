@@ -2,9 +2,9 @@
 """The agent's unattended triage unit runs capped, as the agent, and only the agent may start it.
 
 The claude-code host component ships claude-triage@.service, its polkit rule and its two pages
-from `roles/setup/claude_code/templates/`. Each test pins one leg of the design in docs/claude-agent-user.md,
+from `hosts/components/claude-code/templates/`. Each test pins one leg of the design in docs/claude-agent-user.md,
 "Alert-triggered triage". The runner's own behaviour is tested beside it, in
-roles/setup/claude_code/tests/test_claude_triage_run.py.
+hosts/components/claude-code/tests/test_claude_triage_run.py.
 
 Run: uv run pytest ansible/tests/setup/test_claude_triage.py
 """
@@ -15,12 +15,12 @@ import re
 import pytest
 from _helpers import ANSIBLE
 from _k8s_render import render_role_template
-from _setup_render import render_setup_text, role_context
+from _setup_render import CLAUDE_CODE, render_component_text, role_context
 from deploy_tools.land_lib import policy
 from lib.ansible_jinja_env import template_env
 from lib import yaml_fast
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = CLAUDE_CODE
 UNIT = "claude-triage@.service.j2"
 RULE = "50-claude-triage.rules.j2"
 RUNNER = ROLE / "files" / "claude_triage_run.py"
@@ -36,6 +36,7 @@ PINNED = {
     "run_timeout_s": "claude_code_triage_run_timeout_s",
     "daily_cap": "claude_code_triage_daily_cap",
     "poll_mode": "claude_code_triage_poll_mode",
+    "poll_min_severity": "claude_code_triage_poll_min_severity",
 }
 
 
@@ -62,7 +63,9 @@ def defaults() -> dict:
 
 def unit(overrides: dict | None = None) -> str:
     # systemd folds a backslash-newline into one line, so ExecStart reads as one directive.
-    return re.sub(r"\\\n\s*", " ", render_setup_text("claude_code", UNIT, overrides))
+    return re.sub(
+        r"\\\n\s*", " ", render_component_text("claude-code", UNIT, overrides)
+    )
 
 
 def directive(text: str, key: str) -> list[str]:
@@ -96,6 +99,7 @@ RAISED = {
     "claude_code_triage_run_timeout_s": 99999,
     "claude_code_triage_daily_cap": 99,
     "claude_code_triage_poll_mode": "armed",
+    "claude_code_triage_poll_min_severity": "none",
 }
 
 
@@ -103,9 +107,9 @@ RAISED = {
     "template", [UNIT, RULE, CONFIG, "claude-triage-poll.service.j2"]
 )
 def test_an_inventory_value_under_the_role_names_moves_nothing(template) -> None:
-    assert render_setup_text("claude_code", template, RAISED) == render_setup_text(
-        "claude_code", template
-    )
+    assert render_component_text(
+        "claude-code", template, RAISED
+    ) == render_component_text("claude-code", template)
 
 
 def test_the_config_carries_the_pins() -> None:
@@ -113,12 +117,13 @@ def test_the_config_carries_the_pins() -> None:
     pinned = pins()
     config = dict(
         line.split("=", 1)
-        for line in render_setup_text("claude_code", CONFIG).splitlines()
+        for line in render_component_text("claude-code", CONFIG).splitlines()
         if "=" in line and not line.startswith("#")
     )
     assert config["BUDGET_USD"] == str(pinned["budget_usd"])
     assert config["DAILY_CAP"] == str(pinned["daily_cap"])
     assert config["POLL_MODE"] == pinned["poll_mode"]
+    assert config["POLL_MIN_SEVERITY"] == pinned["poll_min_severity"]
     assert config["STATE_DIR"] == pinned["state_dir"]
 
 
@@ -146,7 +151,8 @@ def rule_patterns(rendered: str) -> list[re.Pattern]:
 
 def admitted(name: str) -> bool:
     return any(
-        p.search(name) for p in rule_patterns(render_setup_text("claude_code", RULE))
+        p.search(name)
+        for p in rule_patterns(render_component_text("claude-code", RULE))
     )
 
 
@@ -174,7 +180,7 @@ def test_the_rule_admits_only_a_run_and_its_page_in_the_runners_shapes(
 
 
 def test_the_rule_and_the_runner_agree_on_the_episode_id_and_states() -> None:
-    rendered = render_setup_text("claude_code", RULE)
+    rendered = render_component_text("claude-code", RULE)
     constants = runner_constants()
     assert constants["EPISODE_ID"].strip("^$") in rendered
     assert f":({'|'.join(constants['STATES'])})\\.service$" in rendered
@@ -188,7 +194,7 @@ def test_the_poller_runs_as_the_agent() -> None:
     text = re.sub(
         r"\\\n\s*",
         " ",
-        render_setup_text("claude_code", "claude-triage-poll.service.j2"),
+        render_component_text("claude-code", "claude-triage-poll.service.j2"),
     )
     assert directive(text, "User") == [defaults()["claude_code_agent_user"]]
     assert directive(text, "OnFailure") == ["homelab-claude-triage-poll-alert.service"]
@@ -214,7 +220,7 @@ def test_the_alert_names_and_labels_the_poller_matches_on_exist() -> None:
 
 
 def config() -> str:
-    return render_setup_text("claude_code", "claude-triage-config.env.j2")
+    return render_component_text("claude-code", "claude-triage-config.env.j2")
 
 
 def test_the_pollers_fallback_address_is_the_pinned_prometheus_cluster_ip() -> None:
@@ -237,14 +243,14 @@ def test_the_poller_mutes_for_the_whole_weekly_reboot_window() -> None:
 
 
 TRIAGE_FILES = [
-    f"ansible/roles/setup/claude_code/templates/{UNIT}",
-    f"ansible/roles/setup/claude_code/templates/{RULE}",
-    "ansible/roles/setup/claude_code/templates/claude-triage-config.env.j2",
-    "ansible/roles/setup/claude_code/templates/claude-triage-prompt.txt.j2",
-    "ansible/roles/setup/claude_code/templates/claude-triage-poll.service.j2",
-    "ansible/roles/setup/claude_code/templates/claude-triage-poll.timer.j2",
-    "ansible/roles/setup/claude_code/files/claude_triage_run.py",
-    "ansible/roles/setup/claude_code/files/claude_triage_poll.py",
+    f"hosts/components/claude-code/templates/{UNIT}",
+    f"hosts/components/claude-code/templates/{RULE}",
+    "hosts/components/claude-code/templates/claude-triage-config.env.j2",
+    "hosts/components/claude-code/templates/claude-triage-prompt.txt.j2",
+    "hosts/components/claude-code/templates/claude-triage-poll.service.j2",
+    "hosts/components/claude-code/templates/claude-triage-poll.timer.j2",
+    "hosts/components/claude-code/files/claude_triage_run.py",
+    "hosts/components/claude-code/files/claude_triage_poll.py",
 ]
 
 
@@ -253,7 +259,9 @@ def test_a_pr_changing_triage_needs_the_operator(path, tmp_path) -> None:
     """The operator's 2026-10-15 ruling: the agent cannot raise its own caps unattended."""
     assert (ANSIBLE.parent / path).is_file(), f"{path} moved; update this list"
     listed = tmp_path / "approval-paths"
-    listed.write_text(render_setup_text("claude_code", "claude-land-approval-paths.j2"))
+    listed.write_text(
+        render_component_text("claude-code", "claude-land-approval-paths.j2")
+    )
     floor = policy.read_approval_paths(str(listed))
     assert policy.approval_hits([{"filename": path}], floor) == [path]
 
@@ -261,14 +269,14 @@ def test_a_pr_changing_triage_needs_the_operator(path, tmp_path) -> None:
 @pytest.mark.parametrize("template", [UNIT, "claude-triage-poll.service.j2"])
 def test_what_the_triage_units_write_is_kept_from_the_operators_group(template) -> None:
     """The operator traverses the state dir, so a file there is reachable by its fixed name."""
-    text = render_setup_text("claude_code", template)
+    text = render_component_text("claude-code", template)
     assert directive(text, "UMask") == ["0027"]
 
 
 def tmpfiles(operator_read: bool) -> dict[str, tuple[str, str, str]]:
     """Each directory the tmpfiles file declares: path -> (mode, owner, group)."""
-    text = render_setup_text(
-        "claude_code",
+    text = render_component_text(
+        "claude-code",
         "claude-triage-tmpfiles.conf.j2",
         {
             "sys_user": "ubuntu",

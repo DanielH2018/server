@@ -14,7 +14,7 @@ import re
 
 from _agent_package import agent_setup_script, render_daniel_server_with
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
@@ -25,10 +25,10 @@ TOKEN = "sentinel-agent-gh-token"
 
 
 def test_gh_reads_the_token_for_the_agents_own_account() -> None:
-    rendered = render_setup_text(
-        "claude_code",
+    rendered = render_component_text(
+        "claude-code",
         "agent-gh-hosts.yml.j2",
-        {"claude_code_agent_gh_token_value": TOKEN},
+        {"claude_code_agent_gh_token": TOKEN},
     )
     host = yaml_fast.safe_load(rendered)["github.com"]
     assert host["users"] == {"DanielClaudeBot": {"oauth_token": TOKEN}}
@@ -74,7 +74,7 @@ def git_config(rendered: str, tmp_path, key: str) -> list[str]:
 
 
 def test_git_signs_every_commit_as_the_machine_account(tmp_path) -> None:
-    rendered = render_setup_text("claude_code", "agent-gitconfig.j2")
+    rendered = render_component_text("claude-code", "agent-gitconfig.j2")
     expect = {
         "user.name": ["DanielClaudeBot"],
         # The noreply address carries the account's numeric id, which is what GitHub matches.
@@ -123,15 +123,15 @@ def test_the_agents_claude_md_names_worktrees_whose_branches_the_fence_lets_it_p
     setup = agent_setup_script(tmp_path)
     assert "put 0644 CLAUDE.md .claude/CLAUDE.md" in setup
     name = instructed_worktree_name(
-        render_setup_text("claude_code", "agent-user-claude-md.j2")
+        render_component_text("claude-code", "agent-user-claude-md.j2")
     )
     assert name == "claude/containers-role-cleanup"
     assert fence_lets_push(enter_worktree_branch(name))
 
 
 def test_a_prefix_outside_the_fence_is_flagged() -> None:
-    rendered = render_setup_text(
-        "claude_code",
+    rendered = render_component_text(
+        "claude-code",
         "agent-user-claude-md.j2",
         {"claude_code_agent_worktree_prefix": "agent"},
     )
@@ -146,7 +146,7 @@ def test_a_fanout_the_agent_launches_names_batch_branches_the_fence_lets_it_push
     monkeypatch,
 ) -> None:
     """`fanout.py place` names its branches itself, so the profile's prefix must reach it."""
-    profile = render_setup_text("claude_code", "agent-user-profile.j2")
+    profile = render_component_text("claude-code", "agent-user-profile.j2")
     found = re.findall(rf"^export {WORKTREE_PREFIX_ENV}=(\S+)$", profile, re.M)
     assert found == ["claude"], f"no single {WORKTREE_PREFIX_ENV} export in:\n{profile}"
     monkeypatch.setenv(WORKTREE_PREFIX_ENV, found[0])

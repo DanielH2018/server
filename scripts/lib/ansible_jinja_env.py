@@ -144,8 +144,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     first, and authelia's config Secret derives its per-service access_control rules
     through the second, which raises on a ``use_authelia: true`` entry with no ``auth_tier``.
     A tiered role's pods take their PriorityClass from the third, which raises on an entry
-    with no ``tier``. uptime-kuma's static monitors ask ``in_service_tier`` whether a service's
-    own tile pages by email, and it raises on an entry name it cannot find. observability's
+    with no ``tier``. observability's blackbox probe jobs ask ``in_service_tier`` whether a
+    service's target pages critical, and it raises on an entry name it cannot find. observability's
     Prometheus config renders its plain scrape jobs through ``scrape_jobs``, and each owning
     role reads its exporter's port through ``metrics_port``; both raise on a malformed
     ``metrics`` item. Its hand-written jobs read their entry's own port through ``entry_port``,
@@ -213,8 +213,6 @@ def register_ansible_filters(env: Environment) -> Environment:
 
     # The first ansible-core import creates its local temp directory (#5904).
     with ansible_local_temp():
-        # It imports ansible.errors at module top, so it loads inside the temp guard.
-        import claude_agents
         from ansible.plugins.filter.core import (
             b64encode,
             combine,
@@ -247,9 +245,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["to_json"] = to_json_stub
     env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
-    env.filters["claude_agent_profiles"] = claude_agents.FilterModule().filters()[
-        "claude_agent_profiles"
-    ]
     env.filters["flux_components"] = flux_components.FilterModule().filters()[
         "flux_components"
     ]

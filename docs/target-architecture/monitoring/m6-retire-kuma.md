@@ -598,10 +598,27 @@ a short window with none, which is the safe direction of convention 5.
       `test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok` derives from the
       renders. Their Cutover-2 drops the push, so the same commit drops their tags from
       `HC_ROUTED_TAGS`, or that test goes red, and deploys `monitor-bridge`. B1's and B5's
-      shadow PRs add those tags to `KUMA_RETIRING_TAGS` as well, so the refused pushes still
-      inside the 3h window do not page once `HC_ROUTED_TAGS` loses them. So `monitor-bridge`
-      applies by its owner, in either order against B5's hand apply on the Pi, and the
-      class-2 residual in *Risks* covers the window between them.
+      shadow PRs add those tags to `KUMA_RETIRING_TAGS` as well. For B1, that keeps the
+      refused pushes still inside the 3h window from paging once `HC_ROUTED_TAGS` loses them.
+      For B5 the entry exempts nothing, as the next bullet explains.
+    - **B1 is order-free; B5 is not.** `KUMA_RETIRING_TAGS` exempts a `rejected` line only,
+      and only a line carrying `by=kuma` parses as `rejected`. B1's host cron logs to the
+      daniel-box journal, which Loki reads, so a push that Kuma refuses carries `by=kuma` and
+      the exemption covers it. `monitor-bridge` and B1's hand apply can then land in either
+      order, and the class-2 residual in *Risks* covers the window between them. The Pi ships
+      only `/var/log/pi-health/health.log` to Loki, because its journal is not shipped. A
+      refused push there logs `push failed (status=down: ...)` with no `by=kuma`, so
+      `parse_push_line` reads it as `swallowed`, and the exemption covers none of the Pi's
+      lines. Once `monitor-bridge` applies B5's Cutover-2, `HC_ROUTED_TAGS` no longer exempts
+      them either. From that apply until the Pi's `homelab-updater.timer` installs the
+      package, every Pi cycle that ends `down` pages Swallowed Push Verdicts. That timer runs
+      every 15 minutes and skips 23:00 to 00:59 and 04:00 to 05:59 UTC. No network fault is
+      needed. The page duplicates the batch's live `PiRecoveryFailed` or `PiSdHealthFailed`
+      rule for the same DOWN verdict, so it is a second page for a real fault, not a false one.
+      B5 accepts the window: its Cutover-2 lands while both Pi checks read `status=up`, outside
+      the updater's skip hours. B5's Cutover-2 landed in
+      [#6794](https://github.com/DanielH2018/server/pull/6794) on 2026-11-01. Exempting a DOWN line without `by=kuma` would close the window,
+      but it contradicts the exclusion's rule that a lost DOWN still counts.
 
   Land Cutover-2 the same day anyway. No step depends on a tile's interval, so a slow tick or a
   delayed hand apply leaves no check unpaged.
@@ -625,6 +642,11 @@ depends on someone remembering to revert. Three rules bound the windows without 
 
 - **One window at a time.** A batch's Kuma-side PR merges only when no other batch's window
   is open.
+    - **One window may carry several batches whose soaks are clean** (operator ruling of
+      2026-10-31). One Cutover-1a PR deletes all their tiles, and one Cutover-1b PR drops
+      `shadow` from all their rules under the same two-hour bound. Each producer plane then
+      gets one Cutover-2 PR. A batch whose soak has a blocking read stays out of the window and
+      waits for its own. The first combined window carries B2, B4 and B6b.
 - **`CheckWithoutPager`, a temporary rule.** It lives in its own group, `kuma-cutover`, in
   `files/rules/kuma-cutover.yaml`.
     - A rule that does not fire has no series, so PromQL cannot read its `shadow` label. The
@@ -680,7 +702,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | B6b pod producers | crowdsec remote allowlist, AppSec verify and home allowlist (the `crowdsec-jobs` sidecar); `configarr-health` and `janitorr-health` (CronJobs) | Exporter for the sidecar, CronJob for the two (*B6b*) | Flux, through `promote` (`crowdsec`, `configarr`, `janitorr`, `observability`, `netpol-baseline`) | The operator ruled on 2026-10-23 that a pod exports through a metrics endpoint. The sidecar serves `homelab_check_*` on a new `crowdsec-jobs` scrape job. Each CronJob patches its verdict onto a ConfigMap it owns, which kube-state-metrics exports. | 5 |
 | B7 pods | autofix-bridge; cloudflare-ddns direct and proxied; pi-peer-backup | Exporter, CronJob, a Prometheus rule plus a LogQL rule | `land.sh` | See *B7*. | 4 |
 | B8 probes | the 14 hand-written monitors, plus one `tcp_connect` probe per Pi published port | M4 | `land.sh` | See *B8*. Cuts over the `pi_pressure` row. | 1 |
-| B9 integrity scans | the weekly AIDE check and rkhunter scan, one tile each per host (#6168) | M3 | the tick (initial_setup) on daniel-box; a hand on daniel-server and the Pi: `initial_setup.yml --tags "aide,rkhunter"`, the Pi's with `-e target=daniel-pi` (**operator-only**) | Both scripts call `write_check_textfile` as `aide-check` and `rkhunter-check`, with a `DEADLINE_S` equal to the tile's interval (626400s and 612000s). `host-checks.yaml` carries `AideCheckFailed`, `AideCheckNotReporting`, `RkhunterScanFailed` and `RkhunterScanNotReporting` for each host, in shadow, and `test_integrity_scan_rule_literals.py` pins the deadline literals. The shadow PR adds six `CheckWithoutPager` terms: `[348h10m]` for the AIDE tiles and `[340h10m]` for rkhunter. Cutover-1b drops `shadow`, and Cutover-1a deletes the six tiles and their tokens. | 6 |
+| B9 integrity scans | the weekly AIDE check and rkhunter scan, one tile each per host (#6168) | M3 | each host's own package, through its `integrity-scans` component (`hosts/<host>/package.yml`): the builder publishes it and the host's `homelab-updater.timer` installs it. `initial_setup_packaged_hosts['fail2ban']` lists all three hosts, so `initial_setup.yml --tags "aide,rkhunter"` writes neither scan anywhere, and no `-e target=daniel-pi` apply reaches the Pi. | Both scripts call `write_check_textfile` as `aide-check` and `rkhunter-check`, with a `DEADLINE_S` equal to the tile's interval (626400s and 612000s). `host-checks.yaml` carries `AideCheckFailed`, `AideCheckNotReporting`, `RkhunterScanFailed` and `RkhunterScanNotReporting` for each host, in shadow, and `test_integrity_scan_rule_literals.py` pins the deadline literals. The shadow PR adds six `CheckWithoutPager` terms: `[348h10m]` for the AIDE tiles and `[340h10m]` for rkhunter. Cutover-1b drops `shadow`, and Cutover-1a deletes the six tiles and their tokens. | 6 |
 
 Phase A retires 77 push tokens: 41 from bridge rows and 36 from other producers. Phase C
 retires the 78th, `kuma_status_page_sync_push_token`, together with Kuma's three other
@@ -2202,8 +2224,11 @@ M4's rules.
   from Cutover-1a to Cutover-2, a producer's push lost on the network (no `by=kuma`) with
   `status=down` still pages through `swallowed_verdicts`, beside the batch's live rule. For
   an `HC_ROUTED_TAGS` producer the same lost push can page from Healthchecks.io too, from its
-  Cutover-2's `monitor-bridge` deploy until its push stops and the 3h window passes. Either
-  needs a network fault during a DOWN verdict inside a same-day window.
+  Cutover-2's `monitor-bridge` deploy until its push stops and the 3h window passes. For B1
+  either case needs a network fault during a DOWN verdict inside a same-day window. B5 needs
+  no network fault: the Pi's refused push carries no `by=kuma`, so from `monitor-bridge`'s
+  apply of B5's Cutover-2 until the Pi installs its package, any Pi DOWN cycle pages
+  Swallowed Push Verdicts beside the live rule (*The cutover order*).
 - **Class 5, a sequence treated as a transaction.** Phase C deletes in an order that the
   prune, the claims and the grants each constrain. Mitigation: the C-1a gate, the split
   between C-1a and C-1b with a live read between them, D2's two-PR retirement, and
@@ -2365,8 +2390,9 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   leaves `HC_ROUTED_TAGS`, which keeps
   `test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok` green.
 - **B5 Cutover-2.** `pi-sd-health` and `pi-recovery-health` leave `HC_ROUTED_TAGS` for the same
-  test, and `monitor-bridge` applies by its owner, in either order against the Pi's package
-  install.
+  test. The order against the Pi's package install is not free: a Pi DOWN cycle in between
+  pages Swallowed Push Verdicts (*The cutover order*), so the PR lands while both Pi checks
+  read `status=up`.
 - **B5.** Nothing beyond the shadow PR. The unit-flag-and-directory test and the `optimize_pi` `CLAUDE.md`
   line the first draft named are obsolete: H3.6 wrote the test, and H3.8b moved the heartbeats and their
   contract into `hosts/components/pi-heartbeats/component.yml`.

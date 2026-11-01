@@ -89,7 +89,7 @@ def iter_targets(roots) -> list[pathlib.Path]:
 
 
 def verdict(scanned: int, repaired: int, failures: list[str]) -> tuple[bool, str]:
-    """(ok, msg) for the state file monitor-bridge's Kuma push reads.
+    """(ok, msg) for the state file fake-remux-health.sh reads.
 
     `scanned` is in the message and a zero count is DOWN, both deliberately. Once the library is
     clean this check finds nothing on every run forever, so a scan that silently stopped SEEING

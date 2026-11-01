@@ -257,7 +257,7 @@ _READ_CENSUS_MUST_FIND = {
     DOCS_REFRESH: frozenset({"PUSH_STATUS", "PUSH_MSG", "PUB_MSG", "UV", "REPO"}),
     EVAL_RUN: frozenset({"PUSH_STATUS", "PUB_MSG", "UNLANDED_RC", "REPO", "TREND_RC"}),
     SECRET_ROTATE: frozenset({"PUB_MSG", "STALE_HEADS", "TRACKED", "UV"}),
-    ROTATION_AUDIT: frozenset({"KUMA_HOST", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
+    ROTATION_AUDIT: frozenset({"AUDIT_RC", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
 }
 
 # `${NAME` plus the operator that follows, when there is one.
@@ -421,34 +421,28 @@ _ASSIGNMENT = re.compile(r"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=")
 _CURL_CONFIG_FLAG = re.compile(r"(?<![\w-])-K(?![\w-])")
 
 # Sources kuma-push-lib.sh (any install path), with the reason each exemption is honest.
-_LIBRARY_EXEMPT = {
-    "renovate-notify.service.j2": (
-        "a systemd ExecStartPost running /bin/sh, which is dash on Ubuntu. kuma-push-lib.sh is "
-        "bash-shaped, so sourcing it would trade an argv leak for a shell-dialect dependency "
-        "inside a unit file. It uses the -K stdin form inline instead."
-    ),
+_LIBRARY_EXEMPT: dict[str, str] = {
+    # Empty since M6 batch B4's Cutover-1a dropped renovate-notify.service.j2's inline push, the
+    # last exemption. A new one is a named template with the reason it cannot source the library.
 }
 
 # Files whose disappearance from the corpus means the derivation broke, not that the estate
 # changed. Every one is a template that can invoke curl against a push URL.
 _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
-    "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
-    "hosts/components/secret-rotation/templates/secret-rotate.sh.j2",
-    "hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2",
-    "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
 }
 
-# The corpus also holds six templates that carry a push URL but invoke no curl of their own: the
-# authelia bypass regex, both cloudflare-ddns Deployments, both pi-peer-backup manifests, and
-# renovate-notify's config.env. They are counted rather than named, so the floor is what watches
-# them. 20 against a measured 34 (2026-10-31, after M6's B1 Cutover-2 dropped the push from the
-# four k3s cron scripts) keeps the slack M3 chose: 23 against 37 after its PR 5 dropped
-# disk-health.sh.j2. A slacker floor would let a third of that unnamed tail vanish before
-# anything went red.
-_MIN_CORPUS = 20
+# The corpus also holds templates that carry a push URL but invoke no curl of their own, such as
+# the authelia bypass regex. They are counted rather than named, so the floor is what watches
+# them. 3 against a measured 5 (2026-11-01, after M6's B6b cutover stopped the crowdsec
+# sidecar and the configarr and janitorr health CronJobs pushing, and B2's and B4's setup-plane
+# Cutover-2 dropped ten scripts and four environment files) keeps the slack M3 chose: about
+# two-thirds of the real count, as 23 against 37 after its PR 5 dropped disk-health.sh.j2. The
+# five left are authelia's config-secret, loki-homelab's config.alloy, the aide and rkhunter
+# checks and registry-gc.sh.j2. A slacker floor would let three of them vanish before anything
+# went red. When a later M6 batch shrinks the corpus again, re-measure rather than estimate,
+# because a floor above the real count fails master CI.
+_MIN_CORPUS = 3
 
 
 def push_corpus() -> dict[Path, str]:
@@ -523,7 +517,7 @@ def test_no_push_token_reaches_curls_argv():
 def test_every_shell_push_script_sources_the_shared_library():
     """crons.yml:15-19 asserts this in prose.
 
-    Two files are honestly exempt; both are named with their reason, and both remain bound by the
+    A file that cannot source it is named with its reason in _LIBRARY_EXEMPT (none is today) and stays bound by the
     argv assertion above.
     """
     offenders = []

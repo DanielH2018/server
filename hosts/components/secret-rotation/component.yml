@@ -1,16 +1,14 @@
 # daniel-box's secret rotation and its daily audit as packaged timers (H7.10c, docs/target-
 # architecture/host/h7-delete-ansible.md). Until H7.36 the initial_setup role installed them as the
 # "Weekly secret rotation (auto tier)" cron and the Ansible-era `kuma-check-secret-rotation-audit`
-# timer, both gated on `has_gitops`, which is true on daniel-box alone. Both scripts push the
-# "Secret Rotation" Kuma monitor through one token, which arrives as the credential
-# `secret_rotation_push_token` (LoadCredential= from /run/credstore, filled by homelab-secrets
-# from daniel-box's SOPS file). Neither script carries the token in its text.
+# timer, both gated on `has_gitops`, which is true on daniel-box alone. Both pushed the
+# "Secret Rotation" Kuma monitor until M6 batch B2's Cutover-2, and neither loads a credential.
 #
 # - homelab-secret-rotation, Sunday 09:00: rotates the coming-due auto-tier push tokens, commits
 #   and publishes through a PR (scripts/secrets_mgmt/secret_rotation.py rotate --commit --deploy,
 #   then scripts/deploy_tools/publish_pr.py).
 # - homelab-secret-rotation-audit, daily 08:30: scripts/secrets_mgmt/secret_rotation.py audit
-#   --push. It exits 1 after a `down` push, so Restart=on-failure reruns it every 30 minutes
+#   --verdict. It exits 1 after a `down` verdict, so Restart=on-failure reruns it every 30 minutes
 #   until the verdict is up (the kuma-check form M6 left), and its boot unit reruns it once at
 #   boot while the last verdict was not up (#4495).
 #
@@ -36,16 +34,21 @@
 #   the one-rotation-in-flight gate (an unlanded `secret-rotate/*` branch on origin refuses a new
 #   rotation), and reconcile's `hold_sha`.
 # - Required evidence, every run: a `status=<up|down>` line tagged secret-rotate or
-#   secret-rotation-audit in the journal, a push to the "Secret Rotation" monitor, and
-#   secret-rotation-audit.prom in node_exporter's textfile directory for the audit.
+#   secret-rotation-audit in the journal, and secret-rotation-audit.prom in node_exporter's
+#   textfile directory for the audit, which SecretRotationAuditFailed and
+#   SecretRotationAuditNotReporting read.
 # - Next-run review: a `secret-rotate/*` branch on origin for more than 6 hours, or a rotation
 #   commit left local, means a rotated credential is live but unpublished. Land it by hand before
 #   the next Sunday. docs/secret-rotation.md has the tiers and the recovery steps.
 #
 # ENFORCED: ansible/tests/setup/test_initial_setup_check_textfiles.py (the audit's behaviour
 # against stubs), ansible/tests/setup/test_cron_scripts_publish_via_pr.py and
-# hosts/lib/tests/test_secret_rotation_component.py (the units, the credential and the legacy
-# entries).
+# hosts/lib/tests/test_secret_rotation_component.py (the units and the legacy entries).
+#
+# No unit loads the key below, because M6 batch B2's Cutover-2 dropped the Kuma push. It stays
+# listed because `host_secrets.py check` pins the names a host's tree declares to that host's SOPS
+# file, and changing the file takes the operator's `host_secrets.py sync daniel-box`. B2's token
+# PR removes the key here and in the file in one step.
 credentials:
   - secret_rotation_push_token
 files:

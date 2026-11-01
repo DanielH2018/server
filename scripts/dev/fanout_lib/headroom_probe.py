@@ -28,10 +28,11 @@ A host that cannot be read drops out, as in launch, and is named in the detail. 
 host, or an unreadable GitHub signing-key list, is a failed read: the probe exits 1 and
 cc-wait retries it.
 
-A REMOTE SOURCE. Each read spends one ssh connection to daniel-server and one `gh api` call,
-so this declares `remote` and a 120s interval. The ssh connection goes through the
-transport's control socket (`transport.mux_opts`), which a `launch` started within
-`MUX_PERSIST_S` reuses rather than opening another against `ufw limit ssh`.
+A FRESH READ EVERY TIME. Each read spends one ssh connection to daniel-server and one `gh api`
+call, at a 120s interval. The source does not declare `remote`, so cc-wait never answers a
+wait from another wait's reading (#6758). The ssh connection goes through the transport's
+control socket (`transport.mux_opts`), which a `launch` started within `MUX_PERSIST_S` reuses
+rather than opening another against `ufw limit ssh`.
 """
 
 import contextlib
@@ -117,7 +118,14 @@ def read(
 
 
 def describe() -> dict:
-    return {"terminal": TERMINAL, "interval_s": 120, "remote": True}
+    # DECIDED: not `remote`, although a read spends ssh and a `gh api` call (#6758). cc-wait
+    # serves a remote source's reading to any wait with the same arguments and cwd for 0.9 of
+    # the interval. In practice that wait is the same orchestrator's next one, started just
+    # after it launched into the `room` the previous wait ended on. `room` is the one state a
+    # launch undoes, so the replay ended the next wait `room` on a host that launch had filled,
+    # and the launch after it was refused (2026-10-31, 2026-11-01). Sharing saves nothing across
+    # sessions, because the cache key carries the cwd.
+    return {"terminal": TERMINAL, "interval_s": 120}
 
 
 def main(argv: list[str] | None = None, tools: Tools | None = None) -> int:

@@ -1,0 +1,63 @@
+{% import 'templates/claude-land-pins.j2' as pins with context -%}
+[Unit]
+Description=Land the agent user's PR #%i
+After=network-online.target
+Wants=network-online.target
+# A refused or failed landing pages Discord. The session that started it may be gone, and a
+# landing the policy refused waits on the operator: an approval given later does not restart
+# it (#4602). Exit 75, a wait that ran out, pages too, because nothing re-runs this unit. The page
+# names the instance, so the PR, and /var/lib/{{ pins.unit }}/<n>.verdict says why.
+OnFailure=homelab-alert@%n.service
+
+[Service]
+Type=oneshot
+# The operator's user, because land.sh deploys what it merges: it uses the operator's gh
+# token, decrypts secrets and runs Ansible with become. The agent's sessions run
+# as {{ pins.agent_user }} and can only START this unit, through the polkit rule
+# 50-claude-land.rules. The instance name is the only input they give: land.sh reads the PR
+# from GitHub, and the policy below decides whether it lands.
+User={{ sys_user }}
+WorkingDirectory={{ pins.checkout }}
+Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/{{ sys_user }}
+# The checkout is the deployer's, and an untracked __pycache__ there would park it.
+Environment=PYTHONDONTWRITEBYTECODE=1
+# land.sh's landing policy: only the agent's account, only its fenced branches, and no path
+# on the approval list unless the operator's GitHub login approved the head.
+Environment=LAND_REQUIRE_AUTHOR={{ pins.author }}
+Environment=LAND_REQUIRE_BRANCH_PREFIX={{ pins.branch_prefix }}
+Environment=LAND_APPROVAL_PATHS=/etc/claude-land/approval-paths
+Environment=LAND_APPROVER={{ pins.approver }}
+# /var/lib/{{ pins.unit }}/<n>.verdict is what the session reads back, so the directory is
+# world-readable and only this unit writes it.
+StateDirectory={{ pins.unit }}
+StateDirectoryMode=0755
+SyslogLevel=notice
+# Room for the 30-minute lock wait plus one landing: land.sh waits up to 45 minutes for the
+# merge and 77 for master CI, then ticks, deploys and checks health. A landing systemd kills
+# leaves its verdict file reading PENDING, or no file if the kill came during the lock wait,
+# so the session also reads this unit's Result. 16h since LAND_WINDOW_GRACE below can add
+# the reboot window's 22200s to LAND_DEADLINE's 32220, with the 1800s flock wait on top (#5457).
+TimeoutStartSec=16h
+# Fits inside what TimeoutStartSec leaves after the flock wait below, so land.sh ends a long
+# promotion wait `deferred` before systemd kills it with no verdict (#5199). It must also leave
+# land-wait room for `verify`'s wait on the rendered soak plus promote's `render`, `images`
+# and `publish`, after the merge and CI waits: ansible/tests/setup/test_lander_deadlines_cover_the_soak.py
+# renders the published bundle and fails when it does not (#5427). `images` counts since
+# published tags build images (#5466). 21600 since code-server's 4500s pre-pull joined
+# the soak (#5512), 25200 once D5.20's verify Kustomizations joined it as well, and 28800
+# once karakeep, pi-peer-backup and media-volume joined it with their snapshot and verify kinds,
+# and 32220 once the master CI budget covered the host_packages chain (#6857).
+Environment=LAND_DEADLINE=32220
+# A landing that merges into the weekly reboot's no-promotion window waits out the deferral
+# rather than giving up on a promotion nothing has failed: the first poll inside the window
+# adds its remaining length to the cap, up to this. It is the window's full length,
+# VERIFY_CAP_S plus weekly_reboot_mute_recovery_minutes, and
+# ansible/tests/setup/test_lander_deadlines_cover_the_soak.py derives it from the schedule (#5457).
+Environment=LAND_WINDOW_GRACE=22200
+# One of the agent's landings at a time, so a second waits for the first's deploy rather than
+# racing it for the same tick. Interactive sessions and renovate-agent's lander do not take
+# this lock; deploy.sh's own locks order the deploys themselves.
+ExecStart=/usr/bin/flock -w 1800 /var/lock/claude-land.lock \
+  {{ pins.checkout }}/scripts/deploy_tools/land.sh --pr %i --arm-merge \
+  --await-merge --verdict-file /var/lib/{{ pins.unit }}/%i.verdict

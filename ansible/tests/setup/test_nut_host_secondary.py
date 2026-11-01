@@ -25,10 +25,7 @@ Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 
 from lib import yaml_fast
 from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
-import json
-import re
 
-from _kuma_monitors import entity, monitors_text, tile_is_gated_on
 from _shell_render import rendered_shell_text
 from deploy_tools.setup_lib import setup_gates
 from lib.proc_testing import run
@@ -118,12 +115,12 @@ def test_daniel_boxs_package_names_the_pinned_clusterip(tmp_path):
     assert monitor[0].split()[1] == f"apc-ups@{pin}"
 
 
-def test_daniel_boxs_watchdog_unit_loads_its_own_tiles_token(tmp_path):
-    """The package must list the credential the unit loads, and it must not be daniel-server's."""
+def test_daniel_boxs_watchdog_unit_loads_no_credential(tmp_path):
+    """M6 batch B4's Cutover-2 dropped the Kuma push, the only reader of the token."""
     package = daniel_box_package(tmp_path)
     unit = package.files["/usr/lib/systemd/system/homelab-ups-watchdog.service"][0]
-    assert b"/run/credstore/ups_secondary_push_token" in unit
-    assert b"ups_secondary_daniel_server_push_token" not in unit
+    assert b"LoadCredential=" not in unit
+    # B4's token PR removes it from the package and daniel-box's SOPS file together.
     assert "ups_secondary_push_token" in package.credentials
 
 
@@ -210,25 +207,6 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
 WATCHDOG = rendered_shell_text("setup", "nut_host", "ups-secondary-health.sh.j2")
 NUT_HOST_DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
 
-# The two tiles and the variable each is gated on, one per watching host.
-TILES = {
-    "daniel-box": ("ups-secondary.json", "ups_secondary_push_token"),
-    "daniel-server": (
-        "ups-secondary-daniel-server.json",
-        "ups_secondary_daniel_server_push_token",
-    ),
-}
-
-
-def test_the_packaged_token_key_names_each_hosts_own_tile_token():
-    """The packaged watchdog unit loads this key (H4.3b3); the wrong host's key reads another tile."""
-    from lib.render_context import render_context
-
-    for host, (_, token) in TILES.items():
-        ctx = render_context(ROLE, host, overrides={"inventory_hostname": host})
-        assert ctx["nut_host_watchdog_token_key"] == token, host
-
-
 # A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
 # for the credential that sits there in the real file; it exists only to be searched for in the
 # extractor's output.
@@ -299,55 +277,12 @@ def test_the_watchdog_logs_above_the_journald_store_cap():
     assert "daemon.info" not in WATCHDOG
 
 
-def test_the_tile_is_gated_on_its_token():
-    """An ungated tile sits red from creation until the secret exists.
-
-    `entity` fails when the tile is absent with its gate armed, `tile_is_gated_on` when it is
-    present with the gate open. Together they pin each tile to THAT variable, which a substring
-    match on the `{% if %}` line cannot do.
-    """
-    for host, (tile, gate_var) in TILES.items():
-        assert entity(tile, gate_var)["name"] == f"UPS Secondary ({host})", (
-            f"{tile} must be the tile named for {host}"
-        )
-        assert tile_is_gated_on(tile, gate_var), (
-            f"{tile} renders with {gate_var} empty, so it sits red from creation"
-        )
-
-
-def test_the_tile_deadline_is_derived_from_the_cron_cadence():
-    """A hardcoded interval survives a schedule change and grants the wrong grace.
-
-    A 24h grace against a 23h gap clears the DOWN it was added to make sticky.
-    """
-    # Two renders at a cadence the inventory does not hold: the deadline must follow the
-    # cadence variable, which a substring match on the variable's name cannot show.
-    minutes = 7
-    for tile, gate_var in TILES.values():
-        armed = entity(tile, gate_var)
-        assert (
-            armed["interval"]
-            == NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] * 120
-        )
-        rerendered = re.search(
-            rf"^  {re.escape(tile)}: \|\n\s+(\{{.*\}})$",
-            monitors_text(
-                {gate_var: "x", "nut_host_watchdog_interval_minutes": minutes}
-            ),
-            re.M,
-        )
-        assert rerendered, f"{tile} is not rendered at a {minutes}-minute cadence"
-        moved = json.loads(rerendered.group(1))
-        assert moved["interval"] == minutes * 120, (
-            f"{tile}'s deadline does not follow nut_host_watchdog_interval_minutes — a hardcoded "
-            "interval survives a schedule change and grants the wrong grace"
-        )
-    assert "*:0/{{ nut_host_watchdog_interval_minutes }}" in NUT_TIMER.read_text()
-
-
 def test_the_watchdog_is_armable_and_armed():
     assert NUT_HOST_DEFAULTS["nut_host_watchdog_armed"] is True
     assert NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] == 10
+    # The timer follows the cadence variable, which `DEADLINE_S` in the watchdog also derives from
+    # (ansible/tests/setup/test_b4_rule_literals.py pins that deadline).
+    assert "*:0/{{ nut_host_watchdog_interval_minutes }}" in NUT_TIMER.read_text()
     enable = yaml_fast.safe_load(NUT_COMPONENT.read_text())["enable"]
     assert enable["homelab-ups-watchdog.timer"]["when"] == "nut_host_watchdog_armed"
 
@@ -362,7 +297,7 @@ def test_the_watchdog_keeps_upsc_stdout_and_stderr_apart():
     """`2>&1` on the upsc call puts its diagnostics inside the VALUE.
 
     upsc writes "Init SSL without certificate database" to stderr on every successful call
-    against this endpoint. Folding the streams makes the pushed message multi-line and makes the
+    against this endpoint. Folding the streams makes the logged message multi-line and makes the
     empty-status branch unreachable, since the noise is never empty.
     """
     assert 'upsc "$ENDPOINT" ups.status 2>&1' not in WATCHDOG
@@ -370,5 +305,5 @@ def test_the_watchdog_keeps_upsc_stdout_and_stderr_apart():
 
 
 def test_the_watchdog_collapses_newlines_out_of_its_message():
-    """A newline in either half breaks the syslog line and the Kuma push message."""
+    """A newline in either half breaks the syslog line."""
     assert WATCHDOG.count("tr '\\n' ' '") >= 2

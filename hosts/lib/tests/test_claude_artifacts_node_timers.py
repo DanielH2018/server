@@ -21,9 +21,9 @@ import yaml
 from lib.render_context import render_context
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
+from _setup_render import CLAUDE_CODE
 
 ROLES = REPO / "ansible" / "roles"
-CLAUDE_CODE = ROLES / "setup" / "claude_code"
 ARTIFACTS = ROLES / "k8s" / "artifacts"
 OBSERVABILITY = ROLES / "k8s" / "observability"
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
@@ -140,7 +140,7 @@ def test_each_timer_runs_its_script_as_the_sys_user_with_its_tag(box, name):
 
 @pytest.mark.parametrize("name", sorted(TIMERS))
 def test_neither_producer_pushes_to_kuma(box, name):
-    # fact: ansible/roles/setup/claude_code/CLAUDE.md#The artifacts node's two timers
+    # fact: hosts/components/claude-code/CLAUDE.md#The artifacts node's two timers
     script, _, _ = TIMERS[name]
     body = _text(box, script)
     # Non-vacuity: the shipped bytes are the real script, which still records its verdict.

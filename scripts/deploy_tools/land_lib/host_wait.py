@@ -6,9 +6,11 @@ contract is C6's *Hosts* bullet in docs/target-architecture/contracts.md.
 
 `host_targets` names the hosts whose package the merge changes. It renders every host package
 at the merge commit and at its first parent, each in a snapshot from `tools.gate_snapshot`,
-and keeps the hosts whose trees differ. When a snapshot or a render fails, every host with a
-`hosts/<host>/package.yml` at the merge commit is a target, so a failure waits rather than
-skips.
+and keeps the hosts whose trees differ. It renders every shared package under
+`hosts/packages/` the same way, and a host whose rendered `nfpm.yaml` depends on a shared
+package that differs is a target too (#6859): the host's updater installs that package. When a
+snapshot or a render fails, every host with a `hosts/<host>/package.yml` at the merge commit
+is a target, so a failure waits rather than skips.
 
 `wait_for_hosts` then reads Prometheus until each target settles:
 
@@ -63,6 +65,7 @@ from deploy_tools.land_lib.host_schedule import (  # noqa: F401
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
 from deploy_tools.land_lib.tools import gate_snapshot
+from lib import yaml_fast
 from lib.git import git as run_git
 from lib.repo_paths import ANSIBLE, REPO
 from lib.systemd_timer import timer_settings
@@ -81,6 +84,7 @@ HOST_RENDER_ARGV = (
     "scripts/renderer/homelab_render.py",
     "host",
 )
+PACKAGE_RENDER_ARGV = (*HOST_RENDER_ARGV[:-1], "package")
 HOST_RENDER_TIMEOUT = 300
 # One rendered host package: each path under `hosts/<host>/` mapped to its kind (`file` or
 # `link`), its mode, and its bytes or its link target.
@@ -147,10 +151,23 @@ def render_host_tree(snapshot: Path, host: str) -> HostTree | None:
     and the renderer code are all the snapshot's commit's. `gate_snapshot` points
     `UV_PROJECT_ENVIRONMENT` at the primary's `.venv` for the life of the snapshot.
     """
+    return _render_tree(
+        snapshot, [*HOST_RENDER_ARGV, "--host", host], Path("hosts") / host
+    )
+
+
+def render_package_tree(snapshot: Path, package: str) -> HostTree | None:
+    """The shared `package` as the renderer in `snapshot` renders it; None when it failed."""
+    return _render_tree(
+        snapshot, [*PACKAGE_RENDER_ARGV, "--name", package], Path("packages") / package
+    )
+
+
+def _render_tree(snapshot: Path, argv: list[str], subdir: Path) -> HostTree | None:
     with tempfile.TemporaryDirectory(prefix="land-host-render-") as out:
         try:
             done = subprocess.run(
-                [*HOST_RENDER_ARGV, "--host", host, "--out", out],
+                [*argv, "--out", out],
                 cwd=snapshot,
                 capture_output=True,
                 text=True,
@@ -158,13 +175,27 @@ def render_host_tree(snapshot: Path, host: str) -> HostTree | None:
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
-            say(f"host render of {host} at {snapshot} did not finish: {exc}")
+            say(f"host render of {subdir} at {snapshot} did not finish: {exc}")
             return None
         if done.returncode != 0:
             last = (done.stderr.strip().splitlines() or ["no output"])[-1]
-            say(f"host render of {host} at {snapshot} failed: {last}")
+            say(f"host render of {subdir} at {snapshot} failed: {last}")
             return None
-        return read_host_tree(Path(out) / "hosts" / host)
+        return read_host_tree(Path(out) / subdir)
+
+
+def depends_of(tree: HostTree) -> set[str]:
+    """The package names a rendered tree's `nfpm.yaml` depends on, without version bounds."""
+    entry = tree.get("nfpm.yaml")
+    if entry is None:
+        return set()
+    spec = yaml_fast.safe_load(entry[2].decode())
+    if not isinstance(spec, dict):
+        return set()
+    return {
+        re.split(r"[\s(]", str(dep).strip(), maxsplit=1)[0]
+        for dep in spec.get("depends") or []
+    }
 
 
 def read_host_tree(root: Path) -> HostTree:
@@ -195,6 +226,7 @@ class HostReads:
 
     snapshot: Callable[[Path, str], AbstractContextManager[Path | None]] = gate_snapshot
     render: Callable[[Path, str], HostTree | None] = render_host_tree
+    render_package: Callable[[Path, str], HostTree | None] = render_package_tree
     git: Callable[..., Any] = run_git
     fetch: Callable[[str, float], bytes] = fetch_url
     clock: Callable[[], float] = time.time
@@ -211,9 +243,9 @@ REAL_READS = HostReads()
 def host_targets(
     primary: Path, merge: str, reads: HostReads = REAL_READS
 ) -> list[HostTarget]:
-    """The hosts whose rendered package differs between `merge` and its first parent.
+    """The hosts whose package, or a shared package it depends on, differs from the parent's.
 
-    A host with no package at the merge commit is never a target: nothing would apply. A host
+    The comparison is between the renders at `merge` and at its first parent. A host with no package at the merge commit is never a target: nothing would apply. A host
     whose package the merge adds is one, with nothing armed at the first parent.
     """
     parent = reads.git("rev-parse", "--verify", f"{merge}^1", cwd=primary, check=False)
@@ -228,6 +260,9 @@ def host_targets(
         if at_merge is None or at_parent is None:
             say("host targets: a snapshot failed; waiting on every host")
             return _every_host(primary, merge, reads)
+        shared = _changed_packages(at_merge, at_parent, reads)
+        if shared is None:
+            return _every_host(primary, merge, reads)
         before = _hosts_in(at_parent)
         targets = []
         for host in sorted(_hosts_in(at_merge)):
@@ -236,7 +271,7 @@ def host_targets(
             if new is None or old is None:
                 say(f"host targets: the render of {host} failed; waiting on every host")
                 return _every_host(primary, merge, reads)
-            if new != old:
+            if new != old or depends_of(new) & shared:
                 target = _target(host, old, at_parent)
                 targets.append(replace(target, compose=touches_compose(old, new)))
         return targets
@@ -244,6 +279,29 @@ def host_targets(
 
 def _hosts_in(root: Path) -> set[str]:
     return {spec.parent.name for spec in (root / "hosts").glob("*/package.yml")}
+
+
+def _packages_in(root: Path) -> set[str]:
+    return {
+        spec.parent.name for spec in (root / "hosts/packages").glob("*/package.yml")
+    }
+
+
+def _changed_packages(
+    at_merge: Path, at_parent: Path, reads: HostReads
+) -> set[str] | None:
+    """The shared packages whose render differs between the two snapshots; None on a failure."""
+    before = _packages_in(at_parent)
+    changed = set()
+    for package in sorted(_packages_in(at_merge)):
+        new = reads.render_package(at_merge, package)
+        old = reads.render_package(at_parent, package) if package in before else {}
+        if new is None or old is None:
+            say(f"host targets: the render of {package} failed; waiting on every host")
+            return None
+        if new != old:
+            changed.add(package)
+    return changed
 
 
 def _every_host(primary: Path, merge: str, reads: HostReads) -> list[HostTarget]:

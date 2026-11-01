@@ -347,7 +347,7 @@ def test_an_insufficient_session_is_not_told_to_type_a_code():
 # --- the agent user's login file: the account with no age key ------------------------
 
 CLAUDE_CODE_DEFAULTS = os.path.join(
-    REPO_ROOT, "ansible", "roles", "setup", "claude_code", "defaults", "main.yml"
+    REPO_ROOT, "hosts", "components", "claude-code", "defaults", "main.yml"
 )
 
 

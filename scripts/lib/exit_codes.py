@@ -220,7 +220,8 @@ RUNBOOK_GATES_UNAVAILABLE = 69
 
 # -- scripts/secrets_mgmt/secret_rotation.py --------------------------------------------
 # A refused argument (a record-tier name for `rotate`, a future date for `record`, a key the
-# registry lacks) and a missing SECRET_ROTATION_KUMA were 2 until #4443; both are usage.
+# registry lacks) was 2 until #4443, and is usage. A missing SECRET_ROTATION_KUMA was the other
+# usage error until M6 batch B2's Cutover-2 removed the audit's Kuma push.
 SECRET_ROTATION_OK = OK
 SECRET_ROTATION_FAILED = FAILED
 SECRET_ROTATION_SOPS_FAILED = 3
@@ -503,7 +504,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "`publish`: pushed but no PR was opened. `unlanded`: a PR is open.",
         ),
         _c(UNLANDED_NO_PR, "UNLANDED_NO_PR", "`unlanded`: a branch with no PR."),
-        _c(UNLANDED_PR_RED, "UNLANDED_PR_RED", "`unlanded`: its PR failed a check."),
+        _c(UNLANDED_PR_RED, "UNLANDED_PR_RED", "`unlanded`: a red or conflicting PR."),
     ),
     "scripts/deploy_tools/narrow_setup.py": (
         _c(
@@ -694,8 +695,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             SECRET_ROTATION_BAD_ARGS,
             "SECRET_ROTATION_BAD_ARGS",
-            "the command line is wrong: a name or date the subcommand refuses, or --push "
-            "without SECRET_ROTATION_KUMA set.",
+            "the command line is wrong: a name or date the subcommand refuses.",
         ),
     ),
     "scripts/backup/b2_drain.py": (

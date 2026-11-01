@@ -209,10 +209,6 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         # arr_autoblock_* for Kuma history continuity; the consumer is the autofix-bridge
         # deploy tag.)
         pusher = "autofix-bridge"
-    elif name == "crowdsec_remote_allowlist_push_token":
-        # The crowdsec role renders the crowdsec-jobs Secret its sidecar pushes with, and the
-        # tile is a static entity in k8s/uptime-kuma.
-        pusher = "crowdsec"
     else:
         # anything else unrecognised -> manual
         return ()

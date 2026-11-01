@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-10-30 18:17 UTC
-generated_sha: 4690d8c994
+generated_at: 2026-11-01 18:17 UTC
+generated_sha: d9b826cb1f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 4690d8c994
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-10-30T18:06:49+0000 | 10m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-10-29T11:37:31+0000 | 1d6h | 1d | ok | session completed |
-| renovate-notify | 2026-10-30T13:03:40+0000 | 5h13m | 1d | ok | notified |
-| docs-refresh | 2026-10-30T06:18:00+0000 | 11h59m | unknown | ok | generators: ok |
-| secret-rotate | 2026-10-30T12:34:47+0000 | 5h42m | unknown | ok | last touched by: Rotate Prowlarr's API key after probe.py arr printed it |
-| longhorn-restore-drill | 2026-10-30T04:11:49+0000 | 14h5m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-10-26T10:20:03+0000 | 4d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1792982702.zip) |
+| gitops-deploy | 2026-11-01T18:13:28+0000 | 4m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-11-01T12:03:05+0000 | 6h14m | 1d | ok | session completed |
+| renovate-notify | 2026-11-01T15:53:06+0000 | 2h24m | 1d | ok | notified |
+| docs-refresh | 2026-11-01T06:17:00+0000 | 12h | unknown | ok | generators: skipped |
+| secret-rotate | 2026-10-30T12:34:47+0000 | 2d5h | unknown | ok | last touched by: Rotate Prowlarr's API key after probe.py arr printed it |
+| longhorn-restore-drill | 2026-11-01T04:10:49+0000 | 14h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-10-26T10:20:03+0000 | 6d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1792982702.zip) |

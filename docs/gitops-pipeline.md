@@ -170,8 +170,7 @@ so any change to that file names `claude_code`, including a change to a key it n
 `narrow_setup.role_tags` maps such a row to the readers of the changed keys the consumer names.
 It first widens the changed keys to every name built from one of them: another key of the
 owner's `defaults/` or `vars/`, an inventory YAML value, or a fact the owner sets. The reader
-may name only the wider key. `initial_setup` names `claude_code_agent_primary_profile`, which
-interpolates thirteen other `claude_code` defaults. A key `hosts.ini` names refuses, because
+may name only the wider key. A key `hosts.ini` names refuses, because
 the walk cannot follow it as a mapping. A key the consumer never names adds no tag. A range in
 which no path reaches the consumer answers that it needs nothing (#4361). The tick then drops
 the role from its run and from the hold, and a range in which no role needs a tag runs no
@@ -182,8 +181,8 @@ hand-run of such a role (`land_reach._reads_no_changed_key`). A change to the ke
 `tasks/agent_access.yml`, runs only inside the agent include, whose tasks all carry that one
 tag. The same test file derives these rows from the tree, and the table must equal them
 (#4357).
-`initial_setup` reads `claude_code`'s agent defaults, and `deploy_ui` reads `k3s_agent_node_ips`.
-A k3s defaults change therefore records `k3s` in `manual_plane` and applies `deploy_ui`.
+`deploy_ui` reads `k3s_agent_node_ips`, so a k3s defaults change records `k3s` in
+`manual_plane` and applies `deploy_ui`.
 A word match that is not a read, such as a bash local in a template, is exempted in that test
 with the reason.
 
@@ -650,9 +649,9 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `GH_TOKEN`/`GITHUB_TOKEN` in the environment win) and degrades to anonymous when gh is logged
   out. The anonymous limit is 60 requests an hour per source IP, shared with every landing's
   `await_ci.py` poll on the host, and an exhausted quota reads as "CI not finished." The
-  authenticated limit is 5000 an hour per token. An anonymous `await_ci.py` polls every 90s
-  rather than every 20s and never walks descendants, so land.sh's 1200s CI budget costs at
-  most 30 of the 60 requests (`await_ci.ANONYMOUS_INTERVAL_S`, #6148). A poll costs 2
+  authenticated limit is 5000 an hour per token. An anonymous `await_ci.py` spreads its budget over at
+  most 15 polls, at least 90s apart, and never walks descendants, so land.sh's CI budget
+  costs at most 30 of the 60 requests (`await_ci.ANONYMOUS_MAX_POLLS`, #6148, #6857). A poll costs 2
   requests until a required run registers. On an anonymous host, a merge commit GitHub never
   ran CI for ends the wait on exit 75 and asks for `gh auth login`.
   - **A tip that is not green sends the gate walking, and the tick deploys the newest GREEN

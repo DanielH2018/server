@@ -7,8 +7,9 @@ services is derived from it (#3389). Four consumers read it:
   to R2, is every `backup_claims` volume of a `home-critical` entry.
 - `tier_priority_class`: a tiered role's templates pass `containers_list |
   tier_priority_class('<role>')` to `pod_shell(...)` instead of a literal PriorityClass (#3452).
-- `in_service_tier`: uptime-kuma's static monitors page a home-critical service's own tile by
-  email and tag it `severity: critical`, so the email tier follows the tier field (#3480).
+- `in_service_tier`: observability's `blackbox-ingress` and `blackbox-extra` probe jobs give a
+  home-critical service's target `page_tier: critical`, so its page reaches email as well as
+  Discord and the email tier follows the tier field (#3480).
 - `shed_entries`: `probe.py shed-set` prints the untiered workloads to scale down when one node
   is lost, so the tiered ones fit on the survivor (#3481). No template reads it, so it is not a
   registered filter. It drops `NEVER_SHED`, the untiered cluster plumbing no break-glass may

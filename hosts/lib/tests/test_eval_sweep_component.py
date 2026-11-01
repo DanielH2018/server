@@ -1,8 +1,8 @@
 """The rendered `eval-sweep` component: the weekly eval sweep in daniel-box's package (H7.10b).
 
 Until H7.36 `initial_setup` installed the sweep as a cron and rendered its Anthropic key into an
-env file. These tests hold what the move carries: the two credentials that replace the env file
-and the token rendered into the script, the `+` ExecStartPre that creates the state directory as
+env file. These tests hold what the move carries: the credential that replaces the env file, the
+`+` ExecStartPre that creates the state directory as
 root for a service that runs as `sys_user`, the PATH and HOME the cron set, the timer's slot and
 the legacy entries. The script's behaviour is run in `ansible/tests/setup/test_eval_sweep_cron.py`
 and `test_eval_run_failure_path.py`.
@@ -25,7 +25,9 @@ COMPONENT = REPO / "hosts" / "components" / "eval-sweep" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/eval-run"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-eval-sweep.conf"
-CREDENTIALS = ("anthropic_api_key", "homelab_eval_push_token")
+# The unit loads the first; the second is the retired Kuma push token the component still names.
+LOADED = ("anthropic_api_key",)
+UNLOADED = ("homelab_eval_push_token",)
 CONTRACT_PARTS = (
     "Autonomous-role contract",
     "Scope:",
@@ -49,10 +51,10 @@ def _user() -> str:
     return render_context(None, "daniel-box", inventory=REPO_INVENTORY)["sys_user"]
 
 
-def credential_problems(unit: str, spec: dict) -> list[str]:
-    """Why `unit` does not load every credential `spec` declares, [] when it does."""
+def credential_problems(unit: str, keys: tuple[str, ...]) -> list[str]:
+    """Why `unit` does not load every one of `keys`, [] when it does."""
     problems = []
-    for key in spec.get("credentials", []):
+    for key in keys:
         if f"LoadCredential={key}:/run/credstore/{key}\n" not in unit:
             problems.append(f"{key} is declared but the unit does not load it")
     if "Wants=homelab-secrets.service\n" not in unit:
@@ -85,19 +87,24 @@ def test_the_service_keeps_the_crons_path_and_home(package):
     assert f"Environment=HOME=/home/{_user()}\n" in unit
 
 
-def test_both_secrets_are_credentials_and_the_script_holds_neither(package):
+def test_the_api_key_is_a_credential_and_the_push_token_is_not_loaded(package):
+    """M6 batch B2's Cutover-2 dropped the Kuma push, the only reader of the push token.
+
+    The component still names the token, because `host_secrets.py check` pins daniel-box's SOPS
+    file to the tree's names until B2's token PR removes both.
+    """
     spec = yaml_fast.safe_load(COMPONENT.read_text())
-    assert tuple(spec["credentials"]) == CREDENTIALS
+    assert tuple(spec["credentials"]) == (*LOADED, *UNLOADED)
     unit = _text(package, f"{UNITS}/homelab-eval-sweep.service")
-    assert credential_problems(unit, spec) == []
+    assert credential_problems(unit, LOADED) == []
+    assert [key for key in UNLOADED if key in unit] == []
     assert "CREDENTIALS_DIRECTORY" in _text(package, SCRIPT)
 
 
 def test_a_unit_missing_a_credential_is_flagged(package):
-    spec = yaml_fast.safe_load(COMPONENT.read_text())
     unit = _text(package, f"{UNITS}/homelab-eval-sweep.service")
     broken = unit.replace("LoadCredential=anthropic_api_key", "#")
-    assert credential_problems(broken, spec) == [
+    assert credential_problems(broken, LOADED) == [
         "anthropic_api_key is declared but the unit does not load it"
     ]
 

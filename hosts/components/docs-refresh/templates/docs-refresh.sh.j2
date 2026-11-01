@@ -3,10 +3,11 @@
 #
 # Usage: docs-refresh.sh [-h|--help]
 # Takes no arguments. homelab-docs-refresh.timer starts the service that runs it as the deploy
-# user on daniel-box at 06:17 and 18:17, with the cron-era PATH and KUBECONFIG and the push
-# token as a credential. Output goes to the journal under the tag docs-refresh. Running it by hand takes the git-tree lock and publishes a PR for real.
+# user on daniel-box at 06:17 and 18:17, with the cron-era PATH and KUBECONFIG. Output goes to
+# the journal under the tag docs-refresh. Running it by hand takes the git-tree lock and publishes a PR for real.
 # It reads the checkout under the deploy user's home and writes the site to docs_host_site_dir.
-# It pushes its verdict to the Docs Refresh Kuma monitor. Exit 1 means the test suite was red.
+# It writes its verdict to docs-refresh.prom, which DocsRefreshFailed and DocsRefreshNotReporting
+# read. Exit 1 means the test suite was red.
 #
 # THE LOCK IS THE POINT. This mutates the primary git tree, which gitops-deploy.service
 # rewrites with `git pull` on a 30-minute timer and which every deploy renders its
@@ -66,9 +67,9 @@
 # read healthy through it, and nothing noticed for hours. The earlier ruleset rejection
 # (see IT OPENS A PR) went undiagnosed for a day the same way.
 #
-# So this pushes a FAILURE REPORT, which is a different mechanism from the deadman that block
+# So this writes a FAILURE REPORT, which is a different mechanism from the deadman that block
 # declines: the trap below reports the outcome of every exit path, and `down` is the load-bearing
-# half. The up-beat is a side effect of having a push monitor at all, not the reason for it.
+# half. The up verdict is a side effect of having a verdict at all, not the reason for it.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -97,33 +98,14 @@ COMMIT_FAILED_STAMP="$STAMP_DIR/commit-failed"
 FAILURE_LOG="$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log"
 FAILURE_LOGS_KEPT=5
 
-# The push token arrives through the unit's LoadCredential= (credential docs_refresh_push_token,
-# from homelab-secrets.service), and never sits in this script. An empty or missing credential
-# skips the push until the secret exists, and the monitor in static-monitors.yaml.j2 is gated on
-# the same variable, so neither half sits red waiting for the other.
-DOCS_REFRESH_PUSH_TOKEN="$(cat "${CREDENTIALS_DIRECTORY:-/nonexistent}/docs_refresh_push_token" 2>/dev/null || true)"
-PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/${DOCS_REFRESH_PUSH_TOKEN}"
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-
-# kuma_push, not an inline curl: the URL embeds the push token, and passing it as an argv
-# element exposes it through /proc/<pid>/cmdline, which is world-readable here (no hidepid).
-#
-# A missing library does NOT abort, unlike secret-rotate.sh. Publishing the docs is worth doing
-# on a host whose monitoring wiring is broken, and the trap below re-checks that kuma_push
-# actually exists before calling it.
-# shellcheck source=/dev/null
-source /usr/lib/homelab/kuma-push-lib.sh 2>/dev/null \
-  || logger -t docs-refresh "kuma-push-lib.sh missing — install homelab-daniel-box on this host"
-
 # DEFAULTS TO down. Every exit path that is genuinely fine says so explicitly; anything else --
 # a crash, a `set -u` abort, or a path added later that forgets to -- reports down. Failing
-# closed is the whole point: this exists because a real failure read green for hours.
+# closed is the whole point: this exists because a real failure read green for hours. The PUSH_
+# prefix on these two names dates from the Kuma push that M6 batch B2's Cutover-2 removed.
 PUSH_STATUS=down
 PUSH_MSG="docs-refresh exited without setting a status"
 # The longest legitimate gap between two textfile writes. The cron runs at 06:17 and 18:17, so
-# the gap is 12h (43200s); the extra hour is the margin Kuma's tile keeps (interval 46800), so
-# the textfile rules and the tile page on the same lateness during the shadow soak.
+# the gap is 12h (43200s), and the extra hour is the margin for a slow run.
 # ansible/tests/services/test_initial_setup_check_rule_literals.py pins the rule's literals to it.
 DEADLINE_S=46800
 # Separate from PUSH_STATUS because a generator failure does not stop the run: the site is still
@@ -140,32 +122,27 @@ DEGRADED_MSG=""
 on_exit() {
   rm -f "${LOG:-}"
   # `status=` prefix, matching secret-rotate.sh: probe.py alerts reconstructs DOWN episodes for
-  # host-cron pushers by matching that token in syslog, and a push straight to Kuma leaves no
-  # other durable trace.
+  # host checks by matching that token in syslog, and the message lives only in this line.
   logger -t docs-refresh "status=${PUSH_STATUS} ${PUSH_MSG}"
-  # The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and
-  # the file must not wait on Kuma. Every exit path reaches this trap, so every run writes.
+  # The textfile verdict, which DocsRefreshFailed and DocsRefreshNotReporting read. Every exit
+  # path reaches this trap, so every run writes.
   write_check_textfile docs-refresh "$([ "$PUSH_STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
     || logger -t docs-refresh "textfile write failed (status=${PUSH_STATUS})"
-  [ -n "$DOCS_REFRESH_PUSH_TOKEN" ] || return 0
-  command -v kuma_push >/dev/null 2>&1 || return 0
-  kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" docs-refresh
 }
 trap on_exit EXIT
 
-# The shared check library, which the textfile write in on_exit needs. It sits below the trap so a
-# host that lacks it still reports `down` through the push, and unlike the push library above it
-# aborts on a miss: its copy task is `tags: [always]`, so a host without it has skipped
-# initial_setup (M6 batch B2). on_exit's write then fails with a log line, because the function is
-# undefined.
+# The shared check library, which the textfile write in on_exit and reachout_down below need. It
+# sits below the trap so a host that lacks it still logs `status=down`, and it aborts on a miss: a
+# host without it lacks homelab-daniel-box's check-lib component. on_exit's write then fails with
+# a log line, because the function is undefined.
 # shellcheck source=/dev/null
 source /usr/lib/homelab/homelab-check-lib.sh || {
   logger -t docs-refresh "homelab-check-lib.sh missing — install homelab-daniel-box on this host"
   exit 1
 }
 
-# Records the message as well as logging it, so every existing call site feeds the push without
-# needing its own push call -- there are eleven exit paths and one of them is a bare crash.
+# Records the message as well as logging it, so every existing call site feeds the trap's status
+# line without needing its own -- there are eleven exit paths and one of them is a bare crash.
 alert() { logger -t docs-refresh "$1"; PUSH_MSG="$1"; }
 
 # build_docs.py's exit code says WHICH half failed (its main() docstring), and the two need
@@ -184,23 +161,16 @@ build_docs_failure() {
 
 # reachout_down MSG -- report a failure whose cause was reaching origin (github.com).
 #
-# Sets PUSH_STATUS from the link rather than to a flat `down`: one WAN outage lit this tile on
-# 2026-09-18 ("cannot reach origin", #2793), and a link that is gone is the WAN tile's page. An
+# Sets PUSH_STATUS from the link rather than to a flat `down`: one WAN outage lit this check on
+# 2026-09-18 ("cannot reach origin", #2793), and a link that is gone is the WAN check's page. An
 # HTTP-level refusal -- a 403, the 60/hour `gh` quota -- keeps `down`, because that is the source
-# answering. The trap below does the pushing, so this only has to decide.
+# answering. The trap above does the reporting, so this only has to decide.
 #
 # Named at the two call sites that actually reach out rather than applied to every failure in the
 # trap: a generator crash or a commit failure has nothing to do with the link, and suppressing
 # those during an outage would hide a fault this cron is the only reporter of.
+# reachout_verdict is homelab-check-lib.sh's, which the run aborts without (above).
 reachout_down() { # msg
-  # The library is sourced without aborting on a miss (above), so this re-checks the way the trap
-  # re-checks kuma_push. Without it, a host whose monitoring wiring is broken would leave
-  # REACHOUT_STATUS unset and `set -u` would abort the run on its error path.
-  if ! command -v reachout_verdict >/dev/null 2>&1; then
-    PUSH_STATUS=down
-    alert "$1"
-    return 0
-  fi
   reachout_verdict docs-refresh {{ wan_probe_urls | join(' ') }}
   PUSH_STATUS="$REACHOUT_STATUS"
   alert "${REACHOUT_NOTE}$1"
@@ -235,7 +205,7 @@ say_failure() {
 # test. So this reads only the `short test summary info` block, wherever it sits in the file:
 # a captured-log line can also start `ERROR` at column 0, outside the block.
 #
-# The count goes first because kuma_push keeps the head of an over-long message. The ` - reason`
+# The count goes first because the cap below keeps the head of an over-long message. The ` - reason`
 # suffix is dropped to fit more ids; a node id wider than pytest's 80 columns arrives with no
 # suffix at all. Prints nothing when the block is missing: a `timeout` kill or an INTERNALERROR.
 suite_summary() {
@@ -249,7 +219,7 @@ suite_summary() {
 
 # say_suite_failure PREFIX LOG -- alert with suite_summary, else the plain tail of LOG.
 #
-# Capped at 600 so the prefix and the count survive kuma_push's 900 and logger's line limit; the
+# Capped at 600 so the prefix and the count survive logger's line limit; the
 # count line still says how many failures a cut list dropped.
 say_suite_failure() {
   local summary
@@ -333,7 +303,7 @@ EOF
 # the index, so afterwards there is nothing left to read.
 #
 # Appended to the kept log, never written to $LOG: say_failure greps $LOG and keeps the last 400
-# characters, so writing there would push the failing hook's name out of the Kuma alert.
+# characters, so writing there would push the failing hook's name out of the status line.
 keep_tree_evidence() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
   {
@@ -406,9 +376,10 @@ UNLANDED="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py unlande
 UNLANDED_RC=$?
 if [ "$UNLANDED_RC" -ne 0 ]; then
   # 2 is a PR waiting on CI: benign, it clears itself, and the docs are only a run behind.
-  # 1 (origin unreadable), 3 (a branch with no PR) and 4 (a PR with a failed check, whose
-  # landing has stopped) all need a human, so they report down. 4 read as 2 until #6588, and a
-  # red PR blocked regeneration for five hours while this monitor read up.
+  # 1 (origin unreadable), 3 (a branch with no PR) and 4 (a PR with a failed check, or one
+  # that conflicts with master so CI never runs) all need a human, so they report down. Each
+  # half of 4 read as 2 until #6588 and #6847, and a stuck PR blocked regeneration for hours
+  # while this monitor read up.
   # 1 is also the code a WAN outage produces, so it goes through reachout_down -- a branch with
   # no PR (3) is local state and stays a flat down.
   if [ "$UNLANDED_RC" -eq 2 ]; then
@@ -473,7 +444,7 @@ WEIGHTS_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/pytest_shard.py
   --record-missing 2>&1)"
 WEIGHTS_RC=$?
 if [ "$WEIGHTS_RC" -ne 0 ]; then
-  # Same flatten-and-cap as say_failure: logger and Kuma each take one line, and a pytest
+  # Same flatten-and-cap as say_failure: logger takes one line, and a pytest
   # failure's first few hundred characters carry the reason.
   alert "docs-refresh: recording shard weights failed (exit ${WEIGHTS_RC}); $(printf '%s' \
     "$WEIGHTS_MSG" | tr '\n' ' ' | tail -c 300)"
@@ -635,7 +606,7 @@ PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish 
   2>&1)"
 PUB_RC=$?
 # The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock
-# bump, and logger and Kuma each take one. Same flatten-and-cap as say_failure, and safe to run
+# bump, and logger takes one. Same flatten-and-cap as say_failure, and safe to run
 # a pipeline here because PUB_RC above already holds the status this branches on. Bash's own
 # `${PUB_MSG: -400}` is NOT the shorter way to write it: a negative offset larger than the
 # string returns the EMPTY string, so it would silently drop every message under 400 characters.

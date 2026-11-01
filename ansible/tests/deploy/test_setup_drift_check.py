@@ -14,7 +14,6 @@ from pathlib import Path
 
 from lib import yaml_fast
 from _helpers import ALL_VARS, REPO
-from _k8s_render import render_role_template
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
@@ -343,6 +342,10 @@ def test_every_reader_task_is_gated_on_that_allowlist():
     named = [t for t in tasks if "setup_drift" in str(t.get("tags", ""))]
     assert named, "the setup-drift tasks lost their tag family"
     for task in named:
+        if (task.get("ansible.builtin.file") or {}).get("state") == "absent":
+            # A retirement installs nothing, and runs on every host so one that left the list
+            # loses the file too (the Kuma push credentials M6 batch B2's Cutover-2 retired).
+            continue
         if str(task.get("ansible.builtin.import_tasks", "")).endswith(
             "common/tasks/kuma_check_timer.yml"
         ):
@@ -364,8 +367,9 @@ def test_the_check_stamps_its_own_templates():
     rebuilt inside its own fix."""
     text = _CRONS.read_text()
     assert "stamp_render_name: setup-drift-check" in text
-    for tpl in ("setup-drift-check.sh.j2", "setup-drift-kuma-push.env.j2"):
-        assert f"templates/{tpl}" in text, f"{tpl} is rendered but never stamped"
+    assert "templates/setup-drift-check.sh.j2" in text, (
+        "setup-drift-check.sh.j2 is rendered but never stamped"
+    )
 
 
 def test_the_library_is_stamped_as_deployed_code():
@@ -373,21 +377,6 @@ def test_the_library_is_stamped_as_deployed_code():
     assert "stamp_deployed_name: setup-drift-lib" in text, (
         "the shared arms are copy:-deployed, so a stale copy of them silently changes what both "
         "readers check — the exact class arm 2 exists to report"
-    )
-
-
-def test_the_tile_is_gated_on_the_token():
-    """An ungated tile sits red from creation until /add-secret runs, because the cron skips its
-    push while the token is empty. The gate is `is defined`, so the tile is absent while the key is undeclared."""
-
-    def tile(overrides: dict) -> str:
-        return render_role_template("uptime-kuma", "static-monitors.yaml.j2", overrides)
-
-    assert "setup-drift-check.json" in tile(
-        {"setup_drift_push_token": "drift-token"}
-    ), "the pusher has no Kuma monitor to push to"
-    assert "setup-drift-check.json" not in tile({}), (
-        "the tile must sit inside the token gate, like its siblings"
     )
 
 
@@ -410,32 +399,25 @@ def test_the_reader_does_not_claim_the_orphan_arm():
     assert "kubectl" not in text
 
 
-def test_the_reader_logs_before_it_pushes():
-    """A successfully-pushed DOWN otherwise leaves no durable record, and `probe.py alerts`
-    reconstructs host-cron episodes by matching status=down in syslog. NOTICE, not INFO:
-    journald here caps MaxLevelStore=notice."""
+def test_the_reader_logs_its_verdict_line_before_it_writes_the_verdict():
+    """The status line is the durable record of the message, and `probe.py alerts` reconstructs
+    host-check episodes by matching status=down in syslog. NOTICE, not INFO: journald here caps
+    MaxLevelStore=notice."""
     text = _check_body()
     logger_at = text.index("logger -p daemon.notice -t setup-drift-check")
-    assert logger_at < text.index("kuma_push "), (
-        "the durable record must precede the push"
+    assert logger_at < text.index("write_check_textfile setup-drift-check"), (
+        "the durable record must precede the textfile"
     )
     assert "status=${STATUS}" in text
 
 
-def test_the_token_is_sourced_never_inlined():
-    """The script lands 0755, so an inlined token is readable by every local account.
+def test_the_reader_reads_no_credential_and_renders_none():
+    """M6 batch B2's Cutover-2 dropped the Kuma push, the only reader of the token.
 
     Asserted on the render, where every secret resolves to the literal `STUB`
-    (`scripts/lib/render_guard.py`). An inlined token therefore shows up as that word, and the
-    source form of the same claim — that the template does not spell the token's name — would
-    read as satisfied by any renaming of the variable.
+    (`scripts/lib/render_guard.py`), so a secret rendered back in shows up as that word.
+    Whether the render still pushes is test_initial_setup_check_textfiles.py's case.
     """
     text = _check_body()
-    assert "STUB" not in text, (
-        "the token must come from the 0640 env file, not be rendered into a 0755 script"
-    )
-    assert "/etc/homelab/kuma-push.env" in text
-    assert "/etc/rancher/k3s/kuma-push.env" not in text, (
-        "that file is a whole-content template owned by roles/setup/k3s and does not exist on "
-        "an agent node at all"
-    )
+    assert "STUB" not in text
+    assert "/etc/homelab/kuma-push.env" not in text
