@@ -9,7 +9,7 @@ import tomllib
 
 import pytest
 from _helpers import ANSIBLE, load_yaml, walk_tasks
-from _setup_render import render_setup_text
+from _setup_render import render_component_text, render_setup_text
 from jinja2 import StrictUndefined
 from lib.ansible_jinja_env import make_ansible_env
 
@@ -25,7 +25,9 @@ def _seed_data(role: str, template: str) -> dict:
 def test_the_operator_seed_answers_every_prompt_the_agent_seed_answers() -> None:
     # fact: ansible/roles/setup/chezmoi_setup/CLAUDE.md#At a glance
     operator = _seed_data("chezmoi_setup", "chezmoi-seed.toml.j2")
-    agent = _seed_data("claude_code", "agent-chezmoi-seed.toml.j2")
+    agent = tomllib.loads(
+        render_component_text("claude-code", "agent-chezmoi-seed.toml.j2", {})
+    )["data"]
     assert operator.keys() == agent.keys()
 
 

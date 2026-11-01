@@ -32,14 +32,6 @@ _KUMA = "pushes a Kuma heartbeat that pages a missed run; M6 moves it to a textf
 _HC = "pings a Healthchecks.io check that pages a missed run"
 
 EXEMPT: dict[str, str] = {
-    "claude_code: timer `claude-cgroup-metrics`": (
-        "samples cgroup counters into its own textfile every 30s for the dashboards; it "
-        "changes no state, and a stopped sampler shows as a flat line, not a missed verdict"
-    ),
-    "claude_code: timer `claude-rc-restart`": (
-        "a weekly try-restart whose miss only delays adopting an auto-update; a textfile rule "
-        "would fire from the deploy until the first weekly run, up to a week of false pages"
-    ),
     "fake_remux: cron `fake-remux scan`": (
         "fake-remux-health.sh reads this cron's state file and writes its verdict as the "
         "fake-remux-scan textfile"
@@ -207,13 +199,12 @@ def test_every_exemption_names_a_member_that_still_writes_none():
 
 
 def test_census_resolves_each_route_a_writer_takes():
-    """Non-vacuity: a script cron, a renamed install, a Python kuma timer and a unit line."""
+    """Non-vacuity: a script cron, a renamed install, a Python kuma timer and a template timer."""
     found = census()
     writers = {
         "k3s: cron `Longhorn backup health`",
         "fake_remux: cron `fake-remux health`",
         "k3s: timer `kuma-check-live-drift`",
-        "claude_code: timer `claude-memory-sync`",
         "renovate_agent: timer `renovate-agent`",
     }
     assert {key for key in writers if found.get(key)} == writers

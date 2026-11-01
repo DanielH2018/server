@@ -547,6 +547,13 @@ to parse, so deleting a role would force that edit.
   H7.20c retires that half. The stub points at the component. Every template, file and
   default that a component renders is `git mv`'d into the component's directory in the PR
   that moves it, as H3.8b does, so H7.20a deletes nothing a render reads.
+- **A moved role keeps its shape** (#6773). The claude-code component holds the claude_code
+  role's `templates/`, `files/` and `defaults/main.yml`, and the renderer loads a component's
+  own `defaults/main.yml` beneath its `defaults:`
+  (`scripts/renderer/renderer_lib/host_sources.py:role_sources`). A host's `package.yml` that
+  must render one of those templates, such as a per-uid slice cap, names the component with
+  `component:` and the template with a `component:templates/<name>` src. The component must be
+  in `host_sources.COMPONENT_SOURCES`.
 - **Deletion.** H7.20a deletes every role directory and the three playbooks together. It
   merges only after daniel-box lists no `gitops-deploy` unit (exit 5), so no tick sees it.
 

@@ -1,0 +1,12 @@
+{
+  "checksum": "10da2c14c5816b59a7b64ddfddeae4505a2ca50e9a862ecd3a215faa62106102",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)",
+  "row": {
+    "atoms": {
+      "docs/claude-memory-sync.md": "99b8941d307fdf8f7fdbb798ba5e92f6020194bae7a4c18cd52da4175910a18c"
+    },
+    "python": "3.14",
+    "verified_sha": "7069ccbd4"
+  }
+}

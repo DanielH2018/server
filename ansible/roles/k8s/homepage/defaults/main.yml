@@ -41,7 +41,7 @@ homepage_k8s_mem_request: 32Mi
 # stats), so repeating them here would add nothing visible.
 #
 # DECIDED: or vector(0) stays; every operand is KSM-sourced, so an outage zeros both counters
-# and reads visibly broken, and check_cluster_targets covers KSM.
+# and reads visibly broken, and observability's ScrapeTargetDown rule pages a dead KSM.
 #
 # DECIDED: the second counter is named "Down" but matches Pending|Failed|Unknown, and a Pending
 # pod is starting rather than down. The mismatch is deliberate and chosen for the dashboard,

@@ -1,0 +1,12 @@
+{
+  "checksum": "95edb86325eec9a736171ea7f35bcfac52cead5022ef81146614da6457ed89c6",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/claude-code/CLAUDE.md#The agent user",
+  "row": {
+    "atoms": {
+      "docs/claude-agent-user.md": "2406c931c957af4700b44d61857808bff08d543a53baa319af3b24878d32f070"
+    },
+    "python": "3.14",
+    "verified_sha": "7069ccbd4"
+  }
+}

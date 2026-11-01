@@ -30,11 +30,10 @@ import re
 
 import pytest
 from _agent_package import render_daniel_server_with
-from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import CLAUDE_CODE, render_component_text
 
-ROLE = "claude_code"
-ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
+COMPONENT = "claude-code"
+ROLE_DIR = CLAUDE_CODE
 DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
 
 FLEET_CONF = "fleet-slice-caps.conf.j2"
@@ -81,7 +80,7 @@ def render(template: str, **overrides: object) -> str:
     this module carried drifted to a fleet cap of 12G while defaults/main.yml moved to 14G, so
     every assertion below was checking a number the host never renders (#3202).
     """
-    return render_setup_text(ROLE, template, overrides)
+    return render_component_text(COMPONENT, template, overrides)
 
 
 @pytest.fixture(scope="module")

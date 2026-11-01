@@ -21,6 +21,12 @@ Only a `.service` under `user@<uid>.service` is left. A system unit such as
 `gitops-deploy.service` is left alone on purpose: moving out of it needs root, and the deployer
 waits for its own deploys. A login session's scope is left alone too.
 
+A SYSTEM UNIT'S CALLER STARTS THE RUN IN THE USER MANAGER INSTEAD (issue #6864). The cron units
+such as `homelab-docs-refresh.service` run as the operator with `KillMode=control-group`, so a
+landing they detach dies when their script exits, and no move can save it. `in_user_manager`
+wraps the command in `systemd-run --user`, so the user manager starts it fresh in a transient
+service of its own, where `leave_unit_cgroup` works as it does for a fan-out unit.
+
 THE RUN RECORDS ITS OWN PID AND EXIT CODE BESIDE ITS LOG. A grandchild cannot be reaped by
 whoever waits on it, so the caller writes `<log stem>.pid` and the run writes `<log stem>.rc`
 after flushing its last line (`record_code`). A cc-wait probe (`land_probe.py`,
@@ -50,6 +56,30 @@ START_GRACE_S = 60
 
 # The cgroup v2 line of a process inside a user manager's service, and that service's name.
 _USER_SERVICE = re.compile(r"^0::/.*/user@\d+\.service/(?:.+/)?([^/]+\.service)$")
+
+# The cgroup v2 line of a process inside a system unit, and that unit's name.
+_SYSTEM_SERVICE = re.compile(r"^0::/system\.slice/(?:.+/)?([^/]+\.service)$")
+
+# Variables systemd sets to describe the unit a process runs in; copied into another unit,
+# they would describe the wrong one.
+_UNIT_OWN_ENV = frozenset(
+    {
+        "INVOCATION_ID",
+        "JOURNAL_STREAM",
+        "LISTEN_FDNAMES",
+        "LISTEN_FDS",
+        "LISTEN_PID",
+        "MANAGERPID",
+        "MONOTONIC_USEC",
+        "NOTIFY_SOCKET",
+        "SYSTEMD_EXEC_PID",
+        "TRIGGER_TIMER_MONOTONIC_USEC",
+        "TRIGGER_TIMER_REALTIME_USEC",
+        "TRIGGER_UNIT",
+        "WATCHDOG_PID",
+        "WATCHDOG_USEC",
+    }
+)
 
 
 def fork_detached(body: Callable[[], None]) -> int:
@@ -105,6 +135,65 @@ def unit_of(cgroup_text: str) -> str | None:
         if match:
             return match.group(1)
     return None
+
+
+def system_unit_of(cgroup_text: str) -> str | None:
+    """The system unit a process runs in, from its /proc/<pid>/cgroup; else None."""
+    for line in cgroup_text.splitlines():
+        match = _SYSTEM_SERVICE.match(line.strip())
+        if match:
+            return match.group(1)
+    return None
+
+
+def in_user_manager(
+    argv: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    read_cgroup: Callable[[], str] | None = None,
+    uid: int | None = None,
+) -> tuple[list[str], dict[str, str]]:
+    """`argv` and `env` rewritten to start `argv` in the caller's user manager, when needed.
+
+    Inside a system unit the command becomes a `systemd-run --user` transient service: it
+    waits for `argv` to exit and passes its stdio and exit code through, and its
+    `KillMode=process` leaves a run that `argv` detached to outlive the service. The variables
+    go across by name only, so no value appears in a command line.
+
+    Args:
+      argv: the command to run.
+      cwd: its working directory.
+      env: its environment.
+      read_cgroup: reads the caller's /proc/self/cgroup.
+      uid: whose user manager to use; the caller's own by default.
+
+    Returns:
+      `(argv, env)` unchanged outside a system unit, else the wrapped pair. The wrapped `env`
+      carries the `XDG_RUNTIME_DIR` a system unit lacks, which `systemd-run --user` needs to
+      find the user manager.
+    """
+    try:
+        unit = system_unit_of((read_cgroup or _read_own_cgroup)())
+    except OSError:
+        return argv, env
+    if unit is None:
+        return argv, env
+    names = sorted(name for name in env if name not in _UNIT_OWN_ENV)
+    wrapped = [
+        "systemd-run",
+        "--user",
+        "--quiet",
+        "--collect",
+        "--wait",
+        "--pipe",
+        "--property=KillMode=process",
+        f"--working-directory={cwd}",
+        *(f"--setenv={name}" for name in names),
+        "--",
+        *argv,
+    ]
+    runtime_dir = f"/run/user/{os.getuid() if uid is None else uid}"
+    return wrapped, {**env, "XDG_RUNTIME_DIR": runtime_dir}
 
 
 def scope_name(prefix: str, pid: int) -> str:
@@ -166,14 +255,22 @@ def leave_unit_cgroup(
     why, because a run that cannot leave is no worse off than before this existed.
 
     Returns:
-      A line for the run's log, or None when the process is in no user-manager service.
+      A line for the run's log, or None when the process is in neither a user-manager service
+      nor a system unit.
     """
     try:
-        unit = unit_of(read_cgroup())
+        cgroup = read_cgroup()
     except OSError:
         return None
+    unit = unit_of(cgroup)
     if unit is None:
-        return None
+        system_unit = system_unit_of(cgroup)
+        if system_unit is None:
+            return None
+        return (
+            f"detach: inside system unit {system_unit}, which this run cannot leave; "
+            f"it stops when {system_unit} does."
+        )
     pid = os.getpid()
     scope = scope_name(prefix, pid)
     try:

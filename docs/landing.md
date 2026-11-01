@@ -44,7 +44,7 @@ event. The kill arrives as a task notification rather than an error in the logfi
 session reads clean while the PR has merged and nothing followed it through. Re-running the same
 command is the fix: it is idempotent, and a PR already `MERGED` is left alone. On `daniel-box`
 the host unit turns the reaper off (`CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in
-`roles/setup/claude_code/templates/claude-rc.service.j2`), so only a session started some other
+`hosts/components/claude-code/templates/claude-rc.service.j2`), so only a session started some other
 way meets it.
 
 ### Exit codes and verdicts

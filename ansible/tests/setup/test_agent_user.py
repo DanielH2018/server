@@ -14,7 +14,7 @@ import re
 
 import pytest
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from lib import yaml_fast
 from renderer.renderer_lib import host as host_mode
 
@@ -113,8 +113,8 @@ def test_the_login_profile_points_the_hook_shim_at_the_agents_own_clone_and_uv()
     None
 ):
     """The shim defaults to the operator's checkout, which this user cannot cd into."""
-    profile = render_setup_text(
-        "claude_code",
+    profile = render_component_text(
+        "claude-code",
         "agent-user-profile.j2",
         {
             "claude_code_agent_user_home": "/srv/agent",

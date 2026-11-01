@@ -47,6 +47,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "scripts",                         # closes the smoke_extract CI gap
   "evals",                                         # homelab eval-case schema validation
   "hosts/lib/tests",                               # the scripts the host packages ship (H3)
+  "hosts/components/*/tests",                      # a host component's own scripts, as for a role
 ]
 # `-n auto` (pytest-xdist) fans the suite across the machine's cores: 5.6s -> 3.0s locally, and
 # pytest was 13.5s of the ~24s of hook work in CI's `rest` shard. Set here rather than in the prek
@@ -145,6 +146,9 @@ pythonpath = [
   # flux_job_connect.py is the one transport of every Job script Flux runs, and
   # arr-notification's seed imports it from here on the controller path too.
   "ansible/roles/k8s/manifests/files",
+  # The claude-code host component's scripts, which its tests import by bare name the way a
+  # role's tests import its `files/` through ansible/roles/conftest.py.
+  "hosts/components/claude-code/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
   # how pytest names the test modules under them). Each remaining subdirectory is listed as well
@@ -194,9 +198,9 @@ extend-exclude = [
 # The signer imports host_lib.py, which imports kuma_push.py, so both are py312 too, and
 # hosts/lib/tests/test_host_lib.py parses them with the 3.12 grammar (#6202).
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
-# user's home, which root must not execute from; ansible/roles/setup/claude_code/tests/test_rootq.py
+# user's home, which root must not execute from; hosts/components/claude-code/tests/test_rootq.py
 # parses it with the 3.12 grammar.
-per-file-target-version = { "ansible/roles/setup/claude_code/files/homelab_rootq.py" = "py312", "ansible/roles/setup/claude_code/files/homelab_rootq_socket.py" = "py312", "ansible/roles/setup/claude_code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312", "hosts/lib/kuma_push.py" = "py312" }
+per-file-target-version = { "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312", "hosts/lib/kuma_push.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -358,7 +362,7 @@ extra-paths = [
   "ansible/roles/setup/hypervisor/files",
   "ansible/roles/setup/renovate_notify/files",
   "ansible/roles/setup/renovate_agent/files",
-  "ansible/roles/setup/claude_code/files",
+  "hosts/components/claude-code/files",
   "ansible/roles/k8s/home-assistant/files",
   "ansible/roles/k8s/tdarr/files",
   "ansible/roles/k8s/sonarr/files",

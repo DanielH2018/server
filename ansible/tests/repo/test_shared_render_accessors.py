@@ -40,6 +40,7 @@ from _shell_render import (
 from lib import yaml_fast
 from lib.render_guard import containers_entries_in, entry_platform
 from validate.shell_templates import discover_templates
+from _setup_render import CLAUDE_CODE
 
 # The Pi's Docker roles are gone: H5.9 moved wg-easy, the last one, into the host package, which
 # tests read through `render_host`, and H5.12 deleted `roles/containers`. The accessor outlives
@@ -190,7 +191,7 @@ GUARDED_SHELL_TEMPLATES = frozenset(
     }
 )
 
-CLAUDE_CODE_DEFAULTS = load_defaults(ROLES / "setup" / "claude_code")
+CLAUDE_CODE_DEFAULTS = load_defaults(CLAUDE_CODE)
 IMAGE_BUILDER_DEFAULTS = load_defaults(ROLES / "k8s" / "image-builder")
 
 

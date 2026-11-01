@@ -14,7 +14,8 @@ import re
 from _helpers import K8S_ROLES
 from _k8s_render import render_pod_env
 from lib import yaml_fast
-from lib.repo_paths import HOST_VARS, ROLES
+from lib.repo_paths import HOST_VARS
+from _setup_render import CLAUDE_CODE
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "hosts.yaml"
 SECONDS_PER_CYCLE = 300
@@ -247,7 +248,7 @@ def test_the_cgroup_pairs_follow_the_inventory():
     """
     # fact: ansible/roles/k8s/node-exporter/CLAUDE.md#The textfile collector directory
     rc_default = yaml_fast.safe_load(
-        (ROLES / "setup" / "claude_code" / "defaults" / "main.yml").read_text()
+        (CLAUDE_CODE / "defaults" / "main.yml").read_text()
     )["claude_code_rc_enabled"]
     derived = set()
     for path in HOST_VARS.glob("*.yml"):

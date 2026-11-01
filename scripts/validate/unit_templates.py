@@ -107,20 +107,40 @@ HOSTS = host_mode.HOSTS
 _FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of section")
 
 
+# A host component that keeps role-shaped sources, `templates/` beside a `defaults/main.yml`,
+# such as claude-code (#6773). Its templates render with that file as their owning defaults.
+COMPONENT_TEMPLATES = ANSIBLE.parent / "hosts" / "components"
+
+
 def discover_templates() -> list[Path]:
-    """Return every *.service.j2 / *.timer.j2 / *.socket.j2 under ansible/roles/."""
+    """Every *.service.j2 / *.timer.j2 / *.socket.j2 under ansible/roles/ and a component's templates/."""
     return sorted(
-        [
-            *ROLES.rglob("*.service.j2"),
-            *ROLES.rglob("*.timer.j2"),
-            *ROLES.rglob("*.socket.j2"),
-        ]
+        path
+        for root, pattern in ((ROLES, "**/"), (COMPONENT_TEMPLATES, "*/templates/"))
+        for suffix in ("service", "timer", "socket")
+        for path in root.glob(f"{pattern}*.{suffix}.j2")
     )
 
 
 def discover_rules() -> list[Path]:
-    """Return every polkit rule template (*.rules.j2) under ansible/roles/."""
-    return sorted(ROLES.rglob("*.rules.j2"))
+    """Every polkit rule template (*.rules.j2) under ansible/roles/ and a component's templates/."""
+    return sorted(
+        [
+            *ROLES.rglob("*.rules.j2"),
+            *COMPONENT_TEMPLATES.glob("*/templates/*.rules.j2"),
+        ]
+    )
+
+
+def template_loader(path: Path) -> tuple[Path, str]:
+    """The directory a template's environment is rooted at, and the name it loads by.
+
+    A component template loads from the component, as the host renderer loads it, so its
+    `templates/<name>` imports resolve.
+    """
+    if path.parents[2] == COMPONENT_TEMPLATES:
+        return path.parents[1], f"templates/{path.name}"
+    return path.parent, path.name
 
 
 # Values a CALLER passes to a shared template, keyed by template basename. `roles/setup/common`
@@ -198,9 +218,9 @@ def check_template(
 
     Returns an error string, or None on success.
     """
-    rel = path.relative_to(ANSIBLE)
-    env = template_env(path.parent)
-    rendered, err = render_or_error(env, path.name, ctx)
+    rel = path.relative_to(ANSIBLE.parent)
+    root, name = template_loader(path)
+    rendered, err = render_or_error(template_env(root), name, ctx)
     if rendered is None:
         return err
 
@@ -222,8 +242,8 @@ def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | Non
     interpolates only a user name, which its role's own defaults carry.
     """
     ctx = unit_context(template)
-    env = template_env(template.parent)
-    rendered, err = render_or_error(env, template.name, ctx)
+    root, name = template_loader(template)
+    rendered, err = render_or_error(template_env(root), name, ctx)
     if rendered is None:
         return err
 

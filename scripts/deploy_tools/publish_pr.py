@@ -15,7 +15,9 @@ then deploys the merge. ``land.py --arm-merge --await-merge`` waits for CI and m
 the REST endpoint, pinned to that SHA. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
 fd 9 and read this script's output through a pipe, so a landing that inherited either would
 keep the lock for the whole CI wait. The detached landing closes every inherited descriptor
-from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``).
+from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``). The callers are
+system units, and a system unit kills its whole cgroup when its script exits, so the landing
+starts in the operator's user manager instead (``lib/detach_fork.py:in_user_manager``, #6864).
 
 ``publish`` expects the commit to already be at HEAD of the primary checkout; the caller
 made it, because what to stage and how to word it is the cron's business. It prints ONE
@@ -58,7 +60,9 @@ passes cleanly in exactly that state. Merged branches are deleted on this repo
   4  a branch is on origin and its PR is open with a FAILED check. Its landing has stopped
      at ``pr-ci-red`` and nothing retries it, so the PR blocks every later run until a human
      fixes or closes it. PR #6544 sat red for five hours reading as 2, which the crons
-     report up (#6588)
+     report up (#6588). A PR that CONFLICTS with its base is the same code, with its own
+     message: GitHub creates no ``pull_request`` run for it, so CI never starts and its
+     landing has nothing to wait on. PR #6766 sat for 18 hours reading as 2 (#6847)
 
 Run: uv run pytest scripts/deploy_tools/tests/test_publish_pr.py
 """
@@ -90,6 +94,7 @@ from lib.exit_codes import (
     UNLANDED_PR_OPEN,
     UNLANDED_PR_RED,
 )
+from lib import detach_fork
 from lib import gh as gh_mod
 from lib import git as git_mod
 from lib.repo_paths import HOST_LIB_FILES
@@ -154,7 +159,12 @@ class PublishTools:
     land: Runner
 
 
-def real_tools(repo: Path, land_script: Path = LAND_SCRIPT) -> PublishTools:
+def real_tools(
+    repo: Path,
+    land_script: Path = LAND_SCRIPT,
+    read_cgroup: Callable[[], str] | None = None,
+    run_process: Runner = subprocess.run,
+) -> PublishTools:
     def git(
         *args: str, timeout: float | None = None
     ) -> subprocess.CompletedProcess[str]:
@@ -174,8 +184,12 @@ def real_tools(repo: Path, land_script: Path = LAND_SCRIPT) -> PublishTools:
                 env.get("PATH", "/usr/bin:/bin"),
             ]
         )
-        return subprocess.run(
-            [sys.executable, str(land_script), *args],
+        # A cron's system unit would kill the detached landing when the cron exits (#6864).
+        argv, env = detach_fork.in_user_manager(
+            [sys.executable, str(land_script), *args], repo, env, read_cgroup
+        )
+        return run_process(
+            argv,
             cwd=repo,
             env=env,
             capture_output=True,
@@ -333,7 +347,7 @@ def publish(
 
 
 def pr_view(number: str, tools: PublishTools) -> dict:
-    """The PR's head, review decision and check rollup, or ``{}`` when the lookup failed.
+    """The PR's head, mergeability, review decision and check rollup, or ``{}`` on a failure.
 
     An empty answer reads as "checks pending" to both readers below, which is the safe side:
     no merge, and no red report on the strength of an answer GitHub never gave.
@@ -344,7 +358,7 @@ def pr_view(number: str, tools: PublishTools) -> dict:
         "view",
         number,
         "--json",
-        "headRefOid,reviewDecision,statusCheckRollup",
+        "headRefOid,mergeable,reviewDecision,statusCheckRollup",
     )
     if proc.returncode != 0:
         return {}
@@ -401,8 +415,9 @@ def merge_if_stalled(number: str, view: dict, tools: PublishTools) -> str:
       or why the merge was refused.
     """
     checks = view.get("statusCheckRollup") or []
-    # An empty rollup is pending, never green: CI has not registered its checks yet.
-    green = bool(checks) and all(
+    # Green needs the CI gate itself: a rollup holding only an app's check, such as
+    # GitGuardian's, is a PR whose CI never ran.
+    green = any(c.get("name") == CI_GATE_NAME for c in checks) and all(
         (c.get("conclusion") or c.get("state") or "") in PASSING for c in checks
     )
     head = str(view.get("headRefOid") or "")
@@ -511,6 +526,14 @@ def unlanded(prefix: str, tools: PublishTools) -> PublishOutcome:
                 f"PR #{number} from a previous run is open with failed checks "
                 f"({', '.join(red)}) on {branch}; its landing has stopped and every later "
                 f"run skips until it is fixed or closed",
+                branch,
+            )
+        if view.get("mergeable") == "CONFLICTING":
+            return PublishOutcome(
+                UNLANDED_PR_RED,
+                f"PR #{number} from a previous run conflicts with its base on {branch}; "
+                f"GitHub runs no CI on a conflicting PR, so it never lands and every later "
+                f"run skips until the base is merged into it or it is closed",
                 branch,
             )
         # Still UNLANDED_PR_OPEN after a merge: this run's tree predates the merge, so it skips

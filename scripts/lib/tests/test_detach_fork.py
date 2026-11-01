@@ -73,8 +73,54 @@ def test_outside_a_user_service_nothing_is_asked_of_systemd():
         read_cgroup=lambda: "0::/system.slice/gitops-deploy.service\n",
         run=lambda argv: calls.append(argv) or _completed(0),
     )
-    assert line is None
     assert calls == []
+    # Issue #6864: a run trapped in a system unit says so in its log rather than nothing.
+    assert line is not None
+    assert "inside system unit gitops-deploy.service" in line
+
+
+_DOCS_REFRESH = "0::/system.slice/homelab-docs-refresh.service\n"
+
+
+def test_a_system_units_cgroup_is_flagged():
+    assert detach_fork.system_unit_of(_DOCS_REFRESH) == "homelab-docs-refresh.service"
+
+
+def test_a_user_service_is_not_a_system_unit():
+    assert detach_fork.system_unit_of(_FANOUT) is None
+
+
+def test_inside_a_system_unit_the_command_starts_in_the_user_manager(tmp_path):
+    env = {"PATH": "/usr/bin", "GH_TOKEN": "s3cret", "INVOCATION_ID": "abc"}
+    argv, new_env = detach_fork.in_user_manager(
+        ["python", "land.py", "--detach"],
+        tmp_path,
+        env,
+        read_cgroup=lambda: _DOCS_REFRESH,
+        uid=1000,
+    )
+    assert argv[:2] == ["systemd-run", "--user"]
+    assert {"--wait", "--pipe", "--property=KillMode=process"} <= set(argv)
+    assert f"--working-directory={tmp_path}" in argv
+    assert argv[argv.index("--") + 1 :] == ["python", "land.py", "--detach"]
+    # Names only: a value in argv is readable by every user through /proc.
+    assert {"--setenv=PATH", "--setenv=GH_TOKEN"} <= set(argv)
+    assert not any("s3cret" in a for a in argv)
+    assert "--setenv=INVOCATION_ID" not in argv
+    assert new_env["XDG_RUNTIME_DIR"] == "/run/user/1000"
+    assert new_env["GH_TOKEN"] == "s3cret"
+
+
+@pytest.mark.parametrize(
+    "cgroup", [_FANOUT, "0::/user.slice/user-1000.slice/session-4.scope\n"]
+)
+def test_outside_a_system_unit_the_command_is_unchanged(tmp_path, cgroup):
+    env = {"PATH": "/usr/bin"}
+    argv, new_env = detach_fork.in_user_manager(
+        ["python", "land.py"], tmp_path, env, read_cgroup=lambda: cgroup
+    )
+    assert argv == ["python", "land.py"]
+    assert new_env == env
 
 
 def test_inside_a_user_service_the_run_moves_into_its_own_scope():

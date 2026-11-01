@@ -1,0 +1,14 @@
+{
+  "checksum": "2dc649c53e32cc4cd73cf3af6fb602f7ac34cd2115a04d1caff1f3d2718c490f",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/claude-code/CLAUDE.md#The agent's socket",
+  "row": {
+    "atoms": {
+      "ansible/tests/setup/test_claude_lander.py": "095d7acdeaab8b7422d6e889c3d583a68917fef4395e05d96113270240eacdf8",
+      "hosts/components/claude-code/files/homelab_rootq_socket.py": "8ec9179df3730eaf710aa79665527bacba2f1c1e5f2cf7d2cefa75273ab7db7c",
+      "hosts/components/claude-code/files/homelab_rootq_socket.py:ARITY": "8fa31398da0538ec95551be501af94bbc26cb8aa6f389170c8dfef39eabeae47"
+    },
+    "python": "3.14",
+    "verified_sha": "7069ccbd4"
+  }
+}

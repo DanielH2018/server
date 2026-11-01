@@ -294,7 +294,7 @@ fi
 # publisher, so a create failure leaves evals-history/<stamp> on origin with no PR and no local
 # trace, and an open-PR check reads that as "nothing pending" and stacks a second branch on it.
 # Exit codes: 0 clean, 1 origin unreadable, 2 a PR is open, 3 a branch with no PR, 4 a PR is
-# open with a failed check.
+# open with a failed check or conflicts with master, so CI never runs on it.
 UNLANDED="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py unlanded \
   --prefix "$PR_BRANCH_PREFIX" 2>&1)"
 UNLANDED_RC=$?
