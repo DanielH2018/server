@@ -1,5 +1,6 @@
-"""`hosts/bootstrap-host.sh` steps 4 to 6 on a fake host: the Pi purge, the k3s install in the
-declared mode, and the local build from a clone, online and from the offline kit.
+"""`hosts/bootstrap-host.sh` steps 4 to 7 on a fake host: the Pi purge, the k3s install in the
+declared mode, the local build from a clone, online and from the offline kit, and the
+integrity-scans baselines.
 
 Run: uv run pytest hosts/lib/tests/test_bootstrap_host_steps.py
 """
@@ -203,3 +204,147 @@ def test_a_kit_whose_nfpm_differs_from_its_pin_is_refused_naming_the_file(tmp_pa
     assert result.returncode == 1
     assert f"{NFPM_ARCHIVE} does not match its pinned sha256" in result.stderr
     assert [c for c in host.apt_calls() if c.startswith("install")] == []
+
+
+SCANS = "rkhunter --propupd --nocolors", "aideinit -y"
+MASK = "systemctl mask --now dailyaidecheck.timer"
+RKHUNTER_DB, AIDE_DB = "var/lib/rkhunter/db/rkhunter.dat", "var/lib/aide/aide.db"
+
+
+def _scans_host(tmp_path, *timers: str) -> FakeHost:
+    """A Pi whose package ships the named integrity-scans timers, both by default."""
+    host = FakeHost(tmp_path)
+    units = host.root / "usr/lib/systemd/system"
+    units.mkdir(parents=True)
+    for timer in timers or ("rkhunter", "aide"):
+        (units / f"homelab-{timer}-check.timer").touch()
+    return host
+
+
+def _touch(host: FakeHost, *paths: str) -> None:
+    for path in paths:
+        (host.root / path).parent.mkdir(parents=True, exist_ok=True)
+        (host.root / path).touch()
+
+
+def test_a_fresh_host_gets_both_baselines_and_the_masked_daily_aide_timer(tmp_path):
+    host = _scans_host(tmp_path)
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert [c for c in commands if c in SCANS] == list(SCANS)
+    assert MASK in commands
+
+
+def test_a_failed_aideinit_still_leaves_the_daily_timer_masked(tmp_path):
+    host = _scans_host(tmp_path)
+    host._stub("aideinit", f'echo "aideinit $*" >> {host.log}; exit 1')
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 1
+    assert "aideinit failed" in result.stderr
+    assert MASK in host.commands()
+
+
+def test_a_rerun_reads_the_mask_and_rewrites_neither_baseline(tmp_path):
+    host = _scans_host(tmp_path)
+    _touch(host, RKHUNTER_DB, AIDE_DB)
+    host._stub(
+        "systemctl",
+        f'echo "systemctl $*" >> {host.log}\n'
+        "case $1 in is-enabled) echo masked; exit 1 ;; is-failed) exit 1 ;; esac",
+    )
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert "systemctl is-enabled dailyaidecheck.timer" in commands
+    assert not [c for c in commands if c in SCANS]
+    assert MASK not in commands
+
+
+def test_a_package_with_only_the_rkhunter_timer_gets_only_its_baseline(tmp_path):
+    host = _scans_host(tmp_path, "rkhunter")
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert [c for c in commands if c.startswith(("rkhunter", "aideinit"))] == [SCANS[0]]
+    assert not [c for c in commands if "dailyaidecheck" in c]
+
+
+@pytest.mark.parametrize(
+    ("log", "database", "init"),
+    [
+        ("var/log/rkhunter.log.1", RKHUNTER_DB, SCANS[0]),
+        ("var/log/aide/aideinit.log", AIDE_DB, SCANS[1]),
+    ],
+    ids=["rkhunter", "aide"],
+)
+def test_a_lost_database_on_a_host_that_had_one_is_refused_until_rebaseline(
+    tmp_path, log, database, init
+):
+    host = _scans_host(tmp_path)
+    # Only the database under test is missing.
+    _touch(host, log, *({RKHUNTER_DB, AIDE_DB} - {database}))
+
+    refused = host.run("daniel-pi")
+    forced = host.run("daniel-pi", "--rebaseline")
+
+    assert refused.returncode == 1
+    assert f"/{database} is missing, but /{log} shows" in refused.stderr
+    assert forced.returncode == 0, forced.stderr
+    assert host.commands().count(init) == 1
+
+
+PENDING = "var/lib/homelab/bootstrap/{}-baseline.pending"
+
+
+@pytest.mark.parametrize(
+    ("name", "log", "database", "init"),
+    [
+        ("rkhunter", "var/log/rkhunter.log", RKHUNTER_DB, SCANS[0]),
+        ("aide", "var/log/aide/aideinit.log", AIDE_DB, SCANS[1]),
+    ],
+    ids=["rkhunter", "aide"],
+)
+def test_a_log_left_by_our_own_unfinished_first_init_resumes_it(
+    tmp_path, name, log, database, init
+):
+    host = _scans_host(tmp_path)
+    marker = PENDING.format(name)
+    _touch(host, log, marker, *({RKHUNTER_DB, AIDE_DB} - {database}))
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    assert host.commands().count(init) == 1
+    assert not (host.root / marker).exists()
+
+
+def test_a_failed_first_aideinit_keeps_its_marker_so_the_rerun_resumes(tmp_path):
+    host = _scans_host(tmp_path)
+    _touch(host, RKHUNTER_DB)
+    # aideinit writes its log while it runs, so a failure leaves the log and no database.
+    aide_log = host.root / "var/log/aide/aideinit.log"
+    host._stub(
+        "aideinit",
+        f'echo "aideinit $*" >> {host.log}; '
+        f"mkdir -p {aide_log.parent}; touch {aide_log}; exit 1",
+    )
+
+    failed = host.run("daniel-pi")
+    marker_after_failure = (host.root / PENDING.format("aide")).exists()
+    host._stub("aideinit", f'echo "aideinit $*" >> {host.log}')
+    resumed = host.run("daniel-pi")
+
+    assert failed.returncode == 1
+    assert "aideinit failed" in failed.stderr
+    assert marker_after_failure
+    assert resumed.returncode == 0, resumed.stderr
+    assert host.commands().count(SCANS[1]) == 2

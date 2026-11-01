@@ -52,11 +52,15 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
   (#3740). `ansible/tests/services/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
-- **Two `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
-  `refresh_token`, which HA logs on a failed cast (issue #3015), and Prowlarr's `apikey=` in the
-  *arr Torznab error URLs (#6276). Each substitutes the capture group only, so the rest of the
-  record survives. `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` and
-  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` fail on either half. The stage is
+- **Three `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
+  `refresh_token`, which HA logs on a failed cast (issue #3015), Prowlarr's `apikey=` in the
+  *arr Torznab error URLs (#6276), and the Uptime Kuma push token in any `/api/push/<token>`
+  path (#6749). The push-token stage is scoped by a `|= "/api/push/"` line filter, not by
+  container, because any container may log a push URL. Each substitutes the capture group
+  only, so the rest of the record survives.
+  `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py`,
+  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` and
+  `ansible/tests/k8s/test_alloy_redacts_kuma_push_token.py` fail on either half. Each stage is
   prospective: a record shipped before it still carries the token for the 744h retention window.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).

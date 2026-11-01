@@ -24,7 +24,8 @@ as are the three sources outside the component a file entry may name: a `lib` en
 public keyring hosts trust) and a `shared` entry (one of the `SHARED_FILES`, a file an Ansible role
 still installs). A file or output entry may carry `when: <expression>`, evaluated like an enable
 link's, and ships only when it is true; an inventory toggle that turned a subject off keeps doing so. A `units:`
-entry may carry `when:` too, so a unit the toggle drops takes its restart policy with it.
+entry may carry `when:` too, so a unit the toggle drops takes its restart policy with it, and so
+may a `legacy:` entry, so a toggle that drops a timer can retire the textfile it wrote.
 
 A package or component may also carry `units`, `enable` and `legacy` (host_manifest.py), a
 file entry's `activate:` field and a `ufw:` map (host_arms.py). A host package installs
@@ -379,6 +380,10 @@ def _render_unit(
         lambda src: _render_template(env, src, ctx, reasons, directory),
     )
     for entry in legacy:
+        if not ships(entry):
+            continue
+        if isinstance(entry, dict):
+            entry = {k: v for k, v in entry.items() if k != "when"}
         package.legacy.append(
             legacy_entry(
                 entry,

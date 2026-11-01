@@ -234,19 +234,19 @@ precheck sends `HEAD /v1/decisions` for that reason: LAPI answers a HEAD from th
 alone, adding no row and stamping no `last_pull`. The `DECIDED:` note in
 `ansible/roles/k8s/traefik/files/traefik_bouncer_key_precheck.py` cites the upstream code.
 
-### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
-The tailer read a Traefik access-log line before Traefik finished writing it. Each occurrence is
-one request the WAF never sees, about 0.05% of traffic. Nothing here fixes it, and the syslog
-sources (`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`) lose lines silently.
+### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read the engine image fixes
+The tailer read a Traefik access-log line before Traefik finished writing it. Each occurrence
+was one request the WAF never saw, about 0.05% of traffic, and the syslog sources
+(`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`) lost lines silently.
 
-**Re-check #2124 on the next `crowdsec_k8s_image` bump**
-(set in `ansible/inventory/group_vars/all.yml`): a release carrying
-crowdsecurity/crowdsec#4678 closes it, and v1.8.2 is the first such release. Upstream had not
-published its image on 2026-10-28, and `docs/crowdsec-waf-record.md` has the dates. The pin
-sits in the `k8s_autodeploy: false` Renovate group, so the bump arrives as a `manual —` PR.
-Verify with
-`probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h` returning
-nothing.
+Only the engine binary fixes it. crowdsecurity/crowdsec#4678 sets `CompleteLines: true` on the
+file datasource's tailer, and every release from v1.8.2 carries it. `CompleteLines` is not an
+`acquis.yaml` key, so nothing in this repo can set it. `crowdsec_k8s_image` (set in
+`ansible/inventory/group_vars/all.yml`) has pinned a release carrying the fix since #2124.
+A recurrence therefore means the pinned image lost the fix, not that a config changed.
+`docs/crowdsec-waf-record.md` has the measurements and the dates. To check, run
+`probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h`, which
+returns nothing while the fix holds.
 
 ## Which Prometheus job covers which agent
 

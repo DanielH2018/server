@@ -253,6 +253,14 @@ enable:
 # leaves a landing already running to finish, but a session that started before the agent's
 # profile changed still hands its next landing to the retired name.
 legacy:
+  # Not Ansible-era: the textfiles a disarmed timer leaves behind. Reconcile stops the dropped
+  # unit in step 1, before it retires these, so a run in flight cannot write one back.
+  - path: /var/lib/node-exporter-textfile/fanout_operator_waits.prom
+    when: not claude_code_fanout_server_lander_enabled
+  - path: /var/lib/node-exporter-textfile/claude-fanout-server-lander.prom
+    when: not claude_code_fanout_server_lander_enabled
+  - path: /var/lib/node-exporter-textfile/claude-pipeline-timeline.prom
+    when: not claude_code_pipeline_timeline_enabled
   - {unit: claude-rc.service}
   - {unit: claude-rc-alert.service}
   - {unit: claude-rc-restart.service}

@@ -148,8 +148,11 @@ Nothing in this repo fixes it. `CompleteLines` is not an `acquis.yaml` key, Trae
 2026-10-19, and v1.8.2 is the first release that carries it. The v1.8.2 source release was
 published on 2026-10-26. Upstream publishes the Docker image through a separate, manually
 dispatched workflow (`publish-docker-release.yml`). On 2026-10-28 neither Docker Hub nor GHCR
-carried a v1.8.2 image, so `crowdsec_k8s_image` stays on v1.8.1. For comparison, the v1.8.1
-image was published 100 minutes after its release. Building a patched image through `k8s/image-builder` was rejected: it would take the WAF
+carried a v1.8.2 image. For comparison, the v1.8.1 image was published 100 minutes after its
+release. Docker Hub carried the v1.8.2 image by 2026-11-01, and #2124 moved
+`crowdsec_k8s_image` to it that day, ahead of Renovate's 7-day soak. Between v1.8.1 and v1.8.2
+the image's Dockerfile changed only its Go base image, so the build that links `cscli`
+statically is unchanged. Building a patched image through `k8s/image-builder` was rejected: it would take the WAF
 binary out of Renovate's view for a 0.05% loss.
 
 ## The Metabase dashboard was removed (2026-08-22)
