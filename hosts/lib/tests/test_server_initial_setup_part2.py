@@ -83,16 +83,23 @@ def test_reconcile_retires_the_compose_era_crowdsec_hub_cron(manifest):
     assert retired.get("Update Crowdsec Hub") == "root"
 
 
-def test_reconcile_retires_the_leaked_eval_run_textfile(package, manifest):
-    leaked = "/var/lib/node-exporter-textfile/eval-run.prom"
-    assert {"path": leaked} in manifest["legacy"]
-    # The entry deletes a live producer's file once anything on this host writes the check.
-    writers = [
+def _eval_run_writers(package: host_mode.Package) -> list[str]:
+    return [
         dst
         for dst, (body, *_) in package.files.items()
         if b"write_check_textfile eval-run " in body
     ]
-    assert writers == []
+
+
+def test_reconcile_retires_the_leaked_eval_run_textfile(package, manifest):
+    leaked = "/var/lib/node-exporter-textfile/eval-run.prom"
+    assert {"path": leaked} in manifest["legacy"]
+    # The entry deletes a live producer's file once anything on this host writes the check.
+    # daniel-box ships the producer, so the pattern must still find it there.
+    assert _eval_run_writers(host_mode.render_host("daniel-box")) == [
+        "/usr/lib/homelab/eval-run"
+    ]
+    assert _eval_run_writers(package) == []
 
 
 def test_the_scans_read_this_hosts_own_tokens(package):
