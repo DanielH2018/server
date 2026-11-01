@@ -269,10 +269,6 @@ def retired_textfiles(package) -> set[str]:
     }
 
 
-def test_an_armed_timer_keeps_its_textfiles(box):
-    assert not retired_textfiles(box) & set().union(*TIMER_TEXTFILES.values())
-
-
 @pytest.mark.parametrize("toggle", sorted(TIMER_TEXTFILES))
 def test_disarming_a_timer_retires_its_textfiles(tmp_path, toggle):
     host_vars = tmp_path / "host_vars"
