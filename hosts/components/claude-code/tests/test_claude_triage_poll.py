@@ -274,6 +274,20 @@ def test_a_warning_fall_starts_nothing_and_shadow_records_it_skipped(
 
 
 @pytest.mark.parametrize("mode", ["armed", "shadow"])
+def test_a_warning_floor_opens_the_warning_fall(tmp_path, mode) -> None:
+    config = _config(tmp_path, mode, "POLL_MIN_SEVERITY=warning\n")
+    started = []
+    read = _reads([], _fall("Registry GC", severity="warning"))
+    assert _run(config, read, started) == 0  # the baseline
+    assert _run(config, read, started) == 0
+    if mode == "armed":
+        assert started == ["20261015t1830-kuma-registry-gc"]
+    else:
+        (line,) = (tmp_path / "state" / "shadow.jsonl").read_text().splitlines()
+        assert "skipped" not in json.loads(line)
+
+
+@pytest.mark.parametrize("mode", ["armed", "shadow"])
 def test_armed_mode_starts_a_run_and_shadow_mode_only_logs_it(tmp_path, mode) -> None:
     config = _config(tmp_path, mode)
     started = []
