@@ -1544,6 +1544,9 @@ jobs:
     # `review_ci.ready_for_ci` waits for the ready run and turns the PR back into a draft if
     # none starts.
     if: ${{ always() && github.event.pull_request.draft != true }}
+    # land.sh's CI budget sums this chain's timeouts (test_land_ci_budget.py), so the gate
+    # names its own rather than inheriting GitHub's 360 minutes.
+    timeout-minutes: 5
     # `statuses: write` is for the record step below, on a pull request only. The job runs no
     # checkout and no repository code.
     permissions:

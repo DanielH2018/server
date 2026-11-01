@@ -229,6 +229,10 @@ list, and the caps and the poll mode are pinned in `templates/claude-triage-pins
 
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as; its home and
 `claude_code_rc_workdir` follow it, and the unit is sandboxed only when it is not `sys_user`.
+The sandbox hides `/home`, `/root` and `/run/user`, then binds back `/run/user/<uid>` and points
+`XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` at it, so `systemd-run --user` works from a
+phone session (#6764). The uid is `claude_code_user_uid`, which has no default: a host that
+sets `claude_code_user` to the agent sets it in host_vars to the uid its `package.yml` declares.
 
 ## The artifacts node's two timers
 

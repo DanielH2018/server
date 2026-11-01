@@ -479,9 +479,10 @@ def github_token(source: Mapping[str, str], run: Callable) -> str | None:
     Why authenticate a read of a public repo. The anonymous limit is 60 requests/hour PER
     SOURCE IP, and every GitHub call from this host shares it: the tick's gate, ``await_ci.py``
     during a landing, renovate_notify, the ruleset-drift cron. ``await_ci.py`` polls every 20s
-    for up to land.sh's 1200s budget, which would be 61 polls of 2 or more requests each. When
-    this returns None it polls every 90s and skips its descendant walk, which bounds a wait at
-    30 requests (``await_ci.ANONYMOUS_INTERVAL_S``, #6148). Before that back-off, two
+    for up to land.sh's CI budget, which would be hundreds of polls of 2 or more requests each.
+    When this returns None it makes at most 15 polls, at least 90s apart, and skips its
+    descendant walk, which bounds a wait at 30 requests (``await_ci.ANONYMOUS_MAX_POLLS``,
+    #6148). Before that back-off, two
     ``land.sh`` runs in an hour exhausted it, after which the tick's
     gate reads ``HTTP Error 403: rate limit exceeded`` and defers as ``CI not finished``. That
     is correct fail-closed behaviour, and also a deploy outage nobody asked for. Measured

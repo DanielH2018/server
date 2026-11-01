@@ -308,11 +308,16 @@ refuses such a file on any branch.
 daniel-box sets it to the agent. The variable routes the unit's `User=`, `Group=`, `HOME`,
 `PATH`, `KUBECONFIG`, `ExecStart` and `WorkingDirectory`, and `claude_code_memory_sync_dir`.
 
-- **Hardening renders only for a non-operator user.** `ProtectHome=yes`, `NoNewPrivileges=yes`
+- **Hardening renders only for a non-operator user.** `ProtectHome=tmpfs`, `NoNewPrivileges=yes`
   and `PrivateTmp=yes` render when `claude_code_user` is not `sys_user`. As `ubuntu`,
   `ProtectHome` would hide the unit's own home and checkout, and `NoNewPrivileges` would stop sudo
   in phone sessions. The agent's home sits under `/var/lib`, so `ProtectHome` hides every human
   home without hiding the agent's.
+- **A phone session reaches the agent's user manager.** `ProtectHome` also hides `/run/user`.
+  `ProtectHome=yes` therefore hid the agent's bus socket, and `systemd-run --user` failed with
+  `Failed to connect to bus: Permission denied` (#6764). The unit uses `tmpfs` instead, binds
+  back `/run/user/<uid>` alone, and sets `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS`. The
+  uid is `claude_code_user_uid` in daniel-box's host_vars.
 - **The agent takes the operator's user-level config through chezmoi.** [The operator's
   dotfiles](#the-operators-dotfiles) describes it. `claude_code_agent_operator_config` switches
   the older copied subset off, and `tasks/agent_operator_config.yml` has its mechanics. The
@@ -421,8 +426,8 @@ a clone, `uv`, Claude Code, a GitHub identity and a signing key.
   `claude_agent_ssh_key_path`, and renders `~/.ssh/config` with one stanza per peer whose switch
   is on: `User claude`, the peer's `server_ip`, `IdentitiesOnly yes` and
   `StrictHostKeyChecking accept-new`.
-- **Both hosts.** The agent user lingers, so a batch started with `systemd-run --user` over ssh
-  outlives the call that started it.
+- **Both hosts.** The agent user lingers, so a batch started with `systemd-run --user`, over ssh
+  or from a phone session, outlives the call that started it.
 - **The Pi** gets nothing. The `docker`-group reasoning above holds for it.
 
 Bringing a peer up is the operator's job, in this order: apply `claude_code` on daniel-box to
