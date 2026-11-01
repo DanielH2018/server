@@ -460,12 +460,11 @@ def record_textfile(code: int, verdict_ts: int) -> None:
 
 
 def log_verdict(status: str, message: str) -> None:
-    """Record the verdict in syslog, where `probe.py alerts` and the Alert History board read it.
+    """Record the verdict in syslog, the local record that Loki keeps.
 
     Prometheus keeps the textfile's CURRENT state only, so a DOWN that has since recovered
-    leaves no trace there. `probe.py alerts` reconstructs episodes for host crons by matching
-    `status=down` in syslog, and without this line this check was invisible to it (2026-08-22
-    review M3).
+    leaves no trace there. Without this line the check left no `status=down` line in syslog
+    at all (2026-08-22 review M3).
 
     NOTICE, not INFO, on the up path. initial_setup's system-tuning.yml sets BOTH
     MaxLevelStore=notice and MaxLevelSyslog=notice on these hosts, so an info-level line is

@@ -8,6 +8,6 @@ Type=oneshot
 User={{ sys_user }}
 SyslogLevel=notice
 ExecStart=/usr/lib/homelab/claude-otel-health
-# DECIDED: the tag stays `claude-otel-health`. It is a join key: the Alert History board's syslog
-# query and `probe.py alerts` read it (claude-otel-health.sh.j2).
+# DECIDED: the tag stays `claude-otel-health`. It is a join key: a Loki query for the run's
+# `status=` line selects it (claude-otel-health.sh.j2).
 SyslogIdentifier=claude-otel-health

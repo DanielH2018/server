@@ -216,7 +216,7 @@ def test_an_error_exit_that_writes_no_log_pushes_down(tmp_path):
     assert "rkhunter exited 1" in pushed[1]
     assert "Invalid option specified: --bogus" in pushed[1], pushed[1]
     assert code == 1
-    # The durable record `probe.py alerts` reconstructs the episode from.
+    # The durable record of the verdict, which Loki keeps.
     assert any(line.startswith("rkhunter-check: status=down ") for line in logged), (
         logged
     )

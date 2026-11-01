@@ -296,7 +296,7 @@ def test_the_kubeconfig_names_the_paths_the_sidecar_mounts(pod):
 
 
 def test_each_log_line_carries_the_syslog_prefix_and_is_flushed():
-    # monitor-bridge's Swallowed Push Verdicts and probe.py alerts both want exactly two
+    # monitor-bridge's Swallowed Push Verdicts check wants exactly two
     # whitespace-free tokens before the tag: a time and the host.
     printed = []
     cj.emit(

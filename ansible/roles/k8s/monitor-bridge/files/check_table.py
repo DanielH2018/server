@@ -11,7 +11,6 @@ This table is the one place a check is declared. Everything else derives from it
 - `k8s/uptime-kuma/templates/static-monitors.yaml.j2` renders one push tile per row.
 - `k8s/uptime-kuma/templates/status-page-sync-configmap.yaml.j2` pins each tile into the status
   page group its `status_group` names.
-- `probe.py kuma-drift` expands the same rows when it reads that template.
 
 The two templates read this file through `ansible/filter_plugins/py_table.py`, which parses it
 without running it. That is why every field but `fn` is a literal, and why this module imports

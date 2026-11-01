@@ -156,7 +156,7 @@ write_verdict() {
 }
 
 # Every exit path reports through here, and the syslog line is unconditional — it is the only
-# record of the message, and `probe.py alerts` reconstructs history from Loki.
+# record of the message, and Loki keeps it (`probe.py loki-query` reads it).
 report() {
   local status="$1" msg="$2"
   logger -t "$TAG" "status=${status} run=${RUN_ID} ${msg}"
