@@ -128,9 +128,9 @@ def merge_tree(
     scratch directory is deleted when the call returns. The exit code and output are git's:
     0 for a clean merge, 1 for a conflict, anything else for a failure.
 
-    Unquarantined, the worktree content check wrote about 1,500 loose objects into the primary
-    checkout's store each time origin/master advanced, which pushed ``git gc --auto`` into
-    writing ``gc.log`` and then refusing to run (#6736).
+    Every result left in the store is unreachable and inside gc's prune window, so a caller
+    that asks once per worktree per master advance would keep ``git gc --auto`` writing
+    ``gc.log`` and refusing to run.
     """
     common = git_stdout(
         "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=cwd, check=False
