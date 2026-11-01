@@ -7,7 +7,7 @@ Three guards moved here with the service from `ansible/tests/services/`
 
 - **Labels.** `container`, `job`, `machine` and `stream` are the contract that lets one LogQL query
   span the estate: the loki-homelab rule `LokiPiLogsSilent` selects `{job="pi"}`, and
-  `probe.py alerts` reads `{job="syslog"} |= "status=down"` and relies on `machine="daniel-pi"`.
+  a query for `{job="syslog"} |= "status=down"` finds the Pi's verdicts by `machine="daniel-pi"`.
   The config is River, which no YAML guard can parse, so these read the rendered config as text.
 - **HTTP surface.** The listener is LAN-published, so two flags drop /debug/pprof and /-/support,
   an `http.auth` block puts every other path behind basic auth, and

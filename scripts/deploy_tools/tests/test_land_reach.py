@@ -450,14 +450,14 @@ def test_setup_file_hosts_falls_back_to_the_role_when_no_task_names_the_file(
 
 
 def test_remaining_setup_hosts_note_stays_empty_for_pr_1241():
-    """PR #1241's real shape, against this repo's own tree: two `initial_setup` cron
-    templates that `tasks/crons.yml` installs on daniel-box alone. The role-level reach
+    """PR #1241's real shape, against this repo's own tree: an `initial_setup` cron
+    template that `tasks/crons.yml` installs on one host alone. The role-level reach
     said all three hosts and the landing exited 1 with `needs-manual-apply`, prescribing
     two playbook runs that change nothing -- 7 of the 18 such verdicts in the two days to
-    2026-09-05 had this shape."""
+    2026-09-05 had this shape. The PR's second template, the setup-drift push credentials,
+    went in M6 batch B2's Cutover-2."""
     files = [
         "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
-        "ansible/roles/setup/initial_setup/templates/setup-drift-kuma-push.env.j2",
     ]
     assert land_reach.remaining_setup_hosts_note(files, "daniel-server") == ""
 

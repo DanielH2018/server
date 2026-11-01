@@ -9,26 +9,24 @@ as CronJobs or as daniel-box root crons (the operator's rulings of 2026-10-18 on
 
 Four jobs run, each on its old host cron's UTC schedule:
 
-    crowdsec-remote-allowlist  remote_allowlist.py  every 5 minutes  pushes CrowdSec Remote Allowlist
-    crowdsec-appsec-verify     appsec_verify.py     every 15 minutes pushes CrowdSec AppSec
+    crowdsec-remote-allowlist  remote_allowlist.py  every 5 minutes  exports its verdict
+    crowdsec-appsec-verify     appsec_verify.py     every 15 minutes exports its verdict
     crowdsec-bouncer-prune     bouncer_prune.py     at minute 17     logs only
-    crowdsec-home-allowlist    home_allowlist.py    every 5 minutes, pushes CrowdSec Home Allowlist
+    crowdsec-home-allowlist    home_allowlist.py    every 5 minutes, exports its verdict
                                                     one minute after the crowdsec-home-ips CronJob
 
-Each job that pushes to Kuma also exports its verdict as gauges on `/metrics`, on the port in
-`JOBS_METRICS_PORT` (`jobs_metrics.py`). The export runs beside the push, which M6 removes
-later. The bouncer prune exports nothing, as it pushes nothing.
+Each job but the prune exports its verdict as gauges on `/metrics`, on the port in
+`JOBS_METRICS_PORT` (`jobs_metrics.py`), which the `pod-producers` rules read. M6 batch B6b's
+Cutover-2 removed the push to Uptime Kuma that used to run beside the export.
 
 Each run is a child `python3` process, so a job that crashes or hangs cannot stop this one. A
 run that outlives its timeout is killed and reported as down. A job still running when its next
 slot comes is skipped for that slot, as `concurrencyPolicy: Forbid` would skip it. This process
 does what each job's bash wrapper did on the host: it takes the child's exit code and last
-output line as the verdict, prints `<tag>: status=<up|down> <summary>` to stdout, and pushes the
-verdict to the job's Kuma monitor. Each stdout line carries the host crons' syslog prefix,
+output line as the verdict, prints `<tag>: status=<up|down> <summary>` to stdout, and records
+the verdict for `/metrics`. Each stdout line carries the host crons' syslog prefix,
 `<UTC time> <pod name> <tag>: <message>`, and is flushed as it is written. monitor-bridge's
-Swallowed Push Verdicts check and `probe.py alerts` both parse that shape from
-`{container="crowdsec-jobs"}`. The push URL comes from the environment variable the job
-names, which the pod reads from the `crowdsec-jobs` Secret.
+Swallowed Push Verdicts check parses that shape from `{container="crowdsec-jobs"}`.
 
 No job runs in the first `STARTUP_GRACE_S` seconds. The engine container writes
 `/etc/crowdsec` on start, and a job that ran before it finished would page a fault that does
@@ -39,7 +37,7 @@ Usage:
     python3 /jobs/crowdsec_jobs.py               # the sidecar's command; runs until SIGTERM
     python3 /jobs/crowdsec_jobs.py --run <tag>   # one run of one job now, then exit
 
-`--run` exits with the job's own exit code and pushes as a scheduled run does. `-h` and
+`--run` exits with the job's own exit code and prints as a scheduled run does. `-h` and
 `--help` print this text and exit 0.
 """
 
@@ -50,14 +48,13 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
 import jobs_metrics
-import kuma_push
 
 JOBS_DIR = Path(__file__).resolve().parent
 STARTUP_GRACE_S = 120
@@ -80,8 +77,7 @@ class Job:
         offset: the minute of each period the run starts at.
         timeout_s: how long a run may take before it is killed and reported down. Each is
             below its period, so a hung run is reported before its next slot.
-        push_env: the environment variable holding the job's Kuma push URL, or None for a
-            job with no Kuma monitor.
+        exports: whether the job's verdict is served on `/metrics`.
     """
 
     tag: str
@@ -89,7 +85,7 @@ class Job:
     period: int
     offset: int
     timeout_s: int
-    push_env: str | None
+    exports: bool
 
 
 JOBS = (
@@ -99,7 +95,7 @@ JOBS = (
         period=5,
         offset=0,
         timeout_s=180,
-        push_env="REMOTE_ALLOWLIST_PUSH_URL",
+        exports=True,
     ),
     Job(
         "crowdsec-appsec-verify",
@@ -107,9 +103,9 @@ JOBS = (
         period=15,
         offset=0,
         timeout_s=300,
-        push_env="APPSEC_PUSH_URL",
+        exports=True,
     ),
-    # No Kuma monitor: a failed run only lets bouncer rows accumulate until the next run
+    # No verdict export: a failed run only lets bouncer rows accumulate until the next run
     # succeeds. Its log line is the evidence (the role's CLAUDE.md).
     Job(
         "crowdsec-bouncer-prune",
@@ -117,7 +113,7 @@ JOBS = (
         period=60,
         offset=17,
         timeout_s=600,
-        push_env=None,
+        exports=False,
     ),
     # One minute after each crowdsec-home-ips CronJob slot, so each run reads the lookup that
     # slot wrote rather than the one before it.
@@ -127,17 +123,17 @@ JOBS = (
         period=5,
         offset=1,
         timeout_s=180,
-        push_env="HOME_ALLOWLIST_PUSH_URL",
+        exports=True,
     ),
 )
 
-# The verdicts of the jobs that push to Kuma, served on /metrics by the `__main__` block. A job's
+# The verdicts of the jobs that export, served on /metrics by the `__main__` block. A job's
 # timestamp may age DEADLINE_PERIODS periods before the rule that reads it calls the job stale.
 EXPOSITION = jobs_metrics.Exposition(
     {
         job.tag: job.period * 60 * jobs_metrics.DEADLINE_PERIODS
         for job in JOBS
-        if job.push_env
+        if job.exports
     }
 )
 
@@ -175,20 +171,17 @@ def run_job(
     job: Job,
     *,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
-    push: Callable[..., bool] = kuma_push.kuma_push,
-    env: Mapping[str, str] | None = None,
     out: Callable[[str], None] = emit,
     export: Callable[[str, bool, float], None] | None = None,
 ) -> int:
-    """Runs `job` once, prints its verdict, records it for `/metrics` and pushes it.
+    """Runs `job` once, prints its verdict and records it for `/metrics`.
 
-    `export` is `Exposition.record`'s signature. Only a job with a Kuma monitor exports, and
+    `export` is `Exposition.record`'s signature. Only a job that exports records, and
     only the scheduler passes it: a `--run` is a second process that serves nothing.
 
     Returns:
         The run's exit code, 1 for a run killed at its timeout.
     """
-    environ: Mapping[str, str] = os.environ if env is None else env
     try:
         done = runner(
             [sys.executable, str(JOBS_DIR / job.script)],
@@ -210,11 +203,8 @@ def run_job(
         for line in output.splitlines()[:-1]:
             out(f"{job.tag}: {line}")
     out(f"{job.tag}: status={status} {summary}")
-    if job.push_env and export is not None:
+    if job.exports and export is not None:
         export(job.tag, returncode == 0, time.time())
-    if job.push_env:
-        base, _, token = environ.get(job.push_env, "").partition("/api/push/")
-        push(status, summary, base, token, log=lambda line: out(f"{job.tag}: {line}"))
     return returncode
 
 

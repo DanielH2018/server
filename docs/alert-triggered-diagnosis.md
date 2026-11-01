@@ -31,14 +31,14 @@ toolkit, and the `homelab-network-diagnostician` agent is a read-only diagnostic
 rebuilt DOWN episodes from Loki. M6's PR B-2 moved it onto Prometheus' `ALERTS`, which keeps 30
 days, so `--limit` and the Loki cap below no longer apply to it.
 
-`probe.py alerts` reads the DOWN lines from two streams in the `loki-homelab` store:
+`probe.py alerts` read the DOWN lines from two streams in the `loki-homelab` store:
 monitor-bridge's checks, and the host crons that push to Kuma through syslog. Loki keeps 744h
 (`loki_homelab_retention` in `ansible/roles/k8s/loki-homelab/defaults/main.yml`), so **the
 issue's 90-day question cannot be answered from Loki at all.** A 90-day figure below is an
 extrapolation from 31 days.
 
-One `probe.py alerts --days 30` call does not reach 31 days either. Loki returns at most 5000
-lines per query (`max_entries_limit_per_query`), and the probe keeps the newest lines:
+One `probe.py alerts --days 30` call did not reach 31 days either. Loki returns at most 5000
+lines per query (`max_entries_limit_per_query`), and the probe kept the newest lines:
 
 ```text
 $ uv run python scripts/diagnostics/probe.py alerts --days 30 --limit 30000 --json

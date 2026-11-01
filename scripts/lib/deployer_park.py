@@ -217,6 +217,8 @@ class ManualPlaneRemedy:
         pins: the pin-play commands, as `(host to run it on, command)`, from
             `agent_pin_cmds`, or () for a row that does not reach the pin play (#5918).
         clear: the `clear-owed` command to run once the role is applied.
+        tags: the tags every command above selects: the line's narrowed row, or the role's own
+            tag for a whole-role line. `gitops_state.py run-owed` clears exactly these.
     """
 
     role: str
@@ -227,6 +229,7 @@ class ManualPlaneRemedy:
     agents: tuple[str, ...]
     pins: tuple[tuple[str, str], ...]
     clear: str
+    tags: frozenset[str] = frozenset()
 
 
 def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
@@ -275,6 +278,7 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
                     else ()
                 ),
                 clear=owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
+                tags=frozenset(selected),
             )
         )
     return remedies

@@ -84,7 +84,7 @@ SUCCESS=0
 VERDICT_TS=$(date +%s)
 
 # Unconditional, before the textfile write and the ping, so a DOWN verdict always leaves a
-# durable record for `probe.py alerts` to reconstruct.
+# durable record in syslog, which Loki keeps.
 logger -t disk-health "status=${STATUS} ${MSG}"
 
 # The textfile, before the ping: the file must not wait on the network. Atomic, in

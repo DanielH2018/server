@@ -14,9 +14,9 @@ true, each held by an accept/reject pair so a rule that stopped matching fails i
   * a source that ANSWERS and refuses still reports `down`. The probe is what classifies, so an
     HTTP-level failure while the link is up must not become a skip.
   * `reachout_verdict` hands back BOTH the status and the message prefix, because the caller has
-    to apply them to its own `logger` line as well as to the push: `probe.py alerts` rebuilds a
-    host cron's DOWN episodes from `{job="syslog"} |= "status=down"`, so a skip that reached only
-    the push would still read as an alert in the place an operator looks.
+    to apply them to its own `logger` line as well as to the push: that line is the host cron's
+    local record in `{job="syslog"}`, so a skip that reached only the push would still read
+    as a `status=down` there.
 """
 
 import pytest

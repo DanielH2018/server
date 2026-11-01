@@ -231,7 +231,6 @@ def test_the_pinned_lander_values_name_the_agent_profile() -> None:
 
 # The approval floor the operator chose on 2026-10-10: the grant points and the gate itself.
 FLOOR = [
-    "ansible/roles/setup/claude_code/tasks/lander.yml",
     f"hosts/components/claude-code/templates/{PATHS}",
     f"hosts/components/claude-code/templates/{UNIT}",
     f"hosts/components/claude-code/templates/{RULE}",
@@ -239,7 +238,6 @@ FLOOR = [
     f"hosts/components/claude-code/templates/{PINS}",
     "hosts/components/claude-code/component.yml",
     # Alert-triggered triage joined the floor on 2026-10-15 (test_claude_triage.py).
-    "ansible/roles/setup/claude_code/tasks/triage.yml",
     "hosts/components/claude-code/templates/claude-triage",
     "hosts/components/claude-code/templates/50-claude-triage.rules.j2",
     "hosts/components/claude-code/files/claude_triage_run.py",
@@ -247,7 +245,6 @@ FLOOR = [
     # The root inspector joined the floor with its grant (#6323).
     "hosts/components/claude-code/files/homelab_rootq.py",
     "hosts/components/claude-code/files/rootq.sh",
-    "ansible/roles/setup/claude_code/tasks/rootq.yml",
     "hosts/components/claude-code/templates/claude-rootq.sudoers.j2",
     # The agent's socket to the same inspector joined it on 2026-10-29 (#6350).
     "hosts/components/claude-code/files/homelab_rootq_socket.py",

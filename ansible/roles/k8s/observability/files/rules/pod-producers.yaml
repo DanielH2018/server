@@ -4,8 +4,8 @@
 # batch B6b, and the operator's ruling of 2026-10-23 that a pod exports its verdict through a
 # metrics endpoint rather than a textfile or a Pushgateway.
 #
-# SHADOW UNTIL B6b's CUTOVER-1b. Each rule runs beside the Kuma tile of the producer it ports, so
-# each carries `shadow: "true"` and pages nobody. Cutover-1b drops the label.
+# THESE RULES PAGE SINCE B6b's CUTOVER-1b. Each one ports the Kuma tile of a producer, and
+# Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule back.
 #
 # TWO SOURCES.
 # - The sidecar serves `homelab_check_*` on the `crowdsec-jobs` scrape job, the series shape of
@@ -36,7 +36,6 @@ groups:
         labels:
           severity: warning
           service: crowdsec
-          shadow: "true"
         annotations:
           summary: The crowdsec remote allowlist job failed its last run.
           description: >-
@@ -49,7 +48,6 @@ groups:
         labels:
           severity: critical
           service: crowdsec
-          shadow: "true"
         annotations:
           summary: The crowdsec engine has no enabled AppSec configuration or rule.
           description: >-
@@ -62,7 +60,6 @@ groups:
         labels:
           severity: warning
           service: crowdsec
-          shadow: "true"
         annotations:
           summary: The crowdsec home allowlist job failed its last run.
           description: >-
@@ -82,7 +79,6 @@ groups:
         labels:
           severity: critical
           service: crowdsec
-          shadow: "true"
         annotations:
           summary: The crowdsec-jobs sidecar has not finished a {{ $labels.check }} run in time.
           description: >-
@@ -97,7 +93,6 @@ groups:
         labels:
           severity: critical
           service: crowdsec
-          shadow: "true"
         annotations:
           summary: Prometheus has no crowdsec-jobs scrape job.
           description: >-
@@ -113,7 +108,6 @@ groups:
         labels:
           severity: warning
           service: configarr
-          shadow: "true"
         annotations:
           summary: configarr's last sync is stale, failed or logged an error.
           description: >-
@@ -127,7 +121,6 @@ groups:
         labels:
           severity: warning
           service: janitorr
-          shadow: "true"
         annotations:
           summary: janitorr logged a scheduled-task error in the last 12 hours.
           description: >-
@@ -150,7 +143,6 @@ groups:
         labels:
           severity: warning
           service: configarr
-          shadow: "true"
         annotations:
           summary: The configarr-health CronJob has not succeeded in 30 minutes.
           description: >-
@@ -169,7 +161,6 @@ groups:
         labels:
           severity: warning
           service: janitorr
-          shadow: "true"
         annotations:
           summary: The janitorr-health CronJob has not succeeded in 30 minutes.
           description: >-

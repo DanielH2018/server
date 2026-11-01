@@ -10,6 +10,7 @@ module from it, so a module the ConfigMap stops carrying fails here rather than 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_crowdsec_jobs.py
 """
 
+import dataclasses
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -50,8 +51,8 @@ def test_every_timeout_ends_a_hung_run_before_its_next_slot():
 
 
 def _run(job_tag, returncode=0, stdout="", raises=None):
-    """Runs one job through `run_job` with a stubbed child and push; returns (printed, pushes)."""
-    printed, pushes = [], []
+    """Runs one job through `run_job` with a stubbed child; returns (code, printed, exported)."""
+    printed, exported = [], []
 
     def runner(argv, **kwargs):
         assert argv == [sys.executable, str(cj.JOBS_DIR / JOBS[job_tag].script)]
@@ -60,31 +61,26 @@ def _run(job_tag, returncode=0, stdout="", raises=None):
             raise raises
         return subprocess.CompletedProcess(argv, returncode, stdout)
 
-    def push(status, msg, base, token, log):
-        pushes.append((status, msg, base, token))
-        return True
-
-    env = {
-        "REMOTE_ALLOWLIST_PUSH_URL": "http://kuma:3001/api/push/tok-remote",
-        "APPSEC_PUSH_URL": "http://kuma:3001/api/push/tok-appsec",
-    }
     rc = cj.run_job(
-        JOBS[job_tag], runner=runner, push=push, env=env, out=printed.append
+        JOBS[job_tag],
+        runner=runner,
+        out=printed.append,
+        export=lambda tag, ok, at: exported.append((tag, ok)),
     )
-    return rc, printed, pushes
+    return rc, printed, exported
 
 
-def test_a_clean_run_pushes_up_with_its_last_line():
-    rc, printed, pushes = _run(
+def test_a_clean_run_prints_up_with_its_last_line_and_exports_success():
+    rc, printed, exported = _run(
         "crowdsec-remote-allowlist", stdout="noise\nremote-ips: 2 live\n"
     )
     assert rc == 0
     assert printed == ["crowdsec-remote-allowlist: status=up remote-ips: 2 live"]
-    assert pushes == [("up", "remote-ips: 2 live", "http://kuma:3001", "tok-remote")]
+    assert exported == [("crowdsec-remote-allowlist", True)]
 
 
-def test_a_failed_run_pushes_down_and_logs_the_lines_above_its_summary():
-    rc, printed, pushes = _run(
+def test_a_failed_run_prints_down_and_logs_the_lines_above_its_summary():
+    rc, printed, exported = _run(
         "crowdsec-appsec-verify",
         returncode=1,
         stdout="Traceback line\nno enabled appsec-configs\n",
@@ -94,32 +90,39 @@ def test_a_failed_run_pushes_down_and_logs_the_lines_above_its_summary():
         "crowdsec-appsec-verify: Traceback line",
         "crowdsec-appsec-verify: status=down no enabled appsec-configs",
     ]
-    assert pushes == [
-        ("down", "no enabled appsec-configs", "http://kuma:3001", "tok-appsec")
-    ]
+    assert exported == [("crowdsec-appsec-verify", False)]
 
 
 def test_a_run_with_no_output_names_its_script_and_exit_code():
-    _, _, pushes = _run("crowdsec-appsec-verify", returncode=2)
-    assert pushes[0][:2] == ("down", "appsec_verify.py exited 2 with no output")
+    _, printed, _ = _run("crowdsec-appsec-verify", returncode=2)
+    assert printed == [
+        "crowdsec-appsec-verify: status=down appsec_verify.py exited 2 with no output"
+    ]
 
 
 def test_a_run_past_its_timeout_is_down():
-    _, _, pushes = _run(
+    _, printed, exported = _run(
         "crowdsec-remote-allowlist",
         raises=subprocess.TimeoutExpired(cmd="x", timeout=1),
     )
-    assert pushes[0][:2] == (
-        "down",
-        "remote_allowlist.py killed after its 180s timeout",
-    )
+    assert printed == [
+        "crowdsec-remote-allowlist: status=down "
+        "remote_allowlist.py killed after its 180s timeout"
+    ]
+    assert exported == [("crowdsec-remote-allowlist", False)]
 
 
-def test_the_bouncer_prune_logs_and_pushes_nothing():
-    _, printed, pushes = _run(
+def test_the_scheduler_makes_no_kuma_request():
+    """M6 batch B6b's Cutover-2 removed the push, and the module no longer imports its library."""
+    assert not hasattr(cj, "kuma_push")
+    assert "push_env" not in {f.name for f in dataclasses.fields(cj.Job)}
+
+
+def test_the_bouncer_prune_logs_and_exports_nothing():
+    _, printed, exported = _run(
         "crowdsec-bouncer-prune", returncode=1, stdout="refused: no live row\n"
     )
-    assert pushes == []
+    assert exported == []
     assert printed == ["crowdsec-bouncer-prune: status=down refused: no live row"]
 
 
@@ -239,11 +242,6 @@ def test_the_sidecar_runs_the_scheduler_from_the_configmap_with_the_tools_the_mo
     [engine] = [c for c in pod["containers"] if c["name"] == "crowdsec"]
     for path in ("/etc/crowdsec", "/var/lib/crowdsec/data"):
         assert mounts[path] == _mounts(engine)[path]
-    # Each pushing job's variable reaches the sidecar from the crowdsec-jobs Secret.
-    env = {e["name"]: e.get("valueFrom", {}) for e in sidecar["env"]}
-    for job in cj.JOBS:
-        if job.push_env:
-            assert env[job.push_env]["secretKeyRef"]["name"] == "crowdsec-jobs"
 
 
 def test_the_engines_trace_link_resolves_to_a_writable_directory_in_the_sidecar(pod):
@@ -298,7 +296,7 @@ def test_the_kubeconfig_names_the_paths_the_sidecar_mounts(pod):
 
 
 def test_each_log_line_carries_the_syslog_prefix_and_is_flushed():
-    # monitor-bridge's Swallowed Push Verdicts and probe.py alerts both want exactly two
+    # monitor-bridge's Swallowed Push Verdicts check wants exactly two
     # whitespace-free tokens before the tag: a time and the host.
     printed = []
     cj.emit(

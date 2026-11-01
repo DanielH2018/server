@@ -4,8 +4,9 @@ H4.3a added the declared `upsmon.conf` output, and H4.3c added its consumers. Th
 the output's mode, owner, `persist` flag and dependent, the absence of a symlink onto the
 nut-client conffile, the upsd endpoint and the placeholder in the MONITOR line, and the `role:`
 key that lets a component render the `nut_host` role's templates and defaults in place. They also
-hold the nut-monitor drop-in and its boot order, the watchdog unit and its credential, the udev
-rule, the legacy entries and the manifest rows reconcile reads.
+hold the nut-monitor drop-in and its boot order, the watchdog unit (which loads no credential
+since M6 batch B4's Cutover-2 dropped its Kuma push), the udev rule, the legacy entries and the
+manifest rows reconcile reads.
 
 Run: uv run pytest hosts/lib/tests/test_nut_secondary_component.py
 """
@@ -95,6 +96,7 @@ def test_a_role_template_with_no_role_is_refused(tmp_path):
 UNITS = "/usr/lib/systemd/system"
 DROPIN = f"{UNITS}/nut-monitor.service.d/50-homelab.conf"
 WATCHDOG_UNIT = f"{UNITS}/homelab-ups-watchdog.service"
+# The retired push token, which the package still names for `host_secrets.py check`.
 TOKEN = "ups_secondary_daniel_server_push_token"
 # The role's udev rule, pinned here because H4.3c deleted the Ansible tasks that held its text.
 RULE = (
@@ -122,18 +124,6 @@ def boot_order_problems(dropin: str) -> list[str]:
     ]
 
 
-def credential_problems(unit: str, credentials: list[str]) -> list[str]:
-    """What a unit's `LoadCredential=` lines get wrong against the package's credentials."""
-    loaded = [
-        line.partition("=")[2].partition(":")[2].removeprefix("/run/credstore/")
-        for line in unit.splitlines()
-        if line.startswith("LoadCredential=")
-    ]
-    return [
-        f"{key} is not a package credential" for key in loaded if key not in credentials
-    ] + [f"loads {key}, not {TOKEN}" for key in loaded if key != TOKEN]
-
-
 def test_the_drop_in_points_upsmon_at_the_rendered_file_and_orders_after_secrets(
     package,
 ):
@@ -152,21 +142,19 @@ def test_a_drop_in_with_requires_or_no_confpath_is_flagged():
     ]
 
 
-def test_the_watchdog_loads_daniel_servers_own_token(package):
-    # R10-01: a render built without `inventory_hostname` names `ups_secondary_push_token`.
+def test_the_watchdog_loads_no_credential_and_the_package_still_names_the_token(
+    package,
+):
     unit = text(package, WATCHDOG_UNIT)
-    assert f"LoadCredential=kuma_push_token:/run/credstore/{TOKEN}" in unit
-    assert credential_problems(unit, package.credentials) == []
-
-
-def test_a_unit_naming_the_other_hosts_token_is_flagged():
-    unit = "LoadCredential=kuma_push_token:/run/credstore/ups_secondary_push_token\n"
-    assert len(credential_problems(unit, [TOKEN])) == 2
+    assert "LoadCredential=" not in unit
+    # B4's token PR removes it from the package and daniel-server's SOPS file together.
+    assert TOKEN in package.credentials
 
 
 def test_the_watchdog_ships_as_a_plain_package_script_on_a_timer(package):
     script = "/usr/lib/homelab/ups-secondary-health"
-    assert "source /usr/lib/homelab/kuma-push-lib.sh" in text(package, script)
+    assert "write_check_textfile ups-secondary-health" in text(package, script)
+    assert "kuma_push" not in text(package, script)
     assert package.files[script][1] == 0o755
     assert f"ExecStart={script}" in text(package, WATCHDOG_UNIT)
     assert "OnCalendar=*:0/10" in text(package, f"{UNITS}/homelab-ups-watchdog.timer")
@@ -184,7 +172,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     assert "nut-monitor.service" in manifest["units"]
     assert "homelab-ups-watchdog.timer" in manifest["enable_links"]
     # These components retire their own entries; the rest are the package's and nut's.
-    others = ("claude-code", "host-maintenance", "integrity-scans")
+    others = ("claude-code", "host-maintenance", "integrity-scans", "worktree-sweep")
     # claude-code's one templated entry names daniel-server's sys_user, and a `when:` never
     # reaches the manifest.
     theirs = [
@@ -206,6 +194,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
         {"path": "/etc/healthchecks/ping.env"},
         {"path": "/etc/healthchecks"},
         {"cron": "Update Crowdsec Hub", "user": "root"},
+        {"path": "/var/lib/node-exporter-textfile/eval-run.prom"},
         {"cron_file": "ups-secondary-health"},
         {"path": "/usr/local/bin/ups-secondary-health.sh"},
         {"path": "/etc/nut/kuma-push.env"},

@@ -65,6 +65,7 @@ from dev.k8s_autodeploy_counts import autodeploy_stances
 from fragment_readers import (
     container_udp_port,
     host_has_docker,
+    hosts_listing_component,
     module_constant,
     parse_jails,
     registry_counts,
@@ -191,7 +192,7 @@ def _traefik_ports() -> tuple[str, list[str]]:
 
 def deadman_inputs(
     estate: Estate | None = None,
-) -> tuple[dict, dict, dict, dict, dict, dict[str, bool], dict]:
+) -> tuple[dict, dict, dict, dict, dict, dict[str, bool], dict, list[str]]:
     """The arguments `deadman_crons` takes, read from the tree.
 
     Shared with the monitor-bridge expectations test, so the fragment and the test cannot read
@@ -206,6 +207,7 @@ def deadman_inputs(
         estate.role_vars(INITIAL_SETUP_ROLE),
         host_has_docker(estate),
         estate.role_vars(OBSERVABILITY_ROLE),
+        hosts_listing_component("worktree-sweep"),
     )
 
 
@@ -219,6 +221,7 @@ def _deadman() -> tuple[str, list[str]]:
         "ansible/inventory/group_vars/all.yml",
         "ansible/inventory/hosts.ini",
         "ansible/inventory/host_vars/",
+        *(f"hosts/{h}/package.yml" for h in hosts_listing_component("worktree-sweep")),
     ]
 
 

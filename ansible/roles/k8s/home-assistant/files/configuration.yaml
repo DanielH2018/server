@@ -312,7 +312,8 @@ logger:
     # monitor-bridge's log-burst arm matched in this container came from this logger: 197 hits of
     # its pattern `(?i)(panic:|fatal|traceback|out of memory)`, all of them a bare `Traceback
     # (most recent call last):`, against exactly 197 `Exception thrown when calling cast status
-    # listener` records. The bursts reach 21-30 lines/hour against LOG_ERROR_MAX=20, so they held
+    # listener` records. The bursts reach 21-30 lines/hour against a threshold of 20 per hour
+    # (the `WorkloadLogErrors` rule in loki-homelab's homelab-logs.yaml keeps it), so they held
     # the composite `k8s_workloads` tile red 11 times in 14 days, and a tile already red reports
     # no new DOWN transition for a real replica, crashloop or DaemonSet failure.
     #
@@ -344,7 +345,7 @@ logger:
     # firing" from "silenced". The operator accepted the fault on 2026-09-30 (#2800) and
     # unpinned the view theme whose receiver TypeError was the `frontend.js` signal above, so
     # that signal is gone too. A failed cast still logs `_handle_signal_show_view`. The
-    # rejected alternative is monitor-bridge's LOG_ERROR_IGNORE, whose own comment says a
-    # growing ignore list means the arm is decaying. `pychromecast.socket_client` keeps its
-    # default level: its connect-retry lines carry no traceback, so the arm never counted them.
+    # rejected alternative was an ignore list in the log-error check, because a growing ignore
+    # list means the check is decaying. `pychromecast.socket_client` keeps its default level:
+    # its connect-retry lines carry no traceback, so the pattern never matches them.
     pychromecast.controllers: critical

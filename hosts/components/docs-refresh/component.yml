@@ -1,8 +1,6 @@
 # The generated-docs refresh on daniel-box (H7.10a, docs/target-architecture/host/h7-delete-ansible.md).
 # Until H7.36 initial_setup installed it as the "Refresh generated docs" cron. Now
 # homelab-docs-refresh.timer starts homelab-docs-refresh.service at 06:17 and 18:17, as sys_user.
-# The push token arrives through LoadCredential= from /run/credstore/docs_refresh_push_token,
-# which homelab-secrets.service fills from daniel-box's SOPS file.
 #
 # The tmpfiles.d file creates `docs_host_site_dir`, the docs pod's hostPath (`type: Directory`),
 # and the commit-failure stamp directory. The service runs `systemd-tmpfiles --create` on it in
@@ -26,14 +24,18 @@
 #   the commit-failure stamp under `/var/lib/homelab/docs-refresh.d`.
 # - Authoritative sources: the primary checkout as the git-tree lock holds it, and origin's
 #   branch list for the unlanded-branch guard.
-# - Required evidence: `status=<up|down> <msg>` in the log, a push to "Docs Refresh", and
-#   `docs-refresh.prom` in the node_exporter textfile directory.
+# - Required evidence: `status=<up|down> <msg>` in the log, and `docs-refresh.prom` in the
+#   node_exporter textfile directory, which DocsRefreshFailed and DocsRefreshNotReporting read.
 # - Next-run review: before adding a fourth staged path, check no prek hook matching it can fail
 #   on generator output. `docs/host-baseline-record.md`'s *The generated-docs refresh cron, in
 #   detail* has why, the `PUSH_STATUS` default and the `vale` exception.
 #
 # ENFORCED: hosts/lib/tests/test_docs_refresh_component.py, and the failure-path tests in
 # ansible/tests/setup/test_docs_refresh_*.py, which read the rendered script.
+# No unit loads this key, because M6 batch B2's Cutover-2 dropped the Kuma push. It stays listed
+# because `host_secrets.py check` pins the names a host's tree declares to that host's SOPS file,
+# and changing the file takes the operator's `host_secrets.py sync daniel-box`. B2's token PR
+# removes the key here and in the file in one step.
 credentials:
   - docs_refresh_push_token
 files:

@@ -220,6 +220,9 @@ claude_code_login_caps_enabled: true
 # gets the same caps as claude-rc.service's own cgroup. Confirmed to be 1000 for {{ sys_user }}
 # on daniel-box. Override per-host if a different uid ever owns the account. It stays in place
 # while Claude sessions still run as that account (see claude_code_login_uids below).
+# claude-rc.service running as {{ sys_user }} reads it too, for the XDG_RUNTIME_DIR and
+# DBUS_SESSION_BUS_ADDRESS its sessions get (#6868). It never reads claude_code_user_uid there,
+# which names the agent's uid on a host whose rollback sets claude_code_user back to sys_user.
 claude_code_login_uid: 1000
 
 # Every uid whose login-session slice gets the caps, and whose home gets the pytest fan-out file.
@@ -415,49 +418,8 @@ claude_code_agent_homelab_ui_enabled: false
 claude_code_agent_node_dir: "{{ claude_code_agent_user_home }}/.local/share/node"
 claude_code_agent_node_bin: "{{ claude_code_agent_node_dir }}/current/bin"
 
-# ── Every agent user on the host ────────────────────────────────────────────────────────
-# The agent users this host builds, in order. tasks/agent.yml runs once per entry, and
-# filter_plugins/claude_agents.py checks each entry and fills in its defaults.
-#
-# The primary agent is the one the claude_code_agent_* scalars above describe, and its entry
-# carries only its name. The lander, the peer ssh login, the homelab-ui browser and login, the
-# artifacts mount, the memory seed and claude-rc.service serve the primary agent alone. The default lists it alone, present
-# while claude_code_agent_user_enabled is true.
-#
-# A further agent is a full entry. `name`, `github_login`, `github_id` and `github_token_var`
-# (the SOPS variable holding its token) are required and never inherited, so a second agent
-# cannot push as the primary's account by omission. `home` defaults to /var/lib/<name>, `clone_dir` to <home>/server and `worktree_prefix`
-# to the name. `journal_access` defaults to false; `operator_read` and `operator_config` to
-# true. Outside Ansible, each further agent needs its own GitHub account and its prefix added to
-# the branch fence ruleset's excludes. docs/claude-agent-user.md, "More than one agent", has the
-# checklist.
-#
-# The way out is `state: absent`, never deleting the entry: Ansible removes nothing it no
-# longer declares. absent expires the account, keeps the home, and removes the agent's GitHub
-# token and clone sync units.
-claude_code_agents:
-  - name: "{{ claude_code_agent_user }}"
-# Whether the agent being built is the primary one. tasks/main.yml sets it per agent; this
-# default is what a template sees outside that loop.
+# Whether the agent being rendered is the primary one, which alone gets the lander.
 claude_code_agent_is_primary: true
-# The SOPS variable the primary agent's GitHub token comes from.
-claude_code_agent_gh_token_var: claude_code_agent_gh_token
-# The primary agent's profile, rendered from the scalars above. Not meant to be overridden:
-# set the scalar instead.
-claude_code_agent_primary_profile:
-  state: "{{ 'present' if claude_code_agent_user_enabled else 'absent' }}"
-  home: "{{ claude_code_agent_user_home }}"
-  clone_dir: "{{ claude_code_agent_user_clone_dir }}"
-  repo: "{{ claude_code_agent_user_repo }}"
-  github_login: "{{ claude_code_agent_github_login }}"
-  github_id: "{{ claude_code_agent_github_id }}"
-  github_token_var: "{{ claude_code_agent_gh_token_var }}"
-  worktree_prefix: "{{ claude_code_agent_worktree_prefix }}"
-  journal_access: "{{ claude_code_agent_journal_access }}"
-  operator_read: "{{ claude_code_agent_operator_read }}"
-  operator_config: "{{ claude_code_agent_operator_config }}"
-  memory_seed: "{{ claude_code_agent_memory_seed }}"
-  dotfiles: "{{ claude_code_agent_dotfiles }}"
 
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # homelab-claude-land@<n>.service lands PR <n> as {{ sys_user }} by running land.sh with the
@@ -506,6 +468,11 @@ claude_code_triage_daily_cap: 6
 # <state_dir>/shadow.jsonl, `armed` starts it. Shipped `shadow` so a week of would-be episodes
 # can be read before the first unattended run.
 claude_code_triage_poll_mode: shadow
+# A fall below this severity (`none`, `info`, `warning`, `critical`) is logged as skipped and
+# opens no run. Kuma reads a tile's `tag-severity`, so an untagged tile ranks below `info`.
+# `critical` because a week of shadow episodes at no floor came to about 21 a day against the
+# six-run cap, mostly warnings (#6861).
+claude_code_triage_poll_min_severity: critical
 claude_code_triage_poll_interval: 2min
 # Loopback first, then observability_prometheus_cluster_ip: Prometheus publishes loopback only
 # on the node it runs on. test_claude_triage.py holds the second equal to the k8s key.

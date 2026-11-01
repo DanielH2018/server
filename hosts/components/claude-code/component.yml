@@ -183,8 +183,8 @@ files:
   # The artifacts node's peer sync and OTLP-door heartbeat (H7.40's fourth slice), and the
   # directories the artifacts pod mounts. They push to nothing: each logs a `status=` line and
   # writes a textfile (M6 batch B6a's Cutover-2). The tags and textfiles keep the names
-  # `sync-artifacts` and `claude-otel-health`, which Loki, `probe.py alerts` and observability's
-  # host-checks rules read.
+  # `sync-artifacts` and `claude-otel-health`, which Loki and observability's host-checks
+  # rules read.
   - {src: tmpfiles.d/homelab-artifacts.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-artifacts.conf, when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: templates/sync-artifacts.sh.j2, dst: /usr/lib/homelab/sync-artifacts, mode: "0755", when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: units/homelab-sync-artifacts.service.j2, dst: /usr/lib/systemd/system/homelab-sync-artifacts.service, when: "inventory_hostname == claude_code_artifacts_node"}

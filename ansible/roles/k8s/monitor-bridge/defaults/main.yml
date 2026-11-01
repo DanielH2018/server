@@ -115,9 +115,11 @@ monitor_bridge_healthchecks_expected:
   # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py derives it.
   - {slug: registry-gc, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 7200}
   # initial_setup's three pinging crons: the weekly reboot pings one slug per host, the Docker
-  # prune one per has_docker host, and the worktree sweep one on ops_cron_host.
+  # prune one per has_docker host, and the worktree sweep one per host whose package lists the
+  # worktree-sweep component (#6815).
   - {slug: weekly-reboot-daniel-box, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
   - {slug: weekly-reboot-daniel-server, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
   - {slug: weekly-reboot-daniel-pi, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
   - {slug: daniel-pi-docker-prune, kind: cron, schedule: "30 6 * * *", tz: UTC, grace: 3600}
   - {slug: daniel-box-worktree-sweep, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}
+  - {slug: daniel-server-worktree-sweep, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}

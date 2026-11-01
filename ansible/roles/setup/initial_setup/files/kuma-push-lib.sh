@@ -68,7 +68,7 @@
 # final `by=kuma` failure the library logs Kuma's `msg` on its own line, `push rejected by kuma
 # (http=<code>): <msg>`. It is a separate line because the swallowed-verdicts parser accepts only
 # `k=v` words inside the http/rc parens, and it never echoes the cron's `status=` so
-# `probe.py alerts` cannot read it as a DOWN episode. The token is redacted from it: a DB error
+# nothing that reads the verdict lines takes it for one. The token is redacted from it: a DB error
 # can print its SQL with the bound values inlined, as the one above did, and the token lookup
 # is one of those statements.
 #
@@ -282,10 +282,9 @@ wan_reachable() {
 # on the `down` path.
 #
 # The caller applies both to its OWN `logger` line as well as to the push, and that is why this
-# sets variables rather than wrapping `kuma_push`. `probe.py alerts` reconstructs a host cron's
-# DOWN episodes from `{job="syslog"} |= "status=down"`, so a wrapper that converted only the push
-# would leave an episode in `alerts` for a tile that never went red — a skip visible in exactly
-# the place an operator reads to find out what alerted.
+# sets variables rather than wrapping `kuma_push`. The `logger` line is the local record of a
+# host cron's verdict in `{job="syslog"}`, so a wrapper that converted only the push would leave
+# a `status=down` there for a tile that never went red.
 #
 # The probe, not the failure text, is what classifies. Reading curl exit codes and git stderr
 # across four heterogeneous crons is the "green and inert" shape this file's own header records

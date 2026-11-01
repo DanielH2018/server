@@ -136,19 +136,19 @@ def test_a_real_null_mismatch_is_still_drift():
 
 
 def test_an_empty_string_dropped_on_admission_is_not_drift():
-    # monitor-bridge's `LOG_ERROR_IGNORE: ""` env entry; EnvVar.value is omitempty, so the
-    # API server stores the entry without its value.
-    applied = _applied(env=[{"name": "LOG_ERROR_IGNORE", "value": ""}])
+    # An env entry declared with `value: ""`; EnvVar.value is omitempty, so the API server
+    # stores the entry without its value.
+    applied = _applied(env=[{"name": "EXTRA_ARGS", "value": ""}])
     live = _live(applied)
-    live["spec"]["env"] = [{"name": "LOG_ERROR_IGNORE"}]
+    live["spec"]["env"] = [{"name": "EXTRA_ARGS"}]
     assert ldc.subset_diff(live, applied) == []
 
 
 def test_a_real_empty_string_mismatch_is_still_drift():
     # The empty-string rule must not swallow a value that is present and different.
-    applied = _applied(env=[{"name": "LOG_ERROR_IGNORE", "value": ""}])
+    applied = _applied(env=[{"name": "EXTRA_ARGS", "value": ""}])
     live = _live(applied)
-    live["spec"]["env"] = [{"name": "LOG_ERROR_IGNORE", "value": "noise"}]
+    live["spec"]["env"] = [{"name": "EXTRA_ARGS", "value": "noise"}]
     assert ldc.subset_diff(live, applied) == [(".spec.env[0].value", "noise", "")]
 
 
@@ -454,7 +454,7 @@ def test_the_up_path_logs_at_a_level_this_host_stores(monkeypatch):
 
 
 def test_the_down_path_logs_at_a_level_this_host_stores(monkeypatch):
-    # The down line is what `probe.py alerts` matches on to reconstruct episodes.
+    # The down line is the verdict's durable record in syslog.
     assert _level_log_verdict_uses("down", monkeypatch) <= _journald_store_cap()
 
 

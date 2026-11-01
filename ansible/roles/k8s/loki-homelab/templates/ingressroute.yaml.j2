@@ -21,8 +21,8 @@
    pod-CIDR clause: /config returned 200 (full config disclosure), /metrics 200,
    /loki/api/v1/push 405 (handler reached, so a POST would ingest) and /loki/api/v1/delete 400
    (param validation, so the delete handler is routed and the compactor has retention enabled).
-   That is read of every log line the fleet emits, forged entries to poison the alert history
-   `probe.py alerts` reconstructs from Loki, and a delete path.
+   That is read of every log line the fleet emits, forged entries to poison the hosts' verdict
+   lines, and a delete path.
 
    The macro's own contract said guard 2 should be "only the endpoint the check reads"; `/` was
    one of just two call sites of eight ignoring it, and both are fixed in this change.

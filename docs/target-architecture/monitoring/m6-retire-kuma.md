@@ -436,7 +436,10 @@ PR follows a read that the tile is gone.
       `k3s/tasks/health-crons.yml` ("Record the deployed Longhorn backup health reader",
       tagged `backup-health`, and "Record the deployed live-drift check", tagged
       `live-drift`). configarr and janitorr import `install_host_lib.yml`
-      (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`).
+      (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`). Both facts moved after this
+      baseline. H7.2e moved the file to `hosts/lib/kuma_push.py`, and `ca9ea9da0` gave
+      `deploy_ui/tasks/code.yml` a ninth pair. *Files under `hosts/`* below and C-3a use
+      the paths at HEAD.
     - `ansible/roles/setup/common/tasks/kuma_check_timer.yml` (118 lines) and its two unit
       templates, with 8 callers (`KNOWN_CHECKS`). Every unit path derives from
       `kuma-check-{{ kuma_check_name }}`, and the `absent` arm removes only those names.
@@ -567,7 +570,7 @@ a short window with none, which is the safe direction of convention 5.
     3. **The no-pager bound.** If Cutover-b has not deployed within two hours of Cutover-a's
        `monitor-bridge` deploy, revert Cutover-a. Its rules are still shadow, so the revert
        restores Kuma as the only pager.
-- **Every other producer (B1 to B7).** Three PRs, because the producer's plane (above) decides
+- **Every other producer (B1 to B7, and B9).** Three PRs, because the producer's plane (above) decides
   when its change applies, and the tick applies a setup role before `land.sh` runs:
     1. **Cutover-1a, the tiles go.** Delete the batch's tiles from `static-monitors.yaml.j2`,
        with every rule still shadow. `land.sh` deploys `uptime-kuma`. The PR records the
@@ -592,6 +595,10 @@ a short window with none, which is the safe direction of convention 5.
       Cutover-1a deletes their tiles. Placing them in Cutover-1a instead would deploy
       `monitor-bridge` after `uptime-kuma` (the toposort), and a refused push read in that gap
       could hold two down cycles and page.
+    - **B9's tags.** B9's shadow PR (`ab283899e`) merged before B9 joined this recipe, and
+      it added no tag. A separate PR therefore adds `aide-check` and `rkhunter-check`, the
+      `logger -t` tags of the two scans, with their cases, and deploys `monitor-bridge`. B9's
+      Cutover-1a waits a week after that deploy, for the reason above.
     - **What the shadow week gives up.** While a batch's tile is live, a `rejected` push from
       its producer means its token matches no tile. That tile then receives no push and goes
       DOWN at its own interval, so the exclusion loses only the faster, named page.
@@ -607,10 +614,27 @@ a short window with none, which is the safe direction of convention 5.
       `test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok` derives from the
       renders. Their Cutover-2 drops the push, so the same commit drops their tags from
       `HC_ROUTED_TAGS`, or that test goes red, and deploys `monitor-bridge`. B1's and B5's
-      shadow PRs add those tags to `KUMA_RETIRING_TAGS` as well, so the refused pushes still
-      inside the 3h window do not page once `HC_ROUTED_TAGS` loses them. So `monitor-bridge`
-      applies by its owner, in either order against B5's hand apply on the Pi, and the
-      class-2 residual in *Risks* covers the window between them.
+      shadow PRs add those tags to `KUMA_RETIRING_TAGS` as well. For B1, that keeps the
+      refused pushes still inside the 3h window from paging once `HC_ROUTED_TAGS` loses them.
+      For B5 the entry exempts nothing, as the next bullet explains.
+    - **B1 is order-free; B5 is not.** `KUMA_RETIRING_TAGS` exempts a `rejected` line only,
+      and only a line carrying `by=kuma` parses as `rejected`. B1's host cron logs to the
+      daniel-box journal, which Loki reads, so a push that Kuma refuses carries `by=kuma` and
+      the exemption covers it. `monitor-bridge` and B1's hand apply can then land in either
+      order, and the class-2 residual in *Risks* covers the window between them. The Pi ships
+      only `/var/log/pi-health/health.log` to Loki, because its journal is not shipped. A
+      refused push there logs `push failed (status=down: ...)` with no `by=kuma`, so
+      `parse_push_line` reads it as `swallowed`, and the exemption covers none of the Pi's
+      lines. Once `monitor-bridge` applies B5's Cutover-2, `HC_ROUTED_TAGS` no longer exempts
+      them either. From that apply until the Pi's `homelab-updater.timer` installs the
+      package, every Pi cycle that ends `down` pages Swallowed Push Verdicts. That timer runs
+      every 15 minutes and skips 23:00 to 00:59 and 04:00 to 05:59 UTC. No network fault is
+      needed. The page duplicates the batch's live `PiRecoveryFailed` or `PiSdHealthFailed`
+      rule for the same DOWN verdict, so it is a second page for a real fault, not a false one.
+      B5 accepts the window: its Cutover-2 lands while both Pi checks read `status=up`, outside
+      the updater's skip hours. B5's Cutover-2 landed in
+      [#6794](https://github.com/DanielH2018/server/pull/6794) on 2026-11-01. Exempting a DOWN line without `by=kuma` would close the window,
+      but it contradicts the exclusion's rule that a lost DOWN still counts.
 
   Land Cutover-2 the same day anyway. No step depends on a tile's interval, so a slow tick or a
   delayed hand apply leaves no check unpaged.
@@ -694,7 +718,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | B6b pod producers | crowdsec remote allowlist, AppSec verify and home allowlist (the `crowdsec-jobs` sidecar); `configarr-health` and `janitorr-health` (CronJobs) | Exporter for the sidecar, CronJob for the two (*B6b*) | Flux, through `promote` (`crowdsec`, `configarr`, `janitorr`, `observability`, `netpol-baseline`) | The operator ruled on 2026-10-23 that a pod exports through a metrics endpoint. The sidecar serves `homelab_check_*` on a new `crowdsec-jobs` scrape job. Each CronJob patches its verdict onto a ConfigMap it owns, which kube-state-metrics exports. | 5 |
 | B7 pods | autofix-bridge; cloudflare-ddns direct and proxied; pi-peer-backup | Exporter, CronJob, a Prometheus rule plus a LogQL rule | `land.sh` | See *B7*. | 4 |
 | B8 probes | the 14 hand-written monitors, plus one `tcp_connect` probe per Pi published port | M4 | `land.sh` | See *B8*. Cuts over the `pi_pressure` row. | 1 |
-| B9 integrity scans | the weekly AIDE check and rkhunter scan, one tile each per host (#6168) | M3 | the tick (initial_setup) on daniel-box; a hand on daniel-server and the Pi: `initial_setup.yml --tags "aide,rkhunter"`, the Pi's with `-e target=daniel-pi` (**operator-only**) | Both scripts call `write_check_textfile` as `aide-check` and `rkhunter-check`, with a `DEADLINE_S` equal to the tile's interval (626400s and 612000s). `host-checks.yaml` carries `AideCheckFailed`, `AideCheckNotReporting`, `RkhunterScanFailed` and `RkhunterScanNotReporting` for each host, in shadow, and `test_integrity_scan_rule_literals.py` pins the deadline literals. The shadow PR adds six `CheckWithoutPager` terms: `[348h10m]` for the AIDE tiles and `[340h10m]` for rkhunter. Cutover-1b drops `shadow`, and Cutover-1a deletes the six tiles and their tokens. | 6 |
+| B9 integrity scans | the weekly AIDE check and rkhunter scan, one tile each per host (#6168) | M3 | each host's own package, through its `integrity-scans` component (`hosts/<host>/package.yml`): the builder publishes it and the host's `homelab-updater.timer` installs it. `initial_setup_packaged_hosts['fail2ban']` lists all three hosts, so `initial_setup.yml --tags "aide,rkhunter"` writes neither scan anywhere, and no `-e target=daniel-pi` apply reaches the Pi. | Both scripts call `write_check_textfile` as `aide-check` and `rkhunter-check`, with a `DEADLINE_S` equal to the tile's interval (626400s and 612000s). `host-checks.yaml` carries `AideCheckFailed`, `AideCheckNotReporting`, `RkhunterScanFailed` and `RkhunterScanNotReporting` for each host, in shadow, and `test_integrity_scan_rule_literals.py` pins the deadline literals. The shadow PR adds six `CheckWithoutPager` terms: `[348h10m]` for the AIDE tiles and `[340h10m]` for rkhunter. Cutover-1b drops `shadow`, and Cutover-1a deletes the six tiles and their tokens. Cutover-2 drops the push and the `kuma-push-lib.sh` source from `aide-check.sh.j2` and `rkhunter-check.sh.j2`, and reaches each host in a new version of its package. C-3a waits for it on all three hosts. | 6 |
 
 Phase A retires 77 push tokens: 41 from bridge rows and 36 from other producers. Phase C
 retires the 78th, `kuma_status_page_sync_push_token`, together with Kuma's three other
@@ -816,6 +840,64 @@ tip then stops a push whose tile is still live, and Kuma pages DOWN 1200s later.
   push tokens C-5 removes, and its call in `scripts/secrets_mgmt/secret_rotation.py:cmd_audit`,
   with their cases in `test_secret_sops_io.py` and `test_secret_rotation.py`.
 - The monitor-bridge modules go in A6-7r, A6-7a (*The bridge as an exporter*) and C-7.
+
+**Files under `hosts/`.** The host packages took over many producers and the push plumbing
+after `70591c307`. The same `git grep` over `hosts ':!*/tests/*' ':!*/test_*'` therefore finds
+files that the rows above name only by their Ansible path. Each goes with the PR named here:
+
+- **The push producers.** The setup-plane Cutover-2 of B2 and B4 (`6ad661ed2`) removed the
+  push from the `hosts/components/` producers: `docs-refresh.sh.j2`, `eval-run.sh.j2`,
+  `loki-read-route-health.sh.j2`, `secret-rotate.sh.j2`, `secret-rotation-audit.sh.j2` and
+  `nut-secondary/units/homelab-ups-watchdog.service.j2`. At `be259bc8a` the grep finds none
+  of them.
+- **B9's integrity scans.** The `integrity-scans` component renders `aide-check.sh.j2` and
+  `rkhunter-check.sh.j2` from `ansible/roles/setup/initial_setup/templates/` into all three
+  host packages. Both still source `kuma-push-lib.sh`, as
+  `{{ initial_setup_host_lib_dir }}/kuma-push-lib.sh`, which the component sets to
+  `/usr/lib/homelab`. The identifier grep finds them under `ansible/`, but C-3a's
+  precondition read searched for the literal `/usr/local/lib/` path and missed them. B9's
+  Cutover-2 (*The cutover order*) drains them, and C-3a waits for it on every host.
+- **C-3a deletes the push plumbing:**
+    - `hosts/lib/kuma_push.py`, and in `hosts/lib/host_lib.py` the re-export and the
+      docstring sentence that names `kuma_push.py`.
+    - The `lib: kuma_push.py` rows of `hosts/components/builder/component.yml` and
+      `hosts/components/claude-code/component.yml`, with the
+      `hosts/components/builder/CLAUDE.md` lines that list the file.
+    - `hosts/components/kuma-push/`, which ships `/usr/lib/homelab/kuma-push-lib.sh`. Its
+      entry leaves the `components:` list of `hosts/daniel-box/package.yml`,
+      `hosts/daniel-server/package.yml` and `hosts/daniel-pi/package.yml`, and the comment
+      in `hosts/components/pi-heartbeats/component.yml` that points at it goes too.
+    - The renderer rows that read the Ansible copy of `kuma-push-lib.sh`: `SHARED_FILES` in
+      `scripts/renderer/renderer_lib/host_sources.py` and `HOST_INPUTS` in
+      `scripts/renderer/renderer_lib/host_inputs.py`.
+- **C-6 deletes the reconcile `legacy:` entries that name Kuma.** Each entry retires a file
+  or unit that an Ansible apply installed. C-6 deletes an entry once a read-only check finds
+  that file or unit gone on its host:
+    - The three `kuma-check-loki-read-route` units in
+      `hosts/components/loki-route-witness/component.yml` and the three
+      `kuma-check-secret-rotation-audit` units in
+      `hosts/components/secret-rotation/component.yml`, with the header comment in each
+      file that names the old timer. The read is C-3b's
+      `systemctl list-unit-files 'kuma-check-*'` on daniel-box.
+    - `/opt/homelab-builder/kuma_push.py` in `hosts/components/builder/component.yml`. The
+      read is C-3a's `ls /opt/*/kuma_push.py` on daniel-box.
+    - `/usr/local/lib/pi-kuma-push-lib.sh` in `hosts/daniel-pi/package.yml`. The read is a
+      read-only `ls` of that path over `ssh daniel-pi`.
+- **The triage poller and rootq.** The poller,
+  `hosts/components/claude-code/files/claude_triage_poll.py`, reads `monitor_status`. B-10,
+  which the fix for #6862 adds to *Phase B*, drops that read. `hosts/components/claude-code/files/homelab_rootq.py` matches `/api/push/` in
+  a redaction rule, not a Kuma read, so it belongs on the allowlist (#6862).
+- **`hosts/components/claude-code/CLAUDE.md`** quotes `kuma_push` in the ENFORCED line of
+  `test_neither_producer_pushes_to_kuma`. C-6 rewords that line to name the test without
+  quoting its markers.
+
+**Which package version carries a `hosts/` change.** The builder versions each host package
+`0.<first-parent count>+g<sha12>` (`hosts/lib/host_package_builder.py:version`). The version
+that carries a change is therefore known only after its merge. `land.sh` already waits for
+each host whose package the PR changes. A later PR that depends on an earlier `hosts/`
+change, such as C-3a on B9's Cutover-2, quotes the earlier change's arrival on each host:
+`dpkg-query -W -f '${Version}' homelab-<host>` prints the installed version, and
+`git merge-base --is-ancestor <merge commit> <sha12>` exits 0 for that version's SHA.
 
 **Cross-area: H2 moves about 15 host crons into CronJobs.** If H2 has moved a cron before its
 batch runs here, that check takes the CronJob recipe instead, and B7's kube-state-metrics change
@@ -1634,8 +1716,9 @@ here. C-1 waits for the operator's acceptance.
       that a `kubectl get secret` still finds. No promotion re-creates them, because the
       entry is gone. C-6's PR quotes exit criterion 1's `kubectl get` returning nothing.
 3. **C-3, the plumbing**, in two PRs:
-    - **C-3a, the push libraries.** Delete `kuma-push-lib.sh`, and `kuma_push.py` with its
-      re-export from `host_lib.py`. Delete the `kuma_push.py` rows from
+    - **C-3a, the push libraries.** Delete `kuma-push-lib.sh` with the `kuma-push` host
+      component that packages it, and `hosts/lib/kuma_push.py` with its re-export from
+      `hosts/lib/host_lib.py`. Delete the `kuma_push.py` rows from
       `deploy_cross_role.py`'s two tables, including the k8s row's `uptime-kuma` member. C-3a
       lands after C-2b, which deletes `uptime-kuma/files/push_heartbeat.py`, whose docstring
       names `kuma_push.py`. Every reader of `kuma_push.py` changes in the same commit, or a
@@ -1643,9 +1726,10 @@ here. C-1 waits for the operator's acceptance.
         - `install_host_lib.yml` drops `kuma_push.py` from its loop and its header comment,
           and gains a `state: absent` task for the old copy beside each `host_lib.py`.
           `test_host_lib_sibling_copies.py` changes with it.
-        - The eight `stamp_deployed` pairs for `kuma_push.py` go (*Baseline*, the push
+        - The nine `stamp_deployed` pairs for `kuma_push.py` go (*Baseline*, the push
           plumbing): `gitops_deploy`, `renovate_agent`, `renovate_notify`, `fake_remux`,
-          `configarr`, `janitorr` and the two in `k3s/tasks/health-crons.yml`. The configarr
+          `deploy_ui`, `configarr`, `janitorr` and the two in `k3s/tasks/health-crons.yml`.
+          The baseline counted eight, before `deploy_ui` gained its pair. The configarr
           and janitorr pairs go here only if H2.5b and H2.5c have not removed them already.
           D5 flips neither role before its H2 PR, so a pair C-3a deletes sits in an
           Ansible-owned role. If H2.5b landed first, configarr's CronJob ConfigMap carries
@@ -1653,19 +1737,32 @@ here. C-1 waits for the operator's acceptance.
           C-3a, and the precondition grep below covers its ConfigMap template.
         - The setup/common `CLAUDE.md` rows that name `kuma_push.py` are reworded. B7's
           autofix-bridge Cutover-2 has already reworded that role's line.
+        - **The host packages change in the same commit.** *Files under `hosts/`* in
+          *Baseline* lists each file. The `kuma-push` component leaves the `components:`
+          list of all three `hosts/<host>/package.yml` files. The `lib: kuma_push.py` rows
+          leave the `builder` and `claude-code` components. The renderer's two rows for the
+          Ansible copy of `kuma-push-lib.sh` go too: `SHARED_FILES` in
+          `scripts/renderer/renderer_lib/host_sources.py` and the `HOST_INPUTS` entry in
+          `scripts/renderer/renderer_lib/host_inputs.py`. A row left behind names a deleted
+          file, so every package render fails.
         - **Precondition, quoted in the PR.** B7's autofix-bridge Cutover-2 has removed the
           staging entry from `autofix-bridge/defaults/main.yml`, and C-1 has deleted the
-          status-page sync's copy. `git grep -l kuma_push.py -- ansible scripts ':!*/tests/*'`
+          status-page sync's copy. `git grep -l kuma_push.py -- ansible hosts scripts ':!*/tests/*'`
           lists only files this PR edits or deletes.
         - **Precondition, quoted in the PR.** Every host producer's Cutover-2 has applied on
           its own host. Three reads show it. First, `homelab_check_last_run_timestamp_seconds`
-          for every B1 check, every daniel-server check (B2's witness, B4's UPS secondary) and
-          every Pi check (B5) is newer than that batch's recorded Cutover-2 apply. That alone
-          is also true of a shadow-phase script, which still sources the library. Second,
-          `git grep -n /usr/local/lib/kuma-push-lib.sh -- 'ansible/roles/*/templates/*' 'ansible/roles/*/files/*'`
-          prints no script that sources the file. Third, on each host, a read-only
-          `grep -rl kuma-push-lib /usr/local/bin /usr/local/lib /opt` lists only the library
-          itself: locally on daniel-box, and over `ssh` on daniel-server and the Pi.
+          for every B1 check, every daniel-server check (B2's witness, B4's UPS secondary),
+          every Pi check (B5) and every B9 integrity scan on all three hosts is newer than that
+          batch's recorded Cutover-2 apply. That alone is also true of a shadow-phase script,
+          which still sources the library. Second,
+          `git grep -n kuma-push-lib -- 'ansible/roles/*/templates/*' 'ansible/roles/*/files/*' hosts ':!*/tests/*'`
+          prints no script that sources the file. The pattern is not the full path, because
+          B9's `aide-check.sh.j2` and `rkhunter-check.sh.j2` source it as
+          `{{ initial_setup_host_lib_dir }}/kuma-push-lib.sh`, which the `integrity-scans`
+          component renders as `/usr/lib/homelab`. Third, on each host, a read-only
+          `grep -rl kuma-push-lib /usr/local/bin /usr/local/lib /usr/lib/homelab /opt` lists
+          only the library's own copies: locally on daniel-box, and over `ssh` on
+          daniel-server and the Pi.
         - **The host file.** `initial_setup/tasks/crons.yml`'s copy task is `tags: [always]`
           behind a `DECIDED` marker, and it runs on every host. C-3a replaces it with an
           `always`-tagged `state: absent` task for `/usr/local/lib/kuma-push-lib.sh`, and
@@ -1676,14 +1773,17 @@ here. C-1 waits for the operator's acceptance.
           once a read-only `ls /usr/local/lib/kuma-push-lib.sh` finds no file on daniel-box,
           and over `ssh` on daniel-server and the Pi.
         - **Deploys.** The tick applies `initial_setup`, `gitops_deploy`, `renovate_agent`,
-          `renovate_notify` and `fake_remux` on daniel-box. `land.sh` deploys `configarr` and
+          `renovate_notify`, `fake_remux` and `deploy_ui` on daniel-box. `land.sh` deploys `configarr` and
           `janitorr` while each still imports `install_host_lib.yml`, which
           `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` defers and alerts on. Once H2
           has removed a role's import, C-3a does not edit it, and its `/opt` copy is H2's
           absent arm: in the role while it is Ansible-owned, and in `k8s_host_files`, applied
           by the tick, after D5's conversion PR. The `k3s` hand apply is
           `--tags "backup-health,live-drift"` (**operator-only**), the tags on the two `k3s` stamps and on the tasks that install
-          `host_lib.py` beside the backup health reader and the live-drift check.
+          `host_lib.py` beside the backup health reader and the live-drift check. Each host
+          installs a new version of its own package through its `homelab-updater.timer`, and
+          dpkg removes the packaged `kuma-push-lib.sh` and `kuma_push.py` copies on that
+          upgrade. `land.sh` waits for all three hosts.
         - **The `/opt` copies.** C-6 deletes the `install_host_lib.yml` absent task once a
           read-only `ls /opt/*/kuma_push.py` finds no file on daniel-box and, over `ssh`, on
           daniel-server.
@@ -1768,11 +1868,10 @@ here. C-1 waits for the operator's acceptance.
    them to `RETIRED`, and carries the regenerated fragment. That is the token-PR rule in
    *Steps*.
 6. **C-6, the census row.** It holds `kuma` to its allowlist from then on (exit criterion 3).
-   C-6 also waits for #6875. Under `hosts/`, the grep below also matches the Kuma push
-   producers and the push plumbing that moved into host packages after this plan was written,
-   such as `hosts/lib/kuma_push.py` and `hosts/components/kuma-push/component.yml`. No PR here
-   names them by their `hosts/` path yet. #6875 assigns each one to its Phase A batch or to
-   C-3a.
+   Under `hosts/`, the grep below also matches the Kuma push producers and the push plumbing
+   that moved into host packages after this plan was written, such as `hosts/lib/kuma_push.py`
+   and `hosts/components/kuma-push/component.yml`. *Files under `hosts/`* in *Phase A* assigns
+   each hit to its PR.
    Its precondition, quoted in the PR, is the read for exit criterion 3's first bullet. It
    must list allowlist entries only:
    `git grep -l -E "/api/push/|kuma_push|KUMA_URL|KUMA_PUSH_|monitor_status|entry_port\('uptime-kuma'\)|kuma-push-lib|kuma_ingress_monitors|kuma-check-" -- ansible hosts scripts .claude ':!*/tests/*' ':!*/test_*'`.
@@ -1818,7 +1917,7 @@ here. C-1 waits for the operator's acceptance.
    checks/notify.py, service.py, host_edge.py, cloudflare_ips.py, healthchecks.py   unchanged: they read State, down_streak and the caches in bridge/streaks.py
 ~  checks/cluster.py                                   check_prometheus out (A6-7a)
 ~  check_table.py                                      22 rows out (A1 to A5, A7, B8); prometheus out (A6-7a); tile fields out (A6-8); swallowed_verdicts out (C-7)
-~  verdicts/logs.py                                    KUMA_RETIRING_TAGS (B1 to B7 shadow PRs); out with swallowed_verdicts (C-7)
+~  verdicts/logs.py                                    KUMA_RETIRING_TAGS (B1 to B7 shadow PRs, B9's tag PR); out with swallowed_verdicts (C-7)
 ~  checks/*.py, verdicts/*.py                          the Prometheus-reading bodies out (A1 to A5, B8); the log arm out (A7)
  ansible/roles/k8s/uptime-kuma/templates/
 ~  static-monitors.yaml.j2                             CHECKS loop out (A6-7a); B tiles out (each Cutover-1a)
@@ -1845,10 +1944,19 @@ here. C-1 waits for the operator's acceptance.
 -  kuma-push-lib.sh                                    C-3a
 +  homelab-check-lib.sh                                B0
  ansible/roles/setup/common/
--  files/kuma_push.py                                  C-3a
 -  tasks/kuma_check_timer.yml                          C-3b, renamed
 +  tasks/check_timer.yml                               C-3b
-~  files/host_lib.py                                   the kuma_push re-export out (C-3a)
+ hosts/lib/
+-  kuma_push.py                                        C-3a
+~  host_lib.py                                         the kuma_push re-export out (C-3a)
+ hosts/components/
+-  kuma-push/                                          C-3a, with its entry in all three package.yml lists
+~  builder/component.yml, claude-code/component.yml    the lib: kuma_push.py rows out (C-3a); builder's /opt legacy entry out (C-6)
+~  loki-route-witness/, secret-rotation/component.yml  the kuma-check-* legacy entries out (C-6)
+~  claude-code/files/claude_triage_poll.py             the Kuma source out (B-10, from #6876)
+ hosts/daniel-pi/package.yml                           the pi-kuma-push-lib.sh legacy entry out (C-6)
+ scripts/renderer/renderer_lib/
+~  host_sources.py, host_inputs.py                     the kuma-push-lib.sh rows out (C-3a)
  ansible/filter_plugins/
 +  ingress_probes.py                                   C-4a
 -  kuma_monitors.py                                    C-4b, after D6
@@ -1873,7 +1981,7 @@ here. C-1 waits for the operator's acceptance.
 ## Steps, as PRs
 
 **Phase A** follows the batch table. Per batch: one shadow PR; Cutover-a and Cutover-b (A
-batches, B8); or Cutover-1a, Cutover-1b and Cutover-2 (B1 to B7); then the token PR a week
+batches, B8); or Cutover-1a, Cutover-1b and Cutover-2 (B1 to B7, and B9 after its tag PR); then the token PR a week
 after the last cutover. A6 runs as A6-1 to A6-9, with the refactor A6-7r before A6-7a.
 *The cutover order* above names each deploy.
 Phase A is about 75 PRs, and A0 lands before any Kuma-side PR. Each shadow PR adds its
@@ -1970,12 +2078,12 @@ this applies to, with what the rules predict:
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
-| C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the eight stamp pairs, the cross-role table rows; after B7's autofix-bridge Cutover-2 and after C-2b | ~500 removed | the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux on daniel-box); `land.sh` for `configarr` and `janitorr` only while H2 has not removed their `install_host_lib.yml` import (*When D5 flips a role M6 edits*); by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
+| C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux, deploy_ui on daniel-box); `land.sh` for `configarr` and `janitorr` only while H2 has not removed their `install_host_lib.yml` import (*When D5 flips a role M6 edits*); by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
 | C-3b | the timer rename with the legacy-unit removal; the variable rename; `glance_facts.py:timer_units` and its named-member case | ~300 changed | the tick; `k3s --tags "manifest-prune,live-drift"` by hand |
 | C-4a | the key rename, `ingress_probes.py` and its `ansible_jinja_env.py` registration | ~160 | per the narrowing |
 | C-4b | delete `kuma_monitors.py`, its `ansible_jinja_env.py` import and registration, and its `FILTER_FIELDS` row, after D6 | ~70 removed | none once D6 has landed |
 | C-5 | secrets (**operator-only** half first) | ~100 | none |
-| C-6 | the census row, after the quoted identifier `git grep`; C-3a's two absent tasks out; after C-7 | ~60 | the tick (initial_setup and the `install_host_lib.yml` importers); `land.sh` for `configarr` and `janitorr` only while they import `install_host_lib.yml`; `k3s --tags "backup-health,live-drift"` by hand |
+| C-6 | the census row, after the quoted identifier `git grep`; C-3a's two absent tasks out; the host packages' Kuma `legacy:` entries out; after C-7 | ~60 | a new version of each host package whose `legacy:` list changes; the tick (initial_setup and the `install_host_lib.yml` importers); `land.sh` for `configarr` and `janitorr` only while they import `install_host_lib.yml`; `k3s --tags "backup-health,live-drift"` by hand |
 | C-7 | M5's `KumaNotificationDropped`; the `swallowed_verdicts` row with its bodies, rule, tests and `KUMA_RETIRING_TAGS` | ~350 removed | `observability`, `monitor-bridge`, `loki-homelab` |
 
 B-2 and the old B-3 (postflight) are one PR, because `postflight.py` imports the modules B-2
@@ -2086,7 +2194,7 @@ M4's rules.
   dependent skipped by a down gate exports 0 and its body is not called. A raising body
   exports 0 and the next row still runs. Until A6-7a, the test also asserts that the push
   keeps today's skip and grace values.
-- `KUMA_RETIRING_TAGS` (each B1 to B7 shadow PR): a `rejected` line from a listed tag returns
+- `KUMA_RETIRING_TAGS` (each B1 to B7 shadow PR, and B9's tag PR): a `rejected` line from a listed tag returns
   up and from an unlisted tag returns down; a lost `status=down` line from a listed tag still
   pages; a listed tag that names no rendered script fails.
 - The probe-row case (C-1): a portless row naming a portless entry fails, and so does a
@@ -2236,8 +2344,11 @@ M4's rules.
   from Cutover-1a to Cutover-2, a producer's push lost on the network (no `by=kuma`) with
   `status=down` still pages through `swallowed_verdicts`, beside the batch's live rule. For
   an `HC_ROUTED_TAGS` producer the same lost push can page from Healthchecks.io too, from its
-  Cutover-2's `monitor-bridge` deploy until its push stops and the 3h window passes. Either
-  needs a network fault during a DOWN verdict inside a same-day window.
+  Cutover-2's `monitor-bridge` deploy until its push stops and the 3h window passes. For B1
+  either case needs a network fault during a DOWN verdict inside a same-day window. B5 needs
+  no network fault: the Pi's refused push carries no `by=kuma`, so from `monitor-bridge`'s
+  apply of B5's Cutover-2 until the Pi installs its package, any Pi DOWN cycle pages
+  Swallowed Push Verdicts beside the live rule (*The cutover order*).
 - **Class 5, a sequence treated as a transaction.** Phase C deletes in an order that the
   prune, the claims and the grants each constrain. Mitigation: the C-1a gate, the split
   between C-1a and C-1b with a live read between them, D2's two-PR retirement, and
@@ -2285,8 +2396,9 @@ M4's rules.
   no identifier grep finds. Mitigation: C-1's `-w uptime-kuma` precondition and the probe-row
   named-member case.
 - **A deleted shared file breaks every role that copies or stamps it.** `kuma_push.py` has
-  eight stamp pairs, one loop entry and one pod staging entry. Mitigation: C-3a's quoted
-  `git grep -l kuma_push.py` precondition and its deploy list.
+  nine stamp pairs, one loop entry, one pod staging entry and two `lib:` rows in the host
+  packages. Mitigation: C-3a's quoted `git grep -l kuma_push.py` precondition, which covers
+  `hosts/`, and its deploy list.
 - **The token registry blocks a retirement commit.** `sync` keeps stale rows, so a retirement
   that only adds `RETIRED` fails prek and CI. Mitigation: the four-part token commit in
   *Steps*, with `audit --check` quoted.
@@ -2399,12 +2511,13 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   leaves `HC_ROUTED_TAGS`, which keeps
   `test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok` green.
 - **B5 Cutover-2.** `pi-sd-health` and `pi-recovery-health` leave `HC_ROUTED_TAGS` for the same
-  test, and `monitor-bridge` applies by its owner, in either order against the Pi's package
-  install.
+  test. The order against the Pi's package install is not free: a Pi DOWN cycle in between
+  pages Swallowed Push Verdicts (*The cutover order*), so the PR lands while both Pi checks
+  read `status=up`.
 - **B5.** Nothing beyond the shadow PR. The unit-flag-and-directory test and the `optimize_pi` `CLAUDE.md`
   line the first draft named are obsolete: H3.6 wrote the test, and H3.8b moved the heartbeats and their
   contract into `hosts/components/pi-heartbeats/component.yml`.
-- **B1 to B7, each shadow PR.** The batch's `KUMA_RETIRING_TAGS` entries and their cases in
+- **B1 to B7, each shadow PR, and B9's tag PR.** The batch's `KUMA_RETIRING_TAGS` entries and their cases in
   `ansible/roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py`.
 - **A6-1 and A6-2.** The exporter test for `homelab_check_rows`, the run-loop export test,
   and the promtool cases for the two exporter rules, restart cases included.
@@ -2442,7 +2555,12 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
       such as `test_kuma_static_monitors.py` and `test_kuma_entities_parse_for_autokuma.py`,
       is deleted or cut to what still exists.
     - C-3a: `test_setup_cross_role_files.py`, `test_host_lib_sibling_copies.py`, and the
-      setup/common `CLAUDE.md` rows for `kuma_push.py`.
+      setup/common `CLAUDE.md` rows for `kuma_push.py`. On the host side,
+      `hosts/lib/tests/test_kuma_push.py` and `test_kuma_push_component.py` are deleted
+      with their subjects. `test_host_lib.py`'s 3.12-grammar case drops `kuma_push.py`.
+      `scripts/renderer/tests/test_renderer_host_inputs.py` and
+      `test_renderer_host_mode.py` stop using `kuma-push-lib.sh` as their sample shared
+      file.
     - C-3b: `test_kuma_check_timer.py` (in `ansible/tests/setup/`) is renamed with its task
       file and gains the legacy-unit case. The setup/common, gitops_deploy, initial_setup and
       render_records `CLAUDE.md` files are updated, and their glance blocks regenerate.
@@ -2482,7 +2600,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - About 75 rules with their tests, including `KumaDown` (deleted again in C-1a).
     - The bridge exporter loop, about 120 lines, with the `homelab_check_rows` gauge, and the
       autofix-bridge exporter.
-    - `KUMA_RETIRING_TAGS`, one set that grows over B1 to B7 and goes in C-7.
+    - `KUMA_RETIRING_TAGS`, one set that grows over B1 to B7 and B9 and goes in C-7.
     - `homelab-check-lib.sh`, about 60 lines.
     - Four blackbox modules and one `tcp_connect` target per Pi publisher.
     - `health_alerts.py`, about 150 lines.

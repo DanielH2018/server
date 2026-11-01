@@ -23,30 +23,29 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Its health signal is the `janitorr-health` CronJob** (`templates/health-cronjob.yaml.j2`),
   every 10 minutes. `files/janitorr_health.py` reads the running pod's container start time
   and, past a 10-minute startup grace, counts `Unexpected error occurred in scheduled task`
-  lines in its log, through its own ServiceAccount (`templates/health-rbac.yaml.j2`). It pushes
-  the "Janitorr Errors" Kuma monitor. No gate Job runs it: the role's defaults
+  lines in its log, through its own ServiceAccount (`templates/health-rbac.yaml.j2`). It records
+  the verdict as a log line and on the verdict ConfigMap (below), and pushes nothing to Kuma
+  since M6 batch B6b's Cutover-2. No gate Job runs it: the role's defaults
   declare no `flux_cronjob_gates`, so `janitorr-verify` holds no copy of this CronJob.
 - **The health reader was a daniel-box host cron until H2.5c.** The absent arms for the cron,
   `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the `janitorr` drift fragment
   live in `ansible/roles/setup/k8s_host_files/tasks/janitorr.yml`, which the setup plane
   applies through `initial_setup.yml`, so they survive janitorr's Flux flip.
-- **The push URL, token included, lives in its own Secret, `janitorr-health`**
-  (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
-  `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of
-  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. The reader's code ships in
-  the `janitorr-health` ConfigMap, beside `host_lib.py` and `kuma_push.py` from `setup/common`,
-  and no secret goes in it (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The pod holds no Secret.** M6 batch B6b's Cutover-2 removed the `janitorr-health`
+  Secret and its `KUMA_PUSH_URL`. The reader's code ships in the `janitorr-health` ConfigMap,
+  beside `host_lib.py` and `kuma_push.py` from `setup/common`. `host_lib.py` imports
+  `kuma_push.py` at module level, so the file stays although the reader never calls it. No
+  secret goes in the ConfigMap (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `janitorr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.
   The patch passes `--field-manager=janitorr-health`: under kubectl's default `kubectl-patch`
   manager, Flux's apply dropped the annotations every 10 minutes (#6746).
-  kube-state-metrics exports the verdict, and the `pod-producers` shadow rules read it. A
+  kube-state-metrics exports the verdict, and the `pod-producers` rules read it. A
   failed export makes the reader exit 1.
 - **The health pod carries `app: janitorr-health`, never `app: janitorr`.** The reader
   takes the first Running pod labelled `app=janitorr`, and a verify Job pod under that label
-  could be the pod it reads. uptime-kuma's
-  `netpol_from` admits `janitorr-health`.
+  could be the pod it reads.
 
 ## Notable
 - Behaviour (retention rules, leaving-soon thresholds, dry-run flag) lives in
@@ -129,4 +128,4 @@ stays. Media tagged `janitorr-keep` is exempt from every rung.
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
 - Verify the health reader: `kubectl -n homelab logs job/<the newest janitorr-health Job>`. Its
-  `janitorr-health: status=up` line is the verdict, and `janitorr-health: pushed` is the push.
+  `janitorr-health: status=up` line is the verdict. No `pushed` line follows it since Cutover-2.

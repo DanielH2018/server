@@ -4,7 +4,7 @@ A refused narrowing marks the whole fleet stale, and the per-service reasons the
 ~7,500 chars. The grouping is `bridge.msgfmt`'s and is tested beside it; this proves the cron asks
 for that shape and records what it gets, unedited. The real template is rendered and run under
 bash with the check library, `git` and `uv` stubbed; the assertion is on the run's `status=` log
-line, which `probe.py alerts` reads, and on the verdict file the SessionStart banner reads.
+line, which Loki keeps, and on the verdict file the SessionStart banner reads.
 
 It also holds the changed-set note: when the counted stale set changes while the check is DOWN,
 the log line carries a `Stale set changed:` prefix, and the cron records the new set for the next

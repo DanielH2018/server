@@ -19,8 +19,8 @@ estate that predates the derivation, whose ids and names were hand-picked:
   `-k8s` suffix is forced, not defaulted, because the status page's `Services` group rule
   matches `-k8s$` (uptime-kuma's `uptime_kuma_k8s_status_page_groups`); a generated tile can
   therefore never land outside a named group.
-- The display name defaults to `k3s <name>`. It is what Kuma shows and what `probe.py
-  kuma-drift` reconciles against Prometheus, but it is not the identity.
+- The display name defaults to `k3s <name>`. It is what Kuma shows, but it is not the
+  identity.
 
 `kuma_malformed_push_tokens` guards the other direction: AutoKuma refuses a push declaration
 whose `push_token` is not 32 letters and digits, logs one WARN per sync, and never creates the

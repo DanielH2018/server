@@ -1,4 +1,4 @@
-# Shipped by homelab-daniel-box with its enable link. Sunday 04:20, the cron's slot. The values
+# Shipped by the host package's worktree-sweep component with its enable link. Sunday 04:20, the cron's slot. The values
 # equal initial_setup_worktree_sweep_cron_* in the initial_setup defaults, which the deadman
 # cadences fragment and monitor-bridge's Healthchecks.io expectation still read
 # (hosts/lib/tests/test_worktree_sweep_component.py holds the two equal).

@@ -205,7 +205,8 @@ The `rotate --commit` weekly cron is autonomous and state-changing — its autho
 - **Mode:** change-producing — writes via `sops set`, commits the registry, and the operator
   redeploys the consumer. Not report-only; there is no dry-run cron (the bare `rotate` is the dry run,
   run by hand).
-- **Required evidence:** the daily "Secret Rotation" Kuma monitor must return green after a rotation.
+- **Required evidence:** the daily audit's verdict (`SecretRotationAuditFailed`) must stay quiet
+  after a rotation.
   An `auto`-tier secret still overdue after a cron window means the **cron broke** — investigate it,
   don't hand-rotate around it.
 - **Host-file keys:** the cron skips every key a per-host SOPS file carries, because the copy
@@ -577,5 +578,5 @@ instance of this discipline, and the history entry shows the retirement variant:
   Verify with a **TOTP challenge, not a login** — a password login succeeds without the storage
   key ever being read.
 
-After any rotation, run `audit` to confirm the secret's window resets (green), and watch the
-"Secret Rotation" Kuma monitor.
+After any rotation, run `audit` to confirm the secret's window resets (green), and watch
+`SecretRotationAuditFailed`, which reads the daily audit's verdict.

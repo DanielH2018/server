@@ -105,18 +105,16 @@ within ~15 s (HOSTSYNC).
 **A watchdog re-proves the link.** `ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2`
 checks it every `nut_host_watchdog_interval_minutes` (10 min), from the persisted
 `/var/lib/homelab-secrets/etc/nut/upsmon.conf`, on **every** armed host (daniel-box and
-`ups_host`/daniel-server both). A `homelab-ups-watchdog.timer` runs it. Each host pushes its own Kuma tile —
-`roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`'s `ups-secondary.json` (daniel-box,
-`ups_secondary_push_token`) and `ups-secondary-daniel-server.json` (daniel-server,
-`ups_secondary_daniel_server_push_token`) — deliberately never the same token: two hosts
-sharing one push token would let either host's `up` satisfy Kuma's deadline and mask the
-other's `down` (issue #952). Each host's unit loads its own credential, `ups_secondary_push_token` on daniel-box.
+`ups_host`/daniel-server both). A `homelab-ups-watchdog.timer` runs it. Each host writes its
+own `ups-secondary-health.prom` textfile, which Prometheus labels with the host's origin, and
+`UpsSecondaryFailed` and `UpsSecondaryNotReporting` in
+`ansible/roles/k8s/observability/files/rules/other-setup-checks.yaml` read each host's series
+apart, so one host's `up` cannot mask the other's `down` (issue #952). Each host pushed its own
+Kuma tile until M6 batch B4's Cutover-2.
 
-**Ordering matters when arming the watchdog on a new host.** The Kuma tile has to exist
-*before* the host's watchdog timer starts pushing to it — deploy `uptime-kuma` first, then
-install the host's package version. Running the timer first just means its
-first several pushes land on a tile that doesn't exist yet; it does not risk a shared token,
-because each host's token and tile are provisioned together, one leg at a time.
+**Arming the watchdog on a new host needs no ordering.** The rules select the host's `origin`
+label, so a new host needs its own pair of rules in the same change; no other side has to exist
+first.
 
 ## Editing
 - Manifests/config: `templates/*.j2` (config-secret.yaml.j2 holds all six NUT files)

@@ -10,7 +10,7 @@
 // journal stub; this image is not — measured 2026-09-02, loki.source.journal read 6,573
 // lines in ten minutes off /var/log/journal and they landed in Loki. What is shipped is the
 // two health timers' verdict lines, via the pi_health source below: the narrow slice
-// `probe.py alerts` needs, at ~576 lines/day against the journal's ~38k. Turning the journal
+// that puts the Pi's verdicts in Loki beside the other hosts', at ~576 lines/day against the journal's ~38k. Turning the journal
 // on is one `loki.source.journal` block with a relabel setting `job` (its default job label is
 // the component id) — not a capability gap any more. What decided against it is this
 // process's memory, not Loki volume: the RSS measurement is in compose.yaml.j2's header (#1922).
@@ -123,9 +123,9 @@ loki.source.docker "pi" {
 }
 
 // The two host health timers' verdict lines — the ONLY host logs shipped from this box, and
-// deliberately not the journal (see the header). `probe.py alerts` reconstructs DOWN
-// episodes from `{job="syslog"} |= "status=down"`, and until this source existed every
-// daniel-pi health check was invisible to it: a real "Daniel Pi Recovery" outage on 2026-08-29
+// deliberately not the journal (see the header). Every other host's verdict lines reach Loki
+// as `{job="syslog"} |= "status=down"`, and until this source existed no daniel-pi health
+// check left one there: a real "Daniel Pi Recovery" outage on 2026-08-29
 // (autoheal down ~50 min) left no episode anywhere.
 //
 // `job = "syslog"` matches the label the cluster hosts' syslog stream already carries, so

@@ -18,9 +18,15 @@ MEMORY = {"kuma:Memory": {"source": "kuma", "monitor": "Memory"}}
 
 
 def advance(
-    state, down, hold=False, muted=False, unknown=frozenset(), kuma_up=frozenset()
+    state,
+    down,
+    hold=False,
+    muted=False,
+    unknown=frozenset(),
+    kuma_up=frozenset(),
+    floor=0,
 ):
-    return poll.step(state, down, hold, muted, T0, 2, 3, unknown, kuma_up)
+    return poll.step(state, down, hold, muted, T0, 2, 3, unknown, kuma_up, floor)
 
 
 def test_the_first_poll_records_what_is_down_and_starts_nothing() -> None:
@@ -110,6 +116,28 @@ def test_falls_up_to_the_storm_size_each_get_their_own_episode() -> None:
     assert len(episodes) == 3
 
 
+def test_a_fall_below_the_floor_is_skipped_once_and_never_makes_a_storm() -> None:
+    down = {
+        f"kuma:w{i}": {"source": "kuma", "monitor": f"w{i}", "severity": "warning"}
+        for i in range(4)
+    }
+    down["alert:TargetDown:sonarr"] = {"monitor": "TargetDown", "severity": "critical"}
+    critical = poll.SEVERITY_RANK["critical"]
+    state, _ = advance({}, {}, floor=critical)
+    state, _ = advance(state, down, floor=critical)
+    state, episodes = advance(state, down, floor=critical)
+    assert [e["monitor"] for e in episodes if e.get("skipped")] == [
+        "w0",
+        "w1",
+        "w2",
+        "w3",
+    ]
+    (opened,) = [e for e in episodes if not e.get("skipped")]
+    assert opened["monitor"] == "TargetDown"
+    _, episodes = advance(state, down, floor=critical)
+    assert episodes == []  # each skipped key stays open until it recovers
+
+
 @pytest.mark.parametrize("gate", ["hold", "muted"])
 def test_a_hold_or_the_reboot_mute_defers_the_episode_until_it_lifts(gate) -> None:
     state, _ = advance({}, {})
@@ -134,6 +162,16 @@ def test_every_episode_id_is_one_the_runner_and_its_rule_accept(key) -> None:
     episode_id = poll.episode_id(key, T0)
     assert run.EPISODE_ID.match(episode_id), episode_id
     assert episode_id.startswith("20261015t1830-")
+
+
+def test_a_kuma_key_carries_its_tiles_severity_tag() -> None:
+    kuma = [
+        {"metric": {"monitor_name": "UPS", "severity": "critical"}, "value": [T0, "0"]},
+        {"metric": {"monitor_name": "Registry GC"}, "value": [T0, "0"]},
+    ]
+    down = poll.down_keys(kuma, [])
+    assert poll.severity_rank(down["kuma:UPS"]) == poll.SEVERITY_RANK["critical"]
+    assert poll.severity_rank(down["kuma:Registry GC"]) == 0
 
 
 def test_down_keys_skip_the_deploy_hold_and_key_alerts_by_service() -> None:
@@ -175,13 +213,13 @@ def test_the_reboot_window_spans_the_lead_and_the_grace(when, muted) -> None:
     assert poll.in_reboot_window(REBOOT, now) is muted
 
 
-def _config(tmp_path, mode: str) -> str:
+def _config(tmp_path, mode: str, extra: str = "") -> str:
     state = tmp_path / "state"
     (state / "inbox").mkdir(parents=True)
     path = tmp_path / "poll.cfg"
     path.write_text(
         f"STATE_DIR={state}\nPOLL_MODE={mode}\n"
-        "PROM_URLS=http://loopback http://cluster-ip\nPOLL_STREAK=1\n"
+        "PROM_URLS=http://loopback http://cluster-ip\nPOLL_STREAK=1\n" + extra
     )
     return str(path)
 
@@ -209,8 +247,46 @@ def _run(config, read, started):
     )
 
 
-def _fall(*names):
-    return [{"metric": {"monitor_name": n}, "value": [T0, "0"]} for n in names]
+def _fall(*names, severity="critical"):
+    return [
+        {"metric": {"monitor_name": n, "severity": severity}, "value": [T0, "0"]}
+        for n in names
+    ]
+
+
+@pytest.mark.parametrize("mode", ["armed", "shadow"])
+@pytest.mark.parametrize("floor", ["critical", "crtical"])
+def test_a_warning_fall_starts_nothing_and_shadow_records_it_skipped(
+    tmp_path, mode, floor
+) -> None:
+    """A mistyped floor admits only critical, so it holds the warning back too."""
+    config = _config(tmp_path, mode, f"POLL_MIN_SEVERITY={floor}\n")
+    started = []
+    read = _reads([], _fall("Registry GC", severity="warning"))
+    assert _run(config, read, started) == 0  # the baseline
+    assert _run(config, read, started) == 0
+    shadow = tmp_path / "state" / "shadow.jsonl"
+    assert started == []
+    assert list((tmp_path / "state" / "inbox").iterdir()) == []
+    if mode == "armed":
+        assert not shadow.exists()
+    else:
+        (line,) = shadow.read_text().splitlines()
+        assert json.loads(line)["skipped"] == "below-floor"
+
+
+@pytest.mark.parametrize("mode", ["armed", "shadow"])
+def test_a_warning_floor_opens_the_warning_fall(tmp_path, mode) -> None:
+    config = _config(tmp_path, mode, "POLL_MIN_SEVERITY=warning\n")
+    started = []
+    read = _reads([], _fall("Registry GC", severity="warning"))
+    assert _run(config, read, started) == 0  # the baseline
+    assert _run(config, read, started) == 0
+    if mode == "armed":
+        assert started == ["20261015t1830-kuma-registry-gc"]
+    else:
+        (line,) = (tmp_path / "state" / "shadow.jsonl").read_text().splitlines()
+        assert "skipped" not in json.loads(line)
 
 
 @pytest.mark.parametrize("mode", ["armed", "shadow"])

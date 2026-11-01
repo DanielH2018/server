@@ -233,6 +233,11 @@ The sandbox hides `/home`, `/root` and `/run/user`, then binds back `/run/user/<
 `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` at it, so `systemd-run --user` works from a
 phone session (#6764). The uid is `claude_code_user_uid`, which has no default: a host that
 sets `claude_code_user` to the agent sets it in host_vars to the uid its `package.yml` declares.
+The operator's unit carries no sandbox but sets the same two variables, at `/run/user/<uid>` for
+`claude_code_login_uid` (#6868). It reads that var rather than `claude_code_user_uid`, which
+daniel-box keeps at the agent's uid through a rollback to `ubuntu`. Only the agent's unit orders
+on `user@<uid>.service`: the operator's binds nothing, so a late manager fails nothing, and a
+`Wants=` would start the operator's manager on a host where the operator does not linger.
 
 ## The artifacts node's two timers
 
@@ -243,7 +248,7 @@ health` until H7.40's fourth slice, whose `legacy:` entries in
 `hosts/components/claude-code/component.yml` retire the cron files and the scripts that
 embedded the push tokens. Each timer fires every N minutes of its `*/N` minute default, and its
 unit's `SyslogIdentifier=` keeps the tag the cron's `logger -t` wrote, `sync-artifacts` or
-`claude-otel-health`. Loki and `probe.py alerts` read that tag.
+`claude-otel-health`. Loki keeps each run's `status=` line under that tag.
 `ansible/roles/k8s/artifacts/CLAUDE.md` documents how the sync behaves, and the heartbeat's
 template carries why it is a host timer at all.
 
@@ -310,8 +315,8 @@ template carries why it is a host timer at all.
 - **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, and six runs a UTC day,
   all pinned in `templates/claude-triage-pins.j2`, plus a lock that holds runs to one at a time. The runner
   enforces the daily cap, because polkit lets `claude` start a run without the poller. The
-  poller opens an episode only on a fall that holds for two polls, makes one storm episode of
-  more than three falls at once, and opens nothing while `DeployHoldActive` fires or the weekly
+  poller opens an episode only on a `critical` fall that holds for two polls, logs a lower one
+  as skipped, makes one storm episode of more than three falls at once, and opens nothing while `DeployHoldActive` fires or the weekly
   reboot's mute is open. It queues episodes and starts the next only when the lock is free,
   and never restarts one whose run crashed.
 - **Evidence:** `/var/lib/claude/triage/runs/<episode>.json`, the report under

@@ -257,7 +257,7 @@ _READ_CENSUS_MUST_FIND = {
     DOCS_REFRESH: frozenset({"PUSH_STATUS", "PUSH_MSG", "PUB_MSG", "UV", "REPO"}),
     EVAL_RUN: frozenset({"PUSH_STATUS", "PUB_MSG", "UNLANDED_RC", "REPO", "TREND_RC"}),
     SECRET_ROTATE: frozenset({"PUB_MSG", "STALE_HEADS", "TRACKED", "UV"}),
-    ROTATION_AUDIT: frozenset({"KUMA_HOST", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
+    ROTATION_AUDIT: frozenset({"AUDIT_RC", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
 }
 
 # `${NAME` plus the operator that follows, when there is one.
@@ -430,18 +430,19 @@ _LIBRARY_EXEMPT: dict[str, str] = {
 # changed. Every one is a template that can invoke curl against a push URL.
 _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
-    "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
-    "hosts/components/secret-rotation/templates/secret-rotate.sh.j2",
-    "hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2",
 }
 
 # The corpus also holds templates that carry a push URL but invoke no curl of their own, such as
 # the authelia bypass regex. They are counted rather than named, so the floor is what watches
-# them. 15 against a measured 21 (2026-11-01, after M6 batch B4's Cutover-1a dropped the push
-# from the two renovate units and their environment files, on top of B5's Pi heartbeats) keeps
-# the slack M3 chose: 23 against 37 after its PR 5 dropped disk-health.sh.j2. A slacker floor
-# would let a third of that unnamed tail vanish before anything went red.
-_MIN_CORPUS = 15
+# them. 3 against a measured 5 (2026-11-01, after M6's B6b cutover stopped the crowdsec
+# sidecar and the configarr and janitorr health CronJobs pushing, and B2's and B4's setup-plane
+# Cutover-2 dropped ten scripts and four environment files) keeps the slack M3 chose: about
+# two-thirds of the real count, as 23 against 37 after its PR 5 dropped disk-health.sh.j2. The
+# five left are authelia's config-secret, loki-homelab's config.alloy, the aide and rkhunter
+# checks and registry-gc.sh.j2. A slacker floor would let three of them vanish before anything
+# went red. When a later M6 batch shrinks the corpus again, re-measure rather than estimate,
+# because a floor above the real count fails master CI.
+_MIN_CORPUS = 3
 
 
 def push_corpus() -> dict[Path, str]:

@@ -115,12 +115,12 @@ def test_daniel_boxs_package_names_the_pinned_clusterip(tmp_path):
     assert monitor[0].split()[1] == f"apc-ups@{pin}"
 
 
-def test_daniel_boxs_watchdog_unit_loads_its_own_tiles_token(tmp_path):
-    """The package must list the credential the unit loads, and it must not be daniel-server's."""
+def test_daniel_boxs_watchdog_unit_loads_no_credential(tmp_path):
+    """M6 batch B4's Cutover-2 dropped the Kuma push, the only reader of the token."""
     package = daniel_box_package(tmp_path)
     unit = package.files["/usr/lib/systemd/system/homelab-ups-watchdog.service"][0]
-    assert b"/run/credstore/ups_secondary_push_token" in unit
-    assert b"ups_secondary_daniel_server_push_token" not in unit
+    assert b"LoadCredential=" not in unit
+    # B4's token PR removes it from the package and daniel-box's SOPS file together.
     assert "ups_secondary_push_token" in package.credentials
 
 
@@ -206,25 +206,6 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
 
 WATCHDOG = rendered_shell_text("setup", "nut_host", "ups-secondary-health.sh.j2")
 NUT_HOST_DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
-
-# The two tiles and the variable each is gated on, one per watching host.
-TILES = {
-    "daniel-box": ("ups-secondary.json", "ups_secondary_push_token"),
-    "daniel-server": (
-        "ups-secondary-daniel-server.json",
-        "ups_secondary_daniel_server_push_token",
-    ),
-}
-
-
-def test_the_packaged_token_key_names_each_hosts_own_tile_token():
-    """The packaged watchdog unit loads this key (H4.3b3); the wrong host's key reads another tile."""
-    from lib.render_context import render_context
-
-    for host, (_, token) in TILES.items():
-        ctx = render_context(ROLE, host, overrides={"inventory_hostname": host})
-        assert ctx["nut_host_watchdog_token_key"] == token, host
-
 
 # A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
 # for the credential that sits there in the real file; it exists only to be searched for in the
@@ -316,7 +297,7 @@ def test_the_watchdog_keeps_upsc_stdout_and_stderr_apart():
     """`2>&1` on the upsc call puts its diagnostics inside the VALUE.
 
     upsc writes "Init SSL without certificate database" to stderr on every successful call
-    against this endpoint. Folding the streams makes the pushed message multi-line and makes the
+    against this endpoint. Folding the streams makes the logged message multi-line and makes the
     empty-status branch unreachable, since the noise is never empty.
     """
     assert 'upsc "$ENDPOINT" ups.status 2>&1' not in WATCHDOG
@@ -324,5 +305,5 @@ def test_the_watchdog_keeps_upsc_stdout_and_stderr_apart():
 
 
 def test_the_watchdog_collapses_newlines_out_of_its_message():
-    """A newline in either half breaks the syslog line and the Kuma push message."""
+    """A newline in either half breaks the syslog line."""
     assert WATCHDOG.count("tr '\\n' ' '") >= 2

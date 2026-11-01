@@ -33,9 +33,9 @@ fake_remux_scan_cron_hour: "4"
 fake_remux_scan_cron_minute: "45"
 fake_remux_replace_cron_minute: "*/20"
 
-# Health push. monitor-bridge read these two state files over a `:ro` bind mount on daniel-server;
-# that stops working when the cron changes host, so a cron here pushes the same two Kuma monitors
-# with the same tokens. Max-ages match the ones check.py applied (26h / 1.2h).
+# Health verdicts. monitor-bridge read these two state files over a `:ro` bind mount on
+# daniel-server; that stopped working when the cron changed host, so a cron here reads them and
+# writes one textfile verdict each. Max-ages match the ones check.py applied (26h / 1.2h).
 fake_remux_scan_max_age_hours: 26
 fake_remux_replace_max_age_hours: 1.2
 fake_remux_health_cron_minute: "*/10"

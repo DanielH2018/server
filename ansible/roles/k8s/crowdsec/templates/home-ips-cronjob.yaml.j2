@@ -14,7 +14,7 @@
       apply, and nothing refuses it;
     - the pod leaves from the node's address, outside NetworkPolicy selection, so it needs no
       `netpol_from` grant. It talks only to ipify, the WAN probe endpoints and the API server,
-      and pushes nothing: the sidecar owns the Kuma tile.
+      and reports nothing: the sidecar owns the verdict.
   `ClusterFirstWithHostNet` keeps `kubernetes.default.svc` resolvable from the host network.
 
   It runs no cscli and execs into nothing. Its ServiceAccount may `patch` the one ConfigMap

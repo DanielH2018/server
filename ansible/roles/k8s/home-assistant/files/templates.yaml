@@ -88,10 +88,11 @@
       # The UPS's own self-test verdict: NUT sets the RB (Replace Battery) flag in ups.status
       # (sensor.apc_ups_status_data, a space-separated flag list) when a periodic self-test fails.
       # Kept strictly on/off (falls back to 'off' when the source is unavailable/unknown) so HA's
-      # Prometheus scrape always exports hass_binary_sensor_state for it while HA is up — its absence
-      # then means the whole HA scrape is down, which monitor-bridge's check_ups treats as a defer
-      # (not a silent single-arm drop). Read by monitor-bridge (UPS_REPLACE_QUERY) for the
-      # Kuma->Discord channel; the ups_power_event automation covers the HA-mobile-push channel.
+      # Prometheus scrape always exports hass_binary_sensor_state for it while HA is up. No alert
+      # reads it: UPSReplaceBattery (observability's files/rules/hosts.yaml) reads nut-exporter's
+      # network_ups_tools_ups_status{flag="RB"}. The UPS dashboard's "Replace-battery self-test"
+      # panel falls back to this series while nut-exporter is down. The ups_power_event
+      # automation covers the HA-mobile-push channel.
       state: >-
         {{ 'RB' in (states('sensor.apc_ups_status_data') or '').split() }}
 

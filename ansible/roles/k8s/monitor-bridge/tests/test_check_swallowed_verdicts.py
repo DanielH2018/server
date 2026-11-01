@@ -174,7 +174,7 @@ def test_a_lost_down_push_from_a_retiring_tag_still_pages_beside_a_landed_siblin
     assert "sync-artifacts" in msg
 
 
-# B6b's pod producers: the crowdsec-jobs sidecar's three pushing jobs and the two health
+# B6b's pod producers: the crowdsec-jobs sidecar's three exporting jobs and the two health
 # CronJobs. Their tags are read from the role files that log them, not from a rendered shell
 # script, because none of them is one.
 _B6B_TAGS = {
@@ -188,9 +188,9 @@ _K8S = Path(__file__).resolve().parents[2]
 
 
 def _pod_producer_tags():
-    """Tags the B6b producers log under: `Job("<tag>", ... push_env=<set>)` and `TAG = "<tag>"`."""
+    """Tags the B6b producers log under: `Job("<tag>", ... exports=True)` and `TAG = "<tag>"`."""
     jobs = (_K8S / "crowdsec" / "files" / "crowdsec_jobs.py").read_text()
-    tags = set(re.findall(r'Job\(\s*"([a-z-]+)",[^)]*?push_env="[A-Z_]+",?\s*\)', jobs))
+    tags = set(re.findall(r'Job\(\s*"([a-z-]+)",[^)]*?exports=True,?\s*\)', jobs))
     for role, script in (
         ("configarr", "configarr_health.py"),
         ("janitorr", "janitorr_health.py"),

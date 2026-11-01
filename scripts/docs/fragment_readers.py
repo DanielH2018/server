@@ -49,6 +49,19 @@ def host_has_docker(estate: Estate) -> dict[str, bool]:
     }
 
 
+def hosts_listing_component(
+    component: str, hosts_dir: _Path | None = None
+) -> list[str]:
+    """Every host whose `hosts/<host>/package.yml` lists `component`, sorted by host."""
+    hosts_dir = hosts_dir or REPO / "hosts"
+    return sorted(
+        path.parent.name
+        for path in hosts_dir.glob("*/package.yml")
+        if component
+        in (yaml_fast.safe_load(path.read_text()) or {}).get("components", [])
+    )
+
+
 def registry_counts(path: _Path) -> dict[str, int]:
     """How many registered secrets sit in each tier."""
     counts: dict[str, int] = {}

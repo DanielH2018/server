@@ -248,21 +248,15 @@ def test_the_orchestrator_is_registered_as_a_cross_host_token_consumer():
     assert '"etcd_drill_full_push_token"' in consumers
 
 
-def test_the_fence_verdict_has_a_token_of_its_own():
-    """The fence's non-fatal verdict is pushed on its own token, a second cross-host consumer.
+def test_the_fence_verdict_has_a_check_of_its_own():
+    """The fence's non-fatal verdict is written to its own textfile check.
 
     An unmeasured range leaves the restore drill passing, so the drill's verdict is `up` and the
-    label is only message text. M6 batch B4's Cutover-1a deleted both Kuma tiles; the key stays
-    registered until the push stops.
+    label is only message text. M6 batch B4's Cutover-2 dropped both Kuma pushes, so the second
+    check is what alarms on it.
     """
-    consumers = (
-        ANSIBLE.parent / "scripts" / "secrets_mgmt" / "consumers.py"
-    ).read_text()
-    assert '"etcd_drill_fence_push_token"' in consumers
-
-    # The env file the orchestrator sources, as the host receives it: the KEY survives the
-    # render even though the token's value is the shared `STUB`.
-    push_env = rendered_setup_text("hypervisor", "etcd-drill-kuma-push.env.j2")
-    assert "ETCD_DRILL_FENCE_PUSH_TOKEN=" in push_env, (
-        "the orchestrator reads the token from this env file; without the line it pushes nothing"
-    )
+    body = rendered_setup_text("hypervisor", "etcd-restore-drill-vm.sh.j2")
+    assert "CHECK_FENCE=etcd-restore-drill-egress-fence" in body
+    assert 'write_verdict "$CHECK_FENCE"' in body
+    for leftover in ("kuma-push-lib", "kuma_push", "/api/push/", "PUSH_TOKEN"):
+        assert leftover not in body, f"the orchestrator still names {leftover}"

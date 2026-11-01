@@ -1,27 +1,29 @@
-"""The configarr-health CronJob pushes its verdict, and its pod's layout imports the reader.
+"""The configarr-health CronJob records its verdict as a log line, and its pod's layout imports the reader.
 
-`files/configarr_health.py` runs as the configarr-health CronJob since H2.5b, reading its push
-token from the configarr-health Secret. The first tests drive its `main` with a stubbed kubectl
-and a stubbed push. The last one builds the pod's `/config` directory from the rendered
-ConfigMap and the CronJob's `items:`, exactly as the kubelet mounts them, and runs the reader
-from it, so a module the ConfigMap stops carrying fails here rather than in the next scheduled pod.
+`files/configarr_health.py` runs as the configarr-health CronJob since H2.5b. M6 batch B6b's Cutover-2 removed its Kuma
+push, so the first tests drive its `main` with a stubbed kubectl and read what it logs and
+patches. The last two build the pod's `/config` directory from the rendered ConfigMap, exactly
+as the kubelet mounts it, and run the reader from it, so a module the ConfigMap stops carrying
+fails here rather than in the next scheduled pod.
 
 Run: uv run pytest ansible/roles/k8s/configarr/tests/test_configarr_health.py
 """
 
 import json
 import importlib.util
+import inspect
 import re
 import socket
 import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 from _k8s_render import render_role_template
 from lib import yaml_fast
 
 import configarr_health
+
+ROLE = Path(__file__).resolve().parents[1]
 
 _JOBS = {
     "items": [
@@ -56,80 +58,48 @@ _PARSER_SPEC.loader.exec_module(_PARSER)
 _SYSLOG_UP = r"\S+ \S+ configarr-health: status=up "
 
 
-@pytest.fixture
-def pushes(monkeypatch) -> list[tuple]:
-    """Sets the push environment; each push the stub below receives lands in the list."""
-    monkeypatch.setenv(
-        "KUMA_PUSH_URL",
-        "http://uptime-kuma.homelab.svc.cluster.local:3001/api/push/tok",
-    )
-    return []
-
-
-def _main(pushes: list[tuple], kubectl, **kwargs) -> int:
-    def push(status, msg, base, token, *, log=None):
-        pushes.append((status, msg, base, token))
-        return True
-
-    return configarr_health.main(kubectl=kubectl, push=push, now=lambda: _NOW, **kwargs)
+def _main(kubectl, **kwargs) -> int:
+    return configarr_health.main(kubectl=kubectl, now=lambda: _NOW, **kwargs)
 
 
 def _replies(replies: dict[str, tuple[int, str]]):
     return lambda *argv: replies[argv[0]]
 
 
-def test_a_clean_sync_is_pushed_up_to_the_url_from_the_environment(pushes, capsys):
+def test_a_clean_run_logs_status_up_in_the_syslog_shape(capsys):
     kubectl = _replies({"get": (0, json.dumps(_JOBS)), "logs": (0, "Done\n")})
-    assert _main(pushes, kubectl) == 0
-    [(status, msg, base, token)] = pushes
-    assert (status, base, token) == (
-        "up",
-        "http://uptime-kuma.homelab.svc.cluster.local:3001",
-        "tok",
-    )
-    assert msg == "configarr sync ok: Done (1.0h ago)"
-    assert re.match(_SYSLOG_UP, capsys.readouterr().out), "not in the syslog shape"
-
-
-def test_a_push_kuma_rejects_parses_as_a_rejection_in_monitor_bridge(pushes, capsys):
-    def push(status, msg, base, token, *, log):
-        log("push failed (http=404 by=kuma) (status=%s: %s)" % (status, msg))
-        return False
-
-    configarr_health.main(
-        kubectl=_replies({"get": (0, json.dumps(_JOBS)), "logs": (0, "Done\n")}),
-        push=push,
-        now=lambda: _NOW,
-    )
-    *_, last = capsys.readouterr().out.splitlines()
-    assert _PARSER.parse_push_line(last)[:4] == (
+    assert _main(kubectl) == 0
+    out = capsys.readouterr().out
+    assert re.match(_SYSLOG_UP, out), "not in the syslog shape"
+    assert "configarr sync ok: Done (1.0h ago)" in out
+    # monitor-bridge reads the line as a landed run, never as a failed push.
+    assert _PARSER.parse_push_line(out.strip())[:4] == (
         "configarr-health",
         socket.gethostname(),
-        "rejected",
+        "run",
         "up",
-    ), last
+    )
 
 
-def test_a_reader_that_raises_pushes_down_naming_the_exception(pushes):
+def test_an_unreadable_job_list_logs_status_down(capsys):
+    assert _main(_replies({"get": (1, "Forbidden")})) == 0
+    assert (
+        "status=down cannot read Jobs in homelab: Forbidden" in capsys.readouterr().out
+    )
+
+
+def test_a_reader_that_raises_logs_down_naming_the_exception(capsys):
     def broken(*argv):
         raise RuntimeError("no kubectl")
 
-    assert _main(pushes, broken) == 0
-    [(status, msg, _, _)] = pushes
-    assert status == "down"
-    assert msg == "configarr health reader failed: RuntimeError: no kubectl"
+    assert _main(broken) == 0
+    assert (
+        "status=down configarr health reader failed: RuntimeError: no kubectl"
+        in capsys.readouterr().out
+    )
 
 
-def test_with_no_token_it_prints_the_verdict_and_pushes_nothing(
-    monkeypatch, pushes, capsys
-):
-    monkeypatch.setenv("KUMA_PUSH_URL", "")
-    assert _main(pushes, _replies({"get": (1, "Forbidden")})) == 0
-    assert pushes == []
-    assert capsys.readouterr().out == "down\tcannot read Jobs in homelab: Forbidden\n"
-
-
-def test_the_verdict_is_also_patched_onto_the_verdict_configmap(pushes):
+def test_the_verdict_is_patched_onto_the_verdict_configmap():
     calls = []
 
     def kubectl(*argv):
@@ -140,18 +110,17 @@ def test_the_verdict_is_also_patched_onto_the_verdict_configmap(pushes):
             else {"get": (0, json.dumps(_JOBS)), "logs": (0, "Done\n")}[argv[0]]
         )
 
-    assert _main(pushes, kubectl, verdict_configmap="configarr-health-verdict") == 0
+    assert _main(kubectl, verdict_configmap="configarr-health-verdict") == 0
     [patch] = [c for c in calls if c[0] == "patch"]
     assert patch[:3] == ("patch", "configmap", "configarr-health-verdict")
     annotations = json.loads(patch[-1].removeprefix("--patch="))["metadata"][
         "annotations"
     ]
-    assert annotations["homelab/check-verdict"] == pushes[0][0]
+    assert annotations["homelab/check-verdict"] == "up"
     assert annotations["homelab/check-last-run"].endswith("Z")
-    assert len(pushes) == 1  # the Kuma push still runs beside the export
 
 
-def test_the_verdict_patch_names_a_field_manager_flux_does_not_strip(pushes):
+def test_the_verdict_patch_names_a_field_manager_flux_does_not_strip():
     calls = []
 
     def kubectl(*argv):
@@ -162,7 +131,7 @@ def test_the_verdict_patch_names_a_field_manager_flux_does_not_strip(pushes):
             else {"get": (0, json.dumps(_JOBS)), "logs": (0, "Done\n")}[argv[0]]
         )
 
-    _main(pushes, kubectl, verdict_configmap="configarr-health-verdict")
+    _main(kubectl, verdict_configmap="configarr-health-verdict")
     [patch] = [c for c in calls if c[0] == "patch"]
     managers = [
         a.removeprefix("--field-manager=")
@@ -173,8 +142,7 @@ def test_the_verdict_patch_names_a_field_manager_flux_does_not_strip(pushes):
     assert managers == ["configarr-health"]
 
 
-def test_a_failed_export_exits_one_after_the_push(pushes):
-
+def test_a_failed_export_exits_one_after_the_log_line(capsys):
     def kubectl(*argv):
         return (
             (1, "Forbidden")
@@ -182,8 +150,22 @@ def test_a_failed_export_exits_one_after_the_push(pushes):
             else {"get": (0, json.dumps(_JOBS)), "logs": (0, "Done\n")}[argv[0]]
         )
 
-    assert _main(pushes, kubectl, verdict_configmap="configarr-health-verdict") == 1
-    assert len(pushes) == 1
+    assert _main(kubectl, verdict_configmap="configarr-health-verdict") == 1
+    assert "status=up" in capsys.readouterr().out
+
+
+def test_the_pod_carries_no_kuma_push_url():
+    """M6 batch B6b's Cutover-2: no env var, Secret or `push` parameter is left."""
+    [cronjob] = yaml_fast.safe_load_all(
+        render_role_template("configarr", "health-cronjob.yaml.j2")
+    )
+    containers = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"][
+        "containers"
+    ]
+    names = {e["name"] for c in containers for e in c.get("env", [])}
+    assert "KUMA_PUSH_URL" not in names
+    assert "push" not in inspect.signature(configarr_health.main).parameters
+    assert not (ROLE / "templates" / "health-secret.yaml.j2").exists()
 
 
 def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):

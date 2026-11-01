@@ -5,11 +5,11 @@
 # Usage: setup-drift-check.sh [-h|--help]
 # Takes no arguments. systemd timer kuma-check-setup-drift.timer runs it as root daily at 08:20
 # on hosts that run no manifest-prune-check.sh, and again every 30 minutes while the last run
-# failed. It reads /etc/homelab/kuma-push.env for the Kuma push token and compares the deployed
-# scripts with the render manifests under /var/lib/homelab. Each run writes its verdict to
-# $TEXTFILE_DIR/setup-drift-check.prom for node_exporter's textfile collector first (default
-# /var/lib/node-exporter-textfile; a test points it elsewhere). Running it by hand is safe, but it
-# pushes to the Kuma monitor.
+# failed. It compares the deployed scripts with the render manifests under /var/lib/homelab. Each
+# run writes its verdict to $TEXTFILE_DIR/setup-drift-check.prom for node_exporter's textfile
+# collector (default /var/lib/node-exporter-textfile; a test points it elsewhere), which
+# SetupDriftFailed and SetupDriftNotReporting read. Running it by hand is safe. M6 batch B2's
+# Cutover-2 removed its Kuma push.
 #
 # WHAT THIS EXISTS FOR (2026-08-29 review M-10). The setup plane is deployed only by a manual
 # `initial_setup.yml`; nothing converges it, so a host can run an old render of a script or an
@@ -33,7 +33,7 @@
 # Runs as root: the deployed-code arm compares live artifacts under /usr/local, some of which are
 # not world-readable, and the render arm reads fragments written 0644 root:root. Same trade-off
 # as manifest-prune-check.sh — root buys the file reads and nothing else; this script makes no
-# cluster or network call beyond its own two pushes.
+# cluster or network call.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -42,11 +42,6 @@ for arg in "$@"; do
   esac
 done
 
-# shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t setup-drift-check "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
 # shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t setup-drift-check "homelab-check-lib.sh missing — run initial_setup on this host"
@@ -64,28 +59,9 @@ REPO_DIR=/home/{{ sys_user }}/server
 # which agree — so the age is reported as its own fault rather than left to silence the arms.
 TREE_MAX_DAYS={{ setup_drift_tree_max_days }}
 # The longest legitimate gap between two textfile writes: the timer fires daily at 08:20 (86400s),
-# and the extra hour is the margin Kuma's tile keeps (interval 90000).
+# and the extra hour is margin for a slow run.
 # ansible/tests/services/test_initial_setup_check_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=90000
-
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
-# push must not depend on DNS.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-
-# Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
-# local account. Its own env file rather than /etc/rancher/k3s/kuma-push.env, which is a
-# whole-content template owned by roles/setup/k3s and does not exist on an agent node at all.
-SETUP_DRIFT_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r /etc/homelab/kuma-push.env ]] && . /etc/homelab/kuma-push.env
-if [[ -z "$SETUP_DRIFT_PUSH_TOKEN" ]]; then
-  # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
-  # matches registry names against raw template text and cannot tell a log line from a render.
-  # The run goes on: the textfile verdict is what Prometheus reads, and only the push needs the token.
-  logger -t setup-drift-check "SETUP_DRIFT_PUSH_TOKEN not set — skipping the Kuma push (see /add-secret)"
-fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${SETUP_DRIFT_PUSH_TOKEN}"
 
 setup_drift_scan
 
@@ -115,20 +91,15 @@ else
   MSG="${MSG}${TREE_NOTE}${DEPLOYED_NOTE}${MANIFEST_NOTE}"
 fi
 
-# Unconditional and before the push: the `|| logger` inside kuma_push only fires when the curl
-# fails, so a successfully-pushed DOWN would otherwise leave no durable record and
-# `probe.py alerts` could never reconstruct this monitor. NOTICE rather than INFO — journald here
-# caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
+# Unconditional: this line is the durable record of the verdict's message, and Loki keeps it.
+# NOTICE rather than INFO — journald here caps
+# MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
 logger -p daemon.notice -t setup-drift-check "status=${STATUS} ${MSG}"
 
-# The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and the
-# file must not wait on Kuma. A failed write logs and the run goes on to its push.
+# The textfile verdict. A failed write logs and the run goes on to its exit code.
 write_check_textfile setup-drift-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
   || logger -t setup-drift-check "textfile write failed (status=${STATUS})"
 
-[[ -z "$SETUP_DRIFT_PUSH_TOKEN" ]] \
-  || kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" setup-drift-check
-
 # The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
-# a down push so Restart=on-failure reruns the check until the plane is re-applied, 0 after up.
+# a down verdict so Restart=on-failure reruns the check until the plane is re-applied, 0 after up.
 [[ "$STATUS" == up ]] || exit 1

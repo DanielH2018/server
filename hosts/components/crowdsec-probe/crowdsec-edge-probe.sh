@@ -17,7 +17,7 @@
 #
 # The file is `*.status`, not `*.log`, so the Pi's Alloy does not ship it to Loki as a syslog
 # stream: one line a minute is evidence for a counter, not a log. Its lines carry no `status=`
-# token either way, because `probe.py alerts` reads that token as a cron verdict.
+# token either way, because that token marks a cron verdict.
 #
 # Bounded on log2ram's tmpfs by rename, never by truncation. Alloy tracks a byte offset in the
 # file, and a file truncated and rewritten in place would make it re-read and re-count old

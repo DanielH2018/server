@@ -341,7 +341,7 @@ is the intended signal, not a second fault.
 
 Both token heartbeats leave a record at `/var/log/pi-health/health.log`, which the Pi's Alloy
 tails as its `pi_health` source under `job="syslog"`. Kuma keeps only current state, so without
-this a DOWN that clears is gone — and `probe.py alerts` reconstructs episodes from
+this a DOWN that clears is gone. The file's lines are the Pi's only entries in
 `{job="syslog"} |= "status=down"`.
 
 Two independent gaps kept daniel-pi out of that view, and closing either alone would have

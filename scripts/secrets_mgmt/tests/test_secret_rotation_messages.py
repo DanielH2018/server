@@ -27,15 +27,8 @@ def _record(key: str, last_rotated: str) -> SimpleNamespace:
     return SimpleNamespace(key=key, last_rotated=dt.date.fromisoformat(last_rotated))
 
 
-def _push() -> SimpleNamespace:
-    return SimpleNamespace(
-        push=True, check=False, no_derive=True, extra_down=None, all=False
-    )
-
-
 def test_every_stderr_line_carries_the_scripts_error_prefix(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["/repo/scripts/secrets_mgmt/secret_rotation.py"])
-    monkeypatch.delenv("SECRET_ROTATION_KUMA", raising=False)
     token = "monitor_bridge_test_token"
     record_key, _ = build_tools(Fakes(registry=_reg("tok", source="record")))
     pinned, _ = build_tools(Fakes(registry=_reg("tok", tier="pinned")))
@@ -50,7 +43,6 @@ def test_every_stderr_line_carries_the_scripts_error_prefix(monkeypatch, capsys)
         sr.cmd_rotate(_rotate(token), deploy_fails),
         sr.cmd_record(_record("absent", "2026-01-01"), pinned),
         sr.cmd_record(_record("tok", future), pinned),
-        sr.cmd_audit(_push(), pinned),
     ]
 
     assert all(code != 0 for code in codes), codes

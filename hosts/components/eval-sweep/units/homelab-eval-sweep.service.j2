@@ -12,10 +12,9 @@ User={{ sys_user }}
 # directory (tmpfiles.d/homelab-eval-sweep.conf.j2).
 ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-eval-sweep.conf
 ExecStart=/usr/lib/homelab/eval-run
-# The script reads both from $CREDENTIALS_DIRECTORY. An empty anthropic_api_key is the disarmed
+# The script reads it from $CREDENTIALS_DIRECTORY. An empty anthropic_api_key is the disarmed
 # no-op that reports UP.
 LoadCredential=anthropic_api_key:/run/credstore/anthropic_api_key
-LoadCredential=homelab_eval_push_token:/run/credstore/homelab_eval_push_token
 # The cron's PATH and HOME: node (through fnm), uv, git and gh resolve without a login shell.
 # eval-run narrows PATH further once it starts.
 Environment=PATH=/usr/local/bin:/usr/bin:/bin

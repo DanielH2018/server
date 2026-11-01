@@ -20,9 +20,9 @@ from _fence_probe import (
     POD_IP,
     _all_vars,
     _load_host_vars,
-    fence_pushes,
+    fence_reports,
+    fence_textfile_success,
     host_reaches,
-    logger_calls,
     run_fence,
     state,
 )
@@ -147,12 +147,12 @@ def test_a_pod_cidr_with_no_neighbour_to_dial_is_unproven_rather_than_absent(tmp
     assert "no usable neighbour" in state(lines, "PODNET"), lines
 
 
-def test_an_unproven_range_alarms_on_a_tile_of_its_own(tmp_path):
+def test_an_unproven_range_alarms_on_a_check_of_its_own(tmp_path):
     """The verdict the drill does not fail on still has to reach the alert chain.
 
-    An unproven target leaves the restore drill passing, so the drill's own tile pushes `up` and
-    the label rides along in a green message that alerts nobody. The fence tile is what makes the
-    same run read as an alarm — and it must push `up` on a clean hold, or it alarms every month.
+    An unproven target leaves the restore drill passing, so the drill's own verdict is `up` and
+    the label rides along in a green message that alerts nobody. The fence check is what makes the
+    same run read as an alarm — and it must read `up` on a clean hold, or it alarms every month.
     """
     vip = _all_vars()["k3s_metallb_ingress_vip"]
     run_fence(
@@ -161,30 +161,27 @@ def test_an_unproven_range_alarms_on_a_tile_of_its_own(tmp_path):
         # The Longhorn ClusterIP answers from neither side: a Service that moved.
         host_reachable=[CONTROL, f"http://{vip}", POD_IP],
     )
-    unproven = fence_pushes(tmp_path)
+    unproven = fence_reports(tmp_path)
 
     assert [status for status, _ in unproven] == ["down"], unproven
     assert "LONGHORNSVC" in unproven[0][1], (
         f"the alarm must name the fence and the range it could not measure: {unproven}"
     )
-
-    # The syslog line is the local record of the same verdict, and `probe.py alerts` reads it
-    # back from Loki. Asserted here so the recording `logger` stub cannot fail open.
-    assert any("fence=down" in call for call in logger_calls(tmp_path)), logger_calls(
-        tmp_path
-    )
+    # The textfile is what EtcdRestoreDrillEgressFenceFailed reads.
+    assert fence_textfile_success(tmp_path) == "0"
 
     held = tmp_path / "held"
     held.mkdir()
     run_fence(held, guest_reachable=[CONTROL], host_reachable=host_reaches())
 
-    assert [status for status, _ in fence_pushes(held)] == ["up"], fence_pushes(held)
+    assert [status for status, _ in fence_reports(held)] == ["up"], fence_reports(held)
+    assert fence_textfile_success(held) == "1"
 
 
-def test_a_leak_alarms_on_the_fence_tile_before_it_aborts_the_run(tmp_path):
-    """The abort path exits, so a push made after it would never happen.
+def test_a_leak_alarms_on_the_fence_check_before_it_aborts_the_run(tmp_path):
+    """The abort path exits, so a report made after it would never happen.
 
-    The leak is already fatal to the drill, but the fence tile is the one named for the fence:
+    The leak is already fatal to the drill, but the fence check is the one named for the fence:
     an operator reading it sees a guest that reached production rather than a failed restore.
     """
     pi = _load_host_vars("daniel-pi")["server_ip"]
@@ -193,7 +190,8 @@ def test_a_leak_alarms_on_the_fence_tile_before_it_aborts_the_run(tmp_path):
         guest_reachable=[CONTROL, f"http://{pi}:51821"],
         host_reachable=host_reaches(),
     )
-    made = fence_pushes(tmp_path)
+    made = fence_reports(tmp_path)
 
     assert [status for status, _ in made] == ["down"], made
     assert "BROKEN" in made[0][1] and "WGEASY" in made[0][1], made
+    assert fence_textfile_success(tmp_path) == "0"

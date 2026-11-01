@@ -114,9 +114,6 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         calls.append(("sops_names", (), {}))
         return list(f.names)
 
-    def kuma_push(url: str, ok: bool, msg: str) -> None:
-        calls.append(("kuma_push", (url, ok, msg), {}))
-
     def cluster_expected() -> Expected:
         calls.append(("cluster_expected", (), {}))
         if f.expected_error is not None:
@@ -142,7 +139,6 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         host_file_keys=lambda: f.host_keys,
         sops_decrypt=partial(decrypted_values, run=run),
         sops_set=partial(sops_set, run=run),
-        kuma_push=kuma_push,
         deploy=partial(run_deploy, run=run),
         owners=lambda: f.owners,
         cluster_tree=lambda: Tree(f.cluster_root),
