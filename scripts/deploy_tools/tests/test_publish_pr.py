@@ -258,6 +258,12 @@ def _stub_body(name: str, log: Path, fail_on: str = "") -> str:
     )
 
 
+# Runs the command after `--`, as the real one does inside its transient service.
+_SYSTEMD_RUN_PASSTHROUGH = (
+    '#!/usr/bin/env bash\nwhile [ "$1" != "--" ]; do shift; done\nshift\nexec "$@"\n'
+)
+
+
 def _land_stub(path: Path, log: Path) -> Path:
     """A stand-in for land.py, run with the interpreter publish_pr runs `land.py` with."""
     path.write_text(
@@ -276,6 +282,8 @@ def _run_cli(
         tmp_path / "bin",
         git=_stub_body("git", log, fail_on),
         gh=_stub_body("gh", log, fail_on),
+        # CI's runner is a system unit, so the landing goes through systemd-run there (#6864).
+        **{"systemd-run": _SYSTEMD_RUN_PASSTHROUGH},
     )
     # The stubs above answer instead of git, but an inherited GIT_DIR from a hook or a parent
     # worktree points at a REAL repository and one of these arguments is `reset --hard`.
