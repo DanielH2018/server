@@ -147,6 +147,21 @@ loki.process "pods" {
       replace    = "<redacted>"
     }
   }
+
+  // Redact Uptime Kuma push tokens (issue #6749). A push URL carries its token as a path
+  // segment, `/api/push/<token>`, so no query-parameter rule reaches it. Three containers logged
+  // one over a week: access-log-rotate's copy of Traefik's access log, cloudflare-ddns on a
+  // failed ping, and crowdsec-agent. Any container may push, so the stage is scoped by the line
+  // filter rather than by container; the filter also keeps the regex off every other line.
+  // As above, only the token goes, so the target and the ping's message survive.
+  // Prospective only: probe.py redacts the records already in Loki on the way out.
+  stage.match {
+    selector = "{container=~\".+\"} |= \"/api/push/\""
+    stage.replace {
+      expression = "/api/push/([0-9A-Za-z_-]+)"
+      replace    = "<redacted>"
+    }
+  }
 }
 
 // ---- Host files. Root + DAC_READ_SEARCH in the DaemonSet exist for these. ---------------
