@@ -105,12 +105,12 @@ def test_a_grace_reads_in_hours_when_whole_and_minutes_otherwise(seconds, text):
 def test_the_grace_table_has_a_row_per_slug():
     body = s.render_deadman_graces(
         [
-            {"slug": "uptime-kuma-alive", "kind": "simple", "grace": 1200},
+            {"slug": "alertmanager-watchdog", "kind": "simple", "grace": 1200},
             {"slug": "registry-gc", "kind": "cron", "grace": 3600},
         ]
     )
     assert body.splitlines()[2:] == [
-        "| `uptime-kuma-alive` | Simple | 20 minutes |",
+        "| `alertmanager-watchdog` | Simple | 20 minutes |",
         "| `registry-gc` | Cron | 1 hour |",
     ]
 

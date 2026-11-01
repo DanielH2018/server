@@ -104,10 +104,9 @@ k8s_autodeploy_reason: "observability — this IS the alert pipeline; a broken d
 monitor_bridge_healthchecks_expected:
   - {slug: longhorn-backup-health, kind: simple, timeout: 600, grace: 1200}
   - {slug: daniel-box-disk-health, kind: simple, timeout: 600, grace: 1500}
-  - {slug: uptime-kuma-alive, kind: simple, timeout: 600, grace: 1200}
   # Pinged by Alertmanager's always-firing Watchdog every
-  # observability_alertmanager_watchdog_repeat_seconds, not by a cron. Sized like
-  # uptime-kuma-alive, so the weekly reboot's gap fits inside period plus grace.
+  # observability_alertmanager_watchdog_repeat_seconds, not by a cron. Its 600s period plus
+  # 1200s grace hold the weekly reboot's gap.
   - {slug: alertmanager-watchdog, kind: simple, timeout: 600, grace: 1200}
   - {slug: manifest-prune-check, kind: cron, schedule: "15 5 * * *", tz: UTC, grace: 7200}
   - {slug: etcd-snapshot-offbox, kind: cron, schedule: "45 2 * * *", tz: UTC, grace: 3600}

@@ -18,7 +18,6 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | any of its three arms: live routing or workload objects absent from the staged manifests; a `copy:`-deployed artifact differing byte-for-byte from the repo; or a `template:`-rendered setup script whose source checksum no longer matches the render manifest this host wrote. A read that failed pings `/fail` too: a `kubectl get` for any checked kind, the read of Flux's Kustomizations in `flux-system`, or the declared-set read of the staged manifests |
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `roles/setup/k8s_host_files/templates/registry-gc.sh.j2` | a mirror's GC job exceeded its deadline, a mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
-| `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
 | `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
 | `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
@@ -78,34 +77,28 @@ than a wider grace — see the boot-grace note under *Watching the spine itself*
 
 ## Watching the spine itself
 
-The job checks above all answer "did this job run and succeed." `uptime-kuma-alive`
-answers a different question: is the thing every alert terminates in still working.
+The job checks above all answer "did this job run and succeed." Kuma's own liveness is a
+different question: is the thing that still pages the checks that have not moved to Alertmanager still working.
 
-The gap it closes: `longhorn-backup-health` pings hc-ping.com whether or not its Kuma push
-succeeded, which is right for a backup check and leaves Kuma itself uncovered.
-`daniel-box-disk-health` pushes nothing to Kuma since M3's PR 5: it writes a textfile metric
-that Prometheus rules page, then pings hc-ping.com. A dead Kuma pod, a wedged SQLite, or a NetworkPolicy that fences off :3001
-silences every one of the ~82 tiles while every job check above keeps reporting green. Kuma
-remains the only pager for its tiles until M2 cuts a family over to Alertmanager, and until then
-Alertmanager pages only its own meta alerts. A *cluster* outage is caught, because these scripts
-go silent with it. A Kuma-only outage was caught by nothing.
-
-`longhorn-backup-health` carries its Kuma push's exit status to this second slug: success
-pings, failure pings `/fail`. It was chosen over a dedicated cron because it already runs every
-10 minutes and already talks to Kuma — no new unit, no new credential.
-
-Set the check's **period to 10 minutes and its grace to 20**, matching the cron. It is not a
-job check, so `/start` is never sent and the duration column stays empty; that is expected.
+Prometheus's `KumaDown` rule answers it. It fires when the scrape of the `uptime-kuma` Service
+fails for 5 minutes, or the job has no `up` series, and Alertmanager pages it critical to Discord
+and email. A dead Kuma pod, a wedged SQLite or a NetworkPolicy that fences off :3001 therefore
+pages from Alertmanager. `KumaDown` replaced the `uptime-kuma-alive` check in M6 batch B1:
+`longhorn-backup-health.sh` used to carry its Kuma push's exit status to that slug, and the
+script no longer pushes or pings it. C-1a deletes `KumaDown` with Kuma. A *cluster* outage is
+caught off-site, because the pinging scripts go silent with it. `KumaDown` proves a 200 from
+`/metrics`, which is weaker than `uptime-kuma-alive` proved (that Kuma accepted a push).
 
 ### The first run after a boot is skipped
 
-Both slugs this script feeds page on a `/fail`, and a `/fail` alerts immediately whatever the
+The slug this script feeds pages on a `/fail`, and a `/fail` alerts immediately whatever the
 grace says. So a cron firing seconds after a boot — against a cluster whose pods have not
 started — pages every time the host restarts, and no console setting can prevent it.
 
 That is the 2026-08-30 restart, exactly: daniel-box came up at 07:39:48, this cron ran at
 07:40:00, and the last pod reached Ready at 07:45:06. Both `longhorn-backup-health` and
-`uptime-kuma-alive` sent `/fail` at 07:40 for an outage that ended five minutes later.
+`uptime-kuma-alive` (retired since) sent `/fail` at 07:40 for an outage that ended five minutes
+later.
 
 The script now calls `boot_grace_active` and exits 0 while the host's uptime is under
 `k3s_health_cron_boot_grace_s`, so the first slot is skipped and the second reports honestly.
@@ -130,7 +123,7 @@ second channel. A Kuma that accepts a push and then drops the alert still reads 
 
 ### Alertmanager's watcher
 
-`alertmanager-watchdog` watches Alertmanager as `uptime-kuma-alive` watches Kuma. Prometheus
+`alertmanager-watchdog` watches Alertmanager. Prometheus
 evaluates an always-firing `Watchdog` rule, and Alertmanager routes it to this check every
 `observability_alertmanager_watchdog_repeat_seconds` (60 seconds). The route comes first and
 takes no mute interval, so no maintenance window silences it. The pings stop when Alertmanager
@@ -143,7 +136,7 @@ The receiver sets `send_resolved: false`. When the Watchdog stops arriving, Aler
 resolves it after `resolve_timeout`, and a resolved notification would count as a ping and hide
 the outage.
 
-The check is Simple, with a 10-minute period and a 20-minute grace, like `uptime-kuma-alive`, so
+The check is Simple, with a 10-minute period and a 20-minute grace, so
 a down Alertmanager pages up to 30 minutes in. A shorter check would page on most weekly
 reboots: the gap between the last ping before the reboot and the first after it is about 15
 minutes. The operator accepted the 30 minutes on 2026-10-12
@@ -164,7 +157,6 @@ internal infrastructure, and some send no body at all:
 | `manifest-prune-check` | generic | Its message names live IngressRoute/Middleware objects — internal service and hostname fragments. |
 | `pi-peer-backup` | generic | An rsync failure echoes `PI_SRC`, which carries the Pi's LAN IP and ssh user. |
 | `registry-gc` | full message | A revision and blob count, or a failure naming the cluster namespace and the `ghcr-mirror` Deployment. Low value to an outsider and it is what makes the failure actionable. |
-| `uptime-kuma-alive` | none | Status only, and status is the whole signal — it reports on Kuma, not on what Kuma found. |
 | `alertmanager-watchdog` | `{"status": "firing"}` | The receiver's `payload` carries the alert's status alone, so no label, annotation or URL goes off-site. |
 | `weekly-reboot-<host>`, `<host>-docker-prune` | none | Status only. The ping discards curl's output, and the cron sends no body. |
 
@@ -233,7 +225,7 @@ the Healthchecks.io API returns, read with `healthchecks_api_read_only_key`:
 
 | Check slug | Down | Up | Detection after power-off |
 |---|---|---|---|
-| `uptime-kuma-alive` | 14:20:04 UTC | 20:20:07 UTC | 24 min |
+| `uptime-kuma-alive` (retired in M6 batch B1) | 14:20:04 UTC | 20:20:07 UTC | 24 min |
 | `daniel-box-disk-health` | 14:25:02 UTC | 20:20:03 UTC | 29 min |
 | `longhorn-backup-health` | 14:25:03 UTC | 20:20:06 UTC | 29 min |
 

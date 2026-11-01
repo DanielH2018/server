@@ -121,7 +121,7 @@ def _sending_files() -> list[Path]:
         path
         for path in _ping_files()
         if re.search(
-            r"curl\b[^\n]*(HC_URL|HC_ALIVE_URL|HC_PING_URL|\$url)",
+            r"curl\b[^\n]*(HC_URL|HC_PING_URL|\$url)",
             _read(path).replace("\\\n", " "),
         )
     ]
@@ -146,11 +146,8 @@ def test_failure_is_reported(path: Path) -> None:
 
 
 # Every hc-ping curl invocation, with backslash continuations folded first so a call split over
-# two lines is read whole. `HC_ALIVE_URL` is named because `_sending_files`' own regex does not
-# match it — longhorn-backup-health.sh.j2 reaches this census through its OTHER ping.
-_PING_CURL_RE = re.compile(
-    r"curl\b[^\n]*?\$\{?(?:HC_URL|HC_ALIVE_URL|HC_PING_URL|url)\b[^\n]*"
-)
+# two lines is read whole.
+_PING_CURL_RE = re.compile(r"curl\b[^\n]*?\$\{?(?:HC_URL|HC_PING_URL|url)\b[^\n]*")
 
 # The ping sites this guard must find. Named rather than counted: a census that globs reads
 # empty the day a file moves, and a parametrized check over nothing passes.

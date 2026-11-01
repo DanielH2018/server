@@ -21,7 +21,7 @@ MUST_FIND = frozenset(
     {
         "roles/setup/k3s/templates/registries.yaml.j2",
         "roles/setup/k3s/templates/host-corefile.j2",
-        "roles/setup/k3s/templates/kuma-push.env.j2",
+        "roles/setup/gitops_deploy/templates/config.env.j2",
         "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
         "roles/setup/common/templates/resolv.conf.j2",
         "roles/setup/nut_host/templates/host-upsmon.conf.j2",

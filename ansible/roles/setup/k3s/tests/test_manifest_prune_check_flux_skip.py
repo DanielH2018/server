@@ -36,20 +36,16 @@ def _run(tmp_path, deployments, kustomizations=("bento-pdf",)):
 
     calls = tmp_path / "calls"
     calls.write_text("")
-    kuma_lib = tmp_path / "kuma-push-lib.sh"
-    kuma_lib.write_text(
-        "kuma_push() { :; }\n"
+    check_lib = tmp_path / "homelab-check-lib.sh"
+    check_lib.write_text(
         f'logger() {{ printf "%s{SEP}" "$*" >> "{calls}"; }}\n'
         "boot_grace_active() { return 1; }\n"
+        "write_check_textfile() { :; }\n"
     )
-    check_lib = tmp_path / "homelab-check-lib.sh"
-    check_lib.write_text("write_check_textfile() { :; }\n")
     drift_lib = tmp_path / "setup-drift-lib.sh"
     drift_lib.write_text(
         'setup_drift_scan() { DRIFTED=""; STALE=""; DEPLOYED_NOTE=""; MANIFEST_NOTE=""; }\n'
     )
-    push_env = tmp_path / "kuma-push.env"
-    push_env.write_text("MANIFEST_PRUNE_PUSH_TOKEN=stubtoken\n")
     manifests = tmp_path / "manifests"
     manifests.mkdir()
     uv = write_exec(tmp_path / "uv", "#!/usr/bin/env bash\necho deployment/declared\n")
@@ -72,10 +68,8 @@ def _run(tmp_path, deployments, kustomizations=("bento-pdf",)):
 
     replacements = {
         "[[ $EUID -ne 0 ]]": "[[ 0 -ne 0 ]]",
-        "/usr/local/lib/kuma-push-lib.sh": str(kuma_lib),
         "/usr/local/lib/homelab-check-lib.sh": str(check_lib),
         "/usr/local/lib/setup-drift-lib.sh": str(drift_lib),
-        "/etc/rancher/k3s/kuma-push.env": str(push_env),
         "/etc/rancher/k3s/manifests": str(manifests),
         "/etc/healthchecks/ping.env": str(tmp_path / "absent-ping.env"),
         "/usr/local/bin/uv run": f"{uv} run",
