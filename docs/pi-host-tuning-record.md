@@ -219,14 +219,14 @@ version to the cluster DaemonSet's.
 
 ## SD-card health heartbeat, and the rotated-log sweep it carries
 
-SD cards have no SMART, so `hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2` pushes
-the root filesystem's ext4 `errors_count` to the static "Daniel Pi SD Health" Kuma push monitor
-through the LAN-only Authelia bypass on `^/api/push/`. `homelab-pi-sd-health.timer` runs it
-every 5 minutes. A nonzero count is an explicit `down`, and a dead timer or host trips the 600s
-push watchdog. The token is `pi_sd_health_push_token` in `secrets.yml`. `optimize_pi` stages it
-as a root-only interim file, and the service reads it through `LoadCredential=`.
+SD cards have no SMART, so `hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2` writes
+the root filesystem's ext4 `errors_count` verdict to `pi-sd-health.prom` in node_exporter's
+textfile directory. `homelab-pi-sd-health.timer` runs it every 5 minutes. A nonzero count is a
+failing verdict, which `PiSdHealthFailed` pages, and a verdict older than 900 seconds trips
+`PiSdHealthNotReporting`. The script pushed to a Kuma monitor until M6 batch B5's Cutover-2, and
+the Pi's SOPS file keeps `pi_sd_health_push_token` until B5's token PR retires it.
 
-**The same push carries the rotated-log integrity verdict** (#2715).
+**The same verdict carries the rotated-log integrity result** (#2715).
 `pi-gz-integrity.sh.j2` (`homelab-pi-gz-integrity.timer`, daily 01:40 UTC, and a minute after
 the timer starts so a fresh install has a verdict) runs `gzip -t` over every rotated
 `.gz` under `/var/log` and `/var/hdd.log` and writes a two-line verdict to
@@ -268,12 +268,13 @@ container logs reaching Loki while Alloy keeps running with zero targets.
 host deploys** — each `containers_list` entry, plus `docker-proxy-lifecycle` and, under
 `has_code_server`, `docker-proxy-codeserver`, which are services inside the docker-proxy
 role's compose file rather than list entries. It reads `docker ps` against the real socket
-through the docker group, so it still reports docker-proxy's own death, and pushes to the
-static "Daniel Pi Recovery" Kuma push monitor over the same LAN-only `^/api/push/` bypass. Any
-one container down is an explicit `down`; a dead timer or host trips the 600s watchdog. The
-token is `pi_recovery_push_token` in `secrets.yml`, staged and read as the SD-health token is. The set was autoheal and docker-proxy alone
-until #1910: the same failed start reaches wg-easy and docker-proxy-lifecycle, and Kuma
-sees neither from outside.
+through the docker group, so it still reports docker-proxy's own death, and writes its verdict
+to `pi-recovery-health.prom`. Any one container down is a failing verdict, which
+`PiRecoveryFailed` pages; a dead timer or host trips `PiRecoveryNotReporting` after 900
+seconds. The script pushed to a Kuma monitor until M6 batch B5's Cutover-2, and the Pi's SOPS
+file keeps `pi_recovery_push_token` until B5's token PR retires it. The set was autoheal and
+docker-proxy alone until #1910: the same failed start reaches wg-easy and
+docker-proxy-lifecycle.
 
 **It also restarts what it finds dead**, and still pushes `down` for that cycle.
 `restart: unless-stopped` covers a container whose process exits, not one whose *create* fails
@@ -333,8 +334,8 @@ To disarm it:
 
 A `sudo systemctl stop`-style edit on the host is undone by the next install that still ships
 the link; the flag is not. Detection and remediation share one script, so disarming the restart
-also ends the heartbeat: the "Daniel Pi Recovery" monitor trips its 600s watchdog within ten
-minutes of the timer stopping. That is the intended signal, not a second fault.
+also ends the heartbeat: `PiRecoveryNotReporting` fires 15 minutes after the timer stops. That
+is the intended signal, not a second fault.
 
 ## The durable health log
 

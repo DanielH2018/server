@@ -15,8 +15,8 @@ from validate import setup_templates as v
 
 # Named members the glob must find. Renaming or moving one of these should fail HERE, with the
 # member named, rather than silently shrinking the set every other test runs over. One per
-# shape the guard covers: a YAML manifest, a Corefile, an env file, a unit, and a template
-# outside the k3s role.
+# shape the guard covers: a YAML manifest, a Corefile, an env file, a unit, a template
+# outside the k3s role, and a template a role-shaped host component holds.
 MUST_FIND = frozenset(
     {
         "roles/setup/k3s/templates/registries.yaml.j2",
@@ -26,6 +26,7 @@ MUST_FIND = frozenset(
         "roles/setup/common/templates/resolv.conf.j2",
         "roles/setup/nut_host/templates/host-upsmon.conf.j2",
         "roles/setup/hypervisor/templates/staging-nwfilter.xml.j2",
+        "hosts/components/claude-code/templates/claude-rootq.sudoers.j2",
     }
 )
 
@@ -41,14 +42,14 @@ def ctx():
 
 
 def _rel(path):
-    return str(path.relative_to(v.ANSIBLE))
+    return v.repo_relative(path)
 
 
 def test_the_census_finds_the_named_setup_templates():
     """Non-vacuity: the glob must return these by name, not merely return something."""
     found = {_rel(p) for p in v.discover_templates()}
     assert MUST_FIND <= found, f"discovery lost: {sorted(MUST_FIND - found)}"
-    assert len(found) >= 70
+    assert len(found) >= 110
 
 
 def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
@@ -177,8 +178,47 @@ def test_a_component_supplies_its_defaults_and_secret_values_to_its_roles_templa
 
 
 def test_the_claude_code_templates_get_the_names_its_component_supplies():
-    supplied = v.component_supplied("claude_code")
-    assert {
-        "claude_code_agents_present",
-        "claude_code_agent_gh_token_value",
-    } <= supplied
+    supplied = v.component_supplied("claude-code")
+    assert {"claude_code_agents_present", "claude_code_rc_unit"} <= supplied
+
+
+def _component_template(root, text: str, defaults: str):
+    component = root / "widget"
+    (component / "templates").mkdir(parents=True)
+    (component / "defaults").mkdir()
+    (component / "component.yml").write_text("defaults: {widget_unit: w.service}\n")
+    (component / "defaults" / "main.yml").write_text(defaults)
+    (component / "templates" / "pins.j2").write_text("{% set port = 1 %}\n")
+    tpl = component / "templates" / "widget.conf.j2"
+    tpl.write_text(text)
+    return tpl
+
+
+def test_a_role_shaped_components_template_is_discovered_and_a_bare_one_is_not(
+    tmp_path,
+):
+    tpl = _component_template(tmp_path, "x\n", "widget_on: true\n")
+    (tmp_path / "bare" / "templates").mkdir(parents=True)
+    (tmp_path / "bare" / "templates" / "y.j2").write_text("y\n")
+    found = v.discover_templates(tmp_path / "no-setup", tmp_path)
+    assert tpl in found
+    assert tmp_path / "bare" / "templates" / "y.j2" not in found
+
+
+def test_a_component_template_reading_its_defaults_and_imports_is_clean(
+    tmp_path, known
+):
+    tpl = _component_template(
+        tmp_path,
+        "{% import 'templates/pins.j2' as pins %}{{ widget_on }} {{ widget_unit }}\n",
+        "widget_on: true\n",
+    )
+    assert v.check_role_template(tpl, known, tmp_path) == []
+
+
+def test_a_component_template_reading_a_name_nothing_defines_is_flagged(
+    tmp_path, known
+):
+    tpl = _component_template(tmp_path, "{{ widget_gone }}\n", "widget_on: true\n")
+    problems = v.check_role_template(tpl, known, tmp_path)
+    assert problems and "widget_gone" in problems[0]

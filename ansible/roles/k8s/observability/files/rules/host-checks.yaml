@@ -945,7 +945,7 @@ groups:
       # watches these timers. One rule per host whose host_vars arm the timer. Setting the
       # timer's flag false stops it, and the rule then fires on purpose: delete the rule in the
       # same PR. Each deadline is the one the service renders through
-      # roles/setup/claude_code/templates/timer-textfile.j2, and
+      # hosts/components/claude-code/templates/timer-textfile.j2, and
       # ansible/tests/setup/test_claude_timer_rule_literals.py pins both literals to it.
       - alert: ClaudeCloneSyncNotReporting
         expr: |

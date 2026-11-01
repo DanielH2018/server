@@ -8,11 +8,11 @@ Run: uv run pytest ansible/tests/setup/test_claude_code_on_daniel_server.py
 """
 
 from _agent_package import agent_setup_script
-from _helpers import ANSIBLE, HOST_VARS, load_yaml
-from _setup_render import render_setup_text
+from _helpers import HOST_VARS, load_yaml
+from _setup_render import CLAUDE_CODE, render_component_text
 from test_claude_fleet_slice_cap import SUB_BOUNDS, to_bytes
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = CLAUDE_CODE
 DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
 SERVER = load_yaml(HOST_VARS / "daniel-server.yml")
 BOX = load_yaml(HOST_VARS / "daniel-box.yml")
@@ -36,7 +36,7 @@ def _render(template: str, host_vars: dict) -> str:
     The host's vars arrive as render OVERRIDES rather than as a context assembled here, so the
     text asserted on below is the text `validate/setup_templates.py` renders (#3202).
     """
-    return render_setup_text("claude_code", template, host_vars)
+    return render_component_text("claude-code", template, host_vars)
 
 
 def test_daniel_server_opts_in_without_the_remote_control_unit():

@@ -183,7 +183,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   That hostPath has `type: DirectoryOrCreate`, so the kubelet creates the directory, root
   0755, on the k3s nodes. Nothing creates it on the Pi: `git grep node-exporter-textfile --
   ansible scripts` matches only that DaemonSet and
-  `ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh`, which exits 0 when the
+  `hosts/components/claude-code/files/claude-cgroup-metrics.sh`, which exits 0 when the
   directory is missing.
   Prometheus scrapes the Pi as a static target on port 9100
   (`ansible/roles/k8s/observability/templates/prometheus.yaml.j2`, the `node-pi` job, with

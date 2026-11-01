@@ -19,7 +19,7 @@
 # ansible/tests/setup/test_pi_heartbeat_textfiles.py (M1 convention 1).
 #
 # `PiRecoveryFailed` fires on every cycle that restarted a container, not only on a failed
-# restart, because the producer pushes `down` for those on purpose (the `# DECIDED:` marker in
+# restart, because the producer reports `down` for those on purpose (the `# DECIDED:` marker in
 # hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2) and the textfile follows it.
 groups:
   - name: pi-checks

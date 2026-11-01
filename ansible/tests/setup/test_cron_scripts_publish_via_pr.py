@@ -430,17 +430,16 @@ _LIBRARY_EXEMPT: dict[str, str] = {
 # changed. Every one is a template that can invoke curl against a push URL.
 _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2",
 }
 
 # The corpus also holds templates that carry a push URL but invoke no curl of their own, such as
 # the authelia bypass regex. They are counted rather than named, so the floor is what watches
-# them. 10 against a measured 13 (2026-11-01, after M6 batch B2's and B4's setup-plane Cutover-2
-# dropped the push from ten scripts and four environment files) keeps the slack M3 chose: 23
-# against 37 after its PR 5 dropped disk-health.sh.j2. A slacker floor would let a third of that
-# unnamed tail vanish before anything went red.
-_MIN_CORPUS = 10
+# them. 8 against a measured 11 (2026-11-01, after M6 batch B4's Cutover-1a dropped the
+# push from the two renovate units and their environment files, B5 dropped the Pi heartbeats'
+# and B2's and B4's setup-plane Cutover-2 dropped ten scripts and four environment files) keeps
+# the slack M3 chose: 23 against 37 after its PR 5 dropped disk-health.sh.j2. A slacker floor
+# would let a third of that unnamed tail vanish before anything went red.
+_MIN_CORPUS = 8
 
 
 def push_corpus() -> dict[Path, str]:

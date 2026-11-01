@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""The Pi's two token heartbeats write a homelab_check_* textfile beside their Kuma push (M6 B5).
+"""The Pi's two heartbeats write a homelab_check_* textfile and push nothing (M6 B5).
 
 docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5: pi-sd-health and
 pi-recovery-health each write `<check>.prom` through homelab-check-lib.sh, so the rules in
-`pi-checks.yaml` can shadow the "Daniel Pi SD Health" and "Daniel Pi Recovery" tiles. The Kuma
-pushes are unchanged. Each case runs the rendered script through `_pi_health` against stubs, with
-the role's check library and `TEXTFILE_DIR` pointed at a temp directory.
+`pi-checks.yaml` page for the "Daniel Pi SD Health" and "Daniel Pi Recovery" tiles that Cutover-1a
+deleted. Cutover-2 dropped the Kuma pushes. Each case runs the rendered script through
+`_pi_health` against stubs, with the role's check library and `TEXTFILE_DIR` pointed at a temp
+directory.
 
 Three properties:
 
 - the file carries success 1 for an up verdict and 0 for a down one, so a cycle that restarted a
-  container reads 0 as the Kuma push does;
-- the file exists before the push is attempted, because a push retries for over a minute;
-- a failed push never costs the textfile.
-
-The rules' deadline literals equal the DEADLINE_S each script renders (M1 convention 1).
+  container reads 0;
+- the rendered script holds no Kuma push, token read or push-library source;
+- the rules' deadline literals equal the DEADLINE_S each script renders (M1 convention 1).
 
 Run: uv run pytest ansible/tests/setup/test_pi_heartbeat_textfiles.py
 """
@@ -41,17 +40,11 @@ ALL = [
 ] + ["docker-proxy-lifecycle"]
 
 
-def _textfile_came_first(tmp_path) -> bool:
-    """The push stub drops this marker when the .prom file already existed at push time."""
-    return (tmp_path / "push.textfile-first").exists()
-
-
-def test_a_healthy_sd_cycle_writes_success_one_before_the_push(tmp_path):
+def test_a_healthy_sd_cycle_writes_success_one(tmp_path):
     status, _, _, _ = run("pi-sd-health", tmp_path, counter="0")
 
     assert status == "up"
     assert textfile(tmp_path, "pi-sd-health")["homelab_check_success"] == 1
-    assert _textfile_came_first(tmp_path)
 
 
 def test_a_climbing_error_count_writes_success_zero(tmp_path):
@@ -61,12 +54,11 @@ def test_a_climbing_error_count_writes_success_zero(tmp_path):
     assert textfile(tmp_path, "pi-sd-health")["homelab_check_success"] == 0
 
 
-def test_a_healthy_recovery_cycle_writes_success_one_before_the_push(tmp_path):
+def test_a_healthy_recovery_cycle_writes_success_one(tmp_path):
     status, _, _, _ = run("pi-recovery-health", tmp_path, running=ALL)
 
     assert status == "up"
     assert textfile(tmp_path, "pi-recovery-health")["homelab_check_success"] == 1
-    assert _textfile_came_first(tmp_path)
 
 
 def test_a_cycle_that_restarted_a_container_writes_success_zero(tmp_path):
@@ -78,14 +70,26 @@ def test_a_cycle_that_restarted_a_container_writes_success_zero(tmp_path):
     assert textfile(tmp_path, "pi-recovery-health")["homelab_check_success"] == 0
 
 
-@pytest.mark.parametrize("script", sorted(PRODUCERS.values()))
-def test_a_failed_push_still_leaves_the_textfile(tmp_path, script):
-    kwargs = {"counter": "0"} if script == "pi-sd-health" else {"running": ALL}
-    run(script, tmp_path, push_ok="0", **kwargs)
+# What a push leaves in a rendered script: the Kuma helper, its push call, the success flag it
+# sets, the push URL, or the credential the unit used to load for it.
+PUSH_MARKERS = ("kuma-push-lib", "kuma_push", "KUMA_PUSH_OK", "api/push", "push_token")
 
-    series = textfile(tmp_path, script)
-    assert series["homelab_check_success"] == 1
-    assert series["homelab_check_deadline_seconds"] == 900
+
+def push_problems(text: str) -> list[str]:
+    """Each push marker a rendered script still carries, or nothing."""
+    return [marker for marker in PUSH_MARKERS if marker in text]
+
+
+@pytest.mark.parametrize("script", sorted(PRODUCERS.values()))
+def test_a_rendered_heartbeat_holds_no_kuma_push(tmp_path, script):
+    path, _ = render(script, tmp_path)
+    assert push_problems(path.read_text()) == []
+
+
+def test_push_problems_is_flagged_on_a_script_that_still_pushes(tmp_path):
+    # The red proof: the push call and the success flag it sets are each found.
+    pushing = 'kuma_push "$STATUS" "$MSG" "$PUSH_URL"\n[ "${KUMA_PUSH_OK:-1}" = 1 ]\n'
+    assert push_problems(pushing) == ["kuma_push", "KUMA_PUSH_OK"]
 
 
 def rendered_deadline(script: str, tmp_path) -> int:

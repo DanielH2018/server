@@ -249,7 +249,9 @@ re-run it on exit 75. It ends `room` (exit 0) once a `launch` of N batches would
 `no-signing-host` (6) when no host signs verifiably. While it waits, its detail is the
 refusal `launch` would print. Placement skips a host at its live-batch cap and places on the
 next host with memory headroom (#6421), so `room` names a host that has both. It
-answers for every run, other sessions' included, which `cc-wait fanout` cannot. The source
+answers for every run, other sessions' included, which `cc-wait fanout` cannot. Each wait
+reads the hosts itself and never reuses an earlier wait's reading, so a wait started just
+after a launch counts that launch's batches (#6758). The source
 is `scripts/dev/fanout.py headroom`, which calls the same two placement functions `launch`
 does, so `room` is not a promise the issue-body gates pass. Launch within a minute of
 `room`: the probe's ssh connection to daniel-server persists for `MUX_PERSIST_S` (60s), and

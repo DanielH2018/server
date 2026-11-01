@@ -19,11 +19,10 @@ import pytest
 from _helpers import ANSIBLE
 from lib import yaml_fast
 from lib.proc_testing import run
+from _setup_render import CLAUDE_CODE
 
 COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
-SCRIPT = (
-    ANSIBLE / "roles" / "setup" / "claude_code" / "files" / "claude-cgroup-metrics.sh"
-)
+SCRIPT = CLAUDE_CODE / "files" / "claude-cgroup-metrics.sh"
 
 # claude-rc.service sits under the fleet's shared parent, user.slice, and
 # claude_code_fleet_caps_enabled: false puts it back in system.slice. The script resolves
@@ -80,9 +79,7 @@ def test_script_exists_and_the_component_ships_it_executable() -> None:
     """The repo blob itself is 644, so the executable bit has to come from the component."""
     assert SCRIPT.exists(), f"{SCRIPT} is missing"
     files = yaml_fast.safe_load(COMPONENT.read_text())["files"]
-    (entry,) = [
-        f for f in files if f.get("src") == "role-file:claude-cgroup-metrics.sh"
-    ]
+    (entry,) = [f for f in files if f.get("src") == "files/claude-cgroup-metrics.sh"]
     assert entry["dst"] == "/usr/local/bin/claude-cgroup-metrics.sh"
     assert entry["mode"] == "0755", "the shipped script must be executable"
 
